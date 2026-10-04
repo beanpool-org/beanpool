@@ -2292,7 +2292,8 @@
                 </div>`;
                 return;
             }
-            const { members, profiles, health, reports, memberStats } = adminDataCache;
+            // Each member's posts and messages; of trades, only the community's totals (queue item 29).
+            const { members, profiles, health, reports, memberStats, tradeTotals } = adminDataCache;
             const flags = health?.flags || [];
             const stats = memberStats || {};
             
@@ -2347,19 +2348,15 @@
             const branchStatsCache = {};
             function computeBranchStats(pubkey) {
                 if (branchStatsCache[pubkey]) return branchStatsCache[pubkey];
-                const personal = stats[pubkey] || { posts: 0, messages: 0, deals: 0, volume: 0, cancelled: 0 };
+                const personal = stats[pubkey] || { posts: 0, messages: 0 };
                 const children = tree[pubkey] || [];
-                const agg = { ...personal, memberCount: 1 };
+                const agg = { posts: personal.posts || 0, messages: personal.messages || 0, memberCount: 1 };
                 children.forEach(c => {
                     const childAgg = computeBranchStats(c.publicKey);
                     agg.posts += childAgg.posts;
                     agg.messages += childAgg.messages;
-                    agg.deals += childAgg.deals;
-                    agg.volume += childAgg.volume;
-                    agg.cancelled += childAgg.cancelled;
                     agg.memberCount += childAgg.memberCount;
                 });
-                agg.volume = Math.round(agg.volume * 100) / 100;
                 branchStatsCache[pubkey] = agg;
                 return agg;
             }
@@ -2412,12 +2409,10 @@
                 }
 
                 // Personal stat chips (compact inline indicators)
-                const s = stats[pubkey] || { posts: 0, messages: 0, deals: 0, volume: 0, cancelled: 0 };
+                const s = stats[pubkey] || { posts: 0, messages: 0 };
                 let chipHtml = '<span style="display:inline-flex;gap:3px;margin-left:0.4rem;vertical-align:middle;">';
                 if (s.posts > 0) chipHtml += `<span class="stat-chip posts" title="${s.posts} active posts">📦${s.posts}</span>`;
                 if (s.messages > 0) chipHtml += `<span class="stat-chip msgs" title="${s.messages} messages sent">💬${s.messages}</span>`;
-                if (s.deals > 0) chipHtml += `<span class="stat-chip deals" title="${s.deals} completed deals · B${s.volume} volume">🤝${s.deals}</span>`;
-                if (s.cancelled > 0) chipHtml += `<span class="stat-chip cancelled" title="${s.cancelled} cancelled escrows">🚫${s.cancelled}</span>`;
                 chipHtml += '</span>';
 
                 // Branch stats card (expandable)
@@ -2426,18 +2421,15 @@
                 const statsCardId = `stats-${pubkey.slice(0,12)}`;
                 let statsBtn = '';
                 let statsCard = '';
-                if (hasBranch || s.deals > 0 || s.posts > 0) {
+                if (hasBranch || s.posts > 0 || s.messages > 0) {
                     statsBtn = `<button class="btn btn-sm btn-outline" onclick="event.preventDefault();event.stopPropagation();const c=document.getElementById('${statsCardId}');c.style.display=c.style.display==='none'?'grid':'none';" title="Toggle stats">📊</button>`;
                     statsCard = `<div id="${statsCardId}" class="stats-card" style="display:none;">
                         <div class="stat-row"><span class="label">📦 Posts</span><span class="value">${s.posts}</span></div>
                         <div class="stat-row"><span class="label">💬 Messages</span><span class="value">${s.messages}</span></div>
-                        <div class="stat-row"><span class="label">🤝 Deals</span><span class="value">${s.deals}</span></div>
-                        <div class="stat-row"><span class="label">💰 Volume</span><span class="value">B${s.volume}</span></div>
-                        <div class="stat-row"><span class="label">🚫 Cancelled</span><span class="value">${s.cancelled}</span></div>
                         ${hasBranch ? `
                         <div class="stat-row full-width" style="background:#0f172a;border:1px solid #334155;margin-top:0.2rem;">
                             <span class="label" style="color:#60a5fa;">🌳 Branch (${branchStats.memberCount} members)</span>
-                            <span class="value" style="color:#60a5fa;">📦${branchStats.posts} 💬${branchStats.messages} 🤝${branchStats.deals} 💰B${branchStats.volume}</span>
+                            <span class="value" style="color:#60a5fa;">📦${branchStats.posts} 💬${branchStats.messages}</span>
                         </div>` : ''}
                     </div>`;
                 }
@@ -2516,8 +2508,12 @@
                 el.innerHTML = '<div style="padding:1rem;color:#64748b;">No tree found</div>';
             } else {
                 const rendered = roots.map(r => buildNode(r.publicKey, 0)).join('');
+                const t = tradeTotals;
+                const totalsHtml = t && typeof t.deals === 'number'
+                    ? `<div id="community-trade-totals" style="padding:0.6rem 0.8rem;margin-bottom:0.6rem;border:1px solid #334155;border-radius:8px;font-size:0.8rem;color:#cbd5e1;">🤝 ${Number(t.deals)} deals · 💰 ${Number(t.volume)} Beans · 🚫 ${Number(t.cancelled)} cancelled<br><span style="color:#64748b;">The whole community's trades. No member's trades are shown here.</span></div>`
+                    : '';
                 el.innerHTML = rendered.trim()
-                    ? rendered
+                    ? totalsHtml + rendered
                     : `<div style="padding:1.25rem;color:#64748b;text-align:center;">No members match ${memberSearch.trim() ? '“' + esc(memberSearch.trim()) + '”' : 'this filter'}.</div>`;
             }
 

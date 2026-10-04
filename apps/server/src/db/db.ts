@@ -1348,6 +1348,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE group_convenor_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE group_convenor_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // The member’s status before a re-key code suspended them, so a cancelled code puts it back (member-wizards cancelRekeyCode).
+    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN prior_status TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_keeper_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_succession_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }

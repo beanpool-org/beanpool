@@ -65,6 +65,8 @@ export interface RekeyRequestRow {
     created_at: string;
     expires_at: string;
     completed_at: string | null;
+    /** The member's status before the code suspended them (cancelRekeyCode); null on a code made before it was kept. */
+    prior_status?: string | null;
 }
 
 export interface RekeyAuditLogRow {
@@ -220,6 +222,18 @@ export function issueRekeyCode(
 
     // Atomic issuance & invalidation
     db.transaction(() => {
+        // The status a cancel puts back (cancelRekeyCode). A code made while an earlier one still holds the member
+        // suspended (pending, or expired with its key still 'rekey_pending') keeps that earlier code's: the 'suspended'
+        // the earlier code wrote is not the member's own.
+        const stillHeld = getInvalidatedKeyInfo(cleanOld)?.reason === 'rekey_pending';
+        const earlier = stillHeld
+            ? (db.prepare(`
+                SELECT prior_status FROM rekey_requests WHERE old_pubkey = ? AND status IN ('pending', 'expired')
+                ORDER BY created_at DESC, id DESC LIMIT 1
+            `).get(cleanOld) as { prior_status: string | null } | undefined)
+            : undefined;
+        const priorStatus = earlier ? earlier.prior_status : (member.status || 'active');
+
         // Cancel any existing pending requests for this member
         db.prepare("UPDATE rekey_requests SET status = 'cancelled' WHERE old_pubkey = ? AND status = 'pending'").run(cleanOld);
 
@@ -237,9 +251,9 @@ export function issueRekeyCode(
 
         // Insert new pending rekey request
         db.prepare(`
-            INSERT INTO rekey_requests (code, old_pubkey, operator_pubkey, status, created_at, expires_at)
-            VALUES (?, ?, ?, 'pending', ?, ?)
-        `).run(code, cleanOld, cleanOperator, nowIso, expiresAtIso);
+            INSERT INTO rekey_requests (code, old_pubkey, operator_pubkey, status, created_at, expires_at, prior_status)
+            VALUES (?, ?, ?, 'pending', ?, ?, ?)
+        `).run(code, cleanOld, cleanOperator, nowIso, expiresAtIso, priorStatus);
 
         // Write system log: that a code was made, for whom and when, never the code (FABLE-sec-errors M1). It binds any
         // new key to this member for a day; the operator who made it has it in the answer, and a log is read by other
@@ -433,6 +447,88 @@ export function completeRekey(
         newPubkey: cleanNew,
         callsign: member.callsign,
     };
+}
+
+/** A refusal with the HTTP status its route answers. */
+function refusal(status: number, message: string): Error {
+    const err: any = new Error(message);
+    err.status = status;
+    return err;
+}
+
+/**
+ * Undoes issueRekeyCode for a code nobody has used: the code is cancelled, the member's key is no longer stopped
+ * ('rekey_pending' row gone), and the member's status is what it was before the code (rekey_requests.prior_status).
+ * Who may make the code may cancel it (assertMayRekey: an owner for an owner's or admin's). A code made before the
+ * prior status was kept puts the member back to 'active' only if the code is what suspended them ('suspended' with the
+ * key held for the re-key), and the answer says so. The sessions issue ended stay ended; the key signs in again.
+ *
+ * One transaction, and each write must touch exactly the rows it expects, or nothing is changed. A used ('completed')
+ * or expired code is refused: there is nothing waiting to cancel.
+ */
+export function cancelRekeyCode(
+    oldPublicKey: string,
+    operatorPubkey: string,
+): { cancelled: true; oldPubkey: string; callsign: string; status: string; note?: string } {
+    assertPlainTablesWritable();
+    assertNotMisspeltRow(oldPublicKey);
+    const cleanOld = oldPublicKey ? oldPublicKey.trim().toLowerCase() : '';
+    const cleanOperator = operatorPubkey ? operatorPubkey.trim().toLowerCase() : 'owner:password';
+    const req = db.prepare(`
+        SELECT * FROM rekey_requests WHERE old_pubkey = ? ORDER BY created_at DESC, id DESC LIMIT 1
+    `).get(cleanOld) as RekeyRequestRow | undefined;
+    // Asked before the member: a used code moved the member’s row to the new key.
+    if (req?.status === 'completed') {
+        throw refusal(409, 'This code was already used: the member has moved to their new key, so it can’t be cancelled.');
+    }
+    const member = getMember(cleanOld);
+    if (!member) throw refusal(404, 'Member not found');
+    assertMayRekey(cleanOld, cleanOperator);
+    if (!req) throw refusal(404, 'There is no re-key code for this member to cancel.');
+    if (req.status === 'pending' && new Date(req.expires_at).getTime() < Date.now()) {
+        db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(req.id);
+        req.status = 'expired';
+    }
+    if (req.status === 'expired') throw refusal(409, 'This code has expired, so it can’t be cancelled.');
+    if (req.status !== 'pending') throw refusal(409, 'This code was already cancelled.');
+
+    const nowIso = new Date().toISOString();
+    let restored = member.status || 'active';
+    let note: string | undefined;
+    db.transaction(() => {
+        const exactly = (changed: number, what: string) => {
+            if (changed !== 1) throw refusal(409, `Nothing was changed: ${what}. Open the member again and check.`);
+        };
+        exactly(db.prepare("UPDATE rekey_requests SET status = 'cancelled' WHERE id = ? AND status = 'pending'").run(req.id).changes,
+            'the code is no longer waiting');
+        exactly(db.prepare("DELETE FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").run(cleanOld).changes,
+            'the member’s key isn’t held for this re-key');
+        // issueRekeyCode wrote 'suspended' unless the member was 'disabled'; only that 'suspended' is put back.
+        const now = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(cleanOld) as { status: string } | undefined)?.status;
+        let target: string | null = req.prior_status ?? null;
+        if (target === null && now === 'suspended') {
+            target = 'active';
+            note = 'This code was made before the node kept the member’s earlier status, so they are back to active.';
+        }
+        if (now === 'suspended' && target && target !== 'suspended') {
+            exactly(db.prepare('UPDATE members SET status = ?, updated_at = ? WHERE public_key = ? AND status = \'suspended\'').run(target, nowIso, cleanOld).changes,
+                'the member’s status changed meanwhile');
+            restored = target;
+        }
+        exactly(db.prepare(`
+            INSERT INTO system_logs (timestamp, level, category, message, metadata)
+            VALUES (?, 'INFO', 'AUTH', ?, ?)
+        `).run(
+            nowIso,
+            sanitizeMessage(`Re-enrolment code cancelled for member ${member.callsign} (${shortKey(cleanOld)}) by operator ${shortKey(cleanOperator)}; status ${restored}`),
+            sanitizeMessage(JSON.stringify({ member: shortKey(cleanOld), operator: shortKey(cleanOperator), cancelledAt: nowIso, status: restored })),
+        ).changes, 'the log line wasn’t written');
+    })();
+
+    noteTakeoverInputsChanged('member re-key cancelled');
+    broadcast({ type: 'profile_updated', publicKey: cleanOld });
+    logger.info('AUTH', `[Rekey] Re-enrolment code cancelled for ${member.callsign} (${shortKey(cleanOld)}) by ${shortKey(cleanOperator)}`);
+    return { cancelled: true, oldPubkey: cleanOld, callsign: member.callsign, status: restored, ...(note ? { note } : {}) };
 }
 
 /**

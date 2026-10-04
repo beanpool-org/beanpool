@@ -397,7 +397,7 @@ export const TABLES: Record<string, TableEntry> = {
     // Every invite already sent, and who used which.
     invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by updated_at'),
     // A replacement phone's code an operator issued.
-    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at'),
+    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status'),
     // The log of which recovery fragments left the node. Its sessions (recovery_collections) stay each server's own, so
     // each row names its owner (owner_pubkey), and a member's own delete deletes theirs by it, with tombstones, on the
     // server that made them and on one that took over.

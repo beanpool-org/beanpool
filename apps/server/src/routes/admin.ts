@@ -83,6 +83,7 @@ import {
 import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
 import {
     issueRekeyCode,
+    cancelRekeyCode,
     completeRekey,
     getRekeyStatus,
     getOffboardPreview,
@@ -2293,6 +2294,22 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
     } catch (e: any) {
         ctx.status = e?.status || (e?.message?.includes('not found') ? 404 : 400);
         ctx.body = { error: e?.message || 'Failed to issue re-enrolment code' };
+    }
+});
+
+// Undo an unused code (engine/member-wizards cancelRekeyCode): who may make it may cancel it, as issue-code asks.
+router.post('/api/local/admin/members/:pubkey/rekey/cancel', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey } = ctx.params;
+    const effectiveActor = resolveAdminActor(ctx);
+    if (!effectiveActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
+
+    try {
+        ctx.body = { success: true, ...cancelRekeyCode(pubkey, effectiveActor) };
+    } catch (e: any) {
+        ctx.status = e?.status || (e?.message?.includes('not found') ? 404 : 400);
+        ctx.body = { error: e?.message || 'Failed to cancel the re-key code' };
     }
 });
 

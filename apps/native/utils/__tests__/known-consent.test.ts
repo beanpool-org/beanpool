@@ -88,6 +88,15 @@ describe('known consent', () => {
         expect(await saveKnownConsent(async () => { throw new Error('Request failed: 500'); })).toEqual({ error: 'Not saved. Try again later.' });
         expect(await saveKnownConsent(async () => ({ error: 'odd' }))).toEqual({ error: 'Not saved. Try again later.' });
     });
+
+    // r4178376536: a 2xx page that isn't JSON (a captive portal or a proxy) makes res.json() throw a SyntaxError, whose
+    // parser text the card showed as if the node had said it.
+    it('a 2xx answer that is not JSON says it was not saved, never the parser\'s text', async () => {
+        const notJson = async () => { JSON.parse('<html>Sign in to the Wi-Fi</html>'); };
+        expect(await saveKnownConsent(notJson)).toEqual({ error: 'Not saved. Try again later.' });
+        expect(await saveKnownConsent(async () => { throw new SyntaxError('JSON Parse error: Unexpected character: <'); }))
+            .toEqual({ error: 'Not saved. Try again later.' });
+    });
 });
 
 // Rehearsal 5 Oct, d1: the wording-5 text as the node serves it at 50% and 60 days (apps/server engine/community-health.ts).

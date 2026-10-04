@@ -57,9 +57,10 @@ export async function saveKnownConsent(post: () => Promise<unknown>): Promise<{ 
         answer = await post();
     } catch (e) {
         // fetch throws a TypeError when the node can't be reached; signedRequestWithMethod throws an Error with the
-        // node's message for a refusal, or "Request failed: <status>" when the node gave none.
+        // node's message for a refusal, or "Request failed: <status>" when the node gave none. A 2xx page that isn't JSON
+        // (a captive portal or a proxy) throws a SyntaxError from res.json(): its parser text is no message from the node.
         if (e instanceof TypeError || !(e instanceof Error) || !e.message) return { error: 'Not saved: the community could not be reached.' };
-        return { error: /^Request failed/.test(e.message) ? 'Not saved. Try again later.' : e.message };
+        return { error: e instanceof SyntaxError || /^Request failed/.test(e.message) ? 'Not saved. Try again later.' : e.message };
     }
     const consent = readKnownConsent(answer);
     return consent ? { consent } : { error: 'Not saved. Try again later.' };

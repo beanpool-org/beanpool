@@ -58,7 +58,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
         try {
             const r = await payTheCommons(payment);
             setHeld(null);
-            setPaid(REPAYMENT_WORDS.paid(r.amount, r.transactionId, !!payment.body.debtId, r.left ?? null));
+            setPaid(REPAYMENT_WORDS.paid(r.amount, r.transactionId, !!payment.body.debtId, r));
             setAmount('');
             onPaid?.();
         } catch (e) {

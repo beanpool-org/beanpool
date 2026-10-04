@@ -18,8 +18,8 @@ export async function getMyRepayment(): Promise<Repayment | null> {
 /** A payment to the Commons as the member confirmed it: the fields every send of it carries, with its id. */
 export type CommonsPayment = { amount: number; debtId?: string };
 
-/** The node's answer to a payment: its reference, the Beans paid, and for a debt what was left on it when paid. */
-export type PaidToCommons = { transactionId: string; amount: number; left?: number };
+/** The node's answer to a payment: its reference, the Beans paid, and for a debt what was left before and after it, and whether it settled it. */
+export type PaidToCommons = { transactionId: string; amount: number; left?: number; leftAfter?: number; settled?: boolean };
 
 /** The member confirmed paying `amount`, for the debt with pay-back code `debtCode` if given: one id for every send of it. */
 export function confirmCommonsPayment(amount: number, debtCode?: string): ConfirmedPayment<CommonsPayment> {
@@ -29,8 +29,7 @@ export function confirmCommonsPayment(amount: number, debtCode?: string): Confir
 
 /**
  * Never more than the member holds, nor more than is left on the debt: the node refuses those, in words this passes on as
- * the error's message. An admin settles a debt only with one payment of at least what is left (a smaller one doesn't
- * count toward it). Sent again with the same id while no answer comes (lib/payment-request.ts), so the node pays it once;
+ * the error's message. A payment for a debt comes off it at once, and the one that leaves nothing settles it. Sent again with the same id while no answer comes (lib/payment-request.ts), so the node pays it once;
  * the last no-answer is thrown (payFailureWords: it may have paid; unansweredPayment: keep it for Try again).
  */
 export async function payTheCommons(payment: ConfirmedPayment<CommonsPayment>, opts?: { wait?: (ms: number) => Promise<void> }): Promise<PaidToCommons> {
@@ -92,7 +91,7 @@ export function payFailureWords(e: unknown): string {
     return typeof message === 'string' && message.trim() ? message : PAY_REFUSED_UNSAID;
 }
 
-/** Whether one payment of `amount` covers what is left: the node settles a debt only with one such payment. */
+/** Whether a payment of `amount` covers what is left: one that does settles the debt as it is paid. */
 export const coversLeft = (amount: number, left: number | null): boolean => left !== null && Math.round(amount * 100) >= Math.round(left * 100);
 
 /** A pay-back code as an admin shares it: the debt record's id, 32 hexadecimal characters. */
@@ -100,11 +99,11 @@ export const debtCodeOk = (code: string): boolean => /^[0-9a-f]{32}$/.test(code.
 
 export const REPAYMENT_WORDS = {
     banner: (r: Repayment) => `You’re working off a debt to the Commons: ${beans(r.left)} left of ${beans(r.amount)}. Every Bean you receive `
-        + 'above 0 goes to the Commons until it is cleared. Then you keep what you receive, as everyone does.',
+        + 'above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself: it comes off at once. Then you keep '
+        + 'what you receive, as everyone does.',
     payTitle: 'Pay the Commons',
     payIntro: 'Pay the Commons from the Beans you hold: never more than you hold. If you’re paying back a debt, enter the pay-back code an admin '
-        + 'gave you and pay all that is left in one payment. An admin can settle a debt only with one payment of at least what is left: a '
-        + 'smaller payment doesn’t count toward it.',
+        + 'gave you: what you pay comes off the debt at once, and when nothing is left it is settled. Your server refuses a payment above what is left.',
     /** The admin's link's amount: what was left when they shared it (a work-off may have lowered it since). */
     linkLeft: (left: number) => `What was left when the admin shared this: ${beans(left)}.`,
     /**
@@ -112,15 +111,14 @@ export const REPAYMENT_WORDS = {
      * "it covers what is left": only the node knows what is left now, and it refuses a payment above that.
      */
     payConfirm: (amount: number, forDebt: boolean, shared: number | null = null) => `Pay ${beans(amount)} to the Commons${forDebt ? ' for your debt' : ''}? ${
-        !forDebt ? '' : shared !== null ? `${beans(shared)} was what was left when the admin shared this. ${coversLeft(amount, shared) ? '' : 'This payment is less, so it won’t settle your debt unless some was worked off since. '}`
-            + 'An admin can settle your debt only with one payment of at least what is left now: a smaller payment doesn’t count toward it. If some was worked off since, your server refuses a payment above what is left and says how much, and nothing is paid. '
-            : 'An admin can settle your debt with it only if this one payment is at least what is left (the amount in the admin’s message): a smaller payment doesn’t count toward it. '
+        !forDebt ? '' : `${shared !== null ? `${beans(shared)} was what was left when the admin shared this. ` : ''}It comes off your debt at once. `
+            + 'If less is left now, your server refuses it and says how much, and nothing is paid. '
     }This can’t be undone.`,
-    /** `left`: what was left on the debt when paid, in the node's answer; null from a node that doesn't say. */
-    paid: (amount: number, ref: string, forDebt: boolean, left: number | null = null) => `Paid ${beans(amount)} to the Commons.${
-        !forDebt ? '' : coversLeft(amount, left) ? ` Give this reference to an admin, who settles your debt with it: ${ref}`
-            : left !== null ? ` That is less than the ${beans(left)} left, so it won’t settle your debt: an admin can settle a debt only with one payment of at least what is left. Tell an admin, and give them this reference: ${ref}`
-                : ` Give this reference to an admin. It settles your debt only if this one payment is at least what was left to repay: a smaller payment doesn’t count toward it. ${ref}`
+    /** The node's answer for a debt: `settled` when this payment left nothing, else `leftAfter`, what is left now. */
+    paid: (amount: number, ref: string, forDebt: boolean, answer: Partial<PaidToCommons> = {}) => `Paid ${beans(amount)} to the Commons.${
+        !forDebt ? '' : answer.settled ? ' Your debt is paid off and settled.'
+            : typeof answer.leftAfter === 'number' ? ` That came off your debt: ${beans(answer.leftAfter)} left.`
+                : ` Reference: ${ref}`
     }`,
     badAmount: 'Write an amount of Beans above 0, to the cent (for example 12.50).',
     badCode: 'A pay-back code is 32 letters and digits, as the admin shared it. Leave it empty to pay without one.',

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } fr
 
 /**
  * The Ledger's repayment card (#1597 item 4): the banner only while the member works a debt off; Pay the Commons checks
- * what is typed, asks first, pays with the code as the debt id, and shows the reference or the node's refusal.
+ * what is typed, asks first, pays with the code as the debt id, and shows what is left (or that it is settled) or the node's refusal.
  * The requests themselves are lib/debts.test.ts's (signed, through the real `request`); here they are stubbed.
  */
 const debts = vi.hoisted(() => ({ getMyRepayment: vi.fn(), payTheCommons: vi.fn() }));
@@ -36,7 +36,7 @@ describe('RepaymentCard', () => {
         expect(screen.queryByRole('status')).toBeNull();
     });
 
-    it('pays for a debt after asking, and shows the reference to give an admin', async () => {
+    it('pays for a debt after asking; a node that doesn’t say what is left gets the reference, and no promise', async () => {
         debts.getMyRepayment.mockResolvedValue(null);
         debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-42', amount: 80 });
         const onPaid = vi.fn();
@@ -45,11 +45,11 @@ describe('RepaymentCard', () => {
         fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '80' } });
         fireEvent.change(screen.getByLabelText(/PAY-BACK CODE/), { target: { value: CODE } });
         fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
-        // A code typed by hand: the page doesn't know what is left, so it promises nothing and says the one-payment rule.
+        // A code typed by hand: the page doesn't know what is left, so it promises nothing and says the node refuses above it.
         expect(confirmSpy).toHaveBeenCalledWith(REPAYMENT_WORDS.payConfirm(80, true, null));
-        expect(confirmSpy.mock.calls[0][0]).toContain('only if this one payment is at least what is left');
-        expect(await screen.findByText(/Give this reference to an admin\. It settles your debt only if this one payment is at least what was left to repay.*tx-42/)).toBeInTheDocument();
-        expect(screen.queryByText(/who settles your debt with it/)).toBeNull();
+        expect(confirmSpy.mock.calls[0][0]).toContain('It comes off your debt at once. If less is left now, your server refuses it and says how much, and nothing is paid.');
+        expect(await screen.findByText('Paid 80 Beans to the Commons. Reference: tx-42')).toBeInTheDocument();
+        expect(screen.queryByText(/settled|to an admin/)).toBeNull();
         expect(sentBody()).toEqual({ amount: 80, debtId: CODE, requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
         expect(onPaid).toHaveBeenCalled();
     });
@@ -81,20 +81,20 @@ describe('RepaymentCard', () => {
         expect(screen.queryByText(/Too Many Requests/)).toBeNull();
     });
 
-    it('the link’s amount is prefilled, called what was left when the admin shared it; 150 of 300 is said not to settle, before and after paying', async () => {
+    it('the link’s amount is prefilled, called what was left when the admin shared it; 150 of 300 comes off it, and 150 is left', async () => {
         window.history.replaceState(null, '', `/?payback=${CODE}&amount=300`);
         try {
             debts.getMyRepayment.mockResolvedValue(null);
-            debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-150', amount: 150, left: 300 });
+            debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-150', amount: 150, left: 300, leftAfter: 150, settled: false });
             render(<RepaymentCard />);
             expect(screen.getByLabelText(/BEANS/)).toHaveValue('300');
             expect(screen.getByLabelText(/PAY-BACK CODE/)).toHaveValue(CODE);
             expect(screen.getByText('What was left when the admin shared this: 300 Beans.')).toBeInTheDocument();
             fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '150' } });
             fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
-            expect(confirmSpy.mock.calls[0][0]).toContain('300 Beans was what was left when the admin shared this. This payment is less, so it won’t settle your debt');
-            expect(await screen.findByText(/That is less than the 300 Beans left, so it won’t settle your debt.*tx-150/)).toBeInTheDocument();
-            expect(screen.queryByText(/who settles your debt with it/)).toBeNull();
+            expect(confirmSpy.mock.calls[0][0]).toContain('300 Beans was what was left when the admin shared this. It comes off your debt at once.');
+            expect(await screen.findByText('Paid 150 Beans to the Commons. That came off your debt: 150 Beans left.')).toBeInTheDocument();
+            expect(screen.queryByText(/settled|to an admin/)).toBeNull();
         } finally { window.history.replaceState(null, '', '/'); }
     });
 
@@ -102,13 +102,13 @@ describe('RepaymentCard', () => {
         window.history.replaceState(null, '', `/?payback=${CODE}&amount=300`);
         try {
             debts.getMyRepayment.mockResolvedValue(null);
-            debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-300', amount: 300, left: 300 });
+            debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-300', amount: 300, left: 300, leftAfter: 0, settled: true });
             render(<RepaymentCard />);
             fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
             expect(confirmSpy.mock.calls[0][0]).toContain('300 Beans was what was left when the admin shared this.');
-            expect(confirmSpy.mock.calls[0][0]).toContain('If some was worked off since, your server refuses a payment above what is left and says how much, and nothing is paid.');
+            expect(confirmSpy.mock.calls[0][0]).toContain('If less is left now, your server refuses it and says how much, and nothing is paid.');
             expect(confirmSpy.mock.calls[0][0]).not.toMatch(/covers|can settle your debt with it/);
-            expect(await screen.findByText(/Give this reference to an admin, who settles your debt with it: tx-300/)).toBeInTheDocument();
+            expect(await screen.findByText('Paid 300 Beans to the Commons. Your debt is paid off and settled.')).toBeInTheDocument();
             expect(sentBody()).toEqual({ amount: 300, debtId: CODE, requestId: expect.any(String) });
         } finally { window.history.replaceState(null, '', '/'); }
     });
@@ -118,14 +118,14 @@ describe('RepaymentCard', () => {
         try {
             debts.getMyRepayment.mockResolvedValue(null);
             debts.payTheCommons.mockRejectedValueOnce(Object.assign(new Error('Only 200 Beans are left on that debt. Pay 200 Beans to settle it.'), { status: 409 }));
-            debts.payTheCommons.mockResolvedValueOnce({ transactionId: 'tx-200', amount: 200, left: 200 });
+            debts.payTheCommons.mockResolvedValueOnce({ transactionId: 'tx-200', amount: 200, left: 200, leftAfter: 0, settled: true });
             render(<RepaymentCard />);
             fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
             expect(await screen.findByRole('alert')).toHaveTextContent('Only 200 Beans are left on that debt. Pay 200 Beans to settle it.');
             expect(screen.getByRole('button', { name: 'Pay the Commons' })).toBeInTheDocument();
             fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '200' } });
             fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
-            expect(await screen.findByText(/Give this reference to an admin, who settles your debt with it: tx-200/)).toBeInTheDocument();
+            expect(await screen.findByText('Paid 200 Beans to the Commons. Your debt is paid off and settled.')).toBeInTheDocument();
             expect(sentBody(1)).toEqual({ amount: 200, debtId: CODE, requestId: expect.any(String) });
             expect(sentBody(1).requestId).not.toBe(sentBody(0).requestId);
         } finally { window.history.replaceState(null, '', '/'); }

@@ -134,7 +134,7 @@ describe('words', () => {
         expect(beans(300)).toBe('300 Beans');
         expect(REPAYMENT_WORDS.banner({ amount: 300, repaid: 120.5, left: 179.5 })).toMatch(/^You’re working off a debt to the Commons: 179\.50 Beans left of 300 Beans\./);
         expect(REPAYMENT_WORDS.paid(80, 'tx-7', true)).not.toContain('Ʀ');
-        expect(REPAYMENT_WORDS.paid(150, 'tx-7', true, 300)).not.toContain('Ʀ');
+        expect(REPAYMENT_WORDS.paid(150, 'tx-7', true, { leftAfter: 150 })).not.toContain('Ʀ');
         expect(parseBeans('12,5')).toBe(12.5);
         expect(parseBeans('1.001')).toBeNull();
         expect(parseBeans('0')).toBeNull();
@@ -143,21 +143,20 @@ describe('words', () => {
     });
 });
 
-describe('one payment of at least what is left settles a debt (the node’s settleByPayment): a settle is promised only then', () => {
-    it('150 of 300 says it won’t settle; 300 of 300 promises it; not knowing what is left, nothing is promised', () => {
+describe('a payment for a debt comes off it at once (the node’s countDebtPayment): the words say what is left, or that it is settled', () => {
+    it('150 of 300 says 150 left; the payment that leaves nothing says settled; a node that doesn’t say promises nothing', () => {
         expect(coversLeft(150, 300)).toBe(false);
         expect(coversLeft(300, 300)).toBe(true);
         expect(coversLeft(300, null)).toBe(false);
-        expect(REPAYMENT_WORDS.paid(150, 'tx-1', true, 300)).toBe('Paid 150 Beans to the Commons. That is less than the 300 Beans left, so it won’t settle your debt: '
-            + 'an admin can settle a debt only with one payment of at least what is left. Tell an admin, and give them this reference: tx-1');
-        expect(REPAYMENT_WORDS.payConfirm(150, true, 300)).toContain('300 Beans was what was left when the admin shared this. This payment is less, so it won’t settle your debt');
-        // The link's amount is never "what is left": a work-off may have lowered it, and the node refuses above what is left.
-        for (const amount of [300, 150]) expect(REPAYMENT_WORDS.payConfirm(amount, true, 300)).not.toMatch(/covers|who settles|can settle your debt with it/);
-        expect(REPAYMENT_WORDS.payConfirm(300, true, 300)).toContain('If some was worked off since, your server refuses a payment above what is left and says how much, and nothing is paid.');
+        expect(REPAYMENT_WORDS.paid(150, 'tx-1', true, { left: 300, leftAfter: 150, settled: false })).toBe('Paid 150 Beans to the Commons. That came off your debt: 150 Beans left.');
+        expect(REPAYMENT_WORDS.paid(300, 'tx-1', true, { left: 300, leftAfter: 0, settled: true })).toBe('Paid 300 Beans to the Commons. Your debt is paid off and settled.');
+        expect(REPAYMENT_WORDS.paid(150, 'tx-1', true)).toBe('Paid 150 Beans to the Commons. Reference: tx-1');
+        expect(REPAYMENT_WORDS.payConfirm(150, true, 300)).toBe('Pay 150 Beans to the Commons for your debt? 300 Beans was what was left when the admin shared this. '
+            + 'It comes off your debt at once. If less is left now, your server refuses it and says how much, and nothing is paid. This can’t be undone.');
         expect(REPAYMENT_WORDS.linkLeft(300)).toBe('What was left when the admin shared this: 300 Beans.');
-        expect(REPAYMENT_WORDS.paid(300, 'tx-1', true, 300)).toBe('Paid 300 Beans to the Commons. Give this reference to an admin, who settles your debt with it: tx-1');
-        expect(REPAYMENT_WORDS.paid(150, 'tx-1', true)).not.toContain('who settles your debt with it');
-        expect(REPAYMENT_WORDS.payConfirm(150, true)).toContain('only if this one payment is at least what is left');
-        expect(REPAYMENT_WORDS.payIntro).toContain('one payment of at least what is left');
+        for (const words of [REPAYMENT_WORDS.payIntro, REPAYMENT_WORDS.payConfirm(150, true), REPAYMENT_WORDS.paid(150, 'tx-1', true, { leftAfter: 150 })]) {
+            expect(words).not.toMatch(/to an admin|one payment|doesn’t count/);
+        }
+        expect(REPAYMENT_WORDS.payIntro).toContain('what you pay comes off the debt at once, and when nothing is left it is settled.');
     });
 });

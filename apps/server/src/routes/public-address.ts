@@ -14,6 +14,7 @@ import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, a
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { dropAddressRequest, nameAskedFor } from '../services/public-address-agent.js';
+import { noteTurnedAway, settleUnansweredClaims } from '../config/turned-away-names.js';
 import { requireAdminRole } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
@@ -187,6 +188,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}),
             } } as any);
             dropAddressRequest(`the owner claimed "${name}" in Settings`);   // the owner's choice ends what `beanpool claim` asked for at install
+            settleUnansweredClaims(name);   // and replaces any claim of another name that got no answer here
             if (result.tunnelToken) addProbeLog('2/4', `⚡ Starting the tunnel inside this server...`, 'info');
             const tunnel = await syncTunnel();
             if (result.tunnelToken) {
@@ -200,6 +202,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, ...addressFields(ctx, result), ...serverSide() };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Claim failed: ${e.message}`, 'error');
+            // No answer in time, but the registrar can still complete it: the owner's latest choice until another claim or
+            // Take offline replaces it, then turned away (config/turned-away-names.ts).
+            if (/timed out/.test(String(e?.message || ''))) noteTurnedAway(name, 'unanswered');
             void noteUnansweredClaim(name, e);
             ctx.status = 400;
             ctx.body = { error: e.message };
@@ -392,6 +397,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             recordRegistrarAnswer(result, 'released');
             updateNodeConfig({ publicAddress: null } as any);
             dropAddressRequest('the owner took the address offline in Settings');   // a release never brings back the name asked for at install
+            settleUnansweredClaims();   // nor a claim that got no answer here
+            noteTurnedAway(prevConfig?.name, 'taken-offline');
             addProbeLog('2/4', `⏳ Stopping the tunnel inside this server...`, 'info');
             const tunnel = await syncTunnel();
             addProbeLog('3/4', tunnel.state === 'off' ? `✅ Tunnel stopped` : `❌ Tunnel still ${describeTunnel(tunnel)}`, tunnel.state === 'off' ? 'success' : 'error');

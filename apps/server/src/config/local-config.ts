@@ -70,7 +70,11 @@ export interface LocalConfig {
     // The name of the latest such request that ended without the registrar giving it here (the owner's claim or Take
     // offline, another address held): a late answer about it never brings the community onto it (tunnel-connector.ts
     // answersAboutAnotherName).
+    // Superseded by turnedAwayNames (config/turned-away-names.ts reads it into the list, and clears it at the next write).
     endedAddressRequest?: { name: string; at: number } | null;
+    // The latest names this server turned away (config/turned-away-names.ts): never stored from a registrar answer while
+    // nothing is stored here.
+    turnedAwayNames?: { name: string; at: number; why: 'install-request-ended' | 'request-replaced' | 'claim-replaced' | 'taken-offline' | 'unanswered' }[] | null;
     replicationTokenHash?: string | null;
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;
@@ -569,7 +573,7 @@ export function clearReplicationToken(): void {
  */
 const LEFT_OUT_OF_BACKUPS = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes',
-    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest', 'endedAddressRequest',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest', 'endedAddressRequest', 'turnedAwayNames',
 ] as const;
 
 /** A copy of the local config that is safe to put in a backup file (LEFT_OUT_OF_BACKUPS). */

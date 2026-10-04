@@ -49,6 +49,7 @@ import {
 } from './services/tunnel-connector.js';
 import { reconcile, checkAddressRequest } from './services/public-address-agent.js';
 import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
+import { noteTurnedAway } from './config/turned-away-names.js';
 import { writeAddressRequestFile } from './address-request.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { useFakeCloudflared, type FakeTunnel } from './tunnel-test-fake.js';
@@ -817,6 +818,64 @@ async function main(): Promise<void> {
             assert(pa()?.name === 'made-elsewhere', `a name this server never left is stored (${pa()?.name})`);
             await post('/api/local/admin/public-address/offline');
             reg.status = () => ({ status: 'none' });
+        });
+
+        await section('19. a Settings claim that timed out, then another pick and Take offline: never revived', async () => {
+            const post = settingsPost!;
+            updateNodeConfig({ publicAddress: null } as any);
+            await syncTunnel();
+            // The registrar completes the claim after the node gave up (5 s): the key holds slow-pick live, nothing records it.
+            let finish: () => void = () => {};
+            reg.claim = (b) => b.name === 'slow-pick' ? new Promise((r) => { finish = () => r(live(b.name, 'eyJ.token-slow-pick')); }) : live(b.name, `eyJ.token-${b.name}`);
+            reg.holder = (b) => ({ name: b?.name, held: 'you', state: 'live' });
+            const slow = await post('/api/local/admin/public-address/claim', { name: 'slow-pick', mode: 'tunnel' });
+            assert(slow.status === 400 && /timed out/.test(slow.body?.error || '') && pa() == null, `the claim timed out here (${slow.status})`);
+            finish();
+            // Nothing else chosen yet: the timed-out claim is the owner's latest choice, and its live answer is stored.
+            reg.status = () => live('slow-pick', 'eyJ.token-slow-pick');
+            const first = await settingsGet!('/api/local/admin/public-address/status');
+            assert(first.status === 200 && pa()?.name === 'slow-pick', `alone, the timed-out pick's live answer is stored (${pa()?.name})`);
+            await post('/api/local/admin/public-address/offline');
+            // Again, then the owner picks another name and takes it offline: the registrar's newest live row is slow-pick2.
+            reg.claim = (b) => b.name === 'slow-pick2' ? new Promise((r) => { finish = () => r(live(b.name, 'eyJ.token-slow-pick2')); }) : live(b.name, `eyJ.token-${b.name}`);
+            const slow2 = await post('/api/local/admin/public-address/claim', { name: 'slow-pick2', mode: 'tunnel' });
+            assert(slow2.status === 400 && pa() == null, `the second claim timed out too (${slow2.status})`);
+            finish();
+            const pick = await post('/api/local/admin/public-address/claim', { name: 'owner-pick4', mode: 'tunnel' });
+            assert(pick.status === 200 && pa()?.name === 'owner-pick4', `the owner picks owner-pick4 (${pick.status})`);
+            const off = await post('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() == null, `Take offline (${off.status})`);
+            reg.status = () => live('slow-pick2', 'eyJ.token-slow-pick2');
+            await reconcile();
+            assert(pa() == null, `the tick does not revive the timed-out pick (${pa()?.name})`);
+            const shown = await settingsGet!('/api/local/admin/public-address/status');
+            assert(shown.status === 200 && pa() == null && shown.body?.status !== 'live', `nor does Settings' status read (${pa()?.name}/${shown.body?.status})`);
+            assert(!tunnelConnectorForTests().runningToken, `no tunnel runs (${tunnelConnectorForTests().runningToken})`);
+            // A request from beanpool claim replaced by another one: the replaced name is turned away too.
+            updateLocalConfig({ addressRequest: { name: 'first-ask', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            reg.claim = () => [503, { error: 'busy' }];
+            await reconcile();
+            writeAddressRequestFile(DATA!, { name: 'second-ask', contact: null, at: Date.now() });
+            await checkAddressRequest();
+            assert(getLocalConfig().addressRequest?.name === 'second-ask', `the second request replaces the first (${getLocalConfig().addressRequest?.name})`);
+            reg.status = () => live('first-ask', 'eyJ.token-first-ask');
+            const m = claims().length;
+            await reconcile();
+            assert(pa()?.name !== 'first-ask' && claims()[m]?.body?.name === 'second-ask', `the replaced request's late name is not stored; the new one is claimed (${pa()?.name} ${claims()[m]?.body?.name})`);
+            updateLocalConfig({ addressRequest: null });
+            await post('/api/local/admin/public-address/offline');
+            // A node from before the list: its one ended request is still turned away; the list keeps the latest 8.
+            updateLocalConfig({ turnedAwayNames: null, endedAddressRequest: { name: 'old-ended', at: 1 } } as any);
+            reg.status = () => live('old-ended', 'eyJ.token-old-ended');
+            await reconcile();
+            assert(pa() == null, `an older node's ended request is still turned away (${pa()?.name})`);
+            for (let i = 0; i < 9; i++) noteTurnedAway(`gone-${i}`, 'taken-offline');
+            const kept = (getLocalConfig() as any).turnedAwayNames as { name: string }[];
+            assert(kept.length === 8 && kept[kept.length - 1].name === 'gone-8' && !kept.some((e) => e.name === 'gone-0' || e.name === 'old-ended')
+                && getLocalConfig().endedAddressRequest == null, `the list keeps the latest 8, the old field moved into it (${kept.map((e) => e.name).join(',')})`);
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            reg.status = () => ({ status: 'none' });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

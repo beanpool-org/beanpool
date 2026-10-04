@@ -32,7 +32,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { getNodeRole, getNodeConfig, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer, registrarNames, registrarHostOf } from '../engine/registrar-names.js';
-import { getLocalConfig } from '../config/local-config.js';
+import { turnedAwayList } from '../config/turned-away-names.js';
 import { addressStatus, askNameHolder, claimAddress, healAddress } from './registrar-client.js';
 import { takeoverHoldsTunnel } from './takeover.js';
 import { logger } from '../logger.js';
@@ -449,16 +449,16 @@ export function persistAddressIfUnchanged(pa: any, use: 'stored' | 'claim', sinc
 const otherNamesSaid = new Set<string>();
 /**
  * With nothing stored: does `answer` name a name this server left? One its record keeps as former (taken offline, or
- * moved off by a claim of another; engine/registrar-names.ts), or the name of `beanpool claim`'s request that ended
- * without being given here (the owner's claim or Take offline came first). Never `asked`, nor the record's current name.
+ * moved off by a claim of another; engine/registrar-names.ts), or one on its turned-away list (config/turned-away-names.ts:
+ * an install request that ended without being given here, a Settings claim that got no answer and was then replaced, a
+ * replaced `beanpool claim` request, a name taken offline). Never `asked`, nor the record's current name.
  */
 function turnedAwayHere(answer: any, asked: string | null): boolean {
     const host = registrarHostOf(answer);
     if (!host || (asked && registrarHostOf({ name: asked }) === host)) return false;
     const entry = registrarNames().find((e) => e.address === host);
     if (entry) return entry.role !== 'current';
-    const ended = getLocalConfig().endedAddressRequest;
-    return !!ended && registrarHostOf({ name: ended.name }) === host;
+    return turnedAwayList().some((e) => e.why !== 'unanswered' && registrarHostOf({ name: e.name }) === host);
 }
 /**
  * Does the registrar's `answer` (a status or heal) name another name than the one `stored` here? Then it is never stored:

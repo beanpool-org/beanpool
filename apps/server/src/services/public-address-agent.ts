@@ -24,6 +24,7 @@
 
 import { getNodeRole, getNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
+import { noteTurnedAway } from '../config/turned-away-names.js';
 import { dataDir } from '../recover-command.js';
 import { isAddressLabel, takeAddressRequestFile } from '../address-request.js';
 import { claimAddress, addressStatus } from './registrar-client.js';
@@ -95,7 +96,8 @@ const requestDone = (name: string): void => {
 export function dropAddressRequest(why: string): void {
     const r = getLocalConfig().addressRequest;
     if (!r) return;
-    updateLocalConfig({ addressRequest: null, endedAddressRequest: { name: r.name, at: Date.now() } });
+    updateLocalConfig({ addressRequest: null });
+    noteTurnedAway(r.name, 'install-request-ended');
     if (!r.refused) console.log(`[PublicAddr] beanpool claim's request for "${r.name}" ends: ${why}`);
 }
 
@@ -201,6 +203,10 @@ export async function checkAddressRequest(now = Date.now()): Promise<void> {
             if (holdsAddress()) {
                 console.warn(`[PublicAddr] beanpool claim asked for "${req.name}", but this server already holds an address; change it in Settings.`);
             } else {
+                // A request for another name replaces a standing one: the replaced name is turned away, so its claim's late
+                // answer (the registrar answers the newest live row first) never moves the community onto it.
+                const replaced = getLocalConfig().addressRequest;
+                if (replaced && replaced.name !== req.name) noteTurnedAway(replaced.name, 'request-replaced');
                 updateLocalConfig({ addressRequest: { name: req.name, mode: 'tunnel', contact: req.contact ?? null, requestedAt: req.at, refused: null } });
                 console.log(`[PublicAddr] 📡 beanpool claim asked for "${req.name}"`);
                 fresh = true;

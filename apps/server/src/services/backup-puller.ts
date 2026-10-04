@@ -79,6 +79,7 @@ import {
 import { errorMessage } from '../error-message.js';
 import { EXPORT_CATEGORIES, STATE_HASH_TABLES } from '@beanpool/engine';
 import { keepMainServerCommunitySettings } from '../config/community-settings.js';
+import { redirectRefusal } from './credential-redirect.js';
 
 // Said once per value, not on every 60 s pull.
 let lastProfileNote: string | null = null;
@@ -403,7 +404,13 @@ class CopyRequests {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
         try {
-            const res = await fetch(this.base + route, { method, headers: this.headers, signal: controller.signal });
+            // Never followed: a redirect would carry the token or password elsewhere, and read that answer as the copy.
+            const res = await fetch(this.base + route, { method, headers: this.headers, redirect: 'manual', signal: controller.signal });
+            const refused = redirectRefusal(res, this.base + route);
+            if (refused) {
+                await res.body?.cancel().catch(() => {});
+                throw new Error(refused);
+            }
             // The body is read under the same timer: a copy's page that stops arriving is abandoned like one that never came.
             if (res.status === 200 && body === 'page') (res as Response & { text_?: string }).text_ = (await readUpTo(res, pageMaxBytes())).toString('utf-8');
             // An object is no bigger than any store keeps (MAX_OBJECT_BYTES): one that is, is refused unread past that.
@@ -1670,11 +1677,15 @@ class SwapError extends Error {
 async function primaryPost(primaryUrl: string, apiPath: string, headers: Record<string, string>, body: Record<string, unknown>): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), MIGRATE_TIMEOUT_MS);
+    const url = primaryUrl.replace(/\/$/, '') + apiPath;
+    let res: Response;
     try {
-        return await fetch(primaryUrl.replace(/\/$/, '') + apiPath, {
+        // Never followed: a redirect would carry the password or token elsewhere (credential-redirect.ts).
+        res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...headers },
             body: JSON.stringify(body),
+            redirect: 'manual',
             signal: controller.signal,
         });
     } catch (e: any) {
@@ -1682,6 +1693,12 @@ async function primaryPost(primaryUrl: string, apiPath: string, headers: Record<
     } finally {
         clearTimeout(timer);
     }
+    const refused = redirectRefusal(res, url);
+    if (refused) {
+        await res.body?.cancel().catch(() => {});
+        throw new SwapError(`the main server at ${refused}`, true, null);
+    }
+    return res;
 }
 
 /** True when the main server accepts this token for replication. */

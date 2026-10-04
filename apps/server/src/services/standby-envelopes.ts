@@ -30,6 +30,7 @@ import { peerIdFromString } from '@libp2p/peer-id';
 import { readSealedHeader, verifySealedHeader, type SealedEnvelopeHeader } from '@beanpool/core';
 import { getConnectorsByLevel } from '../connector-manager.js';
 import { logger } from '../logger.js';
+import { redirectRefusal } from './credential-redirect.js';
 
 export const HELD_ENVELOPES_DIR = 'held-takeover-envelopes';
 export const HELD_ENVELOPES_KEEP = 5;
@@ -235,7 +236,14 @@ export async function pullTakeoverEnvelope(opts: { primaryUrl: string; replicati
         const newest = listHeldEnvelopes().at(-1);
         const headers: Record<string, string> = { 'X-Replication-Token': opts.replicationToken };
         if (newest) headers['If-None-Match'] = `"${newest.envelopeId}"`;
-        const res = await fetch(opts.primaryUrl.replace(/\/$/, '') + TAKEOVER_ENVELOPE_PATH, { method: 'GET', headers, signal: controller.signal });
+        const url = opts.primaryUrl.replace(/\/$/, '') + TAKEOVER_ENVELOPE_PATH;
+        // Never followed: a redirect would carry the replication token elsewhere (credential-redirect.ts).
+        const res = await fetch(url, { method: 'GET', headers, redirect: 'manual', signal: controller.signal });
+        const refused = redirectRefusal(res, url);
+        if (refused) {
+            await res.body?.cancel().catch(() => {});
+            return done('failed', `the main server at ${refused}`);
+        }
 
         if (res.status === 304) {
             await res.body?.cancel().catch(() => {});

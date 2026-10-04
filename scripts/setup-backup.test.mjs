@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'setup-backup.mjs');
 const NODE_WORDS = 'Turn on two-factor sign-in in Settings, or use an automation token made from your phone';
 const REFUSAL = JSON.stringify({ error: NODE_WORDS, code: 'password_needs_2fa' });
-const HINT = 'turn on two-factor sign-in on the primary, or set BEANPOOL_TOKEN';
+const HINT = 'The password path needs a token now: set BEANPOOL_TOKEN';
 
 /** A primary that answers each path from `routes` (status, body); anything else is 404. `seen` holds each request's path and password header. */
 async function standIn(routes) {
@@ -62,6 +62,34 @@ for (const [step, routes] of [
         } finally {
             await primary.close();
             fs.rmSync(dataDir, { recursive: true, force: true });
+        }
+    });
+}
+
+// Two-factor sign-in on: the primary answers the password with no code 401 totpRequired, right password or not, and this
+// script sends no code. It used to print "Check ADMIN_PASSWORD." (#1575 review); it says the path needs a token now.
+for (const [step, routes] of [
+    ['the enrolment bundle', { '/api/local/admin/backup-enroll': [401, JSON.stringify({ error: '2FA code required', totpRequired: true })] }],
+    ['making the replication token', {
+        '/api/local/admin/backup-enroll': [200, JSON.stringify({ communityId: 'c1', genesis: { communityId: 'c1' }, primaryPeerId: '12D3KooWStandIn', primaryUrl: 'http://localhost' })],
+        '/api/local/admin/replication-token/status': [401, JSON.stringify({ error: '2FA code required', totpRequired: true })],
+    }],
+]) {
+    test(`two-factor sign-in on, at ${step}: the password path needs a token now, and nothing is written`, async () => {
+        const primary = await standIn(routes);
+        const dataDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'bp-setup-backup-test-')), 'data');
+        try {
+            const { code, out } = await runScript(primary.url, dataDir);
+            assert.notEqual(code, 0, out);
+            assert.ok(out.includes('two-factor sign-in on, and this script sends no code'), `says why: ${out}`);
+            assert.ok(out.includes(HINT), `the way out: ${out}`);
+            assert.ok(!/Check (ADMIN_PASSWORD|--admin-pw)/.test(out), `no "check the password": ${out}`);
+            assert.ok(!out.includes('turn on two-factor'), `no circle back to two-factor: ${out}`);
+            assert.ok(!out.includes('pw-only'), 'the password is never printed');
+            assert.ok(!fs.existsSync(dataDir), 'nothing written');
+        } finally {
+            await primary.close();
+            fs.rmSync(path.dirname(dataDir), { recursive: true, force: true });
         }
     });
 }

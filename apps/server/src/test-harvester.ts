@@ -44,7 +44,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { openEnvelope, readSealedHeader, verifySealedHeader, sealEnvelope } from '@beanpool/core';
 import {
     nodeSlug, getNodes, saveNodes, loadHarvestState, harvestNode, listSealedBackups, sealOldBackups, backoffDelayMs,
-    listPlainHistory, imagesDirFor, missingManifestFor,
+    listPlainHistory, imagesDirFor, missingManifestFor, pullBackupForNode,
     type FleetNodeConfig,
 } from './services/harvester.js';
 import { sealFileVerified, MISSING_MEMBER } from './services/sealed-backup.js';
@@ -58,6 +58,7 @@ import { createBackupRoutes } from './routes/backup.js';
 import { hashPassword, updateLocalConfig, setReplicationToken, getLocalConfig } from './config/local-config.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { issueAutomationToken } from './automation-tokens.js';
+import { redirectRefusal } from './services/credential-redirect.js';
 import { seedOwnerForTests } from './admin-auth-test-harness.js';
 import type { RouteDeps } from './routes/types.js';
 
@@ -131,6 +132,63 @@ function sameTree(a: Record<string, Buffer>, b: Record<string, Buffer>): boolean
 }
 
 /** Harvest a node served in-process over local HTTP, the way the harvester reaches a real one. */
+/**
+ * A node, or a proxy in front of it, that answers the backup request with a redirect to another origin (#1575 review):
+ * nothing is sent there and nothing from there is kept. Before, fetch followed a 302/307/308 with X-Admin-Password and
+ * X-Replication-Token, and the other origin's 200 was read as the node's backup.
+ */
+async function harvesterRefusesRedirects(): Promise<void> {
+    const dataDir = process.env.BEANPOOL_DATA_DIR!;
+    const received: { method: string; path: string; password: boolean; token: boolean; bearer: boolean }[] = [];
+    const other = http.createServer((req, res) => {
+        received.push({ method: req.method || '', path: req.url || '', password: 'x-admin-password' in req.headers,
+            token: 'x-replication-token' in req.headers, bearer: 'authorization' in req.headers });
+        res.writeHead(200, { 'Content-Type': 'application/gzip' });
+        res.end(Buffer.from([0x1f, 0x8b, 0x08, 0x00]));
+    });
+    let code = 302;
+    let location = '';
+    const node = http.createServer((_req, res) => {
+        res.writeHead(code, location ? { Location: location } : {});
+        res.end();
+    });
+    await new Promise<void>(r => other.listen(0, '127.0.0.1', () => r()));
+    await new Promise<void>(r => node.listen(0, '127.0.0.1', () => r()));
+    const otherUrl = `http://127.0.0.1:${(other.address() as AddressInfo).port}`;
+    const nodeUrl = `http://127.0.0.1:${(node.address() as AddressInfo).port}`;
+    try {
+        const creds: Partial<FleetNodeConfig>[] = [
+            { adminPassword: 'redirect-pw', replicationToken: 'redirect-tok' },
+            { automationToken: `bp_${'a'.repeat(12)}_${'b'.repeat(64)}` },
+        ];
+        for (const status of [301, 302, 303, 307, 308]) {
+            for (const c of creds) {
+                code = status;
+                location = `${otherUrl}/elsewhere?k=secretish#frag`;
+                const n: FleetNodeConfig = { id: `redirect-${status}`, name: `Redirect ${status}`, url: nodeUrl, ...c };
+                let err = '';
+                try { await pullBackupForNode(n); } catch (e: any) { err = e?.message || String(e); }
+                const which = c.automationToken ? 'token' : 'password';
+                assert(err.includes(`answered HTTP ${status}, a redirect to ${otherUrl}/elsewhere.`) && err.includes('not followed'),
+                    `a ${status} to another origin (${which}): the pull stops and names the address it pointed to (got: ${err})`);
+                assert(!/redirect-pw|redirect-tok|bp_a|secretish|frag/.test(err), `a ${status} (${which}): the message holds no credential and no query (got: ${err})`);
+                assert(!fs.existsSync(path.join(dataDir, 'backups', nodeSlug(n))), `a ${status} (${which}): nothing is kept for the node`);
+            }
+        }
+        code = 302;
+        location = '';
+        let noWhere = '';
+        try { await pullBackupForNode({ id: 'redirect-none', name: 'Redirect none', url: nodeUrl, adminPassword: 'redirect-pw' }); } catch (e: any) { noWhere = e?.message || String(e); }
+        assert(noWhere.includes('answered HTTP 302, a redirect to no address'), `a 302 with no Location: the pull stops and says so (got: ${noWhere})`);
+        assert(received.length === 0, `the other origin received nothing: no request, no password, no token (got ${JSON.stringify(received)})`);
+        // 304 is "unchanged" for the take-over envelope fetch (If-None-Match), never a redirect.
+        assert(redirectRefusal(new Response(null, { status: 304 }), nodeUrl) === null, 'a 304 is not refused as a redirect');
+    } finally {
+        await new Promise<void>(r => node.close(() => r()));
+        await new Promise<void>(r => other.close(() => r()));
+    }
+}
+
 async function harvestLocalNode(): Promise<void> {
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
     initStateEngine();
@@ -765,7 +823,10 @@ async function main() {
     const initialState = loadHarvestState();
     assert(typeof initialState === 'object' && Object.keys(initialState).length === 0, 'loadHarvestState returns empty object when state file does not exist');
 
-    // 5. A real harvest against a local node
+    // 5. A redirect from the node is never followed with a credential
+    await harvesterRefusesRedirects();
+
+    // 6. A real harvest against a local node
     await harvestLocalNode();
 
     console.log(`\n${passed}/${run} passed`);

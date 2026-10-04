@@ -255,6 +255,52 @@ async function main() {
         updateLocalConfig({ backupAdminPassword: ADMIN_PW });
         resetBrakes();
 
+        // ---------- 4b. A main server address that redirects (#1575 review): never followed with a credential ----------
+        {
+            const elsewhereSeen: { method: string; path: string; password: boolean; token: boolean }[] = [];
+            const elsewhere = http.createServer((req, res) => {
+                elsewhereSeen.push({ method: req.method || '', path: req.url || '', password: 'x-admin-password' in req.headers, token: 'x-replication-token' in req.headers });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end('{}');
+            });
+            await new Promise<void>(r => elsewhere.listen(0, '127.0.0.1', () => r()));
+            const elsewhereUrl = `http://127.0.0.1:${(elsewhere.address() as AddressInfo).port}`;
+            let code = 302;
+            const redirecting = http.createServer((req, res) => {
+                res.writeHead(code, { Location: `${elsewhereUrl}${req.url}` });
+                res.end();
+            });
+            await new Promise<void>(r => redirecting.listen(0, '127.0.0.1', () => r()));
+            const redirectingUrl = `http://127.0.0.1:${(redirecting.address() as AddressInfo).port}`;
+            try {
+                for (const status of [302, 307, 308]) {
+                    code = status;
+                    // A legacy standby: the swap sends the password.
+                    updateLocalConfig({ backupPrimaryUrl: redirectingUrl, backupAdminPassword: ADMIN_PW, backupReplicationToken: null });
+                    const swap = await migrateStandbyPassword();
+                    assert(swap.lastSwap === 'failed' && (swap.warning || '').includes(`answered HTTP ${status}, a redirect to ${elsewhereUrl}/api/local/admin/replication-token/status.`)
+                        && !(swap.warning || '').includes(ADMIN_PW),
+                        `4b. a ${status} on the swap is not followed, and the warning names where it pointed (got: ${swap.warning})`);
+                    const pwCopy = await requestResync();
+                    assert(!pwCopy.ok && (pwCopy.error || '').includes(`answered HTTP ${status}, a redirect to ${elsewhereUrl}/api/local/admin/sync-copy.`)
+                        && !(pwCopy.error || '').includes(ADMIN_PW),
+                        `4b. a ${status} on a password copy is not followed, and the error names where it pointed (got: ${pwCopy.error})`);
+                    // A standby with a token: the copy sends the token.
+                    updateLocalConfig({ backupAdminPassword: null, backupReplicationToken: 'redirect-test-token' });
+                    const tokCopy = await requestResync();
+                    assert(!tokCopy.ok && (tokCopy.error || '').includes(`answered HTTP ${status}, a redirect to ${elsewhereUrl}/api/local/admin/sync-copy.`)
+                        && !(tokCopy.error || '').includes('redirect-test-token'),
+                        `4b. a ${status} on a token copy is not followed, and the error names where it pointed (got: ${tokCopy.error})`);
+                }
+                assert(elsewhereSeen.length === 0, `4b. the other origin received nothing: no password, no token, no request (got ${JSON.stringify(elsewhereSeen)})`);
+            } finally {
+                await new Promise<void>(r => redirecting.close(() => r()));
+                await new Promise<void>(r => elsewhere.close(() => r()));
+                updateLocalConfig({ backupPrimaryUrl: base, backupAdminPassword: ADMIN_PW, backupReplicationToken: null });
+                resetBrakes();
+            }
+        }
+
         // ---------- 5. Backup files and API responses ----------
         fs.writeFileSync(path.join(DATA_DIR!, 'genesis.json'), JSON.stringify({ communityId: 'standby-test' }));
         if (!fs.existsSync(path.join(DATA_DIR!, 'community.key'))) fs.writeFileSync(path.join(DATA_DIR!, 'community.key'), 'test-key');

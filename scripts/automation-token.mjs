@@ -32,20 +32,34 @@ export function headerValueProblem(name, value) {
  * fetch for a request that carries a credential (a token, the admin password, a 2FA session): it never follows a
  * redirect. fetch's default follows one, and to another origin it drops Authorization but keeps every other header, so
  * X-Admin-Password went wherever the node, or a proxy in front of it, pointed, and that origin's answer was read as the
- * node's. Any 3xx answer throws an Error (`redirect: true`) that says so and names where it pointed, by origin only;
- * nothing is sent there. Point the script at the address the node answers on itself.
+ * node's. Any 3xx answer throws an Error (`redirect: true`) that says so and names where it pointed (origin and path,
+ * never a query); nothing is sent there. Point the script at the address the node answers on itself.
  */
 export async function fetchNoRedirect(url, init = {}) {
     const res = await fetch(url, { ...init, redirect: 'manual' });
     if (res.status < 300 || res.status > 399) return res;
     await res.body?.cancel().catch(() => {});
+    const from = new URL(url);
     const location = res.headers.get('location');
-    let where = 'no address';
+    let to = null;
     if (location) {
-        try { where = new URL(location, url).origin; } catch { where = 'an address that is not a URL'; }
+        try { to = new URL(location, url); } catch { to = null; }
     }
-    const error = new Error(`${new URL(url).origin} answered HTTP ${res.status}, a redirect to ${where}. It was not followed, so ` +
-        'the credential went nowhere else, and nothing more was sent. Use the address the node answers on itself.');
+    const where = to ? to.origin + to.pathname : location ? 'an address that is not a URL' : 'no address';
+    let error;
+    if (to && to.origin === from.origin) {
+        // The same server: the node, or a proxy in front of it, moved this path. Naming the origin again told the operator
+        // nothing to change (#1575 review); the address it moved to is what they need.
+        error = new Error(`${from.origin}${from.pathname} answered HTTP ${res.status}: the node, or a proxy in front of it, redirected ` +
+            `this path to ${where}. Nothing was followed and nothing more was sent. Use that exact address: give the script ` +
+            'the address the node answers on there.');
+    } else if (to && from.protocol === 'http:' && to.protocol === 'https:' && to.hostname === from.hostname) {
+        error = new Error(`${from.origin} answered HTTP ${res.status}, a redirect to ${where}. It was not followed and nothing ` +
+            `more was sent. Use ${to.origin}: this request went over plain http, so the credential in it was not encrypted.`);
+    } else {
+        error = new Error(`${from.origin} answered HTTP ${res.status}, a redirect to ${where}. It was not followed, so ` +
+            'the credential went nowhere else, and nothing more was sent. Use the address the node answers on itself.');
+    }
     error.redirect = true;
     throw error;
 }

@@ -353,6 +353,27 @@ async function main(): Promise<void> {
         `the admins and the owner read every such look: who, whose, when (${show(logRead)})`);
     const missing = await call('GET', null, `/api/local/admin/members/${'f'.repeat(64)}/offboard/preview`, undefined, adaSession);
     assert(missing.status === 404 && logRows() === before8 + 3, `no member, no balance, no line (${show(missing)})`);
+    // The activity log carries no settled balance to anyone (review r4176631042): the removal's line names no number, and a
+    // line a node wrote before this (planted here, as it was written) is answered without it, its search included.
+    const ottLine = db.prepare("SELECT message FROM system_logs WHERE json_extract(metadata, '$.memberPubkey') = ?").get(ott.pk) as { message: string } | undefined;
+    assert(ottLine && /offboarded/.test(ottLine.message) && !/settled balance/i.test(ottLine.message), `Ottoline's removal line names no balance (${JSON.stringify(ottLine)})`);
+    const pip = 'ab'.repeat(32);
+    db.prepare("INSERT INTO system_logs (timestamp, level, category, message, metadata) VALUES (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'INFO', 'ADMIN', ?, ?)")
+        .run(`Member Pipistrelle (${pip.slice(0, 10)}...) offboarded with resolution 'donate_to_commons' (settled balance: 37) by operator ${ada.pk}`,
+            JSON.stringify({ memberPubkey: pip, callsign: 'Pipistrelle', operatorPubkey: ada.pk, resolution: 'donate_to_commons', balanceSettled: 37, giftRecipient: null }));
+    const before8b = logRows();
+    for (const [who, auth] of [['an admin', adaSession], ['the owner', owner]] as const) {
+        const logs = await call('POST', null, '/api/local/admin/logs', { category: 'ADMIN', searchQuery: 'offboarded' }, auth);
+        const rows = (logs.body?.logs ?? []) as any[];
+        const pipRow = rows.find((r) => /Pipistrelle/.test(r.message));
+        assert(logs.status === 200 && pipRow && rows.some((r) => /Ottoline/.test(r.message))
+            && rows.every((r) => !/settled balance|\b37\b/i.test(r.message) && !/balanceSettled/.test(String(r.metadata)))
+            && JSON.parse(pipRow.metadata).resolution === 'donate_to_commons',
+            `${who} reads the removals in the activity log, and no settled balance with them (${show(logs)})`);
+        const probe = await call('POST', null, '/api/local/admin/logs', { category: 'ADMIN', searchQuery: 'settled balance: 37' }, auth);
+        assert(probe.status === 200 && probe.body?.logs?.length === 0, `${who}'s search can't find the number either (${show(probe)})`);
+    }
+    assert(logRows() === before8b, 'reading the activity log is no look at a balance, so it writes no line');
 
     // ── 9. the texts say what the node does ────────────────────────────────────────────────────────
     console.log('── 9. the privacy policy and the guide say what the node does ──');

@@ -1011,7 +1011,17 @@ router.post('/api/local/admin/logs', async (ctx) => {
     const parsedOffset = parseInt(String(body.offset), 10);
     const offset = Math.max(0, isNaN(parsedOffset) ? 0 : parsedOffset);
 
-    let sql = 'SELECT * FROM system_logs WHERE 1=1';
+    // A removal's settled balance is a look at another member's balance, which an admin has only while removing them
+    // (logged: health_access_log). So this answers none, to any reader: not the metadata's balanceSettled, and not the
+    // "(settled balance: N)" a node wrote into the message before; the search reads the message as answered, so it can't
+    // find the number either (review r4176631042).
+    const message = `CASE WHEN instr(message, ' (settled balance: ') > 0
+        THEN substr(message, 1, instr(message, ' (settled balance: ') - 1)
+            || substr(substr(message, instr(message, ' (settled balance: ') + 19), instr(substr(message, instr(message, ' (settled balance: ') + 19), ')') + 1)
+        ELSE message END`;
+    let sql = `SELECT id, timestamp, level, category, ${message} AS message,
+        CASE WHEN json_valid(metadata) THEN json_remove(metadata, '$.balanceSettled') ELSE metadata END AS metadata
+        FROM system_logs WHERE 1=1`;
     const params: any[] = [];
 
     if (level && level !== 'ALL') {
@@ -1023,7 +1033,7 @@ router.post('/api/local/admin/logs', async (ctx) => {
         params.push(category);
     }
     if (searchQuery) {
-        sql += " AND message LIKE ? ESCAPE '\\'";
+        sql += ` AND ${message} LIKE ? ESCAPE '\\'`;
         params.push(likeContains(String(searchQuery)));
     }
 

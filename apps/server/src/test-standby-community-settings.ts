@@ -158,7 +158,8 @@ async function child(): Promise<void> {
             const { installCommunitySettings } = await import('./config/community-settings.js');
             const realWrite = fs.writeFileSync;
             (fs as any).writeFileSync = (file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
-                if (String(file).endsWith('local-config.json')) throw Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
+                // local-config.json, or the temp file it is written to before the rename (write-file-atomic.ts).
+                if (/local-config\.json(\.tmp-\d+-[0-9a-f]+)?$/.test(String(file))) throw Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
                 return (realWrite as (...args: unknown[]) => void)(file, ...rest);
             };
             let threw: string | null = null;

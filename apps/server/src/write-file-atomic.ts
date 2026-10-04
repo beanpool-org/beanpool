@@ -24,18 +24,25 @@ export function fsyncDir(dir: string): void {
 }
 
 export function writeFileAtomic(file: string, data: string | Uint8Array, opts: { mode?: number } = {}): void {
+    // A target this process may not write is refused, as a plain write to it would be: a rename would replace a
+    // read-only file regardless, and a file made read-only is one its owner meant to stay as it is.
+    let exists = true;
+    try { fs.accessSync(file, fs.constants.W_OK); } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+        exists = false;
+    }
     let mode = opts.mode;
-    if (mode === undefined) {
-        try { mode = fs.statSync(file).mode & 0o777; } catch { /* a new file */ }
+    if (mode === undefined && exists) {
+        try { mode = fs.statSync(file).mode & 0o777; } catch { /* gone since */ }
     }
     const dir = path.dirname(file);
     const tmp = path.join(dir, `.${path.basename(file)}.tmp-${process.pid}-${randomBytes(4).toString('hex')}`);
     let fd: number | null = null;
     try {
-        fd = fs.openSync(tmp, 'wx', mode ?? 0o666);
+        fs.writeFileSync(tmp, data, { mode: mode ?? 0o666, flag: 'wx' });
         // The umask may have narrowed a mode asked for; a kept mode must come back as it was.
-        if (mode !== undefined) fs.fchmodSync(fd, mode);
-        fs.writeFileSync(fd, data);
+        if (mode !== undefined) fs.chmodSync(tmp, mode);
+        fd = fs.openSync(tmp, 'r');
         fs.fsyncSync(fd);
         fs.closeSync(fd);
         fd = null;

@@ -19,7 +19,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { signedRequestBytes, signedRequestText, unboundRequestText, utf8Bytes } from '@beanpool/core';
 import {
     beans, debtLine, debtsOfEntry, openDebtOf, openDebtForName, sameName, leftOf, parseBeans, debtCodeOk, DEBT_COPY, REPAYMENT_COPY, DEBT_UNREACHABLE,
-    fetchNamesDebts, workOffDebt, settleDebt, fetchMyRepayment, payTheCommons, type NamesDebt,
+    PAY_UNANSWERED, coversLeft, oneAtATime, fetchNamesDebts, workOffDebt, settleDebt, fetchMyRepayment, payTheCommons, type NamesDebt,
 } from '../names-debts';
 
 const NODE = 'https://debts.example.test';
@@ -95,6 +95,25 @@ describe('an admin’s routes', () => {
         expect(JSON.parse(sent[0].body)).toEqual({ transactionId: 'tx-2' });
         (globalThis as any).fetch = vi.fn(async () => { throw new Error('offline'); });
         expect(await fetchNamesDebts(NODE, identity)).toEqual({ ok: false, status: 0, message: DEBT_UNREACHABLE });
+    });
+
+    it('a payment whose answer was lost never says nothing was changed: it may have gone through, check the Ledger', async () => {
+        expect(PAY_UNANSWERED).not.toContain('Nothing was changed');
+        expect(PAY_UNANSWERED).toContain('may have gone through. Check your Ledger before you pay again.');
+        (globalThis as any).fetch = vi.fn(async () => { throw new TypeError('Network request failed'); });
+        expect(await payTheCommons(NODE, identity, 3)).toEqual({ ok: false, status: 0, message: PAY_UNANSWERED });
+        // A 2xx without JSON, and a proxy's 502 page: the node may have paid.
+        (globalThis as any).fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected end of JSON'); } }));
+        expect(await payTheCommons(NODE, identity, 3, DEBT.id)).toEqual({ ok: false, status: 200, message: PAY_UNANSWERED });
+        (globalThis as any).fetch = vi.fn(async () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError('<html>'); } }));
+        expect(await payTheCommons(NODE, identity, 3)).toEqual({ ok: false, status: 502, message: PAY_UNANSWERED });
+        // The node's own refusal: known not paid, in its words.
+        answerWith(409, { error: 'You hold 2 Beans: you can pay the Commons only what you hold.' });
+        expect(await payTheCommons(NODE, identity, 3)).toEqual({ ok: false, status: 409, message: 'You hold 2 Beans: you can pay the Commons only what you hold.' });
+        // A read or a retry-safe write without an answer still says nothing changed.
+        (globalThis as any).fetch = vi.fn(async () => { throw new TypeError('Network request failed'); });
+        expect(await fetchMyRepayment(NODE, identity)).toEqual({ ok: false, status: 0, message: DEBT_UNREACHABLE });
+        expect(await settleDebt(NODE, identity, DEBT.id, 'tx')).toEqual({ ok: false, status: 0, message: DEBT_UNREACHABLE });
     });
 });
 
@@ -209,9 +228,65 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(pay).toMatch(/parseBeans\(amount\)[\s\S]{0,300}debtCodeOk\(debt\)[\s\S]{0,200}Alert\.alert\(REPAYMENT_COPY\.payTitle[\s\S]{0,500}payTheCommons\(node, identity, beans, debt \|\| undefined\)/);
         expect(pay).toContain('if (!r.ok) { setError(r.message); return; }');
     });
+    it('one payment at a time: the confirmed tap goes through oneAtATime, with nothing awaited before it', () => {
+        const pay = read('app', 'pay-commons.tsx');
+        expect(pay).toContain('const once = useRef(oneAtATime(setBusy)).current;');
+        expect(pay).toMatch(/text: 'Pay', onPress: \(\) => once\(async \(\) => \{\s*const node = await anchorUrl\(\);/);
+        expect(pay).not.toMatch(/setBusy\(true\)/);
+    });
+    it('the link’s amount is what is left: prefilled, and the confirm and the paid words use it for that code only', () => {
+        const pay = read('app', 'pay-commons.tsx');
+        expect(pay).toContain("const linkLeft = linkCode && typeof params.amount === 'string' ? parseBeans(params.amount) : null;");
+        expect(pay).toContain("useState(linkLeft !== null ? String(linkLeft) : '')");
+        expect(pay).toContain('const left = debt && debt.toLowerCase() === linkCode ? linkLeft : null;');
+        expect(pay).toContain('REPAYMENT_COPY.payConfirm(beans, !!debt, left)');
+        expect(pay).toContain('REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, !!debt, left)');
+    });
     it('the shared pay-back code opens Pay the Commons with it filled in', () => {
-        expect(DEBT_COPY.shareCode(DEBT)).toContain(`beanpool://pay-commons?code=${DEBT.id}`);
-        expect(REPAYMENT_COPY.paid(80, 'tx-7', true)).toBe('Paid 80 Beans to the Commons. Give this reference to an admin, who settles your debt with it: tx-7');
+        expect(DEBT_COPY.shareCode(DEBT)).toContain(`beanpool://pay-commons?code=${DEBT.id}&amount=179.5 `);
+        expect(DEBT_COPY.shareCode(DEBT)).toContain('pay all 179.50 Beans in one payment: a smaller payment doesn’t count toward it.');
+        expect(REPAYMENT_COPY.paid(80, 'tx-7', true, 80)).toBe('Paid 80 Beans to the Commons. Give this reference to an admin, who settles your debt with it: tx-7');
         expect(REPAYMENT_COPY.paid(80, 'tx-7', false)).toBe('Paid 80 Beans to the Commons.');
+    });
+    it('the node settles only with ONE payment of at least what is left: a settle is promised only then (150 of 300 is not)', () => {
+        expect(coversLeft(300, 300)).toBe(true);
+        expect(coversLeft(300.01, 300)).toBe(true);
+        expect(coversLeft(150, 300)).toBe(false);
+        expect(coversLeft(179.49, 179.5)).toBe(false);
+        expect(coversLeft(500, null)).toBe(false);
+        for (const words of [REPAYMENT_COPY.paid(150, 'tx-1', true, 300), REPAYMENT_COPY.payConfirm(150, true, 300)]) {
+            expect(words).toContain('won’t settle your debt');
+            expect(words).toContain('one payment of at least what is left');
+            expect(words).not.toContain('who settles your debt with it');
+            expect(words).not.toContain('can settle your debt with it.');
+        }
+        expect(REPAYMENT_COPY.paid(150, 'tx-1', true, 300)).toBe('Paid 150 Beans to the Commons. That is less than the 300 Beans left, so it won’t settle your debt: '
+            + 'an admin can settle a debt only with one payment of at least what is left. Tell an admin, and give them this reference: tx-1');
+        expect(REPAYMENT_COPY.payConfirm(300, true, 300)).toBe('Pay 300 Beans to the Commons for your debt? It covers the 300 Beans left, so an admin can settle your debt with it. This can’t be undone.');
+        // Not knowing what is left (a code typed by hand), nothing is promised, and the rule is said.
+        for (const words of [REPAYMENT_COPY.paid(150, 'tx-1', true), REPAYMENT_COPY.payConfirm(150, true)]) {
+            expect(words).toContain('only if this one payment is at least what');
+            expect(words).not.toContain('who settles your debt with it');
+        }
+        expect(REPAYMENT_COPY.payConfirm(5, false)).toBe('Pay 5 Beans to the Commons? This can’t be undone.');
+        expect(REPAYMENT_COPY.payIntro).toContain('An admin can settle a debt only with one payment of at least what is left: a smaller payment doesn’t count toward it.');
+    });
+    it('oneAtATime sets busy before anything is awaited, and a second tap while one is on its way sends nothing', async () => {
+        const busy: boolean[] = [];
+        const once = oneAtATime((b) => busy.push(b));
+        let release!: () => void;
+        const run = vi.fn(() => new Promise<void>((r) => { release = r; }));
+        const first = once(run);
+        expect(busy).toEqual([true]);
+        await once(run);
+        expect(run).toHaveBeenCalledTimes(1);
+        release();
+        await first;
+        expect(busy).toEqual([true, false]);
+        // A failed payment frees the next one.
+        await once(async () => { throw new Error('x'); }).catch(() => {});
+        const next = vi.fn(async () => {});
+        await once(next);
+        expect(next).toHaveBeenCalledTimes(1);
     });
 });

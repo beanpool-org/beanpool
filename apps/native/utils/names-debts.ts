@@ -35,6 +35,15 @@ export type DebtResult<T> = { ok: true; value: T } | { ok: false; status: number
 
 export const DEBT_UNREACHABLE = 'Your community’s server didn’t answer. Nothing was changed. Try again when you have signal.';
 
+/**
+ * A payment whose answer was lost (no answer, or one with no words in it). The node may have paid before the answer was
+ * lost, and it doesn't de-duplicate POST /api/commons/pay, so this never says nothing was changed.
+ */
+export const PAY_UNANSWERED = 'Your community’s server didn’t answer, so this payment may have gone through. Check your Ledger before you pay again.';
+
+/** Whether one payment of `amount` covers what is left: the node settles a debt only with one such payment. */
+export const coversLeft = (amount: number, left: number | null): boolean => left !== null && Math.round(amount * 100) >= Math.round(left * 100);
+
 /** Beans to the cent: 300 Beans, 12.50 Beans. Never anything finer than a cent. */
 export function beans(n: number): string {
     const cents = Math.round(n * 100);
@@ -87,8 +96,9 @@ export const DEBT_COPY = {
         + 'Commons took the debt when they left. If it passes, the record stays, marked forgiven, and an admin can confirm them again. '
         + 'The Decision names no one.',
     forgiveButton: 'Start the Decision',
-    shareCode: (d: NamesDebt) => `To pay back your debt to the Commons (${beans(leftOf(d))}), open beanpool://pay-commons?code=${d.id} `
-        + `on your phone, or open BeanPool, go to Ledger, tap Pay the Commons, and enter this pay-back code: ${d.id}`,
+    shareCode: (d: NamesDebt) => `To pay back your debt to the Commons, pay all ${beans(leftOf(d))} in one payment: a smaller payment doesn’t `
+        + `count toward it. Open beanpool://pay-commons?code=${d.id}&amount=${leftOf(d)} on your phone, or open BeanPool, go to Ledger, tap Pay `
+        + `the Commons, enter this pay-back code: ${d.id} and pay ${beans(leftOf(d))}.`,
     /** The matching-name warning: an admin adding a name the list holds already, with an open debt on it. */
     sameNameTitle: 'This name has an open debt',
     sameName: (name: string, d: NamesDebt) => `${name} is on the list already, and left owing the Commons ${beans(leftOf(d))}, still open. `
@@ -117,12 +127,13 @@ export function openDebtForName(
     return null;
 }
 
-async function answer<T>(res: Promise<Response>, pick: (body: any) => T): Promise<DebtResult<T>> {
+/** `lost`: the words when no answer came, or one without the node's words in it (PAY_UNANSWERED for the pay write). */
+async function answer<T>(res: Promise<Response>, pick: (body: any) => T, lost = DEBT_UNREACHABLE): Promise<DebtResult<T>> {
     let r: Response;
-    try { r = await res; } catch { return { ok: false, status: 0, message: DEBT_UNREACHABLE }; }
+    try { r = await res; } catch { return { ok: false, status: 0, message: lost }; }
     const body = await r.json().catch(() => null) as any;
-    if (!r.ok) return { ok: false, status: r.status, message: typeof body?.error === 'string' && body.error.trim() ? body.error : DEBT_UNREACHABLE };
-    if (body === null) return { ok: false, status: r.status, message: DEBT_UNREACHABLE };
+    if (!r.ok) return { ok: false, status: r.status, message: typeof body?.error === 'string' && body.error.trim() ? body.error : lost };
+    if (body === null) return { ok: false, status: r.status, message: lost };
     return { ok: true, value: pick(body) };
 }
 
@@ -164,22 +175,47 @@ export function parseBeans(text: string): number | null {
 
 /**
  * Pays the Commons from what the member holds (never into debt), for a debt when `debtId` is given: the node links the
- * payment to that debt, and an admin settles it with the reference this returns.
+ * payment to that debt, and an admin settles it with the reference this returns, if this one payment covers what is
+ * left (a smaller one settles nothing and doesn't count toward it). A lost answer says PAY_UNANSWERED: it may have paid.
  */
 export function payTheCommons(node: string, identity: BeanPoolIdentity, amount: number, debtId?: string) {
     const code = debtId?.trim().toLowerCase();
     return answer(signedPost(node, '/api/commons/pay', { amount, ...(code ? { debtId: code } : {}) }, identity),
-        (b) => b as { transactionId: string; amount: number });
+        (b) => b as { transactionId: string; amount: number }, PAY_UNANSWERED);
+}
+
+/**
+ * One payment at a time: the busy flag is set before anything is awaited, and a second confirmed tap while a payment is
+ * on its way does nothing (the node doesn't de-duplicate payments).
+ */
+export function oneAtATime(setBusy: (busy: boolean) => void) {
+    let inFlight = false;
+    return async (run: () => Promise<void>): Promise<void> => {
+        if (inFlight) return;
+        inFlight = true;
+        setBusy(true);
+        try { await run(); } finally { inFlight = false; setBusy(false); }
+    };
 }
 
 export const REPAYMENT_COPY = {
     banner: (r: Repayment) => `You’re working off a debt to the Commons: ${beans(r.left)} left of ${beans(r.amount)}. Every Bean you receive `
         + 'above 0 goes to the Commons until it is cleared. Then you keep what you receive, as everyone does.',
     payTitle: 'Pay the Commons',
-    payIntro: 'Pay the Commons from the Beans you hold: never more than you hold. If you’re paying back a debt, enter the pay-back code an admin gave you.',
-    payConfirm: (amount: number, forDebt: boolean) => `Pay ${beans(amount)} to the Commons${forDebt ? ' for your debt' : ''}? This can’t be undone.`,
-    paid: (amount: number, ref: string, forDebt: boolean) => `Paid ${beans(amount)} to the Commons.${forDebt
-        ? ` Give this reference to an admin, who settles your debt with it: ${ref}` : ''}`,
+    payIntro: 'Pay the Commons from the Beans you hold: never more than you hold. If you’re paying back a debt, enter the pay-back code an admin '
+        + 'gave you and pay all that is left in one payment. An admin can settle a debt only with one payment of at least what is left: a '
+        + 'smaller payment doesn’t count toward it.',
+    /** `left`: what is left on the debt, from the admin's link; null when this phone doesn't know it. */
+    payConfirm: (amount: number, forDebt: boolean, left: number | null = null) => `Pay ${beans(amount)} to the Commons${forDebt ? ' for your debt' : ''}? ${
+        !forDebt ? '' : coversLeft(amount, left) ? `It covers the ${beans(left!)} left, so an admin can settle your debt with it. `
+            : left !== null ? `${beans(left)} are left, so this payment won’t settle your debt, and it doesn’t count toward it: an admin can settle a debt only with one payment of at least what is left. `
+                : 'An admin can settle your debt with it only if this one payment is at least what is left (the amount in the admin’s message): a smaller payment doesn’t count toward it. '
+    }This can’t be undone.`,
+    paid: (amount: number, ref: string, forDebt: boolean, left: number | null = null) => `Paid ${beans(amount)} to the Commons.${
+        !forDebt ? '' : coversLeft(amount, left) ? ` Give this reference to an admin, who settles your debt with it: ${ref}`
+            : left !== null ? ` That is less than the ${beans(left)} left, so it won’t settle your debt: an admin can settle a debt only with one payment of at least what is left. Tell an admin, and give them this reference: ${ref}`
+                : ` Give this reference to an admin. It settles your debt only if this one payment is at least what was left to repay: a smaller payment doesn’t count toward it. ${ref}`
+    }`,
     badAmount: 'Write an amount of Beans above 0, to the cent (for example 12.50).',
     badCode: 'A pay-back code is 32 letters and digits, as the admin shared it. Leave it empty to pay without one.',
 };

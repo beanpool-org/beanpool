@@ -405,6 +405,11 @@ async function main(): Promise<void> {
     const notSeen = /never sees your trades|never your trades|No admin ever sees your trades|can't see your trades|Nobody's trades are shown/;
     const operatorPage = fs.readFileSync(new URL('../../../packages/beanpool-guide/operators/people/running-a-known-community.md', import.meta.url), 'utf8');
     const privacyPage = fs.readFileSync(new URL('../../../packages/beanpool-guide/content/settings/privacy.md', import.meta.url), 'utf8');
+    // The built-in page's button that shows who the alerts name says the 24-hour rule too (r4177719409).
+    const builtInPage = fs.readFileSync(new URL('../static/settings.js', import.meta.url), 'utf8');
+    assert(builtInPage.split('Show who the alerts name (your first look at each member in 24 hours is logged)').length === 3
+        && !builtInPage.includes('(this look is logged)'),
+        "the built-in page's two buttons that show who the alerts name say an admin's first look at each member in 24 hours is logged");
     const terms9 = await call('GET', null, '/api/community/consent-terms');
     const consentText = String(terms9.body?.text ?? '');
     assert(![policy, guide, operatorPage, privacyPage, consentText].some((t) => notSeen.test(t)),

@@ -7,8 +7,10 @@
  * hash, salt or password 2FA.
  *
  * Every node is its own process (takeover-test-harness.ts); sign-ins go over the node's own real HTTPS server.
- *   1. The main server, with ADMIN_PASSWORD; two standbys copy it and hold envelope E1, sealed with the password.
- *   2. The main server's own sealed bundle, taken now (before the retirement), is kept for step 4.
+ *   1. The main server, with ADMIN_PASSWORD and its 2FA on (a secret and one backup code); two standbys copy it and hold
+ *      envelope E1, sealed with the password and the 2FA. With 2FA on, every "no 2FA" check below can fail: drop the
+ *      2FA clearing from bundledLocalConfigUpdates and steps 4 and 5 go red (PR #1587 review).
+ *   2. The main server's own sealed bundle, taken now (before the retirement), is kept for step 4: it carries the 2FA.
  *   3. The password is retired on the main server: the envelope re-seals (E2) and carries it. Standby 2 holds E2;
  *      standby 1 holds only E1, and is itself retired (a server that already knows).
  *   4. A same-server restore of the step-2 backup: the main server stays retired, with no hash; the old password → 403.
@@ -72,8 +74,11 @@ async function child(): Promise<void> {
         'setup-primary': async (a: { ownerSeedHex: string; replicationToken: string }) => {
             const { ed25519 } = await import('@noble/curves/ed25519.js');
             const se = await import('./state-engine.js');
-            const { setReplicationToken } = await import('./config/local-config.js');
+            const { setReplicationToken, updateLocalConfig } = await import('./config/local-config.js');
+            const { generateTotpSecret, generateBackupCodes, hashBackupCode } = await import('./totp.js');
             const { makeRecoveryCode, flushTakeoverChecks } = await import('./services/takeover-envelope.js');
+            // The password's 2FA on before E1 is sealed, so E1 and the step-2 bundle carry it.
+            updateLocalConfig({ totpEnabled: true, totpSecret: generateTotpSecret(), totpBackupCodesHashes: generateBackupCodes(1).map(hashBackupCode) });
             const anna = Buffer.from(ed25519.getPublicKey(Buffer.from(a.ownerSeedHex, 'hex'))).toString('hex');
             se.seedGenesisMember(anna, 'Anna');
             setReplicationToken(a.replicationToken);
@@ -123,7 +128,7 @@ async function child(): Promise<void> {
             const c = getLocalConfig() as any;
             return {
                 retired: c.passwordRetired ?? null, adminHash: c.adminHash ?? null, salt: c.salt ?? null,
-                totpEnabled: !!c.totpEnabled, totpSecret: c.totpSecret ?? null,
+                totpEnabled: !!c.totpEnabled, totpSecret: c.totpSecret ?? null, backupCodes: (c.totpBackupCodesHashes || []).length,
             };
         },
     });
@@ -178,7 +183,8 @@ async function main(): Promise<void> {
         const setup = await main.send('setup-primary', { ownerSeedHex, replicationToken });
         assert(/^BPRC-1 /.test(setup.code) && setup.envelopeId, 'the main server has a recovery code and a take-over envelope (E1)');
         const before = await main.send('config');
-        assert(before.adminHash && !before.retired, 'E1 is sealed while the main server has its password');
+        assert(before.adminHash && !before.retired && before.totpEnabled && before.totpSecret && before.backupCodes === 1,
+            `E1 is sealed while the main server has its password and its 2FA (${j({ ...before, totpSecret: !!before.totpSecret })})`);
         const standbys: NodeProc[] = [];
         for (const dir of [dirs.s1, dirs.s2]) {
             fs.mkdirSync(dir, { recursive: true });
@@ -196,6 +202,8 @@ async function main(): Promise<void> {
         console.log('\n— 2. a sealed backup bundle taken before the retirement —');
         const oldBundle = await main.send('sealed-bundle');
         assert(oldBundle?.localConfig?.adminHash && !oldBundle.localConfig.passwordRetired, 'the old bundle carries the password and no retirement');
+        assert(oldBundle.localConfig.totpEnabled === true && typeof oldBundle.localConfig.totpSecret === 'string'
+            && oldBundle.localConfig.totpBackupCodesHashes?.length === 1, 'and the 2FA: its secret and one backup code');
 
         console.log('\n— 3. the password is retired on the main server —');
         const retired = await main.send('retire', { by: setup.anna });
@@ -213,8 +221,9 @@ async function main(): Promise<void> {
         const written = await main.send('apply-bundle', { bundle: oldBundle });
         assert(written.some((w: string) => w.startsWith('local-config.json')), `the restore wrote local-config.json (${j(written)})`);
         const afterRestore = await main.send('config');
-        assert(afterRestore.retired?.by === setup.anna && afterRestore.adminHash === null && afterRestore.salt === null && !afterRestore.totpEnabled,
-            `the main server stays retired, with no hash, salt or 2FA (${j(afterRestore)})`);
+        assert(afterRestore.retired?.by === setup.anna && afterRestore.adminHash === null && afterRestore.salt === null && !afterRestore.totpEnabled
+            && afterRestore.totpSecret === null && afterRestore.backupCodes === 0,
+            `the main server stays retired, with no hash, salt or 2FA: the bundle's secret and backup code did not come back (${j(afterRestore)})`);
         await passwordsRefused(main, 'the restored main server');
         await main.kill('SIGKILL');
 
@@ -224,8 +233,9 @@ async function main(): Promise<void> {
         nodes.push(s1);
         assert(s1.ready.role === 'primary', 'it is the main server now');
         const c1 = await s1.send('config');
-        assert(c1.retired?.by === setup.anna && c1.adminHash === null && c1.salt === null && !c1.totpEnabled && c1.totpSecret === null,
-            `still retired: E1's password did not come back (${j(c1)})`);
+        assert(c1.retired?.by === setup.anna && c1.adminHash === null && c1.salt === null && !c1.totpEnabled && c1.totpSecret === null
+            && c1.backupCodes === 0,
+            `still retired: E1's password and its 2FA did not come back (${j(c1)})`);
         await passwordsRefused(s1, 'promoted standby 1');
 
         console.log('\n— 6. standby 2 (never retired, its own password) takes over from E2, sealed AFTER —');
@@ -236,8 +246,9 @@ async function main(): Promise<void> {
         nodes.push(s2);
         assert(s2.ready.role === 'primary', 'it is the main server now');
         const c2 = await s2.send('config');
-        assert(c2.retired?.by === setup.anna && c2.adminHash === null && c2.salt === null && !c2.totpEnabled,
-            `the promoted server is retired, with no hash (${j(c2)})`);
+        assert(c2.retired?.by === setup.anna && c2.adminHash === null && c2.salt === null && !c2.totpEnabled && c2.totpSecret === null
+            && c2.backupCodes === 0,
+            `the promoted server is retired, with no hash and no 2FA (${j(c2)})`);
         await passwordsRefused(s2, 'promoted standby 2');
 
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);

@@ -149,7 +149,8 @@ export function ApplianceSection({
     const [changingPwd, setChangingPwd] = useState(false);
 
     // 2FA state
-    const [tfaStatus, setTfaStatus] = useState<{ enabled: boolean; qrDataUrl?: string; secret?: string; backupCodesRemaining?: number } | null>(null);
+    // passwordRetired: the server says so (2FA status, since the 2FA routes refuse on a retired server); absent from older ones.
+    const [tfaStatus, setTfaStatus] = useState<{ enabled: boolean; qrDataUrl?: string; secret?: string; backupCodesRemaining?: number; passwordRetired?: boolean } | null>(null);
     const [totpVerifyCode, setTotpVerifyCode] = useState('');
     // Turning 2FA off asks for a code from the authenticator (or a backup code) right now: the node refuses it on
     // the strength of an earlier sign-in alone.
@@ -1414,205 +1415,215 @@ export function ApplianceSection({
             {/* Subtab: Access & Security */}
             {subTab === 'access' && (
                 <div className="space-y-6 max-w-2xl">
-                    {/* Password Change Card */}
-                    <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
-                            <span>🔑</span>
-                            <span>Change Admin Password</span>
-                        </h3>
-                        <p className="text-xs text-nature-400 m-0">
-                            Rotate the shared node administrator password
+                    {tfaStatus?.passwordRetired ? (
+                        // Retired (the Retire card below says when and by whom): no password to change, and no 2FA, which
+                        // only ever guarded the password. The server refuses both (routes/settings.ts refuse2faWhileRetired).
+                        <p data-testid="no-server-2fa" className="p-4 rounded-2xl bg-nature-900/80 border border-nature-800 text-sm text-nature-200 m-0">
+                            This server has no admin password, so it has no server 2FA: your phone&apos;s lock is your second factor.
                         </p>
-
-                        {pwdStatus && (
-                            <div className={`p-3 rounded-xl border text-xs font-semibold ${
-                                pwdStatus.isError ? 'bg-red-950/60 border-red-800 text-red-200' : 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
-                            }`}>
-                                {pwdStatus.text}
-                            </div>
-                        )}
-
-                        <form onSubmit={handleChangePassword} className="space-y-3">
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">Current Password</label>
-                                <input
-                                    type="password"
-                                    value={currentPassword}
-                                    onChange={(e) => setCurrentPassword(e.target.value)}
-                                    placeholder="Enter current password"
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">New Password</label>
-                                <input
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    placeholder="Minimum 8 characters"
-                                    required
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">Confirm New Password</label>
-                                <input
-                                    type="password"
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    placeholder="Confirm new password"
-                                    required
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
-                                />
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={changingPwd}
-                                className="px-5 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
-                            >
-                                {changingPwd ? 'Updating...' : 'Update Password'}
-                            </button>
-                        </form>
-                    </div>
-
-                    {/* 2FA / TOTP Card */}
-                    <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-nature-800 pb-3">
-                            <div className="min-w-0">
+                    ) : (
+                        <>
+                            {/* Password Change Card */}
+                            <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
-                                    <span>🛡️</span>
-                                    <span>Two-Factor Authentication (2FA)</span>
+                                    <span>🔑</span>
+                                    <span>Change Admin Password</span>
                                 </h3>
-                                <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Require a 6-digit TOTP code on operator login
+                                <p className="text-xs text-nature-400 m-0">
+                                    Rotate the shared node administrator password
                                 </p>
-                            </div>
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                tfaStatus?.enabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-nature-800 text-nature-400'
-                            }`}>
-                                {tfaStatus?.enabled ? 'Enabled' : 'Disabled'}
-                            </span>
-                        </div>
 
-                        {tfaMessage && (
-                            <div className="p-3 rounded-xl bg-nature-950 border border-nature-800 text-xs text-white">
-                                {tfaMessage}
-                            </div>
-                        )}
-
-                        {tfaStatus?.qrDataUrl && !tfaStatus.enabled && (
-                            <div className="space-y-3 p-4 rounded-xl bg-nature-950 border border-nature-800">
-                                <img src={tfaStatus.qrDataUrl} alt="2FA QR Code" className="w-44 h-44 mx-auto rounded-lg" />
-                                {tfaStatus.secret && (
-                                    <div className="text-center font-mono text-xs text-terra-400 font-bold">
-                                        Secret: {tfaStatus.secret}
+                                {pwdStatus && (
+                                    <div className={`p-3 rounded-xl border text-xs font-semibold ${
+                                        pwdStatus.isError ? 'bg-red-950/60 border-red-800 text-red-200' : 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                                    }`}>
+                                        {pwdStatus.text}
                                     </div>
                                 )}
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={totpVerifyCode}
-                                        onChange={(e) => setTotpVerifyCode(e.target.value)}
-                                        placeholder="Enter 6-digit code to verify"
-                                        className="flex-1 bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
-                                    />
+
+                                <form onSubmit={handleChangePassword} className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-nature-300 mb-1">Current Password</label>
+                                        <input
+                                            type="password"
+                                            value={currentPassword}
+                                            onChange={(e) => setCurrentPassword(e.target.value)}
+                                            placeholder="Enter current password"
+                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-nature-300 mb-1">New Password</label>
+                                        <input
+                                            type="password"
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                            placeholder="Minimum 8 characters"
+                                            required
+                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-nature-300 mb-1">Confirm New Password</label>
+                                        <input
+                                            type="password"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            placeholder="Confirm new password"
+                                            required
+                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                                        />
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={changingPwd}
+                                        className="px-5 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                    >
+                                        {changingPwd ? 'Updating...' : 'Update Password'}
+                                    </button>
+                                </form>
+                            </div>
+
+                            {/* 2FA / TOTP Card */}
+                            <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-nature-800 pb-3">
+                                    <div className="min-w-0">
+                                        <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
+                                            <span>🛡️</span>
+                                            <span>Two-Factor Authentication (2FA)</span>
+                                        </h3>
+                                        <p className="text-xs text-nature-400 m-0 mt-0.5">
+                                            Require a 6-digit TOTP code on operator login
+                                        </p>
+                                    </div>
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                        tfaStatus?.enabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-nature-800 text-nature-400'
+                                    }`}>
+                                        {tfaStatus?.enabled ? 'Enabled' : 'Disabled'}
+                                    </span>
+                                </div>
+
+                                {tfaMessage && (
+                                    <div className="p-3 rounded-xl bg-nature-950 border border-nature-800 text-xs text-white">
+                                        {tfaMessage}
+                                    </div>
+                                )}
+
+                                {tfaStatus?.qrDataUrl && !tfaStatus.enabled && (
+                                    <div className="space-y-3 p-4 rounded-xl bg-nature-950 border border-nature-800">
+                                        <img src={tfaStatus.qrDataUrl} alt="2FA QR Code" className="w-44 h-44 mx-auto rounded-lg" />
+                                        {tfaStatus.secret && (
+                                            <div className="text-center font-mono text-xs text-terra-400 font-bold">
+                                                Secret: {tfaStatus.secret}
+                                            </div>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={totpVerifyCode}
+                                                onChange={(e) => setTotpVerifyCode(e.target.value)}
+                                                placeholder="Enter 6-digit code to verify"
+                                                className="flex-1 bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleVerify2FA}
+                                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white"
+                                            >
+                                                Verify &amp; Enable
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {!tfaStatus?.enabled && !tfaStatus?.qrDataUrl && (
                                     <button
                                         type="button"
-                                        onClick={handleVerify2FA}
-                                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white"
+                                        onClick={handleSetup2FA}
+                                        className="px-5 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
                                     >
-                                        Verify &amp; Enable
+                                        Setup 2FA Authenticator
                                     </button>
-                                </div>
-                            </div>
-                        )}
+                                )}
 
-                        {!tfaStatus?.enabled && !tfaStatus?.qrDataUrl && (
-                            <button
-                                type="button"
-                                onClick={handleSetup2FA}
-                                className="px-5 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
-                            >
-                                Setup 2FA Authenticator
-                            </button>
-                        )}
-
-                        {tfaStatus?.enabled && (
-                            // Wraps: the input takes at least 10rem, so on a narrow screen the button drops to its own
-                            // line instead of squeezing the code. The label is visible text above (it wraps; a
-                            // placeholder that long clipped at 320px and 1.3× text). No numeric keypad: backup codes
-                            // have letters (a–f).
-                            <div className="flex flex-wrap gap-2">
-                                <label htmlFor="tfa-disable-code" className="w-full text-xs text-nature-400">
-                                    Current 2FA or backup code
-                                </label>
-                                <input
-                                    id="tfa-disable-code"
-                                    type="text"
-                                    autoComplete="one-time-code"
-                                    autoCapitalize="none"
-                                    spellCheck={false}
-                                    value={totpDisableCode}
-                                    onChange={(e) => setTotpDisableCode(e.target.value)}
-                                    placeholder="123456"
-                                    className="flex-1 basis-40 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={handleDisable2FA}
-                                    className="min-h-[48px] px-5 py-2.5 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all"
-                                >
-                                    Disable 2FA
-                                </button>
-                            </div>
-                        )}
-                        {tfaStatus?.enabled && isOwnerViewer && (
-                            // New backup codes need the authenticator's current code, never a backup code; shown once.
-                            <div className="pt-3 border-t border-nature-800 space-y-2">
-                                {backupCodesShown ? (
-                                    <>
-                                        <p className="text-[11px] text-nature-300 m-0">
-                                            Your new backup codes. Each works once; the old ones no longer work. They are shown only now.
-                                        </p>
-                                        <ul className="grid grid-cols-2 gap-1 font-mono text-sm text-white list-none p-0 m-0 select-all" data-testid="backup-codes">
-                                            {backupCodesShown.map(c => <li key={c}>{c}</li>)}
-                                        </ul>
-                                        <button
-                                            type="button"
-                                            onClick={() => setBackupCodesShown(null)}
-                                            className="min-h-[48px] w-full py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
-                                        >
-                                            I have kept them safe
-                                        </button>
-                                    </>
-                                ) : (
+                                {tfaStatus?.enabled && (
+                                    // Wraps: the input takes at least 10rem, so on a narrow screen the button drops to its own
+                                    // line instead of squeezing the code. The label is visible text above (it wraps; a
+                                    // placeholder that long clipped at 320px and 1.3× text). No numeric keypad: backup codes
+                                    // have letters (a–f).
                                     <div className="flex flex-wrap gap-2">
-                                        <label htmlFor="tfa-backup-codes-code" className="w-full text-xs text-nature-400">
-                                            New backup codes ({tfaStatus?.backupCodesRemaining ?? 0} left): the 6-digit code your authenticator shows now
+                                        <label htmlFor="tfa-disable-code" className="w-full text-xs text-nature-400">
+                                            Current 2FA or backup code
                                         </label>
                                         <input
-                                            id="tfa-backup-codes-code"
+                                            id="tfa-disable-code"
                                             type="text"
-                                            inputMode="numeric"
                                             autoComplete="one-time-code"
-                                            value={backupCodesTotp}
-                                            onChange={(e) => setBackupCodesTotp(e.target.value)}
+                                            autoCapitalize="none"
+                                            spellCheck={false}
+                                            value={totpDisableCode}
+                                            onChange={(e) => setTotpDisableCode(e.target.value)}
                                             placeholder="123456"
                                             className="flex-1 basis-40 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
                                         />
                                         <button
                                             type="button"
-                                            onClick={handleShowBackupCodes}
-                                            className="min-h-[48px] px-5 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                            onClick={handleDisable2FA}
+                                            className="min-h-[48px] px-5 py-2.5 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all"
                                         >
-                                            Show new backup codes
+                                            Disable 2FA
                                         </button>
                                     </div>
                                 )}
-                                {backupCodesMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{backupCodesMessage}</p>}
+                                {tfaStatus?.enabled && isOwnerViewer && (
+                                    // New backup codes need the authenticator's current code, never a backup code; shown once.
+                                    <div className="pt-3 border-t border-nature-800 space-y-2">
+                                        {backupCodesShown ? (
+                                            <>
+                                                <p className="text-[11px] text-nature-300 m-0">
+                                                    Your new backup codes. Each works once; the old ones no longer work. They are shown only now.
+                                                </p>
+                                                <ul className="grid grid-cols-2 gap-1 font-mono text-sm text-white list-none p-0 m-0 select-all" data-testid="backup-codes">
+                                                    {backupCodesShown.map(c => <li key={c}>{c}</li>)}
+                                                </ul>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setBackupCodesShown(null)}
+                                                    className="min-h-[48px] w-full py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                                >
+                                                    I have kept them safe
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <div className="flex flex-wrap gap-2">
+                                                <label htmlFor="tfa-backup-codes-code" className="w-full text-xs text-nature-400">
+                                                    New backup codes ({tfaStatus?.backupCodesRemaining ?? 0} left): the 6-digit code your authenticator shows now
+                                                </label>
+                                                <input
+                                                    id="tfa-backup-codes-code"
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    autoComplete="one-time-code"
+                                                    value={backupCodesTotp}
+                                                    onChange={(e) => setBackupCodesTotp(e.target.value)}
+                                                    placeholder="123456"
+                                                    className="flex-1 basis-40 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleShowBackupCodes}
+                                                    className="min-h-[48px] px-5 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                                >
+                                                    Show new backup codes
+                                                </button>
+                                            </div>
+                                        )}
+                                        {backupCodesMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{backupCodesMessage}</p>}
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
+                        </>
+                    )}
 
                     {/* Break-Glass Emergency Recovery Card (per admin-surface §2.2) */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">

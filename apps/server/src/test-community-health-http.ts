@@ -443,9 +443,9 @@ async function main(): Promise<void> {
     assert(disputes9.status === 200 && logRows() === before9 + 1 && listLine9?.action === 'disputes_listed' && listLine9?.actor_pubkey === ada.pk
         && JSON.stringify(JSON.parse(listLine9?.detail ?? 'null')) === JSON.stringify(shownIds9),
         `an admin's read of the disputes list is a line: who, and the ids of the trades it showed (${disputes9.status} ${JSON.stringify(listLine9)} ${JSON.stringify(shownIds9)})`);
-    // An alert that names a member: Kim, invited and here a year, with no Beans moved since (inactive_member).
-    db.prepare("UPDATE members SET joined_at = ?, invited_by = CASE WHEN invited_by = 'genesis' THEN ? ELSE invited_by END WHERE public_key = ?")
-        .run(new Date(Date.now() - 400 * DAY).toISOString(), ada.pk, kim.pk);
+    // An alert that names a member: Bea, invited by Ada (the inactivity alert passes over the genesis-invited) and here
+    // 200 days, has moved no Beans in the 30 days it looks back (inactive_member names her).
+    db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(ada.pk, bea.pk);
     const before9b = logRows();
     const data9 = await call('POST', null, '/api/local/admin/data', {}, adaSession);
     const named9 = [...new Set(((data9.body?.health?.flags ?? []) as any[]).flatMap((f) => f.members ?? []))].sort();

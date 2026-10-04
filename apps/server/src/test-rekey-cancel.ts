@@ -26,6 +26,8 @@
  *     member ends active, under a code with a prior status (Sal) or an older one (Len).
  *  I. An admin's emergency suspension while the code alone holds the member is made, and outlasts the cancel; a
  *     report's suspension while the code waits is still refused as one.
+ *  J. Completing the code keeps a report's suspension made while it waited on the new key (Lift suspension lifts it);
+ *     the code's own 'suspended' ends as before.
  *
  * Run (from apps/server): mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-rekey-cancel" node ../../scripts/run-server-suites.mjs
  */
@@ -422,6 +424,30 @@ async function runTests() {
         const su = await suspend(uma.pubKeyHex);
         assert(su.status === 409 && /already suspended/.test(su.json.error ?? '') && getMember(uma.pubKeyHex)?.status === 'suspended',
             `I: a report suspended Uma while the code waits: the emergency suspension is refused as already suspended (${su.status} ${su.json.error})`);
+    }
+
+    // ── J. Completing the code keeps a suspension it didn't make (review 4176287767) ────────────
+    {
+        const rep3 = makeKeypair();
+        join(rep3, 'RoyReporter');
+        const cora = makeKeypair(), coraNew = makeKeypair();
+        join(cora, 'CoraReported');
+        const made = await issue(ownerSession, cora.pubKeyHex);
+        const report = submitReport(rep3.pubKeyHex, cora.pubKeyHex, 'Repeated harassment in the market posts');
+        const actioned = await as(ownerSession, 'POST', `/api/local/admin/reports/${report!.id}/action`, { suspendUser: true });
+        const done = await reEnroll(made.json.code, coraNew);
+        assert(actioned.status === 200 && done.status === 200 && getMember(coraNew.pubKeyHex)?.status === 'suspended',
+            `J: a report suspends Cora while the code waits; her re-key completes and the new key stays suspended (${done.status} ${getMember(coraNew.pubKeyHex)?.status})`);
+        const lifted = await as(ownerSession, 'POST', `/api/local/admin/users/${coraNew.pubKeyHex}/status`, { status: 'active' });
+        assert(lifted.status === 200 && getMember(coraNew.pubKeyHex)?.status === 'active' && await acts(coraNew, 'lifted'),
+            `J: Lift suspension makes her new key active, and it acts (${lifted.status})`);
+
+        // The code's own 'suspended' is undone, as before: the new key is active.
+        const dot = makeKeypair(), dotNew = makeKeypair();
+        join(dot, 'DotMoves');
+        const dm = await issue(ownerSession, dot.pubKeyHex);
+        const dd = await reEnroll(dm.json.code, dotNew);
+        assert(dd.status === 200 && getMember(dotNew.pubKeyHex)?.status === 'active', `J: with nothing else, the new key is active (${getMember(dotNew.pubKeyHex)?.status})`);
     }
 
     console.log(`\n========================================`);

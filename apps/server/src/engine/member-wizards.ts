@@ -348,6 +348,9 @@ export function completeRekey(
         throw new Error('Old member record not found');
     }
 
+    // A suspension the code didn't make (a report's, before or while it waited) stays on the new key. The key move
+    // makes the new key 'active' unless 'disabled', which is right only for the code's own 'suspended'.
+    const keepSuspended = member.status === 'suspended' && !suspendedOnlyByRekeyCode(cleanOld);
     const nowIso = new Date().toISOString();
     /** The members whose block lists the re-key changed (moveBlocks), told after the commit. */
     let blockListsMoved: string[] = [];
@@ -367,6 +370,7 @@ export function completeRekey(
         // 2. Enumerate and transfer ALL 32 consumers of members.public_key (engine/key-move.ts, which a standby's copy
         // follows with too), each row stamped so the standby's next copy carries the move.
         moveMemberKeyRows(cleanOld, cleanNew, nowIso, { keepStamps: false });
+        if (keepSuspended) db.prepare("UPDATE members SET status = 'suspended', updated_at = ? WHERE public_key = ?").run(nowIso, cleanNew);
 
         // What the main server moves by rules of its own, each stamped so the move replicates.
         // (n2) place watches (G5): the places the member watches are theirs, whatever device holds the key.

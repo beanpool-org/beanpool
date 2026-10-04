@@ -498,6 +498,8 @@ export function confirmToWorkOff(actor: string, debtId: unknown, body: { memberP
     if (!debt) throw new NamesListError(404, 'no_debt', 'There is no such debt record.');
     if (debt.status !== 'open') throw new NamesListError(409, 'not_open', `That debt is ${debt.status} already.`);
     if (debt.repaying_pubkey) throw new NamesListError(409, 'repaying', 'Someone is working that debt off already.');
+    // Only while something is left: payments made for the debt count toward it as they are paid (engine/names-debts.ts).
+    if (!(Math.round((debt.amount - debt.repaid) * 100) > 0)) throw new NamesListError(409, 'nothing_left', 'Nothing is left to repay on that debt.');
     return confirmMember(actor, { memberPubkey: body.memberPubkey, entryId: debt.entry_id }, { debtId: debt.id });
 }
 

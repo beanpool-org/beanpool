@@ -5843,12 +5843,13 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
     let chat: { conversationId: string | null; messages: Message[] } | undefined = undefined;
     if (convRow?.id) {
         // The two members' own messages as they are; of the node's plaintext notices in that chat (escrow placed,
-        // released, refunded, a ruling: amounts and both keys), only this trade's post's. The pair's other trades,
-        // finished ones too, stay out of the admin's view.
+        // released, cancelled, a ruling: amounts and both keys), only this trade's, by the transactionId each notice
+        // carries. A repeatable listing the pair traded before shares this post id, so the post id is not enough; a
+        // notice without a transactionId is left out.
         const msgs = getConversationMessages(convRow.id, 50, 0).filter(m => {
             if (m.type !== 'system' && m.authorPubkey !== 'SYSTEM') return true;
             try {
-                return JSON.parse(m.metadata || '{}')?.postId === r.post_id;
+                return JSON.parse(m.metadata || '{}')?.transactionId === r.id;
             } catch {
                 return false;
             }

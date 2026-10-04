@@ -487,13 +487,14 @@ async function main(): Promise<void> {
     chatOf.run('c9-pair', 'dm', null, max.pk);
     for (const m of [max, nia]) inChat.run('c9-pair', m.pk);
     trade.run('t9-old', oldPost.id, max.pk, nia.pk, 'completed', ago(40 * DAY), null);
-    const notice = (post: { id: string }, type: string, amount: number) =>
-        injectSystemMessage(post.id, type, { amount, postId: post.id, buyerPubkey: max.pk, sellerPubkey: nia.pk } as any, max.pk, nia.pk);
-    notice(oldPost, 'ESCROW_FUNDED', 7);
-    notice(oldPost, 'ESCROW_RELEASED', 7);
+    // Each notice carries its trade's transactionId, as engine/escrow.ts writes it.
+    const notice = (post: { id: string }, txId: string, type: string, amount: number, extra: object = {}) =>
+        injectSystemMessage(post.id, type, { amount, postId: post.id, transactionId: txId, buyerPubkey: max.pk, sellerPubkey: nia.pk, ...extra } as any, max.pk, nia.pk);
+    notice(oldPost, 't9-old', 'ESCROW_FUNDED', 7);
+    notice(oldPost, 't9-old', 'ESCROW_RELEASED', 7);
     line.run('m9-pair', 'c9-pair', max.pk, 'a line the pair wrote');
     trade.run('t9-pair', newPost.id, max.pk, nia.pk, 'pending', ago(20 * DAY), null);
-    notice(newPost, 'ESCROW_FUNDED', 9);
+    notice(newPost, 't9-pair', 'ESCROW_FUNDED', 9);
     const pairOne = await one9('t9-pair');
     const pairListed = ((await call('GET', null, '/api/local/admin/disputes?minDays=0&limit=200', undefined, adaSession)).body?.disputes ?? [])
         .find((d: any) => d.id === 't9-pair');
@@ -504,6 +505,24 @@ async function main(): Promise<void> {
             && (d?.chat?.messages ?? []).length === 2 && (d?.chatContext ?? []).length === 2,
             `${where}, the dispute's chat shows the pair's line and this trade's notice, none of their older trade's (${shown.slice(0, 300)})`);
     }
+
+    // A repeatable listing (a weekly box) the same pair traded before shares the post id with the disputed trade, so a
+    // notice is this trade's only by its transactionId (review r4177209847): the earlier trade's notices, a ruling on
+    // another trade with its reason, and a notice with no transactionId all stay out.
+    const boxPost = createPost('offer', 'produce', 'Niamh\'s weekly box', 'Produce', 13, 'fixed', nia.pk, undefined, undefined, undefined, true)!;
+    trade.run('t9-box-old', boxPost.id, max.pk, nia.pk, 'completed', ago(30 * DAY), null);
+    notice(boxPost, 't9-box-old', 'ESCROW_FUNDED', 13);
+    notice(boxPost, 't9-box-old', 'ESCROW_RELEASED', 13);
+    notice(boxPost, 't9-box-ruled', 'ESCROW_DISPUTE_RESOLVED', 11, { resolution: 'refund', resolvedByName: 'Ada', reason: 'an older ruling' });
+    injectSystemMessage(boxPost.id, 'ESCROW_FUNDED', { amount: 17, postId: boxPost.id, buyerPubkey: max.pk, sellerPubkey: nia.pk } as any, max.pk, nia.pk);
+    trade.run('t9-box-new', boxPost.id, max.pk, nia.pk, 'pending', ago(10 * DAY), null);
+    notice(boxPost, 't9-box-new', 'ESCROW_FUNDED', 5);
+    const boxOne = await one9('t9-box-new');
+    const boxShown = JSON.stringify({ chat: boxOne.body?.dispute?.chat ?? null, chatContext: boxOne.body?.dispute?.chatContext ?? null });
+    const boxSystem = (boxOne.body?.dispute?.chat?.messages ?? []).filter((m: any) => m.type === 'system' || m.authorPubkey === 'SYSTEM');
+    assert(boxOne.status === 200 && /5 Beans placed in escrow/.test(boxShown) && !/13 Beans/.test(boxShown) && !/older ruling/.test(boxShown)
+        && !/11 Beans/.test(boxShown) && !/17 Beans/.test(boxShown) && !/t9-box-old|t9-box-ruled/.test(boxShown) && boxSystem.length === 1,
+        `a repeatable listing's dispute shows this trade's notice only, not the pair's earlier trade of it, another ruling or a notice with no trade id (${boxShown.slice(0, 400)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

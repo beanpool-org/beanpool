@@ -25,7 +25,7 @@ import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndex
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
-import { creditLineCard, knownFrozenPartNote, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
+import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
 
 // ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
@@ -942,6 +942,9 @@ export default function LedgerScreen() {
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading }} accessibilityRole="header">{KNOWN_FROZEN_TITLE}</Text>
                             <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>{KNOWN_FROZEN_BODY}</Text>
+                            {frozenDebitLine(balanceState.balance) && (
+                                <Text testID="ledger-frozen-debit" style={{ fontSize: 12.5, fontWeight: '700', color: colors.text.heading, lineHeight: 18, marginTop: 6 }}>{frozenDebitLine(balanceState.balance)}</Text>
+                            )}
                         </View>
                     </View>
                 </View>

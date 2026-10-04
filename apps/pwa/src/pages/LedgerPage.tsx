@@ -18,7 +18,7 @@ import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndex
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
-import { creditLineCard, knownFrozenPartNote, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
+import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -333,6 +333,9 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div>
                             <h2 className="text-sm font-extrabold text-sky-800 dark:text-sky-200">{KNOWN_FROZEN_TITLE}</h2>
                             <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">{KNOWN_FROZEN_BODY}</div>
+                            {frozenDebitLine(balanceInfo?.balance) && (
+                                <p className="text-xs font-bold text-nature-800 dark:text-nature-100 leading-relaxed mt-1.5" data-testid="ledger-frozen-debit">{frozenDebitLine(balanceInfo?.balance)}</p>
+                            )}
                         </div>
                     </div>
                 </div>

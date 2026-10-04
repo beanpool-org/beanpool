@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 105,
-  "hash": "a909063300afa62d9e24162b107b28ba15cb97048503296c4abedec94f540d72",
+  "version": 106,
+  "hash": "707666fee5180fdf3c569744817bc26926ea892011ce12f6becf696002de4e28",
   "sections": [
     {
       "id": "about",
@@ -4622,7 +4622,7 @@
           "items": [
             "**Trust:** completed trades build trust, especially with many different people. See \"The 500-bean partner limit\".",
             "**Ratings:** stars can only lower the trust you earn. An average of 5 stars keeps it all; a lower average takes some off.",
-            "The deepest any credit line goes is 2,000 beans."
+            "The deepest any credit line goes is 2,000 beans, unless your community has set a higher cap (up to 5,000)."
           ]
         },
         {
@@ -4647,6 +4647,23 @@
         {
           "type": "p",
           "text": "The line under the bar tells you, for example \"Post an offer to open your credit line\"."
+        },
+        {
+          "type": "h2",
+          "text": "In a known community"
+        },
+        {
+          "type": "p",
+          "text": "Some communities have admins who know every member by name. If yours has turned on **the known floor**, a member an admin has confirmed gets a credit line straight away: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "One live Offer lets you use all of it. With no Offers, you can't use it.",
+            "Trust you earn by trading adds to it, up to your community's cap (2,000 Beans unless it chose more, up to 5,000).",
+            "An admin can set a smaller limit for you, for example while you are new. That never takes Beans from you: if you are already below it, spending pauses until you are back above it.",
+            "If you are working off a debt from an earlier account, the Beans you receive above 0 go to the Commons until it is paid."
+          ]
         },
         {
           "type": "h2",
@@ -4959,7 +4976,9 @@
           "type": "ul",
           "items": [
             "**Your balance and your trades.** Nobody else in your community can read them, in the app or from your community's server. A trade shows only its two people: you and the other person.",
-            "If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only."
+            "If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only.",
+            "If an admin removes your account, the admin who starts it sees your balance, so that what you hold or owe can be settled. The other admins and the owner can see who looked and when.",
+            "In a known community, if you agreed to it when you joined and an admin has confirmed you, the admins can see your balance once it passes one of your community's lines. You can take that back at any time in Settings. In any community, any admin can also see some of your trades: a trade that isn't finished yet or that an admin settled, how many trades you have finished or cancelled and what they came to, how many posts you have up and messages you have sent, fraud alerts, and an alert if no Beans have moved in or out of your account for a set number of days. Whoever runs your community's server holds its whole database, with its backups, snapshots and standby copies. See \"What the admins can see\"."
           ]
         },
         {
@@ -5085,7 +5104,77 @@
         },
         {
           "type": "p",
-          "text": "The list holds names and notes, and which account is whose. It doesn't show anyone your balance or your trades. See \"Your privacy\" for what members and admins can see otherwise."
+          "text": "The list holds names and notes, and which account is whose. It doesn't show anyone your balance or your trades (an admin can see your balance in the cases below, and some of your trades: see the end of this page). See \"Your privacy\" for what members and admins can see otherwise."
+        },
+        {
+          "type": "h2",
+          "text": "What you agree to in a known community"
+        },
+        {
+          "type": "p",
+          "text": "A community that confirms its members, a **known community**, works the way a LETS always has: the admins keep an eye on debts that grow too big or stay too long. When you join one, the join screen says exactly when, in your community's numbers, for example:"
+        },
+        {
+          "type": "p",
+          "text": "\"In this community, the admins can see your balance if it goes past 50% of your credit line or if you stay in debit for 60 days without a sale. That's how a LETS has always worked. Every look at your balance is logged, and you can take this back at any time in Settings. Whatever you choose, any admin can see some of your trades, and those looks are not logged: a trade that isn't finished yet or that an admin settled (who with, the listing, the price, and your one-to-one chat with them, which they can't read if it is private), so a stuck trade can be settled; how many trades you have finished or cancelled and what the finished ones came to, and how many posts you have up and messages you have sent; a fraud alert that names you, and how many Beans moved, if you trade mostly with one member or with members you invited; one that names you, with no Beans, if you are in a group of members, at least half of them new, who trade mostly with each other; and an alert that names you if no Beans have moved in or out of your account for a set number of days. Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance and trades included, and its backups, snapshots and standby copies.\""
+        },
+        {
+          "type": "p",
+          "text": "Agreeing to that is your consent. Then, and only while an admin has confirmed you:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "If your balance passes either line, your account shows on the admins' phones with your balance, so an admin who knows you can have a word. That list shows nothing else about you, and none of your trades.",
+            "Every time an admin opens that list, the other admins and the owner can see who opened it and when.",
+            "If you haven't agreed, or nobody has confirmed you, or your community doesn't confirm members, that list never shows you."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If you joined before your community asked, your app offers it to you. Saying no, or not answering, changes nothing else: you are still a member. If the community changes its lines later, your app asks you again."
+        },
+        {
+          "type": "p",
+          "text": "You can take your consent back at any time: open **Settings**, where your app shows what you agreed to and when, and tap **Withdraw**. From that moment you are off the list. Your community keeps a record that you agreed and that you withdrew, and you can agree again later."
+        },
+        {
+          "type": "h2",
+          "text": "When an admin sees your balance anyway"
+        },
+        {
+          "type": "p",
+          "text": "Whether or not you agreed to anything, in any community:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**When an admin removes your account.** The admin who starts removing you sees your balance and how many trades you have open, so that what you hold or owe can be settled. The other admins and the owner can see who looked, at whose balance, and when.",
+            "**When your community votes on removing you.** Everyone who can vote in it sees your balance and any debt, in that vote only.",
+            "**Whoever runs your community's server** holds its whole database, your balance and trades included, and its backups, snapshots and standby copies."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What any admin can see of your trades"
+        },
+        {
+          "type": "p",
+          "text": "Whether or not you agreed to anything, in any community, any admin can see:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A trade that isn't finished yet, or that an admin settled.** Both members, the listing, the price, and the messages in the one-to-one chat of the two members. An admin can't read a private chat, only see who wrote and when. This is so that an admin can settle a trade that gets stuck.",
+            "**How many trades each member has finished or cancelled,** and what the finished ones came to, and how many posts each member has up and messages they have sent.",
+            "**Fraud alerts that name members,** with the Beans that moved: when someone trades mostly with one member, or with members they invited.",
+            "**A fraud alert that names a group of members,** at least half of them new, who trade mostly with each other. It shows no Beans.",
+            "**An alert that names the members who have had no Beans move in or out** for a set number of days."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nothing else of your trades. These looks are not logged: unlike a look at your balance, nobody can see who looked."
         },
         {
           "type": "h2",

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 110,
-  "hash": "bb48ba9f2fb99d3d9b1e7b27eb90abd9eed7b3465f3bd10e0358f2e867dcc7c3",
+  "version": 111,
+  "hash": "ac422f44a7f922f9f5d8aa9ce1fa275c6fb0ae1700ea3485924c23d4b5abe681",
   "sections": [
     {
       "id": "about",
@@ -5193,7 +5193,7 @@
         },
         {
           "type": "p",
-          "text": "**Every look at one of these trades is logged:** who looked, when, and at which trades. **A look at the alerts that name a member is logged** the first time each admin opens them, and again at that admin's first look after 24 hours; the looks in between add no line. The owner and the admins can see that log in Community health, as a list of its own beside the list of who looked at a balance."
+          "text": "**Every look at one of these trades is logged:** who looked, when, and at which trades. **A look at the alerts that name a member is logged** the first time each admin opens them, and again at that admin's first look after 24 hours; the looks in between add no line. The owner and the admins can see that log in Community health, as a list of its own beside the list of who looked at a balance. A look made by an automation token (a script an owner set up) says so: the line reads \"by token\" and the token's name, beside the owner who made it."
         },
         {
           "type": "p",

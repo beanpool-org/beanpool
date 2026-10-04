@@ -106,6 +106,16 @@ While a record is open, nobody can be confirmed against that entry. If the perso
 
 Nothing already spent is ever taken back from anyone. A debt record is deleted 3 years after the member left, whatever its status.
 
+## Community health
+
+**Settings → People & Safety → Community health** shows the whole community's totals: Beans in circulation, the credit held and the debt owed, how many members are in debit, the Commons pot and this month's trades. Every owner and admin sees them; they are the community's, not any one member's.
+
+In a known community, an admin's phone also shows the **exceptions**: confirmed members who agreed to it when they joined, and whose balance is past the debt line (50% of their credit line unless you choose another) or who have been in debit with no sale for 60 days (unless you choose another). Each shows with their name from the names list, their balance and their credit line, so an admin who knows them can have a word, the way a LETS committee always has. The phone also lists the open debts of members who left. Nobody's trades are shown, and there is no export of balances: if you truly need every balance, you run the server and have the database, and so does that responsibility.
+
+Only an owner moves the two lines, and every change shows in the known floor's log. The join screen tells every new member, in those numbers, what the admins can see, and their app records that they agreed. A member who joined before your community asked is offered it in their app; until they agree they never show. Changing the lines asks every member again.
+
+Every time anyone opens the exceptions, your server writes who and when, before it answers. Every owner and admin can read that log in Community health.
+
 ## The PDF copy
 
 **Export as PDF** makes a PDF of every name your phone can open, on your phone, and offers to share or save it. The app asks first. The PDF leaves BeanPool's protection: it is yours to keep safe, like a paper list. The other admins can see that you exported it, and when.

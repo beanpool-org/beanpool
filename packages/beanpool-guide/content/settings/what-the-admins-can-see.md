@@ -32,7 +32,21 @@ An admin may **confirm** you: they say your account is the person on your entry.
 
 ## What the names list doesn't show the admins
 
-The list holds names and notes, and which account is whose. It doesn't show anyone your balance or your trades. See "Your privacy" for what members and admins can see otherwise.
+The list holds names and notes, and which account is whose. It doesn't show anyone your balance or your trades (a known community can show your balance in one case: see below). See "Your privacy" for what members and admins can see otherwise.
+
+## What you agree to in a known community
+
+A community that confirms its members, a **known community**, works the way a LETS always has: the admins keep an eye on debts that grow too big or stay too long. When you join one, the join screen says exactly when, in your community's numbers, for example:
+
+"In this community, the admins can see your balance if it goes past 50% of your credit line or if you stay in debit for 60 days without a sale. They can't see your trades."
+
+Agreeing to that is your consent. Then, and only while an admin has confirmed you:
+
+- If your balance passes either line, your account shows on the admins' phones with your balance, so an admin who knows you can have a word. Nothing else about you: never your trades, who you traded with, or what for.
+- Every time an admin opens that list, the other admins and the owner can see who opened it and when.
+- If you haven't agreed, or nobody has confirmed you, or your community doesn't confirm members, the admins never see your balance.
+
+If you joined before your community asked, your app offers it to you. Saying no, or not answering, changes nothing else: you are still a member. If the community changes its lines later, your app asks you again.
 
 ## Asking about your entry
 

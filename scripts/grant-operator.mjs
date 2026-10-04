@@ -7,7 +7,7 @@
 // signed in with their key). It is read from the environment only, never an argument: arguments show in `ps`.
 // ADMIN_PASSWORD (the node's admin password) still works in its place, as before; with a token it is never sent.
 
-import { automationTokenProblem, headerValueProblem } from './automation-token.mjs';
+import { automationTokenProblem, headerValueProblem, fetchNoRedirect } from './automation-token.mjs';
 
 const insecure = process.argv.includes('--insecure');
 if (insecure) {
@@ -70,13 +70,13 @@ const isKey = (v) => /^[0-9a-f]{64}$/i.test(v);
 async function adminRead(what, method, route) {
     let res;
     try {
-        res = await fetch(`${NODE_URL}${route}`, {
+        res = await fetchNoRedirect(`${NODE_URL}${route}`, {
             method,
             headers: method === 'POST' ? { 'content-type': 'application/json', ...authHeader } : authHeader,
             ...(method === 'POST' ? { body: '{}' } : {}),
         });
     } catch (err) {
-        console.error(`✗ Could not reach ${NODE_URL} to read the ${what}: ${err?.cause?.code || err?.message || err}. Nothing was changed.`);
+        console.error(err?.redirect ? `✗ ${err.message} Nothing was changed.` : `✗ Could not reach ${NODE_URL} to read the ${what}: ${err?.cause?.code || err?.message || err}. Nothing was changed.`);
         process.exit(1);
     }
     const body = await res.json().catch(() => null);
@@ -151,19 +151,20 @@ const adminHeaders = {
 let res;
 try {
     if (revoke) {
-        res = await fetch(`${NODE_URL}/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators/${encodeURIComponent(pubkey)}`, {
+        res = await fetchNoRedirect(`${NODE_URL}/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators/${encodeURIComponent(pubkey)}`, {
             method: 'DELETE',
             headers: authHeader,
         });
     } else {
-        res = await fetch(`${NODE_URL}/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`, {
+        res = await fetchNoRedirect(`${NODE_URL}/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`, {
             method: 'POST',
             headers: adminHeaders,
             body: JSON.stringify({ pubkey }),
         });
     }
 } catch (err) {
-    console.error(`\n✗ Network error connecting to ${NODE_URL}:`, err.message || err);
+    if (err?.redirect) console.error(`\n✗ ${err.message}`);
+    else console.error(`\n✗ Network error connecting to ${NODE_URL}:`, err.message || err);
     process.exit(1);
 }
 

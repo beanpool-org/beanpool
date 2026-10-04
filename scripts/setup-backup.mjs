@@ -13,23 +13,26 @@
  *
  * Usage:
  *   BEANPOOL_TOKEN='bp_…' BACKUP_REPLICATION_TOKEN='<replication token>' node scripts/setup-backup.mjs --primary <https url> [--data-dir <path>]
- *   node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--data-dir <path>]   (legacy; BACKUP_REPLICATION_TOKEN optional)
+ *   ADMIN_PASSWORD='<pw>' node scripts/setup-backup.mjs --primary <https url> [--data-dir <path>]   (legacy; BACKUP_REPLICATION_TOKEN optional)
  *
  *   BEANPOOL_TOKEN  An owner's automation token for the primary, read or admin scope (Settings → Automation
  *                tokens, made by an owner signed in with their key). From the environment only, never an
  *                argument: arguments show in `ps`. Used ONCE, in memory, to fetch the community identity, and
- *                never written to this machine. With it, --admin-pw is not sent.
+ *                never written to this machine. With it, the admin password is not sent.
  *   --primary    Required. The primary's public HTTPS base URL,
  *                e.g. https://test.beanpool.org  (http:// only allowed for localhost)
- *   --admin-pw   Legacy, in place of BEANPOOL_TOKEN: the primary's admin password. Used ONCE, in memory. It
- *                is NEVER written to this machine: a standby that kept it held the main server's admin
- *                password in plain text.
+ *   ADMIN_PASSWORD
+ *                Legacy, in place of BEANPOOL_TOKEN: the primary's admin password, from the environment (an
+ *                argument shows in `ps`). Used ONCE, in memory. It is NEVER written to this machine: a standby
+ *                that kept it held the main server's admin password in plain text.
+ *   --admin-pw   The same password as an argument, as before. It still works, with a warning: an argument
+ *                shows in `ps`. ADMIN_PASSWORD wins when both are set.
  *   BACKUP_REPLICATION_TOKEN
  *                The primary's replication token (Settings → Replication Access), written to
  *                .env as BACKUP_REPLICATION_TOKEN; the standby copies with it. From the environment:
  *                it reads the whole ledger, and arguments show in `ps`. Required with
  *                BEANPOOL_TOKEN: making a replication token is an owner's, signed in with their key or
- *                phone, and no automation token can. With --admin-pw and none given, the primary's is
+ *                phone, and no automation token can. With the admin password and none given, the primary's is
  *                made if it has none; if it already has one, give it (a new one would cut off any
  *                standby already using it).
  *   --token      The same replication token as an argument, as before. It still works, with a warning:
@@ -47,7 +50,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { automationTokenProblem, headerValueProblem } from './automation-token.mjs';
+import { automationTokenProblem, headerValueProblem, fetchNoRedirect } from './automation-token.mjs';
 
 function parseArgs(argv) {
     const args = {};
@@ -95,10 +98,14 @@ function passwordNeeds2faHint(status, body) {
         '(an owner\'s automation token, read or admin scope) and the primary\'s replication token in BACKUP_REPLICATION_TOKEN.';
 }
 
-/** Upsert a set of KEY=VALUE lines into an .env file, preserving other lines. */
+/**
+ * Upsert a set of KEY=VALUE lines into an .env file, preserving other lines. The file holds the replication
+ * token, which reads the whole ledger: it is left owner-only (0600), an existing one narrowed before it is written.
+ */
 function upsertEnv(envPath, kv) {
     let lines = [];
     if (fs.existsSync(envPath)) {
+        ownerOnly(envPath);
         lines = fs.readFileSync(envPath, 'utf8').split('\n');
     }
     const remaining = { ...kv };
@@ -119,7 +126,17 @@ function upsertEnv(envPath, kv) {
         if (out.length && out[out.length - 1].trim() !== '') out.push('');
         out.push(...appended);
     }
-    fs.writeFileSync(envPath, out.join('\n').replace(/\n{3,}/g, '\n\n'));
+    fs.writeFileSync(envPath, out.join('\n').replace(/\n{3,}/g, '\n\n'), { mode: 0o600 });
+    ownerOnly(envPath);
+}
+
+/** chmod 600, or a warning when this user may write the file but not change its mode (another owner). */
+function ownerOnly(file) {
+    try {
+        fs.chmodSync(file, 0o600);
+    } catch (e) {
+        console.warn(`  ⚠️  Could not make ${file} owner-only (${e.code || e.message}): run chmod 600 on it. It holds the replication token.`);
+    }
 }
 
 /**
@@ -128,7 +145,7 @@ function upsertEnv(envPath, kv) {
  */
 async function mintTokenIfNone(primary, adminPw) {
     const post = async (p) => {
-        const res = await fetch(`${primary}${p}`, {
+        const res = await fetchNoRedirect(`${primary}${p}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPw },
             body: JSON.stringify({ password: adminPw }),
@@ -153,7 +170,13 @@ async function main() {
     const args = parseArgs(process.argv.slice(2));
     const primary = typeof args.primary === 'string' ? args.primary.replace(/\/$/, '') : null;
     const automationToken = process.env.BEANPOOL_TOKEN || null;
-    const adminPw = typeof args['admin-pw'] === 'string' ? args['admin-pw'] : null;
+    // The admin password from the environment first, for the same reason (legacy: a token sends no password).
+    const envAdminPw = process.env.ADMIN_PASSWORD || null;
+    const argAdminPw = typeof args['admin-pw'] === 'string' ? args['admin-pw'] : null;
+    const adminPw = envAdminPw || argAdminPw;
+    const adminPwName = envAdminPw ? 'ADMIN_PASSWORD' : '--admin-pw';
+    if (argAdminPw && envAdminPw) console.log('  • ADMIN_PASSWORD is set: --admin-pw is not used.');
+    else if (argAdminPw) console.warn('  ⚠️  --admin-pw shows in `ps` to anyone on this machine: set ADMIN_PASSWORD in the environment instead.');
     // The replication token from the environment first: it reads the whole ledger, and an argument shows in `ps`.
     const envReplicationToken = process.env.BACKUP_REPLICATION_TOKEN?.trim() || null;
     const argReplicationToken = typeof args.token === 'string' ? args.token.trim() : null;
@@ -164,11 +187,11 @@ async function main() {
 
     if (!primary || (!automationToken && !adminPw)) {
         die('Usage: BEANPOOL_TOKEN=bp_... BACKUP_REPLICATION_TOKEN=<replication token> node scripts/setup-backup.mjs --primary <https url> [--data-dir <path>]\n' +
-            '   or (legacy): node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--data-dir <path>]   (BACKUP_REPLICATION_TOKEN optional)');
+            '   or (legacy): ADMIN_PASSWORD=<pw> node scripts/setup-backup.mjs --primary <https url> [--data-dir <path>]   (BACKUP_REPLICATION_TOKEN optional)');
     }
     // Each credential checked before any request, in words that never repeat it (automation-token.mjs). The replication
     // token goes into .env as well as a header: a line break in it would add a line there.
-    const credentialProblem = (automationToken ? automationTokenProblem('BEANPOOL_TOKEN', automationToken) : headerValueProblem('--admin-pw', adminPw))
+    const credentialProblem = (automationToken ? automationTokenProblem('BEANPOOL_TOKEN', automationToken) : headerValueProblem(adminPwName, adminPw))
         ?? headerValueProblem('The replication token', replicationToken);
     if (credentialProblem) die(`${credentialProblem}${automationToken ? ' (On the primary: read or admin scope.)' : ''}`);
     // Said now, before anything is fetched or written: the step that makes the primary's replication token is an owner's.
@@ -177,7 +200,7 @@ async function main() {
             'Making one is an owner\'s change: no automation token can. An owner makes it on their phone or in Settings → Replication Access\n' +
             '(signed in with their key), copies it once, and it goes here in BACKUP_REPLICATION_TOKEN (not --token: an argument shows in `ps`).');
     }
-    if (automationToken && adminPw) console.log('  • BEANPOOL_TOKEN is set: --admin-pw is not sent.');
+    if (automationToken && adminPw) console.log(`  • BEANPOOL_TOKEN is set: ${adminPwName} is not sent.`);
     // The token alone, or the password alone: never both.
     const auth = automationToken ? { Authorization: `Bearer ${automationToken}` } : { 'X-Admin-Password': adminPw };
     if (!isAllowedPrimaryUrl(primary)) {
@@ -194,7 +217,7 @@ async function main() {
     console.log(`→ Fetching enrollment bundle from ${enrollUrl} ...`);
     let bundle;
     try {
-        const res = await fetch(enrollUrl, {
+        const res = await fetchNoRedirect(enrollUrl, {
             method: 'GET',
             headers: auth,
         });
@@ -202,10 +225,11 @@ async function main() {
             const body = await res.text().catch(() => '');
             let parsed = null;
             try { parsed = JSON.parse(body); } catch { /* not JSON: printed as it came */ }
-            die(`Primary returned HTTP ${res.status}. ${res.status === 401 ? (automationToken ? 'Check BEANPOOL_TOKEN (revoked or expired?).' : 'Check --admin-pw.') : (passwordNeeds2faHint(res.status, parsed) ?? body)}`);
+            die(`Primary returned HTTP ${res.status}. ${res.status === 401 ? (automationToken ? 'Check BEANPOOL_TOKEN (revoked or expired?).' : `Check ${adminPwName}.`) : (passwordNeeds2faHint(res.status, parsed) ?? body)}`);
         }
         bundle = await res.json();
     } catch (e) {
+        if (e?.redirect) die(e.message);
         die(`Could not reach the primary: ${e?.message || e}\n` +
             '(For a self-signed-CA LAN primary, set NODE_EXTRA_CA_CERTS to its CA pem.)');
     }

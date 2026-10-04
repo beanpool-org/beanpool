@@ -66,6 +66,15 @@ export function isTokenScope(s: unknown): s is TokenScope {
     return typeof s === 'string' && (TOKEN_SCOPES as readonly string[]).includes(s);
 }
 
+/**
+ * Whether a value has the whole shape of a token (bp_ + 12 hex + _ + 64 hex), as the check below asks. For tooling that
+ * sends one (the harvester; scripts/automation-token.mjs mirrors it for the scripts): a value that fails it is refused
+ * before any header is built, so a control character inside never reaches fetch, whose error repeats the whole value.
+ */
+export function isAutomationTokenShape(value: unknown): value is string {
+    return typeof value === 'string' && TOKEN_SHAPE.test(value);
+}
+
 /** Whether a bearer value is meant as an automation token (then checkAdminAuth decides on it alone). */
 export function looksLikeAutomationToken(bearer: string | null | undefined): boolean {
     return typeof bearer === 'string' && bearer.startsWith(TOKEN_PREFIX);

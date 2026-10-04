@@ -31,6 +31,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 // The one definition of what an app signs. Not a workspace dependency of the repo root, so by path to its build.
 import { buildBoundRequestHeaders, ed25519Signer } from '../../packages/beanpool-core/dist/index.js';
+import { automationTokenProblem, headerValueProblem } from '../automation-token.mjs';
 
 // fileURLToPath, not `.pathname` (review finding): `.pathname` yields "/C:/..." on Windows and leaves %20 in
 // any path containing a space, so it silently reads and writes the wrong file rather than failing.
@@ -103,10 +104,13 @@ function rememberTfaSession(node, res) {
 export function adminHeaders(node) {
     const token = envFor('BEANPOOL_TOKEN', node);
     if (token) {
-        if (!token.startsWith('bp_')) throw new Error(`BEANPOOL_TOKEN_${node.toUpperCase()} is not an automation token (bp_…)`);
+        const problem = automationTokenProblem(`BEANPOOL_TOKEN_${node.toUpperCase()}`, token);
+        if (problem) throw new Error(problem);
         return { Authorization: `Bearer ${token}` };
     }
     if (!ADMIN_PASSWORD) throw new Error(`Set BEANPOOL_TOKEN_${node.toUpperCase()} (an owner's automation token, admin scope) or ADMIN_PASSWORD in the environment`);
+    const pwProblem = headerValueProblem('ADMIN_PASSWORD', ADMIN_PASSWORD);
+    if (pwProblem) throw new Error(pwProblem);
     const h = { 'X-Admin-Password': ADMIN_PASSWORD };
     const session = tfaSessions[node] || envFor('ADMIN_2FA_SESSION', node);
     if (session) h['X-Admin-2FA-Session'] = session;

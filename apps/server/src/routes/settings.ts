@@ -24,6 +24,7 @@ import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
 import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
 import { getDoor, setDoor, doorSettingRefusal, type CommunityDoor } from '../config/door.js';
+import { KnownFloorError, knownFloorSettings, setKnownFloorSettings, knownFloorExceptions, readKnownFloorLog, setKnownFloorException } from '../config/known-floor.js';
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
@@ -274,6 +275,44 @@ function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: bool
 router.get('/api/node/config', async (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     ctx.body = withKnockSetting(publicNodeConfig(getNodeConfig()));
+});
+
+// The known floor (config/known-floor.ts, community modes slice 4): every owner and admin reads the settings, the
+// exceptions and the log; only an owner changes the dial, the known floor or the cap; an owner or admin sets one member's
+// exception. Every change is a line in the log.
+function knownFloorRefusal(ctx: any, e: unknown): void {
+    if (!(e instanceof KnownFloorError)) throw e;
+    ctx.status = e.status;
+    ctx.body = { error: e.message, code: e.code };
+}
+
+router.get('/api/local/admin/known-floor', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { ...knownFloorSettings(), exceptions: knownFloorExceptions(), log: readKnownFloorLog(100) };
+});
+
+router.post('/api/local/admin/known-floor', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change the known floor or the cap.')) return;
+    try {
+        ctx.body = setKnownFloorSettings((ctx.state as any)?.actor || 'owner:password', (ctx as any).requestBody || {});
+    } catch (e) { knownFloorRefusal(ctx, e); }
+});
+
+router.post('/api/local/admin/known-floor/exception', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can change a member\'s known floor.')) return;
+    // One member's credit is money, and nobody sets their own: only an owner's or admin's own key session, which names the
+    // person. Never an automation token (it acts as whoever issued it) nor the node password (it names nobody).
+    const actor = (ctx.state as any)?.actor;
+    if ((ctx.state as any)?.automationTokenId || typeof actor !== 'string' || !/^[0-9a-f]{64}$/.test(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Sign in with your own key to change a member\'s known floor.', code: 'key_session_only' };
+        return;
+    }
+    try {
+        ctx.body = setKnownFloorException(actor, (ctx as any).requestBody || {});
+    } catch (e) { knownFloorRefusal(ctx, e); }
 });
 
 router.post('/api/local/admin/node/config', async (ctx) => {

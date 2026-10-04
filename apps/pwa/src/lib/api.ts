@@ -919,6 +919,8 @@ export interface BalanceInfo {
     usableFloor?: number;
     /** Trust Model v3 — count of currently-live Offers (drives the offer-band credit ladder). */
     liveOffers?: number;
+    /** The known floor's part of the limit (community modes slice 4): one live Offer unlocks all of it. Absent from an older node. */
+    knownGrant?: number;
     /** Trust Model v3 — true when your debt is below your usable floor (spending is frozen until you recover or post Offers). */
     frozen?: boolean;
 }

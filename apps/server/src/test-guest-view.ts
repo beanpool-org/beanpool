@@ -1192,6 +1192,9 @@ async function main(): Promise<void> {
                 signedFor: 'localhost', signature: 'AAAA' },
             // The QR sign-in's two digits, typed by a browser that holds no binding cookie for the pairing.
             'POST /api/local/admin/auth/pairing/:id/confirm': { code: '00' },
+            // The known floor: raising Alice's own to the cap, and turning the dial on with the cap at its most (owner or admin only).
+            'POST /api/local/admin/known-floor/exception': { memberPubkey: alice.pk, amount: 5000 },
+            'POST /api/local/admin/known-floor': { confirmation: true, knownFloor: 5000, creditCap: 5000 },
         };
         /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
         const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
@@ -1275,7 +1278,8 @@ async function main(): Promise<void> {
             'POST /api/local/admin/diagnostics', 'POST /api/local/admin/directory/push', 'GET /api/local/admin/disputes',
             'GET /api/local/admin/disputes/:id', 'POST /api/local/admin/disputes/:id/resolve', 'GET /api/local/admin/gateway',
             'POST /api/local/admin/gateway', 'POST /api/local/admin/health', 'POST /api/local/admin/inbox', 'POST /api/local/admin/inbox/send',
-            'GET /api/local/admin/knocks', 'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
+            'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
+            'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
             'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',
             'POST /api/local/admin/members/:pubkey/burst/remove',
             'POST /api/local/admin/members/:pubkey/offboard', 'GET /api/local/admin/members/:pubkey/offboard/preview',

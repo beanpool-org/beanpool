@@ -426,6 +426,8 @@ export const TABLES: Record<string, TableEntry> = {
     confirmations: plain('id member_pubkey entry_id confirmed_by confirmed_at needs_second seconded_by seconded_at revoked_by revoked_at revoke_reason updated_at'),
     // Who opened, exported or changed the list: it outlives a take-over, as the admins' accountability should.
     names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
+    known_floor_exceptions: plain('member_pubkey amount frozen set_by set_at updated_at'),
+    known_floor_log: plain('id actor_pubkey action member_pubkey old_value new_value at updated_at'),
 
     // ── Members' devices and conveniences, on the generic path (design G4; PLAIN_TABLES_PAYLOAD) ──
     // A standby writes none of their rows (config/node-role.ts assertPlainTablesWritable) and sends no push
@@ -654,6 +656,9 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     autosnapshot_config: { kind: 'community-settings', reason: 'the snapshot schedule' },
     door: { kind: 'community-settings', reason: 'who may invite: any member, or only admins (config/door.ts)' },
     names_two_admins: { kind: 'community-settings', reason: 'whether a confirmation against the names list needs a second admin (engine/names-list.ts)' },
+    confirmation: { kind: 'community-settings', reason: 'the confirmation dial: whether a confirmed member holds the known floor (config/known-floor.ts)' },
+    known_floor: { kind: 'community-settings', reason: "the community's known floor in Beans (config/known-floor.ts)" },
+    credit_cap: { kind: 'community-settings', reason: "the community's credit cap in Beans (config/known-floor.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

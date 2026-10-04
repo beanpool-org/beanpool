@@ -1332,6 +1332,7 @@ export async function refreshBalanceFromServer(pubkey: string) {
                 hasLiveOffer: !!balData.hasLiveOffer,
                 usableFloor: balData.usableFloor ?? balData.floor ?? floor,
                 liveOffers: balData.liveOffers ?? 0,
+                knownGrant: typeof balData.knownGrant === 'number' ? balData.knownGrant : 0,
                 frozen: !!balData.frozen,
             });
             const prevTierStr = await AsyncStorage.getItem(`bp_tier_${pubkey}`);
@@ -1373,6 +1374,7 @@ export async function getBalance(pubkey: string) {
     let hasLiveOffer = false;  // has ≥1 live Offer posted (offer covenant)
     let usableFloor: number | undefined = undefined; // v3: offer-gated usable floor (≤ earned floor)
     let liveOffers = 0;        // v3: count of live Offers (drives the credit ladder)
+    let knownGrant = 0;        // the known floor's part of the limit (one live offer unlocks it); 0 from an older node
     let frozen = false;        // v3: debt below usable floor → spending paused
 
     // Background fetch to ensure parity
@@ -1402,6 +1404,7 @@ export async function getBalance(pubkey: string) {
             hasLiveOffer = !!parsed.hasLiveOffer;
             usableFloor = parsed.usableFloor ?? floor;
             liveOffers = parsed.liveOffers ?? 0;
+            knownGrant = typeof parsed.knownGrant === 'number' ? parsed.knownGrant : 0;
             frozen = !!parsed.frozen;
         }
     } catch { /* ignore */ }
@@ -1427,6 +1430,7 @@ export async function getBalance(pubkey: string) {
         hasLiveOffer,
         usableFloor: usableFloor ?? floor,
         liveOffers,
+        knownGrant,
         frozen,
     };
 }

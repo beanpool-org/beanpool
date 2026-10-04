@@ -954,7 +954,7 @@ export default function LedgerScreen() {
                     style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}
                 >
                     {/* The bar itself now carries the offer ladder (locked zone, rungs, unlock caption). */}
-                    <CreditBar balance={balanceState.balance} floor={balanceState.floor} colors={colors} usableFloor={balanceState.usableFloor} liveOffers={balanceState.liveOffers} />
+                    <CreditBar balance={balanceState.balance} floor={balanceState.floor} colors={colors} usableFloor={balanceState.usableFloor} liveOffers={balanceState.liveOffers} knownGrant={balanceState.knownGrant} />
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
                     {balanceState.frozen && (
                         <Text style={{ fontSize: 11.5, color: '#d97706', lineHeight: 16, marginTop: 8 }}>

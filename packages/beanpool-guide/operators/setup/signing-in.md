@@ -1,21 +1,24 @@
 ---
 slug: signing-in
 title: Signing in to Settings
-summary: The three ways in: the admin password, the app's Manage (or Moderate) button, or a computer signed in by scanning a code with the app. How long a sign-in lasts.
+summary: The two ways in: the app's Manage (or Moderate) button, or a computer signed in by scanning a code with the app. The admin password, on servers that still have one. How long a sign-in lasts.
 related: access-and-security, roles, first-time-setup, rate-limits
 ---
 
-There are three ways into Settings. The password is one shared secret for the whole server. The app's Manage button, and a computer you sign in by scanning a code with the app, sign in a named person with their own key.
+There are two ways into Settings: the app's Manage button, and a computer you sign in by scanning a code with the app. Both sign in a named person with their own key. A new server has no admin password. A server set up before the claim code may still have one: see Servers that still have a password, below.
 
 ## Before the community has an owner
 
 On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead: on the server, run docker compose exec beanpool-node beanpool claim, then on your phone open BeanPool and choose **Claim a community**, or scan the QR code on the page. The QR code carries the server's address and the waiting code's short name, never the code. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in only when the first check fails (a later failure keeps the card). A server with an admin password keeps it below the claim, under **This server also has an admin password**. See First-time setup.
 
-## With the admin password
+## Servers that still have a password
+
+A new server has no admin password, so this section is only for a server set up before the claim code that still has one.
+
 
 Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app. If it is off, the password opens only the card that sets it up: Settings does not open on the password alone, and nothing else in it opens until an authenticator is set up. Tools that send the password with every request are refused too until then: give them an automation token instead (Access & Security). The app's Manage button and a computer signed in by scanning a code are never asked for this: the phone's own lock is their second factor.
 
-The first password is the ADMIN_PASSWORD you put in .env. If you left it empty, the server made one up and put it in a file, not in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Change it after you sign in; that deletes the file. See First-time setup.
+Its first password was the ADMIN_PASSWORD in .env on its first start. If that was empty, the server made one up and put it in a file, not in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Change it after you sign in; that deletes the file. See First-time setup.
 
 - The password counts as an **owner**. Whoever has it can do everything an owner can.
 - Anything done with the password is recorded as done by the password, not by a person. Other admins cannot tell who it was.
@@ -68,4 +71,4 @@ The web app shows a plain link to Settings, but it cannot sign you in with your 
 
 - Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once. The Manage button is not slowed down by wrong passwords, and asks for no two-factor code. A phone approving a computer's sign-in is counted with the passwords, though: it shares the limit of 15 sign-in attempts a minute from one internet address, so from the same wifi it may have to wait a minute too. See Rate limits.
 - No owner can sign in any more (every owner's phone and 12 words are gone, and no second owner is left): first try the 12 words on a new phone, a second owner, or your break-glass code. If none of those is left, the fix is on the server: the person who should be owner must be a member (they join first if not), then run this in the server folder: docker compose exec beanpool-node beanpool recover --key @callsign (their callsign, or their public key in its place). It makes that member an owner and prints their break-glass code once; give it only to them. It changes nothing else: the community's name, the gateway settings, the money thresholds, two-factor sign-in, break-glass mode, the backup settings and the replication token all stay as they are. It is never silent: every member gets a critical notice that an owner was added from the server, and the log keeps a SECURITY line. Anyone who can run commands on the server can already read all of its data, so this gives nobody anything new. Running it again for the same person gives them a new break-glass code and the old one stops working.
-- Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer (if no owner can, use beanpool recover, above). Nobody can change the password without knowing the old one. The only way to a new password is on the server itself, and it loses everything in data/local-config.json. Besides the password, that file holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds, break-glass mode, the backup settings, the record of your printed recovery code for sealed backups, and, on a server that became the main server by a take-over, that role. On a standby it also holds the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. So do it only if you need the password itself: stop the server, delete data/local-config.json and start it again with a new ADMIN_PASSWORD (or with it empty, and read the one it makes up from data/first-admin-password.txt), then set those things again. Members, posts and beans are not touched: they are in data/state.db.
+- Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer (if no owner can, use beanpool recover, above). Nobody can change the password without knowing the old one, and there is no way to a new one: deleting data/local-config.json does not give you one, because the server then starts as a new install, which has no admin password and ignores ADMIN_PASSWORD (and that file holds two-factor sign-in, the gateway and backup settings and more besides). Use beanpool recover, above, instead. Members, posts and beans are in data/state.db.

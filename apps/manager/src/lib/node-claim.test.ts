@@ -59,6 +59,15 @@ describe('node-claim lib', () => {
             expect(result).toEqual({ kind: 'claimed' });
         });
 
+        it.each([
+            ['a claimed new install with no admin password', { unclaimed: false, password: false }, { kind: 'claimed', password: false, retired: false }],
+            ['a claimed server whose password an owner retired', { unclaimed: false, password: false, passwordRetired: true }, { kind: 'claimed', password: false, retired: true }],
+            ['a claimed server with an admin password', { unclaimed: false, password: true }, { kind: 'claimed' }],
+        ])('reads %s', async (_name, body, expected) => {
+            vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => body } as Response));
+            expect(await fetchClaimState('/api/local/claim')).toEqual(expected);
+        });
+
         it('returns unclaimed state with codeId, communityName, and password when valid', async () => {
             vi.stubGlobal(
                 'fetch',

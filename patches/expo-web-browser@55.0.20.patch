@@ -1,0 +1,19 @@
+diff --git a/android/src/main/java/expo/modules/webbrowser/CustomTabsActivitiesHelper.kt b/android/src/main/java/expo/modules/webbrowser/CustomTabsActivitiesHelper.kt
+index c1169b2ed7d5580c8fd22ee13476588d9816021c..5da0f988c164d2a1d65b81ab8e802d69094b76e6 100644
+--- a/android/src/main/java/expo/modules/webbrowser/CustomTabsActivitiesHelper.kt
++++ b/android/src/main/java/expo/modules/webbrowser/CustomTabsActivitiesHelper.kt
+@@ -71,7 +71,14 @@ internal class CustomTabsActivitiesHelper(
+     // This prevents the Custom Tab from being destroyed when the main activity
+     // has singleTask launch mode
+     if (options.useProxyActivity) {
++      // BeanPool: a tab the member left with Home or the app switcher keeps the proxy's task (.webContainer) alive. As
++      // published, the next proxy intent equalled that task's root intent (the URL rode only in extras), so Android
++      // brought the old task back as it was left and dropped the new URL: "Manage" showed a stale, signed-out Settings
++      // page and its one-time link was never used (queue item 26, 2026-10-04). Close the old task first, and give each
++      // launch its URL as data, so even an old task this process can't see gets a new proxy (and the new URL) on top.
++      BrowserProxyActivity.instance.get()?.let { if (!it.isFinishing) it.finishAndRemoveTask() }
+       val proxyIntent = Intent(currentActivity, BrowserProxyActivity::class.java).apply {
++        data = url
+         putExtra(BrowserProxyActivity.EXTRA_URL, url.toString())
+         putExtra(BrowserProxyActivity.EXTRA_CUSTOM_TABS_INTENT_DATA, tabsIntent.intent)
+ 

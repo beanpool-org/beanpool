@@ -6677,6 +6677,10 @@ export function actionReport(
         if (suspendUser && subject && !isClosedAccountKey(subject)) {
             // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
             db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(subject);
+            // A re-key code waiting for them (or an expired one still holding their key, which a new code inherits from)
+            // writes the same 'suspended', and a cancel puts back the status it recorded (member-wizards.ts
+            // cancelRekeyCode). From now on that status is this report's 'suspended', which no cancel may undo.
+            db.prepare("UPDATE rekey_requests SET prior_status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE old_pubkey = ? AND status IN ('pending', 'expired')").run(subject);
             try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(subject); } catch { }
             noteTakeoverInputsChanged('member suspended by a report');
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
@@ -6685,6 +6689,11 @@ export function actionReport(
             bumpPostsVersion();
             suspended = subject;
         }
+        // Whether this report suspended its member, read by a cancel of a code with no prior status (cancelRekeyCode).
+        // Recorded on the first action; a later one (a takedown after the fact sends no suspendUser) only ever raises
+        // it, and leaves a report actioned before the node kept it (NULL, not known) as it is.
+        const record = suspended ? 1 : (report.suspended_member ?? (wasOpen ? 0 : null));
+        db.prepare('UPDATE abuse_reports SET suspended_member = ? WHERE id = ?').run(record, reportId);
         return true;
     })();
     const suspendedKey = suspended as string | null;

@@ -396,6 +396,10 @@ export function backdateAdminSessionForTests(sessionId: string, ms: number): voi
  * - 60-second expiry: expired tokens are rejected
  * - session_epoch verification: if epoch bumped since minting, token is rejected
  * - Node role verification: member must still hold a node role
+ *
+ * A refusal for a token the node made names the key it was made for (`mintedFor`), so /settings can tell it from an
+ * earlier sign-in still live in that browser. Only the holder of the token learns it: a token the node never made, or
+ * one long pruned, names nobody.
  */
 export function consumeHandshakeToken(token: string, now = Date.now(), opts: { idleTtlMs?: number } = {}): {
     ok: boolean;
@@ -403,6 +407,7 @@ export function consumeHandshakeToken(token: string, now = Date.now(), opts: { i
     replay?: boolean;
     expired?: boolean;
     revoked?: boolean;
+    mintedFor?: string;
     session?: AdminSession;
     sessionId?: string;
     csrfToken?: string;
@@ -422,12 +427,12 @@ export function consumeHandshakeToken(token: string, now = Date.now(), opts: { i
 
     // Replay check: single use!
     if (entry.used) {
-        return { ok: false, error: 'Handshake token already used (replay detected)', replay: true };
+        return { ok: false, error: 'Handshake token already used (replay detected)', replay: true, mintedFor: entry.memberPubkey };
     }
 
     // Expiry check: 60-second window
     if (now > entry.expiresAt) {
-        return { ok: false, error: 'Handshake token has expired', expired: true };
+        return { ok: false, error: 'Handshake token has expired', expired: true, mintedFor: entry.memberPubkey };
     }
 
     // Single-use: burn token immediately
@@ -437,14 +442,14 @@ export function consumeHandshakeToken(token: string, now = Date.now(), opts: { i
     // session_epoch check
     const currentEpoch = getNodeRoleSessionEpoch(entry.memberPubkey);
     if (currentEpoch !== entry.sessionEpoch) {
-        return { ok: false, error: 'Session epoch revoked', revoked: true };
+        return { ok: false, error: 'Session epoch revoked', revoked: true, mintedFor: entry.memberPubkey };
     }
 
     // Node role check, against the role held NOW rather than the one recorded when the token was minted:
     // an owner demoted to admin in the seconds between must not open an owner-level session.
     const liveRole = nodeRoleOf(entry.memberPubkey);
     if (!liveRole) {
-        return { ok: false, error: 'Member no longer holds a node role' };
+        return { ok: false, error: 'Member no longer holds a node role', mintedFor: entry.memberPubkey };
     }
 
     // Mint browser session (2h idle, or the phone hand-off's 15 min / 12h hard). Never longer than the default.

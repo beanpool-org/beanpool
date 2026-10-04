@@ -2759,6 +2759,10 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('F8 the n
         expect(modal).toContain('<CameraView');
         expect(modal).not.toMatch(/TextInput|KeyboardAwareScrollView|KeyboardProvider/);
         expect(spec.scanner.flex).toBe(1);
+        // The invite for an entry (community modes slice 3): its QR code is drawn the same size, in the same white box.
+        const invite = screen.match(/<View style=\{styles\.qrBox\}>\s*<QRCode value=\{invited\.offline[^}]*\}[^>]*size=\{(\d+)\} quietZone=\{(\d+)\}/);
+        expect(invite).not.toBeNull();
+        expect(Number(invite![1]) + 2 * Number(invite![2]) + 2 * Number(spec.qrBox.padding)).toBeLessThanOrEqual(room);
     });
     it('the locked-entry rows wrap: their words sit in a growing row, never clipped', () => {
         expect(spec.lockedText.numberOfLines).toBeUndefined();

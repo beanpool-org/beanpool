@@ -3,7 +3,7 @@
  *
  * Boots the independent local gateway:
  * 1. Genesis check (first-run community_id + genesis block)
- * 2. Admin password init (from ADMIN_PASSWORD env or auto-generate)
+ * 2. Admin password init (an existing node keeps its own; a new install has none and is claimed with its claim code)
  * 3. TLS certificates (Let's Encrypt or self-signed)
  * 4. DNS shim for beanpool.local resolution
  * 5. Trust Bootstrap (HTTP :80 — redirect or CA cert)
@@ -110,7 +110,7 @@ async function main() {
     console.log(`✅ Community: ${genesis.communityId}`);
     console.log(`   Genesis hash: ${genesis.genesisHash}\n`);
 
-    // Step 2: Admin password (first boot: env var or auto-generate)
+    // Step 2: Admin password (an existing node keeps its own or takes a rotated one; a new install makes none)
     initAdminPassword();
 
     // Step 2.1: Unclean shutdown detection & SQLite PRAGMA integrity_check

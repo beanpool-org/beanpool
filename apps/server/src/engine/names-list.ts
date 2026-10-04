@@ -501,6 +501,73 @@ export function confirmToWorkOff(actor: string, debtId: unknown, body: { memberP
     return confirmMember(actor, { memberPubkey: body.memberPubkey, entryId: debt.entry_id }, { debtId: debt.id });
 }
 
+// ── Invites bound to an entry (community modes slice 3, design §4.1 ways 1–3) ─────────────────────────────────────
+
+/**
+ * Whether `actor` may make an invite bound to `entryId`: the rule confirmMember uses, checked when the invite is made (an
+ * owner or admin who can open the entry), and the entry has no live confirmation (one person, one entry). Returns the
+ * entry's id. The server sees only the id; the name stays sealed on the admins' phones.
+ */
+export function assertMayBindInvite(actor: string, entryId: unknown): string {
+    assertNamesAdmin(actor);
+    const entry = requireEntry(entryId);
+    if (!holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', 'You can’t open that entry, so you can’t invite anyone as that person.');
+    if (liveConfirmationOfEntry(entry.id)) throw new NamesListError(409, 'entry_taken', 'A member is confirmed against this entry already. One person, one entry.');
+    // The second-chance rule binds an invite too (design §4.2): no confirming against an entry whose debt is still open.
+    const debt = openDebtOfEntry(entry.id);
+    if (debt) throw new NamesListError(409, 'open_debt', `The person on this entry left owing the Commons ${debt.amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.`, { debtId: debt.id });
+    return entry.id;
+}
+
+/** What a redeem did with an invite's binding: confirmed (or waiting for a second admin), or why it didn't confirm. */
+export type InviteBindOutcome = 'confirmed' | 'awaiting_second' | 'entry_taken' | 'already_confirmed' | 'entry_gone' | 'maker_not_admin' | 'open_debt';
+
+/**
+ * Confirms `member`, a joiner just written by a redeem, against `entryId` by the invite's `maker`, in the redeem's own
+ * transaction. Never refuses: a joiner is never stranded over the binding (onboarding has no hard gates). Where the
+ * confirmation can't stand now, the joiner is a member unconfirmed, and the outcome (kept on the invite) says why: the
+ * entry was deleted, the maker is no longer an admin who can open it, another member was confirmed against it since the
+ * invite was made, or this member is confirmed already. The same two-admin rule as confirmMember.
+ */
+export function confirmByInvite(maker: string, entryId: string, member: string): InviteBindOutcome {
+    const entry = entryRow(entryId);
+    if (!entry) return 'entry_gone';
+    if (!isNamesAdmin(maker) || !holdersOf(entry.key_id).has(maker)) return 'maker_not_admin';
+    if (liveConfirmationOfEntry(entry.id)) return 'entry_taken';
+    // A debt that opened after the invite was made: the joiner is a member, unconfirmed, as confirmMember would refuse.
+    if (openDebtOfEntry(entry.id)) return 'open_debt';
+    if (db.prepare('SELECT 1 FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(member)) return 'already_confirmed';
+    const needsSecond = twoAdminsToConfirm() && namesAdmins().filter((a) => a.pubkey !== member).length >= 2 ? 1 : 0;
+    db.prepare('INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, ?)')
+        .run(crypto.randomBytes(16).toString('hex'), member, entry.id, maker, needsSecond);
+    log(maker, 'confirm', entry.id, member);
+    return needsSecond ? 'awaiting_second' : 'confirmed';
+}
+
+export interface BoundInvite {
+    entryId: string; createdBy: string; createdAt: string; usedBy: string | null; usedAt: string | null;
+    outcome: InviteBindOutcome | null;
+}
+
+/**
+ * The invites bound to entries, newest first, for every admin: who made each and when, whether it was used, and what it
+ * did. Never a code, not even to its maker: the maker's phone shows it once, when it is made (a lost one is replaced by
+ * making another). A live code in another admin's hands would let one admin, with two admins to confirm, redeem it with
+ * a key of her own (confirmed by the maker) and second that herself.
+ */
+export function readBoundInvites(): BoundInvite[] {
+    return (db.prepare(
+        `SELECT names_entry_id AS entryId, created_by AS createdBy, created_at AS createdAt, used_by AS usedBy, used_at AS usedAt,
+                names_bind_outcome AS outcome
+         FROM invite_codes WHERE names_entry_id IS NOT NULL ORDER BY created_at DESC LIMIT 500`,
+    ).all() as BoundInvite[]);
+}
+
+/** The codes of the invites `maker` bound to entries: left out of their invite list for any reader but them. */
+export function boundInviteCodesOf(maker: string): Set<string> {
+    return new Set((db.prepare('SELECT code FROM invite_codes WHERE created_by = ? AND names_entry_id IS NOT NULL').all(maker) as { code: string }[]).map((r) => r.code));
+}
+
 export function secondConfirmation(actor: string, id: unknown): { id: string; status: ConfirmationStatus } {
     assertPlainTablesWritable();
     const row = confirmationRow(id);

@@ -1,9 +1,10 @@
 /**
  * Whether this node has an owner yet (sign-in step 8, the claim): GET /api/local/claim, asked before sign-in.
  *
- * The route is public and answers `{ unclaimed: false }` once an owner exists, or `{ unclaimed: true, codeId,
- * communityName }` while the one-time claim code waits (apps/server/src/routes/node-claim.ts). It never answers the
- * code itself, and this page never shows it: the page is public, the code is read on the server.
+ * The route is public and answers `{ unclaimed: false, password }` once an owner exists, or `{ unclaimed: true, codeId,
+ * communityName, password }` while the one-time claim code waits (apps/server/src/routes/node-claim.ts). `password` says
+ * whether the server has an admin password at all, and `passwordRetired: true` comes with it when an owner retired it. It
+ * never answers the code itself, and this page never shows it: the page is public, the code is read on the server.
  *
  * A failed or unreadable answer is `unknown`, and the sign-in card treats it as "show the sign-in": the check must
  * never stand between an operator and the password.
@@ -27,8 +28,11 @@ export interface CommunityAddresses {
 
 export type ClaimState =
     | { kind: 'unknown' }
-    /** `password: false`: the node's admin password was retired (design step 10), so no password field is drawn. */
-    | { kind: 'claimed'; password?: boolean }
+    /**
+     * `password: false`: this server has no admin password, so no password field is drawn. A new install never had one;
+     * `retired`: an owner retired it (design step 10). Absent `password` (any other answer) keeps the password form.
+     */
+    | { kind: 'claimed'; password?: false; retired?: boolean }
     /** `password: false` once the node has no admin password (stage C); any other answer keeps the password's fold. */
     | {
         kind: 'unclaimed';
@@ -86,7 +90,9 @@ export async function fetchClaimState(url: string, signal?: AbortSignal): Promis
         const body: unknown = await res.json();
         if (!body || typeof body !== 'object') return { kind: 'unknown' };
         const b = body as Record<string, unknown>;
-        if (b.unclaimed === false) return b.password === false ? { kind: 'claimed', password: false } : { kind: 'claimed' };
+        if (b.unclaimed === false) {
+            return b.password === false ? { kind: 'claimed', password: false, retired: b.passwordRetired === true } : { kind: 'claimed' };
+        }
         if (b.unclaimed !== true) return { kind: 'unknown' };
 
         return {

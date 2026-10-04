@@ -132,13 +132,15 @@ const HOLDER_CACHE_MS = 60_000;
 const foldName = (n: unknown): string => String(n ?? '').trim().replace(/\.$/, '').toLowerCase();
 
 /**
- * Why `name` (folded) is not one to release by name, or null: it is the stored address, the name the public-address agent
- * asks for, or the owner's pending Settings pick (a claim that got no answer here, still their latest choice, which the
- * connector or Settings' status read may store at any moment: #1583 review r4176051848).
+ * Why `name` (folded) is not one to release by name, or null: it is the stored address, the name the record of names calls
+ * current (the status read stores it, even with the stored address cleared: #1583 review r4176138202), the name the
+ * public-address agent asks for, or the owner's pending Settings pick (a claim that got no answer here, still their latest
+ * choice, which the connector or Settings' status read may store at any moment: #1583 review r4176051848).
  */
 function notReleasable(name: string): string | null {
     const host = `${name}.${REGISTRAR_ZONE}`;
-    if (foldName((getNodeConfig() as any).publicAddress?.name) === name || foldName(nameAskedFor()) === name) {
+    if (foldName((getNodeConfig() as any).publicAddress?.name) === name || foldName(nameAskedFor()) === name
+        || registrarNames().some((e) => e.role === 'current' && e.address === host)) {
         return `${host} is this community's address; Take offline releases it.`;
     }
     if (turnedAwayList().some((e) => e.why === 'unanswered' && foldName(e.name) === name)) {
@@ -266,8 +268,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const name = String(b.name || '').toLowerCase().trim();
         const mode: 'tunnel' | 'direct' = b.mode === 'direct' ? 'direct' : 'tunnel';
         if (!name) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
-        if (releasesInFlight.has(name)) { ctx.status = 409; ctx.body = { error: `${name}.${REGISTRAR_ZONE} is being released right now; try again in a moment.` }; return; }
-        claimsInFlight.add(name);
+        // Keyed as release-name keys them (case, trailing dot), so "name." waits for a release of "name" (#1583 review r4176138168).
+        const inFlight = foldName(name);
+        if (releasesInFlight.has(inFlight)) { ctx.status = 409; ctx.body = { error: `${inFlight}.${REGISTRAR_ZONE} is being released right now; try again in a moment.` }; return; }
+        claimsInFlight.add(inFlight);
         clearHolderCache();
         try {
             probeLogs.length = 0;
@@ -305,7 +309,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             ctx.status = 400;
             ctx.body = { error: e.message };
         } finally {
-            claimsInFlight.delete(name);
+            claimsInFlight.delete(inFlight);
         }
     });
 

@@ -139,6 +139,100 @@ describe('App Component', () => {
             expect(document.title).toBe('BeanPool — Node Settings');
         });
 
+        /**
+         * Queue item 26 (2026-10-04): an Android Custom Tab brought back to the front loads the app's new link into the
+         * /settings page it still shows (signed out by a node restart or the phone idle). Only the fragment changes, so
+         * nothing reloads: the page must read the link from the hashchange, not leave the password form up.
+         */
+        it('a phone link that reaches the page already open (fragment change only) signs in, or says why not', async () => {
+            sessionStorage.clear();
+            window.history.replaceState(null, '', '/settings');
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+            expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+
+            let exchange: 'ok' | 'expired' = 'ok';
+            const fetchMock = vi.fn().mockImplementation((url: string) => {
+                if (String(url).includes('/api/local/admin/auth/exchange')) {
+                    return Promise.resolve(exchange === 'ok'
+                        ? { ok: true, status: 200, json: () => Promise.resolve({ success: true, role: 'owner', memberPubkey: 'ab'.repeat(32), csrfToken: 'csrf-link' }) }
+                        : { ok: false, status: 401, json: () => Promise.resolve({ error: 'x', expired: true }) });
+                }
+                if (String(url).includes('/api/local/admin/auth/session')) {
+                    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ authenticated: false }) });
+                }
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, health: { flags: [] }, reports: [] }) });
+            });
+            vi.stubGlobal('fetch', fetchMock);
+
+            // A spent link first: said, in plain words, above the password form.
+            exchange = 'expired';
+            await act(async () => {
+                window.history.replaceState(null, '', `/settings#handoff=${'c'.repeat(64)}&section=home&from=app`);
+                window.dispatchEvent(new HashChangeEvent('hashchange'));
+            });
+            expect(screen.getByRole('alert')).toHaveTextContent(/sign-in link from your phone has expired.*Tap Manage again/);
+            expect(window.location.hash).toBe('');
+
+            // A fresh one: signed in, no password asked.
+            exchange = 'ok';
+            await act(async () => {
+                window.history.replaceState(null, '', `/settings#handoff=${'d'.repeat(64)}&section=home&from=app`);
+                window.dispatchEvent(new HashChangeEvent('hashchange'));
+            });
+            expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /people & safety/i })).toBeInTheDocument();
+            const posted = fetchMock.mock.calls.filter(([u]) => String(u).includes('/auth/exchange')).map(([, o]) => JSON.parse(o.body).token);
+            expect(posted).toEqual(['c'.repeat(64), 'd'.repeat(64)]);
+        });
+
+        /**
+         * PR #1592 review (r4176289097): a refused phone link must not quietly open an earlier sign-in still live in the
+         * browser. The same key's: carried on, and said on the page. Anyone else's: not opened; named, with Sign out.
+         */
+        it("a refused phone link carries on the same account's live sign-in with a note, and never opens someone else's", async () => {
+            sessionStorage.clear();
+            let live = { memberPubkey: 'ab'.repeat(32), callsign: 'Ada' };
+            const fetchMock = vi.fn().mockImplementation((url: string) => {
+                if (String(url).includes('/api/local/admin/auth/exchange')) {
+                    return Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve({ error: 'x', replay: true, mintedFor: 'ab'.repeat(32) }) });
+                }
+                if (String(url).includes('/api/local/admin/auth/session')) {
+                    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ authenticated: true, isKeySession: true, role: 'owner', ...live }) });
+                }
+                if (String(url).includes('/api/local/admin/csrf-token')) {
+                    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ csrfToken: 'csrf-live' }) });
+                }
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, health: { flags: [] }, reports: [] }) });
+            });
+            vi.stubGlobal('fetch', fetchMock);
+
+            // Same key: signed in, and the page says the link itself wasn't used.
+            window.history.replaceState(null, '', `/settings#handoff=${'c'.repeat(64)}&section=home&from=app`);
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+            expect(screen.getByRole('button', { name: /people & safety/i })).toBeInTheDocument();
+            expect(screen.getByText(/link from your phone was already used.*same account/i)).toBeInTheDocument();
+
+            // Another key: the earlier session is not opened; who it is, and Sign out.
+            live = { memberPubkey: 'cd'.repeat(32), callsign: 'Bea' };
+            await act(async () => {
+                window.history.replaceState(null, '', `/settings#handoff=${'d'.repeat(64)}&section=home&from=app`);
+                window.dispatchEvent(new HashChangeEvent('hashchange'));
+            });
+            expect(screen.queryByRole('button', { name: /people & safety/i })).not.toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent("You're still signed in here as Bea — not the account your phone just sent. Sign out, then tap Manage again.");
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+            });
+            const logout = fetchMock.mock.calls.find(([u]) => String(u).includes('/api/local/admin/auth/logout'));
+            expect(logout?.[1]?.headers?.['X-CSRF-Token']).toBe('csrf-live');
+            expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent(/Signed out\. Tap Manage again/);
+        });
+
         it('verifies document title does not contain "Fleet" in single-node mode', async () => {
             stubPasswordSession();
             await act(async () => {

@@ -78,35 +78,73 @@ async function freePorts(): Promise<Record<string, string>> {
 interface Node { child: ChildProcess; output: () => string; exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }> }
 
 async function startNode(dataDir: string): Promise<Node> {
-    const child = spawn(process.execPath, [...process.execArgv, ENTRY], {
-        env: {
-            ...process.env,
-            ...(await freePorts()),
-            BEANPOOL_DATA_DIR: dataDir,
-            ADMIN_PASSWORD: 'Clean-Stop-Suite-1!',
-            DISABLE_UPDATE_CHECK: 'true',
-            // Nothing leaves this machine: the directory push (first at 30 s) goes to a port nothing listens on.
-            DIRECTORY_REGISTRY_URL: 'http://127.0.0.1:9/',
-            CF_API_TOKEN: '', CF_ZONE_ID: '', CF_RECORD_NAME: '', PUBLIC_ADDRESS_AUTO: '', PUBLIC_ADDRESS_NAME: '',
-        } as NodeJS.ProcessEnv,
-        stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let out = '';
-    child.stdout!.on('data', (d) => { out += d.toString(); });
-    child.stderr!.on('data', (d) => { out += d.toString(); });
-    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-        child.on('exit', (code, signal) => resolve({ code, signal }));
-    });
-    const startedAt = Date.now();
-    while (!out.includes(READY_LINE)) {
-        if (child.exitCode !== null || child.signalCode !== null) throw new Error(`the node exited before it was ready\n${out.slice(-3000)}`);
-        if (Date.now() - startedAt > 90_000) {
-            child.kill('SIGKILL');
-            throw new Error(`the node was not ready in 90 s\n${out.slice(-3000)}`);
-        }
-        await new Promise((r) => setTimeout(r, 100));
+    const MAX_ATTEMPTS = 3;
+    const snapshotDir = path.join(path.dirname(dataDir), `.data-snapshot-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    if (fs.existsSync(dataDir)) {
+        fs.cpSync(dataDir, snapshotDir, { recursive: true });
     }
-    return { child, output: () => out, exited };
+    try {
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            const ports = await freePorts();
+            const child = spawn(process.execPath, [...process.execArgv, ENTRY], {
+                env: {
+                    ...process.env,
+                    ...ports,
+                    BEANPOOL_DATA_DIR: dataDir,
+                    ADMIN_PASSWORD: 'Clean-Stop-Suite-1!',
+                    DISABLE_UPDATE_CHECK: 'true',
+                    // Nothing leaves this machine: the directory push (first at 30 s) goes to a port nothing listens on.
+                    DIRECTORY_REGISTRY_URL: 'http://127.0.0.1:9/',
+                    CF_API_TOKEN: '', CF_ZONE_ID: '', CF_RECORD_NAME: '', PUBLIC_ADDRESS_AUTO: '', PUBLIC_ADDRESS_NAME: '',
+                } as NodeJS.ProcessEnv,
+                stdio: ['ignore', 'pipe', 'pipe'],
+            });
+            let out = '';
+            child.stdout!.on('data', (d) => { out += d.toString(); });
+            child.stderr!.on('data', (d) => { out += d.toString(); });
+            const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+                child.on('exit', (code, signal) => resolve({ code, signal }));
+            });
+            const closed = new Promise<void>((resolve) => {
+                child.on('close', () => resolve());
+            });
+            const startedAt = Date.now();
+            let ready = false;
+            while (!ready) {
+                if (out.includes(READY_LINE)) {
+                    ready = true;
+                    break;
+                }
+                if (child.exitCode !== null || child.signalCode !== null) {
+                    await Promise.race([closed, new Promise((r) => setTimeout(r, 200))]);
+                    const isPortCollision = out.includes('UnsupportedListenAddressesError') || out.includes('EADDRINUSE');
+                    if (isPortCollision && attempt < MAX_ATTEMPTS) {
+                        const reason = out.includes('UnsupportedListenAddressesError') ? 'UnsupportedListenAddressesError' : 'EADDRINUSE';
+                        console.log(`Port race during node start (${reason}), retrying with new ports (attempt ${attempt + 1}/${MAX_ATTEMPTS})...`);
+                        fs.rmSync(dataDir, { recursive: true, force: true });
+                        if (fs.existsSync(snapshotDir)) {
+                            fs.cpSync(snapshotDir, dataDir, { recursive: true });
+                        } else {
+                            fs.mkdirSync(dataDir, { recursive: true });
+                        }
+                        break;
+                    }
+                    throw new Error(`the node exited before it was ready\n${out.slice(-3000)}`);
+                }
+                if (Date.now() - startedAt > 90_000) {
+                    child.kill('SIGKILL');
+                    throw new Error(`the node was not ready in 90 s\n${out.slice(-3000)}`);
+                }
+                await new Promise((r) => setTimeout(r, 100));
+            }
+            if (ready) {
+                return { child, output: () => out, exited };
+            }
+        }
+        throw new Error(`the node exited before it was ready`);
+    } finally {
+        fs.rmSync(snapshotDir, { recursive: true, force: true });
+    }
 }
 
 /** Send `signal` and wait for the exit; a node still running after 30 s is killed so the suite never hangs. */

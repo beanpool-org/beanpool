@@ -194,6 +194,12 @@ async function main() {
         // Single use.
         const replay = await exchange(link.body.handshakeToken);
         assert(replay.status === 401 && replay.body.replay === true && !replay.sessionId, 'the same token cannot be used twice');
+        // A refused link names the key it was made for, so /settings can tell it from an earlier sign-in still live in
+        // the browser; only to the one holding the token: a token the node never made names nobody.
+        assert(replay.body.mintedFor === admin.pub, 'a refused link names the key it was made for');
+        const unknown = await exchange('ab'.repeat(32));
+        assert(unknown.status === 401 && !('mintedFor' in (unknown.body ?? {})), 'a token the node never made names no key');
+        assert(info.callsign === 'hoAdmin', 'the key session says whose it is, by callsign');
 
         // Expiry (the store is in this process, so time can be moved forward directly).
         const late = await requestLink(admin);

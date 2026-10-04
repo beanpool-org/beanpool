@@ -100,6 +100,10 @@ const PASSWORD_PATH_NEEDS_TOKEN = 'The password path needs a token now: set BEAN
  * turn two-factor on led straight to it: #1575 review.) Its words and the way out, or null for any other answer.
  */
 function passwordPathRefusal(status, body) {
+    // Sign-in step 10: the primary's owner retired its admin password for good.
+    if (status === 403 && body?.code === 'password_retired') {
+        return `This node's password is retired: use a token.\n${PASSWORD_PATH_NEEDS_TOKEN}`;
+    }
     if (status === 403 && body?.code === 'password_needs_2fa') {
         return `${body.error || 'The primary refused the admin password.'}\n${PASSWORD_PATH_NEEDS_TOKEN}`;
     }

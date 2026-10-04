@@ -25,6 +25,7 @@ import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndex
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
+import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
 
 // ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
@@ -934,7 +935,20 @@ export default function LedgerScreen() {
 
             {/* ── Credit position — zero is the sweet spot. Un-vouched members have no credit line
                  yet (floor 0), so show a plain-language "get vouched" prompt instead of the bar. ── */}
-            {balanceState.activated === false ? (
+            {creditLineCard(balanceState) === 'frozen' ? (
+                <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
+                    <View testID="ledger-known-frozen" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: colors.feedback.info.bg, borderWidth: 1, borderColor: colors.feedback.info.border, borderRadius: 12, padding: 12 }}>
+                        <Text style={{ fontSize: 20 }}>❄️</Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading }} accessibilityRole="header">{KNOWN_FROZEN_TITLE}</Text>
+                            <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>{KNOWN_FROZEN_BODY}</Text>
+                            {frozenDebitLine(balanceState.balance) && (
+                                <Text testID="ledger-frozen-debit" style={{ fontSize: 12.5, fontWeight: '700', color: colors.text.heading, lineHeight: 18, marginTop: 6 }}>{frozenDebitLine(balanceState.balance)}</Text>
+                            )}
+                        </View>
+                    </View>
+                </View>
+            ) : balanceState.activated === false ? (
                 <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: palette.green50, borderWidth: 1, borderColor: palette.green200, borderRadius: 12, padding: 12 }}>
                         <Text style={{ fontSize: 20 }}>🌱</Text>
@@ -955,6 +969,9 @@ export default function LedgerScreen() {
                 >
                     {/* The bar itself now carries the offer ladder (locked zone, rungs, unlock caption). */}
                     <CreditBar balance={balanceState.balance} floor={balanceState.floor} colors={colors} usableFloor={balanceState.usableFloor} liveOffers={balanceState.liveOffers} knownGrant={balanceState.knownGrant} />
+                    {knownFrozenPartNote(balanceState) && (
+                        <Text style={{ fontSize: 11.5, color: colors.text.body, lineHeight: 16, marginTop: 8 }}>{knownFrozenPartNote(balanceState)}</Text>
+                    )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
                     {balanceState.frozen && (
                         <Text style={{ fontSize: 11.5, color: '#d97706', lineHeight: 16, marginTop: 8 }}>

@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from 'react';
 import { agreeToConsent, canWithdrawConsent, consentHeading, fetchMyConsent, shouldOfferConsent, showsConsentCard, withdrawConsent, type KnownConsent } from '../lib/known-consent';
+import { ConsentText } from './ConsentText';
 
 export function KnownConsentCard() {
     const [consent, setConsent] = useState<KnownConsent | null>(null);
@@ -49,7 +50,7 @@ export function KnownConsentCard() {
             background: 'var(--bg-secondary)', overflowWrap: 'anywhere',
         }}>
             <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem' }}>{offer ? consentHeading(consent) : 'What you agreed the admins can see'}</h3>
-            <p style={{ margin: '0 0 0.5rem', fontSize: '0.9rem', lineHeight: 1.45 }}>{consent.text}</p>
+            <ConsentText text={consent.text} fontSize="0.9rem" />
             <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', lineHeight: 1.45, color: 'var(--text-secondary)' }}>
                 {agreed
                     ? <>You agreed{agreedOn ? ` on ${agreedOn}` : ''}{offer ? ' to the earlier text' : ''}. You can take it back at any time: from that moment the admins don&apos;t see your balance.</>

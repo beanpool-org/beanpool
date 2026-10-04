@@ -25,6 +25,7 @@ import {
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { fetchConsentTerms, type ConsentTerms } from '../lib/known-consent';
+import { ConsentText } from '../components/ConsentText';
 import { LookAroundGlobal } from '../components/MembersOnlyListings';
 import { WebRestore } from '../components/WebRestore';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
@@ -2544,7 +2545,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 0.35rem' }}>
                                         What this community's admins can see
                                     </p>
-                                    <p style={{ fontSize: '0.85rem', lineHeight: 1.45, margin: '0 0 0.5rem' }}>{joinTerms.text}</p>
+                                    <ConsentText text={joinTerms.text} fontSize="0.85rem" />
                                     <label htmlFor="joinConsent" style={{
                                         display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: 48,
                                         fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',

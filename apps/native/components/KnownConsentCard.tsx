@@ -8,7 +8,8 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { colors } from '../constants/colors';
 import { signedGet, signedRequestWithMethod } from '../utils/db';
-import { readKnownConsent, shouldOfferConsent, showsConsentCard, canWithdrawConsent, consentHeading, type KnownConsent } from '../utils/known-consent';
+import { ConsentText } from './ConsentText';
+import { readKnownConsent, saveKnownConsent, shouldOfferConsent, showsConsentCard, canWithdrawConsent, consentHeading, type KnownConsent } from '../utils/known-consent';
 
 export function KnownConsentCard() {
     const [consent, setConsent] = useState<KnownConsent | null>(null);
@@ -36,13 +37,9 @@ export function KnownConsentCard() {
         setBusy(true);
         setNote(null);
         try {
-            const res = await signedRequestWithMethod('POST', '/api/names/consent', body);
-            const answer = await (res as Response).json().catch(() => null);
-            const next = readKnownConsent(answer);
-            if ((res as Response).ok && next) { setConsent(next); setNote(done); }
-            else setNote(typeof (answer as { error?: unknown })?.error === 'string' ? (answer as { error: string }).error : 'Not saved. Try again later.');
-        } catch {
-            setNote('Not saved: the community could not be reached.');
+            const saved = await saveKnownConsent(() => signedRequestWithMethod('POST', '/api/names/consent', body));
+            if ('consent' in saved) { setConsent(saved.consent); setNote(done); }
+            else setNote(saved.error);
         } finally {
             setBusy(false);
         }
@@ -54,7 +51,7 @@ export function KnownConsentCard() {
     return (
         <View style={styles.card} accessibilityRole="summary" testID="known-consent-card">
             <Text style={styles.heading} accessibilityRole="header">{offer ? consentHeading(consent) : 'What you agreed the admins can see'}</Text>
-            <Text style={styles.body}>{consent.text}</Text>
+            <ConsentText text={consent.text} />
             {agreed && <Text style={styles.body}>You agreed{agreedOn ? ` on ${agreedOn}` : ''}{offer ? ' to the earlier text' : ''}. You can take it back at any time: from that moment the admins don&apos;t see your balance.</Text>}
             {!agreed && <Text style={styles.body}>Agreeing is up to you. If you don&apos;t, nothing else changes: the admins just never see your balance. You can take it back at any time, here in Settings.</Text>}
             {note && <Text style={styles.body} accessibilityLiveRegion="polite">{note}</Text>}

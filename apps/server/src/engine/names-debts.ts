@@ -99,6 +99,9 @@ const WORK_OFF_FLOOR = '0 (working off a debt)';
 type FloorRow = { amount: number | null; frozen: number; set_at: string };
 const floorRow = (member: string) => db.prepare('SELECT amount, frozen, set_at FROM known_floor_exceptions WHERE member_pubkey = ?').get(member) as FloorRow | undefined;
 const describeFloor = (r: FloorRow | undefined) => !r ? 'default' : r.frozen ? 'frozen' : String(r.amount);
+// What a work-off replaced, put back whole on its revoke: a freeze keeps the amount it froze ('frozen 50'; plain 'frozen'
+// kept the community's known floor), so the 0 the work-off wrote over it must go back too.
+const floorBefore = (r: FloorRow | undefined) => r?.frozen && r.amount !== null ? `frozen ${r.amount}` : describeFloor(r);
 const logFloor = (actor: string, action: string, member: string, oldValue: string, newValue: string) =>
     db.prepare('INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)')
         .run(crypto.randomBytes(16).toString('hex'), actor, action, member, oldValue, newValue);
@@ -142,18 +145,21 @@ export function endWorkOff(actor: string, member: string, confirmationId: string
         return;
     }
     if (before === 'default') db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(member);
-    else if (before === 'frozen') db.prepare(`UPDATE known_floor_exceptions SET frozen = 1, set_by = ?, set_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE member_pubkey = ?`).run(actor, member);
+    else if (before.startsWith('frozen')) {
+        const kept = before === 'frozen' ? null : Number(before.slice('frozen '.length));
+        db.prepare(`UPDATE known_floor_exceptions SET amount = ?, frozen = 1, set_by = ?, set_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE member_pubkey = ?`).run(kept, actor, member);
+    }
     else db.prepare(`UPDATE known_floor_exceptions SET amount = ?, set_by = ?, set_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE member_pubkey = ?`).run(Number(before), actor, member);
-    logFloor(actor, 'exception_restored', member, WORK_OFF_FLOOR, before + ' (the work-off confirmation was revoked)');
+    logFloor(actor, 'exception_restored', member, WORK_OFF_FLOOR, (before.startsWith('frozen') ? 'frozen' : before) + ' (the work-off confirmation was revoked)');
 }
 
 /** The 0 floor, with what it replaced and the set_at it wrote kept on the debt: what its revoke may put back (endWorkOff). */
 function setWorkOffFloor(actor: string, debtId: string, member: string): void {
-    const before = describeFloor(floorRow(member));
+    const before = floorBefore(floorRow(member));
     db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by, set_at) VALUES (?, 0, 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 ON CONFLICT(member_pubkey) DO UPDATE SET amount = 0, frozen = 0, set_by = excluded.set_by, set_at = excluded.set_at`).run(member, actor);
     db.prepare('UPDATE names_debts SET work_off_floor_before = ?, work_off_floor_set_at = ? WHERE id = ?').run(before, floorRow(member)!.set_at, debtId);
-    logFloor(actor, 'exception_lowered', member, before, WORK_OFF_FLOOR);
+    logFloor(actor, 'exception_lowered', member, before.startsWith('frozen') ? 'frozen' : before, WORK_OFF_FLOOR);
 }
 
 function debtRow(id: unknown): DebtRecord {

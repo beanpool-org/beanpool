@@ -251,6 +251,27 @@ describe('AdminLoginCard: the unclaimed card', () => {
         expect(screen.queryByTestId('claim-card')).toBeNull();
     });
 
+    it('shows the phone sign-in and no password form on a claimed server with no admin password (a new install)', async () => {
+        const { claimCalls } = stubNode([{ status: 200, body: { unclaimed: false, password: false } }]);
+        renderCard();
+        const box = await screen.findByTestId('no-password-signin');
+        expect(box).toHaveTextContent('This server has no admin password. Owners and admins sign in with the BeanPool app on your phone.');
+        expect(box).not.toHaveTextContent(/retired/);
+        expect(screen.getByTestId('phone-signin')).toBeInTheDocument();
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
+        expect(screen.queryByRole('button', { name: /Unlock Settings/i })).toBeNull();
+        expect(screen.queryByTestId('password-retired-signin')).toBeNull();
+        expect(claimCalls).toHaveLength(1);
+    });
+
+    it('says an owner retired the password only when the claim answer says so', async () => {
+        stubNode([{ status: 200, body: { unclaimed: false, password: false, passwordRetired: true } }]);
+        renderCard();
+        expect(await screen.findByTestId('password-retired-signin')).toHaveTextContent('This server has no admin password: an owner retired it.');
+        expect(screen.queryByTestId('no-password-signin')).toBeNull();
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
+    });
+
     it('asks again every 5 s and swaps to the sign-in form the moment the node is claimed, then stops asking', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: false });
         const { claimCalls } = stubNode([unclaimed(), unclaimed(), claimed]);

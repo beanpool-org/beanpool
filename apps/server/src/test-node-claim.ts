@@ -18,7 +18,7 @@
  *   C. The brake: a second wrong proof from the same source within 10 s is 429.
  *   D. The right proof, from that braked source: 200 (a right proof is never braked); the key is a member once and the
  *      owner; the file is gone; K is deleted at the burn; the answer carries no secret. The same request again: 200,
- *      still one member. Another key: 409. Still no password signs in.
+ *      still one member. Another key: 409. Still no password signs in, and GET says so (password: false, not retired).
  *   E. A restart after the claim: no file, no new code, GET says claimed.
  *   F. A new code after the file was lost: a statement for the old code id is refused.
  *   G. The claim file cannot be written, on a node with a password (the suites' ADMIN_PASSWORD seam): the node starts
@@ -26,7 +26,7 @@
  *   H. A flood of wrong proofs from many sources never delays a right proof: it answers 200 at once. Their SECURITY lines
  *      stop at the node-wide budget, with one "and M more" line a minute; the claim's own line is always written.
  *   I. On a node with a password (the seam), the password's first invite, then the claim: the claim follows whether the node has an owner; the password still
- *      signs in; with an owner, the next start has no file and no waiting code.
+ *      signs in; with an owner, the next start has no file and no waiting code, and GET says claimed with password: true.
  *   J. Two keys with the right proof at once: one owner, the other 409.
  *   K. No request this suite sent carried the code.
  *   L. A stranger sharing the installer's address: 350 requests (GETs and wrong proofs) meet no per-address limiter, only
@@ -308,6 +308,8 @@ async function main(): Promise<void> {
     assert(r.status === 409 && r.json.code === 'claim_already_claimed', `D6. another key with the right proof: 409 (${r.status} ${r.json.code})`);
     const get2 = await claimInfo(a);
     assert(get2.unclaimed === false && get2.salt === undefined, `D7. GET says claimed, with no salt (${JSON.stringify(get2)})`);
+    assert(get2.password === false && get2.passwordRetired === undefined,
+        `D7b. and that this server has no admin password, not retired: Settings shows the phone sign-in, no password form (${JSON.stringify(get2)})`);
     assert(!(await signsIn(a, password)), 'D8. still no password signs in');
     await a.stop();
     const facts = dbFacts(dirA, alice.pub);
@@ -464,6 +466,8 @@ async function main(): Promise<void> {
     iNode = await boot(dirI, envI);
     assert(!fs.existsSync(path.join(dirI, FILE_NAME)), 'I4. with an owner, the next start has no claim file');
     assert(!pendingIn(dirI), 'I5. and no waiting code');
+    const claimedI = await claimInfo(iNode);
+    assert(claimedI.unclaimed === false && claimedI.password === true, `I6. GET says claimed, and that this server has an admin password (${JSON.stringify(claimedI)})`);
     await iNode.stop();
 
     console.log('\nJ. Two keys at once');

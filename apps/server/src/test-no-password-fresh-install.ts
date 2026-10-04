@@ -10,7 +10,8 @@
  *      with it is refused; local-config.json is not locked and holds no password hash. GET /api/local/claim says
  *      password: false (the Settings card then has no password fold). The claim code claims the node, and the claiming
  *      key is its owner.
- *   B. That claimed node rebooted with ADMIN_PASSWORD still set: still no password signs in, no hash, not locked.
+ *   B. That claimed node rebooted with ADMIN_PASSWORD still set: still no password signs in, no hash, not locked, and
+ *      GET /api/local/claim says password: false (not retired), so the Settings sign-in draws no password form.
  *   C. A fresh install with no ADMIN_PASSWORD: no first-admin-password.txt, no "ignored" line, a claim code.
  *   D. An existing node with a password (a local-config.json as an older version left it, its first-admin-password.txt
  *      still there), booted with another ADMIN_PASSWORD in .env: its own password still signs in, the .env one does not,
@@ -226,7 +227,10 @@ async function main(): Promise<void> {
     cfg = configOf(dirA);
     assert(cfg.isLocked !== true && !cfg.adminHash, 'B2. still not locked, no password hash');
     assert(!fs.existsSync(firstPwFile(dirA)) && !fs.existsSync(path.join(dirA, 'claim-code.txt')), 'B3. no password file, no claim code');
-    assert((await request(a, 'GET', '/api/local/claim', undefined, { Host: HOST })).json?.unclaimed === false, 'B4. it is claimed');
+    const claimedB = (await request(a, 'GET', '/api/local/claim', undefined, { Host: HOST })).json;
+    assert(claimedB?.unclaimed === false, 'B4. it is claimed');
+    assert(claimedB?.password === false && claimedB?.passwordRetired === undefined,
+        `B5. and its claim answer says it has no admin password (not retired), so Settings shows no password form (${JSON.stringify(claimedB)})`);
     await a.stop();
 
     console.log('\nC. A fresh install with no ADMIN_PASSWORD');

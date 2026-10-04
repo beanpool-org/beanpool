@@ -29,7 +29,7 @@ process.env.ADMIN_PASSWORD = 'HealthPanel123!';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance, injectSystemMessage } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -476,6 +476,34 @@ async function main(): Promise<void> {
     const withDm = await one9('t9-open');
     assert(withDm.status === 200 && withDm.body?.dispute?.chat?.conversationId === 'c9-dm' && /a line between the two/.test(withDm.text) && !/a line in the group/.test(withDm.text),
         `their one-to-one chat is (${JSON.stringify(withDm.body?.dispute?.chat ?? null).slice(0, 120)})`);
+
+    // The node's plaintext notices in that chat (escrow placed, released: amounts and both keys) are this trade's only, never
+    // the pair's other trades', finished ones included (review r4177156576). A pair with an older finished trade and the
+    // disputed one; the notices go where the node puts them (injectSystemMessage), next to a line the two wrote.
+    const max = makeMember('Maxine');
+    const nia = makeMember('Niamh');
+    const oldPost = createPost('offer', 'produce', 'Niamh\'s old bread', 'Baking', 7, 'fixed', nia.pk)!;
+    const newPost = createPost('offer', 'produce', 'Niamh\'s honey', 'Preserves', 9, 'fixed', nia.pk)!;
+    chatOf.run('c9-pair', 'dm', null, max.pk);
+    for (const m of [max, nia]) inChat.run('c9-pair', m.pk);
+    trade.run('t9-old', oldPost.id, max.pk, nia.pk, 'completed', ago(40 * DAY), null);
+    const notice = (post: { id: string }, type: string, amount: number) =>
+        injectSystemMessage(post.id, type, { amount, postId: post.id, buyerPubkey: max.pk, sellerPubkey: nia.pk } as any, max.pk, nia.pk);
+    notice(oldPost, 'ESCROW_FUNDED', 7);
+    notice(oldPost, 'ESCROW_RELEASED', 7);
+    line.run('m9-pair', 'c9-pair', max.pk, 'a line the pair wrote');
+    trade.run('t9-pair', newPost.id, max.pk, nia.pk, 'pending', ago(20 * DAY), null);
+    notice(newPost, 'ESCROW_FUNDED', 9);
+    const pairOne = await one9('t9-pair');
+    const pairListed = ((await call('GET', null, '/api/local/admin/disputes?minDays=0&limit=200', undefined, adaSession)).body?.disputes ?? [])
+        .find((d: any) => d.id === 't9-pair');
+    for (const [where, d] of [['by its id', pairOne.body?.dispute], ['on the list', pairListed]] as const) {
+        const shown = JSON.stringify({ chat: d?.chat ?? null, chatContext: d?.chatContext ?? null });
+        assert(pairOne.status === 200 && d?.chat?.conversationId === 'c9-pair' && /a line the pair wrote/.test(shown) && /9 Beans placed in escrow/.test(shown)
+            && !/7 Beans/.test(shown) && !shown.includes(oldPost.id)
+            && (d?.chat?.messages ?? []).length === 2 && (d?.chatContext ?? []).length === 2,
+            `${where}, the dispute's chat shows the pair's line and this trade's notice, none of their older trade's (${shown.slice(0, 300)})`);
+    }
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

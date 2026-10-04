@@ -856,7 +856,11 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
 router.get('/api/local/admin/stranded-escrows', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        ctx.body = { success: true, ...listStrandedEscrows() };
+        const listed = listStrandedEscrows();
+        // A look at the trades these escrows were stuck in, like a look at the disputes (review r4177560417 item 4): a
+        // line in the log the owner and admins read, naming each trade (or the escrow, when its trade is gone), first.
+        if (!logDisputesOrRefuse(ctx, 'disputes_listed', listed.escrows.map(e => e.tradeId ?? e.escrowId))) return;
+        ctx.body = { success: true, ...listed };
     } catch (e: any) {
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Failed to list stranded escrows' };
@@ -934,8 +938,39 @@ router.get('/api/local/admin/sync-audit-log', async (ctx) => {
  */
 router.post('/api/local/admin/health', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    ctx.body = withLoggedAlerts(ctx, getCommunityHealth());
+    ctx.body = healthFor(ctx);
 });
+
+/**
+ * A background check of the alerts (the manager's five-minute tick, the built-in page's reloads) is no admin's look: it
+ * asks with `alerts: 'summary'` and gets each alert's kind and severity, the ones that name members with no member, no
+ * description and no Beans, and nothing is logged (review r4177560410).
+ */
+function wantsAlertsSummary(ctx: any): boolean {
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    return body?.alerts === 'summary' || ctx.query?.alerts === 'summary';
+}
+
+function alertsSummary<T extends { flags: Array<{ type: string; severity: string; description: string; members: string[] }> }>(health: T): T {
+    return {
+        ...health,
+        flags: health.flags.map(f => (Array.isArray(f.members) && f.members.length)
+            ? { type: f.type, severity: f.severity, description: 'An alert that names members: open the alerts to see it.', members: [], namesHidden: true }
+            : f),
+    } as T;
+}
+
+/** The manager's background check: each alert's kind and severity, names-free, and the reports' count; logs nothing. */
+router.post('/api/local/admin/alerts-summary', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { flags: alertsSummary(getCommunityHealth()).flags, reportCount: getReportCount() };
+});
+
+function healthFor(ctx: any) {
+    const health = getCommunityHealth();
+    return wantsAlertsSummary(ctx) ? alertsSummary(health) : withLoggedAlerts(ctx, health);
+}
 
 /**
  * The fraud alerts that name members are an admin's look at those members' trades (queue item 29, Marty 4 Oct): a line
@@ -1000,7 +1035,7 @@ router.post('/api/local/admin/data', async (ctx) => {
         // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt. Polls carry their counts and not
         // who voted for what: that is for members (includeVoters), and the manager never shows it.
         posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled'),
-        health: withLoggedAlerts(ctx, getCommunityHealth()),
+        health: healthFor(ctx),
         reports: getReports().reports,
         reportCount: getReportCount(),
         escrowDisputesCount: (db.prepare(`

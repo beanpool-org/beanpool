@@ -307,7 +307,7 @@ router.get('/api/local/admin/community-health', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can open Community health.')) return;
     ctx.set('Cache-Control', 'no-store');
-    ctx.body = { ...healthSummary(), log: readHealthAccessLog(100) };
+    ctx.body = { ...healthSummary(), log: readHealthAccessLog(100, 'balance'), tradeLog: readHealthAccessLog(100, 'trades') };
 });
 
 router.post('/api/local/admin/community-health', async (ctx) => {

@@ -39,7 +39,11 @@ export const QUIET_DAYS_DEFAULT = 60;
  * who send the member who invited them Beans past a limit in a window (sybil_funnel); not "trade mostly with one member".
  * Wording 5 (queue item 29, Marty 4 Oct: "Keep disputes, log every look, totals only in member stats"): every admin
  * look at the disputes and at an alert that names a member is logged (health_access_log), the owner and the admins
- * read that log, and memberStats carries no member's trades, only the community's totals (tradeTotals).
+ * read that log, and memberStats carries no member's trades, only the community's totals (tradeTotals). Fix round 1
+ * (reviews r4177560405, r4177560417; wording 5 unreleased, so no bump): every member, admins included, sees each
+ * member's trust profile (POST /api/trust/profile: finished and cancelled trades, the share finished, how many
+ * different members, the trades with the viewer, Trust Points), unlogged, as Marty decided on 2026-09-29; and the
+ * stranded escrows list (an escrow left stuck by a removal on an older node) is a logged look like the disputes.
  */
 export const CONSENT_WORDING_VERSION = 5;
 
@@ -79,7 +83,7 @@ export function consentTerms() {
         + `Every look at your balance is logged, and you can take this back at any time in Settings. `
         + `Whatever you choose, any admin can see some of your trades: a trade that isn't `
         + `finished yet or that an admin settled (who with, the listing, the price, and your one-to-one chat with them, which `
-        + `they can't read if it is private), so a stuck trade can be settled; a fraud `
+        + `they can't read if it is private), so a stuck trade can be settled; a trade whose Beans were left stuck when a member was removed on an older server (the listing, the price, its dates and the note on its last payment); a fraud `
         + `alert that names you if you and one member buy from each other back and forth, about evenly, past a limit, with `
         + `the Beans in total and how evenly they went each way; one that names you, with the Beans in total and how many of `
         + `the members you invited have traded with no one but you, if members you invited send you Beans past a limit within `
@@ -88,7 +92,8 @@ export function consentTerms() {
         + `with each other; and an alert that names you if no Beans have moved in or out of your account for a set number `
         + `of days. Every one of those looks is logged, with who looked, when, and at which trades or whom, and the owner `
         + `and the admins can see that log. The member stats the admins see show how many posts you have up and messages `
-        + `you have sent, and of trades only the whole community's totals, not yours. Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance `
+        + `you have sent, and of trades only the whole community's totals, not yours. Every member, admins included, sees your trust profile: how many trades you have finished and how many you cancelled, the share you finished, with how many different members you have traded, how many trades you have done with the member looking, and your Trust Points. That isn't logged, because every member can see it. `
+        + `Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance `
         + `and trades included, and its backups, snapshots and standby copies.`;
     return { known: isKnownCommunity(), debtLinePct, quietDays, version: `${CONSENT_WORDING_VERSION}:${debtLinePct}:${quietDays}`, text };
 }
@@ -229,15 +234,26 @@ export function logDisputesLook(actor: string, action: 'disputes_listed' | 'disp
 
 /**
  * An admin's look at the fraud alerts that name members: one line per member named (`subject_pubkey`, which a re-key
- * moves). An answer that names no one writes none. Written before the answer, all lines or none.
+ * moves), at most one per admin and member in 24 hours, so reading the alerts again doesn't flood the log; a read that
+ * names someone new logs that one (review r4177560410). An answer that names no one writes none. Written before the
+ * answer, all lines or none.
  */
 export function logAlertsLook(actor: string, flags: ReadonlyArray<{ members: string[] }>): void {
     const named = [...new Set(flags.flatMap(f => Array.isArray(f.members) ? f.members : []).filter(m => typeof m === 'string' && m))];
     if (!named.length) return;
     assertPlainTablesWritable();
+    const since = new Date(Date.now() - ALERTS_LOOK_WINDOW_MS).toISOString();
+    const seen = db.prepare("SELECT 1 FROM health_access_log WHERE actor_pubkey = ? AND action = 'alerts_read' AND subject_pubkey = ? AND at > ? LIMIT 1");
     const insert = db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey) VALUES (?, ?, 'alerts_read', ?)");
-    db.transaction(() => { for (const m of named) insert.run(crypto.randomBytes(16).toString('hex'), actor, m); })();
+    db.transaction(() => {
+        for (const m of named) if (!seen.get(actor, m, since)) insert.run(crypto.randomBytes(16).toString('hex'), actor, m);
+    })();
 }
+
+const ALERTS_LOOK_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** The looks at a member's balance (#1599) and the looks at trades and alerts: two lists, so one can't bury the other. */
+const BALANCE_LOOKS = "('exceptions_opened', 'offboard_preview', 'offboard_settled')";
 
 function tradeIdsOf(detail: string | null): string[] | null {
     if (!detail) return null;
@@ -246,10 +262,12 @@ function tradeIdsOf(detail: string | null): string[] | null {
 
 /**
  * Who opened the exceptions, looked at a member's balance, at the disputes or at the alerts; whose, which trades, and
- * when: every owner and admin reads it.
+ * when: every owner and admin reads it. `kind` picks the list: the balance looks, or the looks at trades and alerts,
+ * each its own newest `limit`.
  */
-export function readHealthAccessLog(limit = 100) {
-    return (db.prepare('SELECT id, actor_pubkey, action, subject_pubkey, detail, at FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(Math.max(1, Math.min(500, limit))) as any[])
+export function readHealthAccessLog(limit = 100, kind: 'balance' | 'trades' = 'balance') {
+    const where = kind === 'balance' ? `action IN ${BALANCE_LOOKS}` : `action NOT IN ${BALANCE_LOOKS}`;
+    return (db.prepare(`SELECT id, actor_pubkey, action, subject_pubkey, detail, at FROM health_access_log WHERE ${where} ORDER BY at DESC, rowid DESC LIMIT ?`).all(Math.max(1, Math.min(500, limit))) as any[])
         .map(r => ({
             id: r.id, actor: r.actor_pubkey, actorCallsign: getMember(r.actor_pubkey)?.callsign ?? null, action: r.action,
             subject: r.subject_pubkey ?? null, subjectCallsign: r.subject_pubkey ? getMember(r.subject_pubkey)?.callsign ?? null : null,

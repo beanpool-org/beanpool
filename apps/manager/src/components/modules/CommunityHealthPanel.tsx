@@ -26,7 +26,7 @@ function logDid(l: LogLine): string {
     if (l.action === 'offboard_settled') return 'removed a member and saw the balance it settled on';
     return 'opened it on';
 }
-export type Health = { totals: Totals; settings: Lines; known: boolean; log: LogLine[] };
+export type Health = { totals: Totals; settings: Lines; known: boolean; log: LogLine[]; tradeLog: LogLine[] };
 type Status = { kind: 'saved' | 'error'; text: string };
 
 const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
@@ -44,6 +44,7 @@ export function readHealth(v: unknown): Health | null {
         settings: { debtLinePct: s.debtLinePct!, quietDays: s.quietDays! },
         known: o.known === true,
         log: Array.isArray(o.log) ? o.log.filter((l): l is LogLine => !!l && typeof (l as LogLine).at === 'string') : [],
+        tradeLog: Array.isArray(o.tradeLog) ? o.tradeLog.filter((l): l is LogLine => !!l && typeof (l as LogLine).at === 'string') : [],
     };
 }
 
@@ -192,6 +193,22 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
                 ) : (
                     <ul data-testid="health-log" className="m-0 p-0 list-none space-y-1">
                         {health.log.map((l) => (
+                            <li key={l.id} className="text-xs text-nature-300 break-words">
+                                <span className="font-bold text-white">{l.actorCallsign ?? `${l.actor.slice(0, 8)}…`}</span> {logDid(l)} {new Date(l.at).toLocaleString()}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+
+            {/* The looks at trades and alerts: a list of their own, so they can't push a balance look out of the one above. */}
+            <div className="space-y-2">
+                <h4 className="text-sm font-bold text-white m-0 break-words">Who looked at trades and alerts</h4>
+                {health.tradeLog.length === 0 ? (
+                    <p data-testid="health-trade-log-empty" className="text-xs text-nature-400 m-0 break-words">Nobody has looked.</p>
+                ) : (
+                    <ul data-testid="health-trade-log" className="m-0 p-0 list-none space-y-1">
+                        {health.tradeLog.map((l) => (
                             <li key={l.id} className="text-xs text-nature-300 break-words">
                                 <span className="font-bold text-white">{l.actorCallsign ?? `${l.actor.slice(0, 8)}…`}</span> {logDid(l)} {new Date(l.at).toLocaleString()}
                             </li>

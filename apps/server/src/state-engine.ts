@@ -5071,7 +5071,7 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     }
     // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
     const beans = Math.round(amount * 100) / 100;
-    const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId, beans);
+    const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId, beans, memberPubkey);
     // The same test as ledger.moveToCommons's guard inside the transaction, on the raw balance (decay leaves fractions of a
     // cent; getBalance's is rounded): a refusal is here, in plain words, never a rollback and a ledger rebuild.
     const raw = ledger.getAccount(memberPubkey).balance;

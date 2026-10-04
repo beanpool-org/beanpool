@@ -31,6 +31,9 @@
  *      `open_debt`), and none is written; one made (or an offline ticket signed) while the entry was clean and redeemed
  *      after a debt opened makes its joiner a member, unconfirmed (outcome `open_debt`); once the debt is settled, a
  *      new one confirms its joiner
+ *  16. a debt is paid once: a new payment for it is refused (409, naming the earlier payment's reference to its own
+ *      payer only) while a payment linked to it covers what is left, one after the other or sent at once (2, 5); a replay
+ *      of the first id gets its first answer; payments that don't cover what is left are taken, as before
  *   Every step: conservation, the whole node sums to what it summed to before
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-names-debts-http.ts
@@ -634,6 +637,73 @@ async function main(): Promise<void> {
         `holding 4.996 (shown as ${ivyShown.body?.balance}), paying 5 is refused before the transaction, saying 4.99 (${show(ivyAll)})`);
     const ivyHeld = await call('POST', ivy, '/api/commons/pay', { amount: 4.99 });
     assert(ivyHeld.status === 200 && r2(balanceRow(ivy)) === 0.01, `4.99 is paid (${show(ivyHeld)}; ${balanceRow(ivy)})`);
+    assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
+
+    // ── 16. a debt is paid once ────────────────────────────────────────────────────────────────
+    console.log('── 16. a debt is paid once: a second payment is refused while the first waits for an admin ──');
+    const linksTo = (debtId: string) => (db.prepare('SELECT COUNT(*) n FROM names_debt_payments WHERE debt_id = ?').get(debtId) as any).n as number;
+    const requestRow = (who: Id, id: string) => db.prepare('SELECT 1 FROM money_requests WHERE payer_pubkey = ? AND request_id = ?').get(who.pk, id);
+    const leftDebt = async (name: string, beans: number) => {
+        const entry = makeEntry();
+        await call('POST', await debtor(name, beans, entry), '/api/member/purge', { action: 'purge_account' });
+        return debtsOf(entry)[0];
+    };
+    // (a) one after the other, a replay, another member, and after the settle
+    const maxDebt = await leftDebt('Max', 200);
+    const moe = makeMember('Moe', 1000);
+    const payOnceCommons = getCommonsBalanceExact();
+    const firstId = hex(16);
+    const payOnce1 = await call('POST', moe, '/api/commons/pay', { amount: 200, debtId: maxDebt.id, requestId: firstId });
+    assert(maxDebt?.status === 'open' && payOnce1.status === 200 && payOnce1.body?.left === 200 && balanceRow(moe) === 800,
+        `setup: Moe pays the 200 left on a 200-Bean debt, and it waits for an admin (${show(payOnce1)})`);
+    const secondId = hex(16);
+    const payOnce2 = await call('POST', moe, '/api/commons/pay', { amount: 200, debtId: maxDebt.id, requestId: secondId });
+    assert(payOnce2.status === 409 && payOnce2.body?.error === `You have already paid 200 Beans for this debt (reference ${payOnce1.body?.transactionId}). Give that reference to an admin.`,
+        `a second 200 is refused in plain words, naming the first payment's reference (${show(payOnce2)})`);
+    assert(balanceRow(moe) === 800 && r2(getCommonsBalanceExact() - payOnceCommons) === 200 && linksTo(maxDebt.id) === 1 && !requestRow(moe, secondId),
+        `and nothing moves: Moe holds 800, the Commons has the one 200, one payment is linked, and the refusal records nothing (${balanceRow(moe)})`);
+    const payOnceSmall = await call('POST', moe, '/api/commons/pay', { amount: 50, debtId: maxDebt.id, requestId: hex(16) });
+    assert(payOnceSmall.status === 409 && payOnceSmall.body?.error === payOnce2.body?.error && balanceRow(moe) === 800, `so is a smaller one: the first covers what is left (${show(payOnceSmall)})`);
+    const payOnceReplay = await call('POST', moe, '/api/commons/pay', { amount: 200, debtId: maxDebt.id, requestId: firstId });
+    assert(payOnceReplay.status === 200 && JSON.stringify(payOnceReplay.body) === JSON.stringify(payOnce1.body) && balanceRow(moe) === 800,
+        `the first payment's id sent again gets its first answer, and pays nothing (${show(payOnceReplay)})`);
+    const pat = makeMember('Pat', 500);
+    const patPays = await call('POST', pat, '/api/commons/pay', { amount: 200, debtId: maxDebt.id, requestId: hex(16) });
+    assert(patPays.status === 409 && patPays.body?.error === 'A payment already made for this debt covers what is left on it. An admin settles the debt with that payment.'
+        && !patPays.body.error.includes(payOnce1.body?.transactionId) && balanceRow(pat) === 500,
+        `another member's payment is refused too, without Moe’s reference (${show(patPays)})`);
+    const maxSettled = await call('POST', ada, `/api/names/debts/${maxDebt.id}/settle`, { transactionId: payOnce1.body?.transactionId });
+    const payOnceAfter = await call('POST', moe, '/api/commons/pay', { amount: 200, debtId: maxDebt.id, requestId: hex(16) });
+    const payOnceReplayAfter = await call('POST', moe, '/api/commons/pay', { amount: 200, debtId: maxDebt.id, requestId: firstId });
+    assert(maxSettled.status === 200 && maxSettled.body?.status === 'settled' && payOnceAfter.status === 409 && payOnceAfter.body?.error === 'That debt is settled already.'
+        && payOnceReplayAfter.status === 200 && payOnceReplayAfter.body?.transactionId === payOnce1.body?.transactionId && balanceRow(moe) === 800,
+        `the admin settles with the first; then a new payment is refused as settled, and the first id still gets its first answer (${show(maxSettled)}; ${show(payOnceAfter)}; ${show(payOnceReplayAfter)})`);
+    // (b) two, then five, sent at once: one is paid, every other is refused with its reference
+    for (const n of [2, 5]) {
+        const debt = await leftDebt(`Nat${n}`, 200);
+        const payer = makeMember(`Ola${n}`, 1000);
+        const commons = getCommonsBalanceExact();
+        const answers = await Promise.all(Array.from({ length: n }, () => call('POST', payer, '/api/commons/pay', { amount: 200, debtId: debt.id, requestId: hex(16) })));
+        const paid = answers.filter((a) => a.status === 200);
+        const refused = answers.filter((a) => a.status === 409);
+        const ref = paid[0]?.body?.transactionId;
+        assert(paid.length === 1 && refused.length === n - 1 && refused.every((a) => a.body?.error === `You have already paid 200 Beans for this debt (reference ${ref}). Give that reference to an admin.`),
+            `${n} payments of 200 sent at once: one is paid, ${n - 1} refused naming it (${answers.map(show).join('; ')})`);
+        assert(balanceRow(payer) === 800 && r2(getCommonsBalanceExact() - commons) === 200 && linksTo(debt.id) === 1
+            && (db.prepare('SELECT COUNT(*) n FROM money_requests WHERE payer_pubkey = ?').get(payer.pk) as any).n === 1,
+            `and 200 moved once, one payment is linked, one request is recorded (${balanceRow(payer)})`);
+    }
+    // (c) payments that don't cover what is left are taken, as before; one that does closes the door
+    const quinDebt = await leftDebt('Quin', 200);
+    const rae = makeMember('Rae', 1000);
+    const part1 = await call('POST', rae, '/api/commons/pay', { amount: 150, debtId: quinDebt.id, requestId: hex(16) });
+    const part2 = await call('POST', rae, '/api/commons/pay', { amount: 150, debtId: quinDebt.id, requestId: hex(16) });
+    assert(part1.status === 200 && part1.body?.left === 200 && part2.status === 200 && part2.body?.left === 200 && balanceRow(rae) === 700,
+        `150 and 150 on a 200-Bean debt are both taken, each answering the 200 left (${show(part1)}; ${show(part2)})`);
+    const raeWhole = await call('POST', rae, '/api/commons/pay', { amount: 200, debtId: quinDebt.id, requestId: hex(16) });
+    const raeMore = await call('POST', rae, '/api/commons/pay', { amount: 200, debtId: quinDebt.id, requestId: hex(16) });
+    assert(raeWhole.status === 200 && raeMore.status === 409 && raeMore.body?.error?.includes(`(reference ${raeWhole.body?.transactionId})`) && balanceRow(rae) === 500,
+        `then 200 is taken, and another 200 is refused naming that one (${show(raeWhole)}; ${show(raeMore)})`);
     assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
 
     // ── 7. the 3-year sweep ────────────────────────────────────────────────────────────────────

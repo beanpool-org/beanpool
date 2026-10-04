@@ -80,12 +80,23 @@ export function sweepExpiredDebts(now = Date.now()): number {
  * A payment of `beans` to the Commons a member is making FOR debt `debtId` (POST /api/commons/pay): the debt must be open,
  * and the payment no more than is left on it. A pay-back link carries what was left when an admin shared it, and a
  * work-off may have lowered it since: the node says the true amount, so nobody pays the Commons more than they owe.
- * Before the payment's conservingTransaction (a refusal is no ledger rebuild); the link is written inside it.
+ * Nor a second time: a payment linked to the debt that covers what is left settles it once an admin names it, so another
+ * is refused, with that payment's reference when it was the payer's own (another member's payment is theirs to tell).
+ * Before the payment's conservingTransaction (a refusal is no ledger rebuild); the link is written inside it, in the same
+ * synchronous call, so two payments sent at once are checked one after the other.
  */
-export function assertPayableDebt(debtId: unknown, beans: number): { id: string; left: number } {
+export function assertPayableDebt(debtId: unknown, beans: number, payer: string): { id: string; left: number } {
     const row = debtRow(debtId);
     requireOpen(row);
     const left = round2(row.amount - row.repaid);
+    const covering = db.prepare(`SELECT transaction_id, payer_pubkey, amount FROM names_debt_payments WHERE debt_id = ? AND amount >= ?
+                                 ORDER BY payer_pubkey = ? DESC, paid_at, transaction_id LIMIT 1`)
+        .get(row.id, left, payer) as { transaction_id: string; payer_pubkey: string; amount: number } | undefined;
+    if (covering) {
+        throw new DebtError(409, 'paid_already', covering.payer_pubkey === payer
+            ? `You have already paid ${round2(covering.amount)} Beans for this debt (reference ${covering.transaction_id}). Give that reference to an admin.`
+            : 'A payment already made for this debt covers what is left on it. An admin settles the debt with that payment.');
+    }
     if (beans > left) throw new DebtError(409, 'more_than_left', `Only ${left} Beans are left on that debt. Pay ${left} Beans to settle it.`);
     return { id: row.id, left };
 }

@@ -95,6 +95,7 @@ export const SUITES = [
     'test-treasury-eggs',
     'test-enterprise-credit-rules',
     'test-derived-enterprise-floor',
+    'test-known-floor-http',
     'test-demurrage-window',
     'test-crowdfund-delete-refund',
     'test-money-pledge-and-hourly-price',

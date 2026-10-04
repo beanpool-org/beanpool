@@ -1603,6 +1603,32 @@ CREATE TABLE IF NOT EXISTS confirmations (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_member ON confirmations(member_pubkey) WHERE revoked_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_entry ON confirmations(entry_id) WHERE revoked_at IS NULL;
 
+-- The known floor (community modes slice 4, config/known-floor.ts): an admin's exception for one member's known grant.
+-- `amount` replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
+-- it 0. Lowering never takes Beans back: a member below their new floor is spend-frozen until they climb back.
+CREATE TABLE IF NOT EXISTS known_floor_exceptions (
+    member_pubkey  TEXT PRIMARY KEY,
+    amount         INTEGER,
+    frozen         INTEGER NOT NULL DEFAULT 0 CHECK (frozen IN (0, 1)),
+    set_by         TEXT NOT NULL,
+    set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3): every owner and admin
+-- reads it. `member_pubkey` is null for a community-wide setting.
+CREATE TABLE IF NOT EXISTS known_floor_log (
+    id             TEXT PRIMARY KEY,
+    actor_pubkey   TEXT NOT NULL,
+    action         TEXT NOT NULL,
+    member_pubkey  TEXT,
+    old_value      TEXT,
+    new_value      TEXT,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- Who opened, exported or changed the names list, and when (design §4.4, §7.1: the watchers are watched). Every owner and
 -- admin reads it. `actor_pubkey` is the admin, or `node` for what the node did itself (a holder dropped); `subject_pubkey`
 -- the member confirmed or the admin the keys were sent to (every automatic send is a line: `key_shared`). A phone taking

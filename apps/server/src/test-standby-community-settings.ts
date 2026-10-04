@@ -410,7 +410,7 @@ async function directoryRegistry(): Promise<{ url: string; bodies: any[]; close:
 type Settings = { localConfig: any; rows: Record<string, string>; blob: any; kept: any; directory: any };
 
 const LOCAL = ['callsign', 'communityName', 'location', 'contactEmail', 'contactPhone', 'currencyType', 'currencyValue', 'thresholds'] as const;
-const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins'] as const;
+const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap'] as const;
 const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours'] as const;
 /** The gateway without its admin IP allowlist: the community's part of it. */
 const communityGateway = (g: any) => (g ? Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'adminIpAllowlist')) : null);

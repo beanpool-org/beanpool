@@ -780,8 +780,8 @@ router.post('/api/local/reset', async (ctx) => {
         contactEmail: null,
         contactPhone: null,
     });
-    // The admin password is gone (checked on disk, as in change-password). The next start takes ADMIN_PASSWORD from
-    // .env, or makes up a new one in a new file.
+    // The admin password is gone (checked on disk, as in change-password). joinedAt is cleared too, so the next start is
+    // a new install's: no admin password, ADMIN_PASSWORD ignored, a claim code if no owner is left (initAdminPassword).
     if (!getLocalConfig().adminHash) removeFirstPasswordFile('Wipe & Reset cleared the admin password');
 
     ctx.body = { success: true, message: 'Node reset. Restart to reconfigure.' };

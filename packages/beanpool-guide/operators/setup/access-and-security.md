@@ -13,7 +13,7 @@ Type the current password and a new one. The new one needs at least 8 characters
 
 Change it whenever someone who knew it steps down. Everyone who has it is an owner.
 
-If the server made up the first password (ADMIN_PASSWORD was empty), changing it deletes data/first-admin-password.txt at once. The log says so.
+If an older version of the server made up the first password (ADMIN_PASSWORD was empty; a new install makes none), changing it deletes data/first-admin-password.txt at once. The log says so.
 
 ## Two-factor sign-in
 
@@ -114,6 +114,6 @@ The fleet manager signs in to a node with an automation token instead of the adm
 
 ## Factory reset
 
-Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. It also deletes data/first-admin-password.txt if it is still there, since the password in it no longer works. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and puts it in a new data/first-admin-password.txt, as on the first start. It never prints it in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt
+Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. It also deletes data/first-admin-password.txt if it is still there, since the password in it no longer works. After a restart the server has no admin password, whether it had one before or not: it starts as a new install does, ignores ADMIN_PASSWORD in .env, and makes up no password. Owners and admins still sign in with the BeanPool app. If the community has no owner left, the server makes a one-time claim code: run beanpool claim on the server to see it. To add an owner when nobody can sign in, run beanpool recover on the server.
 
 To start a community again from nothing, stop the server and move the whole data folder away. Keep that copy until you are sure.

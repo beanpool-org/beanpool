@@ -10,7 +10,11 @@
  *   - Loads existing config from disk (env var ignored)
  *
  * Password reset:
- *   - SSH in, delete data/local-config.json, restart container
+ *   - Change it in Settings (Access & Security). Locked out: `beanpool recover` on the server adds an owner, who signs in
+ *     with the app. Deleting data/local-config.json (or Wipe & Reset) leaves no admin password at all, old or from .env:
+ *     the server starts as a new install, with a claim code only if the community has no owner.
+ *   - scripts/rotate-node-env.sh ADMIN_PASSWORD=<new> on a node that has one: the next boot takes the new one
+ *     (initAdminPassword, joinedAt).
  */
 
 import { scryptSync, randomBytes, timingSafeEqual, randomInt, scrypt, createHash } from 'node:crypto';

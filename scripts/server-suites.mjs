@@ -374,6 +374,7 @@ export const SUITES = [
     'test-escrow-disputes',
     'test-process-handlers',
     'test-shutdown-recovery',
+    'test-clean-stop',
     'test-storage-health',
     'test-image-store',
     'test-image-store-s3',

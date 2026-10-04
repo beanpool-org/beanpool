@@ -429,6 +429,43 @@ async function main(): Promise<void> {
     assert(disputes9.status === 200 && data9.status === 200 && typeof data9.body?.memberStats?.[kim.pk]?.deals === 'number' && logRows() === before9,
         `an admin reads the trade lists and each member's trade counts, and no line is written: "these looks are not logged" (${disputes9.status} ${data9.status})`);
 
+    // "A trade that isn't finished yet or that an admin settled", and nothing else: one trade read by its id is a trade the
+    // list can show (round 4, item 1), and its chat is the two members' one-to-one chat, never a group they share (item 3).
+    const ivy = makeMember('Ivy');
+    const jon = makeMember('Jonquil');
+    const stall = createPost('offer', 'produce', 'Jonquil\'s jam', 'Preserves', 5, 'fixed', jon.pk)!;
+    const trade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, dispute_resolution)
+                              VALUES (?, ?, ?, ?, 5, ?, ?, ?)`);
+    trade.run('t9-done', stall.id, ivy.pk, jon.pk, 'completed', ago(20 * DAY), null);
+    trade.run('t9-cancelled', stall.id, ivy.pk, jon.pk, 'cancelled', ago(20 * DAY), null);
+    trade.run('t9-settled', stall.id, ivy.pk, jon.pk, 'completed', ago(20 * DAY), 'release_to_seller');
+    trade.run('t9-open', stall.id, ivy.pk, jon.pk, 'pending', ago(20 * DAY), null);
+    const one9 = (id: string) => call('GET', null, `/api/local/admin/disputes/${id}`, undefined, adaSession);
+    const [done9, cancelled9, settled9, open9] = [await one9('t9-done'), await one9('t9-cancelled'), await one9('t9-settled'), await one9('t9-open')];
+    assert(done9.status === 404 && cancelled9.status === 404 && !/Ivy|Jonquil|jam/.test(done9.text + cancelled9.text),
+        `a finished or cancelled trade nobody disputed is not an admin's to read by its id: 404, no names (${done9.status} ${cancelled9.status})`);
+    assert(settled9.status === 200 && settled9.body?.dispute?.id === 't9-settled' && open9.status === 200 && open9.body?.dispute?.id === 't9-open',
+        `a trade an admin settled, and one not finished yet, are (${settled9.status} ${open9.status})`);
+    const listed9 = new Set(((await call('GET', null, '/api/local/admin/disputes?minDays=0&limit=200', undefined, adaSession)).body?.disputes ?? []).map((d: any) => d.id));
+    assert(['t9-settled', 't9-open'].every(id => listed9.has(id)) && !['t9-done', 't9-cancelled'].some(id => listed9.has(id)),
+        `the same trades the list shows (${[...listed9].filter(id => String(id).startsWith('t9-')).join(', ')})`);
+
+    const chatOf = db.prepare(`INSERT INTO conversations (id, type, post_id, name, created_by) VALUES (?, ?, NULL, ?, ?)`);
+    const inChat = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`);
+    const line = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type) VALUES (?, ?, ?, ?, 'n', 'text')`);
+    chatOf.run('c9-group', 'group', 'Jam makers', ivy.pk);
+    for (const m of [ivy, jon, sam]) inChat.run('c9-group', m.pk);
+    line.run('m9-group', 'c9-group', ivy.pk, 'a line in the group');
+    const groupOnly = await one9('t9-open');
+    assert(groupOnly.status === 200 && !groupOnly.body?.dispute?.chat && (groupOnly.body?.dispute?.chatContext ?? []).length === 0 && !/a line in the group/.test(groupOnly.text),
+        `a group chat the two share is not their chat: the trade shows none (${JSON.stringify(groupOnly.body?.dispute?.chat ?? null).slice(0, 120)})`);
+    chatOf.run('c9-dm', 'dm', null, ivy.pk);
+    for (const m of [ivy, jon]) inChat.run('c9-dm', m.pk);
+    line.run('m9-dm', 'c9-dm', jon.pk, 'a line between the two');
+    const withDm = await one9('t9-open');
+    assert(withDm.status === 200 && withDm.body?.dispute?.chat?.conversationId === 'c9-dm' && /a line between the two/.test(withDm.text) && !/a line in the group/.test(withDm.text),
+        `their one-to-one chat is (${JSON.stringify(withDm.body?.dispute?.chat ?? null).slice(0, 120)})`);
+
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);
 }

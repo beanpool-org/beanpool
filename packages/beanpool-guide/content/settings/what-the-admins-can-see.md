@@ -69,7 +69,7 @@ Whether or not you agreed to anything, in any community, any admin can see:
 - **A fraud alert that names a group of members,** at least half of them new, who trade mostly with each other. It shows how much of the group's trading is with each other, but no Beans.
 - **An alert that names the members who have had no Beans move in or out** for a set number of days.
 
-**Every look at one of these trades is logged:** who looked, when, and at which trades. **A look at the alerts that name a member is logged** the first time each admin opens them, and again at that admin's first look after 24 hours; the looks in between add no line. The owner and the admins can see that log in Community health, as a list of its own beside the list of who looked at a balance.
+**Every look at one of these trades is logged:** who looked, when, and at which trades. **A look at the alerts that name a member is logged** the first time each admin opens them, and again at that admin's first look after 24 hours; the looks in between add no line. The owner and the admins can see that log in Community health, as a list of its own beside the list of who looked at a balance. A look made by an automation token (a script an owner set up) says so: the line reads "by token" and the token's name, beside the owner who made it.
 
 The member stats the admins see show how many posts each member has up and messages they have sent, and of trades only the whole community's totals: how many trades were finished or cancelled and what the finished ones came to, never one member's.
 

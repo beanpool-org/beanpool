@@ -82,6 +82,9 @@ export interface PublicAddressPanelProps {
     onRefreshDiag?: () => void;
 }
 
+/** A name this community's key holds besides its address (GET /api/local/admin/public-address/extra-names). */
+interface ExtraName { name: string; hostname?: string; releasable?: boolean; fromInstall?: boolean }
+
 export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressPanelProps) {
     const [statusData, setStatusData] = useState<PublicAddressStatus | null>(null);
     const [loading, setLoading] = useState(true);
@@ -100,6 +103,9 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     const [restarting, setRestarting] = useState(false);
     const [rotating, setRotating] = useState(false);
     const [takingOffline, setTakingOffline] = useState(false);
+    // Names this community's key holds besides its address (the install's late claim): shown to an owner, released by name.
+    const [extraNames, setExtraNames] = useState<ExtraName[]>([]);
+    const [releasingName, setReleasingName] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<{ text: string; type: 'info' | 'success' | 'warning' | 'error' } | null>(null);
 
     // Confirmation dialog state for destructive actions
@@ -202,6 +208,47 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
             fetchLogs();
         }
     }, [activeNode.url, nodeCredential(activeNode), activeNode.id, fetchLogs]);
+
+    // Owner-only: an admin gets 403, and nothing is shown.
+    const loadExtraNames = useCallback(async () => {
+        try {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/extra-names');
+            const res = await fetch(url, {
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+            });
+            const data = res.ok ? await res.json().catch(() => ({})) : {};
+            setExtraNames(Array.isArray(data?.names) ? data.names.filter((n: ExtraName) => typeof n?.name === 'string') : []);
+        } catch {
+            setExtraNames([]);
+        }
+    }, [activeNode.url, nodeCredential(activeNode), activeNode.id]);
+
+    const releaseExtraName = async (name: string) => {
+        setReleasingName(name);
+        try {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/release-name');
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ name, ...passwordField(nodeCredential(activeNode)) }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) setActionMessage({ text: `✓ ${name}.beanpool.org released. This community's address is unchanged.`, type: 'success' });
+            else setActionMessage({ text: typeof data.error === 'string' ? data.error : `${name}.beanpool.org was not released`, type: 'error' });
+        } catch (e: unknown) {
+            setActionMessage({ text: e instanceof Error ? e.message : `${name}.beanpool.org was not released`, type: 'error' });
+        } finally {
+            setReleasingName(null);
+            await loadExtraNames();
+        }
+    };
+
+    useEffect(() => {
+        loadExtraNames();
+    }, [loadExtraNames]);
 
     useEffect(() => {
         loadStatus();
@@ -532,6 +579,29 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                         </button>
                     </div>
                 )}
+
+                {extraNames.map((n) => (
+                    <div
+                        key={n.name}
+                        data-testid="extra-name"
+                        className="p-3 rounded-xl border bg-nature-950 border-nature-800 text-xs text-nature-300 flex flex-wrap items-center gap-2"
+                    >
+                        <span className="min-w-0 break-words flex-1">
+                            This community also holds <code className="font-mono text-white break-all">{n.hostname || `${n.name}.beanpool.org`}</code>
+                            {n.fromInstall ? ' from the install' : ''}; it is not used.{n.releasable ? ' Release it?' : ''}
+                        </span>
+                        {n.releasable && (
+                            <button
+                                type="button"
+                                onClick={() => releaseExtraName(n.name)}
+                                disabled={releasingName !== null}
+                                className="shrink-0 px-3 py-1.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                                {releasingName === n.name ? 'Releasing…' : 'Release'}
+                            </button>
+                        )}
+                    </div>
+                ))}
 
                 {/* Current Status Display Card */}
                 <div className="p-4 rounded-xl bg-nature-950 border border-nature-800/80 space-y-3">

@@ -253,14 +253,17 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
         if (getNodeRole() !== 'primary') { ctx.body = { success: true, names: [] }; return; }
-        const names: { name: string; hostname: string; state: string | null; releasable: boolean }[] = [];
-        const late = new Set(turnedAwayList().filter((e) => e.why === 'late-claim').map((e) => e.name));
+        const names: { name: string; hostname: string; state: string | null; releasable: boolean; fromInstall: boolean }[] = [];
+        const list = turnedAwayList();
+        const late = new Set(list.filter((e) => e.why === 'late-claim').map((e) => e.name));
+        const install = new Set(list.filter((e) => e.why === 'late-claim' || e.why === 'install-request-ended' || e.why === 'request-replaced').map((e) => e.name));
         for (const name of extraNameCandidates()) {
             const h = await heldByThisKey(name);
-            if (h.held) names.push({ name, hostname: `${name}.${REGISTRAR_ZONE}`, state: h.state, releasable: true });
+            const fromInstall = install.has(name);
+            if (h.held) names.push({ name, hostname: `${name}.${REGISTRAR_ZONE}`, state: h.state, releasable: true, fromInstall });
             // An older registrar can't say who holds it: the agent's late claim was given to this key, so it is shown,
             // with nothing to release it by.
-            else if (!h.known && late.has(name)) names.push({ name, hostname: `${name}.${REGISTRAR_ZONE}`, state: null, releasable: false });
+            else if (!h.known && late.has(name)) names.push({ name, hostname: `${name}.${REGISTRAR_ZONE}`, state: null, releasable: false, fromInstall });
         }
         ctx.body = { success: true, names };
     });

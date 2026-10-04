@@ -672,5 +672,54 @@ describe('PublicAddressPanel Component', () => {
         expect(terminal.getAttribute('aria-live')).toBe('polite');
         expect(terminal.getAttribute('aria-atomic')).toBe('false');
     });
+    describe('a name the key holds besides the address', () => {
+        const mockNames = (names: () => unknown, extraStatus = 200) => {
+            const calls: { url: string; body: any }[] = [];
+            vi.spyOn(global, 'fetch').mockImplementation((url, init) => {
+                const u = String(url);
+                calls.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : null });
+                let status = 200;
+                let body: unknown = { success: true, logs: [] };
+                if (u.includes('/public-address/status')) body = { success: true, status: 'live', name: 'owner-pick', hostname: 'owner-pick.beanpool.org', mode: 'tunnel' };
+                else if (u.includes('/public-address/extra-names')) { status = extraStatus; body = extraStatus === 200 ? { success: true, names: names() } : { error: 'Only an owner of this node can change its public address' }; }
+                else if (u.includes('/public-address/release-name')) body = { success: true, name: 'install-race', status: 'released' };
+                return Promise.resolve({ ok: status === 200, status, json: () => Promise.resolve(body) } as Response);
+            });
+            return calls;
+        };
+
+        it('shows an owner one line for the install\'s late name, and Release releases it by name', async () => {
+            let held = [{ name: 'install-race', hostname: 'install-race.beanpool.org', state: 'live', releasable: true, fromInstall: true }];
+            const calls = mockNames(() => held);
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            const line = await screen.findByTestId('extra-name');
+            expect(line).toHaveTextContent('This community also holds install-race.beanpool.org from the install; it is not used. Release it?');
+            held = [];
+            fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+            await waitFor(() => expect(screen.queryByTestId('extra-name')).not.toBeInTheDocument());
+            const rel = calls.filter((c) => c.url.includes('/public-address/release-name'));
+            expect(rel).toHaveLength(1);
+            expect(rel[0].body?.name).toBe('install-race');
+            expect(calls.some((c) => c.url.includes('/public-address/offline'))).toBe(false);
+            expect(screen.getByText(/install-race\.beanpool\.org released\. This community's address is unchanged\./)).toBeInTheDocument();
+        });
+
+        it('an older address service that cannot release by name: the line only, no button', async () => {
+            mockNames(() => [{ name: 'install-race', hostname: 'install-race.beanpool.org', state: null, releasable: false, fromInstall: true }]);
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            const line = await screen.findByTestId('extra-name');
+            expect(line).toHaveTextContent('This community also holds install-race.beanpool.org from the install; it is not used.');
+            expect(line).not.toHaveTextContent('Release it?');
+            expect(screen.queryByRole('button', { name: 'Release' })).not.toBeInTheDocument();
+        });
+
+        it('an admin (refused the list) is shown nothing', async () => {
+            const calls = mockNames(() => [], 403);
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            await waitFor(() => expect(calls.some((c) => c.url.includes('/public-address/extra-names'))).toBe(true));
+            await screen.findByText('owner-pick.beanpool.org');
+            expect(screen.queryByTestId('extra-name')).not.toBeInTheDocument();
+        });
+    });
 });
 

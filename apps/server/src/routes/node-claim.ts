@@ -65,6 +65,9 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
             codeId: pending ? pending.id : null,
             salt: pending ? pending.salt : null,
             communityName: config.communityName || config.callsign || null,
+            // Whether this server has an admin password at all: a new install has none (config/local-config.ts
+            // initAdminPassword), and the Settings sign-in then shows no password fold.
+            password: !!(config.adminHash && config.salt),
         };
     });
 

@@ -4324,9 +4324,16 @@
                 if (data.isLocked) {
                     showView('login');
                 } else {
-                    // Node not locked — show message
+                    // Not locked: a new install, which has no admin password (config/local-config.ts initAdminPassword).
+                    // No password box to type into: the claim code makes the first owner, who signs in with the app.
                     showView('login');
-                    showStatus('login-status', 'Node not configured. Set ADMIN_PASSWORD and restart.', 'error');
+                    document.getElementById('login-password-field')?.classList.add('hidden');
+                    document.getElementById('login-btn')?.classList.add('hidden');
+                    let unclaimed = false;
+                    try { unclaimed = (await (await fetch(`${API}/claim`)).json()).unclaimed === true; } catch { /* asked again on reload */ }
+                    showStatus('login-status', unclaimed
+                        ? 'This community has no owner yet, and this server has no admin password. Claim it with its one-time claim code: run "beanpool claim" on the server, or use Claim a community in the BeanPool app.'
+                        : 'This server has no admin password. Owners and admins sign in with the BeanPool app.', 'warning');
                 }
             } catch (err) {
                 showView('login');

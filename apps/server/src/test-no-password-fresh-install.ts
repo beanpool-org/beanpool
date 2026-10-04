@@ -7,8 +7,9 @@
  *
  *   A. A fresh install with ADMIN_PASSWORD in .env: no first-admin-password.txt; one log line says ADMIN_PASSWORD is ignored
  *      and points at `beanpool claim`; the password is in no line of the output; it does not sign in, and an admin route
- *      with it is refused; local-config.json is not locked and holds no password hash. The claim code claims the node, and
- *      the claiming key is its owner.
+ *      with it is refused; local-config.json is not locked and holds no password hash. GET /api/local/claim says
+ *      password: false (the Settings card then has no password fold). The claim code claims the node, and the claiming
+ *      key is its owner.
  *   B. That claimed node rebooted with ADMIN_PASSWORD still set: still no password signs in, no hash, not locked.
  *   C. A fresh install with no ADMIN_PASSWORD: no first-admin-password.txt, no "ignored" line, a claim code.
  *   D. An existing node with a password (a local-config.json as an older version left it, its first-admin-password.txt
@@ -167,6 +168,7 @@ async function main(): Promise<void> {
     const code = fs.readFileSync(path.join(dirA, 'claim-code.txt'), 'utf-8').trim();
     const info = (await request(a, 'GET', '/api/local/claim', undefined, { Host: HOST })).json;
     assert(info?.unclaimed === true && typeof info.codeId === 'string', `A9. it waits for its claim (${JSON.stringify(info)})`);
+    assert(info?.password === false, `A9b. and says it has no admin password, so Settings shows no password fold (${info?.password})`);
     const founder = newKey();
     const claimed = await request(a, 'POST', '/api/local/claim', claimBody(founder, code, info.salt, info.codeId), { Host: HOST, 'X-Forwarded-For': '203.0.113.1' });
     assert(claimed.status === 200 && claimed.json?.role === 'owner', `A10. the claim code claims it (${claimed.status} ${JSON.stringify(claimed.json)})`);

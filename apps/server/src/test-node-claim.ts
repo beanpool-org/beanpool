@@ -356,6 +356,7 @@ async function main(): Promise<void> {
     const getG = await request(g, 'GET', '/api/local/claim', undefined, { Host: HOST });
     assert(getG.status === 200 && getG.json.unclaimed === true && getG.json.codeId === null, `G1. the node serves, with no code (${JSON.stringify(getG.json)})`);
     assert(/No claim code this start/.test(g.output()), 'G2. the log says why');
+    assert(getG.json.password === true, `G2b. GET says this server has an admin password, so Settings keeps its fold (${getG.json.password})`);
     assert(await signsIn(g, pwG), 'G3. the admin password works');
     await g.stop();
 

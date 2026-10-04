@@ -235,6 +235,10 @@ async function main() {
         const adminOffline = await call('POST', OFFLINE, {}, asAdmin);
         assert(adminOffline.status === 403 && regStatus === 'live' && (getNodeConfig() as any).publicAddress?.tunnelToken === TUNNEL_TOKEN,
             `an admin's release is refused and the address stays (${adminOffline.status})`);
+        const adminExtra = await call('GET', '/api/local/admin/public-address/extra-names', undefined, asAdmin);
+        const adminRelease = await call('POST', '/api/local/admin/public-address/release-name', { name: 'other-name' }, asAdmin);
+        assert(adminExtra.status === 403 && adminRelease.status === 403 && regStatus === 'live',
+            `nor list or release the names it holds besides it (${adminExtra.status} ${adminRelease.status})`);
         const pwUpdate = await withPassword('POST', UPDATE, { communityName: 'Tok Vale' });
         assert(pwUpdate.status === 200 && !pwUpdate.text.includes(EXTRA_SECRET), `the admin password renames it, named fields only (${pwUpdate.status})`);
         const pwOffline = await withPassword('POST', OFFLINE, {});

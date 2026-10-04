@@ -149,7 +149,7 @@ async function startRegistrar(): Promise<http.Server> {
             if (p === '/api/registrar/claim') return answer(reg.claim(body));
             if (p === '/api/registrar/offline') return send(200, reg.offline());
             if (p === '/api/registrar/heal') return send(200, reg.heal(body));
-            if (p === '/api/registrar/holder') return send(200, reg.holder(body));
+            if (p === '/api/registrar/holder') return answer(reg.holder(body));
             if (p === '/api/registrar/rotate') return answer(reg.rotate(body));
             send(404, { error: 'not found' });
         });
@@ -876,6 +876,45 @@ async function main(): Promise<void> {
             reg.holder = (b) => ({ name: b?.name, held: 'free' });
             reg.status = () => ({ status: 'none' });
             reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
+
+        await section('20. the key holds a name it does not use: Settings shows it, and releases it by name, never the stored one', async () => {
+            const post = settingsPost!;
+            const set = await post('/api/local/admin/public-address/claim', { name: 'owner-pick5', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'owner-pick5', `the owner's pick is stored (${set.status})`);
+            assert(await upOn('eyJ.token-owner-pick5'), 'its tunnel runs');
+            noteTurnedAway('late-one', 'late-claim');
+            const holds = new Set(['late-one', 'owner-pick5']);
+            reg.holder = (b) => holds.has(b?.name) ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' };
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline');
+            const extra = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(extra.status === 200 && JSON.stringify(extra.body?.names?.map((n: any) => [n.name, n.releasable])) === '[["late-one",true]]',
+                `Settings lists the unused name, releasable, and not the stored one (${extra.status} ${JSON.stringify(extra.body?.names)})`);
+            const o0 = offlines().length;
+            const mine = await post('/api/local/admin/public-address/release-name', { name: 'owner-pick5' });
+            assert(mine.status === 409 && offlines().length === o0 && pa()?.name === 'owner-pick5', `the stored name is never released here (${mine.status} ${offlines().length - o0})`);
+            const rel = await post('/api/local/admin/public-address/release-name', { name: 'late-one' });
+            assert(rel.status === 200 && offlines().length === o0 + 1 && offlines()[o0].body?.name === 'late-one',
+                `the unused name is released by name (${rel.status} ${JSON.stringify(offlines()[o0]?.body)})`);
+            assert(pa()?.name === 'owner-pick5' && pa()?.status === 'live' && tunnelConnectorForTests().runningToken === 'eyJ.token-owner-pick5',
+                `the stored address and its tunnel are untouched (${pa()?.name} ${tunnelConnectorForTests().runningToken})`);
+            holds.delete('late-one');
+            const after = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(after.status === 200 && after.body?.names?.length === 0, `once released, nothing is listed (${JSON.stringify(after.body?.names)})`);
+            // A name this key does not hold: refused, nothing asked of the release.
+            const free = await post('/api/local/admin/public-address/release-name', { name: 'gone-3' });
+            assert(free.status === 409 && offlines().length === o0 + 1, `a name the registrar does not give this key is not released (${free.status})`);
+            // An older registrar (no /holder) can't say what it would release: the agent's late claim is shown, never released.
+            noteTurnedAway('late-two', 'late-claim');
+            reg.holder = () => [404, { error: 'not found' }];
+            const old = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(old.status === 200 && JSON.stringify(old.body?.names?.map((n: any) => [n.name, n.releasable])) === '[["late-two",false]]',
+                `an older registrar: the late claim is shown, with no release (${JSON.stringify(old.body?.names)})`);
+            const oldRel = await post('/api/local/admin/public-address/release-name', { name: 'late-two' });
+            assert(oldRel.status === 409 && offlines().length === o0 + 1 && pa()?.name === 'owner-pick5',
+                `and a release by name is refused, so an older release never lets go of the stored name (${oldRel.status})`);
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            await post('/api/local/admin/public-address/offline');
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

@@ -178,8 +178,9 @@ function lateClaim(name: string, res: any): void {
     const now = (getNodeConfig() as any).publicAddress;
     if (res?.status !== 'live' && res?.status !== 'pending') return;
     if (now?.name === name) return;
+    noteTurnedAway(name, 'late-claim');   // Settings shows it, and offers to release it by name
     console.warn(`[PublicAddr] "${name}" was claimed for this server's key, but the address was set ${now?.name ? `to "${now.name}"` : 'offline'} `
-        + 'while the claim was answered: that stands. This server\'s key holds the claimed name too, unused and never moved onto; claim it in Settings to use it.');
+        + 'while the claim was answered: that stands. This server\'s key holds the claimed name too, unused and never moved onto; Settings shows it, to release or claim.');
 }
 
 let checking = false;

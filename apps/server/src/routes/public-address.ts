@@ -9,12 +9,13 @@
 
 import Router from '@koa/router';
 import http from 'node:http';
-import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex } from '../services/registrar-client.js';
+import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex, askNameHolder } from '../services/registrar-client.js';
 import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
-import { recordRegistrarAnswer } from '../engine/registrar-names.js';
+import { recordRegistrarAnswer, registrarNames, REGISTRAR_ZONE } from '../engine/registrar-names.js';
 import { dropAddressRequest, nameAskedFor } from '../services/public-address-agent.js';
-import { noteTurnedAway, settleUnansweredClaims } from '../config/turned-away-names.js';
+import { noteTurnedAway, settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
+import { isAddressLabel } from '../address-request.js';
 import { requireAdminRole } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
@@ -119,6 +120,41 @@ function addressFields(ctx: any, answer: any): Record<string, unknown> {
 /** Claiming, releasing or renaming the community's address is an owner's (operators/setup/signing-in.md). */
 const ADDRESS_OWNER_ONLY = 'Only an owner of this node can change its public address';
 
+/** The states in which the registrar routes a name to (or keeps it for) the key that holds it. */
+const HELD_STATES = new Set(['live', 'pending', 'paused']);
+/** The most names Settings asks the registrar about at once: the turned-away list's size. */
+const EXTRA_NAMES_MAX = 8;
+
+/**
+ * Names this server's key may hold besides its stored address (#1576 review r4175512149): the install's late claim and
+ * every name on the turned-away list or kept as former in the record of names, never the stored name nor the one the
+ * public-address agent asks for. Newest first.
+ */
+function extraNameCandidates(): string[] {
+    const stored = (getNodeConfig() as any).publicAddress?.name ?? null;
+    const asked = nameAskedFor();
+    const suffix = `.${REGISTRAR_ZONE}`;
+    const former = registrarNames().filter((e) => e.role !== 'current' && e.address.endsWith(suffix)).map((e) => e.address.slice(0, -suffix.length));
+    const names = [...turnedAwayList().map((e) => e.name).reverse(), ...former];
+    return [...new Set(names)].filter((n) => isAddressLabel(n) && n !== stored && n !== asked).slice(0, EXTRA_NAMES_MAX);
+}
+
+/**
+ * Who holds `name`, as Settings needs it: `held` when the registrar says this key holds it in a state that keeps it
+ * (live, waiting, paused), `releasable` when that answer came from /holder, which a registrar has only since it reads a
+ * release's name (#1271 after #1116). An older registrar (no /holder) can't say: then nothing is held as far as this
+ * knows, and nothing is released by name, as an older release would let go of the key's first name, the stored one.
+ */
+async function heldByThisKey(name: string): Promise<{ held: boolean; state: string | null; known: boolean }> {
+    try {
+        const r = await askNameHolder(name);
+        if (!r.ok || !r.json) return { held: false, state: null, known: false };
+        if (r.data?.held !== 'you') return { held: false, state: null, known: true };
+        const state = typeof r.data?.state === 'string' ? r.data.state : null;
+        return { held: !!state && HELD_STATES.has(state), state, known: true };
+    } catch { return { held: false, state: null, known: false }; }
+}
+
 export function createPublicAddressRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { checkAdminAuth } = deps;
@@ -208,6 +244,61 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             void noteUnansweredClaim(name, e);
             ctx.status = 400;
             ctx.body = { error: e.message };
+        }
+    });
+
+    // The names this key holds besides the stored address (the install's late claim, a name moved off or taken offline
+    // that the registrar still lists for this key): Settings offers to release each by name. Owner-only, as releasing is.
+    router.get('/api/local/admin/public-address/extra-names', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
+        if (getNodeRole() !== 'primary') { ctx.body = { success: true, names: [] }; return; }
+        const names: { name: string; hostname: string; state: string | null; releasable: boolean }[] = [];
+        const late = new Set(turnedAwayList().filter((e) => e.why === 'late-claim').map((e) => e.name));
+        for (const name of extraNameCandidates()) {
+            const h = await heldByThisKey(name);
+            if (h.held) names.push({ name, hostname: `${name}.${REGISTRAR_ZONE}`, state: h.state, releasable: true });
+            // An older registrar can't say who holds it: the agent's late claim was given to this key, so it is shown,
+            // with nothing to release it by.
+            else if (!h.known && late.has(name)) names.push({ name, hostname: `${name}.${REGISTRAR_ZONE}`, state: null, releasable: false });
+        }
+        ctx.body = { success: true, names };
+    });
+
+    // Release one of those names, by name. Never the stored address: refused here, and asked of a registrar only when it
+    // says (/holder) that this key holds the name, as only a registrar that reads a release's name answers /holder.
+    router.post('/api/local/admin/public-address/release-name', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
+        const b = (ctx.request as any).body || (ctx as any).requestBody || {};
+        const name = String(b.name || '').toLowerCase().trim();
+        if (!isAddressLabel(name)) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
+        if (getNodeRole() !== 'primary') { ctx.status = 409; ctx.body = { error: 'Only the main server releases names.' }; return; }
+        const stored = (getNodeConfig() as any).publicAddress;
+        if (stored?.name === name || nameAskedFor() === name) {
+            ctx.status = 409;
+            ctx.body = { error: `${name}.${REGISTRAR_ZONE} is this community's address; Take offline releases it.` };
+            return;
+        }
+        const h = await heldByThisKey(name);
+        if (!h.held) {
+            ctx.status = 409;
+            ctx.body = { error: `The address service does not say this community holds ${name}.${REGISTRAR_ZONE}; nothing was released.` };
+            return;
+        }
+        // The stored address is not touched: nothing below writes it, nor the tunnel.
+        const since = publicAddressGeneration();
+        try {
+            const result = await releaseAddress(name);
+            if (result?.name && result.name !== name) {
+                console.warn(`[PublicAddr] asked to release "${name}", the address service answered about "${result.name}"`);
+            }
+            noteTurnedAway(name, 'taken-offline');
+            console.log(`[PublicAddr] the owner released "${name}", a name this community held unused (${result?.status ?? 'answered'})`);
+            ctx.body = { success: true, name, status: result?.status ?? null, addressUnchanged: publicAddressGeneration() === since };
+        } catch (e: any) {
+            ctx.status = 502;
+            ctx.body = { error: `Not released: ${e?.message || 'the address service did not answer'}` };
         }
     });
 

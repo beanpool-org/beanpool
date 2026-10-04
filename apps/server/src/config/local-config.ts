@@ -74,7 +74,7 @@ export interface LocalConfig {
     endedAddressRequest?: { name: string; at: number } | null;
     // The latest names this server turned away (config/turned-away-names.ts): never stored from a registrar answer while
     // nothing is stored here.
-    turnedAwayNames?: { name: string; at: number; why: 'install-request-ended' | 'request-replaced' | 'claim-replaced' | 'taken-offline' | 'unanswered' }[] | null;
+    turnedAwayNames?: { name: string; at: number; why: 'install-request-ended' | 'request-replaced' | 'claim-replaced' | 'late-claim' | 'taken-offline' | 'unanswered' }[] | null;
     replicationTokenHash?: string | null;
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;

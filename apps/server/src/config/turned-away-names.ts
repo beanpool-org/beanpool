@@ -1,6 +1,7 @@
 // Names this server turned away (#1579 review r4175807589): an install request that ended without the name being given
 // here, a Settings claim that got no answer in time and was then replaced (another pick, Take offline), a `beanpool claim`
-// request replaced by another, a name taken offline. With nothing stored, a registrar answer naming one of them is never
+// request replaced by another, the agent's claim answered after the owner set the address (late-claim), a name taken
+// offline. With nothing stored, a registrar answer naming one of them is never
 // stored (services/tunnel-connector.ts turnedAwayHere): the community never comes back on a name nobody chose last.
 //
 // Kept short: the latest TURNED_AWAY_MAX, oldest dropped. Per server, never copied (replication manifest, backups' left-out
@@ -14,7 +15,7 @@ export const TURNED_AWAY_MAX = 8;
  * Why a name is on the list. `unanswered`: a Settings claim that got no answer in time; it is the owner's latest choice
  * until another write replaces it (settleUnansweredClaims), so it is not turned away until then.
  */
-export type TurnedAwayWhy = 'install-request-ended' | 'request-replaced' | 'claim-replaced' | 'taken-offline' | 'unanswered';
+export type TurnedAwayWhy = 'install-request-ended' | 'request-replaced' | 'claim-replaced' | 'late-claim' | 'taken-offline' | 'unanswered';
 export interface TurnedAwayName { name: string; at: number; why: TurnedAwayWhy }
 
 /** The list, oldest first. A node from before it kept one ended install request (endedAddressRequest): read in as the oldest. */

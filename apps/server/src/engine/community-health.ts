@@ -62,7 +62,7 @@ export function consentTerms() {
     const { debtLinePct, quietDays } = healthSettings();
     const text = `In this community, the admins can see your balance if it goes past ${debtLinePct}% of your credit line `
         + `or if you stay in debit for ${quietDays} days without a sale. That's how a LETS has always worked. `
-        + `They can't see your trades.`;
+        + `They can't see your trades. Every look is logged, and you can take this back at any time in Settings.`;
     return { known: isKnownCommunity(), debtLinePct, quietDays, version: `${CONSENT_WORDING_VERSION}:${debtLinePct}:${quietDays}`, text };
 }
 

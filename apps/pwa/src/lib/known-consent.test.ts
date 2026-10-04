@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readKnownConsent, shouldOfferConsent, consentHeading, readConsentTerms, joinAsksConsent } from './known-consent';
+import { readKnownConsent, shouldOfferConsent, consentHeading, readConsentTerms, joinAsksConsent, showsConsentCard, canWithdrawConsent } from './known-consent';
 
 const TERMS = { known: true, debtLinePct: 50, quietDays: 60, version: '1:50:60', text: 'In this community, the admins can see your balance…', confirmed: true, consentedAt: null, consentedVersion: null };
 
@@ -9,6 +9,21 @@ describe('known consent (web)', () => {
         expect(joinAsksConsent(readConsentTerms({ ...TERMS, known: false }))).toBe(false);
         expect(readConsentTerms({ error: 'Not found' })).toBeNull();
         expect(joinAsksConsent(null)).toBe(false);
+    });
+
+    it('a member who agreed always sees what they agreed to, and can withdraw it at any time (GDPR Art. 7(3))', () => {
+        const agreed = readKnownConsent({ ...TERMS, consentedAt: '2026-10-04T00:00:00Z', consentedVersion: '1:50:60' })!;
+        expect(showsConsentCard(agreed)).toBe(true);
+        expect(canWithdrawConsent(agreed)).toBe(true);
+        // The owner turned the dial off later: the consent is still theirs to withdraw.
+        expect(showsConsentCard({ ...agreed, known: false })).toBe(true);
+        const withdrawn = readKnownConsent({ ...TERMS, withdrawnAt: '2026-10-05T00:00:00Z' })!;
+        expect(withdrawn.withdrawnAt).toBe('2026-10-05T00:00:00Z');
+        expect(canWithdrawConsent(withdrawn)).toBe(false);
+        expect(showsConsentCard(withdrawn)).toBe(true);
+        expect(readKnownConsent(TERMS)!.withdrawnAt).toBeNull();
+        expect(showsConsentCard(readKnownConsent({ ...TERMS, known: false }))).toBe(false);
+        expect(showsConsentCard(null)).toBe(false);
     });
 
     it('Settings offers it until the member agrees to the current text, and again when the lines change', () => {

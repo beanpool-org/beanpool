@@ -10,6 +10,8 @@ export interface KnownConsent {
     confirmed: boolean;
     consentedAt: string | null;
     consentedVersion: string | null;
+    /** When they last withdrew, while they have no consent now. */
+    withdrawnAt: string | null;
 }
 
 /** A whole answer from GET /api/names/consent, or null (an older node answers 404, the global node 404 too). */
@@ -20,12 +22,23 @@ export function readKnownConsent(v: unknown): KnownConsent | null {
         known: o.known, version: o.version, text: o.text, confirmed: o.confirmed === true,
         consentedAt: typeof o.consentedAt === 'string' ? o.consentedAt : null,
         consentedVersion: typeof o.consentedVersion === 'string' ? o.consentedVersion : null,
+        withdrawnAt: typeof o.withdrawnAt === 'string' ? o.withdrawnAt : null,
     };
 }
 
 /** Whether to offer it: a known community, and the member hasn't agreed to the text it says now. */
 export function shouldOfferConsent(c: KnownConsent | null): boolean {
     return !!c && c.known && c.consentedVersion !== c.version;
+}
+
+/** Whether the member can withdraw: they agreed to some text, whatever the community says now (GDPR Art. 7(3)). */
+export function canWithdrawConsent(c: KnownConsent | null): boolean {
+    return !!c && !!c.consentedVersion;
+}
+
+/** Whether Settings shows the card: to offer the text, or to show the member what they agreed to, with Withdraw. */
+export function showsConsentCard(c: KnownConsent | null): boolean {
+    return shouldOfferConsent(c) || canWithdrawConsent(c);
 }
 
 /** The heading: a first ask, or the community changed its lines since. */

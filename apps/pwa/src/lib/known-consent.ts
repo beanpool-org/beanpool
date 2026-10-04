@@ -18,6 +18,8 @@ export interface KnownConsent extends ConsentTerms {
     confirmed: boolean;
     consentedAt: string | null;
     consentedVersion: string | null;
+    /** When they last withdrew, while they have no consent now. */
+    withdrawnAt: string | null;
 }
 
 /** A whole answer from GET /api/community/consent-terms, or null (an older node answers 404: the join shows nothing). */
@@ -41,12 +43,23 @@ export function readKnownConsent(v: unknown): KnownConsent | null {
         ...terms, confirmed: o.confirmed === true,
         consentedAt: typeof o.consentedAt === 'string' ? o.consentedAt : null,
         consentedVersion: typeof o.consentedVersion === 'string' ? o.consentedVersion : null,
+        withdrawnAt: typeof o.withdrawnAt === 'string' ? o.withdrawnAt : null,
     };
 }
 
 /** Whether Settings offers it: a known community, and the member hasn't agreed to the text it says now. */
 export function shouldOfferConsent(c: KnownConsent | null): boolean {
     return !!c && c.known && c.consentedVersion !== c.version;
+}
+
+/** Whether the member can withdraw: they agreed to some text, whatever the community says now (GDPR Art. 7(3)). */
+export function canWithdrawConsent(c: KnownConsent | null): boolean {
+    return !!c && !!c.consentedVersion;
+}
+
+/** Whether Settings shows the card: to offer the text, or to show the member what they agreed to, with Withdraw. */
+export function showsConsentCard(c: KnownConsent | null): boolean {
+    return shouldOfferConsent(c) || canWithdrawConsent(c);
 }
 
 /** The heading: a first ask, or the community changed its lines since. */
@@ -63,6 +76,11 @@ export async function fetchConsentTerms(): Promise<ConsentTerms | null> {
 /** The member's own consent, or null (an older node, a guest, offline). Never throws. */
 export async function fetchMyConsent(): Promise<KnownConsent | null> {
     return request<unknown>('GET', '/api/names/consent').then(readKnownConsent).catch(() => null);
+}
+
+/** Withdraws the member's consent: from that moment they are in no exception. Throws the node's refusal. */
+export async function withdrawConsent(): Promise<KnownConsent | null> {
+    return readKnownConsent(await request<unknown>('POST', '/api/names/consent', { withdraw: true }));
 }
 
 /** Records the member's consent to the text they were shown. Throws the node's refusal (the lines changed meanwhile). */

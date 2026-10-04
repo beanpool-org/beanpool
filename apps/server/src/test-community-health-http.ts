@@ -299,6 +299,7 @@ async function main(): Promise<void> {
     assert(history.map(h => h.action).join() === 'agreed,withdrawn' && history[0].version === terms.body.version,
         `the withdrawal is kept in the consent history, after the agreement (${JSON.stringify(history)})`);
     const termsNow = await call('GET', null, '/api/community/consent-terms');
+    assert(/take this back at any time/.test(termsNow.body?.text ?? ''), `the text a member agrees to says they can take it back (${show(termsNow)})`);
     const again = await call('POST', kim, '/api/names/consent', { version: termsNow.body.version });
     assert(again.status === 200 && again.body?.consentedVersion === termsNow.body.version && again.body?.withdrawnAt === null,
         `Kimberly can consent again (${show(again)})`);

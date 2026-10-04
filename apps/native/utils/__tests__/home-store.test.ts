@@ -213,7 +213,7 @@ describe('one signed read for the whole screen, and the 304', () => {
         expect(await readStoredHome(me.publicKey, `${NODE}/`)).not.toBeNull();
     });
 
-    it('a refusal (401, 403) is members_only; down, a 5xx or a body that isn\'t one fails; the copy stays as it was', async () => {
+    it('a refusal (401, 403) is members_only; a 404 is needs_update; down, a 5xx or a body that isn\'t one fails; the copy stays as it was', async () => {
         const first = await readHomeFromNode(NODE, me, asked, null);
         if (first.kind !== 'answer') throw new Error('no answer');
         const before = mem.store.get(homeAnswerStoreKey(me.publicKey, NODE));
@@ -221,6 +221,8 @@ describe('one signed read for the whole screen, and the 304', () => {
         expect((await readHomeFromNode(NODE, me, asked, first.stored)).kind).toBe('members_only');
         node.status = 401;
         expect((await readHomeFromNode(NODE, me, asked, first.stored)).kind).toBe('members_only');
+        node.status = 404;
+        expect((await readHomeFromNode(NODE, me, asked, first.stored)).kind).toBe('needs_update');
         node.status = 500;
         expect((await readHomeFromNode(NODE, me, asked, first.stored)).kind).toBe('failed');
         node.status = 200;

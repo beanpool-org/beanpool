@@ -926,6 +926,9 @@ export interface BalanceInfo {
     knownGrant?: number;
     /** Trust Model v3 — true when your debt is below your usable floor (spending is frozen until you recover or post Offers). */
     frozen?: boolean;
+    /** The community's admins froze your known floor (an exception) / your whole line (the manager's Freeze). Absent from an older node. */
+    knownFrozen?: boolean;
+    creditFrozen?: boolean;
 }
 
 export interface Transaction {

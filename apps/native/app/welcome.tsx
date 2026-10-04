@@ -72,6 +72,7 @@ import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, is
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 import { NEXT_REQUEST_TIMEOUT_MS, afterSpentInvite, leaveUnlessNextIsOut, redeemRefusalMeansIn, runNext } from '../utils/invite-next';
 import { communitySwitched } from '../utils/community-switch';
+import { ConsentText } from '../components/ConsentText';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
 // rejection rather than crash with an unhandled promise warning.
@@ -2458,7 +2459,7 @@ export default function WelcomeScreen() {
                         {joinTerms && (
                             <View style={{ marginBottom: 12 }} testID="join-consent">
                                 <Text style={styles.checkboxText} accessibilityRole="header">What this community's admins can see</Text>
-                                <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20, marginTop: 6 }}>{joinTerms.text}</Text>
+                                <ConsentText text={joinTerms.text} />
                                 <Pressable
                                     style={[styles.checkbox, { marginVertical: 8, minHeight: 48 }, joinConsentTicked && styles.checkboxActive]}
                                     onPress={() => setJoinTickedVersion(joinConsentTicked ? null : joinTerms.version)}

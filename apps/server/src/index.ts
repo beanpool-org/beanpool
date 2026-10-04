@@ -54,7 +54,7 @@ if (fs.existsSync(envPath)) {
 scrubReportEnvironment();
 
 import { ensureGenesis } from './genesis.js';
-import { initAdminPassword } from './config/local-config.js';
+import { initAdminPassword, localConfigRestoredNotice } from './config/local-config.js';
 import { burnClaimFromShell, initClaimCode } from './claim-code.js';
 import { initTls, startRenewalScheduler } from './services/tls.js';
 import { startDnsShim } from './dns-shim.js';
@@ -132,6 +132,12 @@ async function main() {
 
     // Step 2.5: Initialize state engine (ledger, members, marketplace)
     initStateEngine();
+    // local-config.json was broken and this start took its last good copy (config/local-config.ts): into the security log
+    // the owner reads in Settings, not only the container log.
+    const restored = localConfigRestoredNotice();
+    if (restored) {
+        logger.security('SYS', `local-config.json was unreadable (${restored.why}): this server started from its last good copy, local-config.json.bak. Check the address and settings.` + (restored.brokenCopy ? ` The broken file is kept as ${restored.brokenCopy}.` : ''));
+    }
     migrateAdminConversations();
 
     // Step 2.51: `beanpool recover`, run in this container, leaves a notice in the data dir for each owner it adds: the

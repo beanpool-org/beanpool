@@ -6,10 +6,10 @@
 // so the node and the fleet manager compute an identical floor instead of the
 // manager keeping a hand-copied, drift-prone reimplementation.
 import type Database from 'better-sqlite3';
-import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
+import { earnedCreditFromValue, getTier, knownGrantFor, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import type { TrustStats, TierInfo } from '@beanpool/core';
 import { prepared } from './statements.js';
-import { memberUsableKnownGrant, creditCap, confirmationDialOn, enterpriseKnownShareOf } from './known-floor.js';
+import { memberUsableKnownGrant, creditCap, confirmationDialOn, enterpriseKnownShareOf, isConfirmed, knownFloor, knownFloorException } from './known-floor.js';
 
 type Db = Database.Database;
 
@@ -452,6 +452,15 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     knownGrant: number;
     /** vouch + earned + granted, before the cap: the part the offer bands meter. */
     otherAllowance: number;
+    /** An admin froze this confirmed member's known floor (known_floor_exceptions.frozen): no known line while it lasts. */
+    knownFrozen: boolean;
+    /** An admin froze this member's whole credit line (members.credit_frozen, the manager's "Freeze"): no line while it lasts. */
+    creditFrozen: boolean;
+    /**
+     * The credit `tier` is read from (tierForCredit(tierCredit) is `tier`): CREDIT_BASE_FLOOR − floor, except that a freeze
+     * keeps the line the member holds unfrozen. A post card's badge takes it, so every surface shows the same tier.
+     */
+    tierCredit: number;
     qualifiedValue: number;
     avgRating: number;
     reviewCount: number;
@@ -481,6 +490,9 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
             reviewCount: 0,
             vouched: false,
             activated: ef.activated,
+            knownFrozen: false,
+            creditFrozen: false,
+            tierCredit: PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - floor,
         };
     }
 
@@ -535,11 +547,23 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     // -CREDIT_FLOOR_CAP; 0 for an un-vouched member. CREDIT_BASE_FLOOR is 0 — no baked-in overdraft.
     const floor = c.CREDIT_BASE_FLOOR - allowance;
 
-    const tier = getTier(floor);
+    // An admin's freeze takes the line away, not the tier: tiers are merit badges, and a frozen member keeps the one their
+    // line would give them (rehearsal 5 Oct, b: a frozen Resident showed "Newcomer"). That is either freeze: the whole line
+    // (members.credit_frozen) or the known floor's: a frozen exception keeps the amount it froze (config/known-floor.ts; NULL
+    // is the community's known floor), so the tier reads that amount as if unfrozen, less their counted known pledges exactly
+    // as unfrozen. So a freeze never moves a tier, up or down (r4178376530, r4178445093). A lowered or raised exception is
+    // the member's line itself, so its tier follows it.
+    const exception = knownFloorException(db, publicKey);
+    const knownFrozen = confirmationDialOn(db) && exception?.frozen === true && isConfirmed(db, publicKey);
+    const tierKnownGrant = knownFrozen
+        ? memberUsableKnownGrant(db, publicKey, knownGrantFor({ dialOn: true, confirmed: true, knownFloor: knownFloor(db), cap, exception: { amount: exception!.amount, frozen: false } }))
+        : knownGrant;
+    const tierAllowance = (activated || tierKnownGrant > 0) ? Math.min(cap, tierKnownGrant + otherAllowance) : 0;
+    const tier = getTier(c.CREDIT_BASE_FLOOR - tierAllowance);
 
     // qualifiedValue: raw diversity-capped trade value (drives the native "value traded"
     // achievement + value-to-next-tier estimate). avgRating/reviewCount: the reputation
     // multiplier inputs, surfaced so the client can show them honestly.
-    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated };
+    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated, knownFrozen, creditFrozen: isCreditFrozen, tierCredit: tierAllowance };
 }
 

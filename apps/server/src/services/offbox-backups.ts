@@ -49,6 +49,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
@@ -231,9 +232,7 @@ function readStoredSettings(): StoredSettings {
 
 function writeStoredSettings(s: StoredSettings): void {
     const file = path.join(dataDir(), OFFBOX_SETTINGS_FILE);
-    const tmp = `${file}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify(s, null, 2), { mode: 0o600 });
-    fs.renameSync(tmp, file);
+    writeFileAtomic(file, JSON.stringify(s, null, 2), { mode: 0o600 });
     try { fs.chmodSync(file, 0o600); } catch { /* the rename kept the temp file's mode */ }
 }
 
@@ -401,10 +400,8 @@ function readState(): OffboxState {
 
 function writeState(s: OffboxState): void {
     const file = path.join(dataDir(), OFFBOX_STATE_FILE);
-    const tmp = `${file}.tmp-${process.pid}`;
     try {
-        fs.writeFileSync(tmp, JSON.stringify(s, null, 2), { mode: 0o600 });
-        fs.renameSync(tmp, file);
+        writeFileAtomic(file, JSON.stringify(s, null, 2), { mode: 0o600 });
     } catch (e) {
         logger.warn('SYS', `[Off-box] Could not save what the off-box backups did: ${(e as Error)?.message || e}`);
     }

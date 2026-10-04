@@ -23,10 +23,14 @@ import path from 'node:path';
 import { type GatewayConfig, DEFAULT_GATEWAY_CONFIG } from './gateway.js';
 import type { RecoveryCodeRecord } from '@beanpool/core';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
+import { writeFileAtomic, fsyncDir } from '../write-file-atomic.js';
 export { type GatewayConfig, DEFAULT_GATEWAY_CONFIG };
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const CONFIG_PATH = path.join(DATA_DIR, 'local-config.json');
+// The last good copy: every save writes it after local-config.json, both atomically, so one of the two always parses.
+// It holds the same secrets as local-config.json and keeps its mode.
+export const CONFIG_BACKUP_PATH = `${CONFIG_PATH}.bak`;
 
 export interface LocalConfig {
     isLocked: boolean;
@@ -207,26 +211,96 @@ export interface AutomationTokenRecord {
     hash: string;
 }
 
-export function getLocalConfig(): LocalConfig {
+/**
+ * local-config.json is there but does not parse, and neither does the last good copy: the server stops rather than
+ * start as a new install. Defaults would forget the community's address, name, owners' settings, role and retired
+ * password, and the next save would write them over the file for good.
+ */
+export class LocalConfigUnreadableError extends Error {}
+
+/** What the last start found, when local-config.json was broken and the last good copy took its place. */
+let restoredFromBackup: { at: string; why: string; brokenCopy: string | null } | null = null;
+export function localConfigRestoredNotice(): typeof restoredFromBackup { return restoredFromBackup; }
+
+/** The file's config, or why it isn't one (an empty or cut-off file, JSON that isn't an object). */
+function parseConfigFile(file: string): { config: LocalConfig } | { error: string } {
     try {
-        if (fs.existsSync(CONFIG_PATH)) {
-            const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as LocalConfig;
-            
-            // Backward compatibility for demurrage -> circulation renaming
-            if (raw.thresholds) {
-                if (raw.thresholds.demurrageRate !== undefined && raw.thresholds.circulationRate === undefined) {
-                    raw.thresholds.circulationRate = raw.thresholds.demurrageRate;
-                }
-                if (raw.thresholds.demurrageEpochDays !== undefined && raw.thresholds.circulationEpochDays === undefined) {
-                    raw.thresholds.circulationEpochDays = raw.thresholds.demurrageEpochDays;
-                }
-            }
-            return raw;
-        }
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as unknown;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { error: 'not a JSON object' };
+        return { config: parsed as LocalConfig };
     } catch (e) {
-        console.warn('[Config] Failed to read local config:', e);
+        return { error: (e as Error).message };
     }
-    return { ...DEFAULT_CONFIG };
+}
+
+/**
+ * local-config.json is there and broken: take the last good copy, put it back in place (the broken file is kept
+ * beside it for a look), and say so loudly. Neither parses: fail closed.
+ */
+function restoreFromBackup(why: string): LocalConfig {
+    const backup = fs.existsSync(CONFIG_BACKUP_PATH) ? parseConfigFile(CONFIG_BACKUP_PATH) : { error: 'there is none' };
+    if (!('config' in backup)) {
+        const msg = `${CONFIG_PATH} is unreadable (${why}) and its last good copy ${CONFIG_BACKUP_PATH} is too (${backup.error}). `
+            + 'This server will not start as a new install over it: that would forget its address and settings. '
+            + 'Put back a good local-config.json (from a backup) and restart.';
+        console.error(`🛑 [Config] ${msg}`);
+        throw new LocalConfigUnreadableError(msg);
+    }
+    let brokenCopy: string | null = `${CONFIG_PATH}.broken-${Date.now()}`;
+    try { fs.copyFileSync(CONFIG_PATH, brokenCopy); } catch { brokenCopy = null; }
+    try {
+        writeFileAtomic(CONFIG_PATH, JSON.stringify(backup.config, null, 2));
+    } catch (e) {
+        console.error('[Config] Could not put the last good copy back in place (this start uses it anyway):', e);
+    }
+    restoredFromBackup = { at: new Date().toISOString(), why, brokenCopy };
+    console.error(`🛑 [Config] ${CONFIG_PATH} was unreadable (${why}). This server started from its last good copy, `
+        + `${CONFIG_BACKUP_PATH}: the community's address and settings are as they were at the last save.`
+        + (brokenCopy ? ` The broken file is kept as ${brokenCopy}.` : ''));
+    return backup.config;
+}
+
+export function getLocalConfig(): LocalConfig {
+    // No file: a new install (or one wiped on purpose). A file that is there always parses, since every save replaces it
+    // whole (writeFileAtomic); one that doesn't was broken some other way, and never reads as a new install.
+    if (!fs.existsSync(CONFIG_PATH)) return { ...DEFAULT_CONFIG };
+    const read = parseConfigFile(CONFIG_PATH);
+    const raw = 'config' in read ? read.config : restoreFromBackup(read.error);
+
+    // Backward compatibility for demurrage -> circulation renaming
+    if (raw.thresholds) {
+        if (raw.thresholds.demurrageRate !== undefined && raw.thresholds.circulationRate === undefined) {
+            raw.thresholds.circulationRate = raw.thresholds.demurrageRate;
+        }
+        if (raw.thresholds.demurrageEpochDays !== undefined && raw.thresholds.circulationEpochDays === undefined) {
+            raw.thresholds.circulationEpochDays = raw.thresholds.demurrageEpochDays;
+        }
+    }
+    return raw;
+}
+
+/**
+ * The local-config.json in another data dir (a restore writing into one), or its last good copy when it is broken; {}
+ * when there is neither. One there that doesn't parse, with no good copy beside it, throws: never read as empty.
+ */
+export function readLocalConfigFileIn(dir: string): Record<string, unknown> {
+    const file = path.join(dir, 'local-config.json');
+    if (!fs.existsSync(file)) return {};
+    const read = parseConfigFile(file);
+    if ('config' in read) return read.config as unknown as Record<string, unknown>;
+    const backup = parseConfigFile(`${file}.bak`);
+    if ('config' in backup) {
+        console.error(`🛑 [Config] ${file} was unreadable (${read.error}): its last good copy is used instead.`);
+        return backup.config as unknown as Record<string, unknown>;
+    }
+    throw new LocalConfigUnreadableError(`${file} is unreadable (${read.error}), and so is its last good copy (${backup.error})`);
+}
+
+/** Write another data dir's local-config.json and its last good copy, as saveLocalConfig does this server's. */
+export function writeLocalConfigFileIn(dir: string, config: Record<string, unknown>, mode: number): void {
+    const json = JSON.stringify(config, null, 2);
+    writeFileAtomic(path.join(dir, 'local-config.json'), json, { mode });
+    writeFileAtomic(path.join(dir, 'local-config.json.bak'), json, { mode });
 }
 
 export function saveLocalConfig(config: LocalConfig): void {
@@ -238,7 +312,12 @@ export function saveLocalConfig(config: LocalConfig): void {
         if (!fs.existsSync(DATA_DIR)) {
             fs.mkdirSync(DATA_DIR, { recursive: true });
         }
-        fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+        // Atomic, so no reader and no crash sees half a file; then the last good copy, the same way.
+        const json = JSON.stringify(config, null, 2);
+        writeFileAtomic(CONFIG_PATH, json);
+        let mode: number | undefined;
+        try { mode = fs.statSync(CONFIG_PATH).mode & 0o777; } catch { /* just written */ }
+        writeFileAtomic(CONFIG_BACKUP_PATH, json, { mode });
     } catch (e) {
         console.error('[Config] Failed to save local config:', e);
     }
@@ -371,17 +450,6 @@ export function firstPasswordPath(): string {
 /** The command that reads the file. The image keeps its data in /data (Dockerfile, docker-compose.yml). */
 function firstPasswordReadCommand(file: string): string {
     return DATA_DIR === '/data' ? `docker compose exec beanpool-node cat ${file}` : `cat ${file}`;
-}
-
-/** Flush a directory's entries, where the filesystem lets a directory be opened and synced; elsewhere, nothing. */
-function fsyncDir(dir: string): void {
-    let fd: number | null = null;
-    try {
-        fd = fs.openSync(dir, 'r');
-        fs.fsyncSync(fd);
-    } catch { /* not every filesystem (or platform) syncs a directory */ } finally {
-        if (fd !== null) try { fs.closeSync(fd); } catch { /* closed */ }
-    }
 }
 
 /**

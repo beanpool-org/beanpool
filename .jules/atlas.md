@@ -165,3 +165,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `fetchClaimState` and `buildClaimQr` in `apps/manager/src/lib/node-claim.ts` were untested directly.
 **Learning:** Testing `fetchClaimState` requires mocking `globalThis.fetch` for various HTTP states (network errors, non-object JSON bodies, timeout via fake timers, and external AbortController signals) to verify `ClaimState` outputs.
 **Action:** Identify any remaining untested utility functions or UI components in `apps/manager/`.
+
+## 2026-10-04 - [manager tests] TotpSetupGate component unit tests
+**Gap:** `TotpSetupGate` component in `apps/manager/src/components/auth/TotpSetupGate.tsx` was untested.
+**Learning:** Testing `TotpSetupGate` requires matching `resolveNodeApiUrl(nodeUrl, ...)` endpoint path targets (`/proxy/https/.../api/local/admin/2fa/setup` and `/verify`) when mocking `globalThis.fetch` calls.
+**Action:** Identify any remaining untested auth/login components in `apps/manager/src/components/auth/`.

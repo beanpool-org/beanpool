@@ -4,10 +4,11 @@
  * invite, signed by the key it took. A plain community (or an older node) shows nothing. The node is a stubbed fetch.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { WelcomePage } from './WelcomePage';
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { consentTextParts } from '../lib/known-consent';
 
 type Call = { path: string; body: any; headers: Record<string, string> };
 
@@ -19,6 +20,18 @@ const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalanc
 const CODE = 'BP-7K3X-9M2W';
 const TEXT = 'In this community, the admins can see your balance if it goes past 50% of your credit line or if you stay in debit for 60 days without a sale. That\'s how a LETS has always worked. Every time an admin opens the list of members past those lines, and every time an admin looks at your balance while removing you, it is logged. In a vote on removing you, everyone who can vote in it sees your balance and any debt, in that vote only, and those looks are not logged. You can take this back at any time in Settings. Whatever you choose, any admin can see some of your trades: a trade that isn\'t finished yet or that an admin settled (who with, the listing, the price, and your one-to-one chat with them, which they can\'t read if it is private), so a stuck trade can be settled; a trade whose Beans were left stuck when a member was removed on an older server (the trade\'s status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one\'s amount and note); a fraud alert that names you if you and one member buy from each other back and forth, about evenly, past a limit, with the Beans in total and how evenly they went each way; one that names you, with the Beans in total and how many of the members you invited have traded with no one but you, if members you invited send you Beans past a limit within a set number of days, or if you are one of those members; one that names you, with how much of the group\'s trading is with each other but no Beans, if you are in a group of members, at least half of them new, who trade mostly with each other; and an alert that names you if no Beans have moved in or out of your account for a set number of days. Every look at one of those trades is logged, with who looked, when, and at which trades; a look at the alerts that name you is logged the first time each admin opens them, and again at that admin\'s first look after 24 hours, and the looks in between add no line. The owner and the admins can see that log. The member stats the admins see show how many posts you have up and messages you have sent, and of trades only the whole community\'s totals, not yours. Every member, admins included, sees your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points. That isn\'t logged, because every member can see it. Nothing else of your trades. Whoever runs this community\'s server holds its whole database, your balance and trades included, and its backups, snapshots and standby copies.';
 const KNOWN = { known: true, debtLinePct: 50, quietDays: 60, version: '6:50:60', text: TEXT };
+
+// The text is laid out in parts on the page (rehearsal 5 Oct, d1: the summary, the rest behind "Read all of it"), every
+// part there word for word, and the parts joined are TEXT: not a word added, dropped or changed.
+async function findConsentText() {
+    const box = await screen.findByTestId('join-consent');
+    const { summary, rest } = consentTextParts(TEXT);
+    const parts = [summary, ...rest.map((b) => b.text)];
+    expect(parts.join(' ')).toBe(TEXT);
+    expect(rest.length).toBeGreaterThan(0);
+    for (const t of parts) expect(within(box).getByText(t)).toBeInTheDocument();
+    return box;
+}
 
 function stubNode(terms: unknown) {
     const calls: Call[] = [];
@@ -60,7 +73,7 @@ describe('the join step in a known community', () => {
         const node = stubNode(KNOWN);
         render(<WelcomePage onComplete={vi.fn()} />);
         await fillIn();
-        expect(await screen.findByText(TEXT)).toBeInTheDocument();
+        await findConsentText();
         const tick = screen.getByLabelText('I agree');
         expect(tick).not.toBeChecked();
         fireEvent.click(tick);
@@ -77,7 +90,7 @@ describe('the join step in a known community', () => {
         const node = stubNode(KNOWN);
         render(<WelcomePage onComplete={vi.fn()} />);
         await fillIn();
-        await screen.findByText(TEXT);
+        await findConsentText();
         join();
         await screen.findByText(/Choose your look/);
         expect(node.redeem()).toBeDefined();

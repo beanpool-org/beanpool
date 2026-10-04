@@ -32,6 +32,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import { createHmac } from 'node:crypto';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
@@ -348,9 +349,7 @@ function readStored(): StoredEnvelope | null {
 
 function writeStored(s: StoredEnvelope): void {
     const target = envelopePath();
-    const tmp = `${target}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify(s), { mode: 0o600 });
-    fs.renameSync(tmp, target);
+    writeFileAtomic(target, JSON.stringify(s), { mode: 0o600 });
 }
 
 function removeStored(): boolean {

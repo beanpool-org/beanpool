@@ -612,3 +612,26 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Claim:** `getEngineVolumeCap` in `apps/manager/src/lib/engine-helpers.ts` lacks test coverage.
 - **Why not to re-file:** the function is `return PER_COUNTERPARTY_VOLUME_CAP`. A test that it equals that constant (and 500)
   only restates it.
+
+### 2026-10-05 — Forge: 404 on removing a group member or post that is already gone (#1621) — CLOSED, KEEP IT IDEMPOTENT
+- **Category:** DELIBERATE DECISION
+- **Claim:** `DELETE /api/groups/:id/members/:pubkey` and the group post delete should answer 404 when the target is already gone.
+- **Why not to re-file:** removing someone already removed, deleting a post already deleted, or leaving twice should quietly succeed.
+  A double tap, a stale list or a retry on a flaky connection would otherwise show the member an error for something that worked.
+  Keep these writes idempotent.
+
+### 2026-10-05 — Vault: credentials: 'same-origin' on the bulk post delete (#1626) — CLOSED, NO-OP
+- **Category:** CLAIM FALSE (see rule 11 and the no-op entries)
+- **Why not to re-file:** `same-origin` is already fetch's default, and the call authenticates with the admin headers it is given,
+  not cookies. Adding it changes nothing.
+
+### 2026-10-05 — Pixel: accessibility label on the Pulse intake submit button (#1623) — CLOSED, LABEL REPEATS THE TEXT
+- **Category:** DELIBERATE DECISION (see #1036, #1087)
+- **Why not to re-file:** the button's visible text already names it. A label belongs only where the content is a spinner or icon, or
+  the spoken name must differ. `accessibilityState` busy is welcome on its own.
+
+### 2026-10-05 — Bolt: memoised pending-transaction lookup in the PWA Messages page (#1617) — MERGED BY MISTAKE, RULE 11 STILL STANDS
+- **Category:** NOTE
+- **What happened:** the director merged it without reading this register. It is harmless (same predicate, no behaviour change), but
+  like #1504 and #745 it memoises a cheap `find` over a small list, so it brings no measured gain.
+- **Why not to re-file more like it:** Bolt, memoisation of small lists still needs a measured gain (rule 11). #1617 is not a precedent.

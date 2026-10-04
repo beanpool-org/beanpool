@@ -14,6 +14,12 @@
  *   7. a keeper backs an enterprise from their known grant only by a recorded pledge (at most half the grant, off their
  *      own line 1:1): 6 enterprises in turn back 500 in all, not 1,224; a keeper can't step down from, or be unbound
  *      off, the debt their known pledge backs; a lowered floor, a revoked confirmation or the dial off spend-freezes
+ *   7b. a freeze never moves a keeper's tier: either freeze, or both, keeps the tier their own known line (the grant less
+ *      their counted known pledges) gives them, on their own answer and on their cards
+ *   7c. a freeze keeps the amount it froze: a lowered (50), raised (1,500) or default line, with or without known
+ *      pledges, keeps its tier frozen, and unfreezing goes back to that amount; money is the frozen line's; restoring the
+ *      default clears both; the log reads 50 → frozen → 50. Another member reading the board gets the badge (the tier's
+ *      least credit) and the trust profile their Trust Points, never the line itself (50, 1,500, 1,000 less pledges)
  *   8. one member's exception needs an owner's or admin's own key session: no automation token, no node password
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-known-floor-http.ts
@@ -27,7 +33,8 @@ process.env.ADMIN_PASSWORD = 'KnownFloor123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, getBalance, getEnterpriseUnderlyingFloor, getAvailableBacking, pledgeEnterpriseBacking, stepDownAsKeeper, adminRevokeTreasuryOperator } from './state-engine.js';
+import { tierForCredit, TIER_LEVELS } from '@beanpool/core';
+import { initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, getBalance, getEnterpriseUnderlyingFloor, getAvailableBacking, pledgeEnterpriseBacking, stepDownAsKeeper, adminRevokeTreasuryOperator, getPosts } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders, ownerTokenHeaders, turnOn2faForTests } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
@@ -178,6 +185,8 @@ async function main(): Promise<void> {
     const kimOn = await balanceOf(kim);
     assert(kimOn.body?.floor === -1000 && kimOn.body?.usableFloor === -1000,
         `a confirmed member with one live offer may use the whole known floor, -1,000 (${show(kimOn)})`);
+    assert(kimOn.body?.knownFrozen === false && typeof kimOn.body?.tier?.name === 'string',
+        `with no exception the line is not frozen, and the answer carries her tier (${show(kimOn)})`);
     const unaOn = await balanceOf(una);
     assert(unaOn.body?.floor === 0 && unaOn.body?.usableFloor === 0, `an unconfirmed member's floor is unchanged, 0 (${show(unaOn)})`);
     const b600 = await buy(kim, samSells(600));
@@ -201,6 +210,7 @@ async function main(): Promise<void> {
     const kimLowered = getBalance(kim.pk);
     assert(Math.abs(kimLowered.balance - -1000) < 1e-9 && kimLowered.usableFloor === -300 && kimLowered.frozen === true,
         `nothing is deducted: Kim still holds -1,000 and is spend-frozen at a -300 floor (${JSON.stringify({ b: kimLowered.balance, u: kimLowered.usableFloor, f: kimLowered.frozen })})`);
+    assert(kimLowered.knownFrozen === false, 'a lowered line is not an admin freeze: knownFrozen stays false');
     const frozenBuy = await buy(kim, samSells(10));
     assert(frozenBuy.status >= 400, `while frozen, Kim can't buy (${show(frozenBuy)})`);
     const overCap = await exception(adaAdmin, { memberPubkey: kim.pk, amount: 2500 });
@@ -219,6 +229,30 @@ async function main(): Promise<void> {
     assert(raiseLine?.actor === ada.pk && raiseLine.memberPubkey === kim.pk && raiseLine.oldValue === '300' && raiseLine.newValue === '1800',
         `the raise names the admin, the member, and 300 → 1,800 (${JSON.stringify(raiseLine)})`);
     assert(!actions.includes('credit_cap') && logged.length === 3, `the refused requests wrote no line (${logged.length} lines)`);
+
+    // An admin freezes Kim's line through the same route the manager's settings use (rehearsal 5 Oct, b): the member's own
+    // answer says the admins froze it (knownFrozen), she has no line while it lasts, and her tier stays the one her line
+    // gives her, the 1,800 it froze (tiers are merit badges; r4178445093): not "Newcomer", and not the default's.
+    const kimRaised = await balanceOf(kim);
+    const freeze = await exception(adaAdmin, { memberPubkey: kim.pk, frozen: true });
+    assert(freeze.status === 200 && freeze.body?.exception?.frozen === true, `an admin freezes Kim's known floor (${show(freeze)})`);
+    const kimFrozen = await balanceOf(kim);
+    assert(kimFrozen.status === 200 && kimFrozen.body?.knownFrozen === true && kimFrozen.body?.floor === 0 && kimFrozen.body?.activated === false,
+        `Kim's own answer: knownFrozen, no line while it lasts (${show(kimFrozen)})`);
+    assert(kimFrozen.body?.tier?.name === kimRaised.body?.tier?.name && kimFrozen.body?.tier?.name !== 'Newcomer',
+        `and her tier stays ${kimRaised.body?.tier?.name}, the one 1,800 gives, not Newcomer (${kimFrozen.body?.tier?.name})`);
+    const unfreeze = await exception(adaAdmin, { memberPubkey: kim.pk, amount: 1800 });
+    assert(unfreeze.status === 200 && getBalance(kim.pk).knownFrozen === false && getBalance(kim.pk).usableFloor === -1800,
+        `an admin opens it again at 1,800 and the freeze is gone (${show(unfreeze)})`);
+    // The manager's "Freeze" on a member is the other freeze (members.credit_frozen, the whole line): the same answer.
+    const tierBefore = (await balanceOf(kim)).body?.tier?.name;
+    const wholeFreeze = await call('POST', null, `/api/local/admin/users/${kim.pk}/freeze`, { freeze: true }, owner);
+    const kimWhole = await balanceOf(kim);
+    assert(wholeFreeze.status === 200 && kimWhole.body?.creditFrozen === true && kimWhole.body?.floor === 0 && kimWhole.body?.tier?.name === tierBefore,
+        `the manager's Freeze: creditFrozen, no line, her tier still ${tierBefore} (${show(kimWhole)})`);
+    const wholeOpen = await call('POST', null, `/api/local/admin/users/${kim.pk}/freeze`, { freeze: false }, owner);
+    assert(wholeOpen.status === 200 && getBalance(kim.pk).creditFrozen === false && getBalance(kim.pk).usableFloor === -1800,
+        `and unfreezing gives her line back (${show(wholeOpen)})`);
 
     // ── 5. the dial off again ──────────────────────────────────────────────────────────────────
     console.log('── 5. the dial off again ──');
@@ -333,6 +367,94 @@ async function main(): Promise<void> {
     frozenAt('dial off', 0, 0);
     const dialOn = await settings(owner, { confirmation: true });
     assert(dialOn.status === 200 && getEnterpriseUnderlyingFloor(kaiCos[0]).floor === -500, 'the dial on again: the pledge, never released, counts again');
+
+    // ── 7b. a freeze never moves a keeper's tier (r4178376530) ──────────────────────────────────
+    // Unfrozen, a keeper's tier follows their own known line: the grant less their counted known pledges. Either freeze, or
+    // both, keeps exactly that tier, on their own answer and on their cards: never higher (the full grant) and never lower.
+    console.log('── 7b. a frozen keeper\'s tier ──');
+    for (const [grant, pledged, tierName] of [[300, 150, 'Newcomer'], [1000, 500, 'Resident']] as const) {
+        const set = await settings(owner, { knownFloor: grant });
+        assert(set.status === 200, `the owner sets the known floor to ${grant} (${show(set)})`);
+        const keeper = makeMember(`Keeper ${grant}`);
+        confirm(keeper, ada);
+        const card = createPost('offer', 'produce', `Keeper ${grant} mends shoes`, 'Shoes', 10, 'fixed', keeper.pk)!;
+        pledgeEnterpriseBacking(makeEnterprise(`Keeper Co ${grant}`, [keeper]), keeper.pk, pledged);
+        const tiers = async (label: string, frozen: { known: boolean; whole: boolean }) => {
+            const own = await balanceOf(keeper);
+            const cardTier = tierForCredit(getPosts({ id: card.id })[0]?.authorEnergyCycled ?? NaN).name;
+            const line = frozen.known || frozen.whole ? 0 : -(grant - pledged);
+            assert(own.status === 200 && own.body?.floor === line && own.body?.knownFrozen === frozen.known && own.body?.creditFrozen === frozen.whole
+                && own.body?.tier?.name === tierName && cardTier === tierName,
+                `known floor ${grant}, ${pledged} pledged, ${label}: floor ${line}, tier ${tierName} on their answer and their card (${own.body?.floor}, ${own.body?.tier?.name}, card ${cardTier})`);
+        };
+        await tiers('unfrozen', { known: false, whole: false });
+        await exception(adaAdmin, { memberPubkey: keeper.pk, frozen: true });
+        await tiers('known floor frozen', { known: true, whole: false });
+        await call('POST', null, `/api/local/admin/users/${keeper.pk}/freeze`, { freeze: true }, owner);
+        await tiers('both frozen', { known: true, whole: true });
+        await exception(owner, { memberPubkey: keeper.pk, clear: true });
+        await tiers('whole line frozen', { known: false, whole: true });
+        await call('POST', null, `/api/local/admin/users/${keeper.pk}/freeze`, { freeze: false }, owner);
+        await tiers('unfrozen again', { known: false, whole: false });
+    }
+    await settings(owner, { knownFloor: 1000 });
+
+    // ── 7c. a freeze keeps the amount it froze (r4178445093) ────────────────────────────────────
+    // An exception's freeze keeps its amount: their tier is the one that amount gives them, frozen or not, and unfreezing
+    // goes back to it. Money is the freeze's: no known line while frozen.
+    console.log('── 7c. a frozen exception keeps its amount ──');
+    for (const [amount, pledged] of [[50, 0], [50, 20], [1500, 0], [1500, 600], [null, 0], [null, 400]] as const) {
+        const grant = amount ?? 1000;
+        const label = `${amount === null ? 'the default 1000' : amount === 50 ? 'lowered to 50' : 'raised to 1500'}, ${pledged} pledged`;
+        const who = makeMember(`Kept ${grant} ${pledged}`);
+        confirm(who, ada);
+        const card = createPost('offer', 'produce', `Kept ${grant} ${pledged} bakes bread`, 'Bread', 10, 'fixed', who.pk)!;
+        if (amount !== null) assert((await exception(adaAdmin, { memberPubkey: who.pk, amount })).status === 200, `${label}: set`);
+        if (pledged) pledgeEnterpriseBacking(makeEnterprise(`Kept Co ${grant} ${pledged}`, [who]), who.pk, pledged);
+        const look = async () => {
+            const own = await balanceOf(who);
+            const theirs = await call('POST', kim, '/api/trust/profile', { targetPubkey: who.pk });
+            const board = await call('GET', kim, '/api/marketplace/posts');
+            const boardCard = (Array.isArray(board.body) ? board.body : board.body?.posts ?? []).find((p: any) => p.id === card.id);
+            const shown = boardCard?.authorEnergyCycled;
+            assert(board.status === 200 && TIER_LEVELS.some(t => t.minCredit === shown) && tierForCredit(shown).name === own.body?.tier?.name
+                && typeof theirs.body?.earnedCredit === 'number'
+                // No number on the card is their line, unless the line happens to be a tier's least credit (600 = Steward's).
+                && !Object.entries(boardCard ?? {}).some(([k, v]) => v === grant - pledged && !(k === 'authorEnergyCycled' && v === shown && TIER_LEVELS.some(t => t.minCredit === v))),
+                `another member's board shows ${label}'s badge only: ${shown}, the least of ${own.body?.tier?.name}, never ${grant - pledged}; their profile, Trust Points ${theirs.body?.earnedCredit}`);
+            return { floor: own.body?.floor, usable: own.body?.usableFloor, tier: own.body?.tier?.name, profileTier: theirs.body?.tier?.name,
+                cardTier: tierForCredit(getPosts({ id: card.id })[0]?.authorEnergyCycled ?? NaN).name,
+                row: db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(who.pk) as { amount: number | null; frozen: number } | undefined };
+        };
+        const before = await look();
+        assert(before.floor === -(grant - pledged) && !!before.tier && before.profileTier === before.tier && before.cardTier === before.tier,
+            `${label}, unfrozen: floor ${-(grant - pledged)}, one tier everywhere (${JSON.stringify(before)})`);
+        const frz = await exception(adaAdmin, { memberPubkey: who.pk, frozen: true });
+        const frozen = await look();
+        assert(frz.status === 200 && frozen.row?.frozen === 1 && frozen.row?.amount === amount,
+            `${label}: the freeze keeps the amount (${show(frz)}; row ${JSON.stringify(frozen.row)})`);
+        assert(frozen.floor === 0 && frozen.usable === 0,
+            `${label}, frozen: no known line, floor and usable 0 (${frozen.floor}, ${frozen.usable})`);
+        assert(frozen.tier === before.tier && frozen.profileTier === before.tier && frozen.cardTier === before.tier,
+            `${label}, frozen: the same tier ${before.tier} on their answer, another member's profile and their card (${frozen.tier}, ${frozen.profileTier}, ${frozen.cardTier})`);
+        const unf = await exception(adaAdmin, { memberPubkey: who.pk, frozen: false });
+        const after = await look();
+        assert(unf.status === 200 && after.floor === before.floor && after.tier === before.tier && after.cardTier === before.tier
+            && (amount === null ? after.row === undefined : after.row?.amount === amount && after.row?.frozen === 0),
+            `${label}: unfreezing goes back to ${amount ?? 'the default'} (${show(unf)}; ${JSON.stringify(after)})`);
+        if (amount === 50 && pledged === 0) {
+            const lines = ((await read()).body?.log as any[]).filter(l => l.memberPubkey === who.pk).map(l => `${l.action} ${l.oldValue}→${l.newValue}`);
+            assert(lines.includes('exception_frozen 50→frozen') && lines.includes('exception_unfrozen frozen→50'),
+                `the log reads 50 → frozen → 50 (${lines.join('; ')})`);
+            const again = await exception(adaAdmin, { memberPubkey: who.pk, frozen: false });
+            assert(again.status === 409 && again.body?.code === 'not_frozen', `unfreezing a line that isn't frozen is refused (${show(again)})`);
+            await exception(adaAdmin, { memberPubkey: who.pk, frozen: true });
+            const cleared = await exception(owner, { memberPubkey: who.pk, clear: true });
+            const def = await look();
+            assert(cleared.status === 200 && def.row === undefined && def.floor === -1000,
+                `restoring the default clears the freeze and the amount: floor -1000 (${show(cleared)}; ${def.floor})`);
+        }
+    }
 
     // ── 8. one member's exception needs an owner's or admin's own key session ────────────────────
     console.log('── 8. who sets an exception ──');

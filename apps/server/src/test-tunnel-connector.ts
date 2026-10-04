@@ -118,7 +118,7 @@ const reg = {
     offline: (): any => ({ status: 'released' }),
     heal: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', changed: [] }),
     /** [HTTP status, body]: the registrar refuses a rotate with a 403, 404 or 409. */
-    rotate: (b: any): [number, any] => [200, { status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-rotate-${b.name}`, rotated: true }],
+    rotate: (b: any): [number, any] | Promise<[number, any]> => [200, { status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-rotate-${b.name}`, rotated: true }],
 };
 const claims = () => reg.calls.filter((c) => c.path === '/api/registrar/claim');
 const statuses = () => reg.calls.filter((c) => c.path === '/api/registrar/status');
@@ -147,7 +147,7 @@ async function startRegistrar(): Promise<http.Server> {
             if (p === '/api/registrar/claim') return answer(reg.claim(body));
             if (p === '/api/registrar/offline') return send(200, reg.offline());
             if (p === '/api/registrar/heal') return send(200, reg.heal(body));
-            if (p === '/api/registrar/rotate') { const [code, answer] = reg.rotate(body); return send(code, answer); }
+            if (p === '/api/registrar/rotate') return answer(reg.rotate(body));
             send(404, { error: 'not found' });
         });
     });
@@ -732,11 +732,25 @@ async function main(): Promise<void> {
             reg.status = () => live('install-race', 'eyJ.token-install-race');
             await reconcile();
             assert(pa()?.name === 'owner-pick' && pa()?.tunnelToken === 'eyJ.token-owner-pick', `still the owner's name (${pa()?.name})`);
+            // New tunnel key answered after the owner claimed another name in another tab: that claim stands.
+            let answerRotate: () => void = () => {};
+            reg.rotate = (b) => new Promise((r) => { answerRotate = () => r([200, { ...live(b.name, 'eyJ.token-rotated-late'), rotated: true }]); });
+            const r0 = rotates().length;
+            const rotating = post('/api/local/admin/public-address/rotate');
+            assert(await until(() => rotates().length > r0), 'the rotate was asked');
+            const next = await post('/api/local/admin/public-address/claim', { name: 'owner-next', mode: 'tunnel' });
+            assert(next.status === 200 && pa()?.name === 'owner-next', `the owner claimed owner-next meanwhile (${next.status})`);
+            answerRotate();
+            const rot = await rotating;
+            assert(rot.status === 409 && pa()?.name === 'owner-next' && pa()?.tunnelToken === 'eyJ.token-owner-next',
+                `the rotate's late answer is not stored over it (${rot.status} ${pa()?.name} ${pa()?.tunnelToken})`);
+            assert(tunnelConnectorForTests().runningToken === 'eyJ.token-owner-next', 'the tunnel runs the newer claim\'s token');
+            reg.rotate = (b) => [200, { ...live(b.name, `T-rotate-${b.name}`), rotated: true }];
             // Take offline names the name it releases.
             const offs = reg.calls.filter((c) => c.path === '/api/registrar/offline').length;
             const off = await post('/api/local/admin/public-address/offline');
             const sent = reg.calls.filter((c) => c.path === '/api/registrar/offline')[offs];
-            assert(off.status === 200 && sent?.body?.name === 'owner-pick', `Take offline releases the owner's name by name (${JSON.stringify(sent?.body)})`);
+            assert(off.status === 200 && sent?.body?.name === 'owner-next', `Take offline releases the stored name by name (${JSON.stringify(sent?.body)})`);
             reg.status = () => ({ status: 'none' });
             reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
         });

@@ -268,8 +268,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const name = String(b.name || '').toLowerCase().trim();
         const mode: 'tunnel' | 'direct' = b.mode === 'direct' ? 'direct' : 'tunnel';
         if (!name) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
-        if (releasesInFlight.has(name)) { ctx.status = 409; ctx.body = { error: `${name}.${REGISTRAR_ZONE} is being released right now; try again in a moment.` }; return; }
-        claimsInFlight.add(name);
+        // Keyed as release-name keys them (case, trailing dot), so "name." waits for a release of "name" (#1583 review r4176138168).
+        const inFlight = foldName(name);
+        if (releasesInFlight.has(inFlight)) { ctx.status = 409; ctx.body = { error: `${inFlight}.${REGISTRAR_ZONE} is being released right now; try again in a moment.` }; return; }
+        claimsInFlight.add(inFlight);
         clearHolderCache();
         try {
             probeLogs.length = 0;
@@ -307,7 +309,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             ctx.status = 400;
             ctx.body = { error: e.message };
         } finally {
-            claimsInFlight.delete(name);
+            claimsInFlight.delete(inFlight);
         }
     });
 

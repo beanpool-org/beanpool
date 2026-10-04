@@ -1039,6 +1039,36 @@ async function main(): Promise<void> {
             reg.holder = (b) => ({ name: b?.name, held: 'free' });
             await post('/api/local/admin/public-address/offline');
         });
+
+        await section('23. a claim and a release of the same name never run together, whatever its case or trailing dot', async () => {
+            const post = settingsPost!;
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline');
+            const holds = new Set(['cf-dot', 'cf-dov']);
+            reg.holder = (b) => holds.has(b?.name) ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' };
+            // r4176138168: a claim of "CF-Dot." while a release of cf-dot is in flight waits.
+            reg.offline = (b) => new Promise((r) => setTimeout(() => r({ status: 'released', ...(b?.name ? { name: b.name } : {}) }), 1_500));
+            const c0 = claims().length;
+            const releasing = post('/api/local/admin/public-address/release-name', { name: 'cf-dot' });
+            await sleep(400);
+            const claim = await post('/api/local/admin/public-address/claim', { name: 'CF-Dot.', mode: 'tunnel' });
+            const rel = await releasing;
+            assert(claim.status === 409 && claims().length === c0 && rel.status === 200 && !pa()?.name,
+                `the claim waits for the release, nothing claimed or stored (claim ${claim.status} ${JSON.stringify(claim.body)} release ${rel.status} claims sent ${claims().length - c0} stored ${pa()?.name})`);
+            reg.offline = (b) => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) });
+            // And a release of cf-dov while a claim of "cf-dov." is in flight is refused, nothing sent.
+            const claimNow = reg.claim;
+            reg.claim = (b) => new Promise((r) => setTimeout(() => r(claimNow(b)), 1_500));
+            const o0 = offlines().length;
+            const claiming = post('/api/local/admin/public-address/claim', { name: 'cf-dov.', mode: 'tunnel' });
+            await sleep(400);
+            const rel2 = await post('/api/local/admin/public-address/release-name', { name: 'cf-dov' });
+            const claim2 = await claiming;
+            assert(rel2.status === 409 && offlines().length === o0 && claim2.status === 200,
+                `the release is refused while the claim runs, nothing sent (release ${rel2.status} ${JSON.stringify(rel2.body)} sent ${JSON.stringify(offlines().slice(o0).map((c) => c.body))} claim ${claim2.status})`);
+            reg.claim = claimNow;
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            await post('/api/local/admin/public-address/offline');
+        });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);
     } finally {

@@ -245,9 +245,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         try {
             const stored = (getNodeConfig() as any).publicAddress;
             const result = await addressStatus(stored?.name);
-            // An answer about another name this key holds (an older registrar answers about its first one) is never
-            // stored: Settings shows the stored address.
-            if (answersAboutAnotherName(result, stored)) {
+            // A live answer about another name this key holds (an older registrar answers about its first one) is never
+            // stored: Settings shows the stored address. Any other answer is only written on the name it concerns, below.
+            if (result.status === 'live' && answersAboutAnotherName(result, stored)) {
                 ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, stored), ...serverSide() };
                 return;
             }

@@ -18,8 +18,9 @@
  *     are accepted, other.test → 421.
  *  2. The registrar answers `none`, and the admin opens Settings: bname is still accepted (main: 421), the tunnel token
  *     file is intact (main: deleted), and Settings says the address service has no record of the name.
- *  3. The registrar answers live `newname` (renamed): bname and newname are both accepted (main: bname 421), only
- *     newname is published. An answer the node doesn't store adds no name (`paused` for `stranger`), and one for a
+ *  3. The registrar answers live `newname`, another name this key holds: not stored, the node stays on bname (the
+ *     registrar renames nothing; a second name is an install's late claim). The owner claims newname in Settings: bname
+ *     and newname are both accepted (main: bname 421), only newname is published. An answer the node doesn't store adds no name (`paused` for `stranger`), and one for a
  *     recorded name is written on it (newname paused, still accepted).
  *  4. Take offline: newname is still accepted during the hold (main: 421), held until the registrar's held_until; the
  *     token is removed. A release answer without held_until holds 30 days. Claiming a released name again takes it back.
@@ -317,9 +318,15 @@ async function main(): Promise<void> {
         });
 
         // ── 3 ──
-        console.log('\n— 3. the registrar answers live newname (renamed) —');
+        console.log('\n— 3. the registrar answers live newname; the owner moves to it in Settings —');
         await section('3', async () => {
             reg.status = live('newname');
+            const asked = await statusOpen();
+            const s0 = await N.send('inspect');
+            assert(asked.status === 200 && asked.body?.hostname === 'bname.beanpool.org' && s0.publicAddress?.name === 'bname' && s0.tunnel === 'T-bname',
+                `an answer about another name this key holds is not stored: still bname (${show(asked)})`);
+            const moved = await call(nBase, 'POST', '/api/local/admin/public-address/claim', admin, { name: 'newname', mode: 'tunnel' });
+            assert(moved.status === 200, `the owner claims newname in Settings (${show(moved)})`);
             const opened = await statusOpen();
             assert(opened.status === 200 && opened.body?.hostname === 'newname.beanpool.org', `Settings shows newname live (${show(opened)})`);
             const r = await bound(N, ['bname.beanpool.org', 'newname.beanpool.org', 'other.test']);

@@ -14,6 +14,8 @@
  *   7. a keeper backs an enterprise from their known grant only by a recorded pledge (at most half the grant, off their
  *      own line 1:1): 6 enterprises in turn back 500 in all, not 1,224; a keeper can't step down from, or be unbound
  *      off, the debt their known pledge backs; a lowered floor, a revoked confirmation or the dial off spend-freezes
+ *   7b. a freeze never moves a keeper's tier: either freeze, or both, keeps the tier their own known line (the grant less
+ *      their counted known pledges) gives them, on their own answer and on their cards
  *   8. one member's exception needs an owner's or admin's own key session: no automation token, no node password
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-known-floor-http.ts
@@ -27,7 +29,8 @@ process.env.ADMIN_PASSWORD = 'KnownFloor123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, getBalance, getEnterpriseUnderlyingFloor, getAvailableBacking, pledgeEnterpriseBacking, stepDownAsKeeper, adminRevokeTreasuryOperator } from './state-engine.js';
+import { tierForCredit } from '@beanpool/core';
+import { initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, getBalance, getEnterpriseUnderlyingFloor, getAvailableBacking, pledgeEnterpriseBacking, stepDownAsKeeper, adminRevokeTreasuryOperator, getPosts } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders, ownerTokenHeaders, turnOn2faForTests } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
@@ -359,6 +362,37 @@ async function main(): Promise<void> {
     frozenAt('dial off', 0, 0);
     const dialOn = await settings(owner, { confirmation: true });
     assert(dialOn.status === 200 && getEnterpriseUnderlyingFloor(kaiCos[0]).floor === -500, 'the dial on again: the pledge, never released, counts again');
+
+    // ── 7b. a freeze never moves a keeper's tier (r4178376530) ──────────────────────────────────
+    // Unfrozen, a keeper's tier follows their own known line: the grant less their counted known pledges. Either freeze, or
+    // both, keeps exactly that tier, on their own answer and on their cards: never higher (the full grant) and never lower.
+    console.log('── 7b. a frozen keeper\'s tier ──');
+    for (const [grant, pledged, tierName] of [[300, 150, 'Newcomer'], [1000, 500, 'Resident']] as const) {
+        const set = await settings(owner, { knownFloor: grant });
+        assert(set.status === 200, `the owner sets the known floor to ${grant} (${show(set)})`);
+        const keeper = makeMember(`Keeper ${grant}`);
+        confirm(keeper, ada);
+        const card = createPost('offer', 'produce', `Keeper ${grant} mends shoes`, 'Shoes', 10, 'fixed', keeper.pk)!;
+        pledgeEnterpriseBacking(makeEnterprise(`Keeper Co ${grant}`, [keeper]), keeper.pk, pledged);
+        const tiers = async (label: string, frozen: { known: boolean; whole: boolean }) => {
+            const own = await balanceOf(keeper);
+            const cardTier = tierForCredit(getPosts({ id: card.id })[0]?.authorEnergyCycled ?? NaN).name;
+            const line = frozen.known || frozen.whole ? 0 : -(grant - pledged);
+            assert(own.status === 200 && own.body?.floor === line && own.body?.knownFrozen === frozen.known && own.body?.creditFrozen === frozen.whole
+                && own.body?.tier?.name === tierName && cardTier === tierName,
+                `known floor ${grant}, ${pledged} pledged, ${label}: floor ${line}, tier ${tierName} on their answer and their card (${own.body?.floor}, ${own.body?.tier?.name}, card ${cardTier})`);
+        };
+        await tiers('unfrozen', { known: false, whole: false });
+        await exception(adaAdmin, { memberPubkey: keeper.pk, frozen: true });
+        await tiers('known floor frozen', { known: true, whole: false });
+        await call('POST', null, `/api/local/admin/users/${keeper.pk}/freeze`, { freeze: true }, owner);
+        await tiers('both frozen', { known: true, whole: true });
+        await exception(owner, { memberPubkey: keeper.pk, clear: true });
+        await tiers('whole line frozen', { known: false, whole: true });
+        await call('POST', null, `/api/local/admin/users/${keeper.pk}/freeze`, { freeze: false }, owner);
+        await tiers('unfrozen again', { known: false, whole: false });
+    }
+    await settings(owner, { knownFloor: 1000 });
 
     // ── 8. one member's exception needs an owner's or admin's own key session ────────────────────
     console.log('── 8. who sets an exception ──');

@@ -4,7 +4,6 @@
 
 import type Database from 'better-sqlite3';
 import {
-    PROTOCOL_CONSTANTS,
     parseReachPeers,
     type PostReach,
     type AudienceScope
@@ -79,9 +78,9 @@ export interface MarketplacePost {
     /** Peer ids named when `reach === 'peers'`. Empty for every other reach. */
     reachPeers?: string[];
     /**
-     * The credit backing the author's floor (vouch + earned + granted = CREDIT_BASE_FLOOR − floor) — the
-     * quantity tierForCredit takes, so a card's badge matches the author's real tier. The name is historical:
-     * it is not beans sent.
+     * The credit backing the author's floor (vouch + earned + granted = CREDIT_BASE_FLOOR − floor; a frozen
+     * author's line as it stands unfrozen: the profile's tierCredit) — the quantity tierForCredit takes, so a
+     * card's badge matches the author's real tier. The name is historical: it is not beans sent.
      */
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean;
@@ -428,11 +427,12 @@ export function generateSearchKeywords(title: string, description: string, categ
 export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, forGuest = false): MarketplacePost {
     const postPhotos = photosByPost.get(row.id) || [];
     // The author's tier credit, from the same profile their own tier comes from. The earned lane alone
-    // left out grants and vouches, so an admin-badged Elder showed as a Newcomer on their cards.
+    // left out grants and vouches, so an admin-badged Elder showed as a Newcomer on their cards; the floor
+    // dropped a frozen member to Newcomer on their cards alone, which gave the freeze away (r4178376532).
     let trustPoints = 0;
     if (!forGuest) {
         try {
-            trustPoints = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - getMemberTrustProfile(db, row.author_pubkey).floor;
+            trustPoints = getMemberTrustProfile(db, row.author_pubkey).tierCredit;
         } catch (e) {
             trustPoints = 0;
         }

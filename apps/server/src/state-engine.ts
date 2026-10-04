@@ -1860,6 +1860,7 @@ export function getMemberTrustProfile(publicKey: string): {
     activated: boolean;
     knownFrozen: boolean;
     creditFrozen: boolean;
+    tierCredit: number;
 } {
     return engine.getMemberTrustProfile(db, publicKey);
 }

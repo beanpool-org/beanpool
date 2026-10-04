@@ -456,6 +456,11 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     knownFrozen: boolean;
     /** An admin froze this member's whole credit line (members.credit_frozen, the manager's "Freeze"): no line while it lasts. */
     creditFrozen: boolean;
+    /**
+     * The credit `tier` is read from (tierForCredit(tierCredit) is `tier`): CREDIT_BASE_FLOOR − floor, except that a freeze
+     * keeps the line the member holds unfrozen. A post card's badge takes it, so every surface shows the same tier.
+     */
+    tierCredit: number;
     qualifiedValue: number;
     avgRating: number;
     reviewCount: number;
@@ -487,6 +492,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
             activated: ef.activated,
             knownFrozen: false,
             creditFrozen: false,
+            tierCredit: PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - floor,
         };
     }
 
@@ -543,11 +549,12 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
 
     // An admin's freeze takes the line away, not the tier: tiers are merit badges, and a frozen member keeps the one their
     // line would give them (rehearsal 5 Oct, b: a frozen Resident showed "Newcomer"). That is either freeze: the whole line
-    // (members.credit_frozen) or the known floor's (an exception, which counts as the community's known floor here). A
-    // lowered or raised exception is the member's line itself, so its tier follows it as before.
+    // (members.credit_frozen) or the known floor's (an exception, which counts as the community's known floor here, less
+    // their counted known pledges exactly as unfrozen, so a freeze never raises a keeper's tier: r4178376530). A lowered or
+    // raised exception is the member's line itself, so its tier follows it as before.
     const knownFrozen = confirmationDialOn(db) && knownFloorException(db, publicKey)?.frozen === true && isConfirmed(db, publicKey);
     const tierKnownGrant = knownFrozen
-        ? knownGrantFor({ dialOn: true, confirmed: true, knownFloor: knownFloor(db), cap, exception: null })
+        ? memberUsableKnownGrant(db, publicKey, knownGrantFor({ dialOn: true, confirmed: true, knownFloor: knownFloor(db), cap, exception: null }))
         : knownGrant;
     const tierAllowance = (activated || tierKnownGrant > 0) ? Math.min(cap, tierKnownGrant + otherAllowance) : 0;
     const tier = getTier(c.CREDIT_BASE_FLOOR - tierAllowance);
@@ -555,6 +562,6 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     // qualifiedValue: raw diversity-capped trade value (drives the native "value traded"
     // achievement + value-to-next-tier estimate). avgRating/reviewCount: the reputation
     // multiplier inputs, surfaced so the client can show them honestly.
-    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated, knownFrozen, creditFrozen: isCreditFrozen };
+    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated, knownFrozen, creditFrozen: isCreditFrozen, tierCredit: tierAllowance };
 }
 

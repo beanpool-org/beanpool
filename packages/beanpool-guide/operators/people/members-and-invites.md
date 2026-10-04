@@ -132,7 +132,7 @@ Opening Re-Key changes nothing. It shows the checklist, or the code that is alre
 
 If they already moved to a new key, the window opens on **Already moved to** that key and the date. A new code would stop the phone they use now, so you type NEW CODE first. Do that only if the new phone is lost too.
 
-**Cancel this code** undoes a code nobody has used: their key works again and they can sign in again, and they are back to what they were before the code (active, or still suspended if they were suspended already). Whoever may make the code may cancel it; for an owner or an admin, that is an owner. A code that was used or has run out can't be cancelled. A code made before this server kept the earlier status puts them back to active, and the window says so.
+**Cancel this code** undoes a code nobody has used: their key works again and they can sign in again, and they are back to what they were before the code (active, or still suspended if they were suspended already). If a report suspended them, before or while the code waited, they stay suspended and the window says why. Whoever may make the code may cancel it; for an owner or an admin, that is an owner. A code that was used or has run out can't be cancelled. A code made before this server kept the earlier status puts them back to active, unless a report on them was ever actioned, and the window says so.
 
 ## Things to know
 

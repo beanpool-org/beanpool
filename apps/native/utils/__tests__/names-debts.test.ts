@@ -356,9 +356,9 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(REPAYMENT_COPY.banner({ amount: 200, repaid: 0, left: 200, debtId: DEBT.id })).toContain('pay some or all of it yourself under Pay the Commons, where your pay-back code is filled in: it comes off at once.');
         expect(REPAYMENT_COPY.payIntro).toContain('enter the pay-back code an admin gave you (working one off, yours is filled in)');
         expect(REPAYMENT_COPY.payConfirm(200, false, null, true)).toBe('Pay 200 Beans to the Commons? This won’t come off your debt: it has no pay-back code. To pay your debt, pay with '
-            + 'your code (Pay the Commons fills it in), or ask an admin to count this payment toward it afterwards. This can’t be undone.');
+            + 'your code (Pay the Commons fills it in), or ask an admin to count this payment toward it afterwards. Until an admin counts it, your debt is still being worked off: the next time you receive Beans, what is left on it is taken from what you hold above 0. This can’t be undone.');
         expect(REPAYMENT_COPY.paid(200, 'tx-9', false, { transactionId: 'tx-9', amount: 200 }, true)).toBe('Paid 200 Beans to the Commons. This did not come off your debt: it was paid '
-            + 'without your pay-back code. To have it count, ask an admin to count it toward your debt with this reference: tx-9');
+            + 'without your pay-back code. To have it count, ask an admin to count it toward your debt with this reference: tx-9. Until an admin counts it, your debt is still being worked off: the next time you receive Beans, what is left on it is taken from what you hold above 0.');
         // With the code, or owing nothing, no such words.
         expect(REPAYMENT_COPY.payConfirm(200, true, null, false)).not.toContain('won’t come off');
         expect(REPAYMENT_COPY.paid(200, 'tx-9', false)).toBe('Paid 200 Beans to the Commons.');

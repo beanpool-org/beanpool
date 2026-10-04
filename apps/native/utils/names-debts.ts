@@ -242,11 +242,11 @@ export function oneAtATime(setBusy: (busy: boolean) => void) {
 
 /** A payment without the pay-back code while the member works a debt off: before it is confirmed. */
 const NOT_OFF_DEBT_BEFORE = 'This won’t come off your debt: it has no pay-back code. To pay your debt, pay with your code (Pay the Commons '
-    + 'fills it in), or ask an admin to count this payment toward it afterwards. ';
+    + 'fills it in), or ask an admin to count this payment toward it afterwards. Until an admin counts it, your debt is still being worked off: the next time you receive Beans, what is left on it is taken from what you hold above 0. ';
 
 /** The same, once paid: it did not come off the debt, and the reference an admin counts it with. */
 const notOffDebtAfter = (ref: string) => ` This did not come off your debt: it was paid without your pay-back code. To have it count, ask an `
-    + `admin to count it toward your debt with this reference: ${ref}`;
+    + `admin to count it toward your debt with this reference: ${ref}.`+ ' Until an admin counts it, your debt is still being worked off: the next time you receive Beans, what is left on it is taken from what you hold above 0.';
 
 export const REPAYMENT_COPY = {
     banner: (r: Repayment) => `You’re working off a debt to the Commons: ${beans(r.left)} left of ${beans(r.amount)}. Every Bean you receive `

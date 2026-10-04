@@ -198,7 +198,7 @@ describe('RepaymentCard', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
         expect(confirmSpy).toHaveBeenCalledWith(REPAYMENT_WORDS.payConfirm(50, false, null, true));
         expect(confirmSpy.mock.calls[0][0]).toContain('This won’t come off your debt: it has no pay-back code.');
-        expect(await screen.findByText(/This did not come off your debt: it was paid without your pay-back code\. .*reference: tx-9$/)).toBeInTheDocument();
+        expect(await screen.findByText(/This did not come off your debt: it was paid without your pay-back code\. .*reference: tx-9\. Until an admin counts it, your debt is still being worked off: .*what you hold above 0\.$/)).toBeInTheDocument();
         expect(sentBody()).toEqual({ amount: 50, requestId: expect.any(String) });
     });
 });

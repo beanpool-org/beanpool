@@ -3,7 +3,7 @@
  *
  * Proves that the two places the server hands a tier (or a tier input) to someone else agree with the
  * member's own tier from getMemberTrustProfile:
- *   1. A post's authorEnergyCycled is the author's tier credit (CREDIT_BASE_FLOOR − floor), so
+ *   1. A post's authorEnergyCycled is the least credit of the author's tier (never the line itself), so
  *      tierForCredit(authorEnergyCycled) is the author's real tier. Before: it was the earned lane alone,
  *      so a granted Elder's cards said Newcomer.
  *   2. The admin member list (/api/local/admin/data) reports the same tier. Before: it read the granted
@@ -74,7 +74,8 @@ async function main() {
         const line = own.creditFrozen ? 0 : -own.floor;
         assert(own.tierCredit === (own.creditFrozen ? granted : line) && (own.creditFrozen ? own.floor === 0 : true),
             `${pk}: the tier credit is ${own.creditFrozen ? 'the line they hold unfrozen' : 'their floor'}, ${own.tierCredit} (floor ${own.floor})`);
-        assert(post?.authorEnergyCycled === own.tierCredit, `${pk}: post carries the author's tier credit ${own.tierCredit} (got ${post?.authorEnergyCycled})`);
+        // Every member reads the card: it carries the tier's least credit, never the line itself (r4178445225).
+        assert(post?.authorEnergyCycled === tierForCredit(own.tierCredit).minCredit, `${pk}: post carries the least credit of the author's tier, ${tierForCredit(own.tierCredit).minCredit}, not their line ${own.tierCredit} (got ${post?.authorEnergyCycled})`);
         assert(tierForCredit(post?.authorEnergyCycled ?? NaN).name === own.tier.name,
             `${pk} (credit ${granted}): card tier ${tierForCredit(post?.authorEnergyCycled ?? NaN).name} = own tier ${own.tier.name}`);
     }

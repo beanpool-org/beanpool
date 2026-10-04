@@ -11,7 +11,7 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { avatarUrlOf } from '@beanpool/core';
+import { avatarUrlOf, tierForCredit } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
@@ -78,9 +78,9 @@ export interface MarketplacePost {
     /** Peer ids named when `reach === 'peers'`. Empty for every other reach. */
     reachPeers?: string[];
     /**
-     * The credit backing the author's floor (vouch + earned + granted = CREDIT_BASE_FLOOR − floor; a frozen
-     * author's line as it stands unfrozen: the profile's tierCredit) — the quantity tierForCredit takes, so a
-     * card's badge matches the author's real tier. The name is historical: it is not beans sent.
+     * The least credit of the author's tier (TIER_LEVELS minCredit: 0, 200, 600 or 1,400), from the line that gives
+     * their tier (the profile's tierCredit, a frozen line as it stands unfrozen): tierForCredit of it is their badge,
+     * and every member reads it, so it is never the line itself. The name is historical: it is not beans sent.
      */
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean;
@@ -429,10 +429,13 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
     // The author's tier credit, from the same profile their own tier comes from. The earned lane alone
     // left out grants and vouches, so an admin-badged Elder showed as a Newcomer on their cards; the floor
     // dropped a frozen member to Newcomer on their cards alone, which gave the freeze away (r4178376532).
+    // Every member reads the card, so it carries the tier's threshold, never the figure itself: the figure is the known
+    // floor plus grants, and a lowered or raised line is an admin's decision about one member (r4178445225). The apps
+    // only ever turn it into the badge (tierForCredit), which the threshold gives exactly.
     let trustPoints = 0;
     if (!forGuest) {
         try {
-            trustPoints = getMemberTrustProfile(db, row.author_pubkey).tierCredit;
+            trustPoints = tierForCredit(getMemberTrustProfile(db, row.author_pubkey).tierCredit).minCredit;
         } catch (e) {
             trustPoints = 0;
         }

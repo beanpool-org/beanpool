@@ -18,7 +18,8 @@
  *      their counted known pledges) gives them, on their own answer and on their cards
  *   7c. a freeze keeps the amount it froze: a lowered (50), raised (1,500) or default line, with or without known
  *      pledges, keeps its tier frozen, and unfreezing goes back to that amount; money is the frozen line's; restoring the
- *      default clears both; the log reads 50 → frozen → 50
+ *      default clears both; the log reads 50 → frozen → 50. Another member reading the board gets the badge (the tier's
+ *      least credit) and the trust profile their Trust Points, never the line itself (50, 1,500, 1,000 less pledges)
  *   8. one member's exception needs an owner's or admin's own key session: no automation token, no node password
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-known-floor-http.ts
@@ -32,7 +33,7 @@ process.env.ADMIN_PASSWORD = 'KnownFloor123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { tierForCredit } from '@beanpool/core';
+import { tierForCredit, TIER_LEVELS } from '@beanpool/core';
 import { initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, getBalance, getEnterpriseUnderlyingFloor, getAvailableBacking, pledgeEnterpriseBacking, stepDownAsKeeper, adminRevokeTreasuryOperator, getPosts } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders, ownerTokenHeaders, turnOn2faForTests } from './admin-auth-test-harness.js';
@@ -413,6 +414,14 @@ async function main(): Promise<void> {
         const look = async () => {
             const own = await balanceOf(who);
             const theirs = await call('POST', kim, '/api/trust/profile', { targetPubkey: who.pk });
+            const board = await call('GET', kim, '/api/marketplace/posts');
+            const boardCard = (Array.isArray(board.body) ? board.body : board.body?.posts ?? []).find((p: any) => p.id === card.id);
+            const shown = boardCard?.authorEnergyCycled;
+            assert(board.status === 200 && TIER_LEVELS.some(t => t.minCredit === shown) && tierForCredit(shown).name === own.body?.tier?.name
+                && typeof theirs.body?.earnedCredit === 'number'
+                // No number on the card is their line, unless the line happens to be a tier's least credit (600 = Steward's).
+                && !Object.entries(boardCard ?? {}).some(([k, v]) => v === grant - pledged && !(k === 'authorEnergyCycled' && v === shown && TIER_LEVELS.some(t => t.minCredit === v))),
+                `another member's board shows ${label}'s badge only: ${shown}, the least of ${own.body?.tier?.name}, never ${grant - pledged}; their profile, Trust Points ${theirs.body?.earnedCredit}`);
             return { floor: own.body?.floor, usable: own.body?.usableFloor, tier: own.body?.tier?.name, profileTier: theirs.body?.tier?.name,
                 cardTier: tierForCredit(getPosts({ id: card.id })[0]?.authorEnergyCycled ?? NaN).name,
                 row: db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(who.pk) as { amount: number | null; frozen: number } | undefined };

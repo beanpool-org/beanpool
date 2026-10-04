@@ -248,9 +248,12 @@ describe('words and checks', () => {
     it('an entry’s history: open with what is repaid and who works it off; settled; forgiven', () => {
         expect(debtLine({ ...DEBT, repaying_pubkey: 'p' }, () => '@bea')).toMatch(/^Removed on 1 Oct 2026 owing the Commons 300 Beans\. Open: 120\.50 Beans repaid, 179\.50 Beans left\. @bea is working it off\.$/);
         expect(debtLine({ ...DEBT, repaid: 0, reason: 'account_deleted' }, () => '')).toMatch(/^Deleted their account on .* Open\.$/);
-        expect(debtLine({ ...DEBT, status: 'settled', settled_how: 'pay_back', settled_by: 'a', settled_at: '2026-10-03T00:00:00Z' }, () => '@ada')).toMatch(/Settled on 3 Oct 2026: paid back, checked by @ada\.$/);
+        expect(debtLine({ ...DEBT, status: 'settled', settled_how: 'pay_back', settled_by: 'a', settled_at: '2026-10-03T00:00:00Z' }, () => '@ada')).toMatch(/Settled on 3 Oct 2026: paid back, with a payment counted by @ada\.$/);
+        expect(debtLine({ ...DEBT, status: 'settled', settled_how: 'pay_back', settled_by: 'node', settled_at: '2026-10-03T00:00:00Z' }, () => '@node')).toMatch(/Settled on 3 Oct 2026: paid back\.$/);
         expect(debtLine({ ...DEBT, status: 'settled', settled_how: 'work_off', settled_at: '2026-10-03T00:00:00Z' }, () => '@ada')).toMatch(/Settled on 3 Oct 2026: worked off\.$/);
-        expect(debtLine({ ...DEBT, status: 'forgiven', settled_how: 'forgiven', settled_at: '2026-10-04T00:00:00Z', note: 'hardship' }, () => '')).toMatch(/Forgiven by the community on 4 Oct 2026\. Note: hardship$/);
+        expect(debtLine({ ...DEBT, repaid: 0, status: 'forgiven', settled_how: 'forgiven', settled_at: '2026-10-04T00:00:00Z', note: 'hardship' }, () => '')).toMatch(/Forgiven by the community on 4 Oct 2026\. Note: hardship$/);
+        expect(debtLine({ ...DEBT, status: 'forgiven', settled_how: 'forgiven', settled_at: '2026-10-04T00:00:00Z' }, () => ''))
+            .toMatch(/Forgiven by the community on 4 Oct 2026: 120\.50 Beans had been repaid, and the 179\.50 Beans left was forgiven\.$/);
         const other = { ...DEBT, id: 'o', entry_id: 'e2' };
         const settled = { ...DEBT, id: 's', status: 'settled' as const };
         expect(debtsOfEntry([DEBT, other, settled], 'e1').map((d) => d.id)).toEqual([DEBT.id, 's']);
@@ -341,41 +344,32 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(pay).toContain('const shared = debt && debt.toLowerCase() === linkCode ? linkLeft : null;');
         expect(pay).toContain('REPAYMENT_COPY.payConfirm(beans, !!debt, shared)');
         expect(pay).toContain('{REPAYMENT_COPY.linkLeft(linkLeft)}');
-        expect(pay).toContain('REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, forDebt, r.value.left ?? null)');
+        expect(pay).toContain('REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, forDebt, r.value)');
         expect(REPAYMENT_COPY.linkLeft(300)).toBe('What was left when the admin shared this: 300 Beans.');
     });
     it('the shared pay-back code opens Pay the Commons with it filled in', () => {
         expect(DEBT_COPY.shareCode(DEBT)).toContain(`beanpool://pay-commons?code=${DEBT.id}&amount=179.5 `);
-        expect(DEBT_COPY.shareCode(DEBT)).toContain('pay all 179.50 Beans in one payment: a smaller payment doesn’t count toward it.');
-        expect(REPAYMENT_COPY.paid(80, 'tx-7', true, 80)).toBe('Paid 80 Beans to the Commons. Give this reference to an admin, who settles your debt with it: tx-7');
+        expect(DEBT_COPY.shareCode(DEBT)).toContain('(179.50 Beans), pay it with this code: each payment comes off the debt as you pay it, and when nothing is left it is settled.');
         expect(REPAYMENT_COPY.paid(80, 'tx-7', false)).toBe('Paid 80 Beans to the Commons.');
     });
-    it('the node settles only with ONE payment of at least what is left: a settle is promised only then (150 of 300 is not)', () => {
+    it('a payment for a debt comes off it at once: the words say what is left, or that it is settled, as the node answers', () => {
         expect(coversLeft(300, 300)).toBe(true);
-        expect(coversLeft(300.01, 300)).toBe(true);
         expect(coversLeft(150, 300)).toBe(false);
-        expect(coversLeft(179.49, 179.5)).toBe(false);
         expect(coversLeft(500, null)).toBe(false);
-        for (const words of [REPAYMENT_COPY.paid(150, 'tx-1', true, 300), REPAYMENT_COPY.payConfirm(150, true, 300)]) {
-            expect(words).toContain('won’t settle your debt');
-            expect(words).toContain('one payment of at least what is left');
-            expect(words).not.toContain('who settles your debt with it');
-            expect(words).not.toContain('can settle your debt with it.');
-        }
-        expect(REPAYMENT_COPY.paid(150, 'tx-1', true, 300)).toBe('Paid 150 Beans to the Commons. That is less than the 300 Beans left, so it won’t settle your debt: '
-            + 'an admin can settle a debt only with one payment of at least what is left. Tell an admin, and give them this reference: tx-1');
-        // The link's amount is never "what is left": a work-off may have lowered it, and the node refuses above what is left.
+        expect(REPAYMENT_COPY.paid(150, 'tx-1', true, { left: 300, leftAfter: 150, settled: false })).toBe('Paid 150 Beans to the Commons. That came off your debt: 150 Beans left.');
+        expect(REPAYMENT_COPY.paid(150, 'tx-1', true, { left: 150, leftAfter: 0, settled: true })).toBe('Paid 150 Beans to the Commons. Your debt is paid off and settled.');
+        // A node that doesn't say: nothing promised, the reference given.
+        expect(REPAYMENT_COPY.paid(150, 'tx-1', true)).toBe('Paid 150 Beans to the Commons. Reference: tx-1');
         expect(REPAYMENT_COPY.payConfirm(300, true, 300)).toBe('Pay 300 Beans to the Commons for your debt? 300 Beans was what was left when the admin shared this. '
-            + 'An admin can settle your debt only with one payment of at least what is left now: a smaller payment doesn’t count toward it. If some was worked off '
-            + 'since, your server refuses a payment above what is left and says how much, and nothing is paid. This can’t be undone.');
-        for (const amount of [300, 150]) expect(REPAYMENT_COPY.payConfirm(amount, true, 300)).not.toMatch(/covers|who settles|can settle your debt with it/);
-        // Not knowing what is left (a code typed by hand), nothing is promised, and the rule is said.
-        for (const words of [REPAYMENT_COPY.paid(150, 'tx-1', true), REPAYMENT_COPY.payConfirm(150, true)]) {
-            expect(words).toContain('only if this one payment is at least what');
-            expect(words).not.toContain('who settles your debt with it');
-        }
+            + 'It comes off your debt at once. If less is left now, your server refuses it and says how much, and nothing is paid. This can’t be undone.');
+        expect(REPAYMENT_COPY.payConfirm(150, true)).toBe('Pay 150 Beans to the Commons for your debt? It comes off your debt at once. If less is left now, '
+            + 'your server refuses it and says how much, and nothing is paid. This can’t be undone.');
         expect(REPAYMENT_COPY.payConfirm(5, false)).toBe('Pay 5 Beans to the Commons? This can’t be undone.');
-        expect(REPAYMENT_COPY.payIntro).toContain('An admin can settle a debt only with one payment of at least what is left: a smaller payment doesn’t count toward it.');
+        for (const words of [REPAYMENT_COPY.payIntro, REPAYMENT_COPY.payConfirm(150, true, 300), REPAYMENT_COPY.paid(150, 'tx-1', true, { leftAfter: 150 }), DEBT_COPY.shareCode(DEBT)]) {
+            expect(words).not.toMatch(/to an admin|one payment|doesn’t count/);
+        }
+        expect(REPAYMENT_COPY.payIntro).toContain('what you pay comes off the debt at once, and when nothing is left it is settled.');
+        expect(DEBT_COPY.settle(DEBT)).toContain('Only for a payment to the Commons the member made without the pay-back code.');
     });
     it('oneAtATime sets busy before anything is awaited, and a second tap while one is on its way sends nothing', async () => {
         const busy: boolean[] = [];

@@ -411,7 +411,7 @@ export default function NamesListScreen() {
         }, false);
     };
 
-    /** Settle with the member's payment: asked first; the node checks the payment was made for this debt, by them, in full. */
+    /** Count a payment the member made without the code: asked first; the node counts it once, up to what is left. */
     const settleWith = (entry: OpenedEntry, debt: NamesDebt) => {
         if (!payRef.trim()) { setError('Paste the payment’s reference the member gave you.'); return; }
         ask(DEBT_COPY.settleTitle, DEBT_COPY.settle(debt), DEBT_COPY.settleButton, async () => {
@@ -889,7 +889,7 @@ export default function NamesListScreen() {
                                 {!e.confirmation && e.text && !open ? btn('Confirm a member', () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
                                 {!e.confirmation && e.text && open && !open.repaying_pubkey
                                     ? btn('Work it off', () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e, workOff: open }); }, 'small') : null}
-                                {e.text && open ? btn('Settle with their payment', () => { setPayRef(''); setSettleNote(''); setMode({ kind: 'settle', entry: e, debt: open }); }, 'small') : null}
+                                {e.text && open ? btn('Count a payment made without the code', () => { setPayRef(''); setSettleNote(''); setMode({ kind: 'settle', entry: e, debt: open }); }, 'small') : null}
                                 {e.text && open ? btn('Share the pay-back code', () => sharePayBackCode(open), 'small') : null}
                                 {open ? btn('Ask to forgive it', () => askToForgive(open), 'small') : null}
                                 {acts?.second ? btn('Confirm as second admin', () => second(e), 'small') : null}

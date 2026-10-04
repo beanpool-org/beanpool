@@ -2,9 +2,8 @@
  * Pay the Commons (#1597 item 4): a member pays Beans they hold to the Commons (POST /api/commons/pay), never more than
  * they hold (the node refuses that). Paying back a debt, they enter the pay-back code an admin shared (the debt record's
  * id; also opened as beanpool://pay-commons?code=…&amount=…, prefilled with what was left when the admin shared it): the
- * node links the payment to that debt (refusing one above what is left now, in its words), and this screen shows the
- * payment's reference to give the admin. The node settles a debt only with one payment of at least what is left, so the
- * screen promises a settle only when the node's answer says the payment covers it. Asked first; the node's refusals in its
+ * node takes the payment off that debt at once (refusing one above what is left now, in its words), and this screen says
+ * what is left, or that the debt is settled, as the node's answer says. Asked first; the node's refusals in its
  * own words. Each confirmed payment has one id (utils/payment-request.ts): a lost answer keeps that payment here for Try
  * again with the same id, so it is never paid twice. One payment at a time (busy before anything is awaited).
  * Styles: the names list's (utils/names-list-style.ts), held to 48dp targets and wrapping at 320dp and 1.3× text.
@@ -53,7 +52,7 @@ export default function PayCommonsScreen() {
         if (!r.ok) { setError(r.message); return; }
         DeviceEventEmitter.emit('transaction_completed');
         const forDebt = !!payment.body.debtId;
-        setPaid({ words: REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, forDebt, r.value.left ?? null), ref: forDebt ? r.value.transactionId : null });
+        setPaid({ words: REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, forDebt, r.value), ref: forDebt ? null : r.value.transactionId });
     });
 
     const pay = () => {
@@ -85,7 +84,7 @@ export default function PayCommonsScreen() {
                         <View style={styles.notice} accessibilityLiveRegion="polite"><Text style={styles.noticeText} selectable>{paid.words}</Text></View>
                         <View style={styles.buttonRow}>
                             {paid.ref ? (
-                                <Pressable style={styles.primaryBtn} onPress={() => { void Share.share({ message: `My payment to the Commons for my debt: ${paid.ref}` }).catch(() => {}); }} accessibilityRole="button">
+                                <Pressable style={styles.primaryBtn} onPress={() => { void Share.share({ message: `My payment to the Commons: ${paid.ref}` }).catch(() => {}); }} accessibilityRole="button">
                                     <Text style={styles.primaryBtnText}>Share the reference</Text>
                                 </Pressable>
                             ) : null}

@@ -277,7 +277,7 @@ async function main(): Promise<void> {
     // what that text said, not today's, so he is in no exception until he agrees to today's wording.
     const leaRow = db.prepare('SELECT version FROM known_consents WHERE member_pubkey = ?').get(lea.pk) as { version: string };
     const [wordingNow, ...leaLines] = leaRow.version.split(':');
-    assert(wordingNow === '5', `he agreed to wording 5, so the one before is wording 4, the text that said "those looks are not logged" (${leaRow.version})`);
+    assert(wordingNow === '6', `he agreed to wording 6, so the one before is wording 5, the text that said "Every look at your balance is logged" (${leaRow.version})`);
     db.prepare('UPDATE known_consents SET version = ? WHERE member_pubkey = ?').run([Number(wordingNow) - 1, ...leaLines].join(':'), lea.pk);
     const ex5 = await exceptions(ada);
     const leaMine = await call('GET', lea, '/api/names/consent');
@@ -500,11 +500,25 @@ async function main(): Promise<void> {
         && /an alert that names you if no Beans have moved in or out of your account for a set number of days\. Every look at one of those trades is logged, with who looked, when, and at which trades; a look at the alerts that name you is logged the first time each admin opens them, and again at that admin's first look after 24 hours, and the looks in between add no line\. The owner and the admins can see that log\. The member stats the admins see show how many posts you have up and messages you have sent, and of trades only the whole community's totals, not yours\. Every member, admins included, sees your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points\. That isn't logged, because every member can see it\. Nothing else of your trades\. Whoever runs/.test(consentText)
         && !/not logged/.test(consentText)
         && /Nothing else of your trades\. Whoever runs this community's server holds its whole database, your balance and trades included, and its backups, snapshots and standby copies\.$/.test(consentText)
-        && /Every look at your balance is logged/.test(consentText),
-        `the wording a member agrees to says what any admin sees of trades, that every look is logged and the owner sees the log, that member stats carry only the community's totals, that a look at a balance is logged, and that whoever runs the server holds it all (${show(terms9)})`);
+        && /Every time an admin opens the list of members past those lines, and every time an admin looks at your balance while removing you, it is logged\. In a vote on removing you, everyone who can vote in it sees your balance and any debt, in that vote only, and those looks aren't logged\. You can take this back at any time in Settings\./.test(consentText),
+        `the wording a member agrees to says what any admin sees of trades, that every look is logged and the owner sees the log, that member stats carry only the community's totals, which looks at a balance are logged and that the looks in a vote on removing them are not, and that whoever runs the server holds it all (${show(terms9)})`);
+    // #1610's deciding review, Question 2: wording 5 said "Every look at your balance is logged", and the looks in a vote on
+    // removing a member (section 8b) write no line. Every text now names the voters, says no other admin or owner sees it
+    // there, and says those looks aren't logged.
+    assert(![policy, guide, operatorPage, privacyPage, consentText].some((t) => /every look at your balance is logged/i.test(t)),
+        'no text says every look at a balance is logged: a look in a vote on removing a member is not');
+    const notThere = "An admin or an owner who can't vote in it doesn't see them there. Those looks aren't logged.";
+    assert(policy.includes(`<li><strong>When the community votes on removing you:</strong> everyone who can vote in it sees your balance and any debt, in that vote only. ${notThere}</li>`)
+        && policy.includes('A look at your balance in a vote on removing you isn\'t recorded.'),
+        'the policy says only the voters see a balance in a vote on removing you, no other admin or owner, and that it is not recorded');
+    assert(guide.includes(`- **When your community votes on removing you.** Everyone who can vote in it sees your balance and any debt, in that vote only. ${notThere}`)
+        && privacyPage.includes(`- If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only. ${notThere}`)
+        && operatorPage.includes("In a vote on removing a member, everyone who can vote in it sees that member's balance and any debt, in that vote only. An owner or an admin who can't vote in it doesn't see them there. Those looks aren't logged.")
+        && operatorPage.includes("Every time an admin sees a member's balance while removing them, it writes who, whose and when."),
+        'both guide pages and the operator page say the same, and the operator page says a look while removing a member is logged');
     const quoted = consentText.replace(/past \d+% of/, 'past 50% of').replace(/debit for \d+ days/, 'debit for 60 days');
     assert(guide.includes(`"${quoted}"`), 'the guide quotes the wording a member agrees to, word for word (at 50% and 60 days)');
-    assert(String(terms9.body?.version ?? '').startsWith('5:'), `the wording is version 5, so a member who agreed to wording 4 ("those looks are not logged", "how many trades you have finished") is asked again (${show(terms9)})`);
+    assert(String(terms9.body?.version ?? '').startsWith('6:'), `the wording is version 6, so a member who agreed to wording 5 ("Every look at your balance is logged") is asked again (${show(terms9)})`);
     // Queue item 29 (Marty, 4 Oct: "Keep disputes, log every look, totals only in member stats").
     const lastLines = (n: number) => db.prepare('SELECT actor_pubkey, action, subject_pubkey, detail FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(n) as any[];
     const before9 = logRows();

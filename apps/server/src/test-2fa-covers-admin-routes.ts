@@ -186,6 +186,7 @@ async function main() {
         const ROUTES: Route[] = [
             { method: 'POST', path: '/api/local/update-identity', body: { callsign: 'TwoFaTest' }, ok: 200, owner: false },
             { method: 'POST', path: '/api/local/change-password', body: { currentPassword: PW, newPassword: PW }, ok: 200, owner: true },
+            { method: 'GET', path: '/api/local/connectors', ok: 200, owner: false },
             { method: 'POST', path: '/api/local/connectors', body: {}, ok: 400, owner: false },
             { method: 'POST', path: '/api/local/connectors/connect', body: {}, ok: 400, owner: false },
             { method: 'POST', path: '/api/local/connectors/credit-cap', body: {}, ok: 400, owner: false },

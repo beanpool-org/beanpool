@@ -208,6 +208,10 @@ printf '{\n  "isLocked": true,\n  "adminHash": "h"\n}\n' > "$DATA/local-config.j
 assert "a locked server says nothing" "$(first_password_notice "$DATA" x)" ""
 printf '{\n  "isLocked": false,\n  "adminHash": "h",\n  "salt": "s"\n}\n' > "$DATA/local-config.json"
 assert "a hash a take-over or a sealed restore wrote without isLocked: says nothing" "$(first_password_notice "$DATA" x)" ""
+printf '{\n  "isLocked": true,\n  "adminHash": null,\n  "salt": null,\n  "joinedAt": 1700000000000\n}\n' > "$DATA/local-config.json"
+out=$(first_password_notice "$DATA" x)
+assert "locked with no hash (an older standby took over from a community with none): says it has no admin password" "$(echo "$out" | grep -c 'has no admin password')" "1"
+assert "and is not told to claim it, nor sent to a password file" "$(echo "$out" | grep -cE 'beanpool claim|first-admin-password')" "0"
 printf '{\n  "isLocked": false,\n  "adminHash": null,\n  "joinedAt": 1700000000000\n}\n' > "$DATA/local-config.json"
 assert "a password being rotated (joinedAt, no hash yet): not a new install, says nothing" "$(first_password_notice "$DATA" x)" ""
 printf '{\n  "isLocked": false,\n  "adminHash": null,\n  "joinedAt": null\n}\n' > "$DATA/local-config.json"

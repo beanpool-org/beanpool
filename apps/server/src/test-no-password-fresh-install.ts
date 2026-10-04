@@ -28,6 +28,11 @@
  *      r4176337957). Booted with ADMIN_PASSWORD: the community password signs in, the .env one does not, /api/local/status
  *      says isLocked (legacy Settings shows the password box), no "ignored" line, /api/local/claim says password: true, and
  *      the boot locks the config with the hash kept.
+ *   I. The mirror image (confirmation r4176483949): an older standby, locked with its own password, takes over from a
+ *      primary installed on this version (no password). The take-over's real bundledLocalConfigUpdates drops the hash and
+ *      keeps the lock (isLocked is per-server). Booted with its old ADMIN_PASSWORD: no password signs in (fails safe), and
+ *      nothing reports one: /api/local/status says isLocked false, /api/local/claim says password: false, and the boot never
+ *      says "admin password already configured" but that it holds none.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-no-password-fresh-install.ts
  */
@@ -43,6 +48,7 @@ import { claimKeyFromCode, claimProof, claimText, signedRequestBytes } from '@be
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--child';
+const TAKEOVER_FLAG = '--takeover';
 const HOST = 'no-password-test.example';
 const ENV_PW = 'Fresh-Install-Env-61!';
 const OLD_PW = 'Older-Node-Password-61!';
@@ -68,6 +74,20 @@ async function runChild(): Promise<void> {
     process.stdout.write('@@ ' + JSON.stringify({ ready: true, port }) + '\n');
     process.stdin.on('data', () => { /* the parent only closes it */ });
     process.stdin.on('end', () => process.exit(0));
+}
+
+/**
+ * A take-over's admin-settings step (services/takeover.ts) on this data dir. The primary's local-config.json is on stdin,
+ * and the bundle carries its BUNDLED_LOCAL_CONFIG_FIELDS, as the envelope does. A child of its own: the take-over's
+ * modules open the data dir's database when imported.
+ */
+async function runTakeover(): Promise<void> {
+    const { getLocalConfig, updateLocalConfig } = await import('./config/local-config.js');
+    const { BUNDLED_LOCAL_CONFIG_FIELDS, bundledLocalConfigUpdates } = await import('./services/takeover-envelope.js');
+    const primary = JSON.parse(fs.readFileSync(0, 'utf8'));
+    const bundled = Object.fromEntries(BUNDLED_LOCAL_CONFIG_FIELDS.map((k) => [k, primary[k] ?? null]));
+    updateLocalConfig(bundledLocalConfigUpdates(bundled, getLocalConfig() as any) as any);
+    process.exit(0);
 }
 
 let run = 0, passed = 0;
@@ -323,12 +343,40 @@ async function main(): Promise<void> {
     assert(cfg.isLocked === true && cfg.adminHash === hashH && cfg.salt === saltH, 'H6. the boot locks the config and keeps the hash');
     await h.stop();
 
+    console.log('\nI. An older locked standby takes over from a primary with no password');
+    const dirP = path.join(root, 'i-primary');
+    const p0 = await boot(dirP);
+    await p0.stop();
+    const dirI = path.join(root, 'i-standby');
+    existingConfig(dirI, OLD_PW);
+    const i0 = await boot(dirI, { ADMIN_PASSWORD: OLD_PW });
+    assert(await signsIn(i0, OLD_PW), 'I0. before: the standby\'s own password signs in');
+    await i0.stop();
+    const took = spawnSync(process.execPath, [...process.execArgv, SCRIPT, TAKEOVER_FLAG], {
+        input: JSON.stringify(configOf(dirP)), encoding: 'utf8', env: { ...process.env, BEANPOOL_DATA_DIR: dirI },
+    });
+    cfg = configOf(dirI);
+    assert(took.status === 0 && cfg.isLocked === true && !cfg.adminHash, `I1. the take-over drops the hash and keeps the lock (${took.status} ${cfg.isLocked} ${!!cfg.adminHash}) ${took.stderr}`);
+    const i = await boot(dirI, { ADMIN_PASSWORD: OLD_PW });
+    assert(!(await signsIn(i, OLD_PW)), 'I2. no password signs in: the community has none (fails safe)');
+    const statusI = (await request(i, 'GET', '/api/local/status')).json;
+    assert(statusI?.isLocked === false, `I3. /api/local/status says it has no password (legacy Settings shows no password box) (${statusI?.isLocked})`);
+    const claimI = (await request(i, 'GET', '/api/local/claim', undefined, { Host: HOST })).json;
+    assert(claimI?.password === false, `I4. /api/local/claim says password: false (${JSON.stringify(claimI)})`);
+    assert(!/admin password already configured/.test(i.output()), 'I5. the boot never says an admin password is configured');
+    assert(/holds no admin password/.test(i.output()), 'I6. it says it holds none');
+    cfg = configOf(dirI);
+    assert(cfg.isLocked === true && !cfg.adminHash, 'I7. and changes nothing: still locked, still no hash');
+    await i.stop();
+
     fs.rmSync(root, { recursive: true, force: true });
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);
 }
 
-if (process.argv.includes(CHILD_FLAG)) {
+if (process.argv.includes(TAKEOVER_FLAG)) {
+    runTakeover().catch((e) => { console.error(e); process.exit(1); });
+} else if (process.argv.includes(CHILD_FLAG)) {
     runChild().catch((e) => { console.error(e); process.exit(1); });
 } else {
     main().catch((e) => { console.error(e); process.exit(1); });

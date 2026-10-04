@@ -440,7 +440,9 @@ export function hasAdminPassword(config: LocalConfig): boolean {
  * - passwordRetired (an owner retired it, routes/admin.ts retire-password) → none, for good, before every rule below:
  *   ADMIN_PASSWORD in .env is ignored, any hash left is cleared, the first-password file deleted
  * - Config locked, or a hash in it (hasAdminPassword) → an existing node: its password stays exactly as it is, and the
- *   first-password file is looked at. A hash a take-over or sealed restore wrote without isLocked is locked here
+ *   first-password file is looked at. A hash a take-over or sealed restore wrote without isLocked is locked here. A lock
+ *   with no hash (an older locked server that took over a community with no password) stays, and no password is made:
+ *   only the hash ever counts as having one (hasAdminPassword)
  * - Not locked, but joinedAt set (when this server's password was set; only a boot that sets one writes it, and Wipe &
  *   Reset clears it) → an existing node whose password is being rotated: scripts/rotate-node-env.sh unlocks the config
  *   and drops the hash, then restarts it with the new ADMIN_PASSWORD, which is taken as before. Never read as a new
@@ -470,7 +472,13 @@ export function initAdminPassword(): void {
             updateLocalConfig({ isLocked: true });
             console.log('🔒 This server holds an admin password a take-over or a restore brought, so it is locked now.');
         }
-        console.log('🔒 Node is locked — admin password already configured.');
+        if (hasAdminPassword(config)) {
+            console.log('🔒 Node is locked — admin password already configured.');
+        } else {
+            // Locked with no hash behind it: an older server, locked with its own password, that took over a community with
+            // none (isLocked is per-server; the take-over brings the community's hash, here none). No password signs in.
+            console.log('🔒 This server is locked but holds no admin password: its community has none, so no password signs in, ADMIN_PASSWORD from .env included. Owners sign in with the BeanPool app.');
+        }
         checkFirstPasswordFile(config);
         return;
     }

@@ -122,8 +122,9 @@ router.get('/api/local/status', async (ctx) => {
     ctx.set('Access-Control-Allow-Origin', '*');
     
     ctx.body = {
-        // Has an admin password: the hash counts too (hasAdminPassword), as a take-over or a restore writes it unlocked.
-        isLocked: config.isLocked || hasAdminPassword(config),
+        // Has an admin password: the hash (hasAdminPassword), never the lock alone. A take-over or a restore writes a hash
+        // unlocked, and one from a community with no password leaves an older server's lock with no hash behind it.
+        isLocked: hasAdminPassword(config),
         callsign: config.callsign || null,
         location: config.location || null,
         // Design step 10: an owner retired the admin password, so sign-in screens show no password field and the fleet

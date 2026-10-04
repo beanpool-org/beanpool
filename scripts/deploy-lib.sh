@@ -109,11 +109,14 @@ remove_fleet_tunnel_token() {
 # Run just before the container starts. A server with no locked admin password (no local-config.json yet, or one that is not
 # locked) is a new install: it makes no admin password and ignores ADMIN_PASSWORD (initAdminPassword in
 # apps/server/src/config/local-config.ts). Its first owner claims it with a one-time claim code, which `beanpool claim` shows
-# (address first, then the code and a QR code). This says how, never the code. A server that has or had a password says
-# nothing, as initAdminPassword decides it: locked, or a hash (a take-over or a sealed restore writes one without isLocked),
-# or joinedAt (when its password was set: rotate-node-env.sh drops the hash and keeps it; Wipe & Reset clears it).
+# (address first, then the code and a QR code). This says how, never the code. A server that has a password, or is having
+# one rotated, says nothing, as initAdminPassword decides it: a hash (locked, or as a take-over or a sealed restore writes
+# one, without isLocked), or joinedAt (when its password was set: rotate-node-env.sh drops the hash and keeps it; Wipe &
+# Reset clears it).
 # A server whose admin password an owner retired (passwordRetired) makes none, locked or not (after Wipe & Reset it is not):
-# it says so instead, before either of the others, as initAdminPassword checks it first.
+# it says so instead, before either of the others, as initAdminPassword checks it first. A server locked with no hash behind
+# the lock (an older one, locked with its own password, that took over a community with none: isLocked is per-server) has
+# no password either and makes none: it says so, never "nothing", as only the hash counts as having one.
 first_password_notice() {
   local data_dir=$1 target=$2
   if sudo test -f "$data_dir/local-config.json" \
@@ -122,7 +125,16 @@ first_password_notice() {
     return 0
   fi
   if sudo test -f "$data_dir/local-config.json" \
-    && sudo grep -qE '"isLocked"[[:space:]]*:[[:space:]]*true|"adminHash"[[:space:]]*:[[:space:]]*"[^"]|"joinedAt"[[:space:]]*:[[:space:]]*[0-9]' "$data_dir/local-config.json"; then
+    && sudo grep -qE '"adminHash"[[:space:]]*:[[:space:]]*"[^"]' "$data_dir/local-config.json"; then
+    return 0
+  fi
+  if sudo test -f "$data_dir/local-config.json" \
+    && sudo grep -qE '"isLocked"[[:space:]]*:[[:space:]]*true' "$data_dir/local-config.json"; then
+    echo "🔒 This server has no admin password: its community has none, and ADMIN_PASSWORD is ignored. Owners sign in with their phone."
+    return 0
+  fi
+  if sudo test -f "$data_dir/local-config.json" \
+    && sudo grep -qE '"joinedAt"[[:space:]]*:[[:space:]]*[0-9]' "$data_dir/local-config.json"; then
     return 0
   fi
   echo "🔑 This is a new install: it has no admin password, and ignores ADMIN_PASSWORD. Its first owner claims it with a one-time claim code."

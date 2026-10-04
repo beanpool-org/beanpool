@@ -102,12 +102,14 @@ export async function reconcile(): Promise<void> {
     // Take offline, a take-over): a late answer never moves the community off a name set after this tick began.
     const since = publicAddressGeneration();
     let st: any;
-    try { st = await addressStatus(); } catch (e: any) { console.warn('[PublicAddr] status check failed:', e.message); return; }
+    try { st = await addressStatus((getNodeConfig() as any).publicAddress?.name); } catch (e: any) { console.warn('[PublicAddr] status check failed:', e.message); return; }
 
     if (st.status === 'live' || st.status === 'pending') {
         if (st.status === 'pending') console.log(`[PublicAddr] ⏳ "${st.name || desiredName()}" awaiting approval`);
+        // Not stored: another write came meanwhile (it stands; the next tick asks again), or the answer names another
+        // name than the one stored (an older registrar answers about the key's first name): never moved onto it.
         const stored = persistAddressIfUnchanged(st, 'stored', since);
-        if (!stored) return;    // the newer write stands; the next tick asks again
+        if (!stored) return;
         await stored;
         if (st.name) requestDone(st.name);
         return;

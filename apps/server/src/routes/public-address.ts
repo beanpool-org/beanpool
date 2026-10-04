@@ -10,7 +10,7 @@
 import Router from '@koa/router';
 import http from 'node:http';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex } from '../services/registrar-client.js';
-import { syncTunnel, restartTunnel, persistAddress, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
+import { syncTunnel, restartTunnel, persistAddress, answersAboutAnotherName, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { dropAddressRequest } from '../services/public-address-agent.js';
@@ -242,7 +242,14 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         // agent) is shown, never stored over the newer write.
         const since = publicAddressGeneration();
         try {
-            const result = await addressStatus();
+            const stored = (getNodeConfig() as any).publicAddress;
+            const result = await addressStatus(stored?.name);
+            // An answer about another name this key holds (an older registrar answers about its first one) is never
+            // stored: Settings shows the stored address.
+            if (answersAboutAnotherName(result, stored)) {
+                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, stored), ...serverSide() };
+                return;
+            }
             if (result.status === 'live' && publicAddressGeneration() !== since) {
                 ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, result), ...serverSide() };
                 return;
@@ -362,7 +369,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             addProbeLog('1/4', `⏳ Releasing domain & deleting tunnel on Cloudflare registrar...`, 'info');
             const prevConfig = (getNodeConfig() as any).publicAddress;
             const hostname = prevConfig?.hostname;
-            const result = await releaseAddress();
+            // Named: with no name the registrar releases this key's first name, which can be another one it holds. Unnamed
+            // only when nothing is stored here.
+            const result = await releaseAddress(prevConfig?.name);
             addProbeLog('1/4', `✅ Domain released on registrar`, 'success');
             // The name stays accepted here (decision D-B, pending Marty). The record keeps the registrar's hold as its
             // answer gives it (held_until), and none when it gives none: then the registrar freed the name at once.

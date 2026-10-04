@@ -109,10 +109,11 @@ function refuseEdge(): void {
 
 // ── The mock registrar ───────────────────────────────────────────────────────────────────────
 
-interface Call { method: string; path: string; body: any }
+interface Call { method: string; path: string; body: any; name?: string | null }
 const reg = {
     calls: [] as Call[],
-    status: (): any => ({ status: 'none' }),
+    /** `name`: the name the node asked about (/status?name=); an older registrar never reads it. */
+    status: (_name?: string | null): any => ({ status: 'none' }),
     claim: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-claim-${b.name}` }),
     offline: (): any => ({ status: 'released' }),
     heal: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', changed: [] }),
@@ -131,9 +132,10 @@ async function startRegistrar(): Promise<http.Server> {
         req.on('end', () => {
             const send = (code: number, body: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
             if (!req.headers['x-bp-pubkey'] || !req.headers['x-bp-signature']) return send(401, { error: 'unsigned' });
-            const p = new URL(req.url || '/', 'http://registrar').pathname;
+            const u = new URL(req.url || '/', 'http://registrar');
+            const p = u.pathname;
             const body = text ? JSON.parse(text) : null;
-            reg.calls.push({ method: req.method || '', path: p, body });
+            reg.calls.push({ method: req.method || '', path: p, body, name: u.searchParams.get('name') });
             // An answer, [HTTP status, body] for one that refuses, { html: [status, page] } for a page from something in front
             // of the registrar, or a promise of one (an answer held back).
             const answer = (out: any): void => void Promise.resolve(out).then((o) => {
@@ -141,7 +143,7 @@ async function startRegistrar(): Promise<http.Server> {
                 if (Array.isArray(o)) send(o[0], o[1]);
                 else send(200, o);
             });
-            if (p === '/api/registrar/status') return answer(reg.status());
+            if (p === '/api/registrar/status') return answer(reg.status(u.searchParams.get('name')));
             if (p === '/api/registrar/claim') return answer(reg.claim(body));
             if (p === '/api/registrar/offline') return send(200, reg.offline());
             if (p === '/api/registrar/heal') return send(200, reg.heal(body));
@@ -182,6 +184,7 @@ async function main(): Promise<void> {
     const T1 = 'eyJhIjoiYWxwaGEtMSJ9.token-one-4f1c9a2e';
     const servers: { app: http.Server | null } = { app: null };
     let settingsPost: ((p: string, body?: unknown) => Promise<{ status: number; body: any }>) | null = null;
+    let settingsGet: ((p: string) => Promise<{ status: number; body: any }>) | null = null;
 
     try {
         await section('1, 8. at boot: no address, no child; a leftover token file is deleted and never run', async () => {
@@ -499,6 +502,10 @@ async function main(): Promise<void> {
                 return { status: res.status, body: await res.json().catch(() => null) as any };
             };
             settingsPost = post;
+            settingsGet = async (p: string) => {
+                const res = await fetch(base + p);
+                return { status: res.status, body: await res.json().catch(() => null) as any };
+            };
 
             reg.claim = (b) => live(b.name, 'eyJ.token-beta');
             const claimed = await post('/api/local/admin/public-address/claim', { name: 'beta', mode: 'tunnel' });
@@ -698,6 +705,39 @@ async function main(): Promise<void> {
             await checkAddressRequest(t3 + 1_000_000);
             assert(/name reserved/.test(refused() || ''), `the registrar's own JSON 403 is its word: refused (${refused()})`);
             updateLocalConfig({ addressRequest: null });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
+
+        await section('17. the key holds a second name (the install\'s, claimed late): no answer moves the community onto it', async () => {
+            const post = settingsPost!;
+            // The owner's pick waits for approval; the install's late claim is live for the same key. An older registrar
+            // answers /status about the key's first name (live outranks pending) whatever was asked.
+            reg.claim = (b) => b.name === 'owner-pick' ? { status: 'pending', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel' } : live(b.name, `eyJ.token-${b.name}`);
+            const set = await post('/api/local/admin/public-address/claim', { name: 'owner-pick', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'owner-pick' && pa()?.status === 'pending', `the owner's pick is stored, pending (${set.status} ${pa()?.status})`);
+            reg.status = () => live('install-race', 'eyJ.token-install-race');
+            const n = statuses().length;
+            await reconcile();
+            assert(statuses().length === n + 1 && statuses()[n].name === 'owner-pick', `the tick asks about the stored name (${statuses()[n]?.name})`);
+            assert(pa()?.name === 'owner-pick' && pa()?.status === 'pending', `an answer about the other name is not stored by the tick (${pa()?.name})`);
+            assert(tunnelConnectorForTests().runningToken !== 'eyJ.token-install-race', 'the tunnel never runs the other name\'s token');
+            const shown = await settingsGet!('/api/local/admin/public-address/status');
+            assert(shown.status === 200 && pa()?.name === 'owner-pick', `nor by Settings' status read (${pa()?.name})`);
+            assert(tunnelLogs().filter((l) => /answered about "install-race" when asked about "owner-pick"/.test(l.message)).length === 1, 'said once');
+            // The owner's pick is approved: a registrar that reads the name answers about it, and that is stored.
+            reg.status = (name) => name === 'owner-pick' ? live('owner-pick', 'eyJ.token-owner-pick') : live('install-race', 'eyJ.token-install-race');
+            await reconcile();
+            assert(pa()?.name === 'owner-pick' && pa()?.status === 'live' && pa()?.tunnelToken === 'eyJ.token-owner-pick', `the same name's state is stored (${pa()?.status})`);
+            // Paused by the sweep: the older registrar names the live install name, never the owner's paused one.
+            reg.status = () => live('install-race', 'eyJ.token-install-race');
+            await reconcile();
+            assert(pa()?.name === 'owner-pick' && pa()?.tunnelToken === 'eyJ.token-owner-pick', `still the owner's name (${pa()?.name})`);
+            // Take offline names the name it releases.
+            const offs = reg.calls.filter((c) => c.path === '/api/registrar/offline').length;
+            const off = await post('/api/local/admin/public-address/offline');
+            const sent = reg.calls.filter((c) => c.path === '/api/registrar/offline')[offs];
+            assert(off.status === 200 && sent?.body?.name === 'owner-pick', `Take offline releases the owner's name by name (${JSON.stringify(sent?.body)})`);
+            reg.status = () => ({ status: 'none' });
             reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
         });
     } catch (e: any) {

@@ -441,7 +441,26 @@ export function persistAddress(pa: any, use: 'stored' | 'claim' = 'stored'): Pro
  */
 export function persistAddressIfUnchanged(pa: any, use: 'stored' | 'claim', since: number): Promise<TunnelStatus> | null {
     if (publicAddressGeneration() !== since) return null;
+    if (use === 'stored' && answersAboutAnotherName(pa, (getNodeConfig() as any).publicAddress)) return null;
     return persistAddress(pa, use);
+}
+
+const otherNamesSaid = new Set<string>();
+/**
+ * Does the registrar's `answer` (a status or heal) name another name than the one `stored` here? Then it is never stored:
+ * a key can hold two names (an install's claim answered after the owner's pick), and a registrar older than the one that
+ * reads /status's `name` answers about the key's first name, whichever was asked. Storing it would move the community
+ * onto a name nobody chose. An answer that names no name is used only while nothing is stored. Said once per pair.
+ */
+export function answersAboutAnotherName(answer: any, stored: any): boolean {
+    if (!stored?.name || answer?.name === stored.name) return false;
+    const pair = `${stored.name}→${answer?.name ?? ''}`;
+    if (!otherNamesSaid.has(pair)) {
+        otherNamesSaid.add(pair);
+        say('warn', `the address service answered about ${answer?.name ? `"${answer.name}"` : 'no name'} when asked about "${stored.name}": `
+            + `not stored; this server stays on "${stored.name}"`);
+    }
+    return true;
 }
 
 /** A heal's answer that came after the address was written another way: the newer write stands, the next tick looks again. */
@@ -499,10 +518,11 @@ async function healDeadTunnel(): Promise<void> {
         const pa = savedTunnelAddress();
         const since = publicAddressGeneration();
         if (!pa?.name || getNodeRole() !== 'primary') return;
-        const st = await addressStatus();
+        const st = await addressStatus(pa.name);
+        if (answersAboutAnotherName(st, pa)) return;
         if (st?.status === 'live') {
             const token = typeof st.tunnelToken === 'string' ? st.tunnelToken.trim() : '';
-            if ((st.name && st.name !== pa.name) || (token && token !== running?.token)) {
+            if (token && token !== running?.token) {
                 const stored = persistAddressIfUnchanged(st, 'stored', since);
                 if (!stored) { addressChangedMeanwhile(pa); return; }
                 say('info', `Cloudflare refuses the tunnel; the address service has a new token for ${st.hostname || st.name}: running it`);
@@ -598,8 +618,8 @@ async function moveOriginToLoopback(): Promise<void> {
         const since = publicAddressGeneration();
         if (!pa?.name) return;
         // Only a name the registrar says is live and this key's: a claim of a released one would take it back.
-        const st = await addressStatus();
-        if (st?.status !== 'live' || (st.name && st.name !== pa.name)) {
+        const st = await addressStatus(pa.name);
+        if (st?.status !== 'live' || st.name !== pa.name) {
             say('info', `not moving ${pa.hostname || pa.name} to ${LOOPBACK_ORIGIN} yet: the address service answers "${st?.status ?? 'nothing'}"`);
             return;
         }

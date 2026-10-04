@@ -248,6 +248,9 @@ async function main(): Promise<void> {
         assert(again.status === 409 && again.body?.passwordRetired === true, `retiring twice answers 409 (${show(again)})`);
         const status = await call('GET', '/api/local/status');
         assert(status.status === 200 && status.body?.passwordRetired === true, `/api/local/status says passwordRetired (${show(status)})`);
+        const claimRead = await call('GET', '/api/local/claim');
+        assert(claimRead.status === 200 && claimRead.body?.unclaimed === false && claimRead.body?.password === false,
+            `the sign-in screen's claim check says there is no password (${show(claimRead)})`);
         const view2 = await call('GET', '/api/local/admin/auth/password-retirement', { headers: asCookie(o.sessionId) });
         assert(view2.body?.passwordRetired === true && view2.body?.retiredByCallsign === 'Olive' && typeof view2.body?.retiredAt === 'number', `the card reads who and when (${show(view2)})`);
 

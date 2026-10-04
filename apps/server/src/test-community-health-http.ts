@@ -269,6 +269,17 @@ async function main(): Promise<void> {
         `Leander agreed to 50%: his 100 of 1,000 is still no past-the-line exception at 5%, only quiet (${JSON.stringify(lea4)})`);
     const neo4 = (ex4.body?.exceptions ?? []).find((e: any) => e.memberPubkey === neo.pk);
     assert(!neo4, 'Neopolis, who agreed to 60 days, is not quiet after 7 days in debit');
+    // Two wordings: Leander's row says he agreed to another text (wording 0) with the same lines. What he agreed to is
+    // what that text said, not today's, so he is in no exception until he agrees to today's wording.
+    const leaRow = db.prepare('SELECT version FROM known_consents WHERE member_pubkey = ?').get(lea.pk) as { version: string };
+    const [wordingNow, ...leaLines] = leaRow.version.split(':');
+    db.prepare('UPDATE known_consents SET version = ? WHERE member_pubkey = ?').run([Number(wordingNow) - 1, ...leaLines].join(':'), lea.pk);
+    const ex5 = await exceptions(ada);
+    assert(ex5.status === 200 && !(ex5.body?.exceptions ?? []).some((e: any) => e.memberPubkey === lea.pk),
+        `Leander, who agreed to wording ${Number(wordingNow) - 1} and not today's ${wordingNow}, is not listed (${show(ex5)})`);
+    db.prepare('UPDATE known_consents SET version = ? WHERE member_pubkey = ?').run(leaRow.version, lea.pk);
+    const ex6 = await exceptions(ada);
+    assert((ex6.body?.exceptions ?? []).some((e: any) => e.memberPubkey === lea.pk), 'with his consent to today\'s wording, he is listed again');
 
     // ── 7. Settings (the manager) ────────────────────────────────────────────────────────────────
     console.log('── 7. Settings ──');
@@ -276,7 +287,7 @@ async function main(): Promise<void> {
     const s = consumeHandshakeToken(handshakeToken);
     const adaSession = { 'X-Admin-Session': s.sessionId! };
     const mgr = await call('GET', null, '/api/local/admin/community-health', undefined, adaSession);
-    assert(mgr.status === 200 && mgr.body?.totals?.membersInDebit >= 6 && mgr.body?.settings?.debtLinePct === 5 && mgr.body?.log?.length === 5
+    assert(mgr.status === 200 && mgr.body?.totals?.membersInDebit >= 6 && mgr.body?.settings?.debtLinePct === 5 && mgr.body?.log?.length === 7
         && mgr.body?.exceptions === undefined, `an admin's Settings reads the totals, the lines and the access log, and no exceptions (${show(mgr)})`);
     const mgrO = await call('GET', null, '/api/local/admin/community-health', undefined, owner);
     assert(mgrO.status === 200 && mgrO.body?.known === true, `and the owner's (${show(mgrO)})`);

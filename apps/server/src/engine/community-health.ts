@@ -159,7 +159,10 @@ export function openExceptions(actor: string, now = Date.now()) {
         const floor = Math.abs(b.floor);
         // A member is seen only within what they agreed to AND what the community says now: the less intrusive of the
         // two lines. An owner who tightens the lines reaches a member only once they consent to the new text.
-        const [, agreedPct, agreedDays] = r.version.split(':').map(Number);
+        const [agreedWording, agreedPct, agreedDays] = r.version.split(':').map(Number);
+        // A consent counts only for the wording it was given to: a member who agreed to another text (say, one that let
+        // the admins see less) is in no exception until they agree to today's.
+        if (agreedWording !== CONSENT_WORDING_VERSION) continue;
         const pct = Math.max(debtLinePct, Number.isInteger(agreedPct) ? agreedPct : 100);
         const days = Math.max(quietDays, Number.isInteger(agreedDays) ? agreedDays : 3650);
         const quietSince = new Date(now - days * 86_400_000).toISOString();

@@ -18,11 +18,13 @@
  * server-side later without another app-store release.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { REQUEST_SIGNING_VERSION, signedPathOf } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity } from './identity';
 import { plainOriginOf, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
 import { loadSavedRequestSigning } from './nodes';
 import { APP_VERSION_HEADER } from './force-update';
+import { fellBackToOldFormat, OLD_SERVER_SIGNATURE_REFUSAL, settledRequestSigning } from './request-signing-version';
 
 let installed = false;
 /** `X-BeanPool-App`'s value on this phone (utils/force-update.ts appVersionHeaderValue), or null: sent with nothing. */
@@ -40,6 +42,43 @@ export function isAnchorRequest(url: string, anchorUrl: string): boolean {
     if (!anchor) return false;
     const origin = plainOriginOf(url);
     return origin ? origin === anchor : url.startsWith(anchorUrl);
+}
+
+/** A header's value from a plain headers object, any case; undefined from anything else. */
+function plainHeader(headers: any, name: string): string | undefined {
+    if (!headers || typeof headers !== 'object' || typeof headers.get === 'function') return undefined;
+    const lower = name.toLowerCase();
+    const key = Object.keys(headers).find(k => k.toLowerCase() === lower);
+    return key === undefined ? undefined : String(headers[key]);
+}
+
+const SIGNING_HEADERS = new Set(['x-public-key', 'x-signature', 'x-timestamp', 'x-nonce', 'x-signed-for', 'content-type']);
+
+/**
+ * A request signed in format 2 (it names a host: X-Signed-For) that a node refused as an old server refuses a signature
+ * it can't read, before this phone had heard which format that node reads (its info couldn't be read): signed again,
+ * once, in the old format, which is then kept for that node until its info says otherwise (request-signing-version.ts
+ * `fellBackToOldFormat`). Never for a node that has said it reads 2. Only for a plain headers object, a string body
+ * (or none) and the phone's own key: anything else is returned as answered. Null: not signed again.
+ */
+async function signedAgainForOldNode(
+    url: string, method: string, init: any, res: Response, send: (init: any) => Promise<Response>,
+): Promise<Response | null> {
+    if (res.status !== 403 && res.status !== 401) return null;
+    const headers = init?.headers;
+    const signedFor = plainHeader(headers, 'X-Signed-For');
+    const pubkey = plainHeader(headers, 'X-Public-Key');
+    if (!signedFor || !pubkey) return null;
+    if (init?.body !== undefined && init?.body !== null && typeof init.body !== 'string') return null;
+    if (typeof (res as any).clone !== 'function') return null;
+    const refusal = await res.clone().json().catch(() => null);
+    if (refusal?.error !== OLD_SERVER_SIGNATURE_REFUSAL) return null;
+    const identity = await loadIdentity();
+    if (!identity?.privateKey || identity.publicKey !== pubkey) return null;
+    if (!(await fellBackToOldFormat(url))) return null;
+    const kept = Object.fromEntries(Object.entries(headers).filter(([k]) => !SIGNING_HEADERS.has(k.toLowerCase())));
+    const signed = await buildSignedHeaders(method, url, init?.body ?? '', identity.privateKey, identity.publicKey);
+    return send({ ...init, headers: { ...kept, ...signed } });
 }
 
 /** Read a header value from either a plain object or a Headers instance. */
@@ -100,8 +139,14 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
                 const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                 const toAnchor = !!anchorUrl && isAnchorRequest(url, anchorUrl);
                 if (toAnchor && appVersionHeader) init = withAppVersionHeader(input, init, appVersionHeader);
-                // Only sign requests to our own node, and never double-sign.
-                if (method === 'GET' && toAnchor && !hasHeader(init?.headers, 'X-Signature')) {
+                // Only sign requests to our own node, and never double-sign. Nor the read of a node's info while this
+                // phone doesn't know it reads format 2: that read is how it learns, an older node refuses a format-2
+                // signature even on its public info, a request signed meanwhile waits for this answer
+                // (request-signing-version.ts learnRequestSigning) so signing it would wait on itself, and a node
+                // updated since it was old must be able to say so even once it refuses the old format.
+                const learningRead = signedPathOf(url) === '/api/community/info'
+                    && ((await settledRequestSigning(url)) ?? 0) < REQUEST_SIGNING_VERSION;
+                if (method === 'GET' && toAnchor && !learningRead && !hasHeader(init?.headers, 'X-Signature')) {
                     const identity = await loadIdentity();
                     if (identity?.privateKey && identity?.publicKey) {
                         // Signed over the URL fetched: its host (request binding) and its path, which is the
@@ -119,6 +164,14 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
             if (e instanceof Error && e.message.includes('NAT-4')) throw e;
             if (e instanceof UnsafeNodeAddressError) throw e;
         }
-        return originalFetch(input, init);
+        const res = await originalFetch(input, init);
+        if (typeof input !== 'string' || !url) return res;
+        try {
+            const method = String(init?.method ?? 'GET').toUpperCase();
+            return (await signedAgainForOldNode(url, method, init, res, (again) => originalFetch(input, again))) ?? res;
+        } catch (e) {
+            if (e instanceof UnsafeNodeAddressError) throw e;
+            return res;
+        }
     };
 }

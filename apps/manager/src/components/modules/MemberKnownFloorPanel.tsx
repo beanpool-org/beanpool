@@ -9,13 +9,18 @@ import { buildAdminHeaders, passwordField, resolveNodeApiUrl } from '../../lib/n
  * node's POST /api/local/admin/known-floor/exception; a refusal shows in the node's words. The node takes it only from an
  * owner's or admin's own key session, and nobody sets their own.
  *
- * It reads GET /api/local/admin/known-floor/member/:pubkey: the member's credit line, never their balance. A node older
- * than this, a viewer who isn't an owner or admin, or a community with the dial off: nothing is shown.
+ * It reads GET /api/local/admin/known-floor/member/:pubkey: the member's credit line, never their balance, with their lines
+ * in the node's known-floor log (who changed it, from what to what, when), which every admin reads here. Where the node
+ * would refuse a change (`changeRefused`: a password or token sign-in, or the admin's own line), the controls are not
+ * shown and one line says why. A node older than this, a viewer who isn't an owner or admin, or a community with the dial
+ * off: nothing is shown.
  *
  * Operator manual text: packages/beanpool-guide/operators/people/running-a-known-community.md.
  */
 
 export type KnownFloorException = { amount: number | null; frozen: boolean };
+export type KnownFloorLogLine = { id: string; actor: string; actorCallsign: string | null; action: string; oldValue: string | null; newValue: string | null; at: string };
+export type ChangeRefused = 'key_session_only' | 'own_floor';
 export type MemberKnownFloor = {
     confirmation: boolean;
     knownFloor: number;
@@ -23,7 +28,19 @@ export type MemberKnownFloor = {
     confirmed: boolean;
     exception: KnownFloorException | null;
     knownGrant: number;
+    log: KnownFloorLogLine[];
+    changeRefused: ChangeRefused | null;
 };
+
+const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+
+function readLog(v: unknown): KnownFloorLogLine[] {
+    if (!Array.isArray(v)) return [];
+    return v.flatMap((l: Record<string, unknown> | null) => {
+        if (!l || typeof l !== 'object' || typeof l.id !== 'string' || typeof l.actor !== 'string' || typeof l.action !== 'string' || typeof l.at !== 'string') return [];
+        return [{ id: l.id, actor: l.actor, actorCallsign: str(l.actorCallsign), action: l.action, oldValue: str(l.oldValue), newValue: str(l.newValue), at: l.at }];
+    });
+}
 
 export function readMemberKnownFloor(v: unknown): MemberKnownFloor | null {
     const o = v as Partial<MemberKnownFloor> | null;
@@ -33,7 +50,40 @@ export function readMemberKnownFloor(v: unknown): MemberKnownFloor | null {
     const exception = e && typeof e === 'object'
         ? { amount: Number.isInteger(e.amount) ? e.amount! : null, frozen: e.frozen === true }
         : null;
-    return { confirmation: o.confirmation, knownFloor: o.knownFloor!, creditCap: o.creditCap!, confirmed: o.confirmed, exception, knownGrant: o.knownGrant! };
+    // A node from before the log and the refusal mark came with the line: no log, and the controls as before.
+    const changeRefused = o.changeRefused === 'key_session_only' || o.changeRefused === 'own_floor' ? o.changeRefused : null;
+    return { confirmation: o.confirmation, knownFloor: o.knownFloor!, creditCap: o.creditCap!, confirmed: o.confirmed, exception, knownGrant: o.knownGrant!,
+        log: readLog(o.log), changeRefused };
+}
+
+/** Why the controls aren't there, in one line: what the node would answer a change from this sign-in. */
+export const CHANGE_REFUSED_TEXT: Record<ChangeRefused, string> = {
+    key_session_only: "Sign in with your own key to change it: the node password and automation tokens can't.",
+    own_floor: 'Another admin or the owner sets your own known floor.',
+};
+
+/** "default (1,000 Beans)", "frozen", "300 Beans": one value in a log line. */
+function logValue(v: string | null, knownFloor: number): string {
+    if (v === null || v === 'default') return `the community default (${beans(knownFloor)})`;
+    if (v === 'frozen') return 'frozen';
+    return /^\d+$/.test(v) ? beans(Number(v)) : v;
+}
+
+const LOG_VERBS: Record<string, string> = {
+    exception_lowered: 'set it', exception_raised: 'raised it', exception_frozen: 'froze it', exception_unfrozen: 'unfroze it',
+    exception_cleared: 'restored the default',
+};
+
+/** One log line in plain words: "Ada raised it from the community default (1,000 Beans) to 2,000 Beans". */
+export function describeKnownFloorLogLine(l: KnownFloorLogLine, knownFloor: number): string {
+    const who = l.actorCallsign || (/^[0-9a-f]{64}$/.test(l.actor) ? `${l.actor.slice(0, 8)}…` : 'The node password');
+    const verb = LOG_VERBS[l.action] ?? l.action.replace(/_/g, ' ');
+    return `${who} ${verb}: from ${logValue(l.oldValue, knownFloor)} to ${logValue(l.newValue, knownFloor)}`;
+}
+
+function when(at: string): string {
+    const d = new Date(at);
+    return Number.isNaN(d.getTime()) ? at : d.toLocaleString('en', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 const beans = (n: number) => `${n.toLocaleString('en')} Beans`;
@@ -140,7 +190,7 @@ export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassw
 
     const question = !pending ? null
         : pending.kind === 'amount'
-            ? `Set ${name}'s known floor to ${beans(pending.amount)}?${pending.amount > line.knownFloor ? ` That is more than the community's ${beans(line.knownFloor)}: every admin sees the raise in the log.` : ''}`
+            ? `Set ${name}'s known floor to ${beans(pending.amount)}?${pending.amount > line.knownFloor ? ` That is more than the community's ${beans(line.knownFloor)}: every admin sees the raise in the changes below.` : ''}`
             : pending.kind === 'freeze'
                 ? `Freeze ${name}'s known floor? Their known floor counts as 0 until you restore it.`
                 : `Restore ${name} to the community default (${beans(line.knownFloor)})?`;
@@ -159,7 +209,11 @@ export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassw
                 </p>
             </div>
 
-            {pending ? (
+            {line.changeRefused ? (
+                <p data-testid="member-known-floor-refused" className="m-0 text-nature-300 leading-relaxed break-words">
+                    {CHANGE_REFUSED_TEXT[line.changeRefused]}
+                </p>
+            ) : pending ? (
                 <div className="space-y-2" data-testid="member-known-floor-confirm">
                     <p className="m-0 text-nature-200 leading-relaxed break-words">{question}</p>
                     <div className="flex flex-wrap gap-2">
@@ -211,6 +265,20 @@ export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassw
                 <p role={status.kind === 'error' ? 'alert' : 'status'} className={`m-0 break-words ${status.kind === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>
                     {status.text}
                 </p>
+            )}
+
+            {line.log.length > 0 && (
+                <div data-testid="member-known-floor-log" className="min-w-0 border-t border-nature-800 pt-2">
+                    <p className="m-0 font-bold text-nature-300">Changes to {name}&apos;s known floor</p>
+                    <ul className="m-0 mt-1 p-0 list-none space-y-1">
+                        {line.log.map((l) => (
+                            <li key={l.id} className="min-w-0 text-nature-200 leading-relaxed break-words">
+                                {describeKnownFloorLogLine(l, line.knownFloor)}
+                                <span className="block text-nature-500">{when(l.at)}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             )}
         </section>
     );

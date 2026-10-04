@@ -177,8 +177,11 @@ function existingConfig(dir: string, password: string, extra: Record<string, unk
 /**
  * scripts/rotate-node-env.sh's own updater (the python it sends to the node over SSH), run on <project>/ (the node's data
  * dir is <project>/data) with the given KEY=value lines. `docker` is a fake on PATH that only records it ran.
+ * The path is made absolute: the updater runs docker in the project dir, so a relative one (the runner's TMPDIR=.th)
+ * would point the fake's file at <project>/<project>/docker-ran and fail the compose step.
  */
-function rotate(project: string, pairs: string[]): { code: number | null; out: string } {
+function rotate(relProject: string, pairs: string[]): { code: number | null; out: string } {
+    const project = path.resolve(relProject);
     const updater = fs.readFileSync(ROTATE_SCRIPT, 'utf8').match(/UPDATE_SCRIPT=\$\(cat << 'REMOTE_PYTHON'\n([\s\S]*?)\nREMOTE_PYTHON\n/)?.[1];
     if (!updater) throw new Error('the updater was not found in scripts/rotate-node-env.sh');
     const bin = path.join(project, 'bin');

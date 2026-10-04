@@ -287,6 +287,26 @@ it('opening the wizard makes no code: it only reads the status (queue item 22)',
         await waitFor(() => expect(make.disabled).toBe(false));
     });
 
+    it('a failed status read keeps Make a re-key code off, and offers Try again (review 4176252099)', async () => {
+        const spy = vi.spyOn(nodeClient, 'fetchRekeyStatusApi')
+            .mockRejectedValueOnce(new Error('Network down'))
+            .mockResolvedValueOnce({ isInvalidated: false, invalidatedInfo: null, pendingRequest: null, history: [] });
+        const issueSpy = vi.spyOn(nodeClient, 'issueRekeyCodeApi');
+        render(<RekeyMemberWizard member={mockMember} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+
+        await waitFor(() => expect(screen.getByText(/Couldn’t read this member’s re-key status/)).toBeDefined());
+        screen.getAllByRole('checkbox').forEach((cb) => fireEvent.click(cb));
+        const make = screen.getByRole('button', { name: /Make a re-key code/ }) as HTMLButtonElement;
+        expect(make.disabled).toBe(true);
+        fireEvent.click(make);
+        expect(issueSpy).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: /Try again/ }));
+        await waitFor(() => expect(make.disabled).toBe(false));
+        expect(spy).toHaveBeenCalledTimes(2);
+        expect(screen.queryByText(/Couldn’t read this member’s re-key status/)).toBeNull();
+    });
+
     it('a member who already moved opens on "Already moved" and needs the typed words before a new code', async () => {
         const movedAt = '2026-10-04T03:00:00.000Z';
         vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({

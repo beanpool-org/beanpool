@@ -69,8 +69,10 @@ export function RekeyMemberWizard({
     const [rereading, setRereading] = useState(false);
 
     // Opening the wizard only reads the member's re-key status; a code is made only by the "Make a re-key code" press,
-    // and not before that read has answered (or failed), so the wizard knows whether the member already moved.
+    // and not before that read has answered, so the wizard knows whether the member already moved. A failed read leaves
+    // it unknown, so the button stays off until a retry answers: they may have moved (review 4176252099).
     const [statusChecked, setStatusChecked] = useState(false);
+    const [statusReadFailed, setStatusReadFailed] = useState(false);
     const [typedConfirm, setTypedConfirm] = useState('');
     const [cancelling, setCancelling] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
@@ -102,23 +104,26 @@ export function RekeyMemberWizard({
         setCodeNeedsStepUp(!!pending.codeNeedsStepUp);
     }, []);
 
+    /** The read opening does, and its retry: only an answer lets a code be made. */
+    const checkExisting = useCallback(async (isMounted: () => boolean = () => true) => {
+        setStatusReadFailed(false);
+        try {
+            const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            if (!isMounted()) return;
+            if (status) applyStatus(status);
+            setStatusChecked(true);
+        } catch {
+            if (isMounted()) setStatusReadFailed(true);
+        }
+    }, [nodeUrl, member.publicKey, adminPassword, tfaToken, applyStatus]);
+
     useEffect(() => {
         let mounted = true;
-        const checkExisting = async () => {
-            try {
-                const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
-                if (mounted && status) applyStatus(status);
-            } catch {
-                // Not blocking
-            } finally {
-                if (mounted) setStatusChecked(true);
-            }
-        };
-        checkExisting();
+        checkExisting(() => mounted);
         return () => {
             mounted = false;
         };
-    }, [nodeUrl, member.publicKey, adminPassword, tfaToken, applyStatus]);
+    }, [checkExisting]);
 
     // The time left on a pending code, kept current while it shows.
     useEffect(() => {
@@ -348,11 +353,26 @@ export function RekeyMemberWizard({
                             </label>
                         )}
 
-                        <p className="text-[11px] text-nature-400 m-0 break-words">
-                            {statusChecked
-                                ? 'Nothing changes until you press Make a re-key code. You can cancel a code until it is used.'
-                                : 'Checking this member’s re-key status…'}
-                        </p>
+                        {statusReadFailed ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-[11px] text-amber-300 m-0 break-words flex-1 min-w-0">
+                                    Couldn’t read this member’s re-key status, so a code can’t be made yet: they may already have moved to a new key.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => checkExisting()}
+                                    className="shrink-0 px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 text-xs font-semibold"
+                                >
+                                    Try again
+                                </button>
+                            </div>
+                        ) : (
+                            <p className="text-[11px] text-nature-400 m-0 break-words">
+                                {statusChecked
+                                    ? 'Nothing changes until you press Make a re-key code. You can cancel a code until it is used.'
+                                    : 'Checking this member’s re-key status…'}
+                            </p>
+                        )}
 
                         <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
                             <button

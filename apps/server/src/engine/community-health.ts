@@ -37,8 +37,11 @@ export const QUIET_DAYS_DEFAULT = 60;
  * Wording 4 (review r4177156495) says what the two named-with-Beans alerts fire on: a pair who buy from each other back
  * and forth, about evenly, past the volume cap (wash_trading, which shows the total and how evenly it went), and members
  * who send the member who invited them Beans past a limit in a window (sybil_funnel); not "trade mostly with one member".
+ * Wording 5 (queue item 29, Marty 4 Oct: "Keep disputes, log every look, totals only in member stats"): every admin
+ * look at the disputes and at an alert that names a member is logged (health_access_log), the owner and the admins
+ * read that log, and memberStats carries no member's trades, only the community's totals (tradeTotals).
  */
-export const CONSENT_WORDING_VERSION = 4;
+export const CONSENT_WORDING_VERSION = 5;
 
 export class HealthError extends Error {
     constructor(readonly status: number, readonly code: string, message: string) {
@@ -74,17 +77,18 @@ export function consentTerms() {
     const text = `In this community, the admins can see your balance if it goes past ${debtLinePct}% of your credit line `
         + `or if you stay in debit for ${quietDays} days without a sale. That's how a LETS has always worked. `
         + `Every look at your balance is logged, and you can take this back at any time in Settings. `
-        + `Whatever you choose, any admin can see some of your trades, and those looks are not logged: a trade that isn't `
+        + `Whatever you choose, any admin can see some of your trades: a trade that isn't `
         + `finished yet or that an admin settled (who with, the listing, the price, and your one-to-one chat with them, which `
-        + `they can't read if it is private), so a stuck trade can be settled; how many trades you have finished or `
-        + `cancelled and what the finished ones came to, and how many posts you have up and messages you have sent; a fraud `
+        + `they can't read if it is private), so a stuck trade can be settled; a fraud `
         + `alert that names you if you and one member buy from each other back and forth, about evenly, past a limit, with `
         + `the Beans in total and how evenly they went each way; one that names you, with the Beans in total and how many of `
         + `the members you invited have traded with no one but you, if members you invited send you Beans past a limit within `
         + `a set number of days, or if you are one of those members; one that names you, with how much of the group's trading `
         + `is with each other but no Beans, if you are in a group of members, at least half of them new, who trade mostly `
         + `with each other; and an alert that names you if no Beans have moved in or out of your account for a set number `
-        + `of days. Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance `
+        + `of days. Every one of those looks is logged, with who looked, when, and at which trades or whom, and the owner `
+        + `and the admins can see that log. The member stats the admins see show how many posts you have up and messages `
+        + `you have sent, and of trades only the whole community's totals, not yours. Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance `
         + `and trades included, and its backups, snapshots and standby copies.`;
     return { known: isKnownCommunity(), debtLinePct, quietDays, version: `${CONSENT_WORDING_VERSION}:${debtLinePct}:${quietDays}`, text };
 }

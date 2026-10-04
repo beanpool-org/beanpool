@@ -32,8 +32,9 @@ import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getAllCommunityMembers } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
+import { exceptionRows, departedRows, healthLogText, type HealthExceptionsBody, type HealthLogLine } from '../utils/community-health';
 import {
-    NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
+    NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, fetchHealthExceptions, fetchHealthLog, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
@@ -48,7 +49,9 @@ export { ErrorBoundary };
 /** The admin picked to check, or null for "check an admin" with nobody picked (a reinstalled phone, say). */
 type Picked = { pubkey: string; callsign: string } | null;
 /** `addId`: a new entry's id, chosen when its form opens and kept until the add is confirmed (a Save after a lost answer is the same add). */
-type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry } | { kind: 'check'; picked: Picked };
+type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry } | { kind: 'check'; picked: Picked }
+    // Community health's exceptions (slice 6): opened by a tap, each opening logged; names overlaid from this list.
+    | { kind: 'health'; body: HealthExceptionsBody | null; log: HealthLogLine[]; refused: string | null };
 
 export default function NamesListScreen() {
     const { theme, colors } = useTheme();
@@ -434,6 +437,21 @@ export default function NamesListScreen() {
         ]);
     };
 
+    /** Opens the exceptions (the node logs this opening before it answers), then reads who has opened them. */
+    const openHealth = async () => {
+        if (!anchor || !identity) return;
+        if (!begin()) return;
+        const ex = await fetchHealthExceptions(anchor, identity);
+        const lines = await fetchHealthLog(anchor, identity, 30);
+        finish();
+        setMode({
+            kind: 'health',
+            body: ex.ok ? ex.value : null,
+            log: lines.ok ? lines.value.log : [],
+            refused: ex.ok ? null : ex.message,
+        });
+    };
+
     const setTwoAdmins = async (on: boolean) => {
         if (!anchor || !identity || !opened) return;
         if (!begin()) return;
@@ -455,6 +473,7 @@ export default function NamesListScreen() {
             </Pressable>
             <Text style={styles.headerTitle} numberOfLines={2} accessibilityRole="header">
                 {mode.kind === 'edit' ? (mode.entry ? 'Change an entry' : 'Add a name') : mode.kind === 'pick' ? 'Confirm a member'
+                    : mode.kind === 'health' ? 'Community health'
                     : mode.kind === 'check' ? COPY.checkEachOtherTitle : COPY.title}
             </Text>
         </View>
@@ -569,6 +588,45 @@ export default function NamesListScreen() {
                 ))}
             </>
         );
+    } else if (mode.kind === 'health') {
+        const rows = mode.body ? exceptionRows(mode.body, entries) : [];
+        const departed = mode.body ? departedRows(mode.body, entries) : [];
+        body = (
+            <>
+                {mode.refused ? (
+                    <View style={styles.warn} accessibilityLiveRegion="polite"><Text style={styles.warnText}>{mode.refused}</Text></View>
+                ) : null}
+                {mode.body ? (
+                    <>
+                        <Text style={styles.body}>
+                            Only members who agreed to what the admins can see, past {mode.body.settings.debtLinePct}% of their floor or in debit
+                            with no sale for {mode.body.settings.quietDays} days. Their trades are never shown.
+                        </Text>
+                        <Text style={styles.label}>PAST A LINE</Text>
+                        {rows.length === 0 ? <Text style={styles.hint}>Nobody is past a line.</Text> : null}
+                        {rows.map((r) => (
+                            <View key={r.key} style={styles.entry}>
+                                <Text style={styles.entryName}>{r.name}</Text>
+                                <Text style={styles.entryNote}>{r.detail}</Text>
+                            </View>
+                        ))}
+                        <Text style={styles.label}>LEFT WITH A DEBT</Text>
+                        {departed.length === 0 ? <Text style={styles.hint}>Nobody left owing Beans.</Text> : null}
+                        {departed.map((r) => (
+                            <View key={r.key} style={styles.entry}>
+                                <Text style={styles.entryName}>{r.name}</Text>
+                                <Text style={styles.entryNote}>{r.detail}</Text>
+                            </View>
+                        ))}
+                    </>
+                ) : null}
+                <Text style={styles.label}>WHO OPENED THE EXCEPTIONS</Text>
+                <Text style={styles.hint}>Every admin and the owner can read this.</Text>
+                {mode.log.length === 0 ? <Text style={styles.hint}>Nothing yet.</Text> : null}
+                {mode.log.map((l) => <Text key={l.id} style={styles.logLine}>{healthLogText(l)}</Text>)}
+                <View style={styles.buttonRow}>{btn('Back to the list', () => setMode({ kind: 'list' }), 'secondary')}</View>
+            </>
+        );
     } else if (mode.kind === 'check') {
         const who = mode.picked?.callsign ?? '';
         body = (
@@ -661,6 +719,7 @@ export default function NamesListScreen() {
                 <View style={styles.buttonRow}>
                     {btn('Add a name', () => openForm(null), 'primary')}
                     {btn('Export as PDF', exportPdf, 'secondary', 'Makes a PDF of the list on this phone, to keep with your paper copy')}
+                    {btn('Community health', () => { void openHealth(); }, 'secondary', 'Opens who is past a debt line (every opening is logged for all admins)')}
                 </View>
                 <TextInput
                     style={styles.search} value={query} onChangeText={setQuery} placeholder="Search names and notes"

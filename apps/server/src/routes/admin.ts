@@ -34,6 +34,7 @@ import {
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
+import { logBalanceLook } from '../engine/community-health.js';
 import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
@@ -1015,7 +1016,17 @@ router.post('/api/local/admin/logs', async (ctx) => {
     const parsedOffset = parseInt(String(body.offset), 10);
     const offset = Math.max(0, isNaN(parsedOffset) ? 0 : parsedOffset);
 
-    let sql = 'SELECT * FROM system_logs WHERE 1=1';
+    // A removal's settled balance is a look at another member's balance, which an admin has only while removing them
+    // (logged: health_access_log). So this answers none, to any reader: not the metadata's balanceSettled, and not the
+    // "(settled balance: N)" a node wrote into the message before; the search reads the message as answered, so it can't
+    // find the number either (review r4176631042).
+    const message = `CASE WHEN instr(message, ' (settled balance: ') > 0
+        THEN substr(message, 1, instr(message, ' (settled balance: ') - 1)
+            || substr(substr(message, instr(message, ' (settled balance: ') + 19), instr(substr(message, instr(message, ' (settled balance: ') + 19), ')') + 1)
+        ELSE message END`;
+    let sql = `SELECT id, timestamp, level, category, ${message} AS message,
+        CASE WHEN json_valid(metadata) THEN json_remove(metadata, '$.balanceSettled') ELSE metadata END AS metadata
+        FROM system_logs WHERE 1=1`;
     const params: any[] = [];
 
     if (level && level !== 'ALL') {
@@ -1027,7 +1038,7 @@ router.post('/api/local/admin/logs', async (ctx) => {
         params.push(category);
     }
     if (searchQuery) {
-        sql += " AND message LIKE ? ESCAPE '\\'";
+        sql += ` AND ${message} LIKE ? ESCAPE '\\'`;
         params.push(likeContains(String(searchQuery)));
     }
 
@@ -2452,17 +2463,19 @@ router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const { pubkey } = ctx.params;
+        const actor = resolveAdminActor(ctx);
+        if (!actor) return;
         const preview = getOffboardPreview(pubkey);
 
         // Security / Privacy: Only return active members roster to key-authenticated sessions.
         // Password-only sessions cannot execute gift_to_member, so withholding the list
         // prevents leaking the member roster.
-        const actor = resolveAdminActor(ctx);
-        if (!actor) return;
         if (actor === 'owner:password') {
             preview.activeMembers = [];
         }
 
+        // The member's balance, outside their consent: a line in the access log the admins and the owner read, first.
+        logBalanceLook(actor, preview.member.publicKey, 'offboard_preview');
         ctx.body = preview;
     } catch (e: any) {
         const msg = e?.message || 'Failed to get offboard preview';
@@ -2502,7 +2515,13 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
             { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },
             effectiveActor
         );
-        ctx.body = result;
+        // The balance it settled is a look at the member's balance too: logged, or left out of the answer.
+        try {
+            logBalanceLook(effectiveActor, result.memberPubkey, 'offboard_settled');
+            ctx.body = result;
+        } catch {
+            ctx.body = { ...result, balanceSettled: undefined };
+        }
     } catch (e: any) {
         ctx.status = e?.statusCode || e?.status || 400;
         ctx.body = { error: e?.message || 'Failed to offboard member', code: e?.code };

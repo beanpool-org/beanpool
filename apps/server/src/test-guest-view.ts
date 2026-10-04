@@ -1199,6 +1199,10 @@ async function main(): Promise<void> {
             'POST /api/commons/pay': { amount: 1 },
             'POST /api/names/debts/:id/settle': { transactionId: 'sentinel-payment' },
             'POST /api/names/debts/:id/work-off': { memberPubkey: alice.pk },
+            // The Community health panel and the consent: the owner's two lines, and a member's consent to the terms.
+            'POST /api/names/health/settings': { debtLinePct: 90, quietDays: 30 },
+            'POST /api/names/consent': { version: '1:50:60' },
+            'POST /api/local/admin/community-health': { debtLinePct: 90 },
         };
         /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
         const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
@@ -1219,7 +1223,7 @@ async function main(): Promise<void> {
             'GET /api/commons/balance', 'GET /api/commons/decisions', 'POST /api/commons/decisions', 'GET /api/commons/decisions/:id',
             'POST /api/commons/decisions/:id/vote', 'GET /api/commons/projects', 'POST /api/commons/projects', 'POST /api/commons/projects/delete',
             'POST /api/commons/projects/update', 'POST /api/commons/pay', 'GET /api/commons/repayment',
-            'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/me', 'POST /api/community/me/area', 'GET /api/community/members',
+            'GET /api/community/consent-terms', 'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/me', 'POST /api/community/me/area', 'GET /api/community/members',
             'GET /api/community/membership/:publicKey', 'POST /api/community/register',
             'GET /api/crowdfund/projects', 'POST /api/crowdfund/projects', 'GET /api/crowdfund/projects/:id', 'POST /api/crowdfund/projects/:id/pledge',
             'POST /api/crowdfund/projects/delete', 'POST /api/crowdfund/projects/update',
@@ -1283,6 +1287,7 @@ async function main(): Promise<void> {
             'GET /api/local/admin/disputes/:id', 'POST /api/local/admin/disputes/:id/resolve', 'GET /api/local/admin/gateway',
             'POST /api/local/admin/gateway', 'POST /api/local/admin/health', 'POST /api/local/admin/inbox', 'POST /api/local/admin/inbox/send',
             'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
+            'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health',
             'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
             'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',
             'POST /api/local/admin/members/:pubkey/burst/remove',
@@ -1353,6 +1358,8 @@ async function main(): Promise<void> {
             'POST /api/names/entries/:id/invite', 'GET /api/names/invites',
             'POST /api/names/generations', 'GET /api/names/log', 'POST /api/names/settings', 'POST /api/names/shares', 'GET /api/names/state',
             'GET /api/names/debts', 'POST /api/names/debts/:id/settle', 'POST /api/names/debts/:id/work-off',
+            'GET /api/names/health', 'GET /api/names/health/exceptions', 'GET /api/names/health/log', 'POST /api/names/health/settings',
+            'GET /api/names/consent', 'POST /api/names/consent', 'DELETE /api/names/consent',
             'POST /api/node-admin/break-glass', 'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',

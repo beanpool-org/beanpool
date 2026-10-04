@@ -5829,11 +5829,14 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
     const photos = (db.prepare('SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC').all(r.post_id) as any[])
         .map(p => engine.postPhotoUrl(r.post_id, p.order_num, p.updated_at, r.post_audience_scope));
 
-    // Chat context between buyer and seller
+    // Chat context between buyer and seller: their one-to-one chat only, the one the trade's system messages go to
+    // (injectSystemMessage), never a group or event chat the two of them happen to share.
     const convRow = db.prepare(`
         SELECT c.id FROM conversations c
         JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
         JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
+        WHERE c.type = 'dm' AND c.post_id IS NULL
+          AND (SELECT COUNT(*) FROM conversation_participants cp WHERE cp.conversation_id = c.id) = 2
         LIMIT 1
     `).get(r.buyer_pubkey, r.seller_pubkey) as any;
 
@@ -5952,6 +5955,8 @@ export function countEscrowDisputes(minDays = 7): { pending: number; resolved: n
     return { pending: row.pending, resolved: row.resolved, all: row.all_count };
 }
 
+/** One trade on the Escrow Disputes list, by id: exactly the trades the list can show (one not finished yet, or one an
+ *  admin settled), so a finished or cancelled trade nobody disputed stays out of an admin's view (null → 404). */
 export function getEscrowDispute(transactionId: string): EscrowDisputeContext | null {
     const row = db.prepare(`
         SELECT mt.*,
@@ -5971,7 +5976,7 @@ export function getEscrowDispute(transactionId: string): EscrowDisputeContext | 
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
         LEFT JOIN members seller ON mt.seller_pubkey = seller.public_key
-        WHERE mt.id = ?
+        WHERE mt.id = ? AND (mt.status = 'pending' OR mt.dispute_resolution IS NOT NULL)
     `).get(transactionId) as any;
 
     if (!row) return null;

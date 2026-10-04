@@ -947,6 +947,18 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     // ---- gateway ----
     if (pathname === '/api/local/admin/gateway') return ok(GATEWAY_CONFIG);
 
+    // ---- community health (People & Safety → Invites & QR): long numbers and a long name, to hold at 320px ----
+    if (pathname === '/api/local/admin/community-health') {
+        return ok({
+            totals: { beansInCirculation: 1234567, sumOfCredit: 1234567, sumOfDebt: 987654, membersInDebit: 1234, commonsPot: 300000, tradesThisMonth: 4100 },
+            settings: { debtLinePct: 50, quietDays: 60 }, known: true,
+            log: [
+                { id: 'hl1', actor: pubkey('admin-ada'), actorCallsign: 'Ada_Lovelace_With_A_Long_Name', action: 'exceptions_opened', at: '2026-10-04T06:00:00.000Z' },
+                { id: 'hl2', actor: pubkey('admin-unnamed'), actorCallsign: null, action: 'exceptions_opened', at: '2026-10-03T06:00:00.000Z' },
+            ],
+        });
+    }
+
     // ---- node roles ----
     if (pathname === '/api/local/admin/node-roles') return ok({ roles: NODE_ROLES });
     if (/^\/api\/local\/admin\/node-roles\/[^/]+\/[^/]+$/.test(pathname)) return ok({ success: true });

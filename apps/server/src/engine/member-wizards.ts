@@ -901,7 +901,9 @@ export function executeOffboard(
             VALUES (?, 'INFO', 'ADMIN', ?, ?)
         `).run(
             nowIso,
-            `Member ${member.callsign} (${cleanPub.slice(0, 10)}...) offboarded with resolution '${resolution}' (settled balance: ${balance}) by operator ${cleanOperator}`,
+            // No balance in the message: every admin reads this log (routes/admin.ts /logs, which answers without the
+            // metadata's balanceSettled too). It stays in the metadata for the idempotent retry (getPreviousOffboardResult).
+            `Member ${member.callsign} (${cleanPub.slice(0, 10)}...) offboarded with resolution '${resolution}' by operator ${cleanOperator}`,
             JSON.stringify({
                 memberPubkey: cleanPub,
                 callsign: member.callsign,

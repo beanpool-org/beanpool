@@ -26,7 +26,7 @@
     </nav>
     <section class="legal-content glass-panel">
         <h1>Privacy Policy</h1>
-        <p><strong style="color: #94a3b8;">Last Updated: October 1, 2026</strong></p>
+        <p><strong style="color: #94a3b8;">Last Updated: October 4, 2026</strong></p>
         
         <h2>1. Your Keys, and What Recovery Costs You</h2>
         <p>BeanPool is a peer-to-peer (P2P) localized protocol natively bypassing centralized tracking silos. Our systems are mathematically verifiable, functioning without a central corporate authority tracking your personal data. Your Ed25519 keypair is generated on your own device. It leaves the device only as a locked copy, if you use a sign-in for recovery (below), or when you copy your account to another device of yours. Where it is kept differs by app, and we would rather say so than round it up: on the <strong>phone apps</strong> it is held in the operating system's secure storage (Android Keystore / iOS Keychain, via SecureStore), and you can put an optional biometric lock on the app itself; in the <strong>browser app</strong> it is held in that browser's own local database on your device, which is not hardware-protected. Your 12-word recovery phrase is the only recovery path that depends on nobody.</p>
@@ -66,6 +66,19 @@
             <li><strong>The event chat:</strong> open to the host and everyone marked Going. It is <strong>not end-to-end encrypted</strong>, unlike a direct message: the node stores these messages in a form it can read, so that the host can remove a message and so that membership can follow the RSVPs. Your node's operator can read an event chat. The app says so on the chat screen.</li>
             <li><strong>It stays in your community:</strong> an event is always local. The event, its RSVPs, the private note and the chat are never sent to another community's node &mdash; they stay on your own node and in that node's own backup.</li>
             <li><strong>Thirty days after the event ends:</strong> the RSVPs, the chat messages and the private note are deleted from the node. The event post itself remains, inactive, as other finished posts do.</li>
+        </ul>
+
+        <h2>8. Known Communities: Real Names and What Admins Can See</h2>
+        <p>Some communities confirm their members by real name, the way a LETS keeps a membership list. In such a <strong>known community</strong>, your name is sealed on the admins' phones before it reaches the community's server: the operator and BeanPool cannot read it. Your balance stays private to you except in the four cases below. What any admin can see of your trades is listed below too, and it is nothing more. The first case is one you agree to when you join: the join screen says, in your community's own numbers, when the admins can see your balance (if it goes past a share of your credit line, or if you stay in debit for a number of days without a sale).</p>
+        <ul>
+            <li><strong>Only with your consent, and only once confirmed:</strong> the app records when you agreed and to which wording. Without that, or in a community that does not confirm members, the admins' list of balances never shows you. Saying no changes nothing else.</li>
+            <li><strong>You can take your consent back at any time,</strong> in Settings, as easily as you gave it. From that moment you are off the list. The app keeps a record that you agreed and that you withdrew.</li>
+            <li><strong>When an admin removes your account:</strong> the admin who starts removing you sees your balance and how many trades you have open, so that what you hold or owe can be settled. This happens whether or not you agreed to anything above.</li>
+            <li><strong>When the community votes on removing you:</strong> everyone who can vote in it sees your balance and any debt, in that vote only.</li>
+            <li><strong>The watchers are watched:</strong> every time an admin opens the list of balances, the node records who and when; every time an admin sees your balance while removing you, it records who, whose and when. Every other admin and the owner can see that record. There is no export of balances.</li>
+            <li><strong>The server's operator:</strong> whoever runs your community's server holds its whole database, balances and trades included, and its backups, snapshots and standby copies, as the operator of any server does.</li>
+            <li><strong>What any admin can see of trades,</strong> in any community and whatever you agreed to: a trade that isn't finished yet or that an admin settled (both members, the listing, the price, and the messages in the two members' one-to-one chat, which an admin can't read if it is private), so that a stuck trade can be settled; how many trades each member has finished or cancelled and what the finished ones came to, and how many posts each member has up and messages they have sent; fraud alerts that name members, with the Beans that moved, when they trade mostly with one member or with members they invited; a fraud alert that names a group of members, at least half of them new, who trade mostly with each other, with no Beans; and an alert that names the members who have had no Beans move in or out for a set number of days. Nothing else of anyone's trades. These looks are not logged.</li>
+            <li><strong>Who holds it:</strong> the community, not BeanPool. Ask your community's admins to see, correct or delete your entry. A record of a debt left behind when a member leaves is kept 3 years, then deleted.</li>
         </ul>
 
         <h2>Contact Administrator</h2>

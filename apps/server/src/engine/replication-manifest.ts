@@ -428,6 +428,9 @@ export const TABLES: Record<string, TableEntry> = {
     names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
     known_floor_exceptions: plain('member_pubkey amount frozen set_by set_at updated_at'),
     known_floor_log: plain('id actor_pubkey action member_pubkey old_value new_value at updated_at'),
+    health_access_log: plain('id actor_pubkey action subject_pubkey at updated_at'),
+    known_consents: plain('member_pubkey version consented_at updated_at'),
+    known_consent_log: plain('id member_pubkey action version at updated_at'),
     names_debts: plain('id entry_id amount reason removed_at status repaying_pubkey repaid settled_how settled_by settled_at settle_ref note work_off_confirmation_id work_off_floor_before work_off_floor_set_at updated_at'),
     names_debt_payments: plain('transaction_id debt_id payer_pubkey amount paid_at updated_at'),
 
@@ -661,6 +664,8 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     confirmation: { kind: 'community-settings', reason: 'the confirmation dial: whether a confirmed member holds the known floor (config/known-floor.ts)' },
     known_floor: { kind: 'community-settings', reason: "the community's known floor in Beans (config/known-floor.ts)" },
     credit_cap: { kind: 'community-settings', reason: "the community's credit cap in Beans (config/known-floor.ts)" },
+    health_debt_line_pct: { kind: 'community-settings', reason: "the Community health panel's debt line, a % of the credit line (engine/community-health.ts)" },
+    health_quiet_days: { kind: 'community-settings', reason: "the Community health panel's days in debit without a sale (engine/community-health.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

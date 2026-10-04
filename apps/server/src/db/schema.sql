@@ -1655,6 +1655,42 @@ CREATE TABLE IF NOT EXISTS names_debt_payments (
 );
 CREATE INDEX IF NOT EXISTS idx_names_debt_payments_debt ON names_debt_payments(debt_id);
 
+-- The Community health panel (community modes slice 6, engine/community-health.ts): every opening of the exceptions list,
+-- who and when (design §4.4, §7.1: the watchers are watched), and every other look an admin takes at one member's
+-- balance outside that member's consent: while removing them (`subject_pubkey` is whose). Every owner and admin reads
+-- it; no member does.
+CREATE TABLE IF NOT EXISTS health_access_log (
+    id             TEXT PRIMARY KEY,
+    actor_pubkey   TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('exceptions_opened', 'offboard_preview', 'offboard_settled')),
+    subject_pubkey TEXT,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- A member's consent at joining a known community (design §4.4, §7.5): when, and which text (`version` = wording:debt
+-- line:days). Without a row, a member is in no exception. One row per member; consenting again replaces it.
+CREATE TABLE IF NOT EXISTS known_consents (
+    member_pubkey  TEXT PRIMARY KEY,
+    version        TEXT NOT NULL,
+    consented_at   DATETIME NOT NULL,
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- A member's consent history: every agreement and every withdrawal (GDPR Art. 7(3): a member withdraws at any time, as
+-- easily as they agreed). Withdrawing deletes their known_consents row with its tombstone, so they are in no exception from
+-- that moment, on a standby too;
+-- this keeps that it happened, and to which text. Only the member reads their own.
+CREATE TABLE IF NOT EXISTS known_consent_log (
+    id             TEXT PRIMARY KEY,
+    member_pubkey  TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('agreed', 'withdrawn')),
+    version        TEXT NOT NULL,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_known_consent_log_member ON known_consent_log(member_pubkey, at);
+
 -- The known floor (community modes slice 4, config/known-floor.ts): an admin's exception for one member's known grant.
 -- `amount` replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
 -- it 0. Lowering never takes Beans back: a member below their new floor is spend-frozen until they climb back.

@@ -230,7 +230,11 @@ async function main() {
                 for (const m of text.matchAll(/dispatchPushNotification\(([\s\S]*?)\);/g)) {
                     for (const k of m[1].matchAll(/'((?:chat|group|market|trade|review|event|community|account|owner)\.[a-z-]+)'/g)) named.add(k[1]);
                 }
-                for (const k of text.matchAll(/^\s*'((?:chat|group|market|trade|review|event|community|account|owner)\.[a-z-]+)',?\s*$/gm)) named.add(k[1]);
+                // A kind on a line of its own (a table of kinds) counts only in a file that sends or types push notices, so a
+                // file name like 'community.key' in an unrelated list isn't read as a kind.
+                if (/dispatchPushNotification|PushNoticeKind|push-notices/.test(text)) {
+                    for (const k of text.matchAll(/^\s*'((?:chat|group|market|trade|review|event|community|account|owner)\.[a-z-]+)',?\s*$/gm)) named.add(k[1]);
+                }
                 for (const k of text.matchAll(/\? '((?:review|trade)\.[a-z-]+)' : '((?:review|trade)\.[a-z-]+)'/g)) { named.add(k[1]); named.add(k[2]); }
             }
         };

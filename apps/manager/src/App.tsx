@@ -70,7 +70,7 @@ import { ApplianceSection } from './components/modules/ApplianceSection';
 import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
-import { startKeySession, endKeySession, sectionTargetFor, isModeratorSession, forgetStoredAdminSecrets, type KeySession } from './lib/key-session';
+import { startKeySession, carriesHandoff, endKeySession, sectionTargetFor, isModeratorSession, forgetStoredAdminSecrets, type KeySession } from './lib/key-session';
 import { ModeratorView } from './components/modules/ModeratorView';
 import { readCameFrom, backLink, profileLink } from './lib/came-from';
 import { useSidebarMode, nextSidebarMode } from './lib/sidebar-mode';
@@ -973,36 +973,56 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         if (refreshToken > 0) refreshAll();
     }, [refreshToken]);
 
-    // Single-node /settings: finish a key sign-in from the app's one-time link, or pick up a live one.
+    // Single-node /settings: finish a key sign-in from the app's one-time link, or pick up a live one. Again whenever a
+    // new link reaches the page already open: an Android Custom Tab brought back to the front loads
+    // `/settings#handoff=…` into the page it still shows (signed out by the node's restart or the 15-min phone idle),
+    // and a change of fragment alone reloads nothing, so without this the link was never read (queue item 26).
     useEffect(() => {
         if (isFleetMode || typeof window === 'undefined') return;
         let cancelled = false;
-        startKeySession().then((res) => {
-            if (cancelled) return;
-            // A moderator lands on Reports whatever the link named (their only screen).
-            const target = sectionTargetFor(res.kind === 'session' ? res.session.role : null, res.section);
-            if (target) {
-                setActiveTab(target.tab);
-                setNavSubTab(target.subTab);
-            }
-            if (res.kind === 'session' || res.kind === 'password') {
-                setKeySessionCsrfToken(res.csrfToken);
-                setKeySessionCsrf(res.csrfToken);
-                if (res.kind === 'session') setKeySession(res.session);
-                else {
-                    setPasswordSession(true);
-                    setTotpGate(res.totpSetupRequired);
+        let run = 0;
+        const begin = (fromNewLink: boolean) => {
+            const mine = ++run;
+            startKeySession().then((res) => {
+                if (cancelled || mine !== run) return;
+                // A moderator lands on Reports whatever the link named (their only screen).
+                const target = sectionTargetFor(res.kind === 'session' ? res.session.role : null, res.section);
+                if (target) {
+                    setActiveTab(target.tab);
+                    setNavSubTab(target.subTab);
                 }
-                // The first automatic poll ran before the cookie existed and was refused; clear that
-                // block so polling resumes, then fetch everything with the session (once the 2FA card is done).
-                authBlockedRef.current = {};
-                if (!(res.kind === 'password' && res.totpSetupRequired)) setRefreshToken((n) => n + 1);
-            } else if (res.kind === 'failed') {
-                setKeySessionNotice(res.message);
-            }
-            setKeySessionChecked(true);
-        });
-        return () => { cancelled = true; };
+                if (res.kind === 'session' || res.kind === 'password') {
+                    setKeySessionNotice(null);
+                    setKeySessionCsrfToken(res.csrfToken);
+                    setKeySessionCsrf(res.csrfToken);
+                    if (res.kind === 'session') {
+                        setPasswordSession(false);
+                        setTotpGate(false);
+                        setKeySession(res.session);
+                    } else {
+                        setKeySession(null);
+                        setPasswordSession(true);
+                        setTotpGate(res.totpSetupRequired);
+                    }
+                    // The first automatic poll ran before the cookie existed and was refused; clear that
+                    // block so polling resumes, then fetch everything with the session (once the 2FA card is done).
+                    authBlockedRef.current = {};
+                    if (!(res.kind === 'password' && res.totpSetupRequired)) setRefreshToken((n) => n + 1);
+                } else {
+                    // A new link that found no live session: whatever this page showed as signed in is over.
+                    if (fromNewLink) dropSession();
+                    if (res.kind === 'failed') setKeySessionNotice(res.message);
+                }
+                setKeySessionChecked(true);
+            });
+        };
+        begin(false);
+        const onHashChange = () => { if (carriesHandoff(window.location.hash)) begin(true); };
+        window.addEventListener('hashchange', onHashChange);
+        return () => {
+            cancelled = true;
+            window.removeEventListener('hashchange', onHashChange);
+        };
     }, [isFleetMode]);
 
     /**

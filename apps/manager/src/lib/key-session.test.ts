@@ -77,7 +77,7 @@ describe('startKeySession', () => {
     });
 
     it('a damaged link (not a token) is said, never a silent password form', async () => {
-        const fetchMock = vi.fn(async () => reply(200, { authenticated: false }));
+        const fetchMock = vi.fn(async (_url: string) => reply(200, { authenticated: false }));
         vi.stubGlobal('fetch', fetchMock);
         const { win, replaceState } = fakeWindow('#handoff=abc&from=app');
         const r = await startKeySession(win);

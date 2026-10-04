@@ -139,6 +139,54 @@ describe('App Component', () => {
             expect(document.title).toBe('BeanPool — Node Settings');
         });
 
+        /**
+         * Queue item 26 (2026-10-04): an Android Custom Tab brought back to the front loads the app's new link into the
+         * /settings page it still shows (signed out by a node restart or the phone idle). Only the fragment changes, so
+         * nothing reloads: the page must read the link from the hashchange, not leave the password form up.
+         */
+        it('a phone link that reaches the page already open (fragment change only) signs in, or says why not', async () => {
+            sessionStorage.clear();
+            window.history.replaceState(null, '', '/settings');
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+            expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+
+            let exchange: 'ok' | 'expired' = 'ok';
+            const fetchMock = vi.fn().mockImplementation((url: string) => {
+                if (String(url).includes('/api/local/admin/auth/exchange')) {
+                    return Promise.resolve(exchange === 'ok'
+                        ? { ok: true, status: 200, json: () => Promise.resolve({ success: true, role: 'owner', memberPubkey: 'ab'.repeat(32), csrfToken: 'csrf-link' }) }
+                        : { ok: false, status: 401, json: () => Promise.resolve({ error: 'x', expired: true }) });
+                }
+                if (String(url).includes('/api/local/admin/auth/session')) {
+                    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ authenticated: false }) });
+                }
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, health: { flags: [] }, reports: [] }) });
+            });
+            vi.stubGlobal('fetch', fetchMock);
+
+            // A spent link first: said, in plain words, above the password form.
+            exchange = 'expired';
+            await act(async () => {
+                window.history.replaceState(null, '', `/settings#handoff=${'c'.repeat(64)}&section=home&from=app`);
+                window.dispatchEvent(new HashChangeEvent('hashchange'));
+            });
+            expect(screen.getByRole('alert')).toHaveTextContent(/sign-in link from your phone has expired.*Tap Manage again/);
+            expect(window.location.hash).toBe('');
+
+            // A fresh one: signed in, no password asked.
+            exchange = 'ok';
+            await act(async () => {
+                window.history.replaceState(null, '', `/settings#handoff=${'d'.repeat(64)}&section=home&from=app`);
+                window.dispatchEvent(new HashChangeEvent('hashchange'));
+            });
+            expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /people & safety/i })).toBeInTheDocument();
+            const posted = fetchMock.mock.calls.filter(([u]) => String(u).includes('/auth/exchange')).map(([, o]) => JSON.parse(o.body).token);
+            expect(posted).toEqual(['c'.repeat(64), 'd'.repeat(64)]);
+        });
+
         it('verifies document title does not contain "Fleet" in single-node mode', async () => {
             stubPasswordSession();
             await act(async () => {

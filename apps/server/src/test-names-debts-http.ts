@@ -20,7 +20,8 @@
  *      floor (the member keeps what comes in); with two admins, nothing is swept until the second agrees
  *  10. a payment settles only the debt it was made for (linked when it was paid), once: never a sweep's row, never one
  *      made for another debt or for none
- *  11. a member pays any amount to the cent (0.29, 1.13, 0.57), never a part of one
+ *  11. a member pays any amount to the cent (0.29, 1.13, 0.57), never a part of one (0.291); one within float noise of
+ *      a cent (1.0000000001, 0.1 + 0.2) is paid, stored and linked to its debt as that whole cent
  *  12. a sale an admin's dispute ruling releases to a repaying seller is swept (transfer's after-commit hook), as a sale
  *      completed by the buyer is; half a cent above 0 sweeps nothing
  *  13. a revoked work-off puts back only the known floor it lowered: nothing for one revoked before a second admin
@@ -399,6 +400,22 @@ async function main(): Promise<void> {
     }
     const tooFine = await call('POST', cy, '/api/commons/pay', { amount: 0.291 });
     assert(tooFine.status === 400 && balanceRow(cy) === 48.01, `a part of a cent is refused (${show(tooFine)}, ${balanceRow(cy)})`);
+    const exactBalance = (who: Id) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(who.pk) as { balance: number }).balance;
+    for (const [amount, cents] of [[1.0000000001, 1], [0.1 + 0.2, 0.3]]) {
+        const before = exactBalance(cy);
+        const paid = await call('POST', cy, '/api/commons/pay', { amount });
+        const stored = (db.prepare('SELECT amount FROM transactions WHERE id = ?').get(paid.body?.transactionId) as { amount: number } | undefined)?.amount;
+        assert(paid.status === 200 && paid.body?.amount === cents && stored === cents && exactBalance(cy) === Math.round((before - cents) * 100) / 100,
+            `${amount}, within float noise of ${cents}, is paid and stored as whole cents: ${cents} (${show(paid)}; stored ${stored}; balance ${before} → ${exactBalance(cy)})`);
+    }
+    const cyEntry = makeEntry();
+    await call('POST', await debtor('Cy old', 5, cyEntry), '/api/member/purge', { action: 'purge_account' });
+    const cyDebt = debtsOf(cyEntry)[0];
+    const forDebt = await call('POST', cy, '/api/commons/pay', { amount: 2.0000000001, debtId: cyDebt.id });
+    const link = db.prepare('SELECT amount FROM names_debt_payments WHERE transaction_id = ?').get(forDebt.body?.transactionId) as { amount: number } | undefined;
+    assert(forDebt.status === 200 && link?.amount === 2, `a payment made for a debt is linked as whole cents too (${show(forDebt)}; ${JSON.stringify(link)})`);
+    const tooFineStill = await call('POST', cy, '/api/commons/pay', { amount: 0.291 });
+    assert(tooFineStill.status === 400, `0.291 is still refused (${show(tooFineStill)})`);
 
     // ── 12. a sale released by an admin's dispute ruling is swept too; never half a cent ─────────
     console.log('── 12. an escrow dispute released to a repaying seller; rounding ──');

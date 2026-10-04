@@ -134,8 +134,12 @@ async function startRegistrar(): Promise<http.Server> {
             const p = new URL(req.url || '/', 'http://registrar').pathname;
             const body = text ? JSON.parse(text) : null;
             reg.calls.push({ method: req.method || '', path: p, body });
-            // An answer, or [HTTP status, body] for one that refuses.
-            const answer = (out: any) => Array.isArray(out) ? send(out[0], out[1]) : send(200, out);
+            // An answer, [HTTP status, body] for one that refuses, { html: [status, page] } for a page from something in front
+            // of the registrar, or a promise of one (an answer held back).
+            const answer = (out: any): void => void Promise.resolve(out).then((o) => {
+                if (o?.html) { res.writeHead(o.html[0], { 'Content-Type': 'text/html' }); return void res.end(o.html[1]); }
+                Array.isArray(o) ? send(o[0], o[1]) : send(200, o);
+            });
             if (p === '/api/registrar/status') return answer(reg.status());
             if (p === '/api/registrar/claim') return answer(reg.claim(body));
             if (p === '/api/registrar/offline') return send(200, reg.offline());
@@ -618,6 +622,45 @@ async function main(): Promise<void> {
             assert(claims().length === n + 1, 'and never asked for again');
             updateLocalConfig({ addressRequest: null });
             reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
+
+        await section('15. the agent\'s claim answered after the owner set a name in Settings: the owner\'s name stays', async () => {
+            const post = settingsPost!;
+            reg.status = () => ({ status: 'none' });
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline').length;
+            // The registrar holds back its answer to the install's name until the owner has claimed theirs.
+            let answerAgent: () => void = () => {};
+            reg.claim = (b) => b.name !== 'install-race' ? live(b.name, `eyJ.token-${b.name}`)
+                : new Promise((r) => { answerAgent = () => r(live(b.name, 'eyJ.token-install-race')); });
+            const t2 = Date.now() + 20_000_000;
+            const off0 = offlines();
+            writeAddressRequestFile(DATA!, { name: 'install-race', contact: null, at: t2 });
+            const agent = checkAddressRequest(t2);
+            assert(await until(() => claims().some((c) => c.body?.name === 'install-race')), 'the agent asked for the install\'s name');
+            const set = await post('/api/local/admin/public-address/claim', { name: 'owner-pick', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'owner-pick', `Settings claimed owner-pick while the agent waited (${set.status})`);
+            answerAgent();
+            await agent;
+            assert(pa()?.name === 'owner-pick' && pa()?.tunnelToken === 'eyJ.token-owner-pick',
+                `the agent's late answer does not move the community off the owner's name (${pa()?.name})`);
+            assert(tunnelConnectorForTests().runningToken === 'eyJ.token-owner-pick', 'the tunnel still runs the owner\'s name');
+            assert(getLocalConfig().addressRequest == null, 'the request stays ended');
+            assert(offlines() === off0, 'nothing is released: the owner\'s name is never touched');
+            // The 5-min tick's own claim (not under the 2 s check) is held to the same rule.
+            updateNodeConfig({ publicAddress: null } as any);
+            await syncTunnel();
+            updateLocalConfig({ addressRequest: { name: 'install-race', mode: 'tunnel', contact: null, requestedAt: t2, refused: null } });
+            const n = claims().length;
+            const tick = reconcile();
+            assert(await until(() => claims().length > n), 'the tick asked for the install\'s name');
+            const set2 = await post('/api/local/admin/public-address/claim', { name: 'owner-two', mode: 'tunnel' });
+            assert(set2.status === 200 && pa()?.name === 'owner-two', `Settings claimed owner-two while the tick waited (${set2.status})`);
+            answerAgent();
+            await tick;
+            assert(pa()?.name === 'owner-two', `nor does the tick's late answer (${pa()?.name})`);
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+            const off = await post('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() === null, `and Take offline clears it for the next section (${off.status})`);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

@@ -383,6 +383,7 @@ export const SUITES = [
     'test-invite-bound-name',
     'test-names-copy',
     'test-names-access-log-migration',
+    'test-health-access-log-migration',
     'test-rip-out-legacy-voting',
     'test-escrow-disputes',
     'test-process-handlers',

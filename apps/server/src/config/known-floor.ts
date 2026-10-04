@@ -13,7 +13,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX } from '@beanpool/core';
-import { CONFIRMATION_DIAL_KEY, KNOWN_FLOOR_KEY, CREDIT_CAP_KEY, confirmationDialOn, savedCreditCap, knownFloor, isConfirmed } from '@beanpool/engine';
+import { CONFIRMATION_DIAL_KEY, KNOWN_FLOOR_KEY, CREDIT_CAP_KEY, confirmationDialOn, savedCreditCap, knownFloor, isConfirmed, memberKnownGrant } from '@beanpool/engine';
 import { getProfileSwitches } from './node-profile.js';
 import { getMember } from '../state-engine.js';
 import { clearEnterpriseFloorCache } from '@beanpool/engine';
@@ -108,6 +108,24 @@ export function knownFloorExceptions(): KnownFloorException[] {
 export function readKnownFloorLog(limit = 100): KnownFloorLogLine[] {
     return (db.prepare('SELECT * FROM known_floor_log ORDER BY at DESC, rowid DESC LIMIT ?').all(Math.max(1, Math.min(500, limit))) as any[])
         .map(r => ({ id: r.id, actor: r.actor_pubkey, action: r.action, memberPubkey: r.member_pubkey, oldValue: r.old_value, newValue: r.new_value, at: r.at }));
+}
+
+/**
+ * One member's known-floor line, for the Manager's member screen: whether they are confirmed, their exception, and the
+ * known grant it comes to (0 with the dial off or unconfirmed). Their credit line only, never their balance.
+ */
+export function knownFloorForMember(pk: string) {
+    const m = getMember(pk);
+    if (!m || m.status !== 'active' || m.isTreasury) throw new KnownFloorError(404, 'not_member', 'Only an active member of this community has a known floor.');
+    return {
+        memberPubkey: pk,
+        confirmation: confirmationDialOn(db),
+        knownFloor: knownFloor(db),
+        creditCap: savedCreditCap(db),
+        confirmed: isConfirmed(db, pk),
+        exception: knownFloorExceptions().find(e => e.memberPubkey === pk) ?? null,
+        knownGrant: memberKnownGrant(db, pk),
+    };
 }
 
 /**

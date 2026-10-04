@@ -100,6 +100,10 @@ In a LETS, a member the committee knows can go into debt by an agreed amount fro
 
 An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own.
 
+It is in the manager: **People & Safety → Members**, tap the member, then **Known floor**. It shows their line now: the community default, lowered or raised to an amount, or frozen. Type a whole number of Beans, from 0 to the cap, and tap **Set**; or tap **Freeze** (their known floor counts as 0), or **Restore the default**. Each asks you to confirm first. An amount above the community's known floor is a raise: the manager says so before you confirm, and the log shows it as a raise. If the server refuses, the manager shows its reason as it gave it. The members list marks everyone whose known floor an admin changed. The panel shows only when the switch is on, and only to an owner or admin. It shows the member's credit line, never their balance.
+
+A change needs an owner or admin signed in with their own key, so the log can say who made it: the node password names nobody, and the server refuses a change made with it. The older built-in settings page signs in only with the password, so it has no known floor controls.
+
 **Lowering never takes Beans back.** A member already below their new limit keeps their balance. They can still receive and sell, and can spend again once they are back above it. The same happens to everyone in debt on the known floor if your owner turns the switch off.
 
 ### Everyone sees the changes
@@ -128,7 +132,9 @@ In a known community, an admin's phone also shows the **exceptions**: confirmed 
 
 Only an owner moves the two lines, and every change shows in the known floor's log. The join screen tells every new member, in those numbers, what the admins can see, and their app records that they agreed. A member who joined before your community asked is offered it in their app; until they agree they never show. Changing the lines asks every member again; until a member agrees to the new ones, they show only within the lines they agreed to (a tighter line never reaches them without their say).
 
-Every time anyone opens the exceptions, your server writes who and when, before it answers. Every owner and admin can read that log in Community health.
+Every time anyone opens the exceptions, your server writes who and when, before it answers. Every time an admin sees a member's balance while removing them, it writes who, whose and when. Every owner and admin can read that log in Community health.
+
+In a vote on removing a member, everyone who can vote in it sees that member's balance and any debt, in that vote only. An owner or an admin who can't vote in it doesn't see them there. Those looks are not logged.
 
 ## The PDF copy
 

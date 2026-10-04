@@ -433,6 +433,9 @@ export const TABLES: Record<string, TableEntry> = {
     known_consent_log: plain('id member_pubkey action version at updated_at'),
     names_debts: plain('id entry_id amount reason removed_at status repaying_pubkey repaid settled_how settled_by settled_at settle_ref note work_off_confirmation_id work_off_floor_before work_off_floor_set_at updated_at'),
     names_debt_payments: plain('transaction_id debt_id payer_pubkey amount paid_at updated_at'),
+    // A member's retried payment gets its first answer (engine/money-requests.ts), on a standby that took over too. Its
+    // week-old ids go without tombstones, on each server (engine/money-requests.ts pruneMoneyRequests; the age rule).
+    money_requests: plain('payer_pubkey request_id route fingerprint answer created_at updated_at', { agedOut: { column: 'created_at', days: 7 } }),
 
     // ── Members' devices and conveniences, on the generic path (design G4; PLAIN_TABLES_PAYLOAD) ──
     // A standby writes none of their rows (config/node-role.ts assertPlainTablesWritable) and sends no push

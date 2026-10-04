@@ -102,6 +102,7 @@ export const SUITES = [
     'test-derived-enterprise-floor',
     'test-known-floor-http',
     'test-names-debts-http',
+    'test-commons-pay-idempotent-http',
     'test-community-health-http',
     'test-demurrage-window',
     'test-crowdfund-delete-refund',

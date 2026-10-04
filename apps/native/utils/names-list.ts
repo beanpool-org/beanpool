@@ -223,9 +223,15 @@ export const fetchNamesLog = (anchor: string, id: BeanPoolIdentity, limit = 50) 
 /** Community health's exceptions (slice 6): by key and entry id, never a name. Each call is an opening, logged first. */
 export const fetchHealthExceptions = (anchor: string, id: BeanPoolIdentity) =>
     call<HealthExceptionsBody>(anchor, id, 'GET', `${NAMES_PATH}/health/exceptions`);
-/** Who opened the exceptions, and when: readable by every admin and the owner. */
+/** The community's totals and lines (`readHealthTotals` checks them): every admin and the owner, in any community. Not logged. */
+export const fetchHealthSummary = (anchor: string, id: BeanPoolIdentity) =>
+    call<{ totals?: unknown }>(anchor, id, 'GET', `${NAMES_PATH}/health`);
+/**
+ * The access log, readable by every admin and the owner: `log`, the looks at a member's balance; `tradeLog` (#1608), the
+ * looks at trades and alerts, absent from an older node.
+ */
 export const fetchHealthLog = (anchor: string, id: BeanPoolIdentity, limit = 50) =>
-    call<{ log: HealthLogLine[] }>(anchor, id, 'GET', `${NAMES_PATH}/health/log?limit=${Math.max(1, Math.min(500, Math.floor(limit)))}`);
+    call<{ log: HealthLogLine[]; tradeLog?: HealthLogLine[] }>(anchor, id, 'GET', `${NAMES_PATH}/health/log?limit=${Math.max(1, Math.min(500, Math.floor(limit)))}`);
 export const confirmMember = (anchor: string, id: BeanPoolIdentity, memberPubkey: string, entryId: string) =>
     call<{ id: string; status: ConfirmationStatus }>(anchor, id, 'POST', `${NAMES_PATH}/confirmations`, { memberPubkey, entryId });
 export const secondConfirmation = (anchor: string, id: BeanPoolIdentity, confirmationId: string) =>

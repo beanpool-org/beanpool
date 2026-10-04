@@ -45,8 +45,12 @@ export const QUIET_DAYS_DEFAULT = 60;
  * different members, the trades with the viewer, Trust Points), unlogged, as Marty decided on 2026-09-29; and the
  * stranded escrows list (an escrow left stuck by a removal on an older node) is a logged look of its own
  * (stranded_escrows_read).
+ * Wording 6 (#1610's deciding review, Question 2): wording 5 said "Every look at your balance is logged", and a vote on
+ * removing a member shows their balance and debt to everyone who can vote in it, unlogged. It now says what is logged
+ * (every opening of the list of members past the lines, every look at a balance while removing that member) and that the
+ * looks in a removal vote, by those who can vote in it and nobody else (decisionForReader, decisionForAdmin), are not.
  */
-export const CONSENT_WORDING_VERSION = 5;
+export const CONSENT_WORDING_VERSION = 6;
 
 export class HealthError extends Error {
     constructor(readonly status: number, readonly code: string, message: string) {
@@ -81,7 +85,9 @@ export function consentTerms() {
     const { debtLinePct, quietDays } = healthSettings();
     const text = `In this community, the admins can see your balance if it goes past ${debtLinePct}% of your credit line `
         + `or if you stay in debit for ${quietDays} days without a sale. That's how a LETS has always worked. `
-        + `Every look at your balance is logged, and you can take this back at any time in Settings. `
+        + `Every time an admin opens the list of members past those lines, and every time an admin looks at your balance while `
+        + `removing you, it is logged. In a vote on removing you, everyone who can vote in it sees your balance and any debt, `
+        + `in that vote only, and those looks are not logged. You can take this back at any time in Settings. `
         + `Whatever you choose, any admin can see some of your trades: a trade that isn't `
         + `finished yet or that an admin settled (who with, the listing, the price, and your one-to-one chat with them, which `
         + `they can't read if it is private), so a stuck trade can be settled; a trade whose Beans were left stuck when a member was removed on an older server (the trade's status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one's amount and note); a fraud `

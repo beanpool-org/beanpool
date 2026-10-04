@@ -45,4 +45,9 @@ describe('known consent (web)', () => {
         expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '5:50:60', consentedAt: '2026-10-04T00:00:00Z', consentedVersion: '4:50:60' }))).toBe(true);
         expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '5:50:60', consentedAt: '2026-10-04T00:00:00Z', consentedVersion: '5:50:60' }))).toBe(false);
     });
+
+    it('asks again at wording 6 (#1610: which looks at a balance are logged, and that a removal vote\'s are not)', () => {
+        expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '6:50:60', consentedAt: '2026-10-05T00:00:00Z', consentedVersion: '5:50:60' }))).toBe(true);
+        expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '6:50:60', consentedAt: '2026-10-05T00:00:00Z', consentedVersion: '6:50:60' }))).toBe(false);
+    });
 });

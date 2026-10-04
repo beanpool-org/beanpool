@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { processProfileImage } from '../utils/image-processing';
 import { BUNDLED_AVATARS } from '../utils/bundled-avatars';
 import { colors, palette } from '../constants/colors';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+import { bottomSheetLayout } from '../utils/bottom-sheet-layout';
 
 interface AvatarPickerSheetProps {
     visible: boolean;
@@ -16,6 +16,11 @@ interface AvatarPickerSheetProps {
 export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPickerSheetProps) {
     const [loading, setLoading] = useState(false);
     const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
+    // The body scrolls and "Use Selected Avatar" sits in a footer outside it, above the system bars: at 320 dp and 130%
+    // text the button was at the screen's edge, its label cut (rehearsal 5 Oct, d1).
+    const { height: windowHeight } = useWindowDimensions();
+    const insets = useSafeAreaInsets();
+    const layout = bottomSheetLayout(windowHeight, insets);
 
     // Scroll affordance for the horizontal avatar strip: without an on-screen cue it isn't
     // obvious there are more avatars off the right edge. We show a chevron on whichever side
@@ -102,7 +107,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
             onRequestClose={onClose}
         >
             <Pressable style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close" onPress={onClose}>
-                <Pressable style={styles.sheet} accessibilityRole="button" onPress={(e) => e.stopPropagation()}>
+                <Pressable style={[styles.sheet, { maxHeight: layout.maxHeight }]} accessibilityRole="button" onPress={(e) => e.stopPropagation()}>
                     {/* Header */}
                     <View style={styles.header}>
                         <Text style={styles.title}>Profile Photo</Text>
@@ -111,8 +116,8 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                         </Pressable>
                     </View>
 
-                    {/* Content */}
-                    <View style={styles.content}>
+                    {/* Content: scrolls when taller than the sheet, so the footer below always shows */}
+                    <ScrollView style={styles.body} contentContainerStyle={styles.content}>
                         {loading ? (
                             <View style={styles.loadingContainer}>
                                 <ActivityIndicator size="large" color={palette.blue600} />
@@ -195,14 +200,20 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                                     )}
                                 </View>
 
-                                {selectedAvatarId && (
-                                    <Pressable style={styles.confirmButton} accessibilityRole="button" onPress={handleSelectBundled}>
-                                        <Text style={styles.confirmButtonText}>Use Selected Avatar</Text>
-                                    </Pressable>
-                                )}
                             </>
                         )}
-                    </View>
+                    </ScrollView>
+
+                    {/* Footer: outside the scroll, clear of the gesture bar or navigation buttons */}
+                    {!loading && selectedAvatarId ? (
+                        <View style={[styles.footer, { paddingBottom: layout.footerPaddingBottom }]}>
+                            <Pressable style={styles.confirmButton} accessibilityRole="button" onPress={handleSelectBundled}>
+                                <Text style={styles.confirmButtonText}>Use Selected Avatar</Text>
+                            </Pressable>
+                        </View>
+                    ) : (
+                        <View style={{ height: layout.footerPaddingBottom }} />
+                    )}
                 </Pressable>
             </Pressable>
         </Modal>
@@ -219,8 +230,6 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface.card,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
-        maxHeight: SCREEN_HEIGHT * 0.8,
-        paddingBottom: 40,
     },
     header: {
         flexDirection: 'row',
@@ -248,8 +257,19 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: palette.slate500,
     },
+    // Shrinks to fit the sheet's cap and scrolls; never grows past its content.
+    body: {
+        flexGrow: 0,
+        flexShrink: 1,
+    },
     content: {
         padding: 20,
+    },
+    footer: {
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: palette.slate100,
     },
     sourceButtonsRow: {
         flexDirection: 'row',
@@ -355,7 +375,6 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     confirmButton: {
-        marginTop: 24,
         backgroundColor: palette.blue500,
         borderRadius: 12,
         padding: 16,

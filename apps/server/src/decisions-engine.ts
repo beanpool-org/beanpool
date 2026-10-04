@@ -272,7 +272,7 @@ function carriesMemberBalance(params: unknown): params is Record<string, unknown
  * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote
  * or made an emergency suspension is an admin key: members get the public reason on the card, not the key.
  * A member's balance recorded in its params is left off too: decisionForReader gives it to the Decision's voters.
- * Admin routes (/api/local/admin/*) serve the full Decision.
+ * Admin routes (/api/local/admin/*) serve decisionForAdmin.
  */
 export function publicDecision(decision: Decision): PublicDecision {
     const { adminHaltedBy: _haltedBy, ...rest } = decision;
@@ -296,6 +296,21 @@ export function decisionForReader(decision: Decision, reader: string | null | un
     const params: Record<string, unknown> = { ...(shown.params || {}) };
     for (const k of MEMBER_BALANCE_PARAMS) if (k in decision.params) params[k] = decision.params[k];
     return { ...shown, params };
+}
+
+/**
+ * A Decision as an admin route (/api/local/admin/*) serves it to `reader`, the key of the admin's key session: the full
+ * Decision, except a member's balance and debt recorded in its params. Those go only where decisionForReader sends them:
+ * to an admin who may vote in this Decision, or is its subject. Being an admin or the owner is not a reason to see them.
+ * The route passes no reader for a password session or an automation token (a token's actor is its maker's key, but a
+ * token is not a voter), so neither ever does. balanceHidden says they were left off.
+ */
+export function decisionForAdmin(decision: Decision, reader: string | null | undefined): Decision & { balanceHidden?: true } {
+    if (!carriesMemberBalance(decision.params)) return decision;
+    if (reader && (reader === decision.subject || checkVoterEligibility(reader, decision).ok)) return decision;
+    const params: Record<string, unknown> = { ...decision.params };
+    for (const k of MEMBER_BALANCE_PARAMS) delete params[k];
+    return { ...decision, params, balanceHidden: true };
 }
 
 /**

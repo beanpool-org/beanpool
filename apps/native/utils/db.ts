@@ -1334,6 +1334,8 @@ export async function refreshBalanceFromServer(pubkey: string) {
                 liveOffers: balData.liveOffers ?? 0,
                 knownGrant: typeof balData.knownGrant === 'number' ? balData.knownGrant : 0,
                 frozen: !!balData.frozen,
+                knownFrozen: balData.knownFrozen === true,
+                creditFrozen: balData.creditFrozen === true,
             });
             const prevTierStr = await AsyncStorage.getItem(`bp_tier_${pubkey}`);
             if (prevTierStr !== newTierStr) {
@@ -1376,6 +1378,8 @@ export async function getBalance(pubkey: string) {
     let liveOffers = 0;        // v3: count of live Offers (drives the credit ladder)
     let knownGrant = 0;        // the known floor's part of the limit (one live offer unlocks it); 0 from an older node
     let frozen = false;        // v3: debt below usable floor → spending paused
+    let knownFrozen = false;   // the community's admins froze this member's known floor (utils/credit-line-card.ts)
+    let creditFrozen = false;  // … or their whole line (the manager's Freeze)
 
     // Background fetch to ensure parity
     refreshBalanceFromServer(pubkey).catch(() => null);
@@ -1406,6 +1410,8 @@ export async function getBalance(pubkey: string) {
             liveOffers = parsed.liveOffers ?? 0;
             knownGrant = typeof parsed.knownGrant === 'number' ? parsed.knownGrant : 0;
             frozen = !!parsed.frozen;
+            knownFrozen = parsed.knownFrozen === true;
+            creditFrozen = parsed.creditFrozen === true;
         }
     } catch { /* ignore */ }
 
@@ -1432,6 +1438,8 @@ export async function getBalance(pubkey: string) {
         liveOffers,
         knownGrant,
         frozen,
+        knownFrozen,
+        creditFrozen,
     };
 }
 

@@ -178,6 +178,8 @@ async function main(): Promise<void> {
     const kimOn = await balanceOf(kim);
     assert(kimOn.body?.floor === -1000 && kimOn.body?.usableFloor === -1000,
         `a confirmed member with one live offer may use the whole known floor, -1,000 (${show(kimOn)})`);
+    assert(kimOn.body?.knownFrozen === false && typeof kimOn.body?.tier?.name === 'string',
+        `with no exception the line is not frozen, and the answer carries her tier (${show(kimOn)})`);
     const unaOn = await balanceOf(una);
     assert(unaOn.body?.floor === 0 && unaOn.body?.usableFloor === 0, `an unconfirmed member's floor is unchanged, 0 (${show(unaOn)})`);
     const b600 = await buy(kim, samSells(600));
@@ -201,6 +203,7 @@ async function main(): Promise<void> {
     const kimLowered = getBalance(kim.pk);
     assert(Math.abs(kimLowered.balance - -1000) < 1e-9 && kimLowered.usableFloor === -300 && kimLowered.frozen === true,
         `nothing is deducted: Kim still holds -1,000 and is spend-frozen at a -300 floor (${JSON.stringify({ b: kimLowered.balance, u: kimLowered.usableFloor, f: kimLowered.frozen })})`);
+    assert(kimLowered.knownFrozen === false, 'a lowered line is not an admin freeze: knownFrozen stays false');
     const frozenBuy = await buy(kim, samSells(10));
     assert(frozenBuy.status >= 400, `while frozen, Kim can't buy (${show(frozenBuy)})`);
     const overCap = await exception(adaAdmin, { memberPubkey: kim.pk, amount: 2500 });
@@ -219,6 +222,29 @@ async function main(): Promise<void> {
     assert(raiseLine?.actor === ada.pk && raiseLine.memberPubkey === kim.pk && raiseLine.oldValue === '300' && raiseLine.newValue === '1800',
         `the raise names the admin, the member, and 300 → 1,800 (${JSON.stringify(raiseLine)})`);
     assert(!actions.includes('credit_cap') && logged.length === 3, `the refused requests wrote no line (${logged.length} lines)`);
+
+    // An admin freezes Kim's line through the same route the manager's settings use (rehearsal 5 Oct, b): the member's own
+    // answer says the admins froze it (knownFrozen), she has no line while it lasts, and her tier stays the one a
+    // confirmed member's line gives (tiers are merit badges): not "Newcomer".
+    const freeze = await exception(adaAdmin, { memberPubkey: kim.pk, frozen: true });
+    assert(freeze.status === 200 && freeze.body?.exception?.frozen === true, `an admin freezes Kim's known floor (${show(freeze)})`);
+    const kimFrozen = await balanceOf(kim);
+    assert(kimFrozen.status === 200 && kimFrozen.body?.knownFrozen === true && kimFrozen.body?.floor === 0 && kimFrozen.body?.activated === false,
+        `Kim's own answer: knownFrozen, no line while it lasts (${show(kimFrozen)})`);
+    assert(kimFrozen.body?.tier?.name === kimOn.body?.tier?.name && kimFrozen.body?.tier?.name !== 'Newcomer',
+        `and her tier stays ${kimOn.body?.tier?.name}, not Newcomer (${kimFrozen.body?.tier?.name})`);
+    const unfreeze = await exception(adaAdmin, { memberPubkey: kim.pk, amount: 1800 });
+    assert(unfreeze.status === 200 && getBalance(kim.pk).knownFrozen === false && getBalance(kim.pk).usableFloor === -1800,
+        `an admin opens it again at 1,800 and the freeze is gone (${show(unfreeze)})`);
+    // The manager's "Freeze" on a member is the other freeze (members.credit_frozen, the whole line): the same answer.
+    const tierBefore = (await balanceOf(kim)).body?.tier?.name;
+    const wholeFreeze = await call('POST', null, `/api/local/admin/users/${kim.pk}/freeze`, { freeze: true }, owner);
+    const kimWhole = await balanceOf(kim);
+    assert(wholeFreeze.status === 200 && kimWhole.body?.creditFrozen === true && kimWhole.body?.floor === 0 && kimWhole.body?.tier?.name === tierBefore,
+        `the manager's Freeze: creditFrozen, no line, her tier still ${tierBefore} (${show(kimWhole)})`);
+    const wholeOpen = await call('POST', null, `/api/local/admin/users/${kim.pk}/freeze`, { freeze: false }, owner);
+    assert(wholeOpen.status === 200 && getBalance(kim.pk).creditFrozen === false && getBalance(kim.pk).usableFloor === -1800,
+        `and unfreezing gives her line back (${show(wholeOpen)})`);
 
     // ── 5. the dial off again ──────────────────────────────────────────────────────────────────
     console.log('── 5. the dial off again ──');

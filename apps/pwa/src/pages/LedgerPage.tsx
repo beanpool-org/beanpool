@@ -18,6 +18,7 @@ import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndex
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
+import { creditLineCard, knownFrozenPartNote, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -325,7 +326,17 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
 
             {/* Credit position — zero is the sweet spot. A brand-new member (no trades yet) has no
                 credit line (floor 0); their line opens automatically on their first real trade. */}
-            {activated === false ? (
+            {creditLineCard(balanceInfo ?? {}) === 'frozen' ? (
+                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-4 mb-4 shadow-sm" data-testid="ledger-known-frozen">
+                    <div className="flex items-start gap-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-xl p-3">
+                        <span className="text-xl leading-none" aria-hidden="true">❄️</span>
+                        <div>
+                            <h2 className="text-sm font-extrabold text-sky-800 dark:text-sky-200">{KNOWN_FROZEN_TITLE}</h2>
+                            <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">{KNOWN_FROZEN_BODY}</div>
+                        </div>
+                    </div>
+                </div>
+            ) : activated === false ? (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-4 mb-4 shadow-sm">
                     <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
                         <span className="text-xl leading-none">🌱</span>
@@ -341,6 +352,9 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
                     {/* The bar itself now carries the offer ladder (locked zone, rungs, unlock caption). */}
                     <CreditBar balance={balance} floor={floor} usableFloor={usableFloor} liveOffers={liveOffers} knownGrant={balanceInfo?.knownGrant ?? 0} />
+                    {knownFrozenPartNote(balanceInfo ?? {}) && (
+                        <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-2">{knownFrozenPartNote(balanceInfo ?? {})}</p>
+                    )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
                     {frozen && (
                         <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">

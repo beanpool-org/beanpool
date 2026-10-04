@@ -43,6 +43,12 @@ describe('known consent', () => {
         expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '2:50:60', consentedAt: '2026-10-04T00:00:00Z', consentedVersion: '1:50:60' }))).toBe(true);
     });
 
+    it('asks again at wording 3 (round 4: posts and messages counts, the ring and inactivity alerts, the operator\'s copies)', () => {
+        const onTwo = readKnownConsent({ ...TERMS, version: '3:50:60', consentedAt: '2026-10-04T00:00:00Z', consentedVersion: '2:50:60' })!;
+        expect(shouldOfferConsent(onTwo)).toBe(true);
+        expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '3:50:60', consentedAt: '2026-10-04T00:00:00Z', consentedVersion: '3:50:60' }))).toBe(false);
+    });
+
     it('the join screen asks only in a known community, and an older node (404 body) shows nothing', () => {
         const terms = readConsentTerms({ known: true, debtLinePct: 50, quietDays: 60, version: '1:50:60', text: TERMS.text });
         expect(joinAsksConsent(terms)).toBe(true);

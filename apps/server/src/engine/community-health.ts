@@ -31,9 +31,11 @@ export const QUIET_DAYS_DEFAULT = 60;
  * (review r4176931267) names what every admin sees of trades, unlogged, whatever the member agrees to: a trade not yet
  * finished or one an admin settled (/api/local/admin/disputes), each member's trade counts and total (/admin/data
  * memberStats), and the fraud alerts that name members (getCommunityHealth flags). Wording 1 said "They can't see your
- * trades", so a member who agreed to it is asked again.
+ * trades", so a member who agreed to it is asked again. Wording 3 (fix round 4) names the rest of what an admin sees:
+ * memberStats' posts and messages counts, the ring alert (names, no Beans), the inactivity alert, the one-to-one chat
+ * only, and that whoever runs the server holds the whole database with its backups, snapshots and standby copies.
  */
-export const CONSENT_WORDING_VERSION = 2;
+export const CONSENT_WORDING_VERSION = 3;
 
 export class HealthError extends Error {
     constructor(readonly status: number, readonly code: string, message: string) {
@@ -70,10 +72,14 @@ export function consentTerms() {
         + `or if you stay in debit for ${quietDays} days without a sale. That's how a LETS has always worked. `
         + `Every look at your balance is logged, and you can take this back at any time in Settings. `
         + `Whatever you choose, any admin can see some of your trades, and those looks are not logged: a trade that isn't `
-        + `finished yet or that an admin settled (who with, the listing, the price, and your chat with them, which they can't `
-        + `read if it is private), so a stuck trade can be settled; how many trades you have finished or cancelled, and what `
-        + `the finished ones came to; and a fraud alert that names you, and how many Beans moved, if you trade mostly with `
-        + `one member, within a small group, or with members you invited. Nothing else of your trades.`;
+        + `finished yet or that an admin settled (who with, the listing, the price, and your one-to-one chat with them, which `
+        + `they can't read if it is private), so a stuck trade can be settled; how many trades you have finished or `
+        + `cancelled and what the finished ones came to, and how many posts you have up and messages you have sent; a fraud `
+        + `alert that names you, and how many Beans moved, if you trade mostly with one member or with members you invited; `
+        + `one that names you, with no Beans, if you are in a group of members, at least half of them new, who trade mostly `
+        + `with each other; and an alert that names you if no Beans have moved in or out of your account for a set number `
+        + `of days. Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance `
+        + `and trades included, and its backups, snapshots and standby copies.`;
     return { known: isKnownCommunity(), debtLinePct, quietDays, version: `${CONSENT_WORDING_VERSION}:${debtLinePct}:${quietDays}`, text };
 }
 

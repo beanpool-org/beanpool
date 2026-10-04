@@ -274,6 +274,7 @@ async function main(): Promise<void> {
     // what that text said, not today's, so he is in no exception until he agrees to today's wording.
     const leaRow = db.prepare('SELECT version FROM known_consents WHERE member_pubkey = ?').get(lea.pk) as { version: string };
     const [wordingNow, ...leaLines] = leaRow.version.split(':');
+    assert(wordingNow === '3', `he agreed to wording 3, so the one before is wording 2, the round-3 text (${leaRow.version})`);
     db.prepare('UPDATE known_consents SET version = ? WHERE member_pubkey = ?').run([Number(wordingNow) - 1, ...leaLines].join(':'), lea.pk);
     const ex5 = await exceptions(ada);
     const leaMine = await call('GET', lea, '/api/names/consent');
@@ -405,24 +406,34 @@ async function main(): Promise<void> {
     const consentText = String(terms9.body?.text ?? '');
     assert(![policy, guide, operatorPage, privacyPage, consentText].some((t) => notSeen.test(t)),
         'no text says an admin never sees a trade: every admin sees some (disputes, memberStats, fraud flags)');
-    const tradeList = "a trade that isn't finished yet or that an admin settled (both members, the listing, the price, and the messages in a chat the two of them share, which an admin can't read if it is a private chat), so that a stuck trade can be settled; how many trades each member has finished or cancelled, and what the finished ones came to; and fraud alerts that name members, with the Beans that moved, when they trade mostly with one member, within a small group, or with members they invited";
+    // Wording 3 (round 4): memberStats' posts and messages counts, the ring alert (names, no Beans), the inactivity alert,
+    // the pair's one-to-one chat only, and the operator's whole database with its backups, snapshots and standby copies.
+    const tradeList = "a trade that isn't finished yet or that an admin settled (both members, the listing, the price, and the messages in the two members' one-to-one chat, which an admin can't read if it is private), so that a stuck trade can be settled; how many trades each member has finished or cancelled and what the finished ones came to, and how many posts each member has up and messages they have sent; fraud alerts that name members, with the Beans that moved, when they trade mostly with one member or with members they invited; a fraud alert that names a group of members, at least half of them new, who trade mostly with each other, with no Beans; and an alert that names the members who have had no Beans move in or out for a set number of days";
     assert(policy.includes(`<li><strong>What any admin can see of trades,</strong> in any community and whatever you agreed to: ${tradeList}. Nothing else of anyone's trades. These looks are not logged.</li>`),
         'the policy lists what any admin sees of trades, says nothing else, and says it is not logged');
     assert(operatorPage.includes(`What every admin can see of trades, in any community and with no log, is: ${tradeList}.`),
         'the operator page lists the same, with no log');
-    assert(/## What any admin can see of your trades/.test(guide) && /\*\*A trade that isn't finished yet, or that an admin settled\.\*\* Both members, the listing, the price, and the messages in a chat the two of you share\./.test(guide)
-        && /\*\*How many trades each member has finished or cancelled,\*\* and what the finished ones came to\./.test(guide)
-        && /\*\*Fraud alerts that name members,\*\* with the Beans that moved/.test(guide)
+    assert(/## What any admin can see of your trades/.test(guide) && /\*\*A trade that isn't finished yet, or that an admin settled\.\*\* Both members, the listing, the price, and the messages in the one-to-one chat of the two members\./.test(guide)
+        && /\*\*How many trades each member has finished or cancelled,\*\* and what the finished ones came to, and how many posts each member has up and messages they have sent\./.test(guide)
+        && /\*\*Fraud alerts that name members,\*\* with the Beans that moved: when someone trades mostly with one member, or with members they invited\./.test(guide)
+        && /\*\*A fraud alert that names a group of members,\*\* at least half of them new, who trade mostly with each other\. It shows no Beans\./.test(guide)
+        && /\*\*An alert that names the members who have had no Beans move in or out\*\* for a set number of days\./.test(guide)
         && /Nothing else of your trades\. These looks are not logged/.test(guide),
-        'the members\' guide lists the same three, says nothing else, and says they are not logged');
-    assert(/any admin can see some of your trades, and those looks are not logged: a trade that isn't finished yet or that an admin settled \(who with, the listing, the price, and your chat with them/.test(consentText)
-        && /how many trades you have finished or cancelled, and what the finished ones came to/.test(consentText)
-        && /a fraud alert that names you, and how many Beans moved/.test(consentText) && /Nothing else of your trades\.$/.test(consentText)
+        'the members\' guide lists the same five, says nothing else, and says they are not logged');
+    const wholeDb = /holds its whole database, (balances and trades|your balance and trades) included, and its backups, snapshots and standby copies/;
+    assert(wholeDb.test(policy) && wholeDb.test(guide) && /holds its whole database, with its backups, snapshots and standby copies/.test(privacyPage),
+        'the policy and both guide pages say whoever runs the server holds the whole database, with its backups, snapshots and standby copies');
+    assert(/any admin can see some of your trades, and those looks are not logged: a trade that isn't finished yet or that an admin settled \(who with, the listing, the price, and your one-to-one chat with them/.test(consentText)
+        && /how many trades you have finished or cancelled and what the finished ones came to, and how many posts you have up and messages you have sent;/.test(consentText)
+        && /a fraud alert that names you, and how many Beans moved, if you trade mostly with one member or with members you invited;/.test(consentText)
+        && /one that names you, with no Beans, if you are in a group of members, at least half of them new, who trade mostly with each other;/.test(consentText)
+        && /an alert that names you if no Beans have moved in or out of your account for a set number of days\./.test(consentText)
+        && /Nothing else of your trades\. Whoever runs this community's server holds its whole database, your balance and trades included, and its backups, snapshots and standby copies\.$/.test(consentText)
         && /Every look at your balance is logged/.test(consentText),
-        `the wording a member agrees to says what any admin sees of trades, unlogged, and that a look at a balance is logged (${show(terms9)})`);
+        `the wording a member agrees to says what any admin sees of trades, unlogged, that a look at a balance is logged, and that whoever runs the server holds it all (${show(terms9)})`);
     const quoted = consentText.replace(/past \d+% of/, 'past 50% of').replace(/debit for \d+ days/, 'debit for 60 days');
     assert(guide.includes(`"${quoted}"`), 'the guide quotes the wording a member agrees to, word for word (at 50% and 60 days)');
-    assert(String(terms9.body?.version ?? '').startsWith('2:'), `the wording is version 2, so a member who agreed to wording 1 ("They can't see your trades") is asked again (${show(terms9)})`);
+    assert(String(terms9.body?.version ?? '').startsWith('3:'), `the wording is version 3, so a member who agreed to wording 2 (no posts or messages counts, no ring or inactivity alert, no word of the operator's backups) is asked again (${show(terms9)})`);
     const before9 = logRows();
     const disputes9 = await call('GET', null, '/api/local/admin/disputes?minDays=0', undefined, adaSession);
     const data9 = await call('POST', null, '/api/local/admin/data', {}, adaSession);

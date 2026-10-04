@@ -627,7 +627,9 @@ async function main(): Promise<void> {
     assert(scrubbedRow.thumbnail_url === null, 'thumbnail_url NULLed on tombstone');
 
     // Per-Channel Pruner: insert an old item and run prunePulseItems with keepPerChannel = 1
-    const oldPublished = new Date(Date.now() - (35 * 24 * 60 * 60 * 1000)).toISOString();
+    // A fixed date older than every fixture in this file, never "now - N days": the pruner keeps the newest per channel, so an
+    // item dated relative to the clock overtook item_1 (published 2026-08-30T10:00Z) at 2026-10-04T10:00Z and item_1 was pruned.
+    const oldPublished = '2026-01-01T00:00:00.000Z';
     insertStmt.run('item_old', ch.id, kayla, 'youtube', 'vid_old', 'https://youtube.com/watch?v=vid_old', 'Old Video', 'https://img.com/old.jpg', oldPublished, 'craft', now, now);
 
     const prunedCount = prunePulseItems(1);

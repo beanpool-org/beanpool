@@ -39,6 +39,10 @@ describe('known consent', () => {
         expect(consentHeading(readKnownConsent(TERMS)!)).toBe("What this community's admins can see");
     });
 
+    it('asks again when the wording changes and the lines do not (wording 2, review r4176931267)', () => {
+        expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '2:50:60', consentedAt: '2026-10-04T00:00:00Z', consentedVersion: '1:50:60' }))).toBe(true);
+    });
+
     it('the join screen asks only in a known community, and an older node (404 body) shows nothing', () => {
         const terms = readConsentTerms({ known: true, debtLinePct: 50, quietDays: 60, version: '1:50:60', text: TERMS.text });
         expect(joinAsksConsent(terms)).toBe(true);

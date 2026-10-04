@@ -410,8 +410,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         try {
             const removed = removeGroupMember(ctx.params.id, actor, ctx.params.pubkey);
+            if (!removed) {
+                // Forge reliability fix: return 404 Not Found when group member does not exist in group
+                ctx.status = 404;
+                ctx.body = { error: 'Group member not found' };
+                return;
+            }
             ctx.status = 200;
-            ctx.body = { success: removed };
+            ctx.body = { success: true };
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
@@ -627,8 +633,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         try {
             const deleted = deleteGroupPost(ctx.params.id, actor, ctx.params.postId);
+            if (!deleted) {
+                // Forge reliability fix: return 404 Not Found when group post does not exist
+                ctx.status = 404;
+                ctx.body = { error: 'Group post not found' };
+                return;
+            }
             ctx.status = 200;
-            ctx.body = { success: deleted };
+            ctx.body = { success: true };
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;

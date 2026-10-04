@@ -144,3 +144,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/local/admin/posts/bulk-delete` in `apps/server/src/routes/admin.ts` called `adminBulkDeletePosts` without enclosing it in a try/catch block.
 **Learning:** Unlike single post deletion (`POST /api/local/admin/posts/:id/delete`), bulk post deletion was exposed to unhandled exceptions (e.g. SQLite locks or state engine failures during multi-post operations), which would produce 500 server crashes instead of formatted JSON error bodies.
 **Pattern:** Ensure all batch/bulk state mutation routes wrap multi-resource engine operations in `try/catch` blocks that log the error and set `ctx.status = 500`.
+
+## 2026-10-04 - [Missing 404 status codes on non-existent group member removal and post deletion]
+**Issue:** `DELETE /api/groups/:id/members/:pubkey` and `DELETE /api/groups/:id/posts/:postId` in `apps/server/src/routes/groups.ts` returned `200 OK` with `{ success: false }` when `removeGroupMember` or `deleteGroupPost` returned `false` (item/member not found in group).
+**Learning:** Returning HTTP `200 OK` on missing or failed resource deletions misleads API clients into treating failed deletion operations as successes.
+**Pattern:** Ensure deletion route handlers check boolean return flags from domain functions and explicitly set `ctx.status = 404` with `{ error: '...' }` when the target resource is missing.

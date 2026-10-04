@@ -449,6 +449,23 @@ export function completeRekey(
     };
 }
 
+/**
+ * Whether a report on this member was actioned (since `sinceIso`, or ever when null). The report row doesn't keep
+ * whether it suspended them, so any actioned report counts: a cancel then leaves the 'suspended' as it is. Its member
+ * is read as actionReport's reportSubjectOf reads it, more widely: the reported key, a reported post's author or a
+ * reported Pulse item's owner.
+ */
+function actionedReportOn(publicKey: string, sinceIso: string | null): boolean {
+    return !!db.prepare(`
+        SELECT 1 FROM abuse_reports r
+        WHERE r.status = 'actioned' AND (? IS NULL OR r.updated_at >= ?)
+          AND (r.target_pubkey = ?
+               OR r.target_post_id IN (SELECT id FROM posts WHERE author_pubkey = ?)
+               OR r.target_pulse_item_id IN (SELECT id FROM pulse_items WHERE owner_pubkey = ?))
+        LIMIT 1
+    `).get(sinceIso, sinceIso, publicKey, publicKey, publicKey);
+}
+
 /** A refusal with the HTTP status its route answers. */
 function refusal(status: number, message: string): Error {
     const err: any = new Error(message);
@@ -461,7 +478,9 @@ function refusal(status: number, message: string): Error {
  * ('rekey_pending' row gone), and the member's status is what it was before the code (rekey_requests.prior_status).
  * Who may make the code may cancel it (assertMayRekey: an owner for an owner's or admin's). A code made before the
  * prior status was kept puts the member back to 'active' only if the code is what suspended them ('suspended' with the
- * key held for the re-key), and the answer says so. The sessions issue ended stay ended; the key signs in again.
+ * key held for the re-key) and no report on them was ever actioned, and the answer says so. A member a report suspended,
+ * before or while the code waited, stays suspended (the answer says why). The sessions issue ended stay ended; the
+ * key signs in again.
  *
  * One transaction, and each write must touch exactly the rows it expects, or nothing is changed. A used ('completed')
  * or expired code is refused: there is nothing waiting to cancel.
@@ -506,10 +525,17 @@ export function cancelRekeyCode(
         // A standby only adds replaced keys, so the hold's delete reaches it as a tombstone (engine/sync.ts
         // applyTombstoneLocally), and a server that takes over lets the key in, as this one now does.
         writeTombstone('invalidated_keys', cleanOld);
-        // issueRekeyCode wrote 'suspended' unless the member was 'disabled'; only that 'suspended' is put back.
+        // issueRekeyCode wrote 'suspended' unless the member was 'disabled'; only that 'suspended' is put back, and never
+        // on doubt. A report's suspension writes the same 'suspended' (state-engine.ts actionReport) and records it on
+        // a waiting code's prior_status; any other suspension (an admin's, a Decision's, an offboarding) writes another
+        // status, which is left alone. A report actioned on this member while the code waited (or ever, for a code
+        // made before prior_status was kept) leaves them suspended: it may have been what suspended them.
         const now = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(cleanOld) as { status: string } | undefined)?.status;
         let target: string | null = req.prior_status ?? null;
-        if (target === null && now === 'suspended') {
+        if (now === 'suspended' && (target === 'suspended' || actionedReportOn(cleanOld, target === null ? null : req.created_at))) {
+            target = null;
+            note = 'They stay suspended: something other than this code suspended them (a report, before or while the code waited). Reactivate them from their page if that’s no longer right.';
+        } else if (target === null && now === 'suspended') {
             target = 'active';
             note = 'This code was made before the node kept the member’s earlier status, so they are back to active.';
         }

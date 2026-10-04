@@ -20,6 +20,8 @@
  *  E. A code made before the prior status was kept puts a re-key-suspended member back to active, and says so.
  *  F. A member suspended by an admin ('disabled') stays so; two codes in a row put back the status before the first.
  *  G. A write that would touch an unexpected row changes nothing: the key freed meanwhile, the cancel is refused.
+ *  H. A suspension something else made stays: a report's suspension while the code waits (and over an expired code),
+ *     and an older server's code over a report's suspension (no prior status kept): the member stays suspended.
  *
  * Run (from apps/server): mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-rekey-cancel" node ../../scripts/run-server-suites.mjs
  */
@@ -30,7 +32,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
-import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, getMember } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, getMember, submitReport } from './state-engine.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
@@ -272,6 +274,70 @@ async function runTests() {
         assert(r.status === 409 && /Nothing was changed/.test(r.json.error), `G: the cancel is refused (${r.status} ${r.json.error})`);
         assert(latestRequest(zed.pubKeyHex)?.status === 'pending' && getMember(zed.pubKeyHex)?.status === 'suspended' && cancelLogLines('ZedRace') === 0,
             'G: nothing changed: the code still waits, Zed still suspended, no log line');
+    }
+
+    // ── H. A suspension something else made stays ───────────────────────────────────────────
+    {
+        const rep = makeKeypair();
+        join(rep, 'RexReporter');
+        const reportSuspends = async (pk: string) => {
+            const report = submitReport(rep.pubKeyHex, pk, 'Repeated harassment in the market posts');
+            if (!report) throw new Error('report refused');
+            return as(ownerSession, 'POST', `/api/local/admin/reports/${report.id}/action`, { suspendUser: true });
+        };
+
+        // A report actioned with suspendUser while the code waits (review 4176252096).
+        const pia = makeKeypair();
+        join(pia, 'PiaReported');
+        await issue(ownerSession, pia.pubKeyHex);
+        const actioned = await reportSuspends(pia.pubKeyHex);
+        assert(actioned.status === 200 && getMember(pia.pubKeyHex)?.status === 'suspended', `H: a report suspends Pia while the code waits (${actioned.status})`);
+        const r = await cancel(ownerSession, pia.pubKeyHex);
+        assert(r.status === 200 && r.json.status === 'suspended' && /report/.test(r.json.note ?? ''),
+            `H: the cancel leaves Pia suspended and says why (${r.status} ${JSON.stringify(r.json)})`);
+        assert(getMember(pia.pubKeyHex)?.status === 'suspended' && heldReason(pia.pubKeyHex) === undefined && latestRequest(pia.pubKeyHex)?.status === 'cancelled',
+            `H: Pia stays suspended; the code is cancelled and its hold gone (${getMember(pia.pubKeyHex)?.status})`);
+        // Where the report alone leaves a member: Pia, after the cancel, can do just what Kit can.
+        const kit = makeKeypair();
+        join(kit, 'KitReported');
+        await reportSuspends(kit.pubKeyHex);
+        const kitActs = await acts(kit, 'reported only'), piaActs = await acts(pia, 'after the cancel');
+        assert(piaActs === kitActs && signsIn(pia) === signsIn(kit), `H: Pia is where the report alone leaves a member (acts ${piaActs}/${kitActs})`);
+
+        // The same while an expired code holds her, and a new code is made over it: the report's suspension carries.
+        const ivy = makeKeypair();
+        join(ivy, 'IvyChain');
+        await issue(ownerSession, ivy.pubKeyHex);
+        await reportSuspends(ivy.pubKeyHex);
+        db.prepare("UPDATE rekey_requests SET expires_at = ? WHERE old_pubkey = ?").run(new Date(Date.now() - 60_000).toISOString(), ivy.pubKeyHex);
+        await cancel(ownerSession, ivy.pubKeyHex); // marks it expired, refused
+        await issue(ownerSession, ivy.pubKeyHex);
+        const ri = await cancel(ownerSession, ivy.pubKeyHex);
+        assert(ri.status === 200 && getMember(ivy.pubKeyHex)?.status === 'suspended' && /report/.test(ri.json.note ?? ''),
+            `H: a new code over the expired one, cancelled: Ivy stays suspended (${ri.status} ${JSON.stringify(ri.json)})`);
+
+        // P2 (review 4176252098): an older server's code (no prior status) over a report's suspension.
+        const quin = makeKeypair();
+        join(quin, 'QuinLegacy');
+        await reportSuspends(quin.pubKeyHex);
+        await issue(ownerSession, quin.pubKeyHex);
+        db.prepare('UPDATE rekey_requests SET prior_status = NULL WHERE old_pubkey = ?').run(quin.pubKeyHex);
+        const rq = await cancel(ownerSession, quin.pubKeyHex);
+        assert(rq.status === 200 && rq.json.status === 'suspended' && getMember(quin.pubKeyHex)?.status === 'suspended' && /report/.test(rq.json.note ?? ''),
+            `H: P2: an older code over a report’s suspension: Quin stays suspended, and the answer says why (${JSON.stringify(rq.json)})`);
+
+        // P3: the same, the older code expired with the key still held, and a new code made over it.
+        const ren = makeKeypair();
+        join(ren, 'RenLegacy');
+        await reportSuspends(ren.pubKeyHex);
+        await issue(ownerSession, ren.pubKeyHex);
+        db.prepare("UPDATE rekey_requests SET prior_status = NULL, status = 'expired', expires_at = ? WHERE old_pubkey = ?")
+            .run(new Date(Date.now() - 60_000).toISOString(), ren.pubKeyHex);
+        const renew = await issue(ownerSession, ren.pubKeyHex);
+        assert(renew.status === 200 && latestRequest(ren.pubKeyHex)?.prior_status !== 'active', `H: P3: a new code over the older expired hold doesn’t record active (${latestRequest(ren.pubKeyHex)?.prior_status})`);
+        const rr = await cancel(ownerSession, ren.pubKeyHex);
+        assert(rr.status === 200 && getMember(ren.pubKeyHex)?.status === 'suspended',
+            `H: P3: cancelling it leaves Ren suspended (${rr.status} ${JSON.stringify(rr.json)})`);
     }
 
     console.log(`\n========================================`);

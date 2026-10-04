@@ -171,4 +171,34 @@ describe('RepaymentCard', () => {
         expect(confirmSpy).toHaveBeenCalledTimes(2);
         expect(sentBody(2).requestId).not.toBe(sentBody(0).requestId);
     });
+
+    it('working a debt off, Pay the Commons opens with their own code, and the payment comes off the debt (confirmation 4)', async () => {
+        debts.getMyRepayment.mockResolvedValue({ debtId: CODE, amount: 200, repaid: 0, left: 200 });
+        debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-8', amount: 200, left: 200, leftAfter: 0, settled: true });
+        render(<RepaymentCard />);
+        expect(await screen.findByRole('status')).toHaveTextContent('under Pay the Commons, where your pay-back code is filled in: it comes off at once.');
+        fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
+        expect(screen.getByLabelText(/PAY-BACK CODE/)).toHaveValue(CODE);
+        fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '200' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
+        expect(confirmSpy).toHaveBeenCalledWith(REPAYMENT_WORDS.payConfirm(200, true, null, false));
+        expect(await screen.findByText('Paid 200 Beans to the Commons. Your debt is paid off and settled.')).toBeInTheDocument();
+        expect(sentBody()).toEqual({ amount: 200, debtId: CODE, requestId: expect.any(String) });
+    });
+
+    it('working a debt off, a payment without the code is said not to come off it, before and after, with the reference for an admin', async () => {
+        debts.getMyRepayment.mockResolvedValue({ debtId: CODE, amount: 200, repaid: 0, left: 200 });
+        debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-9', amount: 50 });
+        render(<RepaymentCard />);
+        await screen.findByRole('status');
+        fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
+        // Cleared by the member: it stays cleared.
+        fireEvent.change(screen.getByLabelText(/PAY-BACK CODE/), { target: { value: '' } });
+        fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '50' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
+        expect(confirmSpy).toHaveBeenCalledWith(REPAYMENT_WORDS.payConfirm(50, false, null, true));
+        expect(confirmSpy.mock.calls[0][0]).toContain('This won’t come off your debt: it has no pay-back code.');
+        expect(await screen.findByText(/This did not come off your debt: it was paid without your pay-back code\. .*reference: tx-9$/)).toBeInTheDocument();
+        expect(sentBody()).toEqual({ amount: 50, requestId: expect.any(String) });
+    });
 });

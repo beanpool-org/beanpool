@@ -30,7 +30,7 @@ export interface NamesDebt {
 }
 
 /** A member's own repayment, as GET /api/commons/repayment sends it: only while they work a debt off. */
-export interface Repayment { amount: number; repaid: number; left: number }
+export interface Repayment { amount: number; repaid: number; left: number; debtId?: string }
 
 export type DebtResult<T> = { ok: true; value: T } | { ok: false; status: number; message: string };
 
@@ -240,26 +240,40 @@ export function oneAtATime(setBusy: (busy: boolean) => void) {
     };
 }
 
+/** A payment without the pay-back code while the member works a debt off: before it is confirmed. */
+const NOT_OFF_DEBT_BEFORE = 'This won’t come off your debt: it has no pay-back code. To pay your debt, pay with your code (Pay the Commons '
+    + 'fills it in), or ask an admin to count this payment toward it afterwards. ';
+
+/** The same, once paid: it did not come off the debt, and the reference an admin counts it with. */
+const notOffDebtAfter = (ref: string) => ` This did not come off your debt: it was paid without your pay-back code. To have it count, ask an `
+    + `admin to count it toward your debt with this reference: ${ref}`;
+
 export const REPAYMENT_COPY = {
     banner: (r: Repayment) => `You’re working off a debt to the Commons: ${beans(r.left)} left of ${beans(r.amount)}. Every Bean you receive `
-        + 'above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself: it comes off at once. Then you keep '
+        + 'above 0 goes to the Commons until it is cleared. You can also pay some or all of it yourself under Pay the Commons, where your '
+        + 'pay-back code is filled in: it comes off at once. Then you keep '
         + 'what you receive, as everyone does.',
     payTitle: 'Pay the Commons',
     payIntro: 'Pay the Commons from the Beans you hold: never more than you hold. If you’re paying back a debt, enter the pay-back code an admin '
-        + 'gave you: what you pay comes off the debt at once, and when nothing is left it is settled. Your server refuses a payment above what is left.',
+        + 'gave you (working one off, yours is filled in): what you pay comes off the debt at once, and when nothing is left it is settled. Your server refuses a payment above what is left.',
     /** The admin's link's amount: what was left when they shared it (a work-off may have lowered it since). */
     linkLeft: (left: number) => `What was left when the admin shared this: ${beans(left)}.`,
     /**
      * `shared`: what was left when the admin shared the link, from the link; null when this phone doesn't know it. Never
      * "it covers what is left": only the node knows what is left now, and it refuses a payment above that.
      */
-    payConfirm: (amount: number, forDebt: boolean, shared: number | null = null) => `Pay ${beans(amount)} to the Commons${forDebt ? ' for your debt' : ''}? ${
-        !forDebt ? '' : `${shared !== null ? `${beans(shared)} was what was left when the admin shared this. ` : ''}It comes off your debt at once. `
+    payConfirm: (amount: number, forDebt: boolean, shared: number | null = null, openDebt = false) => `Pay ${beans(amount)} to the Commons${forDebt ? ' for your debt' : ''}? ${
+        !forDebt ? (openDebt ? NOT_OFF_DEBT_BEFORE : '') : `${shared !== null ? `${beans(shared)} was what was left when the admin shared this. ` : ''}It comes off your debt at once. `
             + 'If less is left now, your server refuses it and says how much, and nothing is paid. '
     }This can’t be undone.`,
+    /**
+     * `openDebt` (payConfirm and paid): the member is working a debt off (GET /api/commons/repayment) and this payment has no
+     * pay-back code, so the node takes it for the Commons and not off the debt (it never links one by itself: a member may pay
+     * the Commons for other reasons). Said before and after, with what to do.
+     */
     /** The node's answer for a debt: `settled` when this payment left nothing, else `leftAfter`, what is left now. */
-    paid: (amount: number, ref: string, forDebt: boolean, answer: Partial<PaidToCommons> = {}) => `Paid ${beans(amount)} to the Commons.${
-        !forDebt ? '' : answer.settled ? ' Your debt is paid off and settled.'
+    paid: (amount: number, ref: string, forDebt: boolean, answer: Partial<PaidToCommons> = {}, openDebt = false) => `Paid ${beans(amount)} to the Commons.${
+        !forDebt ? (openDebt ? notOffDebtAfter(ref) : '') : answer.settled ? ' Your debt is paid off and settled.'
             : typeof answer.leftAfter === 'number' ? ` That came off your debt: ${beans(answer.leftAfter)} left.`
                 : ` Reference: ${ref}`
     }`,

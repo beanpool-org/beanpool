@@ -2,7 +2,9 @@
  * The Ledger's repayment card on the web (#1597 item 4): while the member works a debt off, what is left and why their
  * incoming Beans go to the Commons; and, always, Pay the Commons, where a member paying back a debt enters the pay-back
  * code an admin shared (a link's ?payback=<code>&amount=<n> fills both in; n is what was left when the admin shared it, and
- * the node refuses a payment above what is left now, in its words). A settle is promised only when the node's answer says
+ * the node refuses a payment above what is left now, in its words). A member working a debt off finds their own code filled
+ * in (the repayment's debtId) unless they typed in the field; a payment without it is said, before and after, not to come
+ * off the debt, with its reference for an admin to count. A settle is promised only when the node's answer says
  * the payment covers what is left. Asked first; one payment at a time; the node's refusals in its own words. Each confirmed
  * payment has one id (lib/payment-request.ts): a lost answer keeps it here for Try again with the same id, never paid twice. The banner says nothing when the node answers nothing (an older node, no signal). Wraps at 320px and 130% text: no fixed widths, every control at least 48px tall.
  */
@@ -35,9 +37,16 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
     const [held, setHeld] = useState<ConfirmedPayment<CommonsPayment> | null>(null);
     const linkFor = (debt: string) => (debt && debt.toLowerCase() === link.code.trim().toLowerCase() ? link.left : null);
 
+    // Whether the member typed in the code field: their own code goes in only while they haven't.
+    const codeTyped = useRef(false);
+
     useEffect(() => {
         let live = true;
-        getMyRepayment().then((r) => { if (live) setRepayment(r); }).catch(() => {});
+        getMyRepayment().then((r) => {
+            if (!live) return;
+            setRepayment(r);
+            if (r?.debtId && !codeTyped.current) setCode((c) => (c.trim() ? c : r.debtId!));
+        }).catch(() => {});
         return () => { live = false; };
     }, [paid]);
 
@@ -50,7 +59,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
             if (beans === null) { setError(REPAYMENT_WORDS.badAmount); return; }
             const debt = code.trim();
             if (debt && !debtCodeOk(debt)) { setError(REPAYMENT_WORDS.badCode); return; }
-            if (!window.confirm(REPAYMENT_WORDS.payConfirm(beans, !!debt, linkFor(debt)))) return;
+            if (!window.confirm(REPAYMENT_WORDS.payConfirm(beans, !!debt, linkFor(debt), !debt && !!repayment))) return;
             payment = confirmCommonsPayment(beans, debt || undefined);
         }
         inFlight.current = true;
@@ -58,7 +67,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
         try {
             const r = await payTheCommons(payment);
             setHeld(null);
-            setPaid(REPAYMENT_WORDS.paid(r.amount, r.transactionId, !!payment.body.debtId, r));
+            setPaid(REPAYMENT_WORDS.paid(r.amount, r.transactionId, !!payment.body.debtId, r, !payment.body.debtId && !!repayment));
             setAmount('');
             onPaid?.();
         } catch (e) {
@@ -96,7 +105,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
                                 <input className={input} inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); setHeld(null); }} placeholder="For example 12.50" maxLength={12} disabled={busy} />
                             </label>
                             <label className="text-xs font-bold tracking-wide text-nature-600 dark:text-nature-400">PAY-BACK CODE (IF YOU HAVE ONE)
-                                <input className={input} value={code} onChange={(e) => { setCode(e.target.value); setHeld(null); }} placeholder="From an admin" autoCapitalize="none" autoCorrect="off" maxLength={64} disabled={busy} />
+                                <input className={input} value={code} onChange={(e) => { codeTyped.current = true; setCode(e.target.value); setHeld(null); }} placeholder="From an admin" autoCapitalize="none" autoCorrect="off" maxLength={64} disabled={busy} />
                             </label>
                             {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
                         </>

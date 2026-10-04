@@ -1,7 +1,8 @@
 /**
  * The Ledger's repayment card (#1597 item 4): while the member works a debt off, a banner says what is left and why
  * their incoming Beans go to the Commons (GET /api/commons/repayment, their own only). Under it, always, "Pay the
- * Commons" (app/pay-commons.tsx), where a member paying back a debt enters the pay-back code an admin gave them.
+ * Commons" (app/pay-commons.tsx), where a member paying back a debt enters the pay-back code an admin gave them; one
+ * working a debt off finds their own filled in (the repayment's debtId), so what they pay comes off it at once.
  * Reads on focus; says nothing when the node answers nothing (an older node, no signal): no false state.
  */
 import React, { useCallback, useState } from 'react';
@@ -39,7 +40,7 @@ export function RepaymentCard() {
                 </View>
             ) : null}
             <Pressable
-                onPress={() => router.push('/pay-commons')} accessibilityRole="button" accessibilityHint="Pay Beans you hold to the Commons, or pay back a debt"
+                onPress={() => router.push(repayment?.debtId ? { pathname: '/pay-commons', params: { code: repayment.debtId } } : '/pay-commons')} accessibilityRole="button" accessibilityHint="Pay Beans you hold to the Commons, or pay back a debt"
                 style={{ minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start', paddingHorizontal: 4 }}
             >
                 <Text style={{ fontSize: 14, fontWeight: '600', color: colors.brand.primary }}>{REPAYMENT_COPY.payTitle}</Text>

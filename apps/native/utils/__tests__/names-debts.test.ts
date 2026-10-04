@@ -313,7 +313,7 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(read('app', '(tabs)', 'ledger.tsx')).toContain('<RepaymentCard />');
         const card = read('components', 'RepaymentCard.tsx');
         expect(card).toContain('fetchMyRepayment(node, identity)');
-        expect(card).toContain("router.push('/pay-commons')");
+        expect(card).toContain("router.push(repayment?.debtId ? { pathname: '/pay-commons', params: { code: repayment.debtId } } : '/pay-commons')");
     });
     it('Pay the Commons checks the amount and code, asks first, then pays with the code as the debt id', () => {
         const pay = read('app', 'pay-commons.tsx');
@@ -327,7 +327,7 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(pay).toMatch(/const pay = \(\) => \{\s*if \(held\) \{ send\(held\); return; \}/);
         expect(pay).toContain('const edit = (set: (v: string) => void) => (v: string) => { set(v); setHeld(null); };');
         expect(pay).toContain('onChangeText={edit(setAmount)}');
-        expect(pay).toContain('onChangeText={edit(setCode)}');
+        expect(pay).toContain('onChangeText={edit((v) => { codeTyped.current = true; setCode(v); })}');
         expect(pay).toContain("{held ? 'Try again' : REPAYMENT_COPY.payTitle}");
     });
     it('one payment at a time: the confirmed tap goes through oneAtATime, with nothing awaited before it', () => {
@@ -342,10 +342,26 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
         expect(pay).toContain("const linkLeft = linkCode && typeof params.amount === 'string' ? parseBeans(params.amount) : null;");
         expect(pay).toContain("useState(linkLeft !== null ? String(linkLeft) : '')");
         expect(pay).toContain('const shared = debt && debt.toLowerCase() === linkCode ? linkLeft : null;');
-        expect(pay).toContain('REPAYMENT_COPY.payConfirm(beans, !!debt, shared)');
+        expect(pay).toContain('REPAYMENT_COPY.payConfirm(beans, !!debt, shared, !debt && !!myDebt)');
         expect(pay).toContain('{REPAYMENT_COPY.linkLeft(linkLeft)}');
-        expect(pay).toContain('REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, forDebt, r.value)');
+        expect(pay).toContain('REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, forDebt, r.value, !forDebt && !!myDebt)');
         expect(REPAYMENT_COPY.linkLeft(300)).toBe('What was left when the admin shared this: 300 Beans.');
+    });
+    it('working a debt off, Pay the Commons opens with their own code, from the banner or any other way in; a payment without it is said not to come off the debt, before and after (confirmation 4)', () => {
+        const pay = read('app', 'pay-commons.tsx');
+        expect(pay).toContain('const r = await fetchMyRepayment(node, identity);');
+        expect(pay).toContain('if (mine.debtId && !codeTyped.current) setCode((c) => (c.trim() ? c : mine.debtId!));');
+        expect(pay).toContain('onChangeText={edit((v) => { codeTyped.current = true; setCode(v); })}');
+        expect(read('components', 'RepaymentCard.tsx')).toContain("router.push(repayment?.debtId ? { pathname: '/pay-commons', params: { code: repayment.debtId } } : '/pay-commons')");
+        expect(REPAYMENT_COPY.banner({ amount: 200, repaid: 0, left: 200, debtId: DEBT.id })).toContain('pay some or all of it yourself under Pay the Commons, where your pay-back code is filled in: it comes off at once.');
+        expect(REPAYMENT_COPY.payIntro).toContain('enter the pay-back code an admin gave you (working one off, yours is filled in)');
+        expect(REPAYMENT_COPY.payConfirm(200, false, null, true)).toBe('Pay 200 Beans to the Commons? This won’t come off your debt: it has no pay-back code. To pay your debt, pay with '
+            + 'your code (Pay the Commons fills it in), or ask an admin to count this payment toward it afterwards. This can’t be undone.');
+        expect(REPAYMENT_COPY.paid(200, 'tx-9', false, { transactionId: 'tx-9', amount: 200 }, true)).toBe('Paid 200 Beans to the Commons. This did not come off your debt: it was paid '
+            + 'without your pay-back code. To have it count, ask an admin to count it toward your debt with this reference: tx-9');
+        // With the code, or owing nothing, no such words.
+        expect(REPAYMENT_COPY.payConfirm(200, true, null, false)).not.toContain('won’t come off');
+        expect(REPAYMENT_COPY.paid(200, 'tx-9', false)).toBe('Paid 200 Beans to the Commons.');
     });
     it('the shared pay-back code opens Pay the Commons with it filled in', () => {
         expect(DEBT_COPY.shareCode(DEBT)).toContain(`beanpool://pay-commons?code=${DEBT.id}&amount=179.5 `);

@@ -806,6 +806,35 @@ export function rebuildNamesAccessLogCheck(d: Database.Database): boolean {
     return true;
 }
 
+/**
+ * Rebuilds health_access_log when its CHECK lacks 'alerts_read' (a table #1599 made), keeping every row and adding the
+ * `detail` column the dispute looks write; true when it rebuilt. Idempotent.
+ */
+export function rebuildHealthAccessLogCheck(d: Database.Database): boolean {
+    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='health_access_log'").get() as { sql?: string } | undefined;
+    if (!row?.sql || row.sql.includes('alerts_read')) return false;
+    d.transaction(() => {
+        d.exec(`
+            DROP TABLE IF EXISTS health_access_log_migration;
+            CREATE TABLE health_access_log_migration (
+                id             TEXT PRIMARY KEY,
+                actor_pubkey   TEXT NOT NULL,
+                action         TEXT NOT NULL CHECK (action IN ('exceptions_opened', 'offboard_preview', 'offboard_settled',
+                                                               'disputes_listed', 'dispute_opened', 'alerts_read')),
+                subject_pubkey TEXT,
+                detail         TEXT,
+                at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO health_access_log_migration (id, actor_pubkey, action, subject_pubkey, at, updated_at)
+                SELECT id, actor_pubkey, action, subject_pubkey, at, updated_at FROM health_access_log;
+            DROP TABLE health_access_log;
+            ALTER TABLE health_access_log_migration RENAME TO health_access_log;
+        `);
+    })();
+    return true;
+}
+
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
@@ -1338,6 +1367,13 @@ export function initSchema() {
         if (rebuildNamesAccessLogCheck(db)) console.log('[DB] ✅ Migrated names_access_log CHECK constraint to allow copy_restored');
     } catch (err: any) {
         console.error('[DB] ❌ Failed to migrate names_access_log for copy_restored:', err?.message || err);
+    }
+    // health_access_log: its CHECK allows the looks at disputes and alerts, and it has `detail` (a table #1599 made has
+    // neither). Before schema.sql, as names_access_log above; the watermark triggers come after.
+    try {
+        if (rebuildHealthAccessLogCheck(db)) console.log('[DB] ✅ Migrated health_access_log for the looks at disputes and alerts');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate health_access_log for the looks at disputes and alerts:', err?.message || err);
     }
 
     // In-flight money and governance replicate to a standby as plain tables (engine/replication-manifest.ts, design G3):

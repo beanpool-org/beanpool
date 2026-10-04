@@ -212,12 +212,44 @@ export function logBalanceLook(actor: string, subject: string, action: 'offboard
         .run(crypto.randomBytes(16).toString('hex'), actor, action, subject);
 }
 
-/** Who opened the exceptions or looked at a member's balance, whose, and when: every owner and admin reads it. */
+/**
+ * An admin's look at trades in the disputes view (queue item 29, Marty 4 Oct: "Keep disputes, log every look"): the
+ * list, or one dispute. One line naming the trade ids shown. Written before the answer: a look that can't be logged
+ * isn't answered.
+ */
+export function logDisputesLook(actor: string, action: 'disputes_listed' | 'dispute_opened', tradeIds: string[]): void {
+    assertPlainTablesWritable();
+    db.prepare('INSERT INTO health_access_log (id, actor_pubkey, action, detail) VALUES (?, ?, ?, ?)')
+        .run(crypto.randomBytes(16).toString('hex'), actor, action, JSON.stringify(tradeIds));
+}
+
+/**
+ * An admin's look at the fraud alerts that name members: one line per member named (`subject_pubkey`, which a re-key
+ * moves). An answer that names no one writes none. Written before the answer, all lines or none.
+ */
+export function logAlertsLook(actor: string, flags: ReadonlyArray<{ members: string[] }>): void {
+    const named = [...new Set(flags.flatMap(f => Array.isArray(f.members) ? f.members : []).filter(m => typeof m === 'string' && m))];
+    if (!named.length) return;
+    assertPlainTablesWritable();
+    const insert = db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey) VALUES (?, ?, 'alerts_read', ?)");
+    db.transaction(() => { for (const m of named) insert.run(crypto.randomBytes(16).toString('hex'), actor, m); })();
+}
+
+function tradeIdsOf(detail: string | null): string[] | null {
+    if (!detail) return null;
+    try { const v = JSON.parse(detail); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null; } catch { return null; }
+}
+
+/**
+ * Who opened the exceptions, looked at a member's balance, at the disputes or at the alerts; whose, which trades, and
+ * when: every owner and admin reads it.
+ */
 export function readHealthAccessLog(limit = 100) {
-    return (db.prepare('SELECT id, actor_pubkey, action, subject_pubkey, at FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(Math.max(1, Math.min(500, limit))) as any[])
+    return (db.prepare('SELECT id, actor_pubkey, action, subject_pubkey, detail, at FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(Math.max(1, Math.min(500, limit))) as any[])
         .map(r => ({
             id: r.id, actor: r.actor_pubkey, actorCallsign: getMember(r.actor_pubkey)?.callsign ?? null, action: r.action,
-            subject: r.subject_pubkey ?? null, subjectCallsign: r.subject_pubkey ? getMember(r.subject_pubkey)?.callsign ?? null : null, at: r.at,
+            subject: r.subject_pubkey ?? null, subjectCallsign: r.subject_pubkey ? getMember(r.subject_pubkey)?.callsign ?? null : null,
+            tradeIds: tradeIdsOf(r.detail), at: r.at,
         }));
 }
 

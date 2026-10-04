@@ -19,6 +19,7 @@ import {
     getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, isOwnerLevelActor, nodeRoleOf, heldNodeRoleOf, type MemberNodeRole,
     canVouch, getMemberTrustProfile,
     getMemberStats,
+    getTradeTotals,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
     getNodeConfig, updateNodeConfig,
     adminRejectProject,
@@ -34,7 +35,7 @@ import {
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
-import { logBalanceLook } from '../engine/community-health.js';
+import { logAlertsLook, logBalanceLook, logDisputesLook } from '../engine/community-health.js';
 import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
@@ -933,8 +934,22 @@ router.get('/api/local/admin/sync-audit-log', async (ctx) => {
  */
 router.post('/api/local/admin/health', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    ctx.body = getCommunityHealth();
+    ctx.body = withLoggedAlerts(ctx, getCommunityHealth());
 });
+
+/**
+ * The fraud alerts that name members are an admin's look at those members' trades (queue item 29, Marty 4 Oct): a line
+ * per member named in the log the owner and admins read, first. Not logged (a standby, which writes no plain table):
+ * the alerts that name someone are left out of the answer.
+ */
+function withLoggedAlerts<T extends { flags: Array<{ members: string[] }> }>(ctx: any, health: T): T {
+    try {
+        logAlertsLook((ctx.state as any)?.actor || 'owner:password', health.flags);
+        return health;
+    } catch {
+        return { ...health, flags: health.flags.filter(f => !(Array.isArray(f.members) && f.members.length)) };
+    }
+}
 
 router.post('/api/local/admin/data', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -985,7 +1000,7 @@ router.post('/api/local/admin/data', async (ctx) => {
         // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt. Polls carry their counts and not
         // who voted for what: that is for members (includeVoters), and the manager never shows it.
         posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled'),
-        health: getCommunityHealth(),
+        health: withLoggedAlerts(ctx, getCommunityHealth()),
         reports: getReports().reports,
         reportCount: getReportCount(),
         escrowDisputesCount: (db.prepare(`
@@ -994,7 +1009,9 @@ router.post('/api/local/admin/data', async (ctx) => {
             WHERE status = 'pending'
               AND (julianday('now') - julianday(created_at)) >= 7
         `).pluck().get() as number) || 0,
+        // Each member's posts and messages; of trades, only the community's totals (queue item 29, Marty 4 Oct).
         memberStats: getMemberStats(),
+        tradeTotals: getTradeTotals(),
     };
 });
 
@@ -2316,6 +2333,8 @@ router.get('/api/local/admin/disputes', async (ctx) => {
     const total = counts[status];
 
     const disputes = getEscrowDisputes(minDays, limit, offset, status);
+    // Every look at the disputes is a line in the log the owner and admins read, naming the trades shown: first.
+    if (!logDisputesOrRefuse(ctx, 'disputes_listed', disputes.map(d => d.id))) return;
     ctx.body = {
         disputes,
         total,
@@ -2336,8 +2355,21 @@ router.get('/api/local/admin/disputes/:id', async (ctx) => {
         ctx.body = { error: 'Dispute not found' };
         return;
     }
+    if (!logDisputesOrRefuse(ctx, 'dispute_opened', [dispute.id])) return;
     ctx.body = { dispute };
 });
+
+/** A look at the disputes that can't be logged (a standby writes no plain table) isn't answered. */
+function logDisputesOrRefuse(ctx: any, action: 'disputes_listed' | 'dispute_opened', tradeIds: string[]): boolean {
+    try {
+        logDisputesLook((ctx.state as any)?.actor || 'owner:password', action, tradeIds);
+        return true;
+    } catch {
+        ctx.status = 503;
+        ctx.body = { error: 'This server cannot log a look at the disputes right now, so it shows none.', code: 'LOOK_NOT_LOGGED' };
+        return false;
+    }
+}
 
 router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;

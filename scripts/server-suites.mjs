@@ -229,6 +229,7 @@ export const SUITES = [
     'test-logger-sanitization',
     'test-codes-out-of-logs',
     'test-ws-traffic-private',
+    'test-ws-logs-session',
     'test-manager-build',
     'test-onboarding-funnel',
     'test-funnel-cohort',

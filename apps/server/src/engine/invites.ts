@@ -25,6 +25,7 @@ import {
 import { ticketBinding } from './member-signature.js';
 import { ticketJoinRefusal } from './writer-bounds.js';
 import { inviteLogTag } from '../sanitize-message.js';
+import { assertMayBindInvite, confirmByInvite } from './names-list.js';
 
 /**
  * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
@@ -60,12 +61,15 @@ function assertInvitesOn(): void {
  * Where only admins invite (the door, config/door.ts), a member who is no owner or admin here gets DoorClosedError (403
  * `admins_only`), after the member check and before the limit: a knock's answer included (engine/knocks.ts).
  */
-export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void): InviteCode | null {
+export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string): InviteCode | null {
     assertPlainTablesWritable();
     assertInvitesOn();
     const inviter = getMember(db, inviterPubkey);
     if (!inviter || !canInvite(inviterPubkey)) return null;
     assertMayInviteHere(inviterPubkey);
+    // An invite bound to a names-list entry (community modes slice 3): only an admin who could confirm someone against
+    // that entry now, and never one with a live confirmation (NamesListError, before the limit and before any write).
+    const boundEntry = namesEntryId === undefined ? null : assertMayBindInvite(inviterPubkey, namesEntryId);
     beforeWrite?.();
 
     recordActivity(inviterPubkey);
@@ -73,10 +77,11 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
     const code = generateShortCode();
     const createdAt = new Date().toISOString();
 
-    db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)`)
-      .run(code, inviterPubkey, createdAt, intendedFor || null);
+    db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id) VALUES (?, ?, ?, ?, ?)`)
+      .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry);
 
-    const invite: InviteCode = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
+    const invite: InviteCode & { namesEntryId?: string } = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
+    if (boundEntry) invite.namesEntryId = boundEntry;
     // Never the code itself: it lets anyone join for 30 days. Its tag lets an operator follow it (FABLE-sec-errors M2).
     console.log(`🎟️  Invite generated: ${inviteLogTag(code)} by ${inviter.callsign}`);
     return invite;
@@ -227,14 +232,20 @@ export function redeemInvite(
         return { success: false, error: INVITER_GONE };
     }
 
-    // Register member FIRST — invite_codes.used_by has FK to members(public_key)
-    const member = registerMemberInternal(broadcast, publicKey, callsign, invite.created_by, code);
+    // Register member FIRST — invite_codes.used_by has FK to members(public_key). One transaction with the code's use
+    // and, for an invite bound to a names-list entry, the confirmation (confirmByInvite): never a member without them.
+    const member = db.transaction(() => {
+        const m = registerMemberInternal(broadcast, publicKey, callsign, invite.created_by, code);
+        if (!m) return null;
+        const outcome = invite.names_entry_id ? confirmByInvite(invite.created_by, invite.names_entry_id, publicKey) : null;
+        db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ? WHERE code COLLATE NOCASE = ?")
+            .run(publicKey, new Date().toISOString(), outcome, code);
+        return m;
+    })();
     if (!member) {
         recordFunnelEvent('invite_failed', 'registration_failed');
         return { success: false, error: 'Registration failed' };
     }
-
-    db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ? WHERE code COLLATE NOCASE = ?").run(publicKey, new Date().toISOString(), code);
 
     // Pre-seed earned credit for tiered genesis invites
     const genesisType = (invite.genesis_type || 'standard') as GenesisInviteType;

@@ -133,3 +133,40 @@ test('fetchNoRedirect: a 3xx throws a plain error naming where it pointed, and n
         await b.close();
     }
 });
+
+// A same-origin redirect (#1575 review): the message named the same origin, so the operator wasn't told what to change.
+test('fetchNoRedirect: a same-origin path redirect names the address it points to and says to use that exact address', async () => {
+    const seen = [];
+    const server = http.createServer((req, res) => {
+        seen.push(`${req.method} ${req.url}`);
+        res.writeHead(308, { Location: '/beanpool/api/local/admin/status?k=v' }).end();
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const a = `http://127.0.0.1:${server.address().port}`;
+    try {
+        await assert.rejects(fetchNoRedirect(`${a}/api/local/admin/status?x=1`, { headers: { 'X-Admin-Password': PASSWORD } }), (e) => {
+            assert.ok(e.message.includes(`redirected this path to ${a}/beanpool/api/local/admin/status.`), e.message);
+            assert.match(e.message, /exact address/, e.message);
+            assert.ok(!e.message.includes(PASSWORD) && !e.message.includes('k=v') && !e.message.includes('x=1'), e.message);
+            assert.equal(e.redirect, true);
+            return true;
+        });
+        assert.deepEqual(seen, ['GET /api/local/admin/status?x=1'], 'one request, nothing followed');
+    } finally {
+        await new Promise((resolve) => server.close(resolve));
+    }
+});
+
+test('fetchNoRedirect: an http to https redirect says to use the https address', async () => {
+    const server = http.createServer((req, res) => res.writeHead(301, { Location: `https://127.0.0.1:${server.address().port}${req.url}` }).end());
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+    try {
+        await assert.rejects(fetchNoRedirect(`http://127.0.0.1:${port}/api/local/admin/status`, { headers: { 'X-Admin-Password': PASSWORD } }), (e) => {
+            assert.ok(e.message.includes(`Use https://127.0.0.1:${port}:`) && /plain http/.test(e.message) && !e.message.includes(PASSWORD), e.message);
+            return true;
+        });
+    } finally {
+        await new Promise((resolve) => server.close(resolve));
+    }
+});

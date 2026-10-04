@@ -5008,7 +5008,11 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
  * Working off a debt (community modes slice 5, engine/names-debts.ts; design §4.2 (b), the Rule 7 sweep pattern): a member
  * an admin confirmed with a repayment flag sends every Bean above 0 they hold to the Commons, until what they repay reaches
  * the debt; then the record is settled and the flag clears. Only what is above 0 moves, never more than is left to repay,
- * and never anything already spent. Runs after a payment to them commits. Returns what moved.
+ * and never anything already spent. Runs after a payment to them commits: transfer()'s after-commit hook (direct
+ * payments, escrow releases and refunds, a dispute ruling's, stranded pledges returned) and payFromCommons'. A hardship
+ * grant Decision (decisions-engine.ts grant_hardship) is not swept: the community chose to give those Beans for hardship,
+ * and taking them straight back would undo its own Decision. They count toward the debt only once spent and earned back.
+ * Returns what moved.
  */
 export function sweepRepayment(memberPubkey: string): number {
     const debt = repaymentOf(memberPubkey);

@@ -76,6 +76,9 @@ file reliability or hardening work against guardian/social-recovery routes.
 In `apps/server/src/services/tls.ts`, wrapped `Promise.race` in `try...finally` to guarantee both `timer` and `checkInterval` are cleared upon resolution or rejection. Do not re-file.
 When racing an asynchronous operation against a polling interval or timer using `Promise.race`, always wrap the race in `try...finally` to explicitly clear all active timers and intervals upon resolution or rejection.
 
+### 2026-10-04 — "Group post deletion / member removal returning success: false should return 404" — CLOSED, CLAIM FALSE.
+Removing a group member who is already gone, deleting a group post that is already gone, or leaving twice quietly succeeds (idempotent, returning `200 OK` with `{ success: false }`), NOT a 404 error. A double tap, a stale list, or a retry on a flaky connection would otherwise show the user an error for an operation that succeeded. Do NOT re-file 404 changes against idempotent removal/deletion routes.
+
 ### 2026-08-25 — Pairing routes "request body extraction" is a NO-OP. Closed twice.
 #403 and #409. The JSON body middleware in `apps/server/src/https-server.ts` assigns **both**
 `(ctx as any).requestBody` and `(ctx.request as any).body` to the same parsed object in every
@@ -144,8 +147,3 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/local/admin/posts/bulk-delete` in `apps/server/src/routes/admin.ts` called `adminBulkDeletePosts` without enclosing it in a try/catch block.
 **Learning:** Unlike single post deletion (`POST /api/local/admin/posts/:id/delete`), bulk post deletion was exposed to unhandled exceptions (e.g. SQLite locks or state engine failures during multi-post operations), which would produce 500 server crashes instead of formatted JSON error bodies.
 **Pattern:** Ensure all batch/bulk state mutation routes wrap multi-resource engine operations in `try/catch` blocks that log the error and set `ctx.status = 500`.
-
-## 2026-10-04 - [Missing 404 status codes on non-existent group member removal and post deletion]
-**Issue:** `DELETE /api/groups/:id/members/:pubkey` and `DELETE /api/groups/:id/posts/:postId` in `apps/server/src/routes/groups.ts` returned `200 OK` with `{ success: false }` when `removeGroupMember` or `deleteGroupPost` returned `false` (item/member not found in group).
-**Learning:** Returning HTTP `200 OK` on missing or failed resource deletions misleads API clients into treating failed deletion operations as successes.
-**Pattern:** Ensure deletion route handlers check boolean return flags from domain functions and explicitly set `ctx.status = 404` with `{ error: '...' }` when the target resource is missing.

@@ -289,14 +289,6 @@ async function runRouteTests() {
         await dispatch(router, 'DELETE', `/api/groups/${groupId}/posts/${post!.id}`, ctxAlice);
         check(ctxAlice.status === 200, '10c. Convenor deletes group post (200)');
         check(ctxAlice.body?.success === true, '10d. Success is true');
-
-        // Deleting the same (or non-existent) post returns 404
-        const ctxMissingPost: any = {
-            state: { actor: alice }
-        };
-        await dispatch(router, 'DELETE', `/api/groups/${groupId}/posts/${post!.id}`, ctxMissingPost);
-        check(ctxMissingPost.status === 404, '10e. Deleting non-existent group post returns 404');
-        check(ctxMissingPost.body?.error === 'Group post not found', '10f. Error message is Group post not found');
     }
 
     // 11. DELETE /api/groups/:id/members/:pubkey - Member leaves group
@@ -307,14 +299,6 @@ async function runRouteTests() {
         await dispatch(router, 'DELETE', `/api/groups/${groupId}/members/${bob}`, ctxBob);
         check(ctxBob.status === 200, '11a. Member can remove themselves / leave group (200)');
         check(ctxBob.body?.success === true, '11b. Success is true');
-
-        // Removing a member who is no longer in the group returns 404
-        const ctxMissingMember: any = {
-            state: { actor: alice }
-        };
-        await dispatch(router, 'DELETE', `/api/groups/${groupId}/members/${bob}`, ctxMissingMember);
-        check(ctxMissingMember.status === 404, '11c. Removing non-existent group member returns 404');
-        check(ctxMissingMember.body?.error === 'Group member not found', '11d. Error message is Group member not found');
     }
 
     console.log(`\n🎉 All ${passed}/${run} route tests passed successfully!`);

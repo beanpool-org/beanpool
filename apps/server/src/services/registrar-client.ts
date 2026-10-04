@@ -8,6 +8,9 @@
 //   message = `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}`            (v1)
 //             `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${nonce}\n${bodyText}`  (v2)
 //   v2's nonce is taken once by the Worker, so a captured request can't be replayed while its timestamp still verifies.
+//   A request with a query (/status?name=) also carries x-bp-signature-query: the same message with `${pathname}${search}`
+//   in place of the pathname. A Worker that predates it verifies x-bp-signature alone and ignores it; a newer one reads
+//   the query only when it verifies, so a replayed /status can't pick which of the key's names it is answered about.
 //
 // ## Domain separation — why the first line is a constant
 //
@@ -115,7 +118,8 @@ export async function buildAttestation(nonce: string, proto: Proto = SEND_PROTO)
 }
 
 // The signature headers of a request signed under `proto`: the node's one request-signing path.
-export async function signRequest(method: string, path: string, bodyText: string, proto: Proto = SEND_PROTO): Promise<Record<string, string>> {
+// `search`: the request's query (`?name=…`), signed in x-bp-signature-query under the same timestamp and nonce.
+export async function signRequest(method: string, path: string, bodyText: string, proto: Proto = SEND_PROTO, search = ''): Promise<Record<string, string>> {
     const ts = Math.floor(Date.now() / 1000);
     const nonce = usesNonce(proto) ? randomBytes(16).toString('hex') : undefined;
     const headers: Record<string, string> = {
@@ -123,6 +127,7 @@ export async function signRequest(method: string, path: string, bodyText: string
         'x-bp-timestamp': String(ts),
         'x-bp-signature': await signHex(requestMessage(proto, method, path, ts, bodyText, nonce)),
     };
+    if (search) headers['x-bp-signature-query'] = await signHex(requestMessage(proto, method, `${path}${search}`, ts, bodyText, nonce));
     if (proto !== DEFAULT_PROTO) headers['x-bp-proto'] = proto;
     if (nonce) headers['x-bp-nonce'] = nonce;
     return headers;
@@ -139,9 +144,11 @@ export function retryProto<P extends string>(sent: string, accepted: unknown, sp
     return both.sort((a, b) => protoVersion(b) - protoVersion(a))[0] ?? null;
 }
 
-// `path` may carry a query; the signature covers the path without it, as the registrar verifies it (apps/registrar sign.js).
+// `path` may carry a query; x-bp-signature covers the path without it, as every registrar verifies it, and
+// x-bp-signature-query the path with it (apps/registrar sign.js).
 async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string, proto: Proto): Promise<{ ok: boolean; status: number; data: any; json: boolean }> {
-    const headers = await signRequest(method, path.split('?')[0], bodyText, proto);
+    const q = path.indexOf('?');
+    const headers = await signRequest(method, q < 0 ? path : path.slice(0, q), bodyText, proto, q < 0 ? '' : path.slice(q));
     if (bodyText) headers['content-type'] = 'application/json';
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);

@@ -91,7 +91,7 @@ export interface RegistrarNameLost {
  *  - `status`: it doesn't store it. Written on the entry it names, or on the current one when it names none (`none`);
  *    never adds a name.
  *  - `released`: Settings → Take offline answered. The name released (the answer's, else the current one) becomes
- *    former, with when and until when it is held.
+ *    former, with when and until when it is held; the current one becomes former too.
  */
 export type RegistrarAnswerUse = 'stored' | 'claim' | 'status' | 'released';
 
@@ -276,6 +276,10 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
         }
     } else {
         const entry = find(host) ?? current();
+        // Nothing is stored after a release, so nothing stays current: also when the answer names another name than the
+        // stored one (a registrar older than #1116 releases the key's first name, whichever was asked).
+        const cur = current();
+        if (cur && cur !== entry) makeFormer(cur);
         if (entry) {
             makeFormer(entry);
             entry.status = status;

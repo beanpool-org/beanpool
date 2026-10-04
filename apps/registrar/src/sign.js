@@ -7,6 +7,9 @@
 //   signed message = `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}`            (v1)
 //                    `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${nonce}\n${bodyText}`  (v2)
 // The node signs with its identity key; the registrar binds the claim to that pubkey.
+// A request with a query also carries x-bp-signature-query: the same message with `${pathname}${search}` in place of
+// the pathname, under the same timestamp and nonce. A Worker that predates it ignores it and verifies x-bp-signature;
+// this one reads a query only when it verifies (signedQuery), so a replayed request can't pick its answer by its query.
 //
 // Replays: a captured v1 request verifies again for as long as its timestamp is inside CLOCK_SKEW_S. A v2 request
 // signs a one-use nonce, which the Worker records (request_nonces, migration 0006) and refuses a second time. v1 stays
@@ -87,6 +90,20 @@ export async function verifyEd25519(pubkeyHex, message, signatureHex) {
     } catch {
         return false;
     }
+}
+
+// The query of a request verifySignedRequest accepted from `pubkey`, when x-bp-signature-query covers it: its
+// URLSearchParams, else empty ones (none sent, or a query changed after signing). A pathname can't hold a raw '?', so
+// this message never equals the path-only one of another request.
+export async function signedQuery(request, bodyText, pubkey) {
+    const url = new URL(request.url);
+    const proto = requestProto(request);
+    const sig = request.headers.get('x-bp-signature-query') || '';
+    if (!url.search || !proto || !pubkey || !sig) return new URLSearchParams();
+    const ts = request.headers.get('x-bp-timestamp') || '';
+    const nonce = request.headers.get('x-bp-nonce') || '';
+    const message = requestMessage(proto, request.method, `${url.pathname}${url.search}`, ts, bodyText, nonce);
+    return (await verifyEd25519(pubkey, message, sig)) ? url.searchParams : new URLSearchParams();
 }
 
 // Verify a signed node request under the protocol it names. Returns the signer pubkey (hex) on success, else null —

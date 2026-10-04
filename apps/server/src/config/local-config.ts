@@ -220,6 +220,12 @@ export class LocalConfigUnreadableError extends Error {}
 
 /** What the last start found, when local-config.json was broken and the last good copy took its place. */
 let restoredFromBackup: { at: string; why: string; brokenCopy: string | null } | null = null;
+/**
+ * A restore that could not put the last good copy back in place (a full disk, a read-only file): the copy it read, and
+ * the broken file as it was then. While the file is unchanged, every later read in this process takes that copy, with
+ * no second log line and no second `.broken-*` copy; once the file changes (a save, a hand fix) it is read again.
+ */
+let restoredInMemory: { size: number; mtimeMs: number; config: string } | null = null;
 export function localConfigRestoredNotice(): typeof restoredFromBackup { return restoredFromBackup; }
 
 /** The file's config, or why it isn't one (an empty or cut-off file, JSON that isn't an object). */
@@ -249,9 +255,14 @@ function restoreFromBackup(why: string): LocalConfig {
     let brokenCopy: string | null = `${CONFIG_PATH}.broken-${Date.now()}`;
     try { fs.copyFileSync(CONFIG_PATH, brokenCopy); } catch { brokenCopy = null; }
     try {
-        writeFileAtomic(CONFIG_PATH, JSON.stringify(backup.config, null, 2));
+        writeFileAtomic(CONFIG_PATH, JSON.stringify(backup.config, null, 2), { newMode: 0o600 });
+        restoredInMemory = null;
     } catch (e) {
-        console.error('[Config] Could not put the last good copy back in place (this start uses it anyway):', e);
+        console.error('[Config] Could not put the last good copy back in place (this process uses it until the file changes):', e);
+        try {
+            const st = fs.statSync(CONFIG_PATH);
+            restoredInMemory = { size: st.size, mtimeMs: st.mtimeMs, config: JSON.stringify(backup.config) };
+        } catch { restoredInMemory = null; }
     }
     restoredFromBackup = { at: new Date().toISOString(), why, brokenCopy };
     console.error(`🛑 [Config] ${CONFIG_PATH} was unreadable (${why}). This server started from its last good copy, `
@@ -260,12 +271,46 @@ function restoreFromBackup(why: string): LocalConfig {
     return backup.config;
 }
 
+/** The copy an earlier restore in this process read, while the broken file it could not replace is unchanged. */
+function restoredCopyStillApplies(): LocalConfig | null {
+    if (!restoredInMemory) return null;
+    try {
+        const st = fs.statSync(CONFIG_PATH);
+        if (st.size === restoredInMemory.size && st.mtimeMs === restoredInMemory.mtimeMs) return JSON.parse(restoredInMemory.config) as LocalConfig;
+    } catch { /* gone: read as it is now */ }
+    restoredInMemory = null;
+    return null;
+}
+
+/**
+ * At a start (boot-file-safety.ts): local-config.json parses, and its last good copy is missing, broken or older than
+ * it: write the copy, atomically, with the file's mode. A node upgraded from before the copy existed has one from its
+ * first start on, not only from its first save. A broken local-config.json is left to getLocalConfig. Never throws.
+ */
+export function ensureLocalConfigBackup(): void {
+    try {
+        if (!fs.existsSync(CONFIG_PATH)) return;
+        const bytes = fs.readFileSync(CONFIG_PATH);
+        if (!('config' in parseConfigFile(CONFIG_PATH))) return;
+        const st = fs.statSync(CONFIG_PATH);
+        let why: string | null = null;
+        if (!fs.existsSync(CONFIG_BACKUP_PATH)) why = 'there was none';
+        else if (!('config' in parseConfigFile(CONFIG_BACKUP_PATH))) why = 'it was unreadable';
+        else if (fs.statSync(CONFIG_BACKUP_PATH).mtimeMs < st.mtimeMs && !fs.readFileSync(CONFIG_BACKUP_PATH).equals(bytes)) why = 'it was older';
+        if (!why) return;
+        writeFileAtomic(CONFIG_BACKUP_PATH, bytes, { mode: st.mode & 0o777 });
+        console.log(`💾 [Config] Wrote the last good copy of local-config.json (${CONFIG_BACKUP_PATH}): ${why}.`);
+    } catch (e) {
+        console.error(`[Config] Could not write the last good copy ${CONFIG_BACKUP_PATH} at start:`, (e as Error).message);
+    }
+}
+
 export function getLocalConfig(): LocalConfig {
     // No file: a new install (or one wiped on purpose). A file that is there always parses, since every save replaces it
     // whole (writeFileAtomic); one that doesn't was broken some other way, and never reads as a new install.
     if (!fs.existsSync(CONFIG_PATH)) return { ...DEFAULT_CONFIG };
     const read = parseConfigFile(CONFIG_PATH);
-    const raw = 'config' in read ? read.config : restoreFromBackup(read.error);
+    const raw = 'config' in read ? read.config : (restoredCopyStillApplies() ?? restoreFromBackup(read.error));
 
     // Backward compatibility for demurrage -> circulation renaming
     if (raw.thresholds) {
@@ -308,18 +353,27 @@ export function saveLocalConfig(config: LocalConfig): void {
     if (rememberedCopyPassword && (config.adminHash !== rememberedCopyPassword.storedHash || config.salt !== rememberedCopyPassword.salt)) {
         rememberedCopyPassword = null;
     }
+    // Atomic, so no reader and no crash sees half a file; then the last good copy, the same way. A new file is 0600: it
+    // holds the admin's hash and token hashes.
+    const json = JSON.stringify(config, null, 2);
+    let saved = false;
     try {
         if (!fs.existsSync(DATA_DIR)) {
             fs.mkdirSync(DATA_DIR, { recursive: true });
         }
-        // Atomic, so no reader and no crash sees half a file; then the last good copy, the same way.
-        const json = JSON.stringify(config, null, 2);
-        writeFileAtomic(CONFIG_PATH, json);
-        let mode: number | undefined;
-        try { mode = fs.statSync(CONFIG_PATH).mode & 0o777; } catch { /* just written */ }
-        writeFileAtomic(CONFIG_BACKUP_PATH, json, { mode });
+        writeFileAtomic(CONFIG_PATH, json, { newMode: 0o600 });
+        saved = true;
     } catch (e) {
-        console.error('[Config] Failed to save local config:', e);
+        console.error(`[Config] Failed to save local config (${CONFIG_PATH}; nothing changed on disk):`, e);
+    }
+    if (saved) {
+        try {
+            let mode: number | undefined;
+            try { mode = fs.statSync(CONFIG_PATH).mode & 0o777; } catch { /* just written */ }
+            writeFileAtomic(CONFIG_BACKUP_PATH, json, { mode: mode ?? 0o600 });
+        } catch (e) {
+            console.error(`[Config] Saved ${CONFIG_PATH}, but not its last good copy ${CONFIG_BACKUP_PATH} (it is one save behind):`, e);
+        }
     }
     // The admin/2FA fields and the recovery-code record are in the take-over envelope. Most saves change
     // neither; the check compares a fingerprint and re-seals only when they did.

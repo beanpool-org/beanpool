@@ -127,6 +127,7 @@ export const SUITES = [
     'test-beanpool-recover',
     'test-claim-cli',
     'test-atomic-state-writes',
+    'test-boot-file-safety',
     'test-totp-helpers',
     'test-moderation-admin',
     'test-report-dedup-and-sync',

@@ -18,14 +18,16 @@ const NODE_WORDS = 'Turn on two-factor sign-in in Settings, or use an automation
 const REFUSAL = JSON.stringify({ error: NODE_WORDS, code: 'password_needs_2fa' });
 const HINT = 'turn on two-factor sign-in on the primary, or set BEANPOOL_TOKEN';
 
-/** A primary that answers each path from `routes` (status, body); anything else is 404. */
+/** A primary that answers each path from `routes` (status, body); anything else is 404. `seen` holds each request's path and password header. */
 async function standIn(routes) {
+    const seen = [];
     const server = http.createServer((req, res) => {
+        seen.push({ path: req.url.split('?')[0], adminPw: req.headers['x-admin-password'] ?? null });
         const [status, body] = routes[req.url.split('?')[0]] ?? [404, '{}'];
         res.writeHead(status, { 'Content-Type': 'application/json' }).end(body);
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-    return { url: `http://localhost:${server.address().port}`, close: () => new Promise((resolve) => server.close(resolve)) };
+    return { url: `http://localhost:${server.address().port}`, seen, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
 /** Runs the script with the password only (no BEANPOOL_TOKEN); resolves with its exit code and output. */
@@ -33,6 +35,7 @@ function runScript(primary, dataDir) {
     const env = { ...process.env };
     delete env.BEANPOOL_TOKEN;
     delete env.BACKUP_REPLICATION_TOKEN;
+    delete env.ADMIN_PASSWORD;
     return new Promise((resolve) => {
         execFile(process.execPath, [SCRIPT, '--primary', primary, '--admin-pw', 'pw-only', '--data-dir', dataDir], { env, timeout: 20_000 },
             (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }));
@@ -148,3 +151,57 @@ for (const [label, before] of [['a new .env', null], ['an existing 0644 .env', 0
         }
     });
 }
+
+// The legacy admin password from ADMIN_PASSWORD, not argv: argv shows in `ps` (#1571 review). --admin-pw still works,
+// with one warning; the environment wins when both are set.
+const ENV_PW = 'env-admin-pw-5d1c';
+const ARG_PW = 'arg-admin-pw-9e2a';
+
+/** Runs the script without BEANPOOL_TOKEN (the password path), with `envExtra` and the replication token set. */
+function runLegacy(primary, root, args, envExtra) {
+    const env = { ...process.env, BACKUP_REPLICATION_TOKEN: REPLICATION, ...envExtra };
+    delete env.BEANPOOL_TOKEN;
+    if (!('ADMIN_PASSWORD' in envExtra)) delete env.ADMIN_PASSWORD;
+    return new Promise((resolve) => {
+        execFile(process.execPath, [SCRIPT, '--primary', primary, '--data-dir', path.join(root, 'data'), ...args], { env, timeout: 20_000 },
+            (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }));
+    });
+}
+
+for (const [label, args, envExtra, sent, warnings, notUsed] of [
+    ['from ADMIN_PASSWORD: sent, no warning', [], { ADMIN_PASSWORD: ENV_PW }, ENV_PW, 0, false],
+    ['from --admin-pw, as before: sent, with one warning that argv shows in ps', ['--admin-pw', ARG_PW], {}, ARG_PW, 1, false],
+    ['in both: ADMIN_PASSWORD is sent and --admin-pw is not used', ['--admin-pw', ARG_PW], { ADMIN_PASSWORD: ENV_PW }, ENV_PW, 0, true],
+]) {
+    test(`the admin password ${label}`, async () => {
+        const primary = await standIn({ '/api/local/admin/backup-enroll': [200, JSON.stringify(ENROLL)] });
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-setup-backup-test-'));
+        try {
+            const { code, out } = await runLegacy(primary.url, root, args, envExtra);
+            assert.equal(code, 0, out);
+            assert.deepEqual(primary.seen.map((r) => r.path), ['/api/local/admin/backup-enroll'], out);
+            assert.equal(primary.seen[0].adminPw, sent, 'the password the primary got');
+            assert.equal(out.split('--admin-pw shows in `ps`').length - 1, warnings, `the argv warning, ${warnings} time(s): ${out}`);
+            assert.equal(out.includes('ADMIN_PASSWORD is set: --admin-pw is not used.'), notUsed, out);
+            assert.ok(!out.includes(ENV_PW) && !out.includes(ARG_PW) && !out.includes(REPLICATION), `no credential is printed: ${out}`);
+            assert.ok(!fs.readFileSync(path.join(root, '.env'), 'utf8').includes(sent), 'the password is never written to .env');
+        } finally {
+            await primary.close();
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+}
+
+test('a wrong ADMIN_PASSWORD at the enrolment bundle: "Check ADMIN_PASSWORD"', async () => {
+    const primary = await standIn({ '/api/local/admin/backup-enroll': [401, JSON.stringify({ error: 'Unauthorized' })] });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-setup-backup-test-'));
+    try {
+        const { code, out } = await runLegacy(primary.url, root, [], { ADMIN_PASSWORD: ENV_PW });
+        assert.notEqual(code, 0, out);
+        assert.ok(out.includes('Check ADMIN_PASSWORD.'), out);
+        assert.ok(!out.includes(ENV_PW), out);
+    } finally {
+        await primary.close();
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});

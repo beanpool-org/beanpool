@@ -94,7 +94,7 @@ No token, whatever its scope, makes an owner-only change. It cannot change who i
 
 ### Scripts and the harvester
 
-The scripts that come with BeanPool take a token in the environment variable **BEANPOOL_TOKEN**, never on the command line: anyone else on that computer can see a command line. With a token set they send the token alone and never the password. They still take the admin password (ADMIN_PASSWORD, or --admin-pw for setup-backup) if you have no token. What each needs:
+The scripts that come with BeanPool take a token in the environment variable **BEANPOOL_TOKEN**, never on the command line: anyone else on that computer can see a command line. With a token set they send the token alone and never the password. They still take the admin password if you have no token, in the environment variable **ADMIN_PASSWORD**, for the same reason. (setup-backup still takes --admin-pw too, with a warning that anyone on the computer can see it; ADMIN_PASSWORD wins when both are set.) What each needs:
 
 - **scripts/grant-operator.mjs** (let a member run an enterprise) and **scripts/bootstrap-community-eggs.mjs**: an **Admin** token.
 - **scripts/setup-backup.mjs** (set up a standby): a **Read** token, to fetch the community's identity. No token can make the replication token, because that is an owner's change: an owner makes it under **Replication Access**, signed in from the app, and you give it to the script in the environment variable **BACKUP_REPLICATION_TOKEN**: that token reads the whole ledger, so it stays off the command line too. (--token still works, with a warning that anyone on the computer can see it.) Without one the script stops and says so before it changes anything.

@@ -14,7 +14,7 @@
 
 import * as cf from './cf.js';
 import * as db from './db.js';
-import { verifySignedRequest, verifyEd25519, requestProto, requestNonce, protoOf, PROTOCOLS, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
+import { verifySignedRequest, signedQuery, verifyEd25519, requestProto, requestNonce, protoOf, PROTOCOLS, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
@@ -913,12 +913,13 @@ async function handleRotate(request, env, bodyText) {
 // captured /status can't be replayed for it.
 // `?name=`: the name the node stores, answered about while it is this key's row (a key can hold more than one: an
 // install's claim answered after the owner's pick). Without it, or for a name that is not this key's, the key's first
-// row as before. Not in the signed bytes (a GET signs its path): it only picks among this key's own rows.
+// row as before. Read only when x-bp-signature-query covers it (sign.js signedQuery): a captured /status replayed inside
+// the clock window with another `?name=` gets the first row, as before `?name=` existed, never the row it names.
 async function handleStatus(request, env) {
     const pubkey = await signer(request, env, '');
     if (pubkey instanceof Response) return pubkey;
     await db.touchContact(env, pubkey, nowS(), requestProto(request));
-    const asked = (new URL(request.url).searchParams.get('name') || '').toLowerCase();
+    const asked = ((await signedQuery(request, '', pubkey)).get('name') || '').toLowerCase();
     const named = NAME_RE.test(asked) ? await db.getAllocation(env, asked) : null;
     // Any state: answering 'none' for a name the node still owns is what made nodes wipe their saved address
     // (2026-09-24 incident).

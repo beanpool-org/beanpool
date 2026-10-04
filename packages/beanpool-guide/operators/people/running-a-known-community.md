@@ -73,6 +73,18 @@ The app reads and writes nothing whenever it can't check what the server says, a
 
 When a member is removed, or deletes their account, their confirmation ends by itself. Their entry stays on the list until an admin deletes it.
 
+## Inviting a named person
+
+In a known community you can invite someone by name, so they are confirmed the moment they join.
+
+Add their name to the list, or open their entry, and tap **Invite this person**. The app shows a QR code, an invite code and **Share**. Give it to them yourself: show the QR code, or send it to them. When they join with it, they are confirmed against that entry, by you.
+
+- Only an admin who could confirm someone against the entry can make it: an owner or admin whose phone holds the list's key.
+- With no signal (a hall, say), the app makes an offline ticket instead, with the entry in it. It confirms them the same way when they join, once your server sees it. A server older than this version can't read such a ticket: invite them once you have signal.
+- When you answer a request to join, you can add their name and invite them in one step.
+- One person, one entry: an entry with a member confirmed against it takes no new invite. If someone else is confirmed against the entry before your invite is used, the person who uses it still joins, but isn't confirmed; the entry says why, and you can confirm them by hand.
+- Your server sees only which entry the invite is for, never the name.
+
 ## The PDF copy
 
 **Export as PDF** makes a PDF of every name your phone can open, on your phone, and offers to share or save it. The app asks first. The PDF leaves BeanPool's protection: it is yours to keep safe, like a paper list. The other admins can see that you exported it, and when.

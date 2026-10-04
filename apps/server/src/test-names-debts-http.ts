@@ -40,6 +40,7 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import WebSocket from 'ws';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -109,6 +110,26 @@ async function call(method: string, id: Id | null, path: string, body?: unknown,
     let json: any; try { json = await res.json(); } catch { /* empty */ }
     return { status: res.status, body: json };
 }
+
+type Sock = { ws: WebSocket; events: any[] };
+/** A member's signed /ws socket (test-blocks-on-beans.ts socket), or an unsigned one for `null`. */
+function socket(id: Id | null): Promise<Sock> {
+    let url = `${BASE.replace('https', 'wss')}/ws`;
+    if (id) {
+        const ts = Date.now();
+        const nonce = hex(16);
+        const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
+        url += `?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    }
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(url, { rejectUnauthorized: false });
+        const s: Sock = { ws, events: [] };
+        ws.on('message', (d) => { try { s.events.push(JSON.parse(d.toString())); } catch { /* */ } });
+        ws.on('open', () => resolve(s));
+        ws.on('error', reject);
+    });
+}
+const settle = () => new Promise((r) => setTimeout(r, 400));
 
 /** The whole node as one number (test-commons-conservation.ts nodeTotal): every account but the pot's shadow, plus the pot. */
 const nodeTotal = () => r2((db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t + getCommonsBalanceExact());
@@ -277,6 +298,28 @@ async function main(): Promise<void> {
     assert(nodeTotal() === totalBefore, `nothing moved (${totalBefore} → ${nodeTotal()})`);
     const kyConfirms = await call('POST', ada, '/api/names/confirmations', { memberPubkey: makeMember('Ky again').pk, entryId: kyEntry });
     assert(kyConfirms.status === 201, `and Ky's entry confirms a new key (${show(kyConfirms)})`);
+
+    // ── 8. a repayment is the member's own business ────────────────────────────────────────────
+    console.log('── 8. a repayment reaches the member alone ──');
+    const vicEntry = makeEntry();
+    const vicOld = await debtor('Vic', 300, vicEntry);
+    await call('POST', vicOld, '/api/member/purge', { action: 'purge_account' });
+    const vicDebt = debtsOf(vicEntry)[0];
+    const vic = makeMember('Vic again');
+    const vicWork = await call('POST', ada, `/api/names/debts/${vicDebt?.id}/work-off`, { memberPubkey: vic.pk });
+    assert(vicDebt?.status === 'open' && vicWork.status === 201, `setup: Vic's new key works off a 300-Bean debt (${show(vicWork)})`);
+    const samSock = await socket(sam);
+    const vicSock = await socket(vic);
+    const anonSock = await socket(null);
+    await settle();
+    transfer('genesis', vic.pk, 120, 'Vic digs a bed', 'direct', true);
+    await settle();
+    const heard = (s: Sock) => s.events.filter((e) => e?.type === 'debt_repaid' || JSON.stringify(e).includes('Working off a debt'));
+    assert(debtsOf(vicEntry)[0].repaid === 120, `setup: 120 Beans in are swept (${JSON.stringify(debtsOf(vicEntry)[0])})`);
+    assert(heard(samSock).length === 0, `another member's socket hears nothing of it (${JSON.stringify(heard(samSock))})`);
+    assert(heard(anonSock).length === 0, `an unsigned socket hears nothing of it (${JSON.stringify(heard(anonSock))})`);
+    assert(vicSock.events.some((e) => e?.type === 'debt_repaid' && e.amount === 120), `Vic's own socket hears it (${JSON.stringify(vicSock.events.map((e) => e?.type))})`);
+    for (const s of [samSock, vicSock, anonSock]) s.ws.close();
 
     // ── 7. the 3-year sweep ────────────────────────────────────────────────────────────────────
     console.log('── 7. the 3-year sweep ──');

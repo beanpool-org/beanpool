@@ -5033,7 +5033,8 @@ export function sweepRepayment(memberPubkey: string): number {
         console.error(`[NamesDebts] Failed to sweep ${amount} Beans of a repayment:`, err);
         return 0;
     }
-    try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }); } catch { }
+    // To the member alone: who is working off a debt, and how much, is nobody else's business (debts are admins-only).
+    try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }, [memberPubkey]); } catch { }
     return amount;
 }
 

@@ -31,6 +31,7 @@ import { TakeoverLockPanel } from './TakeoverLockPanel';
 import type { RolesViewer } from './NodeRolesPanel';
 import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
 import { AutomationTokensPanel } from './AutomationTokensPanel';
+import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
@@ -1699,6 +1700,11 @@ export function ApplianceSection({
                             {breakGlassMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{breakGlassMessage}</p>}
                         </div>
                     </div>
+
+                    {/* Retire the admin password (design step 10): owners only; only an owner's key retires it */}
+                    <SectionErrorBoundary sectionName="Retire the admin password" resetKey={activeNode.id}>
+                        <RetirePasswordPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
 
                     {/* Automation tokens: owners only (the panel draws nothing for anyone else) */}
                     <SectionErrorBoundary sectionName="Automation tokens" resetKey={activeNode.id}>

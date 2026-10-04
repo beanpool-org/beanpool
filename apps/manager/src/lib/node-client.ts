@@ -540,12 +540,18 @@ export async function downloadAdminFile(
  */
 export const PASSWORD_NEEDS_2FA_HINT = 'This profile signs in with the admin password; an owner\'s token works without it';
 
+/** Sign-in step 10: the node answered 403 password_retired. A profile with only a password needs a token from now on. */
+export const PASSWORD_RETIRED_HINT = "This node's password is retired: use a token";
+
 /** The error for a request refused that way: the node's words plus the hint. Null for any other answer; the body is left unread. */
 export async function passwordNeeds2faError(res: Response): Promise<Error | null> {
     if (res.status !== 403) return null;
     // A copy, so the caller can still read the body; a stand-in Response without clone() is read as it is.
     const copy = typeof res.clone === 'function' ? res.clone() : res;
     const body = await Promise.resolve().then(() => copy.json()).catch(() => null) as { error?: unknown; code?: unknown } | null;
+    if (body?.code === 'password_retired') {
+        return new Error(`${PASSWORD_RETIRED_HINT} (an owner makes one in Settings, Access & Security, Automation tokens).`);
+    }
     if (body?.code !== 'password_needs_2fa') return null;
     const words = typeof body.error === 'string' && body.error.trim() ? body.error.trim() : 'This node needs two-factor sign-in for the admin password';
     return new Error(`${words}${/[.!?]$/.test(words) ? '' : '.'} ${PASSWORD_NEEDS_2FA_HINT}.`);
@@ -561,7 +567,7 @@ export async function passwordNeeds2faError(res: Response): Promise<Error | null
  */
 export function isAuthFailure(message: string): boolean {
     return /\b401\b/.test(message) || /unauthor/i.test(message) || /admin password/i.test(message)
-        || message.includes(PASSWORD_NEEDS_2FA_HINT);
+        || message.includes(PASSWORD_NEEDS_2FA_HINT) || message.includes(PASSWORD_RETIRED_HINT);
 }
 
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {

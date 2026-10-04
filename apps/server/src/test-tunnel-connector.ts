@@ -49,6 +49,7 @@ import {
 } from './services/tunnel-connector.js';
 import { reconcile, checkAddressRequest } from './services/public-address-agent.js';
 import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
+import { noteTurnedAway } from './config/turned-away-names.js';
 import { writeAddressRequestFile } from './address-request.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { useFakeCloudflared, type FakeTunnel } from './tunnel-test-fake.js';
@@ -115,7 +116,8 @@ const reg = {
     /** `name`: the name the node asked about (/status?name=); an older registrar never reads it. */
     status: (_name?: string | null): any => ({ status: 'none' }),
     claim: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-claim-${b.name}` }),
-    offline: (): any => ({ status: 'released' }),
+    /** As ours answers since #1116: the name it released, when the node named one. */
+    offline: (b?: any): any => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) }),
     holder: (b: any): any => ({ name: b?.name, held: 'free' }),
     heal: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', changed: [] }),
     /** [HTTP status, body]: the registrar refuses a rotate with a 403, 404 or 409. */
@@ -146,9 +148,9 @@ async function startRegistrar(): Promise<http.Server> {
             });
             if (p === '/api/registrar/status') return answer(reg.status(u.searchParams.get('name')));
             if (p === '/api/registrar/claim') return answer(reg.claim(body));
-            if (p === '/api/registrar/offline') return send(200, reg.offline());
+            if (p === '/api/registrar/offline') return answer(reg.offline(body));
             if (p === '/api/registrar/heal') return send(200, reg.heal(body));
-            if (p === '/api/registrar/holder') return send(200, reg.holder(body));
+            if (p === '/api/registrar/holder') return answer(reg.holder(body));
             if (p === '/api/registrar/rotate') return answer(reg.rotate(body));
             send(404, { error: 'not found' });
         });
@@ -817,6 +819,201 @@ async function main(): Promise<void> {
             assert(pa()?.name === 'made-elsewhere', `a name this server never left is stored (${pa()?.name})`);
             await post('/api/local/admin/public-address/offline');
             reg.status = () => ({ status: 'none' });
+        });
+
+        await section('19. a Settings claim that timed out, then another pick and Take offline: never revived', async () => {
+            const post = settingsPost!;
+            updateNodeConfig({ publicAddress: null } as any);
+            await syncTunnel();
+            // The registrar completes the claim after the node gave up (5 s): the key holds slow-pick live, nothing records it.
+            let finish: () => void = () => {};
+            reg.claim = (b) => b.name === 'slow-pick' ? new Promise((r) => { finish = () => r(live(b.name, 'eyJ.token-slow-pick')); }) : live(b.name, `eyJ.token-${b.name}`);
+            reg.holder = (b) => ({ name: b?.name, held: 'you', state: 'live' });
+            const slow = await post('/api/local/admin/public-address/claim', { name: 'slow-pick', mode: 'tunnel' });
+            assert(slow.status === 400 && /timed out/.test(slow.body?.error || '') && pa() == null, `the claim timed out here (${slow.status})`);
+            finish();
+            // Nothing else chosen yet: the timed-out claim is the owner's latest choice, and its live answer is stored.
+            reg.status = () => live('slow-pick', 'eyJ.token-slow-pick');
+            const first = await settingsGet!('/api/local/admin/public-address/status');
+            assert(first.status === 200 && pa()?.name === 'slow-pick', `alone, the timed-out pick's live answer is stored (${pa()?.name})`);
+            await post('/api/local/admin/public-address/offline');
+            // Again, then the owner picks another name and takes it offline: the registrar's newest live row is slow-pick2.
+            reg.claim = (b) => b.name === 'slow-pick2' ? new Promise((r) => { finish = () => r(live(b.name, 'eyJ.token-slow-pick2')); }) : live(b.name, `eyJ.token-${b.name}`);
+            const slow2 = await post('/api/local/admin/public-address/claim', { name: 'slow-pick2', mode: 'tunnel' });
+            assert(slow2.status === 400 && pa() == null, `the second claim timed out too (${slow2.status})`);
+            finish();
+            const pick = await post('/api/local/admin/public-address/claim', { name: 'owner-pick4', mode: 'tunnel' });
+            assert(pick.status === 200 && pa()?.name === 'owner-pick4', `the owner picks owner-pick4 (${pick.status})`);
+            const off = await post('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() == null, `Take offline (${off.status})`);
+            reg.status = () => live('slow-pick2', 'eyJ.token-slow-pick2');
+            await reconcile();
+            assert(pa() == null, `the tick does not revive the timed-out pick (${pa()?.name})`);
+            const shown = await settingsGet!('/api/local/admin/public-address/status');
+            assert(shown.status === 200 && pa() == null && shown.body?.status !== 'live', `nor does Settings' status read (${pa()?.name}/${shown.body?.status})`);
+            assert(!tunnelConnectorForTests().runningToken, `no tunnel runs (${tunnelConnectorForTests().runningToken})`);
+            // A request from beanpool claim replaced by another one: the replaced name is turned away too.
+            updateLocalConfig({ addressRequest: { name: 'first-ask', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            reg.claim = () => [503, { error: 'busy' }];
+            await reconcile();
+            writeAddressRequestFile(DATA!, { name: 'second-ask', contact: null, at: Date.now() });
+            await checkAddressRequest();
+            assert(getLocalConfig().addressRequest?.name === 'second-ask', `the second request replaces the first (${getLocalConfig().addressRequest?.name})`);
+            reg.status = () => live('first-ask', 'eyJ.token-first-ask');
+            const m = claims().length;
+            await reconcile();
+            assert(pa()?.name !== 'first-ask' && claims()[m]?.body?.name === 'second-ask', `the replaced request's late name is not stored; the new one is claimed (${pa()?.name} ${claims()[m]?.body?.name})`);
+            updateLocalConfig({ addressRequest: null });
+            await post('/api/local/admin/public-address/offline');
+            // A node from before the list: its one ended request is still turned away; the list keeps the latest 8.
+            updateLocalConfig({ turnedAwayNames: null, endedAddressRequest: { name: 'old-ended', at: 1 } } as any);
+            reg.status = () => live('old-ended', 'eyJ.token-old-ended');
+            await reconcile();
+            assert(pa() == null, `an older node's ended request is still turned away (${pa()?.name})`);
+            for (let i = 0; i < 9; i++) noteTurnedAway(`gone-${i}`, 'taken-offline');
+            const kept = (getLocalConfig() as any).turnedAwayNames as { name: string }[];
+            assert(kept.length === 8 && kept[kept.length - 1].name === 'gone-8' && !kept.some((e) => e.name === 'gone-0' || e.name === 'old-ended')
+                && getLocalConfig().endedAddressRequest == null, `the list keeps the latest 8, the old field moved into it (${kept.map((e) => e.name).join(',')})`);
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            reg.status = () => ({ status: 'none' });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
+
+        await section('20. the key holds a name it does not use: Settings shows it, and releases it by name, never the stored one', async () => {
+            const post = settingsPost!;
+            reg.offline = (b) => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) });   // §5 left it answering "beta"
+            const set = await post('/api/local/admin/public-address/claim', { name: 'owner-pick5', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'owner-pick5', `the owner's pick is stored (${set.status})`);
+            assert(await upOn('eyJ.token-owner-pick5'), 'its tunnel runs');
+            noteTurnedAway('late-one', 'late-claim');
+            const holds = new Set(['late-one', 'owner-pick5']);
+            reg.holder = (b) => holds.has(b?.name) ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' };
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline');
+            const extra = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(extra.status === 200 && JSON.stringify(extra.body?.names?.map((n: any) => [n.name, n.releasable])) === '[["late-one",true]]',
+                `Settings lists the unused name, releasable, and not the stored one (${extra.status} ${JSON.stringify(extra.body?.names)})`);
+            const o0 = offlines().length;
+            const mine = await post('/api/local/admin/public-address/release-name', { name: 'owner-pick5' });
+            assert(mine.status === 409 && offlines().length === o0 && pa()?.name === 'owner-pick5', `the stored name is never released here (${mine.status} ${offlines().length - o0})`);
+            const rel = await post('/api/local/admin/public-address/release-name', { name: 'late-one' });
+            assert(rel.status === 200 && offlines().length === o0 + 1 && offlines()[o0].body?.name === 'late-one',
+                `the unused name is released by name (${rel.status} ${JSON.stringify(offlines()[o0]?.body)})`);
+            assert(pa()?.name === 'owner-pick5' && pa()?.status === 'live' && tunnelConnectorForTests().runningToken === 'eyJ.token-owner-pick5',
+                `the stored address and its tunnel are untouched (${pa()?.name} ${tunnelConnectorForTests().runningToken})`);
+            holds.delete('late-one');
+            const after = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(after.status === 200 && after.body?.names?.length === 0, `once released, nothing is listed (${JSON.stringify(after.body?.names)})`);
+            // A name this key does not hold: refused, nothing asked of the release.
+            const free = await post('/api/local/admin/public-address/release-name', { name: 'gone-3' });
+            assert(free.status === 409 && offlines().length === o0 + 1, `a name the registrar does not give this key is not released (${free.status})`);
+            // An older registrar (no /holder) can't say what it would release: the agent's late claim is shown, never released.
+            noteTurnedAway('late-two', 'late-claim');
+            reg.holder = () => [404, { error: 'not found' }];
+            const old = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(old.status === 200 && JSON.stringify(old.body?.names?.map((n: any) => [n.name, n.releasable])) === '[["late-two",false]]',
+                `an older registrar: the late claim is shown, with no release (${JSON.stringify(old.body?.names)})`);
+            const oldRel = await post('/api/local/admin/public-address/release-name', { name: 'late-two' });
+            assert(oldRel.status === 409 && offlines().length === o0 + 1 && pa()?.name === 'owner-pick5',
+                `and a release by name is refused, so an older release never lets go of the stored name (${oldRel.status})`);
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            await post('/api/local/admin/public-address/offline');
+        });
+
+        await section('21. release-name never releases the stored address: races, the pending pick, case, an answer about another name', async () => {
+            const post = settingsPost!;
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline');
+            const holders = () => reg.calls.filter((c) => c.path === '/api/registrar/holder');
+            const holds = new Set<string>();
+            let holderDelayMs = 0;
+            reg.holder = (b) => new Promise((r) => setTimeout(() => r(holds.has(b?.name) ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' }), holderDelayMs));
+            assert((await post('/api/local/admin/public-address/claim', { name: 'race-stored', mode: 'tunnel' })).status === 200 && pa()?.name === 'race-stored', 'race-stored is stored');
+
+            // D1 (r4176051800): a Settings claim stores the name while /holder is pending.
+            noteTurnedAway('race-late', 'late-claim');
+            holds.add('race-late');
+            holderDelayMs = 1_500;
+            const o0 = offlines().length;
+            const releasing = post('/api/local/admin/public-address/release-name', { name: 'race-late' });
+            await sleep(300);
+            const claim = await post('/api/local/admin/public-address/claim', { name: 'race-late', mode: 'tunnel' });
+            const rel = await releasing;
+            assert(claim.status === 200 && rel.status === 409 && !offlines().slice(o0).some((c) => c.body?.name === 'race-late') && pa()?.name === 'race-late' && pa()?.status === 'live',
+                `D1: a claim during /holder stores the name, and the release is refused, nothing sent (claim ${claim.status} release ${rel.status} ${JSON.stringify(rel.body)} sent ${JSON.stringify(offlines().slice(o0).map((c) => c.body))} stored ${pa()?.name})`);
+            assert(await upOn('eyJ.token-race-late'), 'and the claimed name\'s tunnel runs');
+
+            // D2b: nothing stored; Settings' status read stores the owner's pending pick while /holder is pending.
+            await post('/api/local/admin/public-address/offline');
+            noteTurnedAway('pend-two', 'late-claim');
+            holds.add('pend-two');
+            const o1 = offlines().length;
+            const releasing2 = post('/api/local/admin/public-address/release-name', { name: 'pend-two' });
+            await sleep(300);
+            noteTurnedAway('pend-two', 'unanswered');   // as a Settings claim of it that timed out would
+            reg.status = () => live('pend-two', 'eyJ.token-pend-two');
+            const st = await settingsGet!('/api/local/admin/public-address/status');
+            const rel2 = await releasing2;
+            assert(rel2.status === 409 && offlines().length === o1 && pa()?.name === 'pend-two',
+                `D2b: the status read stores the pending pick, and the release is refused, nothing sent (status ${st.status} release ${rel2.status} ${JSON.stringify(rel2.body)} sent ${offlines().length - o1} stored ${pa()?.name})`);
+            holderDelayMs = 0;
+            reg.status = () => ({ status: 'none' });
+
+            // r4176051848: the owner's pending pick (unanswered) is never listed, and release-name refuses it.
+            await post('/api/local/admin/public-address/offline');
+            noteTurnedAway('pend-pick', 'unanswered');
+            holds.add('pend-pick');
+            const ex = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(ex.status === 200 && !ex.body?.names?.some((n: any) => n.name === 'pend-pick'), `the pending pick is not offered for release (${JSON.stringify(ex.body?.names)})`);
+            const o2 = offlines().length;
+            const pick = await post('/api/local/admin/public-address/release-name', { name: 'pend-pick' });
+            assert(pick.status === 409 && /chose last/.test(pick.body?.error || '') && offlines().length === o2, `release-name refuses the pending pick (${pick.status} ${JSON.stringify(pick.body)})`);
+            noteTurnedAway('pend-pick', 'claim-replaced');
+
+            // r4176051940: a stored name in another case is still the stored name.
+            assert((await post('/api/local/admin/public-address/claim', { name: 'kelp-pick', mode: 'tunnel' })).status === 200, 'kelp-pick is stored');
+            updateNodeConfig({ publicAddress: { ...pa(), name: 'Kelp-Pick' } } as any);
+            holds.add('kelp-pick');
+            noteTurnedAway('kelp-pick', 'late-claim');
+            const ex2 = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(!ex2.body?.names?.some((n: any) => n.name === 'kelp-pick'), `a mixed-case stored name is not listed (${JSON.stringify(ex2.body?.names)})`);
+            const o3 = offlines().length;
+            const kelp = await post('/api/local/admin/public-address/release-name', { name: 'kelp-pick' });
+            assert(kelp.status === 409 && offlines().length === o3, `release-name refuses a mixed-case stored name (${kelp.status} ${JSON.stringify(kelp.body)})`);
+            updateNodeConfig({ publicAddress: { ...pa(), name: 'kelp-pick' } } as any);
+
+            // r4176051981: /holder about another name says nothing; /offline about another name, or "none", is not a release.
+            noteTurnedAway('third-late', 'late-claim');
+            reg.holder = () => ({ name: 'kelp-pick', held: 'you', state: 'live' });
+            const o4 = offlines().length;
+            const other = await post('/api/local/admin/public-address/release-name', { name: 'third-late' });
+            assert(other.status === 409 && offlines().length === o4, `a /holder answer about another name releases nothing (${other.status})`);
+            holds.add('third-late');
+            reg.holder = (b) => holds.has(b?.name) ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' };
+            reg.offline = () => ({ status: 'released', name: 'kelp-pick' });   // a registrar that ignores the name
+            const c0 = claims().length;
+            const wrong = await post('/api/local/admin/public-address/release-name', { name: 'third-late' });
+            assert(wrong.status === 502 && !wrong.body?.success && /kelp-pick/.test(wrong.body?.error || '') && /claimed back/.test(wrong.body?.error || ''),
+                `an answer about the stored name is a failure, and says so (${wrong.status} ${JSON.stringify(wrong.body)})`);
+            assert(claims()[c0]?.body?.name === 'kelp-pick' && pa()?.name === 'kelp-pick' && pa()?.status === 'live',
+                `and the stored name is claimed back at once (${JSON.stringify(claims()[c0]?.body)} ${pa()?.name}/${pa()?.status})`);
+            reg.offline = () => ({ status: 'none' });
+            const none = await post('/api/local/admin/public-address/release-name', { name: 'third-late' });
+            assert(none.status === 502 && !none.body?.success && /^Not released: .*did not release third-late/.test(none.body?.error || ''), `{status:"none"} is not a release (${none.status} ${JSON.stringify(none.body)})`);
+            reg.offline = (b) => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) });
+
+            // r4176052022: Settings asks /holder in parallel, waits briefly, and reuses the answers for a minute.
+            for (let i = 0; i < 8; i++) noteTurnedAway(`slow-${i}`, 'taken-offline');
+            reg.holder = (b) => new Promise((r) => setTimeout(() => r({ name: b?.name, held: 'free' }), 5_000));
+            const h0 = holders().length;
+            const t0 = Date.now();
+            const slow = await settingsGet!('/api/local/admin/public-address/extra-names');
+            const ms = Date.now() - t0;
+            assert(slow.status === 200 && holders().length - h0 === 8 && ms < 4_500, `8 names, a registrar that doesn't answer: Settings waits ${ms} ms, not 8 × 5 s (${holders().length - h0} asked)`);
+            const h1 = holders().length;
+            const t1 = Date.now();
+            const again = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(again.status === 200 && holders().length === h1 && Date.now() - t1 < 500, `opened again within a minute: no /holder asked (${holders().length - h1}, ${Date.now() - t1} ms)`);
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            await post('/api/local/admin/public-address/offline');
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

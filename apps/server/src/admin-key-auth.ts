@@ -44,7 +44,7 @@ import {
     type MemberNodeRole,
     type BreakGlassMadeBy,
 } from './engine/node-roles.js';
-import { getLocalConfig, isBreakGlassMode } from './config/local-config.js';
+import { getLocalConfig, isBreakGlassMode, isPasswordRetired } from './config/local-config.js';
 import { issueCsrfToken, revokeCsrfTokensBoundTo, restamp2faSessions } from './admin-auth.js';
 import { adminBroadcastAnnouncement } from './state-engine.js';
 import { logger } from './logger.js';
@@ -529,7 +529,9 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
         // The password is owner level and opens no session in break-glass mode (checkAdminAuth). A changed password,
         // or a second factor turned on, off or replaced, ends every session the old one opened, except the session
         // that made the change (restampPasswordSession).
-        const ended = isBreakGlassMode()
+        const ended = isPasswordRetired()
+            ? 'The admin password was retired: it signs nobody in'
+            : isBreakGlassMode()
             ? 'Break-glass mode is on: the admin password signs in to key enrolment only'
             : session.credentialStamp !== passwordCredentialStamp()
                 ? 'The admin password or its 2FA changed since this sign-in'
@@ -588,7 +590,7 @@ export interface AdminSessionBinding {
  * break-glass mode, where the password opens no admin route but key enrolment.
  */
 export function passwordCredentialBinding(): AdminSessionBinding | null {
-    if (isBreakGlassMode()) return null;
+    if (isBreakGlassMode() || isPasswordRetired()) return null;
     return { sessionId: '', memberPubkey: '', sessionEpoch: 0, credentialStamp: passwordCredentialStamp() };
 }
 
@@ -606,11 +608,11 @@ export function adminSessionBinding(sessionId: string, now = Date.now()): AdminS
  * session is ended and no idle window slides, so an open log socket keeps no session alive.
  */
 export function adminSessionBindingLive(b: AdminSessionBinding, now = Date.now()): boolean {
-    if (!b.sessionId) return !!b.credentialStamp && !isBreakGlassMode() && b.credentialStamp === passwordCredentialStamp();
+    if (!b.sessionId) return !!b.credentialStamp && !isBreakGlassMode() && !isPasswordRetired() && b.credentialStamp === passwordCredentialStamp();
     const session = adminSessions.get(b.sessionId);
     if (!session || session.memberPubkey !== b.memberPubkey || session.sessionEpoch !== b.sessionEpoch) return false;
     if (now > session.hardExpiresAt || now > session.idleExpiresAt) return false;
-    if (session.kind === 'password') return !isBreakGlassMode() && session.credentialStamp === passwordCredentialStamp();
+    if (session.kind === 'password') return !isBreakGlassMode() && !isPasswordRetired() && session.credentialStamp === passwordCredentialStamp();
     if (getNodeRoleSessionEpoch(session.memberPubkey) !== b.sessionEpoch) return false;
     const liveRole = nodeRoleOf(session.memberPubkey);
     return !!liveRole && liveRole !== 'moderator';
@@ -655,6 +657,19 @@ export function revokeAdminSession(sessionId: string): void {
 }
 
 // ===================== PASSWORD SESSIONS =====================
+
+/** Ends every session opened with the password now (the password was retired), and closes the log sockets they opened. */
+export function endPasswordSessions(): number {
+    let ended = 0;
+    for (const [id, s] of adminSessions) {
+        if (s.kind !== 'password') continue;
+        adminSessions.delete(id);
+        revokeCsrfTokensBoundTo(id);
+        ended++;
+    }
+    noteSessionsEnded();
+    return ended;
+}
 
 /** At most this many password sessions at once; a new one ends the oldest. Each is a sign-in with the password. */
 export const MAX_PASSWORD_SESSIONS = 32;

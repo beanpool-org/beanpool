@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
+import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode, isPasswordRetired } from './config/local-config.js';
 import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from './totp.js';
 import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, passwordCredentialBinding, passwordCredentialStamp, type AdminSessionBinding } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
@@ -143,6 +143,34 @@ export async function checkAdminAuth(ctx: any, opts: PasswordAuthOptions = {}): 
  * never reach this.
  */
 export const PASSWORD_NEEDS_2FA_CODE = 'password_needs_2fa';
+
+/**
+ * The answer on every password path once an owner retired the password (POST /api/local/admin/auth/retire-password):
+ * the header, a body password, the password sign-in, verify-password, change-password. No route sets one again.
+ */
+export const PASSWORD_RETIRED_CODE = 'password_retired';
+export const PASSWORD_RETIRED_ERROR =
+    "This community's admin password was retired: it signs nobody in, and no route sets one again. " +
+    'Sign in with your phone (Manage in the app, or "Sign in with your phone" on a computer); scripts use an owner automation token. ' +
+    'Locked out: your break-glass code, a second owner, or "beanpool recover" on the server.';
+
+export function refusePasswordRetired(ctx: any): void {
+    ctx.status = 403;
+    ctx.body = { error: PASSWORD_RETIRED_ERROR, code: PASSWORD_RETIRED_CODE, passwordRetired: true };
+}
+
+/** The password (or break-glass code) a request carries: a header or the body, never the URL (#130). */
+function sentPassword(ctx: any): string | null {
+    const headerPass = (typeof ctx.get === 'function' ? ctx.get('x-admin-password') : null) ||
+        (typeof ctx.get === 'function' ? ctx.get('x-break-glass-code') : null) ||
+        ctx.request?.headers?.['x-admin-password'] ||
+        ctx.headers?.['x-admin-password'] ||
+        ctx.request?.headers?.['x-break-glass-code'] ||
+        ctx.headers?.['x-break-glass-code'];
+    const rawPass = ctx.requestBody?.password || ctx.request?.body?.password ||
+                    ctx.requestBody?.breakGlassCode || ctx.request?.body?.breakGlassCode || headerPass;
+    return rawPass ? String(rawPass).trim() : null;
+}
 export const PASSWORD_NEEDS_2FA_ERROR = 'Turn on two-factor sign-in in Settings, or use an automation token made from your phone';
 
 export interface PasswordAuthOptions {
@@ -218,6 +246,17 @@ export async function checkAdminPasswordAuth(ctx: any, opts: PasswordAuthOptions
     // When breakGlassMode is enabled, password and break-glass credentials can ONLY reach key enrolment!
     const isBreakGlass = isBreakGlassMode();
     const reqPath = ctx.path || ctx.request?.path || '';
+
+    // Retired for good (design step 10): whatever is sent as the password is refused before it is looked at. A
+    // break-glass code on the enrol routes is still the owners' recovery factor.
+    if (isPasswordRetired()) {
+        const sent = sentPassword(ctx);
+        const breakGlassEnrol = reqPath === '/api/local/admin/auth/enrol' || reqPath === '/api/local/admin/auth/break-glass/enrol';
+        if (sent && !(breakGlassEnrol && isBreakGlassCodeShape(sent))) {
+            refusePasswordRetired(ctx);
+            return false;
+        }
+    }
     const isEnrolment = reqPath === '/api/local/admin/auth/enrol' ||
                         reqPath === '/api/local/admin/auth/break-glass/enrol' ||
                         reqPath === '/api/local/admin/auth/break-glass/status' ||
@@ -239,16 +278,7 @@ export async function checkAdminPasswordAuth(ctx: any, opts: PasswordAuthOptions
 
     // 3. Password / Break-glass Code Authentication
     const config = getLocalConfig();
-    const headerPass = (typeof ctx.get === 'function' ? ctx.get('x-admin-password') : null) ||
-        (typeof ctx.get === 'function' ? ctx.get('x-break-glass-code') : null) ||
-        ctx.request?.headers?.['x-admin-password'] ||
-        ctx.headers?.['x-admin-password'] ||
-        ctx.request?.headers?.['x-break-glass-code'] ||
-        ctx.headers?.['x-break-glass-code'];
-    // #130: Password must travel in headers or request body only, NEVER in URL query params.
-    const rawPass = ctx.requestBody?.password || ctx.request?.body?.password ||
-                    ctx.requestBody?.breakGlassCode || ctx.request?.body?.breakGlassCode || headerPass;
-    const password = rawPass ? String(rawPass).trim() : null;
+    const password = sentPassword(ctx);
 
     let ok = false;
     let breakGlassOwner: string | null = null;
@@ -835,7 +865,7 @@ export function issue2faSessionToken(): string {
 export function isValid2faSession(token: string): boolean {
     const entry = tfaSessionTokens.get(token);
     if (!entry) return false;
-    if (Date.now() > entry.expiry || entry.credentialStamp !== passwordCredentialStamp()) {
+    if (Date.now() > entry.expiry || entry.credentialStamp !== passwordCredentialStamp() || isPasswordRetired()) {
         tfaSessionTokens.delete(token);
         return false;
     }

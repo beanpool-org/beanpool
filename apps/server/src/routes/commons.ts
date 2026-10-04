@@ -50,9 +50,9 @@ router.get('/api/commons/balance', async (ctx) => {
 router.post('/api/commons/pay', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) { ctx.status = 401; ctx.body = { error: 'A signed request is required' }; return; }
-    const { amount } = (ctx as any).requestBody || {};
+    const { amount, debtId } = (ctx as any).requestBody || {};
     try {
-        const txn = payToCommons(actor, amount);
+        const txn = payToCommons(actor, amount, debtId);
         ctx.body = { transactionId: txn.id, amount: txn.amount };
     } catch (e: any) {
         ctx.status = typeof e?.status === 'number' ? e.status : 400;

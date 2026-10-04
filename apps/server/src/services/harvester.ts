@@ -616,7 +616,7 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
     const refused = redirectRefusal(res, url);
     if (refused) {
         await res.body?.cancel().catch(() => {});
-        throw new Error(refused);
+        throw refused;
     }
 
     if (!res.ok) {

@@ -353,18 +353,39 @@ async function main(): Promise<void> {
         }
         // Timing: the check itself, in-process (the network's jitter would hide nothing and prove nothing).
         const { verifyAutomationToken } = await import('./automation-tokens.js');
-        const time = (t: string) => { const s = process.hrtime.bigint(); for (let i = 0; i < 4000; i++) verifyAutomationToken(t); return Number(process.hrtime.bigint() - s) / 4000; };
-        for (let i = 0; i < 2; i++) bad.forEach(time); // warm up
-        // The fastest of five interleaved rounds for each: other work on a busy machine only ever adds time. A shared CI
-        // runner can still slow one kind for all five rounds, so a measurement over the bound is taken again, up to three
-        // times: a real difference (a lookup that leaks) shows every time, a busy neighbour does not.
+        // Warm up JIT
+        for (let i = 0; i < 2; i++) {
+            for (const t of bad) {
+                for (let j = 0; j < 1000; j++) verifyAutomationToken(t);
+            }
+        }
+        // Interleaved rounds (A,B,C,A,B,C,…) of many iterations each, comparing medians.
+        // Single-round spikes from CI neighbours do not affect the median. A real difference (a lookup that leaks)
+        // shows consistently in every round and in the medians.
+        const ROUNDS = 21;
+        const ITERS = 1000;
         const measure = () => {
-            const ns = bad.map(() => Infinity);
-            for (let round = 0; round < 5; round++) bad.forEach((t, i) => { ns[i] = Math.min(ns[i], time(t)); });
-            return ns;
+            const samples: number[][] = bad.map(() => []);
+            for (let round = 0; round < ROUNDS; round++) {
+                for (let i = 0; i < bad.length; i++) {
+                    const t = bad[i];
+                    const s = process.hrtime.bigint();
+                    for (let j = 0; j < ITERS; j++) verifyAutomationToken(t);
+                    samples[i].push(Number(process.hrtime.bigint() - s) / ITERS);
+                }
+            }
+            return samples.map(s => {
+                const sorted = [...s].sort((a, b) => a - b);
+                const mid = Math.floor(sorted.length / 2);
+                return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+            });
         };
         const attempts: number[][] = [];
-        for (let a = 0; a < 3; a++) { const ns = measure(); attempts.push(ns); if (Math.max(...ns) / Math.min(...ns) < 2) break; }
+        for (let a = 0; a < 3; a++) {
+            const medians = measure();
+            attempts.push(medians);
+            if (Math.max(...medians) / Math.min(...medians) < 2) break;
+        }
         const last = attempts[attempts.length - 1];
         assert(Math.max(...last) / Math.min(...last) < 2,
             `the three take about the same time (${attempts.map(ns => ns.map(n => n.toFixed(0)).join(' / ')).join('; then ')} ns per check)`);

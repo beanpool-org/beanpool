@@ -100,9 +100,11 @@ When a confirmed member leaves owing Beans, because the community removed them o
 
 While a record is open, nobody can be confirmed against that entry. If the person comes back, a second chance is an admin's decision, made with the history in front of them. There are three ways to settle a debt, as in a LETS:
 
-- **Paid back.** The person, on their new account, pays the amount to the Commons. An admin then links that payment to the record, and it is settled.
-- **Worked off.** An admin confirms them with a known floor of 0 and a repayment flag. Every Bean they receive above 0 goes to the Commons until the debt is cleared; then the flag lifts and the record is settled. The admin can raise their known floor after that.
+- **Paid back.** The person, on their new account, pays the amount to the Commons for that debt. An admin then checks that payment against the record, and it is settled. A payment made for another debt, or for none, settles nothing, and no payment settles two debts.
+- **Worked off.** An admin confirms them with a known floor of 0 and a repayment flag. Once the confirmation counts (with a second admin's too, where your community asks for one), every Bean they receive above 0 goes to the Commons until the debt is cleared; then the flag lifts and the record is settled. The admin can raise their known floor after that. If an admin takes the confirmation back, the flag and the floor of 0 end with it: from then on they keep what they receive, and what they already repaid stays repaid.
 - **Forgiven.** The community votes on a Decision to forgive it. The record stays, marked forgiven, and an admin can confirm them again.
+
+**The rule binds the entry, not the person.** Your server can't read the names, so it can't tell when an admin adds a new entry for the same person and confirms them against that one instead. That rests on your admins' honesty; the access log shows who added and who confirmed each entry. The app doesn't yet warn an admin when a new entry's name matches one with an open debt.
 
 Nothing already spent is ever taken back from anyone. A debt record is deleted 3 years after the member left, whatever its status.
 

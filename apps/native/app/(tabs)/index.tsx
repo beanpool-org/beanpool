@@ -72,7 +72,7 @@ import type { NeedsYouEntry } from '../../utils/needs-you';
  *   and only there, the knocks this phone sent are read, for the card's answers and First steps' ask.
  */
 
-type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community';
+type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community' | 'needs_update';
 
 const REVEAL_MS = 300;
 
@@ -299,6 +299,12 @@ export default function HomeScreen() {
             if (why === 'pull') AccessibilityInfo.announceForAccessibility('Home updated');
         } else if (read.kind === 'members_only') {
             setStatus('members_only');
+        } else if (read.kind === 'needs_update') {
+            setStatus('needs_update');
+            storedRef.current = null;
+            setStored(null);
+            setOfflineNote(false);
+            if (why === 'pull') AccessibilityInfo.announceForAccessibility("This community's server needs an update before Home works. Market and Talk still work.");
         } else {
             setStatus(storedRef.current ? 'ok' : 'offline');
             setOfflineNote(!!storedRef.current);
@@ -520,6 +526,18 @@ export default function HomeScreen() {
                 <View style={st.empty}>
                     <Text style={[st.emptyText, { color: colors.text.body }]}>Home shows once you're a member of this community.</Text>
                     <HomeButton colors={colors} text="Open the Market" onPress={() => router.navigate('/(tabs)/market')} />
+                </View>
+            );
+        } else if (status === 'needs_update') {
+            empty = (
+                <View style={st.empty}>
+                    <Text style={[st.emptyText, { color: colors.text.body }]} accessibilityLiveRegion="polite" testID="home-needs-update-note">
+                        This community's server needs an update before Home works. Market and Talk still work.
+                    </Text>
+                    <View style={s.buttonRow}>
+                        <HomeButton colors={colors} text="Open the Market" onPress={() => router.navigate('/(tabs)/market')} testID="home-open-market" />
+                        <HomeButton colors={colors} text="Open Talk" onPress={() => router.navigate('/(tabs)/chats')} testID="home-open-talk" />
+                    </View>
                 </View>
             );
         } else if (status === 'no_community') {

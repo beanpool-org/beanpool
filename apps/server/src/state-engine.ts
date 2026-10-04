@@ -54,7 +54,7 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
-import { repaymentOf } from './engine/names-debts.js';
+import { repaymentOf, assertPayableDebt, linkDebtPayment } from './engine/names-debts.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
 import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
@@ -3312,7 +3312,8 @@ function assertKeeperOwnDebtCovered(keeperPubkey: string): void {
     const { balance } = getBalance(keeperPubkey);
     const floor = usableFloor(keeperPubkey);
     if (balance < floor) {
-        throw new Error(`Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
+        // A refusal, not a passing database error: the scheduler's applyKeeperChange closes the change instead of retrying it.
+        throw new KeeperChangeRefused(`Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
     }
 }
 
@@ -5008,13 +5009,18 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
  * Working off a debt (community modes slice 5, engine/names-debts.ts; design §4.2 (b), the Rule 7 sweep pattern): a member
  * an admin confirmed with a repayment flag sends every Bean above 0 they hold to the Commons, until what they repay reaches
  * the debt; then the record is settled and the flag clears. Only what is above 0 moves, never more than is left to repay,
- * and never anything already spent. Runs after a payment to them commits. Returns what moved.
+ * and never anything already spent. Runs after a payment to them commits: transfer()'s after-commit hook (direct
+ * payments, escrow releases and refunds, a dispute ruling's, stranded pledges returned) and payFromCommons'. A hardship
+ * grant Decision (decisions-engine.ts grant_hardship) is not swept: the community chose to give those Beans for hardship,
+ * and taking them straight back would undo its own Decision. They count toward the debt only once spent and earned back.
+ * Returns what moved.
  */
 export function sweepRepayment(memberPubkey: string): number {
     const debt = repaymentOf(memberPubkey);
     if (!debt) return 0;
     const { balance } = getBalance(memberPubkey);
-    const amount = Math.round(Math.max(0, Math.min(balance, debt.amount - debt.repaid)) * 100) / 100;
+    // Down to the cent, never up: rounding up would take a part of a cent below 0.
+    const amount = Math.floor(Math.max(0, Math.min(balance, debt.amount - debt.repaid)) * 100 + 1e-9) / 100;
     if (!(amount > 0)) return 0;
     try {
         conservingTransaction(() => {
@@ -5033,7 +5039,8 @@ export function sweepRepayment(memberPubkey: string): number {
         console.error(`[NamesDebts] Failed to sweep ${amount} Beans of a repayment:`, err);
         return 0;
     }
-    try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }); } catch { }
+    // To the member alone: who is working off a debt, and how much, is nobody else's business (debts are admins-only).
+    try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }, [memberPubkey]); } catch { }
     return amount;
 }
 
@@ -5042,19 +5049,22 @@ export function sweepRepayment(memberPubkey: string): number {
  * the Commons never takes anyone into debt, so it skips no floor rule. An admin then links it to the debt record
  * (engine/names-debts.ts settleByPayment).
  */
-export function payToCommons(memberPubkey: string, amount: unknown): Transaction {
+export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unknown): Transaction {
     const m = getMember(memberPubkey);
     if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
         throw Object.assign(new Error('Only an active member pays the Commons.'), { status: 403 });
     }
-    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) {
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
         throw Object.assign(new Error('The amount is a number of Beans above 0, to the cent.'), { status: 400 });
     }
     const txn = conservingTransaction(() => {
         const { balance } = getBalance(memberPubkey);
         if (amount > balance) throw Object.assign(new Error(`You hold ${balance} Beans: you can pay the Commons only what you hold.`), { status: 409 });
+        const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId);
         const t = moveToCommons(memberPubkey, amount, 'Paid to the Commons', { allowMemberDebit: true, authSigner: memberPubkey });
         if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });
+        // Made for a debt: the link an admin's settle reads (engine/names-debts.ts settleByPayment).
+        if (debt) linkDebtPayment(debt, t.id, memberPubkey, amount);
         return t;
     });
     try { broadcast({ type: 'profile_updated', publicKey: memberPubkey }); } catch { }
@@ -5726,8 +5736,8 @@ export function completePostTransaction(transactionId: string, confirmerPublicKe
     assertLedgerWritable();
     const res = completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
     if (res) clearEnterpriseFloorCache();
-    // A seller working off a debt: the sale's Beans above 0 go to the Commons (sweepRepayment), once the release committed.
-    if (res && !res.alreadyCompleted) sweepRepayment(res.sellerPublicKey);
+    // A seller working off a debt: the release is a transfer(), whose after-commit hook sweeps the sale's Beans above 0 to
+    // the Commons (sweepRepayment), as it does for a release or refund by an admin's dispute ruling.
     return res;
 }
 

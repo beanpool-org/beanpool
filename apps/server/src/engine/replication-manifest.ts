@@ -428,6 +428,7 @@ export const TABLES: Record<string, TableEntry> = {
     health_access_log: plain('id actor_pubkey action at updated_at'),
     known_consents: plain('member_pubkey version consented_at updated_at'),
     names_debts: plain('id entry_id amount reason removed_at status repaying_pubkey repaid settled_how settled_by settled_at settle_ref note updated_at'),
+    names_debt_payments: plain('transaction_id debt_id payer_pubkey amount paid_at updated_at'),
 
     // ── Members' devices and conveniences, on the generic path (design G4; PLAIN_TABLES_PAYLOAD) ──
     // A standby writes none of their rows (config/node-role.ts assertPlainTablesWritable) and sends no push
@@ -597,6 +598,10 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     totpSecret: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
     totpBackupCodesHashes: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
     breakGlassMode: { kind: 'takeover-bundle', reason: 'break-glass sign-in' },
+    passwordRetired: {
+        kind: 'takeover-bundle',
+        reason: 'the admin password retired for good; merged sticky, so an older bundle never brings the password back',
+    },
     recoveryCode: { kind: 'takeover-bundle', reason: "the public record of the community's recovery code" },
     identityEpoch: { kind: 'takeover-bundle', reason: 'how many take-overs this identity has been through', differsByDesign: 'a take-over writes the bundle\'s epoch + 1' },
     isLocked: { kind: 'per-server', reason: "whether this server's admin password has been set" },

@@ -195,6 +195,10 @@ services:
       - default
       - beanpool-shared
     restart: unless-stopped
+    # On a stop (docker compose up recreating the container, docker stop, docker compose down) the node closes its
+    # database and marks the stop clean, in milliseconds (apps/server/src/engine/shutdown-recovery.ts). 20 s rather than
+    # Docker's 10 before a kill is room for a slow disk; a kill is what shows owners "an unclean shutdown".
+    stop_grace_period: 20s
     logging: *default-logging
 
 networks:

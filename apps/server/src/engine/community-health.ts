@@ -26,8 +26,14 @@ export const DEBT_LINE_PCT_KEY = 'health_debt_line_pct';
 export const QUIET_DAYS_KEY = 'health_quiet_days';
 export const DEBT_LINE_PCT_DEFAULT = 50;
 export const QUIET_DAYS_DEFAULT = 60;
-/** The consent's wording; a new wording is a new version, and the member's record says which one they saw. */
-export const CONSENT_WORDING_VERSION = 1;
+/**
+ * The consent's wording; a new wording is a new version, and the member's record says which one they saw. Wording 2
+ * (review r4176931267) names what every admin sees of trades, unlogged, whatever the member agrees to: a trade not yet
+ * finished or one an admin settled (/api/local/admin/disputes), each member's trade counts and total (/admin/data
+ * memberStats), and the fraud alerts that name members (getCommunityHealth flags). Wording 1 said "They can't see your
+ * trades", so a member who agreed to it is asked again.
+ */
+export const CONSENT_WORDING_VERSION = 2;
 
 export class HealthError extends Error {
     constructor(readonly status: number, readonly code: string, message: string) {
@@ -62,7 +68,12 @@ export function consentTerms() {
     const { debtLinePct, quietDays } = healthSettings();
     const text = `In this community, the admins can see your balance if it goes past ${debtLinePct}% of your credit line `
         + `or if you stay in debit for ${quietDays} days without a sale. That's how a LETS has always worked. `
-        + `They can't see your trades. Every look is logged, and you can take this back at any time in Settings.`;
+        + `Every look at your balance is logged, and you can take this back at any time in Settings. `
+        + `Whatever you choose, any admin can see some of your trades, and those looks are not logged: a trade that isn't `
+        + `finished yet or that an admin settled (who with, the listing, the price, and your chat with them, which they can't `
+        + `read if it is private), so a stuck trade can be settled; how many trades you have finished or cancelled, and what `
+        + `the finished ones came to; and a fraud alert that names you, and how many Beans moved, if you trade mostly with `
+        + `one member, within a small group, or with members you invited. Nothing else of your trades.`;
     return { known: isKnownCommunity(), debtLinePct, quietDays, version: `${CONSENT_WORDING_VERSION}:${debtLinePct}:${quietDays}`, text };
 }
 

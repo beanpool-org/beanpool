@@ -21,7 +21,7 @@ Tap the sliders button at the top right of the screen. Settings is not one of th
 - **Your balance and your trades.** Nobody else in your community can read them, in the app or from your community's server. A trade shows only its two people: you and the other person.
 - If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only.
 - If an admin removes your account, the admin who starts it sees your balance, so that what you hold or owe can be settled. The other admins and the owner can see who looked and when.
-- In a known community, if you agreed to it when you joined and an admin has confirmed you, the admins can see your balance once it passes one of your community's lines. Never your trades. You can take that back at any time in Settings. See "What the admins can see".
+- In a known community, if you agreed to it when you joined and an admin has confirmed you, the admins can see your balance once it passes one of your community's lines. You can take that back at any time in Settings. In any community, any admin can also see some of your trades: a trade that isn't finished yet, how many trades you have made and what they came to, and fraud alerts. See "What the admins can see".
 
 The owners and admins who run your community's server can still see what is stored there. See "Who else can see things".
 

@@ -179,7 +179,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE confirmations SET revoked_at = ?, revoked_by = ? WHERE member_pubkey = ?').run(ago(DAY), ada.pk, rex.pk);
     assert(getBalance(kim.pk).balance === -600 && getBalance(kim.pk).floor !== 0, `Kimberly is 600 in debit with a known floor (${JSON.stringify(getBalance(kim.pk)).slice(0, 120)})`);
     const terms = await call('GET', null, '/api/community/consent-terms');
-    assert(terms.status === 200 && terms.body?.known === true && /50%/.test(terms.body?.text) && /60 days/.test(terms.body?.text) && /can't see your trades/.test(terms.body?.text),
+    assert(terms.status === 200 && terms.body?.known === true && /50%/.test(terms.body?.text) && /60 days/.test(terms.body?.text) && /any admin can see some of your trades, and those looks are not logged/.test(terms.body?.text),
         `the join screen's text, before joining, from the two settings (${show(terms)})`);
     for (const m of [kim, lea, neo, ugo, rex]) {
         const c = await call('POST', m, '/api/names/consent', { version: terms.body.version });
@@ -276,6 +276,9 @@ async function main(): Promise<void> {
     const [wordingNow, ...leaLines] = leaRow.version.split(':');
     db.prepare('UPDATE known_consents SET version = ? WHERE member_pubkey = ?').run([Number(wordingNow) - 1, ...leaLines].join(':'), lea.pk);
     const ex5 = await exceptions(ada);
+    const leaMine = await call('GET', lea, '/api/names/consent');
+    assert(leaMine.status === 200 && leaMine.body?.consentedVersion === [Number(wordingNow) - 1, ...leaLines].join(':') && String(leaMine.body?.version).startsWith(`${wordingNow}:`),
+        `his app reads that he agreed to wording ${Number(wordingNow) - 1}, not today's, so it asks him again (${show(leaMine)})`);
     assert(ex5.status === 200 && !(ex5.body?.exceptions ?? []).some((e: any) => e.memberPubkey === lea.pk),
         `Leander, who agreed to wording ${Number(wordingNow) - 1} and not today's ${wordingNow}, is not listed (${show(ex5)})`);
     db.prepare('UPDATE known_consents SET version = ? WHERE member_pubkey = ?').run(leaRow.version, lea.pk);
@@ -392,8 +395,39 @@ async function main(): Promise<void> {
     assert(/sees your balance and how many trades you have open/.test(policy) && /sees your balance and how many trades you have open/.test(guide),
         'both name the open-trade count the removal preview answers (pendingEscrowsCount)');
     assert(/take your consent back at any time/.test(policy) && /take your consent back at any time/.test(guide), 'both say consent can be withdrawn at any time (section 6c)');
-    assert(/an admin never sees your trades: who you traded with, or what for/.test(policy) && /No admin ever sees your trades: who you traded with, or what for/.test(guide),
-        'and both say no admin sees a trade itself (section 3: no trade on the wire)');
+    // What every admin sees of trades, whatever a member agreed to (review r4176931267): /api/local/admin/disputes (a pending
+    // trade, or one an admin settled: both members, the listing, the price, their shared chat), /admin/data memberStats
+    // (finished and cancelled counts, the finished ones' total) and the health flags naming members. None of it is logged.
+    const notSeen = /never sees your trades|never your trades|No admin ever sees your trades|can't see your trades|Nobody's trades are shown/;
+    const operatorPage = fs.readFileSync(new URL('../../../packages/beanpool-guide/operators/people/running-a-known-community.md', import.meta.url), 'utf8');
+    const privacyPage = fs.readFileSync(new URL('../../../packages/beanpool-guide/content/settings/privacy.md', import.meta.url), 'utf8');
+    const terms9 = await call('GET', null, '/api/community/consent-terms');
+    const consentText = String(terms9.body?.text ?? '');
+    assert(![policy, guide, operatorPage, privacyPage, consentText].some((t) => notSeen.test(t)),
+        'no text says an admin never sees a trade: every admin sees some (disputes, memberStats, fraud flags)');
+    const tradeList = "a trade that isn't finished yet or that an admin settled (both members, the listing, the price, and the messages in a chat the two of them share, which an admin can't read if it is a private chat), so that a stuck trade can be settled; how many trades each member has finished or cancelled, and what the finished ones came to; and fraud alerts that name members, with the Beans that moved, when they trade mostly with one member, within a small group, or with members they invited";
+    assert(policy.includes(`<li><strong>What any admin can see of trades,</strong> in any community and whatever you agreed to: ${tradeList}. Nothing else of anyone's trades. These looks are not logged.</li>`),
+        'the policy lists what any admin sees of trades, says nothing else, and says it is not logged');
+    assert(operatorPage.includes(`What every admin can see of trades, in any community and with no log, is: ${tradeList}.`),
+        'the operator page lists the same, with no log');
+    assert(/## What any admin can see of your trades/.test(guide) && /\*\*A trade that isn't finished yet, or that an admin settled\.\*\* Both members, the listing, the price, and the messages in a chat the two of you share\./.test(guide)
+        && /\*\*How many trades each member has finished or cancelled,\*\* and what the finished ones came to\./.test(guide)
+        && /\*\*Fraud alerts that name members,\*\* with the Beans that moved/.test(guide)
+        && /Nothing else of your trades\. These looks are not logged/.test(guide),
+        'the members\' guide lists the same three, says nothing else, and says they are not logged');
+    assert(/any admin can see some of your trades, and those looks are not logged: a trade that isn't finished yet or that an admin settled \(who with, the listing, the price, and your chat with them/.test(consentText)
+        && /how many trades you have finished or cancelled, and what the finished ones came to/.test(consentText)
+        && /a fraud alert that names you, and how many Beans moved/.test(consentText) && /Nothing else of your trades\.$/.test(consentText)
+        && /Every look at your balance is logged/.test(consentText),
+        `the wording a member agrees to says what any admin sees of trades, unlogged, and that a look at a balance is logged (${show(terms9)})`);
+    const quoted = consentText.replace(/past \d+% of/, 'past 50% of').replace(/debit for \d+ days/, 'debit for 60 days');
+    assert(guide.includes(`"${quoted}"`), 'the guide quotes the wording a member agrees to, word for word (at 50% and 60 days)');
+    assert(String(terms9.body?.version ?? '').startsWith('2:'), `the wording is version 2, so a member who agreed to wording 1 ("They can't see your trades") is asked again (${show(terms9)})`);
+    const before9 = logRows();
+    const disputes9 = await call('GET', null, '/api/local/admin/disputes?minDays=0', undefined, adaSession);
+    const data9 = await call('POST', null, '/api/local/admin/data', {}, adaSession);
+    assert(disputes9.status === 200 && data9.status === 200 && typeof data9.body?.memberStats?.[kim.pk]?.deals === 'number' && logRows() === before9,
+        `an admin reads the trade lists and each member's trade counts, and no line is written: "these looks are not logged" (${disputes9.status} ${data9.status})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

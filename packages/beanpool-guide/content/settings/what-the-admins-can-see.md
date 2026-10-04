@@ -32,17 +32,17 @@ An admin may **confirm** you: they say your account is the person on your entry.
 
 ## What the names list doesn't show the admins
 
-The list holds names and notes, and which account is whose. It doesn't show anyone your balance or your trades (an admin can see your balance in the cases below, never your trades). See "Your privacy" for what members and admins can see otherwise.
+The list holds names and notes, and which account is whose. It doesn't show anyone your balance or your trades (an admin can see your balance in the cases below, and some of your trades: see the end of this page). See "Your privacy" for what members and admins can see otherwise.
 
 ## What you agree to in a known community
 
 A community that confirms its members, a **known community**, works the way a LETS always has: the admins keep an eye on debts that grow too big or stay too long. When you join one, the join screen says exactly when, in your community's numbers, for example:
 
-"In this community, the admins can see your balance if it goes past 50% of your credit line or if you stay in debit for 60 days without a sale. They can't see your trades. Every look is logged, and you can take this back at any time in Settings."
+"In this community, the admins can see your balance if it goes past 50% of your credit line or if you stay in debit for 60 days without a sale. That's how a LETS has always worked. Every look at your balance is logged, and you can take this back at any time in Settings. Whatever you choose, any admin can see some of your trades, and those looks are not logged: a trade that isn't finished yet or that an admin settled (who with, the listing, the price, and your chat with them, which they can't read if it is private), so a stuck trade can be settled; how many trades you have finished or cancelled, and what the finished ones came to; and a fraud alert that names you, and how many Beans moved, if you trade mostly with one member, within a small group, or with members you invited. Nothing else of your trades."
 
 Agreeing to that is your consent. Then, and only while an admin has confirmed you:
 
-- If your balance passes either line, your account shows on the admins' phones with your balance, so an admin who knows you can have a word. Nothing else about you: never your trades, who you traded with, or what for.
+- If your balance passes either line, your account shows on the admins' phones with your balance, so an admin who knows you can have a word. That list shows nothing else about you, and none of your trades.
 - Every time an admin opens that list, the other admins and the owner can see who opened it and when.
 - If you haven't agreed, or nobody has confirmed you, or your community doesn't confirm members, that list never shows you.
 
@@ -58,7 +58,15 @@ Whether or not you agreed to anything, in any community:
 - **When your community votes on removing you.** Everyone who can vote in it sees your balance and any debt, in that vote only.
 - **Whoever runs your community's server** holds its database, balances included.
 
-No admin ever sees your trades: who you traded with, or what for.
+## What any admin can see of your trades
+
+Whether or not you agreed to anything, in any community, any admin can see:
+
+- **A trade that isn't finished yet, or that an admin settled.** Both members, the listing, the price, and the messages in a chat the two of you share. An admin can't read a private chat, only see who wrote and when. This is so that an admin can settle a trade that gets stuck.
+- **How many trades each member has finished or cancelled,** and what the finished ones came to.
+- **Fraud alerts that name members,** with the Beans that moved: when someone trades mostly with one member, within a small group, or with members they invited.
+
+Nothing else of your trades. These looks are not logged: unlike a look at your balance, nobody can see who looked.
 
 ## Asking about your entry
 

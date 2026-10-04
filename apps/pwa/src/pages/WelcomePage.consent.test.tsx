@@ -17,8 +17,8 @@ function json(status: number, body: unknown): Response {
 
 const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } };
 const CODE = 'BP-7K3X-9M2W';
-const TEXT = 'In this community, the admins can see your balance if it goes past 50% of your floor, or if you stay in debit for 60 days without a sale. They can\'t see your trades.';
-const KNOWN = { known: true, debtLinePct: 50, quietDays: 60, version: '1:50:60', text: TEXT };
+const TEXT = 'In this community, the admins can see your balance if it goes past 50% of your credit line or if you stay in debit for 60 days without a sale. That\'s how a LETS has always worked. Every look at your balance is logged, and you can take this back at any time in Settings. Whatever you choose, any admin can see some of your trades, and those looks are not logged: a trade that isn\'t finished yet or that an admin settled (who with, the listing, the price, and your chat with them, which they can\'t read if it is private), so a stuck trade can be settled; how many trades you have finished or cancelled, and what the finished ones came to; and a fraud alert that names you, and how many Beans moved, if you trade mostly with one member, within a small group, or with members you invited. Nothing else of your trades.';
+const KNOWN = { known: true, debtLinePct: 50, quietDays: 60, version: '2:50:60', text: TEXT };
 
 function stubNode(terms: unknown) {
     const calls: Call[] = [];
@@ -69,7 +69,7 @@ describe('the join step in a known community', () => {
         await screen.findByText(/Choose your look/);
         await waitFor(() => expect(node.consents()).toHaveLength(1));
         const [consent] = node.consents();
-        expect(consent.body).toEqual({ version: '1:50:60' });
+        expect(consent.body).toEqual({ version: '2:50:60' });
         expect(consent.headers['X-Public-Key']).toBe(node.redeem()!.body.publicKey);
     });
 

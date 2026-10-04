@@ -29,7 +29,7 @@ import { isAddressLabel, takeAddressRequestFile } from '../address-request.js';
 import { claimAddress, addressStatus } from './registrar-client.js';
 import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
-import { persistAddressIfUnchanged, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
+import { persistAddressIfUnchanged, answersAboutAnotherName, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
 
 // Where it always lived; the take-over suites import it from here.
 export { withKeptTunnelToken };
@@ -51,6 +51,13 @@ const desiredName = (): string =>
 
 const envEnabled = (): boolean => process.env.PUBLIC_ADDRESS_AUTO === '1' || !!process.env.PUBLIC_ADDRESS_NAME;
 const isEnabled = (): boolean => envEnabled() || !!requestedName();
+
+/**
+ * The name this agent claims (its env's, or `beanpool claim`'s request while it stands), or null when it claims none. With
+ * nothing stored, an answer about it is stored even if this server turned it away before (tunnel-connector.ts
+ * answersAboutAnotherName).
+ */
+export const nameAskedFor = (): string | null => (isEnabled() ? desiredName() || null : null);
 
 /**
  * A tunnel address saved here, live or waiting for approval: Settings' claim, this agent's, or a take-over's. A live one's
@@ -88,7 +95,7 @@ const requestDone = (name: string): void => {
 export function dropAddressRequest(why: string): void {
     const r = getLocalConfig().addressRequest;
     if (!r) return;
-    updateLocalConfig({ addressRequest: null });
+    updateLocalConfig({ addressRequest: null, endedAddressRequest: { name: r.name, at: Date.now() } });
     if (!r.refused) console.log(`[PublicAddr] beanpool claim's request for "${r.name}" ends: ${why}`);
 }
 
@@ -102,13 +109,17 @@ export async function reconcile(): Promise<void> {
     // Take offline, a take-over): a late answer never moves the community off a name set after this tick began.
     const since = publicAddressGeneration();
     let st: any;
-    try { st = await addressStatus((getNodeConfig() as any).publicAddress?.name); } catch (e: any) { console.warn('[PublicAddr] status check failed:', e.message); return; }
+    const held = (getNodeConfig() as any).publicAddress;
+    try { st = await addressStatus(held?.name); } catch (e: any) { console.warn('[PublicAddr] status check failed:', e.message); return; }
 
-    if (st.status === 'live' || st.status === 'pending') {
+    // With nothing stored, the key's live or waiting name that this server turned away (one the owner took offline, the
+    // install's late claim) is never stored: the answer counts as none, and the name asked for is claimed below.
+    const turnedAway = (st.status === 'live' || st.status === 'pending') && !held?.name && answersAboutAnotherName(st, null, nameAskedFor());
+    if (!turnedAway && (st.status === 'live' || st.status === 'pending')) {
         if (st.status === 'pending') console.log(`[PublicAddr] ⏳ "${st.name || desiredName()}" awaiting approval`);
         // Not stored: another write came meanwhile (it stands; the next tick asks again), or the answer names another
         // name than the one stored (an older registrar answers about the key's first name): never moved onto it.
-        const stored = persistAddressIfUnchanged(st, 'stored', since);
+        const stored = persistAddressIfUnchanged(st, 'stored', since, nameAskedFor());
         if (!stored) return;
         await stored;
         if (st.name) requestDone(st.name);
@@ -116,9 +127,9 @@ export async function reconcile(): Promise<void> {
     }
 
     // A pause of this server's own name that its heal lifts (the sweep's): asked back at once, by proving its key.
-    if (await healPausedAddress(st, since)) return;
+    if (!turnedAway && await healPausedAddress(st, since)) return;
     // Any other answer (none, paused, released, revoked, blocked) is written on the name it concerns; none is forgotten.
-    recordRegistrarAnswer(st, 'status');
+    if (!turnedAway) recordRegistrarAnswer(st, 'status');
     // The refresh never claims: only a server told to by its env claims a name.
     if (!claims) return;
 

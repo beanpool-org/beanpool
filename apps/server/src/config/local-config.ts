@@ -67,6 +67,10 @@ export interface LocalConfig {
     // public-address agent claims <name>.beanpool.org with the node's own key, as it does for PUBLIC_ADDRESS_NAME (the env
     // wins when both are set). Cleared once the registrar holds the name; `refused` keeps the registrar's reason.
     addressRequest?: { name: string; mode: 'tunnel'; contact?: string | null; requestedAt: number; refused?: string | null } | null;
+    // The name of the latest such request that ended without the registrar giving it here (the owner's claim or Take
+    // offline, another address held): a late answer about it never brings the community onto it (tunnel-connector.ts
+    // answersAboutAnotherName).
+    endedAddressRequest?: { name: string; at: number } | null;
     replicationTokenHash?: string | null;
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;

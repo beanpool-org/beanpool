@@ -13,7 +13,7 @@ import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, r
 import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
-import { dropAddressRequest } from '../services/public-address-agent.js';
+import { dropAddressRequest, nameAskedFor } from '../services/public-address-agent.js';
 import { requireAdminRole } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
@@ -246,8 +246,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             const stored = (getNodeConfig() as any).publicAddress;
             const result = await addressStatus(stored?.name);
             // A live answer about another name this key holds (an older registrar answers about its first one) is never
-            // stored: Settings shows the stored address. Any other answer is only written on the name it concerns, below.
-            if (result.status === 'live' && answersAboutAnotherName(result, stored)) {
+            // stored: Settings shows the stored address. With nothing stored, nor one this server left (one the owner took
+            // offline, the install's late claim): Settings shows it offline. Any other answer is only written on
+            // the name it concerns, below.
+            if (result.status === 'live' && answersAboutAnotherName(result, stored, nameAskedFor())) {
                 ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, stored), ...serverSide() };
                 return;
             }

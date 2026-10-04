@@ -31,7 +31,8 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { getNodeRole, getNodeConfig, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
-import { recordRegistrarAnswer } from '../engine/registrar-names.js';
+import { recordRegistrarAnswer, registrarNames, registrarHostOf } from '../engine/registrar-names.js';
+import { getLocalConfig } from '../config/local-config.js';
 import { addressStatus, askNameHolder, claimAddress, healAddress } from './registrar-client.js';
 import { takeoverHoldsTunnel } from './takeover.js';
 import { logger } from '../logger.js';
@@ -439,21 +440,49 @@ export function persistAddress(pa: any, use: 'stored' | 'claim' = 'stored'): Pro
  * take-over, another check's answer). Checked and written with no await between, so nothing can land in the gap.
  * null: not stored, and nothing else done.
  */
-export function persistAddressIfUnchanged(pa: any, use: 'stored' | 'claim', since: number): Promise<TunnelStatus> | null {
+export function persistAddressIfUnchanged(pa: any, use: 'stored' | 'claim', since: number, asked: string | null = null): Promise<TunnelStatus> | null {
     if (publicAddressGeneration() !== since) return null;
-    if (use === 'stored' && answersAboutAnotherName(pa, (getNodeConfig() as any).publicAddress)) return null;
+    if (use === 'stored' && answersAboutAnotherName(pa, (getNodeConfig() as any).publicAddress, asked)) return null;
     return persistAddress(pa, use);
 }
 
 const otherNamesSaid = new Set<string>();
 /**
+ * With nothing stored: does `answer` name a name this server left? One its record keeps as former (taken offline, or
+ * moved off by a claim of another; engine/registrar-names.ts), or the name of `beanpool claim`'s request that ended
+ * without being given here (the owner's claim or Take offline came first). Never `asked`, nor the record's current name.
+ */
+function turnedAwayHere(answer: any, asked: string | null): boolean {
+    const host = registrarHostOf(answer);
+    if (!host || (asked && registrarHostOf({ name: asked }) === host)) return false;
+    const entry = registrarNames().find((e) => e.address === host);
+    if (entry) return entry.role !== 'current';
+    const ended = getLocalConfig().endedAddressRequest;
+    return !!ended && registrarHostOf({ name: ended.name }) === host;
+}
+/**
  * Does the registrar's `answer` (a status or heal) name another name than the one `stored` here? Then it is never stored:
  * a key can hold two names (an install's claim answered after the owner's pick), and a registrar older than the one that
  * reads /status's `name` answers about the key's first name, whichever was asked. Storing it would move the community
- * onto a name nobody chose. An answer that names no name is used only while nothing is stored. Said once per pair.
+ * onto a name nobody chose. Said once per pair.
+ *
+ * With nothing stored (Take offline, a fresh server) every registrar answers about the key's first name, which can be one
+ * the owner took offline or the install's late claim. Then a name this server turned away is never stored (turnedAwayHere);
+ * any other is, as a fresh server learns a name made for its key elsewhere. `asked`: the name the public-address agent
+ * asks for (its env's, or `beanpool claim`'s request while it stands), never turned away.
  */
-export function answersAboutAnotherName(answer: any, stored: any): boolean {
-    if (!stored?.name || answer?.name === stored.name) return false;
+export function answersAboutAnotherName(answer: any, stored: any, asked: string | null = null): boolean {
+    if (!stored?.name) {
+        if (!turnedAwayHere(answer, asked)) return false;
+        const pair = `→${answer?.name ?? ''}`;
+        if (!otherNamesSaid.has(pair)) {
+            otherNamesSaid.add(pair);
+            say('warn', `the address service answered that this server's key holds "${answer?.name}", a name this server left `
+                + '(taken offline, moved off, or asked for at install and then dropped): not stored; this server stays offline. Claim it in Settings to use it.');
+        }
+        return true;
+    }
+    if (answer?.name === stored.name) return false;
     const pair = `${stored.name}→${answer?.name ?? ''}`;
     if (!otherNamesSaid.has(pair)) {
         otherNamesSaid.add(pair);

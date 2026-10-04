@@ -766,6 +766,55 @@ async function main(): Promise<void> {
             reg.status = () => ({ status: 'none' });
             reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
         });
+
+        await section('18. after Take offline, no status answer brings the community back on a name nobody chose', async () => {
+            const post = settingsPost!;
+            updateNodeConfig({ publicAddress: null } as any);
+            await syncTunnel();
+            // beanpool claim asked for install-race; the owner picked owner-pick3 in Settings before the registrar answered
+            // the install's claim, which then completed: both are live for the same key.
+            updateLocalConfig({ addressRequest: { name: 'install-race', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            const set = await post('/api/local/admin/public-address/claim', { name: 'owner-pick3', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'owner-pick3' && getLocalConfig().addressRequest == null, `the owner's pick is stored, the request ends (${set.status})`);
+            reg.status = (name) => name === 'owner-pick3' ? live('owner-pick3', 'eyJ.token-owner-pick3') : live('install-race', 'eyJ.token-install-race');
+            const off = await post('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() == null, `Take offline: nothing stored (${off.status})`);
+            await reconcile();
+            assert(pa() == null, `the tick stores nothing (${pa()?.name})`);
+            // Settings opens: its status read asks with no name, and every registrar answers the key's live late name.
+            const shown = await settingsGet!('/api/local/admin/public-address/status');
+            assert(shown.status === 200 && pa() == null, `Settings' status read stores nothing (${shown.status} ${pa()?.name}/${pa()?.status})`);
+            assert(shown.body?.name !== 'install-race' && shown.body?.status !== 'live', `and shows no live address (${shown.body?.name}/${shown.body?.status})`);
+            assert(!tunnelConnectorForTests().runningToken, `no tunnel runs (${tunnelConnectorForTests().runningToken})`);
+            // An older registrar that kept the released name live (it ignored the release's name): not brought back either.
+            reg.status = () => live('owner-pick3', 'eyJ.token-owner-pick3');
+            await settingsGet!('/api/local/admin/public-address/status');
+            assert(pa() == null && !tunnelConnectorForTests().runningToken, `nor on the name the owner took offline (${pa()?.name})`);
+            // A request from beanpool claim that still stands: another name's live answer is not stored, the requested name
+            // is claimed; and the requested name's own live answer (its claim completed unanswered) is stored, as before.
+            updateLocalConfig({ addressRequest: { name: 'asked-name', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            reg.status = () => live('install-race', 'eyJ.token-install-race');
+            const n = claims().length;
+            await reconcile();
+            assert(pa()?.name === 'asked-name' && claims().length === n + 1 && claims()[n].body?.name === 'asked-name',
+                `while it stands, another name's answer is not stored: the requested name is claimed (${pa()?.name})`);
+            assert(tunnelConnectorForTests().runningToken === 'eyJ.token-asked-name', `and its tunnel runs (${tunnelConnectorForTests().runningToken})`);
+            await post('/api/local/admin/public-address/offline');
+            updateLocalConfig({ addressRequest: { name: 'asked-name', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            reg.status = () => live('asked-name', 'eyJ.token-asked-name-2');
+            const m = claims().length;
+            await reconcile();
+            assert(pa()?.name === 'asked-name' && pa()?.tunnelToken === 'eyJ.token-asked-name-2' && claims().length === m,
+                `the requested name's own live answer is stored, with no claim (${pa()?.name} ${claims().length - m})`);
+            await post('/api/local/admin/public-address/offline');
+            updateLocalConfig({ addressRequest: null });
+            // A fresh server learns a name made for its key elsewhere (a name it never left): stored, as before.
+            reg.status = () => live('made-elsewhere', 'eyJ.token-made-elsewhere');
+            await settingsGet!('/api/local/admin/public-address/status');
+            assert(pa()?.name === 'made-elsewhere', `a name this server never left is stored (${pa()?.name})`);
+            await post('/api/local/admin/public-address/offline');
+            reg.status = () => ({ status: 'none' });
+        });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);
     } finally {

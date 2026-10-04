@@ -500,6 +500,23 @@ async function main(): Promise<void> {
     assert(bgData9.status === 200 && bgHealth9.status === 200 && logRows() === bgBefore9 && bgFlags9.length > 0
         && bgFlags9.every((f) => !(f.members ?? []).length) && namedKeys9.every((k) => !JSON.stringify(bgFlags9).includes(k)),
         `/admin/data and /admin/health asked for the alerts' summary write no line and their alerts name nobody (${logRows() - bgBefore9} lines)`);
+    // A report filed since the manager's last full read lights its ALERT dot from the summary (confirmation 1, r4177719213):
+    // the summary carries each report's id, the same reports /admin/data lists, and nobody's key, callsign or reason.
+    const reportId9 = 't9-report-' + crypto.randomBytes(4).toString('hex');
+    const reportTarget9 = namedKeys9[0];
+    db.prepare("INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason) VALUES (?, ?, ?, 'T9 reason: spam in the market')")
+        .run(reportId9, ada.pk, reportTarget9);
+    const rpBefore9 = logRows();
+    const rpSummary9 = await call('POST', null, '/api/local/admin/alerts-summary', {}, adaSession);
+    const rpData9 = await call('POST', null, '/api/local/admin/data', { alerts: 'summary' }, adaSession);
+    const rpText9 = JSON.stringify(rpSummary9.body ?? null);
+    const rpDataIds9 = ((rpData9.body?.reports ?? []) as any[]).map((r) => r.id);
+    assert(rpSummary9.status === 200 && Array.isArray(rpSummary9.body?.reportIds) && rpSummary9.body.reportIds.includes(reportId9)
+        && JSON.stringify([...rpSummary9.body.reportIds].sort()) === JSON.stringify([...rpDataIds9].sort())
+        && typeof rpSummary9.body?.reportCount === 'number' && rpSummary9.body.reportCount >= 1
+        && !rpText9.includes(ada.pk) && !rpText9.includes(reportTarget9) && !rpText9.includes('T9 reason') && logRows() === rpBefore9,
+        `the summary carries each report's id (the reports /admin/data lists) and no reporter, member or reason, and writes no line (${rpSummary9.status} ${rpText9.slice(0, 160)})`);
+    db.prepare('DELETE FROM abuse_reports WHERE id = ?').run(reportId9);
     // An escrow left stuck by a member's removal on an older node: reading the list is a look, logged like the disputes.
     // It gets a line of its own (stranded_escrows_read), so the log says which view the admin opened.
     db.prepare("INSERT INTO accounts (public_key, balance) VALUES ('escrow_t9-stranded', -5)").run();

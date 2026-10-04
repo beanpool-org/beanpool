@@ -42,6 +42,8 @@ vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 const DIAGNOSTICS = '/api/local/admin/diagnostics';
 const DATA = '/api/local/admin/data';
+/** The alerts' names-free summary: what the five-minute tick and a Refresh of a node not on screen read instead of DATA. */
+const SUMMARY = '/api/local/admin/alerts-summary';
 const GATEWAY = '/api/local/admin/gateway';
 const LOGS = '/api/local/admin/public-address/logs';
 const HARVESTER = '/api/manager/backups/status';
@@ -58,6 +60,16 @@ let failing: string[] = [];
  */
 let holds: string[][] = [];
 let held: { href: string; resolve: (body: unknown) => void }[] = [];
+
+/**
+ * What the node's summary says about `dataPayload`, as the node would answer it: each flag's kind and severity with no
+ * member, and each report's id. Derived, so a test that changes what the node holds changes both answers at once.
+ */
+function summaryOf(payload: Record<string, unknown>) {
+    const flags = (((payload.health as { flags?: Record<string, unknown>[] } | undefined)?.flags) ?? []).map((f) => ({ ...f, members: [] }));
+    const reports = ((payload.reports as { id?: string }[] | undefined) ?? []);
+    return { flags, reportCount: reports.length, reportIds: reports.map((r) => r.id).filter(Boolean) };
+}
 
 function jsonOk(body: unknown) {
     return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) } as unknown as Response);
@@ -90,6 +102,9 @@ function installFetch() {
             }
             if (href.includes(DATA)) {
                 return jsonOk(dataPayload);
+            }
+            if (href.includes(SUMMARY)) {
+                return jsonOk(summaryOf(dataPayload));
             }
             if (href.includes(LOGS)) {
                 return jsonOk({ success: true, logs: [{ timestamp: '12:00:01', step: '1/4', message: 'Requesting tunnel', type: 'info' }] });
@@ -180,7 +195,10 @@ describe('Node Settings polling cadence', () => {
         expect(countOf(GATEWAY)).toBe(0);
     });
 
-    it('fetches the data payload again once the five minutes are up', async () => {
+    it("checks the alerts again once the five minutes are up, from their names-free summary, not the data payload", async () => {
+        // The five-minute check used to fetch the whole data payload, and with it the alerts that name members, which
+        // the node logs as an admin's look at those members' trades (PR #1608). An automatic check is nobody's look,
+        // so it reads the summary the node doesn't log (review r4177560410); the cadence it pins is unchanged.
         seedProfiles('https://localhost:8443');
         await act(async () => {
             render(<App isFleetMode={true} />);
@@ -188,11 +206,37 @@ describe('Node Settings polling cadence', () => {
         calls = [];
 
         await tick(4 * 60_000);
+        expect(countOf(SUMMARY)).toBe(0);
         expect(countOf(DATA)).toBe(0);
 
         await tick(2 * 60_000);
-        expect(countOf(DATA)).toBe(1);
+        expect(countOf(SUMMARY)).toBe(1);
+        expect(countOf(DATA)).toBe(0);
         expect(countOf(GATEWAY)).toBe(1);
+    });
+
+    it('lights the ALERT dot within one check for a report filed after the first load, and keeps it dark once dismissed', async () => {
+        // Confirmation 1 (r4177719213): the summary branch kept the last full read's reports, so a new report never
+        // reached the dot until someone pressed Refresh. The summary's report ids are what the dot needs.
+        seedProfiles('https://localhost:8443');
+        await act(async () => {
+            render(<App isFleetMode={true} />);
+        });
+        await tick(10_000);
+        expect(screen.queryAllByText(/ALERT \(Inspect\)/i).length).toBe(0);
+
+        // A member files a report on the node; nobody presses anything in the manager.
+        dataPayload = { ...dataPayload, reports: [{ id: 'report-1', reason: 'Spam', targetPubkey: 'cccc' }] };
+        calls = [];
+        await tick(6 * 60_000);
+        expect(countOf(SUMMARY)).toBe(1);
+        expect(countOf(DATA)).toBe(0);
+        expect(screen.getAllByText(/ALERT \(Inspect\)/i).length).toBeGreaterThan(0);
+
+        // Dismissed on the members screen: the next five-second tick re-reads the summary in hand and the dot clears.
+        localStorage.setItem('bp_dismissed_flags', JSON.stringify(['report-1']));
+        await tick(10_000);
+        expect(screen.queryAllByText(/ALERT \(Inspect\)/i).length).toBe(0);
     });
 
     it('costs nothing at all while the tab is hidden, and refreshes once on coming back', async () => {
@@ -286,11 +330,40 @@ describe('Node Settings polling cadence', () => {
         await tick(2_000);
 
         // The second node has no section on screen, so `loadNodeData` never runs for it: the only
-        // thing that can fetch its payload inside the five-minute window is the manual bypass in
+        // thing that can check its alerts inside the five-minute window is the manual bypass in
         // `diagSuccess`. Without that bypass a fleet operator could press Refresh on a node showing
         // a stale alert and be told nothing new for another five minutes.
+        //
+        // It checks them from the names-free summary, not the full payload: the operator isn't viewing that node, and
+        // the node logs a read of the alerts that name members as an admin's look at them (confirmation 1's
+        // observation on PR #1608). The node on screen still gets the full read.
+        const otherSummary = calls.filter((c) => c.includes('other.example.org') && c.includes(SUMMARY));
         const otherData = calls.filter((c) => c.includes('other.example.org') && c.includes(DATA));
-        expect(otherData.length).toBeGreaterThanOrEqual(1);
+        expect(otherSummary.length).toBeGreaterThanOrEqual(1);
+        expect(otherData.length).toBe(0);
+        expect(calls.filter((c) => c.includes('localhost:8443') && c.includes(DATA)).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('selecting a node reads the full data, named alerts and all, only for that node', async () => {
+        // Selecting a node (and the same effect at startup) is a manual refresh of every node: the others are checked
+        // from the summary, so no line is written for members of a node the operator isn't viewing.
+        seedProfiles('https://localhost:8443', 'https://other.example.org', 'https://third.example.org');
+        await act(async () => {
+            render(<App isFleetMode={true} />);
+        });
+        await tick(30_000);
+        calls = [];
+
+        await act(async () => {
+            fireEvent.click(screen.getAllByText('Node 1')[0]);
+        });
+        await tick(2_000);
+
+        expect(calls.filter((c) => c.includes('other.example.org') && c.includes(DATA)).length).toBeGreaterThanOrEqual(1);
+        for (const host of ['localhost:8443', 'third.example.org']) {
+            expect(calls.filter((c) => c.includes(host) && c.includes(DATA)).length).toBe(0);
+            expect(calls.filter((c) => c.includes(host) && c.includes(SUMMARY)).length).toBeGreaterThanOrEqual(1);
+        }
     });
 
     it('never has two requests of the same kind in flight for one node', async () => {
@@ -338,8 +411,9 @@ describe('Node Settings polling cadence', () => {
         // diagnostics but fails on `/data` — a 503, a 429, a dropped connection — used to record
         // the failure as a refresh and stop being checked for security flags until the window
         // rolled over. The nodes most likely to need the check are exactly the flaky ones.
+        // The retries are the automatic check, so they ask for the alerts' summary (review r4177560410).
         seedProfiles('https://localhost:8443');
-        failing = [DATA];
+        failing = [DATA, SUMMARY];
         await act(async () => {
             render(<App isFleetMode={true} />);
         });
@@ -349,27 +423,26 @@ describe('Node Settings polling cadence', () => {
         await tick(60_000);
 
         // Tried again well inside the five minutes...
-        expect(countOf(DATA)).toBeGreaterThanOrEqual(1);
+        expect(countOf(SUMMARY)).toBeGreaterThanOrEqual(1);
         // ...but backed off to roughly every thirty seconds rather than riding the 5-second tick,
         // which is the bandwidth bug this PR exists to fix.
-        expect(countOf(DATA)).toBeLessThanOrEqual(3);
+        expect(countOf(SUMMARY)).toBeLessThanOrEqual(3);
     });
 
     it('never paints a payload that arrived after the operator switched node', async () => {
         // Node 0's ~4 MB payload is in flight when the operator moves to Node 1. It must not
         // overwrite the screen they are now looking at: the sidebar copies are keyed by node id
         // and stay correct either way, but `nodeData` belongs to whichever node is on screen now.
+        //
+        // The five-minute tick no longer fetches the payload (it reads the alerts' summary, review r4177560410), so
+        // the payload held here is the one the startup refresh asks for while Node 0 is on screen.
         localStorage.setItem('bp_fleet_active_tab', 'members');
         seedProfiles('https://localhost:8443', 'https://other.example.org');
+        holds = [['localhost:8443', DATA]];
         await act(async () => {
             render(<App isFleetMode={true} />);
         });
         await tick(5_000);
-
-        // Hold the next payload Node 0 asks for — the one the five-minute window is about to
-        // trigger from the diagnostics tick, with no section of its own on screen to ask for it.
-        holds = [['localhost:8443', DATA]];
-        await tick(6 * 60_000);
         expect(held.length).toBeGreaterThanOrEqual(1);
 
         dataPayload = {

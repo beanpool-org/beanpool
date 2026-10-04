@@ -961,11 +961,16 @@ function alertsSummary<T extends { flags: Array<{ type: string; severity: string
     } as T;
 }
 
-/** The manager's background check: each alert's kind and severity, names-free, and the reports' count; logs nothing. */
+/**
+ * The manager's background check: each alert's kind and severity, names-free, the reports' count, and each report's id
+ * (the same reports /admin/data lists, no reporter, member or reason), which is what lights the manager's ALERT dot for a
+ * report filed since its last full read and keeps a report it dismissed dark (confirmation 1, r4177719213). Logs nothing.
+ */
 router.post('/api/local/admin/alerts-summary', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     ctx.set('Cache-Control', 'no-store');
-    ctx.body = { flags: alertsSummary(getCommunityHealth()).flags, reportCount: getReportCount() };
+    const reportIds = db.prepare('SELECT id FROM abuse_reports ORDER BY created_at DESC').pluck().all() as string[];
+    ctx.body = { flags: alertsSummary(getCommunityHealth()).flags, reportCount: getReportCount(), reportIds };
 });
 
 function healthFor(ctx: any) {

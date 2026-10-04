@@ -947,10 +947,11 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
 
 /**
  * The alerts' names-free summary (POST /api/local/admin/alerts-summary): each alert's kind and severity, the ones that
- * name members with no member, description or Beans, and the reports' count. The node logs nothing for it, so the
- * background flag check reads this, never the full data (review r4177560410).
+ * name members with no member, description or Beans, the reports' count and each report's id (no reporter, member or
+ * reason). The node logs nothing for it, so the background flag check reads this, never the full data (review
+ * r4177560410), and a report's id is enough to light the ALERT dot and to keep a dismissed one dark (r4177719213).
  */
-export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<{ flags: NodeHealthFlag[]; reportCount: number }> {
+export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<{ flags: NodeHealthFlag[]; reportCount: number; reportIds: string[] }> {
     const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/alerts-summary'), {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
@@ -958,7 +959,11 @@ export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     const json = await res.json();
-    return { flags: Array.isArray(json?.flags) ? json.flags : [], reportCount: typeof json?.reportCount === 'number' ? json.reportCount : 0 };
+    return {
+        flags: Array.isArray(json?.flags) ? json.flags : [],
+        reportCount: typeof json?.reportCount === 'number' ? json.reportCount : 0,
+        reportIds: Array.isArray(json?.reportIds) ? json.reportIds.filter((id: unknown): id is string => typeof id === 'string') : [],
+    };
 }
 
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {

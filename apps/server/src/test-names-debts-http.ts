@@ -23,6 +23,9 @@
  *  11. a member pays any amount to the cent (0.29, 1.13, 0.57), never a part of one
  *  12. a sale an admin's dispute ruling releases to a repaying seller is swept (transfer's after-commit hook), as a sale
  *      completed by the buyer is; half a cent above 0 sweeps nothing
+ *  13. a revoked work-off puts back only the known floor it lowered: nothing for one revoked before a second admin
+ *      agreed (the owner's 0, or a 0 kept after an earlier settled work-off, stands); exactly the floor the member had
+ *      for a live one; an admin's floor set during the work-off (even 0) stands, logged as kept
  *   Every step: conservation, the whole node sums to what it summed to before
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-names-debts-http.ts
@@ -424,6 +427,84 @@ async function main(): Promise<void> {
     const swept = sweepRepayment(qi.pk);
     const qiBal = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(qi.pk) as any).balance;
     assert(swept === 0 && qiBal === 0.005 && debtsOf(qiEntry)[0].repaid === 0, `half a cent above 0 sweeps nothing: never rounded up below 0 (${swept}, ${qiBal})`);
+
+    // ── 13. a revoked work-off puts back only the floor it lowered ─────────────────────────────
+    console.log('── 13. a revoked work-off puts back only what it lowered ──');
+    const floorOf = (who: Id) => db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(who.pk) as { amount: number | null; frozen: number } | undefined;
+    const floorLog = (who: Id) => db.prepare('SELECT action, old_value, new_value FROM known_floor_log WHERE member_pubkey = ? ORDER BY at, rowid').all(who.pk) as { action: string; old_value: string; new_value: string }[];
+    const setFloor = (who: Id, amount: number) => call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: who.pk, amount }, owner);
+    const twoAdmins = (on: boolean) => db.prepare(`INSERT INTO node_config (key, value) VALUES ('names_two_admins', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(on ? 'true' : 'false');
+    const leftOwing = async (name: string, beans: number): Promise<any> => {
+        const entry = makeEntry();
+        await call('POST', await debtor(name, beans, entry), '/api/member/purge', { action: 'purge_account' });
+        return debtsOf(entry)[0];
+    };
+    const workOffAs = (debt: any, who: Id) => call('POST', ada, `/api/names/debts/${debt?.id}/work-off`, { memberPubkey: who.pk });
+    const revoke = (c: Res) => call('POST', ada, `/api/names/confirmations/${c.body?.id}/revoke`);
+    // The deciding review's sequence (R1): the floor an older work-off lowered is no business of a later one.
+    const niaDebt = await leftOwing('Nia', 30);
+    const nia = makeMember('Nia again');
+    const nia300 = await setFloor(nia, 300);
+    const niaFirst = await workOffAs(niaDebt, nia);
+    const niaFirstFloor = floorOf(nia);
+    const niaFirstRevoke = await revoke(niaFirst);
+    assert(nia300.status === 200 && niaFirst.body?.status === 'confirmed' && niaFirstFloor?.amount === 0 && niaFirstRevoke.status === 200 && floorOf(nia)?.amount === 300,
+        `setup: Nia's floor of 300 goes to 0 for a work-off and back to 300 when it is revoked (${show(niaFirst)}; ${JSON.stringify(niaFirstFloor)} → ${JSON.stringify(floorOf(nia))})`);
+    const nia0 = await setFloor(nia, 0);
+    twoAdmins(true);
+    const niaSecond = await workOffAs(niaDebt, nia);
+    const niaLogBefore = floorLog(nia).length;
+    const niaSecondRevoke = await revoke(niaSecond);
+    twoAdmins(false);
+    assert(nia0.status === 200 && niaSecond.body?.status === 'awaiting_second' && niaSecondRevoke.status === 200,
+        `setup: the owner sets Nia's floor to 0; with two admins, Ada confirms her against the debt again and revokes it before a second (${show(niaSecond)}; ${show(niaSecondRevoke)})`);
+    assert(floorOf(nia)?.amount === 0 && floorOf(nia)?.frozen === 0 && floorLog(nia).length === niaLogBefore,
+        `that work-off never set a floor, so its revoke puts nothing back: the owner's 0 stands, never the 300 an older work-off lowered (${JSON.stringify(floorOf(nia))}; ${JSON.stringify(floorLog(nia).slice(niaLogBefore))})`);
+    // Two work-offs for one member over time (R1b): a 0 kept after a settled work-off is not the next one's to undo.
+    const moFirstDebt = await leftOwing('Mo', 10);
+    const mo = makeMember('Mo again');
+    const moFirst = await workOffAs(moFirstDebt, mo);
+    transfer('genesis', mo.pk, 10, 'Mo stacks wood', 'direct', true);
+    const moFirstRevoke = await revoke(moFirst);
+    assert(moFirst.body?.status === 'confirmed' && debtsOf(moFirstDebt.entry_id)[0].settled_how === 'work_off' && moFirstRevoke.status === 200 && floorOf(mo)?.amount === 0,
+        `setup: Mo works a 10-Bean debt off; his floor stays 0 once it is settled, and revoking that confirmation leaves it at 0 (${JSON.stringify(debtsOf(moFirstDebt.entry_id)[0])}; ${JSON.stringify(floorOf(mo))})`);
+    const moSecondDebt = await leftOwing('Mo two', 20);
+    twoAdmins(true);
+    const moSecond = await workOffAs(moSecondDebt, mo);
+    const moLogBefore = floorLog(mo).length;
+    const moSecondRevoke = await revoke(moSecond);
+    twoAdmins(false);
+    assert(moSecond.body?.status === 'awaiting_second' && moSecondRevoke.status === 200 && floorOf(mo)?.amount === 0 && floorLog(mo).length === moLogBefore,
+        `a second work-off revoked before a second admin agreed: Mo's 0 stays, never the community's default from the first work-off (${JSON.stringify(floorOf(mo))}; ${JSON.stringify(floorLog(mo).slice(moLogBefore))})`);
+    const mo200 = await setFloor(mo, 200);
+    const moThird = await workOffAs(moSecondDebt, mo);
+    const moThirdFloor = floorOf(mo);
+    const moThirdRevoke = await revoke(moThird);
+    const moLast = floorLog(mo).at(-1);
+    assert(mo200.status === 200 && moThird.body?.status === 'confirmed' && moThirdFloor?.amount === 0 && moThirdRevoke.status === 200 && floorOf(mo)?.amount === 200
+        && moLast?.action === 'exception_restored' && /^200 /.test(moLast.new_value),
+        `the owner sets Mo's floor to 200; a live work-off lowers it to 0, and its revoke puts back exactly the 200 this work-off lowered (${JSON.stringify(moThirdFloor)} → ${JSON.stringify(floorOf(mo))}; ${JSON.stringify(moLast)})`);
+    // An admin's exception set during a work-off stands: even a 0, which looks like the work-off's own.
+    const otDebt = await leftOwing('Ot', 30);
+    const ot = makeMember('Ot again');
+    const otWork = await workOffAs(otDebt, ot);
+    const otMid = await setFloor(ot, 0);
+    const otRevoke = await revoke(otWork);
+    const otLast = floorLog(ot).at(-1);
+    assert(otWork.body?.status === 'confirmed' && otMid.status === 200 && otRevoke.status === 200 && floorOf(ot)?.amount === 0
+        && otLast?.action === 'exception_kept' && /admin/.test(otLast.new_value),
+        `the owner sets Ot's floor to 0 during his work-off: the revoke keeps the owner's 0, not the default he had before, and the log says why (${JSON.stringify(floorOf(ot))}; ${JSON.stringify(otLast)})`);
+    const pipDebt = await leftOwing('Pip', 30);
+    const pip = makeMember('Pip again');
+    const pip300 = await setFloor(pip, 300);
+    const pipWork = await workOffAs(pipDebt, pip);
+    const pipMid = await setFloor(pip, 50);
+    const pipRevoke = await revoke(pipWork);
+    const pipLast = floorLog(pip).at(-1);
+    assert(pip300.status === 200 && pipWork.body?.status === 'confirmed' && pipMid.status === 200 && pipRevoke.status === 200 && floorOf(pip)?.amount === 50
+        && pipLast?.action === 'exception_kept' && /^50 /.test(pipLast.new_value),
+        `the owner sets Pip's floor to 50 during her work-off: the revoke keeps 50, never back up to her 300, and the log says why (${JSON.stringify(floorOf(pip))}; ${JSON.stringify(pipLast)})`);
+    assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
 
     // ── 7. the 3-year sweep ────────────────────────────────────────────────────────────────────
     console.log('── 7. the 3-year sweep ──');

@@ -1622,6 +1622,12 @@ CREATE TABLE IF NOT EXISTS names_debts (
     settled_at       DATETIME,
     settle_ref       TEXT,
     note             TEXT,
+    -- The work-off under way (engine/names-debts.ts): the confirmation that started it, and, once it set the 0 known
+    -- floor, the member's floor before ('default', 'frozen' or Beans) and the set_at it wrote. Its revoke puts back that
+    -- floor and nothing else, only while the floor is still the one it wrote.
+    work_off_confirmation_id TEXT,
+    work_off_floor_before    TEXT,
+    work_off_floor_set_at    TEXT,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

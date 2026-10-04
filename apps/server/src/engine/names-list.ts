@@ -487,7 +487,7 @@ export function confirmMember(actor: string, body: { memberPubkey?: unknown; ent
         log(actor, 'confirm', entry.id, member);
         // Working the debt off (design §4.2 (b)): a known floor of 0, and every Bean above 0 they receive goes to the
         // Commons until the debt is cleared (state-engine.ts sweepRepayment).
-        if (workOff) startWorkOff(actor, workOff.debtId, member, !needsSecond);
+        if (workOff) startWorkOff(actor, workOff.debtId, member, id, !needsSecond);
     })();
     return { id, status: needsSecond ? 'awaiting_second' : 'confirmed' };
 }
@@ -513,7 +513,7 @@ export function secondConfirmation(actor: string, id: unknown): { id: string; st
     db.transaction(() => {
         db.prepare("UPDATE confirmations SET seconded_by = ?, seconded_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(actor, row.id);
         log(actor, 'second', row.entry_id, row.member_pubkey);
-        workOffGoesLive(actor, row.member_pubkey, row.entry_id);
+        workOffGoesLive(actor, row.member_pubkey, row.id);
     })();
     return { id: row.id, status: 'confirmed' };
 }
@@ -527,7 +527,7 @@ export function revokeConfirmation(actor: string, id: unknown): { id: string; st
             .run(actor, row.id);
         log(actor, 'revoke', row.entry_id, row.member_pubkey);
         // A work-off confirmation revoked: the repayment flag and the 0 floor end with it (engine/names-debts.ts).
-        endWorkOff(actor, row.member_pubkey, row.entry_id);
+        endWorkOff(actor, row.member_pubkey, row.id);
     })();
     return { id: row.id, status: 'revoked' };
 }

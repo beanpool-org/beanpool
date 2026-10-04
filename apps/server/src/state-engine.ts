@@ -5048,7 +5048,7 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
         throw Object.assign(new Error('Only an active member pays the Commons.'), { status: 403 });
     }
-    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) {
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
         throw Object.assign(new Error('The amount is a number of Beans above 0, to the cent.'), { status: 400 });
     }
     const txn = conservingTransaction(() => {

@@ -20,6 +20,7 @@
  *      floor (the member keeps what comes in); with two admins, nothing is swept until the second agrees
  *  10. a payment settles only the debt it was made for (linked when it was paid), once: never a sweep's row, never one
  *      made for another debt or for none
+ *  11. a member pays any amount to the cent (0.29, 1.13, 0.57), never a part of one
  *   Every step: conservation, the whole node sums to what it summed to before
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-names-debts-http.ts
@@ -383,6 +384,16 @@ async function main(): Promise<void> {
     const noDebt = await call('POST', wil, '/api/commons/pay', { amount: 1, debtId: 'zz' });
     assert(settledDebt.status === 409 && noDebt.status === 400, `a payment names an open debt or none (${show(settledDebt)}; ${show(noDebt)})`);
     assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
+
+    // ── 11. paying back to the cent ────────────────────────────────────────────────────────────
+    console.log('── 11. any amount to the cent ──');
+    const cy = makeMember('Cy', 50);
+    for (const amount of [0.29, 1.13, 0.57]) {
+        const paid = await call('POST', cy, '/api/commons/pay', { amount });
+        assert(paid.status === 200 && paid.body?.amount === amount, `Cy pays exactly ${amount} Beans (${show(paid)})`);
+    }
+    const tooFine = await call('POST', cy, '/api/commons/pay', { amount: 0.291 });
+    assert(tooFine.status === 400 && balanceRow(cy) === 48.01, `a part of a cent is refused (${show(tooFine)}, ${balanceRow(cy)})`);
 
     // ── 7. the 3-year sweep ────────────────────────────────────────────────────────────────────
     console.log('── 7. the 3-year sweep ──');

@@ -297,7 +297,7 @@ export function redeemOfflineTicket(
         recordFunnelEvent('invite_failed', 'invalid');
         return { success: false, error: verified.error };
     }
-    const { inviterPubkey, timestamp, intendedFor, codeHash } = verified;
+    const { inviterPubkey, timestamp, intendedFor, namesEntryId, codeHash } = verified;
 
     // Never a key a re-key replaced, as in redeemInvite.
     if (isInvalidatedKey(db, String(joinerPublicKey))) {
@@ -345,22 +345,30 @@ export function redeemOfflineTicket(
         recordFunnelEvent('invite_failed', 'inviter_daily_limit');
         return { success: false, error: inviterAtLimit };
     }
-    if (!existingInvite) {
-        const createdAt = new Date(timestamp).toISOString();
-        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)`).run(codeHash, inviterPubkey, createdAt, intendedFor || null);
-    }
-
     // No recordActivity(inviterPubkey): the joiner redeems the ticket, possibly weeks after the inviter
     // signed it and without the inviter present. Stamping the inviter active would reset lead-succession
     // inactivity and cancel a succession vote on a lead who did nothing (#838 review).
 
-    const member = registerMemberInternal(broadcast, joinerPublicKey, callsign, inviterPubkey, codeHash);
+    // One transaction: the code's row, the member, the code's use and, for a ticket bound to a names-list entry (signed
+    // inside it, core inviteTicketText), the confirmation by the ticket's maker (confirmByInvite: made on the phone, so
+    // the maker's right to it is checked now; a binding that can't stand makes the member unconfirmed, never refused).
+    const member = db.transaction(() => {
+        if (!existingInvite) {
+            const createdAt = new Date(timestamp).toISOString();
+            db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id) VALUES (?, ?, ?, ?, ?)`)
+                .run(codeHash, inviterPubkey, createdAt, intendedFor || null, namesEntryId ?? null);
+        }
+        const m = registerMemberInternal(broadcast, joinerPublicKey, callsign, inviterPubkey, codeHash);
+        if (!m) return null;
+        const outcome = namesEntryId ? confirmByInvite(inviterPubkey, namesEntryId, joinerPublicKey) : null;
+        db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ? WHERE code COLLATE NOCASE = ?")
+            .run(joinerPublicKey, new Date().toISOString(), outcome, codeHash);
+        return m;
+    })();
     if (!member) {
         recordFunnelEvent('invite_failed', 'registration_failed');
         return { success: false, error: 'Registration failed during state sync' };
     }
-
-    db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ? WHERE code COLLATE NOCASE = ?").run(joinerPublicKey, new Date().toISOString(), codeHash);
 
     return { success: true, member };
 }

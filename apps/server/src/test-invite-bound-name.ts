@@ -16,7 +16,7 @@ import path from 'node:path';
 import {
     newNamesListKey, newNamesEntryId, sealNamesEntry, openNamesEntry, makeNamesGeneration, makeNamesShare, makeNamesGenerationFor, namesSelfClaim,
     syncNames, namesSharesToSend, checkNamesKeyInPerson, emptyNamesPin, namesReplay, namesRingKeys, readNamesGeneration, sealNamesRing,
-    namesKeyCheckMatches, namesKeyQr, namesKeyCode,
+    namesKeyCheckMatches, namesKeyQr, namesKeyCode, buildInviteTicket, parseInviteTicketText,
     type NamesEntryText, type NamesPin, type NamesPlan, type NamesShare,
 } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -257,6 +257,31 @@ async function main(): Promise<void> {
     const quin = newId('Quin');
     assert((await redeem(quin, plain.body.invite.code)).status === 200 && !liveConfirmation(quin.pk) && inviteRow(plain.body.invite.code)?.names_bind_outcome === null,
         '6. an invite with no entry joins as before, confirms nobody and has no outcome');
+
+    // ── 7a. An offline ticket for a hall with no signal ──────────────────────────────────────────
+    const owenSign = async (b: Uint8Array) => new Uint8Array(crypto.sign(null, Buffer.from(b), owen.priv));
+    const wan = await addEntry(owenP, { name: 'Lives by the old cannery', note: '' });
+    const ticket = await buildInviteTicket(BASE, owen.pk, owenSign, { namesEntryId: wan.entryId });
+    const payload = JSON.parse(Buffer.from(ticket, 'base64').toString('utf8')).p as string;
+    assert(parseInviteTicketText(payload)?.namesEntryId === wan.entryId && !payload.includes('cannery'), '7a. the ticket carries the entry id, signed, and never the name');
+    const redeemTicket = (who: Id, t: string) => call(who, 'POST', '/api/invite/redeem-offline', { ticketB64: t, publicKey: who.pk, callsign: who.name });
+    const tess = newId('Tess');
+    const byTicket = await redeemTicket(tess, ticket);
+    assert(byTicket.status === 200 && liveConfirmation(tess.pk)?.entry_id === wan.entryId && liveConfirmation(tess.pk)?.confirmed_by === owen.pk,
+        `7a. redeeming it makes Tess a member confirmed against the entry by Owen (${show(byTicket)})`);
+    const ticketRow = db.prepare('SELECT names_entry_id, names_bind_outcome FROM invite_codes WHERE used_by = ?').get(tess.pk) as any;
+    assert(ticketRow?.names_entry_id === wan.entryId && ticketRow?.names_bind_outcome === 'confirmed', `7a. the ticket's row keeps the binding and the outcome (${JSON.stringify(ticketRow)})`);
+    const tampered = JSON.parse(Buffer.from(ticket, 'base64').toString('utf8'));
+    tampered.p = tampered.p.replace(wan.entryId, zed.entryId);
+    const ulf = newId('Ulf');
+    const forged = await redeemTicket(ulf, Buffer.from(JSON.stringify(tampered)).toString('base64'));
+    assert(forged.status >= 400 && !db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(ulf.pk), `7a. the entry id changed after signing: refused, nobody joins (${show(forged)})`);
+    const melSign = async (b: Uint8Array) => new Uint8Array(crypto.sign(null, Buffer.from(b), mel.priv));
+    const vix = await addEntry(owenP, { name: 'Vix', note: '' });
+    const melTicket = await buildInviteTicket(BASE, mel.pk, melSign, { namesEntryId: vix.entryId });
+    const vee = newId('Vee');
+    const byMelTicket = await redeemTicket(vee, melTicket);
+    assert(byMelTicket.status === 200 && !liveConfirmation(vee.pk), `7a. a member's ticket bound to an entry: the joiner is a member, unconfirmed (the maker isn't an admin) (${show(byMelTicket)})`);
 
     // ── 7. Replication carries the binding ──────────────────────────────────────────────────────
     const cols = JSON.stringify(TABLES.invite_codes);

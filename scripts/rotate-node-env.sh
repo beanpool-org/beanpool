@@ -278,6 +278,24 @@ if not os.path.isdir(project_dir):
     print(f"🛑 Error: Project directory {project_dir} does not exist", file=sys.stderr)
     sys.exit(2)
 
+# An owner retired this node's admin password for good (Settings → Retire the admin password): the node ignores
+# ADMIN_PASSWORD on every start, so setting it would be a false success. Leave it out, say why, set the other keys,
+# and exit 3 so the run does not say every node succeeded.
+password_skipped = False
+if "ADMIN_PASSWORD" in updates:
+    import json
+    try:
+        with open(os.path.join(project_dir, "data", "local-config.json"), "r") as f:
+            password_skipped = bool(json.load(f).get("passwordRetired"))
+    except Exception:
+        password_skipped = False
+    if password_skipped:
+        print("  [not set] ADMIN_PASSWORD: this node's admin password is retired for good, so the node ignores it. Owners sign in with their phone; take ADMIN_PASSWORD out of this .env.")
+        del updates["ADMIN_PASSWORD"]
+        order.remove("ADMIN_PASSWORD")
+        if not updates:
+            sys.exit(3)
+
 existing_lines = []
 if os.path.exists(env_path):
     with open(env_path, "r") as f:
@@ -323,7 +341,7 @@ if dry_run:
         print("  [dry-run] Would reset isLocked in data/local-config.json for password rotation (token-only setting kept)")
     print(f"  [dry-run] Would write updated .env to {env_path} (mode 0600)")
     print(f"  [dry-run] Would run: cd {project_dir} && docker compose -p {proj_name} up -d --no-deps --force-recreate beanpool-node")
-    sys.exit(0)
+    sys.exit(3 if password_skipped else 0)
 
 # Real update: create backup, write atomically, mode 0600 via umask
 old_umask = os.umask(0o077)
@@ -376,6 +394,8 @@ if res.returncode != 0:
     sys.exit(res.returncode)
 
 print(f"  [restarted] beanpool-node container recreated successfully")
+if password_skipped:
+    sys.exit(3)
 REMOTE_PYTHON
 )
 
@@ -390,6 +410,9 @@ REMOTE_PYTHON
 
   if [ $RC -eq 0 ]; then
     echo "✅ $N_NAME completed successfully."
+  elif [ $RC -eq 3 ]; then
+    echo "⚠️ $N_NAME: ADMIN_PASSWORD was NOT set: this node's admin password is retired. Any other keys were set."
+    FAILED_NODES+=("$N_NAME (admin password retired: ADMIN_PASSWORD not set)")
   else
     echo "❌ $N_NAME failed with exit code $RC"
     FAILED_NODES+=("$N_NAME (code $RC)")

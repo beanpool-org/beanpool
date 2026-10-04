@@ -242,7 +242,7 @@ export async function pullTakeoverEnvelope(opts: { primaryUrl: string; replicati
         const refused = redirectRefusal(res, url);
         if (refused) {
             await res.body?.cancel().catch(() => {});
-            return done('failed', `the main server at ${refused}`);
+            return done('failed', `the main server at ${refused.message}`);
         }
 
         if (res.status === 304) {

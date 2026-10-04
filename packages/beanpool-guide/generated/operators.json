@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 98,
-  "hash": "799c4366b46ac4a2d6ac0ae412c0d6976b52b15786af3e6ea2fb2fb2e3713d15",
+  "version": 99,
+  "hash": "b5b7ef11b7a5801c40ebcb36a49ea20fe4beadaea88ac8989f44de4cd901275d",
   "sections": [
     {
       "id": "setup",
@@ -835,7 +835,7 @@
         },
         {
           "type": "p",
-          "text": "The scripts that come with BeanPool take a token in the environment variable **BEANPOOL_TOKEN**, never on the command line: anyone else on that computer can see a command line. With a token set they send the token alone and never the password. They still take the admin password (ADMIN_PASSWORD, or --admin-pw for setup-backup) if you have no token. What each needs:"
+          "text": "The scripts that come with BeanPool take a token in the environment variable **BEANPOOL_TOKEN**, never on the command line: anyone else on that computer can see a command line. With a token set they send the token alone and never the password. They still read the admin password from the environment variable **ADMIN_PASSWORD** (setup-backup also from --admin-pw, with a warning that anyone on the computer can see it; ADMIN_PASSWORD wins when both are set), but on a current server **the password alone opens nothing**: with two-factor sign-in off the server refuses it, and with it on the server asks for a code the scripts never send. setup-backup then stops, writes nothing and says to use a token. The password works only on a server from before this change. Use a token. What each needs:"
         },
         {
           "type": "ul",
@@ -2539,6 +2539,7 @@
             "A server with no recovery code sends a backup that is not locked. The fleet manager keeps it as before: the latest database, and one copy a day for 30 days, and shows the server as \"Partial: database, no keys\". The same goes for a server that runs a BeanPool older than locked backups.",
             "A server with a recovery code sends a locked backup. The fleet manager keeps it as it came: the newest, and one a day for 30 days. It cannot open these files and does not need to.",
             "It collects with a **Backups** automation token when that server's entry in manager-nodes.json has one (\"automationToken\"), and then sends no password. Without one it sends the admin password, as before. The token can take a full copy of the community: keep manager-nodes.json readable by the fleet manager's user only (chmod 600). See Automation tokens in Access & Security.",
+            "It never follows a redirect. If the server, or a proxy in front of it, answers with one, the collection fails and says where the redirect pointed: nothing is sent there and nothing from there is kept. Put the address the server answers on itself in manager-nodes.json. A standby does the same with BACKUP_PRIMARY_URL, for its copies, its replication token and the take-over keys.",
             "When a collection fails, it waits 5 minutes before asking that server again, then 10, doubling up to 6 hours.",
             "The copies are files in its data folder, under backups/(server name). A community server no longer lists, collects or hands out these copies itself: the old fleet manager pages (/api/manager/backups) were removed in October 2026."
           ]
@@ -3162,6 +3163,7 @@
             "You can also give the name at install, before anyone signs in: docker compose exec beanpool-node beanpool claim --name NAME (see First-time setup). Your server claims it with its own key. Once your server has an address, it changes only here, by an owner.",
             "The usual way in is a tunnel: your server runs Cloudflare's tunnel program, cloudflared, inside its own container and dials out to Cloudflare, so it needs no open ports and its own address stays hidden. Nothing extra to install or start: it comes up as soon as the name is live. The other way points the name straight at your server, which needs a public IP address and port 443 open.",
             "Claiming the name, changing the community's name or contact on it, and **Take offline** are an owner's: an owner signed in with their key, or the admin password, which counts as one. An admin sees the address and the tunnel, and can press **Restart tunnel** and **New tunnel key**; asked for the rest, the server answers \"Only an owner of this node can change its public address\".",
+            "Your server's key can hold a second name it doesn't use: the name asked for at install, if the address service gave it only after an owner had picked another one here. Your community stays on the name it has; it is never moved onto the other one. An owner sees one line about it: \"This community also holds NAME.beanpool.org from the install; it is not used. Release it?\" **Release** asks first (\"Release NAME.beanpool.org? Your community's address stays …\"), then lets go of that name only, never your community's address. If the address service answers about any other name, Settings says it was not released, and if that other name is your community's address, your server claims it straight back. If the address service can't release a single name by name (an older one), the line has no button.",
             "Only an owner sees the tunnel's key (the **Tunnel Token**). Anyone holding it could answer at your address and see some of your visitors' traffic, owners' sign-ins included, so an admin sees \"Only an owner can see the tunnel token\" instead.",
             "The panel shows the tunnel as it is: connected, retrying and why, or not running. **Restart tunnel** restarts it; visitors' connections drop for a few seconds. If the BeanPool project re-makes your tunnel, your server picks up the new key by itself within a few minutes.",
             "Every few minutes the BeanPool address service checks that the name still answers with your server's key. If something else answers there instead, it **pauses** the name. That might be another BeanPool server, or, for about an hour, something that isn't a BeanPool server at all, such as a stranger's website. While the name is paused, visitors can't reach your community at that address. But the name stays yours, and nobody else can claim it. The panel says **Paused** and why.",

@@ -2,6 +2,8 @@
  * Community health on an admin's phone (community modes slice 6; apps/server engine/community-health.ts). The node
  * answers the exceptions by member key and names-list entry id, never a name: the name is overlaid here, from the
  * names list this phone has opened and decrypted. Every opening of the exceptions is in a log every admin can read.
+ * The screen also shows the community's totals and, as a list of its own, every look at trades and alerts (#1608), as
+ * packages/beanpool-guide/content/settings/what-the-admins-can-see.md promises.
  */
 import type { OpenedEntry } from './names-list';
 
@@ -40,6 +42,8 @@ export interface HealthLogLine {
     /** Whose balance, for a look while removing a member (offboard_preview, offboard_settled). */
     subject?: string | null;
     subjectCallsign?: string | null;
+    /** Which trades a look at the disputes or the stuck escrows showed (#1608). */
+    tradeIds?: string[] | null;
     at: string;
 }
 
@@ -80,10 +84,113 @@ export function departedRows(body: HealthExceptionsBody, entries: Pick<OpenedEnt
     }));
 }
 
+const whoOf = (l: HealthLogLine) => (l.actorCallsign ? `@${l.actorCallsign}` : 'An admin');
+const whenOf = (l: HealthLogLine) => new Date(l.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+/** A look at a member's balance: opening the exceptions, or while removing a member. */
 export function healthLogText(l: HealthLogLine): string {
-    const who = l.actorCallsign ? `@${l.actorCallsign}` : 'An admin';
-    const when = new Date(l.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    const who = whoOf(l);
+    const when = whenOf(l);
     if (l.action === 'offboard_preview') return `${who} saw ${l.subjectCallsign ? `@${l.subjectCallsign}'s` : 'a member\'s'} balance while removing them · ${when}`;
     if (l.action === 'offboard_settled') return `${who} removed a member and saw the balance it settled · ${when}`;
     return `${who} opened the exceptions · ${when}`;
+}
+
+/**
+ * A look at trades or alerts (#1608): the disputes, one dispute, the escrows a removal left stuck, the alerts that named a
+ * member. The same words as the manager's Community health panel (apps/manager CommunityHealthPanel.tsx `logDid`).
+ */
+export function tradeLookText(l: HealthLogLine): string {
+    const who = whoOf(l);
+    const when = whenOf(l);
+    if (l.action === 'disputes_listed') return `${who} opened the disputes list · ${when}`;
+    if (l.action === 'dispute_opened') return `${who} opened a dispute · ${when}`;
+    if (l.action === 'stranded_escrows_read') return `${who} opened the escrows a member’s removal left stuck · ${when}`;
+    if (l.action === 'alerts_read') return `${who} read the alerts that named ${l.subjectCallsign ? `@${l.subjectCallsign}` : 'a member'} · ${when}`;
+    return `${who} looked at trades · ${when}`;
+}
+
+/** The community's totals (`GET /api/names/health`): public by rule, the same for every admin, in any community. */
+export interface HealthTotals {
+    beansInCirculation: number;
+    sumOfCredit: number;
+    sumOfDebt: number;
+    membersInDebit: number;
+    commonsPot: number;
+    tradesThisMonth: number;
+}
+
+const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** The totals from the node's answer, or null when it has none the phone can trust (an older node, a bad answer). */
+export function readHealthTotals(v: unknown): HealthTotals | null {
+    const t = (v as { totals?: Partial<Record<keyof HealthTotals, unknown>> } | null)?.totals;
+    if (!t || !num(t.sumOfCredit) || !num(t.sumOfDebt) || !num(t.membersInDebit)) return null;
+    return {
+        beansInCirculation: num(t.beansInCirculation) ? t.beansInCirculation : 0,
+        sumOfCredit: t.sumOfCredit,
+        sumOfDebt: t.sumOfDebt,
+        membersInDebit: t.membersInDebit,
+        commonsPot: num(t.commonsPot) ? t.commonsPot : 0,
+        tradesThisMonth: num(t.tradesThisMonth) ? t.tradesThisMonth : 0,
+    };
+}
+
+const wholeBeans = (n: number) => `${Math.round(n).toLocaleString('en')} Beans`;
+
+/** The totals as the screen lists them: the manager panel's labels, one label and value per line. */
+export function totalsRows(t: HealthTotals): Array<{ label: string; value: string }> {
+    return [
+        { label: 'Beans in circulation', value: wholeBeans(t.beansInCirculation) },
+        { label: 'Credit held (all balances above 0)', value: wholeBeans(t.sumOfCredit) },
+        { label: 'Debt owed (all balances below 0)', value: wholeBeans(t.sumOfDebt) },
+        { label: 'Members in debit', value: t.membersInDebit.toLocaleString('en') },
+        { label: 'Commons pot', value: wholeBeans(t.commonsPot) },
+        { label: 'Trades this month', value: t.tradesThisMonth.toLocaleString('en') },
+    ];
+}
+
+/** One of the two access-log lists, as the screen shows it. */
+export interface HealthLogSection {
+    heading: string;
+    hint: string;
+    /** Shown when `lines` is empty. */
+    empty: string;
+    lines: Array<{ key: string; text: string }>;
+}
+
+export const HEALTH_COPY = {
+    totalsHeading: 'THE WHOLE COMMUNITY',
+    totalsHint: 'Any member may know these. Nobody’s own balance or trades are in them.',
+    totalsMissing: 'The totals couldn’t be read just now.',
+    balanceHeading: 'WHO LOOKED AT A MEMBER’S BALANCE',
+    balanceHint: 'Every opening of the exceptions above, and every look at a member’s balance while removing them. Every admin and the owner can read this.',
+    tradesHeading: 'WHO LOOKED AT TRADES AND ALERTS',
+    tradesHint: 'Every look at the disputes, at one dispute or at the escrows a member’s removal left stuck, and each admin’s first look in 24 hours at the alerts that name a member. Every admin and the owner can read this.',
+    nobodyYet: 'Nobody has looked yet.',
+    /** A node from before #1608 answers no `tradeLog`: it doesn't log these looks, so "nobody" would be untrue. */
+    tradesNotLogged: 'This community’s server doesn’t log these looks yet: it needs an update.',
+} as const;
+
+const isLine = (l: unknown): l is HealthLogLine =>
+    !!l && typeof (l as HealthLogLine).id === 'string' && typeof (l as HealthLogLine).at === 'string' && typeof (l as HealthLogLine).actor === 'string';
+
+/**
+ * The node's `GET /api/names/health/log` answer as two lists, so a look at trades can't bury a look at a balance:
+ * `log` (looks at a member's balance) and `tradeLog` (looks at trades and alerts, #1608). Newest first, as the node sends.
+ */
+export function healthLogSections(answer: { log?: unknown; tradeLog?: unknown } | null): { balance: HealthLogSection; trades: HealthLogSection } {
+    const balance = Array.isArray(answer?.log) ? answer.log.filter(isLine) : [];
+    const trades = Array.isArray(answer?.tradeLog) ? answer.tradeLog.filter(isLine) : null;
+    return {
+        balance: {
+            heading: HEALTH_COPY.balanceHeading, hint: HEALTH_COPY.balanceHint, empty: HEALTH_COPY.nobodyYet,
+            lines: balance.map((l) => ({ key: l.id, text: healthLogText(l) })),
+        },
+        trades: {
+            heading: HEALTH_COPY.tradesHeading, hint: HEALTH_COPY.tradesHint,
+            empty: answer && trades === null ? HEALTH_COPY.tradesNotLogged : HEALTH_COPY.nobodyYet,
+            lines: (trades ?? []).map((l) => ({ key: l.id, text: tradeLookText(l) })),
+        },
+    };
 }

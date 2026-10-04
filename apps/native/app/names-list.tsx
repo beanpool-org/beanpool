@@ -32,9 +32,11 @@ import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getAllCommunityMembers } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
-import { exceptionRows, departedRows, healthLogText, type HealthExceptionsBody, type HealthLogLine } from '../utils/community-health';
 import {
-    NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, fetchHealthExceptions, fetchHealthLog, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
+    exceptionRows, departedRows, healthLogSections, readHealthTotals, totalsRows, HEALTH_COPY, type HealthExceptionsBody, type HealthLogSection, type HealthTotals,
+} from '../utils/community-health';
+import {
+    NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, fetchHealthExceptions, fetchHealthLog, fetchHealthSummary, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
@@ -51,7 +53,8 @@ type Picked = { pubkey: string; callsign: string } | null;
 /** `addId`: a new entry's id, chosen when its form opens and kept until the add is confirmed (a Save after a lost answer is the same add). */
 type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry } | { kind: 'check'; picked: Picked }
     // Community health's exceptions (slice 6): opened by a tap, each opening logged; names overlaid from this list.
-    | { kind: 'health'; body: HealthExceptionsBody | null; log: HealthLogLine[]; refused: string | null };
+    // The totals (any community) and the two access-log lists: looks at a balance, looks at trades and alerts (#1608).
+    | { kind: 'health'; body: HealthExceptionsBody | null; totals: HealthTotals | null; logs: { balance: HealthLogSection; trades: HealthLogSection }; refused: string | null };
 
 export default function NamesListScreen() {
     const { theme, colors } = useTheme();
@@ -437,17 +440,21 @@ export default function NamesListScreen() {
         ]);
     };
 
-    /** Opens the exceptions (the node logs this opening before it answers), then reads who has opened them. */
+    /**
+     * Reads the community's totals and opens the exceptions (the node logs this opening before it answers), then reads
+     * the access log, this opening included.
+     */
     const openHealth = async () => {
         if (!anchor || !identity) return;
         if (!begin()) return;
-        const ex = await fetchHealthExceptions(anchor, identity);
+        const [summary, ex] = await Promise.all([fetchHealthSummary(anchor, identity), fetchHealthExceptions(anchor, identity)]);
         const lines = await fetchHealthLog(anchor, identity, 30);
         finish();
         setMode({
             kind: 'health',
             body: ex.ok ? ex.value : null,
-            log: lines.ok ? lines.value.log : [],
+            totals: summary.ok ? readHealthTotals(summary.value) : null,
+            logs: healthLogSections(lines.ok ? lines.value : null),
             refused: ex.ok ? null : ex.message,
         });
     };
@@ -591,8 +598,28 @@ export default function NamesListScreen() {
     } else if (mode.kind === 'health') {
         const rows = mode.body ? exceptionRows(mode.body, entries) : [];
         const departed = mode.body ? departedRows(mode.body, entries) : [];
+        const logList = (section: HealthLogSection) => (
+            <>
+                <Text style={styles.label} accessibilityRole="header">{section.heading}</Text>
+                <Text style={styles.hint}>{section.hint}</Text>
+                {section.lines.length === 0 ? <Text style={styles.hint}>{section.empty}</Text> : null}
+                {section.lines.map((l) => <Text key={l.key} style={styles.logLine}>{l.text}</Text>)}
+            </>
+        );
         body = (
             <>
+                <Text style={styles.label} accessibilityRole="header">{HEALTH_COPY.totalsHeading}</Text>
+                <Text style={styles.hint}>{HEALTH_COPY.totalsHint}</Text>
+                {mode.totals ? (
+                    <View style={styles.entry}>
+                        {totalsRows(mode.totals).map((t) => (
+                            <View key={t.label} accessible accessibilityLabel={`${t.label}: ${t.value}`}>
+                                <Text style={styles.hint}>{t.label}</Text>
+                                <Text style={styles.entryName}>{t.value}</Text>
+                            </View>
+                        ))}
+                    </View>
+                ) : <Text style={styles.hint}>{HEALTH_COPY.totalsMissing}</Text>}
                 {mode.refused ? (
                     <View style={styles.warn} accessibilityLiveRegion="polite"><Text style={styles.warnText}>{mode.refused}</Text></View>
                 ) : null}
@@ -620,10 +647,8 @@ export default function NamesListScreen() {
                         ))}
                     </>
                 ) : null}
-                <Text style={styles.label}>WHO OPENED THE EXCEPTIONS</Text>
-                <Text style={styles.hint}>Every admin and the owner can read this.</Text>
-                {mode.log.length === 0 ? <Text style={styles.hint}>Nothing yet.</Text> : null}
-                {mode.log.map((l) => <Text key={l.id} style={styles.logLine}>{healthLogText(l)}</Text>)}
+                {logList(mode.logs.balance)}
+                {logList(mode.logs.trades)}
                 <View style={styles.buttonRow}>{btn('Back to the list', () => setMode({ kind: 'list' }), 'secondary')}</View>
             </>
         );

@@ -357,6 +357,7 @@ export const SUITES = [
     'test-poll-voters-members-only',
     'test-poll-vote-origins',
     'test-suspended-and-visitor-reads',
+    'test-viewer-helpers',
     'test-visitors-cant-act',
     'test-doors-key-case',
     'test-events',

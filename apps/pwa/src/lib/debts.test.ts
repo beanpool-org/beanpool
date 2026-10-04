@@ -15,7 +15,9 @@ const IDENTITY = { publicKey: PUB, privateKey: bytesToHex(toEd25519Pkcs8(SEED)),
 const identityMock = vi.hoisted(() => ({ loadIdentity: vi.fn() }));
 vi.mock('./identity', () => identityMock);
 
-import { getMyRepayment, payTheCommons, beans, parseBeans, debtCodeOk, payFailureWords, coversLeft, PAY_UNANSWERED, REPAYMENT_WORDS } from './debts';
+import { getMyRepayment, payTheCommons, confirmCommonsPayment, unansweredPayment, beans, parseBeans, debtCodeOk, payFailureWords, coversLeft, PAY_UNANSWERED, PAY_UNANSWERED_RETRY, PAY_REFUSED_UNSAID, REPAYMENT_WORDS } from './debts';
+
+const noWait = { wait: async () => {} };
 
 const fetchMock = vi.fn();
 const reply = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, statusText: '', json: async () => body, text: async () => JSON.stringify(body), headers: new Headers() });
@@ -57,11 +59,12 @@ describe('GET /api/commons/repayment', () => {
 
 describe('POST /api/commons/pay', () => {
     it('the amount and the pay-back code as debtId (lower case, trimmed), signed over that body; the reference back', async () => {
-        fetchMock.mockResolvedValue(reply(200, { transactionId: 'tx-9', amount: 80 }));
-        expect(await payTheCommons(80, ` ${'AB'.repeat(16)} `)).toEqual({ transactionId: 'tx-9', amount: 80 });
+        fetchMock.mockResolvedValue(reply(200, { transactionId: 'tx-9', amount: 80, left: 80 }));
+        const p = confirmCommonsPayment(80, ` ${'AB'.repeat(16)} `);
+        expect(await payTheCommons(p, noWait)).toEqual({ transactionId: 'tx-9', amount: 80, left: 80 });
         const s = sent();
         expect(s.url).toMatch(/\/api\/commons\/pay$/);
-        expect(JSON.parse(s.body)).toEqual({ amount: 80, debtId: 'ab'.repeat(16) });
+        expect(JSON.parse(s.body)).toEqual({ amount: 80, debtId: 'ab'.repeat(16), requestId: p.requestId });
         expect(signedByMember(s, '/api/commons/pay')).toBe(true);
         // The check is real: another body fails it.
         expect(signedByMember({ ...s, body: JSON.stringify({ amount: 8000 }) }, '/api/commons/pay')).toBe(false);
@@ -69,13 +72,15 @@ describe('POST /api/commons/pay', () => {
 
     it('no code: no debtId; more than they hold: the node’s 409 in its own words', async () => {
         fetchMock.mockResolvedValue(reply(409, { error: 'You hold 5 Beans: you can pay the Commons only what you hold.' }));
-        await expect(payTheCommons(6)).rejects.toThrow('You hold 5 Beans: you can pay the Commons only what you hold.');
-        expect(JSON.parse(sent().body)).toEqual({ amount: 6 });
+        const p = confirmCommonsPayment(6);
+        await expect(payTheCommons(p, noWait)).rejects.toThrow('You hold 5 Beans: you can pay the Commons only what you hold.');
+        expect(JSON.parse(sent().body)).toEqual({ amount: 6, requestId: p.requestId });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     it('a lost answer never says nothing was paid: no answer, a 2xx without JSON, a server error may have paid; a refusal did not', async () => {
         expect(PAY_UNANSWERED).toBe('Your community’s server didn’t answer, so this payment may have gone through. Check your Ledger before you pay again.');
-        const failure = async () => { try { await payTheCommons(3); } catch (e) { return payFailureWords(e); } return 'paid'; };
+        const failure = async () => { try { await payTheCommons(confirmCommonsPayment(3), noWait); } catch (e) { return payFailureWords(e); } return 'paid'; };
         fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
         expect(await failure()).toBe(PAY_UNANSWERED);
         fetchMock.mockResolvedValue({ ...reply(200, null), json: async () => { throw new SyntaxError('Unexpected end of JSON input'); } });
@@ -84,7 +89,42 @@ describe('POST /api/commons/pay', () => {
         expect(await failure()).toBe(PAY_UNANSWERED);
         fetchMock.mockResolvedValue(reply(404, { error: 'There is no such debt record.' }));
         expect(await failure()).toBe('There is no such debt record.');
+        fetchMock.mockResolvedValue(reply(500, { error: 'Something went wrong on the server. Please try again.' }));
+        expect(await failure()).toBe(PAY_UNANSWERED);
         expect(payFailureWords(null)).toBe(PAY_UNANSWERED);
+    });
+
+    it('a proxy’s 4xx page (no JSON) is said in plain words, never its status text; nothing was paid, nothing held', async () => {
+        fetchMock.mockResolvedValue({ ...reply(429, null), statusText: 'Too Many Requests', json: async () => { throw new SyntaxError('<html>'); } });
+        let caught: unknown;
+        await payTheCommons(confirmCommonsPayment(3), noWait).catch((e) => { caught = e; });
+        expect(payFailureWords(caught)).toBe(PAY_REFUSED_UNSAID);
+        expect(payFailureWords(caught)).not.toContain('Too Many Requests');
+        expect(unansweredPayment(caught)).toBe(false);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('one id per confirmed payment: a proxy’s 502/503/504/524 or no answer is sent again with the same id; the last lost answer is kept for Try again', async () => {
+        for (const status of [502, 503, 504, 524]) {
+            fetchMock.mockReset();
+            fetchMock.mockResolvedValueOnce({ ...reply(status, null), statusText: 'Gateway', json: async () => { throw new SyntaxError('<html>'); } });
+            fetchMock.mockResolvedValueOnce(reply(200, { transactionId: 'tx-4', amount: 40, left: 40 }));
+            const p = confirmCommonsPayment(40, 'ab'.repeat(16));
+            expect(await payTheCommons(p, noWait)).toEqual({ transactionId: 'tx-4', amount: 40, left: 40 });
+            const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body));
+            expect(bodies).toEqual([p.body, p.body]);
+            expect(bodies[0].requestId).toBe(p.requestId);
+        }
+        fetchMock.mockReset();
+        fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+        const p = confirmCommonsPayment(5);
+        let caught: unknown;
+        await payTheCommons(p, noWait).catch((e) => { caught = e; });
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+        expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).requestId)).toEqual(Array(3).fill(p.requestId));
+        expect(unansweredPayment(caught)).toBe(true);
+        expect(PAY_UNANSWERED_RETRY).toContain('Press Try again: the same payment is never paid twice.');
+        expect(confirmCommonsPayment(5).requestId).not.toBe(p.requestId);
     });
 });
 
@@ -110,7 +150,11 @@ describe('one payment of at least what is left settles a debt (the node’s sett
         expect(coversLeft(300, null)).toBe(false);
         expect(REPAYMENT_WORDS.paid(150, 'tx-1', true, 300)).toBe('Paid 150 Beans to the Commons. That is less than the 300 Beans left, so it won’t settle your debt: '
             + 'an admin can settle a debt only with one payment of at least what is left. Tell an admin, and give them this reference: tx-1');
-        expect(REPAYMENT_WORDS.payConfirm(150, true, 300)).toContain('300 Beans are left, so this payment won’t settle your debt');
+        expect(REPAYMENT_WORDS.payConfirm(150, true, 300)).toContain('300 Beans was what was left when the admin shared this. This payment is less, so it won’t settle your debt');
+        // The link's amount is never "what is left": a work-off may have lowered it, and the node refuses above what is left.
+        for (const amount of [300, 150]) expect(REPAYMENT_WORDS.payConfirm(amount, true, 300)).not.toMatch(/covers|who settles|can settle your debt with it/);
+        expect(REPAYMENT_WORDS.payConfirm(300, true, 300)).toContain('If some was worked off since, your server refuses a payment above what is left and says how much, and nothing is paid.');
+        expect(REPAYMENT_WORDS.linkLeft(300)).toBe('What was left when the admin shared this: 300 Beans.');
         expect(REPAYMENT_WORDS.paid(300, 'tx-1', true, 300)).toBe('Paid 300 Beans to the Commons. Give this reference to an admin, who settles your debt with it: tx-1');
         expect(REPAYMENT_WORDS.paid(150, 'tx-1', true)).not.toContain('who settles your debt with it');
         expect(REPAYMENT_WORDS.payConfirm(150, true)).toContain('only if this one payment is at least what is left');

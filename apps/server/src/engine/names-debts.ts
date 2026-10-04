@@ -69,7 +69,23 @@ export function repaymentOf(pubkey: string): DebtRecord | undefined {
 
 /** The 3-year sweep (Marty's answer 8): every record whose member left more than 3 years ago goes, with a tombstone. */
 export function sweepExpiredDebts(now = Date.now()): number {
-    return deletePlainRows('names_debts', 'removed_at < ?', new Date(now - DEBT_RECORD_KEPT_MS).toISOString());
+    const gone = deletePlainRows('names_debts', 'removed_at < ?', new Date(now - DEBT_RECORD_KEPT_MS).toISOString());
+    deletePlainRows('names_debt_payments', 'debt_id NOT IN (SELECT id FROM names_debts)');
+    return gone;
+}
+
+/**
+ * A payment to the Commons a member is making FOR debt `debtId` (POST /api/commons/pay): the debt must be open. Inside the
+ * payment's conservingTransaction, so the link and the payment are written together or not at all.
+ */
+export function assertPayableDebt(debtId: unknown): string {
+    const row = debtRow(debtId);
+    requireOpen(row);
+    return row.id;
+}
+
+export function linkDebtPayment(debtId: string, txId: string, payer: string, amount: number): void {
+    db.prepare('INSERT INTO names_debt_payments (transaction_id, debt_id, payer_pubkey, amount, paid_at) VALUES (?, ?, ?, ?, ?)').run(txId, debtId, payer, amount, nowIso());
 }
 
 export function debtRecord(id: string): DebtRecord | undefined {
@@ -140,8 +156,10 @@ function cleanNote(v: unknown): string | null {
 }
 
 /**
- * Pay back: a member's own payment to the Commons (`transactionId`) settles the record, when it is at least what is
- * left to repay and no other record is settled by it. The admin links the two; nothing moves here.
+ * Pay back: a member's own payment to the Commons (`transactionId`), made for this record (names_debt_payments, written
+ * with the payment), settles it, when it is at least what is left to repay and no record is settled by it already. Never
+ * a payment made for another debt or for none, nor a repayment sweep's row (its Beans count as repaid toward its own
+ * debt already). The admin confirms it; nothing moves here.
  */
 export function settleByPayment(actor: string, id: unknown, body: { transactionId?: unknown; note?: unknown }): DebtRecord {
     assertPlainTablesWritable();
@@ -157,8 +175,12 @@ export function settleByPayment(actor: string, id: unknown, body: { transactionI
     }
     const left = round2(row.amount - row.repaid);
     if (round2(tx.amount) < left) throw new DebtError(409, 'too_little', `That payment is ${round2(tx.amount)} Beans; ${left} Beans are left to repay.`);
-    if (db.prepare("SELECT 1 FROM names_debts WHERE settle_ref = ? AND settled_how = 'pay_back'").get(tx.id)) {
-        throw new DebtError(409, 'payment_used', 'That payment settled another debt already.');
+    const link = db.prepare('SELECT debt_id, payer_pubkey FROM names_debt_payments WHERE transaction_id = ?').get(tx.id) as { debt_id: string; payer_pubkey: string } | undefined;
+    if (!link || link.debt_id !== row.id || link.payer_pubkey !== tx.from_pubkey) {
+        throw new DebtError(409, 'not_for_this_debt', 'That payment wasn’t made for this debt. The member pays it from the debt, so it settles that debt alone.');
+    }
+    if (db.prepare('SELECT 1 FROM names_debts WHERE settle_ref = ?').get(tx.id)) {
+        throw new DebtError(409, 'payment_used', 'That payment settled a debt already.');
     }
     db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'pay_back', settled_by = ?, settled_at = ?, settle_ref = ?,
                 note = COALESCE(?, note), repaying_pubkey = NULL WHERE id = ?`).run(actor, nowIso(), tx.id, note, row.id);

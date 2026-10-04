@@ -1627,6 +1627,18 @@ CREATE TABLE IF NOT EXISTS names_debts (
 );
 CREATE INDEX IF NOT EXISTS idx_names_debts_entry ON names_debts(entry_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_names_debts_repaying ON names_debts(repaying_pubkey) WHERE status = 'open' AND repaying_pubkey IS NOT NULL;
+-- A member's payment to the Commons made FOR an open debt (POST /api/commons/pay with `debtId`), written with the payment.
+-- Only such a payment settles that debt by paying it back (engine/names-debts.ts settleByPayment), and only once: never a
+-- payment made for another debt or for none, never a repayment sweep's own row. Kept off the memo, which others may read.
+CREATE TABLE IF NOT EXISTS names_debt_payments (
+    transaction_id   TEXT PRIMARY KEY,
+    debt_id          TEXT NOT NULL,
+    payer_pubkey     TEXT NOT NULL,
+    amount           REAL NOT NULL CHECK (amount > 0),
+    paid_at          DATETIME NOT NULL,
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_names_debt_payments_debt ON names_debt_payments(debt_id);
 
 -- The known floor (community modes slice 4, config/known-floor.ts): an admin's exception for one member's known grant.
 -- `amount` replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes

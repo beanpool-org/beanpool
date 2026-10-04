@@ -54,7 +54,7 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
-import { repaymentOf } from './engine/names-debts.js';
+import { repaymentOf, assertPayableDebt, linkDebtPayment } from './engine/names-debts.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
 import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
@@ -5043,7 +5043,7 @@ export function sweepRepayment(memberPubkey: string): number {
  * the Commons never takes anyone into debt, so it skips no floor rule. An admin then links it to the debt record
  * (engine/names-debts.ts settleByPayment).
  */
-export function payToCommons(memberPubkey: string, amount: unknown): Transaction {
+export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unknown): Transaction {
     const m = getMember(memberPubkey);
     if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
         throw Object.assign(new Error('Only an active member pays the Commons.'), { status: 403 });
@@ -5054,8 +5054,11 @@ export function payToCommons(memberPubkey: string, amount: unknown): Transaction
     const txn = conservingTransaction(() => {
         const { balance } = getBalance(memberPubkey);
         if (amount > balance) throw Object.assign(new Error(`You hold ${balance} Beans: you can pay the Commons only what you hold.`), { status: 409 });
+        const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId);
         const t = moveToCommons(memberPubkey, amount, 'Paid to the Commons', { allowMemberDebit: true, authSigner: memberPubkey });
         if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });
+        // Made for a debt: the link an admin's settle reads (engine/names-debts.ts settleByPayment).
+        if (debt) linkDebtPayment(debt, t.id, memberPubkey, amount);
         return t;
     });
     try { broadcast({ type: 'profile_updated', publicKey: memberPubkey }); } catch { }

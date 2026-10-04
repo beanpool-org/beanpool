@@ -8,14 +8,19 @@
  *      confirmed one leaving with nothing owed, writes none
  *   3. confirming any key against an entry with an open debt is refused (409 `open_debt`), and nothing is written; a
  *      clean entry still confirms
- *   4. pay back: a member pays the Commons only what they hold; an admin links the payment and the record is settled;
- *      a payment too small, or one used already, is refused; the entry confirms again
+ *   4. pay back: a member pays the Commons only what they hold, for the debt; an admin confirms the payment and the record is
+ *      settled; a payment too small, or one used already, is refused; the entry confirms again
  *   5. work off: an admin confirms a member with a known floor of 0 and the repayment flag; Beans they receive above 0
  *      go to the Commons, exactly the surplus, and stop when the debt is cleared; the record is settled, the flag clears
  *      and the member reads why
  *   6. forgiven by a community Decision: the record stays, marked forgiven; nothing moves
  *   7. the 3-year sweep, with a moved clock: a day short keeps every record; past 3 years every one goes, with a tombstone
- *   8. conservation: the whole node sums to what it summed to before every step
+ *   8. a repayment's event reaches the repaying member's own sockets alone, never another member's or an unsigned one
+ *   9. the sweep runs only for a live confirmation against the debt's entry: a revoked work-off ends the flag and the 0
+ *      floor (the member keeps what comes in); with two admins, nothing is swept until the second agrees
+ *  10. a payment settles only the debt it was made for (linked when it was paid), once: never a sweep's row, never one
+ *      made for another debt or for none
+ *   Every step: conservation, the whole node sums to what it summed to before
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-names-debts-http.ts
  */
@@ -230,19 +235,19 @@ async function main(): Promise<void> {
     transfer('genesis', rob2.pk, 250, 'Rob again earns', 'direct', true);
     const tooMuch = await call('POST', rob2, '/api/commons/pay', { amount: 251 });
     assert(tooMuch.status === 409 && balanceRow(rob2) === 250, `a member pays the Commons only what they hold (${show(tooMuch)})`);
-    const part = await call('POST', rob2, '/api/commons/pay', { amount: 250 });
+    const part = await call('POST', rob2, '/api/commons/pay', { amount: 250, debtId: robDebt[0].id });
     assert(part.status === 200 && balanceRow(rob2) === 0 && typeof part.body?.transactionId === 'string', `Rob pays 250 Beans to the Commons (${show(part)})`);
     const short = await call('POST', ada, `/api/names/debts/${robDebt[0].id}/settle`, { transactionId: part.body?.transactionId });
     assert(short.status === 409 && short.body?.code === 'too_little' && debtsOf(robEntry)[0].status === 'open', `250 Beans don't settle 300 (${show(short)})`);
     transfer('genesis', rob2.pk, 300, 'Rob again earns more', 'direct', true);
-    const whole = await call('POST', rob2, '/api/commons/pay', { amount: 300 });
+    const whole = await call('POST', rob2, '/api/commons/pay', { amount: 300, debtId: robDebt[0].id });
     const memberSettles = await call('POST', rob2, `/api/names/debts/${robDebt[0].id}/settle`, { transactionId: whole.body?.transactionId });
     assert(memberSettles.status === 403, `a member can't mark it settled (${show(memberSettles)})`);
     const settled = await call('POST', ada, `/api/names/debts/${robDebt[0].id}/settle`, { transactionId: whole.body?.transactionId, note: 'paid in full' });
     assert(settled.status === 200 && settled.body?.status === 'settled' && settled.body?.settled_how === 'pay_back' && settled.body?.settle_ref === whole.body?.transactionId,
         `Ada links the 300-Bean payment: settled, with the payment named (${show(settled)})`);
     const again = await call('POST', ada, `/api/names/debts/${deeDebt[0].id}/settle`, { transactionId: whole.body?.transactionId });
-    assert(again.status === 409 && again.body?.code === 'payment_used', `the same payment settles nothing else (${show(again)})`);
+    assert(again.status === 409 && again.body?.code === 'not_for_this_debt' && debtsOf(deeEntry)[0].status === 'open', `the same payment settles nothing else (${show(again)})`);
     const nowConfirms = await call('POST', ada, '/api/names/confirmations', { memberPubkey: rob2.pk, entryId: robEntry });
     assert(nowConfirms.status === 201, `and Rob's entry confirms his new key now (${show(nowConfirms)})`);
     assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
@@ -354,6 +359,29 @@ async function main(): Promise<void> {
     transfer('genesis', wren.pk, 10, 'Wren sweeps another path', 'direct', true);
     assert(balanceRow(wren) === 0 && debtsOf(wrenEntry)[0].repaid === 50, `and the sweep: what she holds above 0 goes (${balanceRow(wren)}, ${JSON.stringify(debtsOf(wrenEntry)[0])})`);
     db.prepare(`UPDATE node_config SET value = 'false' WHERE key = 'names_two_admins'`).run();
+    assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
+
+    // ── 10. a payment settles only the debt it was made for, once ──────────────────────────────
+    console.log('── 10. a payment settles the one debt it was made for ──');
+    const sweepTx = db.prepare(`SELECT id, amount FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL' AND memo = 'Working off a debt to the Commons'`).get(vic.pk) as { id: string; amount: number };
+    const left = (e: string) => r2(debtsOf(e)[0].amount - debtsOf(e)[0].repaid);
+    assert(sweepTx?.amount === 120 && sweepTx.amount >= left(wrenEntry), `setup: Vic's debt X swept 120 Beans (${JSON.stringify(sweepTx)}); Wren's debt Y has ${left(wrenEntry)} left`);
+    const ySweep = await call('POST', ada, `/api/names/debts/${wrenDebt?.id}/settle`, { transactionId: sweepTx?.id });
+    assert(ySweep.status === 409 && ySweep.body?.code === 'not_for_this_debt' && debtsOf(wrenEntry)[0].status === 'open',
+        `X's sweep, already counted as repaid toward X, settles nothing of Y (${show(ySweep)})`);
+    transfer('genesis', wil.pk, 300, 'Wil is paid for a season', 'direct', true);
+    const plain = await call('POST', wil, '/api/commons/pay', { amount: 150 });
+    const plainSettle = await call('POST', ada, `/api/names/debts/${wrenDebt?.id}/settle`, { transactionId: plain.body?.transactionId });
+    assert(plain.status === 200 && plainSettle.status === 409 && plainSettle.body?.code === 'not_for_this_debt', `a payment made for no debt settles none (${show(plain)}; ${show(plainSettle)})`);
+    const forX = await call('POST', wil, '/api/commons/pay', { amount: left(vicEntry), debtId: vicDebt.id });
+    const xOnY = await call('POST', ada, `/api/names/debts/${wrenDebt?.id}/settle`, { transactionId: forX.body?.transactionId });
+    assert(forX.status === 200 && xOnY.status === 409 && xOnY.body?.code === 'not_for_this_debt' && debtsOf(wrenEntry)[0].status === 'open',
+        `a payment made for X doesn't settle Y (${show(forX)}; ${show(xOnY)})`);
+    const xSettles = await call('POST', ada, `/api/names/debts/${vicDebt.id}/settle`, { transactionId: forX.body?.transactionId });
+    assert(xSettles.status === 200 && xSettles.body?.settled_how === 'pay_back', `it settles X (${show(xSettles)})`);
+    const settledDebt = await call('POST', wil, '/api/commons/pay', { amount: 1, debtId: vicDebt.id });
+    const noDebt = await call('POST', wil, '/api/commons/pay', { amount: 1, debtId: 'zz' });
+    assert(settledDebt.status === 409 && noDebt.status === 400, `a payment names an open debt or none (${show(settledDebt)}; ${show(noDebt)})`);
     assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
 
     // ── 7. the 3-year sweep ────────────────────────────────────────────────────────────────────

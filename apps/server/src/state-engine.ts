@@ -3293,7 +3293,11 @@ function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: num
     const earnedRoom = earnedPledgeRoom(keeperPubkey);
     const knownRoom = engine.knownPledgeRoom(db, keeperPubkey);
     if (amount > earnedRoom + knownRoom) {
-        throw new KeeperChangeRefused(`Pledge amount (${amount}) exceeds what you can pledge (${earnedRoom + knownRoom} available: ${earnedRoom} earned credit, ${knownRoom} from your known floor)`);
+        // With no known grant to draw on (the dial off, or not confirmed) it is main's refusal, word for word.
+        if (engine.memberKnownGrant(db, keeperPubkey) === 0) {
+            throw new Error(`Pledge amount (${amount}) exceeds available earned credit (${earnedRoom} available to add across all enterprises)`);
+        }
+        throw new Error(`Pledge amount (${amount}) exceeds what you can pledge (${earnedRoom + knownRoom} available: ${earnedRoom} earned credit, ${knownRoom} from your known floor)`);
     }
     const earnedPart = Math.min(amount, earnedRoom);
     return { earnedPart, knownPart: amount - earnedPart };
@@ -3303,7 +3307,7 @@ function assertKeeperOwnDebtCovered(keeperPubkey: string): void {
     const { balance } = getBalance(keeperPubkey);
     const floor = usableFloor(keeperPubkey);
     if (balance < floor) {
-        throw new KeeperChangeRefused(`Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
+        throw new Error(`Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
     }
 }
 

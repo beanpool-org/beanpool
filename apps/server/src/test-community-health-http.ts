@@ -383,10 +383,17 @@ async function main(): Promise<void> {
         'neither says no admin ever sees a balance: an admin removing a member sees it (section 8)');
     assert(/removes your account/.test(policy) && /removes your account/.test(guide), 'both say an admin removing your account sees your balance');
     assert(/votes on removing you/.test(policy) && /votes on removing you/.test(guide), 'both say a vote on removing you shows it to the voters');
-    assert(/sees your balance while removing you, the node records who, whose and when/.test(policy) && /can see who looked, at whose balance, and when/.test(guide),
+    assert(/sees your balance while removing you, it records who, whose and when/.test(policy) && /can see who looked, at whose balance, and when/.test(guide),
         'both say that look is logged where the admins and the owner read it (section 8)');
+    assert(/opens the list of balances, the node records who and when;/.test(policy) && /can see who opened it and when/.test(guide),
+        'both say an opening of the list records who and when, not whose (section 6: exceptions_opened has no subject)');
+    assert(/except in the four cases below/.test(policy) && (policy.match(/<h2>8\.[\s\S]*?<\/ul>/)?.[0].match(/<li><strong>(Only with your consent|When an admin removes|When the community votes|The server's operator)/g) ?? []).length === 4,
+        'the policy counts its cases as it lists them: consent, removal, a vote, the operator');
+    assert(/sees your balance and how many trades you have open/.test(policy) && /sees your balance and how many trades you have open/.test(guide),
+        'both name the open-trade count the removal preview answers (pendingEscrowsCount)');
     assert(/take your consent back at any time/.test(policy) && /take your consent back at any time/.test(guide), 'both say consent can be withdrawn at any time (section 6c)');
-    assert(/never shown to an admin/.test(policy) && /No admin ever sees your trades/.test(guide), 'and both say trades are never shown (section 3: no trade on the wire)');
+    assert(/an admin never sees your trades: who you traded with, or what for/.test(policy) && /No admin ever sees your trades: who you traded with, or what for/.test(guide),
+        'and both say no admin sees a trade itself (section 3: no trade on the wire)');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

@@ -79,9 +79,10 @@ export function consentTerms() {
         + `they can't read if it is private), so a stuck trade can be settled; how many trades you have finished or `
         + `cancelled and what the finished ones came to, and how many posts you have up and messages you have sent; a fraud `
         + `alert that names you if you and one member buy from each other back and forth, about evenly, past a limit, with `
-        + `the Beans in total and how evenly they went each way; one that names you, with the Beans in total, if members you `
-        + `invited send you Beans past a limit within a set number of days, or if you are one of those members; `
-        + `one that names you, with no Beans, if you are in a group of members, at least half of them new, who trade mostly `
+        + `the Beans in total and how evenly they went each way; one that names you, with the Beans in total and how many of `
+        + `the members you invited have traded with no one but you, if members you invited send you Beans past a limit within `
+        + `a set number of days, or if you are one of those members; one that names you, with how much of the group's trading `
+        + `is with each other but no Beans, if you are in a group of members, at least half of them new, who trade mostly `
         + `with each other; and an alert that names you if no Beans have moved in or out of your account for a set number `
         + `of days. Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance `
         + `and trades included, and its backups, snapshots and standby copies.`;

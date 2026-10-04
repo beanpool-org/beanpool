@@ -5014,7 +5014,8 @@ export function sweepRepayment(memberPubkey: string): number {
     const debt = repaymentOf(memberPubkey);
     if (!debt) return 0;
     const { balance } = getBalance(memberPubkey);
-    const amount = Math.round(Math.max(0, Math.min(balance, debt.amount - debt.repaid)) * 100) / 100;
+    // Down to the cent, never up: rounding up would take a part of a cent below 0.
+    const amount = Math.floor(Math.max(0, Math.min(balance, debt.amount - debt.repaid)) * 100 + 1e-9) / 100;
     if (!(amount > 0)) return 0;
     try {
         conservingTransaction(() => {
@@ -5730,8 +5731,8 @@ export function completePostTransaction(transactionId: string, confirmerPublicKe
     assertLedgerWritable();
     const res = completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
     if (res) clearEnterpriseFloorCache();
-    // A seller working off a debt: the sale's Beans above 0 go to the Commons (sweepRepayment), once the release committed.
-    if (res && !res.alreadyCompleted) sweepRepayment(res.sellerPublicKey);
+    // A seller working off a debt: the release is a transfer(), whose after-commit hook sweeps the sale's Beans above 0 to
+    // the Commons (sweepRepayment), as it does for a release or refund by an admin's dispute ruling.
     return res;
 }
 

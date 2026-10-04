@@ -21,6 +21,8 @@
  *  10. a payment settles only the debt it was made for (linked when it was paid), once: never a sweep's row, never one
  *      made for another debt or for none
  *  11. a member pays any amount to the cent (0.29, 1.13, 0.57), never a part of one
+ *  12. a sale an admin's dispute ruling releases to a repaying seller is swept (transfer's after-commit hook), as a sale
+ *      completed by the buyer is; half a cent above 0 sweeps nothing
  *   Every step: conservation, the whole node sums to what it summed to before
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-names-debts-http.ts
@@ -34,7 +36,7 @@ process.env.ADMIN_PASSWORD = 'NamesDebts123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, completePostTransaction, getCommonsBalanceExact } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost, completePostTransaction, getCommonsBalanceExact, acceptPost, resolveEscrowDispute, sweepRepayment } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { createDecision, executeDecision, tickDecisions } from './decisions-engine.js';
@@ -394,6 +396,34 @@ async function main(): Promise<void> {
     }
     const tooFine = await call('POST', cy, '/api/commons/pay', { amount: 0.291 });
     assert(tooFine.status === 400 && balanceRow(cy) === 48.01, `a part of a cent is refused (${show(tooFine)}, ${balanceRow(cy)})`);
+
+    // ── 12. a sale released by an admin's dispute ruling is swept too; never half a cent ─────────
+    console.log('── 12. an escrow dispute released to a repaying seller; rounding ──');
+    const zedEntry = makeEntry();
+    const zedOld = await debtor('Zed', 50, zedEntry);
+    await call('POST', zedOld, '/api/member/purge', { action: 'purge_account' });
+    const zedDebt = debtsOf(zedEntry)[0];
+    const zed = makeMember('Zed again');
+    const zedWork = await call('POST', ada, `/api/names/debts/${zedDebt?.id}/work-off`, { memberPubkey: zed.pk });
+    assert(zedWork.status === 201 && zedWork.body?.status === 'confirmed', `setup: Zed's new key works off 50 Beans (${show(zedWork)})`);
+    transfer('genesis', sam.pk, 100, 'Sam is paid', 'direct', true);
+    const table = createPost('offer', 'produce', 'Zed builds a table', 'Furniture', 100, 'fixed', zed.pk)!;
+    const held = acceptPost(table.id, sam.pk);
+    const ruled = resolveEscrowDispute(held!.id, 'release_to_seller', ada.pk, { reason: 'the table came' });
+    const zedAfter = debtsOf(zedEntry)[0];
+    assert(ruled?.status === 'completed' && zedAfter.repaid === 50 && zedAfter.status === 'settled' && balanceRow(zed) === 48.5,
+        `released to Zed by a ruling: the 50 left go to the Commons, Zed keeps 48.5 after the fee (${ruled?.status}, ${balanceRow(zed)}, ${JSON.stringify(zedAfter)})`);
+    assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
+    const qiEntry = makeEntry();
+    const qiOld = await debtor('Qi', 40, qiEntry);
+    await call('POST', qiOld, '/api/member/purge', { action: 'purge_account' });
+    const qi = makeMember('Qi again');
+    await call('POST', ada, `/api/names/debts/${debtsOf(qiEntry)[0]?.id}/work-off`, { memberPubkey: qi.pk });
+    db.prepare('UPDATE accounts SET balance = 0.005 WHERE public_key = ?').run(qi.pk);
+    initStateEngine();
+    const swept = sweepRepayment(qi.pk);
+    const qiBal = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(qi.pk) as any).balance;
+    assert(swept === 0 && qiBal === 0.005 && debtsOf(qiEntry)[0].repaid === 0, `half a cent above 0 sweeps nothing: never rounded up below 0 (${swept}, ${qiBal})`);
 
     // ── 7. the 3-year sweep ────────────────────────────────────────────────────────────────────
     console.log('── 7. the 3-year sweep ──');

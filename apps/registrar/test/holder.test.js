@@ -710,3 +710,29 @@ test('the names page says what a blocked name\'s release does: held from every k
         ]);
     } finally { w.restore(); }
 });
+
+// ── /status?name= ────────────────────────────────────────────────────────────────────────────────────────────────
+
+test('status?name=: a key holding two names hears about the one it asks for; another key\'s name or none asked: its first', async () => {
+    const w = await world();
+    try {
+        const [key, other] = await Promise.all([makeKey(), makeKey()]);
+        await liveName(w, 'first-one', key);
+        await liveName(w, 'second-one', key);
+        await liveName(w, 'not-yours', other);
+        const ask = async (q) => send(w, await signedRaw(key, { method: 'GET', signedPath: '/api/registrar/status', sentPath: `/api/registrar/status${q}`, text: '' }));
+        const plain = await ask('');
+        assert.equal(plain.status, 200);
+        assert.ok(['first-one', 'second-one'].includes(plain.body.name), JSON.stringify(plain.body));
+        for (const name of ['first-one', 'second-one']) {
+            const r = await ask(`?name=${name}`);
+            assert.equal(r.status, 200);
+            assert.equal(r.body.name, name);
+            assert.equal(r.body.status, 'live');
+        }
+        const theirs = await ask('?name=not-yours');
+        assert.equal(theirs.status, 200);
+        assert.equal(theirs.body.name, plain.body.name, 'another key\'s name is never answered about');
+        assert.equal((await ask('?name=NOT%20A%20NAME')).body.name, plain.body.name);
+    } finally { w.restore(); }
+});

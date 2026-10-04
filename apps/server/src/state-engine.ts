@@ -5683,6 +5683,8 @@ export function completePostTransaction(transactionId: string, confirmerPublicKe
     assertLedgerWritable();
     const res = completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
     if (res) clearEnterpriseFloorCache();
+    // A seller working off a debt: the sale's Beans above 0 go to the Commons (sweepRepayment), once the release committed.
+    if (res && !res.alreadyCompleted) sweepRepayment(res.sellerPublicKey);
     return res;
 }
 

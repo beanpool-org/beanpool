@@ -242,13 +242,16 @@ async function main(): Promise<void> {
     transfer('genesis', dee2.pk, 120, 'Dee mends a fence', 'direct', true);
     assert(balanceRow(dee2) === 0 && debtsOf(deeEntry)[0].repaid === 120 && debtsOf(deeEntry)[0].status === 'open',
         `120 Beans in: all 120 go to the Commons, 80 left (${balanceRow(dee2)}, ${JSON.stringify(debtsOf(deeEntry)[0])})`);
-    transfer('genesis', dee2.pk, 100, 'Dee mends a gate', 'direct', true);
+    const gate = createPost('offer', 'produce', 'Dee mends a gate', 'Repairs', 100, 'fixed', dee2.pk)!;
+    const gateSale = await call('POST', sam, '/api/marketplace/posts/accept', { postId: gate.id, buyerPublicKey: sam.pk });
+    completePostTransaction(gateSale.body?.transaction?.id, sam.pk);
     const done = debtsOf(deeEntry)[0];
-    assert(balanceRow(dee2) === 20 && done.repaid === 200 && done.status === 'settled' && done.settled_how === 'work_off',
-        `100 more: exactly the 80 left goes, Dee keeps 20, and the record is settled (${balanceRow(dee2)}, ${JSON.stringify(done)})`);
-    assert(r2(getCommonsBalanceExact() - commonsAtStart) === 200, `the Commons got exactly 200 (${r2(getCommonsBalanceExact() - commonsAtStart)})`);
+    assert(balanceRow(dee2) === 18.5 && done.repaid === 200 && done.status === 'settled' && done.settled_how === 'work_off',
+        `a 100-Bean sale through escrow: exactly the 80 left goes, Dee keeps the other 18.5 (after the 1.5 fee), and the record is settled (${balanceRow(dee2)}, ${JSON.stringify(done)})`);
+    const repaidRows = r2((db.prepare(`SELECT COALESCE(SUM(amount), 0) t FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL' AND memo = 'Working off a debt to the Commons'`).get(dee2.pk) as any).t);
+    assert(repaidRows === 200 && r2(getCommonsBalanceExact() - commonsAtStart) === 201.5, `the Commons got exactly 200 of repayment, plus the sale's 1.5 fee (${repaidRows}, ${r2(getCommonsBalanceExact() - commonsAtStart)})`);
     transfer('genesis', dee2.pk, 30, 'Dee mends a shed', 'direct', true);
-    assert(balanceRow(dee2) === 50, `and it stops there: the next 30 stay hers (${balanceRow(dee2)})`);
+    assert(balanceRow(dee2) === 48.5, `and it stops there: the next 30 stay hers (${balanceRow(dee2)})`);
     const cleared = await call('GET', dee2, '/api/commons/repayment');
     assert(cleared.status === 200 && cleared.body?.repayment === null, `the flag cleared (${show(cleared)})`);
     assert(nodeTotal() === total, `every Bean is still counted, the seeding from genesis too (${total} → ${nodeTotal()})`);

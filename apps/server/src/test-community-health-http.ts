@@ -621,6 +621,38 @@ async function main(): Promise<void> {
     const totals9 = data9.body?.tradeTotals;
     assert(totals9 && totals9.deals === (sums9.deals ?? 0) && totals9.volume === sums9.volume && totals9.cancelled === (sums9.cancelled ?? 0),
         `of trades, the community's totals: each trade once (${JSON.stringify(totals9)} vs ${JSON.stringify(sums9)})`);
+    // A look an automation token makes names the token (its id and name, never its secret) beside its maker, so the owner
+    // and admins can tell a script from a person (#1613's actor survey). A person's own session names none.
+    const tokenLines = (n: number) => db.prepare('SELECT actor_pubkey, action, subject_pubkey, token_id, token_name FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(n) as any[];
+    const tokenHeaders9 = ownerTokenHeaders('admin', founder.pk);
+    const [, tokenId9, tokenSecret9] = /^Bearer bp_([0-9a-f]{12})_([0-9a-f]{64})$/.exec(tokenHeaders9.Authorization) ?? [];
+    const beforeT9 = logRows();
+    const byToken9 = await call('GET', null, '/api/local/admin/disputes?minDays=0', undefined, tokenHeaders9);
+    const tokenLine9 = tokenLines(1)[0];
+    assert(byToken9.status === 200 && logRows() === beforeT9 + 1 && tokenLine9?.action === 'disputes_listed' && tokenLine9?.token_id === tokenId9
+        && tokenLine9?.token_name === 'suite admin' && tokenLine9?.actor_pubkey === founder.pk
+        && !JSON.stringify(db.prepare('SELECT * FROM health_access_log').all()).includes(tokenSecret9),
+        `a token's look at the disputes names the token, its id and name, beside its maker, never its secret (${byToken9.status} ${JSON.stringify(tokenLine9)})`);
+    assert(listLine9 && tokenLines(logRows()).filter((l) => l.actor_pubkey === ada.pk).every((l) => l.token_id === null && l.token_name === null),
+        'an admin\'s own key-session looks name no token');
+    const beforeT9b = logRows();
+    const tokenData9 = await call('POST', null, '/api/local/admin/data', {}, tokenHeaders9);
+    const tokenAlerts9 = tokenLines(logRows() - beforeT9b);
+    assert(tokenData9.status === 200 && tokenAlerts9.length === named9.length && tokenAlerts9.every((l) => l.action === 'alerts_read' && l.token_id === tokenId9 && l.token_name === 'suite admin'),
+        `a token's read of the alerts is a line per member named, each naming the token (${tokenData9.status} ${tokenAlerts9.length} lines for ${named9.length} named)`);
+    const beforeT9c = logRows();
+    const tokenPreview9 = await call('GET', null, `/api/local/admin/members/${una.pk}/offboard/preview`, undefined, tokenHeaders9);
+    const previewLine9 = tokenLines(1)[0];
+    assert(tokenPreview9.status === 200 && logRows() === beforeT9c + 1 && previewLine9?.action === 'offboard_preview' && previewLine9?.subject_pubkey === una.pk
+        && previewLine9?.token_id === tokenId9 && previewLine9?.token_name === 'suite admin',
+        `a token's look at a member's balance while removing them names the token (${tokenPreview9.status} ${JSON.stringify(previewLine9)})`);
+    const panelT9 = await call('GET', null, '/api/local/admin/community-health', undefined, adaSession);
+    const tokenTrade9 = ((panelT9.body?.tradeLog ?? []) as any[]).find((l) => l.action === 'disputes_listed' && l.token);
+    const tokenBalance9 = ((panelT9.body?.log ?? []) as any[]).find((l) => l.action === 'offboard_preview' && l.token);
+    const personTrade9 = ((panelT9.body?.tradeLog ?? []) as any[]).find((l) => l.action === 'disputes_listed' && l.actor === ada.pk);
+    assert(panelT9.status === 200 && tokenTrade9?.token?.id === tokenId9 && tokenTrade9?.token?.name === 'suite admin'
+        && tokenBalance9?.token?.id === tokenId9 && personTrade9 && personTrade9.token === null,
+        `the panel's lists carry the token on a token's look and null on a person's (${JSON.stringify(tokenTrade9)}; ${JSON.stringify(personTrade9)})`);
     const panel9 = await call('GET', null, '/api/local/admin/community-health', undefined, adaSession);
     const panelLog9 = (panel9.body?.tradeLog ?? []) as any[];
     assert(panel9.status === 200 && panelLog9.some((l) => l.action === 'disputes_listed' && JSON.stringify(l.tradeIds) === JSON.stringify(shownIds9))

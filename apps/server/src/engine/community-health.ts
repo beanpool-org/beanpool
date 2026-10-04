@@ -223,38 +223,42 @@ export function openExceptions(actor: string, now = Date.now()) {
  * An admin's look at one member's balance outside that member's consent: while removing them (the offboarding preview,
  * and the balance the removal settled). Written before the answer: a look that can't be logged isn't answered.
  */
-export function logBalanceLook(actor: string, subject: string, action: 'offboard_preview' | 'offboard_settled'): void {
+export function logBalanceLook(actor: string, subject: string, action: 'offboard_preview' | 'offboard_settled', token: LookToken | null = null): void {
     assertPlainTablesWritable();
-    db.prepare('INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey) VALUES (?, ?, ?, ?)')
-        .run(crypto.randomBytes(16).toString('hex'), actor, action, subject);
+    db.prepare('INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey, token_id, token_name) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(crypto.randomBytes(16).toString('hex'), actor, action, subject, token?.id ?? null, token ? token.name : null);
 }
+
+/** The automation token behind a look (admin-auth lookTokenOf): its id and name, never its secret. */
+export type LookToken = { id: string; name: string };
 
 /**
  * An admin's look at trades in the disputes view (queue item 29, Marty 4 Oct: "Keep disputes, log every look"): the
  * list, or one dispute; or at the escrows a member's removal left stuck on an older node (a line of its own). One line
  * naming the trade ids shown. Written before the answer: a look that can't be logged isn't answered.
  */
-export function logDisputesLook(actor: string, action: TradeLookAction, tradeIds: string[]): void {
+export function logDisputesLook(actor: string, action: TradeLookAction, tradeIds: string[], token: LookToken | null = null): void {
     assertPlainTablesWritable();
-    db.prepare('INSERT INTO health_access_log (id, actor_pubkey, action, detail) VALUES (?, ?, ?, ?)')
-        .run(crypto.randomBytes(16).toString('hex'), actor, action, JSON.stringify(tradeIds));
+    db.prepare('INSERT INTO health_access_log (id, actor_pubkey, action, detail, token_id, token_name) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(crypto.randomBytes(16).toString('hex'), actor, action, JSON.stringify(tradeIds), token?.id ?? null, token ? token.name : null);
 }
 
 /**
  * An admin's look at the fraud alerts that name members: one line per member named (`subject_pubkey`, which a re-key
  * moves), at most one per admin and member in 24 hours, so reading the alerts again doesn't flood the log; a read that
- * names someone new logs that one (review r4177560410). An answer that names no one writes none. Written before the
- * answer, all lines or none.
+ * names someone new logs that one (review r4177560410). A token's looks count apart from its maker's own, so a script's
+ * look still shows after its maker's. An answer that names no one writes none. Written before the answer, all lines or none.
  */
-export function logAlertsLook(actor: string, flags: ReadonlyArray<{ members: string[] }>): void {
+export function logAlertsLook(actor: string, flags: ReadonlyArray<{ members: string[] }>, token: LookToken | null = null): void {
     const named = [...new Set(flags.flatMap(f => Array.isArray(f.members) ? f.members : []).filter(m => typeof m === 'string' && m))];
     if (!named.length) return;
     assertPlainTablesWritable();
     const since = new Date(Date.now() - ALERTS_LOOK_WINDOW_MS).toISOString();
-    const seen = db.prepare("SELECT 1 FROM health_access_log WHERE actor_pubkey = ? AND action = 'alerts_read' AND subject_pubkey = ? AND at > ? LIMIT 1");
-    const insert = db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey) VALUES (?, ?, 'alerts_read', ?)");
+    const seen = db.prepare("SELECT 1 FROM health_access_log WHERE actor_pubkey = ? AND token_id IS ? AND action = 'alerts_read' AND subject_pubkey = ? AND at > ? LIMIT 1");
+    const insert = db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey, token_id, token_name) VALUES (?, ?, 'alerts_read', ?, ?, ?)");
+    const tokenId = token?.id ?? null;
     db.transaction(() => {
-        for (const m of named) if (!seen.get(actor, m, since)) insert.run(crypto.randomBytes(16).toString('hex'), actor, m);
+        for (const m of named) if (!seen.get(actor, tokenId, m, since)) insert.run(crypto.randomBytes(16).toString('hex'), actor, m, tokenId, token ? token.name : null);
     })();
 }
 
@@ -272,16 +276,16 @@ function tradeIdsOf(detail: string | null): string[] | null {
 
 /**
  * Who opened the exceptions, looked at a member's balance, at the disputes or at the alerts; whose, which trades, and
- * when: every owner and admin reads it. `kind` picks the list: the balance looks, or the looks at trades and alerts,
+ * when, and the automation token when a script looked (`token`, its id and name): every owner and admin reads it. `kind` picks the list: the balance looks, or the looks at trades and alerts,
  * each its own newest `limit`.
  */
 export function readHealthAccessLog(limit = 100, kind: 'balance' | 'trades' = 'balance') {
     const where = kind === 'balance' ? `action IN ${BALANCE_LOOKS}` : `action NOT IN ${BALANCE_LOOKS}`;
-    return (db.prepare(`SELECT id, actor_pubkey, action, subject_pubkey, detail, at FROM health_access_log WHERE ${where} ORDER BY at DESC, rowid DESC LIMIT ?`).all(Math.max(1, Math.min(500, limit))) as any[])
+    return (db.prepare(`SELECT id, actor_pubkey, action, subject_pubkey, detail, token_id, token_name, at FROM health_access_log WHERE ${where} ORDER BY at DESC, rowid DESC LIMIT ?`).all(Math.max(1, Math.min(500, limit))) as any[])
         .map(r => ({
             id: r.id, actor: r.actor_pubkey, actorCallsign: getMember(r.actor_pubkey)?.callsign ?? null, action: r.action,
             subject: r.subject_pubkey ?? null, subjectCallsign: r.subject_pubkey ? getMember(r.subject_pubkey)?.callsign ?? null : null,
-            tradeIds: tradeIdsOf(r.detail), at: r.at,
+            tradeIds: tradeIdsOf(r.detail), token: r.token_id ? { id: r.token_id, name: r.token_name ?? '' } : null, at: r.at,
         }));
 }
 

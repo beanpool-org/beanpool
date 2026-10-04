@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MemberKnownFloorPanel, describeKnownFloorLine, readMemberKnownFloor } from './MemberKnownFloorPanel';
+import { MemberKnownFloorPanel, describeKnownFloorLine, describeKnownFloorLogLine, readMemberKnownFloor } from './MemberKnownFloorPanel';
 
 /** Member detail → "Known floor" (community modes slice 4): one confirmed member's line, set, frozen or restored. */
 
@@ -42,7 +42,8 @@ describe('MemberKnownFloorPanel', () => {
     beforeEach(() => { vi.unstubAllGlobals(); });
 
     it('reads only a whole answer, and never a balance', () => {
-        expect(readMemberKnownFloor(LINE)).toEqual({ confirmation: true, knownFloor: 1000, creditCap: 2000, confirmed: true, exception: null, knownGrant: 1000 });
+        expect(readMemberKnownFloor(LINE)).toEqual({ confirmation: true, knownFloor: 1000, creditCap: 2000, confirmed: true, exception: null, knownGrant: 1000,
+            log: [], changeRefused: null });
         expect(readMemberKnownFloor({ error: 'Not found' })).toBeNull();
         expect(readMemberKnownFloor({ ...LINE, balance: -400 })).not.toHaveProperty('balance');
     });
@@ -167,6 +168,58 @@ describe('MemberKnownFloorPanel', () => {
         expect(screen.getByRole('button', { name: 'Set' })).toBeDisabled();
         fireEvent.change(input, { target: { value: '1800' } });
         fireEvent.click(screen.getByRole('button', { name: 'Set' }));
-        expect(screen.getByText(/every admin sees the raise in the log/)).toBeInTheDocument();
+        expect(screen.getByText(/every admin sees the raise in the changes below/)).toBeInTheDocument();
+    });
+
+    // #1614 review r4178406925: the panel promised the raise shows in the log, and no screen showed the log.
+    const ADA = 'a'.repeat(64);
+    const LOG = [
+        { id: 'l2', actor: ADA, actorCallsign: 'Ada', action: 'exception_raised', oldValue: 'frozen', newValue: '1800', at: '2026-10-05T09:30:00.000Z' },
+        { id: 'l1', actor: ADA, actorCallsign: null, action: 'exception_frozen', oldValue: 'default', newValue: 'frozen', at: '2026-10-04T08:00:00.000Z' },
+    ];
+
+    it('describes a log line in plain words: who, from what, to what', () => {
+        expect(describeKnownFloorLogLine(LOG[0], 1000)).toBe('Ada raised it: from frozen to 1,800 Beans');
+        expect(describeKnownFloorLogLine(LOG[1], 1000)).toBe('aaaaaaaa… froze it: from the community default (1,000 Beans) to frozen');
+        expect(describeKnownFloorLogLine({ ...LOG[0], action: 'exception_cleared', oldValue: '300', newValue: 'default' }, 1000))
+            .toBe('Ada restored the default: from 300 Beans to the community default (1,000 Beans)');
+    });
+
+    it("shows the member's changes, newest first, with when", async () => {
+        mockNode({ ok: true, body: { ...LINE, exception: { amount: 1800, frozen: false }, knownGrant: 1800, log: LOG } });
+        renderPanel();
+        const log = await screen.findByTestId('member-known-floor-log');
+        expect(log).toHaveTextContent("Changes to Kim's known floor");
+        const items = log.querySelectorAll('li');
+        expect(items).toHaveLength(2);
+        expect(items[0]).toHaveTextContent('Ada raised it: from frozen to 1,800 Beans');
+        expect(items[0]).toHaveTextContent(/2026/);
+        expect(items[1]).toHaveTextContent('froze it');
+    });
+
+    // #1614 review r4178406974: Set / Freeze / Restore showed where the node refuses every change.
+    it('a password or token sign-in sees the line and why, and no controls', async () => {
+        const f = mockNode({ ok: true, body: { ...LINE, exception: { amount: 300, frozen: false }, knownGrant: 300, changeRefused: 'key_session_only' } });
+        renderPanel();
+        expect(await screen.findByTestId('member-known-floor-refused')).toHaveTextContent('Sign in with your own key to change it');
+        expect(screen.getByTestId('member-known-floor-line')).toHaveTextContent('Lowered to 300 Beans');
+        for (const name of ['Set', 'Freeze', 'Restore the default']) expect(screen.queryByRole('button', { name })).toBeNull();
+        expect(screen.queryByLabelText(/New known floor/)).toBeNull();
+        expect(posts(f)).toEqual([]);
+    });
+
+    it("an admin's own row says another admin or the owner sets it, and has no controls", async () => {
+        mockNode({ ok: true, body: { ...LINE, changeRefused: 'own_floor' } });
+        renderPanel();
+        expect(await screen.findByTestId('member-known-floor-refused')).toHaveTextContent('Another admin or the owner sets your own known floor.');
+        expect(screen.queryByRole('button', { name: 'Set' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Freeze' })).toBeNull();
+    });
+
+    it('a node from before the mark keeps the controls (it still refuses in its own words)', async () => {
+        mockNode({ ok: true, body: { ...LINE, changeRefused: 'something new' } });
+        renderPanel();
+        expect(await screen.findByRole('button', { name: 'Freeze' })).toBeInTheDocument();
+        expect(screen.queryByTestId('member-known-floor-refused')).toBeNull();
     });
 });

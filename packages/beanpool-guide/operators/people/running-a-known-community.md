@@ -100,15 +100,15 @@ In a LETS, a member the committee knows can go into debt by an agreed amount fro
 
 An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own. A member whose known floor is frozen is told so on their Ledger, with what they can still do and to ask an admin; their level stays the one their line gives them unfrozen (the known floor less what they have pledged to enterprises), on their profile and their listings alike.
 
-It is in the manager: **People & Safety → Members**, tap the member, then **Known floor**. It shows their line now: the community default, lowered or raised to an amount, or frozen. Type a whole number of Beans, from 0 to the cap, and tap **Set**; or tap **Freeze** (their known floor counts as 0), or **Restore the default**. Each asks you to confirm first. An amount above the community's known floor is a raise: the manager says so before you confirm, and the log shows it as a raise. If the server refuses, the manager shows its reason as it gave it. The members list marks everyone whose known floor an admin changed. The panel shows only when the switch is on, and only to an owner or admin. It shows the member's credit line, never their balance.
+It is in the manager: **People & Safety → Members**, tap the member, then **Known floor**. It shows their line now: the community default, lowered or raised to an amount, or frozen. Type a whole number of Beans, from 0 to the cap, and tap **Set**; or tap **Freeze** (their known floor counts as 0), or **Restore the default**. Each asks you to confirm first. An amount above the community's known floor is a raise: the manager says so before you confirm, and the log shows it as a raise. Under the controls, **Changes to their known floor** lists every change to this member's line, newest first: which admin made it, from what to what, and when. Every owner and admin who opens the member sees it. If the server refuses, the manager shows its reason as it gave it. The members list marks everyone whose known floor an admin changed. The panel shows only when the switch is on, and only to an owner or admin. It shows the member's credit line, never their balance.
 
-A change needs an owner or admin signed in with their own key, so the log can say who made it: the node password names nobody, and the server refuses a change made with it. The older built-in settings page signs in only with the password, so it has no known floor controls.
+A change needs an owner or admin signed in with their own key, so the log can say who made it: the node password names nobody, and the server refuses a change made with it. Signed in with the password (or an automation token), the panel shows the line and its changes but no controls, and says "Sign in with your own key to change it". Nobody sets their own: on your own row it says "Another admin or the owner sets your own known floor." The older built-in settings page signs in only with the password, so it has no known floor controls.
 
 **Lowering never takes Beans back.** A member already below their new limit keeps their balance. They can still receive and sell, and can spend again once they are back above it. The same happens to everyone in debt on the known floor if your owner turns the switch off.
 
 ### Everyone sees the changes
 
-Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read it. A raise above the community's known floor is its own line, so other admins notice.
+Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read one member's lines on that member's **Known floor** panel. A raise above the community's known floor is its own line, so other admins notice.
 
 ## Debts and a second chance
 
@@ -132,7 +132,7 @@ In a known community, an admin's phone also shows the **exceptions**: confirmed 
 
 Only an owner moves the two lines, and every change shows in the known floor's log. The join screen tells every new member, in those numbers, what the admins can see, and their app records that they agreed. A member who joined before your community asked is offered it in their app; until they agree they never show. Changing the lines asks every member again; until a member agrees to the new ones, they show only within the lines they agreed to (a tighter line never reaches them without their say).
 
-Every time anyone opens the exceptions, your server writes who and when, before it answers. Every time an admin sees a member's balance while removing them, it writes who, whose and when. Every owner and admin can read that log in Community health.
+Every time anyone opens the exceptions, your server writes who and when, before it answers. Every time an admin sees a member's balance while removing them, it writes who, whose and when. Every owner and admin can read that log in Community health. A look made by an automation token shows "by token" and the token's name beside the owner who made it (never the token itself), in the manager and on the phone, so a script isn't taken for a person.
 
 In a vote on removing a member, everyone who can vote in it sees that member's balance and any debt, in that vote only. An owner or an admin who can't vote in it doesn't see them there. Those looks are not logged.
 

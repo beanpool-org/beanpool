@@ -54,7 +54,7 @@ import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { getAppVersionCounts } from '../app-version-counts.js';
 import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired, lookTokenOf } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
@@ -985,7 +985,7 @@ function healthFor(ctx: any) {
  */
 function withLoggedAlerts<T extends { flags: Array<{ members: string[] }> }>(ctx: any, health: T): T {
     try {
-        logAlertsLook((ctx.state as any)?.actor || 'owner:password', health.flags);
+        logAlertsLook((ctx.state as any)?.actor || 'owner:password', health.flags, lookTokenOf(ctx));
         return health;
     } catch {
         return { ...health, flags: health.flags.filter(f => !(Array.isArray(f.members) && f.members.length)) };
@@ -2407,7 +2407,7 @@ router.get('/api/local/admin/disputes/:id', async (ctx) => {
 /** A look at the disputes that can't be logged (a standby writes no plain table) isn't answered. */
 function logDisputesOrRefuse(ctx: any, action: TradeLookAction, tradeIds: string[]): boolean {
     try {
-        logDisputesLook((ctx.state as any)?.actor || 'owner:password', action, tradeIds);
+        logDisputesLook((ctx.state as any)?.actor || 'owner:password', action, tradeIds, lookTokenOf(ctx));
         return true;
     } catch {
         ctx.status = 503;
@@ -2552,7 +2552,7 @@ router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
         }
 
         // The member's balance, outside their consent: a line in the access log the admins and the owner read, first.
-        logBalanceLook(actor, preview.member.publicKey, 'offboard_preview');
+        logBalanceLook(actor, preview.member.publicKey, 'offboard_preview', lookTokenOf(ctx));
         ctx.body = preview;
     } catch (e: any) {
         const msg = e?.message || 'Failed to get offboard preview';
@@ -2594,7 +2594,7 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
         );
         // The balance it settled is a look at the member's balance too: logged, or left out of the answer.
         try {
-            logBalanceLook(effectiveActor, result.memberPubkey, 'offboard_settled');
+            logBalanceLook(effectiveActor, result.memberPubkey, 'offboard_settled', lookTokenOf(ctx));
             ctx.body = result;
         } catch {
             ctx.body = { ...result, balanceSettled: undefined };

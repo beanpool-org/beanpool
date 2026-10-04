@@ -281,6 +281,12 @@ router.get('/api/node/config', async (ctx) => {
 // The known floor (config/known-floor.ts, community modes slice 4): every owner and admin reads the settings, the
 // exceptions and the log; only an owner changes the dial, the known floor or the cap; an owner or admin sets one member's
 // exception. Every change is a line in the log.
+/** The owner's or admin's own key behind this session, or null: the node password and an automation token name nobody. */
+function ownKeySessionActor(ctx: any): string | null {
+    const actor = ctx.state?.actor;
+    return !ctx.state?.automationTokenId && typeof actor === 'string' && /^[0-9a-f]{64}$/.test(actor) ? actor : null;
+}
+
 function knownFloorRefusal(ctx: any, e: unknown): void {
     if (!(e instanceof KnownFloorError)) throw e;
     ctx.status = e.status;
@@ -329,7 +335,7 @@ router.get('/api/local/admin/known-floor/member/:pubkey', async (ctx) => {
     if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can see a member\'s known floor.')) return;
     ctx.set('Cache-Control', 'no-store');
     try {
-        ctx.body = knownFloorForMember(ctx.params.pubkey);
+        ctx.body = knownFloorForMember(ctx.params.pubkey, ownKeySessionActor(ctx));
     } catch (e) { knownFloorRefusal(ctx, e); }
 });
 
@@ -338,8 +344,8 @@ router.post('/api/local/admin/known-floor/exception', async (ctx) => {
     if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can change a member\'s known floor.')) return;
     // One member's credit is money, and nobody sets their own: only an owner's or admin's own key session, which names the
     // person. Never an automation token (it acts as whoever issued it) nor the node password (it names nobody).
-    const actor = (ctx.state as any)?.actor;
-    if ((ctx.state as any)?.automationTokenId || typeof actor !== 'string' || !/^[0-9a-f]{64}$/.test(actor)) {
+    const actor = ownKeySessionActor(ctx);
+    if (!actor) {
         ctx.status = 403;
         ctx.body = { error: 'Sign in with your own key to change a member\'s known floor.', code: 'key_session_only' };
         return;

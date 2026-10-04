@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CommunityHealthPanel, readHealth } from './CommunityHealthPanel';
+import { CommunityHealthPanel, logWho, readHealth } from './CommunityHealthPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 
@@ -73,6 +73,27 @@ describe('CommunityHealthPanel', () => {
         expect(trades).toHaveTextContent('Ada opened the disputes list on');
         expect(trades).not.toHaveTextContent('opened it on');
         expect(screen.getByTestId('health-log')).not.toHaveTextContent('disputes');
+    });
+
+    // #1613's actor survey: a token's look was logged under its maker's key, so a script read as a person.
+    it('a look an automation token made says "by token <name>"; a person\'s says nothing more', async () => {
+        const token = { id: 'abcdef012345', name: 'nightly report' };
+        expect(logWho({ id: 'l', actor: 'a'.repeat(64), actorCallsign: 'Ada', token, at: '2026-10-05T01:00:00Z' })).toBe('Ada by token nightly report');
+        expect(logWho({ id: 'l', actor: 'a'.repeat(64), actorCallsign: 'Ada', token: { id: 'abcdef012345', name: '' }, at: '2026-10-05T01:00:00Z' })).toBe('Ada by token abcdef012345');
+        expect(logWho({ id: 'l', actor: 'a'.repeat(64), actorCallsign: 'Ada', token: null, at: '2026-10-05T01:00:00Z' })).toBe('Ada');
+        mockNode({ ok: true, body: { ...HEALTH,
+            log: [{ id: 'b1', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'offboard_preview', subjectCallsign: 'Kim', token, at: '2026-10-05T01:00:00Z' }],
+            tradeLog: [
+                { id: 't1', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'disputes_listed', token, at: '2026-10-05T01:00:00Z' },
+                { id: 't2', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'dispute_opened', token: null, at: '2026-10-05T00:00:00Z' },
+            ] } });
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        const trades = await screen.findByTestId('health-trade-log');
+        const [byToken, byPerson] = Array.from(trades.querySelectorAll('li'));
+        expect(byToken).toHaveTextContent('Ada by token nightly report opened the disputes list on');
+        expect(byPerson).toHaveTextContent('Ada opened a dispute on');
+        expect(byPerson).not.toHaveTextContent('token');
+        expect(screen.getByTestId('health-log')).toHaveTextContent("Ada by token nightly report saw Kim's balance while removing them on");
     });
 
     it('an owner saves the two lines', async () => {

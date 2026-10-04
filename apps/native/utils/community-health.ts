@@ -44,6 +44,8 @@ export interface HealthLogLine {
     subjectCallsign?: string | null;
     /** Which trades a look at the disputes or the stuck escrows showed (#1608). */
     tradeIds?: string[] | null;
+    /** The automation token that looked, under its maker's key (`actor`): its id and name, never its secret. */
+    token?: { id: string; name: string } | null;
     at: string;
 }
 
@@ -84,7 +86,13 @@ export function departedRows(body: HealthExceptionsBody, entries: Pick<OpenedEnt
     }));
 }
 
-const whoOf = (l: HealthLogLine) => (l.actorCallsign ? `@${l.actorCallsign}` : 'An admin');
+/** "by token nightly report" when a script looked under its maker's key, so it isn't read as the maker's own look. */
+export function byTokenText(token: HealthLogLine['token']): string {
+    if (!token || typeof token !== 'object' || typeof token.id !== 'string') return '';
+    return ` by token ${typeof token.name === 'string' && token.name.trim() ? token.name.trim() : token.id}`;
+}
+
+const whoOf = (l: HealthLogLine) => `${l.actorCallsign ? `@${l.actorCallsign}` : 'An admin'}${byTokenText(l.token)}`;
 const whenOf = (l: HealthLogLine) => new Date(l.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 /** A look at a member's balance: opening the exceptions, or while removing a member. */

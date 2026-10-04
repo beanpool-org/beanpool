@@ -18,7 +18,20 @@ import { nodeCredential } from '../../lib/profiles';
 
 type Totals = { beansInCirculation: number; sumOfCredit: number; sumOfDebt: number; membersInDebit: number; commonsPot: number; tradesThisMonth: number };
 type Lines = { debtLinePct: number; quietDays: number };
-type LogLine = { id: string; actorCallsign: string | null; actor: string; action?: string; subjectCallsign?: string | null; at: string };
+type LogLine = {
+    id: string; actorCallsign: string | null; actor: string; action?: string; subjectCallsign?: string | null;
+    /** The automation token that looked under its maker's key (`actor`): its id and name, never its secret. */
+    token?: { id: string; name: string } | null;
+    at: string;
+};
+
+/** Who looked: the admin, and "by token <name>" when a script looked under their key, so it isn't read as theirs. */
+export function logWho(l: LogLine): string {
+    const who = l.actorCallsign ?? `${l.actor.slice(0, 8)}…`;
+    const t = l.token;
+    if (!t || typeof t !== 'object' || typeof t.id !== 'string') return who;
+    return `${who} by token ${typeof t.name === 'string' && t.name.trim() ? t.name.trim() : t.id}`;
+}
 
 /**
  * What a line in the access log says the admin did: opened the exceptions, looked at a member's balance while removing
@@ -201,7 +214,7 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
                     <ul data-testid="health-log" className="m-0 p-0 list-none space-y-1">
                         {health.log.map((l) => (
                             <li key={l.id} className="text-xs text-nature-300 break-words">
-                                <span className="font-bold text-white">{l.actorCallsign ?? `${l.actor.slice(0, 8)}…`}</span> {logDid(l)} {new Date(l.at).toLocaleString()}
+                                <span className="font-bold text-white">{logWho(l)}</span> {logDid(l)} {new Date(l.at).toLocaleString()}
                             </li>
                         ))}
                     </ul>
@@ -217,7 +230,7 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
                     <ul data-testid="health-trade-log" className="m-0 p-0 list-none space-y-1">
                         {health.tradeLog.map((l) => (
                             <li key={l.id} className="text-xs text-nature-300 break-words">
-                                <span className="font-bold text-white">{l.actorCallsign ?? `${l.actor.slice(0, 8)}…`}</span> {logDid(l)} {new Date(l.at).toLocaleString()}
+                                <span className="font-bold text-white">{logWho(l)}</span> {logDid(l)} {new Date(l.at).toLocaleString()}
                             </li>
                         ))}
                     </ul>

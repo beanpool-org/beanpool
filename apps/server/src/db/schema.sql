@@ -1676,7 +1676,9 @@ CREATE INDEX IF NOT EXISTS idx_money_requests_created ON money_requests(created_
 -- balance outside that member's consent: while removing them (`subject_pubkey` is whose). And every look an admin takes
 -- at trades and alerts (queue item 29, Marty 4 Oct): the disputes list and one dispute (`detail` is a JSON array of the
 -- trade ids shown), the escrows a member's removal left stuck on an older node (`detail` the same), and the fraud
--- alerts, one line per member they named (`subject_pubkey`). Every owner and admin reads it; no member does.
+-- alerts, one line per member they named (`subject_pubkey`). A look an automation token made names the token
+-- (`token_id`, `token_name`; never its secret) beside its maker (`actor_pubkey`), so a script's look isn't taken for a
+-- person's; NULL for a person's own session. Every owner and admin reads it; no member does.
 CREATE TABLE IF NOT EXISTS health_access_log (
     id             TEXT PRIMARY KEY,
     actor_pubkey   TEXT NOT NULL,
@@ -1685,6 +1687,8 @@ CREATE TABLE IF NOT EXISTS health_access_log (
                                                    'stranded_escrows_read')),
     subject_pubkey TEXT,
     detail         TEXT,
+    token_id       TEXT,
+    token_name     TEXT,
     at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

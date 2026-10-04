@@ -194,6 +194,15 @@ export const TOKEN_OWNER_ONLY_ERROR = 'An automation token never makes owner-onl
  * (requireAdminRole, requirePhoneStepUp). What it does is the issuing owner's (ctx.state.actor), marked with the
  * token's id (ctx.state.viaToken), and every use is logged with the route, never the secret.
  */
+/**
+ * The automation token behind this request, for a look log (its id and name, never its secret), or null for a person's
+ * own session: its actor is its maker, so without this a script's look reads as the maker's own.
+ */
+export function lookTokenOf(ctx: any): { id: string; name: string } | null {
+    const id = ctx?.state?.automationTokenId;
+    return typeof id === 'string' && id ? { id, name: typeof ctx.state.tokenName === 'string' ? ctx.state.tokenName : '' } : null;
+}
+
 function checkAutomationToken(ctx: any, presented: string): boolean {
     const method = String(ctx.method || ctx.request?.method || 'GET').toUpperCase();
     const reqPath = String(ctx.path || ctx.request?.path || '');
@@ -224,6 +233,7 @@ function checkAutomationToken(ctx: any, presented: string): boolean {
     if (!ctx.state) ctx.state = {};
     ctx.state.automationTokenId = record.id;
     ctx.state.viaToken = record.id;
+    ctx.state.tokenName = typeof record.name === 'string' ? record.name : '';
     ctx.state.tokenScope = record.scope;
     ctx.state.tokenOwnerRoute = record.scope === 'backups';
     ctx.state.adminRole = record.scope === 'backups' ? 'owner' : 'admin';

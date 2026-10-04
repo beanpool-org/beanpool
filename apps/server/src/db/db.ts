@@ -839,6 +839,20 @@ export function rebuildHealthAccessLogCheck(d: Database.Database): boolean {
     return true;
 }
 
+/**
+ * Adds health_access_log's `token_id` and `token_name` (the automation token behind a look, #1613's actor survey) to a
+ * table from before them: ALTER TABLE ADD COLUMN, so every row is kept as it was, NULL in both (a person's look, or one
+ * from before the token was recorded). Nothing on a table that has them, or none; true when it added. Idempotent.
+ */
+export function addHealthAccessLogToken(d: Database.Database): boolean {
+    const cols = (d.prepare('PRAGMA table_info(health_access_log)').all() as { name: string }[]).map(c => c.name);
+    if (!cols.length) return false;
+    const missing = ['token_id', 'token_name'].filter(c => !cols.includes(c));
+    if (!missing.length) return false;
+    d.transaction(() => { for (const c of missing) d.exec(`ALTER TABLE health_access_log ADD COLUMN ${c} TEXT`); })();
+    return true;
+}
+
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
@@ -1378,6 +1392,11 @@ export function initSchema() {
         if (rebuildHealthAccessLogCheck(db)) console.log('[DB] ✅ Migrated health_access_log for the looks at disputes, stranded escrows and alerts');
     } catch (err: any) {
         console.error('[DB] ❌ Failed to migrate health_access_log for the looks at disputes and alerts:', err?.message || err);
+    }
+    try {
+        if (addHealthAccessLogToken(db)) console.log('[DB] ✅ Migrated health_access_log to name the automation token behind a look');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to add the token to health_access_log:', err?.message || err);
     }
 
     // In-flight money and governance replicate to a standby as plain tables (engine/replication-manifest.ts, design G3):

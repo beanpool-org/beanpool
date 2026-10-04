@@ -38,6 +38,19 @@ describe('community health on the phone', () => {
         expect(healthLogText({ id: 'l', actor: 'k', actorCallsign: 'sam', action: 'offboard_settled', subject: 's', subjectCallsign: null, at: '2026-10-04T01:00:00Z' }))
             .toMatch(/^@sam removed a member and saw the balance it settled · /);
     });
+
+    // #1613's actor survey: a token's look was logged under its maker's key, so a script read as a person.
+    it('a look an automation token made says "by token <name>"; a person\'s says nothing more', () => {
+        const token = { id: 'abcdef012345', name: 'nightly report' };
+        expect(tradeLookText({ id: 'l', actor: 'k', actorCallsign: 'sam', action: 'disputes_listed', token, at: '2026-10-04T01:00:00Z' }))
+            .toMatch(/^@sam by token nightly report opened the disputes list · /);
+        expect(healthLogText({ id: 'l', actor: 'k', actorCallsign: 'sam', action: 'offboard_preview', subjectCallsign: 'kim', token, at: '2026-10-04T01:00:00Z' }))
+            .toMatch(/^@sam by token nightly report saw @kim's balance while removing them · /);
+        expect(tradeLookText({ id: 'l', actor: 'k', actorCallsign: 'sam', action: 'alerts_read', token: { id: 'abcdef012345', name: ' ' }, at: '2026-10-04T01:00:00Z' }))
+            .toMatch(/^@sam by token abcdef012345 read the alerts/);
+        expect(tradeLookText({ id: 'l', actor: 'k', actorCallsign: 'sam', action: 'dispute_opened', token: null, at: '2026-10-04T01:00:00Z' }))
+            .toMatch(/^@sam opened a dispute · /);
+    });
 });
 
 // The node's answers since #1608, as GET /api/names/health and GET /api/names/health/log send them.

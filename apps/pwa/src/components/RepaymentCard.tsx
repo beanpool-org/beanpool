@@ -9,11 +9,12 @@ import { getMyRepayment, payTheCommons, parseBeans, debtCodeOk, REPAYMENT_WORDS,
 
 export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
     const [repayment, setRepayment] = useState<Repayment | null>(null);
-    const [open, setOpen] = useState(false);
-    const [amount, setAmount] = useState('');
+    // A link with ?payback=<code> opens the form with the code in it.
     const [code, setCode] = useState(() => {
         try { return new URLSearchParams(window.location.search).get('payback') ?? ''; } catch { return ''; }
     });
+    const [open, setOpen] = useState(() => code !== '');
+    const [amount, setAmount] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [paid, setPaid] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
@@ -23,7 +24,6 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
         getMyRepayment().then((r) => { if (live) setRepayment(r); }).catch(() => {});
         return () => { live = false; };
     }, [paid]);
-    useEffect(() => { if (code) setOpen(true); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const pay = async () => {
         setError(null);

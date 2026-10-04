@@ -22,7 +22,7 @@ import { REQUEST_SIGNING_VERSION, signedPathOf } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity } from './identity';
 import { plainOriginOf, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
-import { loadSavedRequestSigning } from './nodes';
+import { getSavedNodes, loadSavedRequestSigning } from './nodes';
 import { APP_VERSION_HEADER } from './force-update';
 import { fellBackToOldFormat, OLD_SERVER_SIGNATURE_REFUSAL, settledRequestSigning } from './request-signing-version';
 
@@ -54,12 +54,23 @@ function plainHeader(headers: any, name: string): string | undefined {
 
 const SIGNING_HEADERS = new Set(['x-public-key', 'x-signature', 'x-timestamp', 'x-nonce', 'x-signed-for', 'content-type']);
 
+/** Whether `url` goes to the community open on this phone (the anchor) or a saved one: the same origin. */
+async function isSavedCommunity(url: string): Promise<boolean> {
+    const origin = plainOriginOf(url);
+    if (!origin) return false;
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (anchorUrl && plainOriginOf(anchorUrl) === origin) return true;
+    return (await getSavedNodes()).some(n => plainOriginOf(n.url) === origin);
+}
+
 /**
  * A request signed in format 2 (it names a host: X-Signed-For) that a node refused as an old server refuses a signature
  * it can't read, before this phone had heard which format that node reads (its info couldn't be read): signed again,
  * once, in the old format, which is then kept for that node until its info says otherwise (request-signing-version.ts
- * `fellBackToOldFormat`). Never for a node that has said it reads 2. Only for a plain headers object, a string body
- * (or none) and the phone's own key: anything else is returned as answered. Null: not signed again.
+ * `fellBackToOldFormat`). Never for a node that has said it reads 2. Only to one of this phone's communities
+ * (`isSavedCommunity`): any other host could answer a write that way just to get it signed in the old format, which
+ * names no host, and replay it at the member's community until the switch. Only for a plain headers object, a string
+ * body (or none) and the phone's own key: anything else is returned as answered. Null: not signed again.
  */
 async function signedAgainForOldNode(
     url: string, method: string, init: any, res: Response, send: (init: any) => Promise<Response>,
@@ -75,6 +86,7 @@ async function signedAgainForOldNode(
     if (refusal?.error !== OLD_SERVER_SIGNATURE_REFUSAL) return null;
     const identity = await loadIdentity();
     if (!identity?.privateKey || identity.publicKey !== pubkey) return null;
+    if (!(await isSavedCommunity(url))) return null;
     if (!(await fellBackToOldFormat(url))) return null;
     const kept = Object.fromEntries(Object.entries(headers).filter(([k]) => !SIGNING_HEADERS.has(k.toLowerCase())));
     const signed = await buildSignedHeaders(method, url, init?.body ?? '', identity.privateKey, identity.publicKey);

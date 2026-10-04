@@ -257,6 +257,23 @@ describe('a current community, and no downgrade', () => {
         expect(knownRequestSigning(NEW)).toBe(2);
     });
 
+    it('a host never saved that answers a signed write with the old server\'s refusal gets no old-format signature', async () => {
+        const HOME = 'https://home1.test';
+        const X = 'https://hostile1.test';
+        nodes[HOME] = 'new';
+        // Looks old from its info too: only that it isn't one of this phone's communities keeps the old format from it.
+        nodes[X] = 'old';
+        mem.set('beanpool_anchor_url', HOME);
+        await addSavedNode(HOME);
+        expect(await post(X, '/api/ledger/transfer', { from: PUB, to: 'b'.repeat(64), amount: 20 })).toBe(403);
+        // Sent once, in format 2 (bound to X): never again unbound, which X could replay at HOME.
+        const signed = calls.filter(c => c.headers['X-Signature']);
+        expect(signed).toHaveLength(1);
+        expect(signed[0].headers['X-Signed-For']).toBe('hostile1.test');
+        expect(knownRequestSigning(X)).toBeUndefined();
+        expect((await getSavedNodes()).map(n => n.url)).toEqual([HOME]);
+    });
+
     it('a request signed while the node\'s info read is in flight waits for it: an answer of 2 is not moved by a refusal', async () => {
         const NEW = 'https://new3.test';
         nodes[NEW] = 'new-refusing';

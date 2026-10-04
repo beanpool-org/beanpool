@@ -9,9 +9,10 @@
  * every member read were refused). So: the info read is never signed while the format isn't known
  * (node-request-signing.ts); a request signed while a read of that node's info is in flight waits for its answer; a
  * socket, which can't be signed again, reads the info first (`learnRequestSigning`); and an HTTP request an old
- * server refuses is signed again once in the old format (`fellBackToOldFormat`). A node not heard from otherwise
- * gets format 2, and a hostile node that pretends to be old gains only old-format signatures, which every node
- * refuses after the switch.
+ * server refuses is signed again once in the old format (`fellBackToOldFormat`), but only to one of this phone's own
+ * communities (node-request-signing.ts): any other host could refuse just to get an old-format signature, which names
+ * no host. A node not heard from otherwise gets format 2, and a saved community that pretends to be old gains only
+ * old-format signatures, which every node refuses after the switch.
  *
  * One way only: once a host has said 2, nothing it says later moves it back. Until the switch every community still
  * accepts the old format, which names no community, so a request signed in it for a hostile node that stopped saying

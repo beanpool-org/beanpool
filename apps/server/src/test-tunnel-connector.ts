@@ -1015,6 +1015,30 @@ async function main(): Promise<void> {
             reg.holder = (b) => ({ name: b?.name, held: 'free' });
             await post('/api/local/admin/public-address/offline');
         });
+
+        await section('22. release-name never releases the name the record of names calls current, even with the stored address cleared', async () => {
+            const post = settingsPost!;
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline');
+            assert((await post('/api/local/admin/public-address/claim', { name: 'cf-cur', mode: 'tunnel' })).status === 200 && pa()?.name === 'cf-cur', 'cf-cur is stored');
+            // r4176138202: the record still calls cf-cur current; the stored address is cleared by hand.
+            updateNodeConfig({ publicAddress: null } as any);
+            reg.holder = (b) => b?.name === 'cf-cur' ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' };
+            reg.offline = (b) => new Promise((r) => setTimeout(() => r({ status: 'released', ...(b?.name ? { name: b.name } : {}) }), 1_500));
+            const ex = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(ex.status === 200 && !ex.body?.names?.some((n: any) => n.name === 'cf-cur'), `the record's current name is not offered for release (${JSON.stringify(ex.body?.names)})`);
+            const o0 = offlines().length;
+            const releasing = post('/api/local/admin/public-address/release-name', { name: 'cf-cur' });
+            await sleep(300);
+            reg.status = () => live('cf-cur', 'eyJ.token-cf-cur');
+            const st = await settingsGet!('/api/local/admin/public-address/status');
+            const rel = await releasing;
+            assert(rel.status === 409 && !offlines().slice(o0).some((c) => c.body?.name === 'cf-cur') && pa()?.name === 'cf-cur' && pa()?.status === 'live',
+                `the release is refused and nothing sent; the status read stores it (status ${st.status} release ${rel.status} ${JSON.stringify(rel.body)} sent ${JSON.stringify(offlines().slice(o0).map((c) => c.body))} stored ${pa()?.name}/${pa()?.status})`);
+            reg.status = () => ({ status: 'none' });
+            reg.offline = (b) => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) });
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            await post('/api/local/admin/public-address/offline');
+        });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);
     } finally {

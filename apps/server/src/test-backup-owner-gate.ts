@@ -294,6 +294,10 @@ async function main(): Promise<void> {
                 `1. ${c.what}: ${who}'s key session is refused, in words (${r.status}: ${words})`);
             const changed = c.unchanged();
             assert(changed === null, `1. ${c.what}: …and nothing changed${changed ? ` (${changed})` : ''}`);
+            // A route that answers with a secret says no-store from its first line, so a refusal is never cached either (#1548 NB3).
+            if (c.route === '/api/local/admin/replication-token/generate') {
+                assert(/no-store/.test(r.headers.get('cache-control') ?? ''), `1. ${c.what}: …and the refusal is never cached`);
+            }
         }
     }
     // What an admin keeps: the status, the snapshot list, reading the snapshot settings, taking a snapshot.
@@ -330,6 +334,7 @@ async function main(): Promise<void> {
         const gen = await call('POST', '/api/local/admin/replication-token/generate', credsOf());
         assert(gen.status === 200 && typeof gen.json?.token === 'string' && await verifyReplicationToken(gen.json.token),
             `1. replication-token/generate: ${who} makes a token that works (${gen.status})`);
+        assert(/no-store/.test(gen.headers.get('cache-control') ?? ''), `1. replication-token/generate: the token's answer is never cached (${gen.headers.get('cache-control')})`);
         const clear = await call('POST', '/api/local/admin/replication-token/clear', credsOf());
         assert(clear.status === 200 && !hasReplicationToken(), `1. replication-token/clear: ${who} removes it (${clear.status})`);
         setReplicationToken(TOKEN);

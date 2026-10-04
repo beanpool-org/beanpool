@@ -2989,3 +2989,31 @@ export function removeAppAddress(nodeUrl: string, address: string, adminPassword
         method: 'POST', headers: buildAdminHeaders(adminPassword, tfaToken), body: JSON.stringify({ address }),
     });
 }
+
+export type SignOutEverywhereResult = { ok: true; breakGlassCodeRetired: boolean } | { ok: false; message: string };
+
+/**
+ * "Sign out everywhere" for the person signed in to this node's Settings with their key (POST auth/revoke-all, same
+ * origin, the session cookie and its CSRF token): the node ends every Settings session of theirs, on every computer and
+ * phone, and retires a break-glass code one of those sessions made. Names nobody in the body, so it can only ever be the
+ * caller's own key. Never claims success unless the node said so.
+ */
+export async function signOutEverywhere(): Promise<SignOutEverywhereResult> {
+    let res: Response;
+    try {
+        res = await fetch('/api/local/admin/auth/revoke-all', {
+            method: 'POST',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: buildAdminHeaders(),
+            body: '{}',
+        });
+    } catch {
+        return { ok: false, message: 'Could not reach the node, so you may still be signed in elsewhere. Check the connection and try again.' };
+    }
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (res.ok && body.success === true) return { ok: true, breakGlassCodeRetired: body.breakGlassCodeRetired === true };
+    const said = typeof body.error === 'string' && body.error ? body.error : null;
+    if (res.status === 401) return { ok: false, message: said ? `${said}. Sign in again, then try once more.` : 'Your sign-in here has already ended. Sign in again, then try once more.' };
+    return { ok: false, message: said ?? `The node did not sign you out (${res.status}). Nothing changed.` };
+}

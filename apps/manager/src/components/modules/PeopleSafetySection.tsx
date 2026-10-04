@@ -36,6 +36,8 @@ interface PeopleSafetySectionProps {
     onSubTabChange?: (sub: 'directory' | 'invites' | 'funnel' | 'moderation' | 'roles') => void;
     /** Who is signed in to /settings — decides whether Owners & admins offers its add/remove controls. */
     rolesViewer?: RolesViewer;
+    /** A key session in Settings only: back to the sign-in screen after "Sign out everywhere". */
+    onSignedOutEverywhere?: () => void;
 }
 
 export function PeopleSafetySection({
@@ -54,6 +56,7 @@ export function PeopleSafetySection({
     initialSubTab = 'directory',
     onSubTabChange,
     rolesViewer = { kind: 'password' },
+    onSignedOutEverywhere,
 }: PeopleSafetySectionProps) {
     const [subTab, setSubTab] = useSectionSubTab<'directory' | 'invites' | 'funnel' | 'moderation' | 'roles'>(initialSubTab, onSubTabChange);
     const [directoryView, setDirectoryView] = useState<'roster' | 'tree'>('roster');
@@ -363,7 +366,7 @@ export function PeopleSafetySection({
 
             {subTab === 'roles' && (
                 <SectionErrorBoundary sectionName="Owners & admins" resetKey={activeNode.id}>
-                    <NodeRolesPanel activeNode={activeNode} members={members} viewer={rolesViewer} onChanged={onRefresh} />
+                    <NodeRolesPanel activeNode={activeNode} members={members} viewer={rolesViewer} onChanged={onRefresh} onSignedOutEverywhere={onSignedOutEverywhere} />
                 </SectionErrorBoundary>
             )}
 

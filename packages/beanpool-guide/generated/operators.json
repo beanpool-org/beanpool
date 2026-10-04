@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 105,
-  "hash": "bcb8472dc8d8b4e16be6df83cd218fc2697a5af37d39e09f64d27d4a0139f82a",
+  "version": 106,
+  "hash": "0ddb7e890319f337bccc13886c0636b880a84776fd9498ff4d8262d2a22a51c8",
   "sections": [
     {
       "id": "setup",
@@ -1341,7 +1341,7 @@
           "items": [
             "**Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Members then vote for 7 days on keeping the suspension. If the vote does not pass, it lifts by itself. See Decisions and emergencies.",
             "**Lift suspension**: ends a suspension early and closes its vote.",
-            "**Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation.",
+            "**Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation. Their Ledger tells them the admins froze their credit line: they can't spend into debit while it lasts, but can still sell, receive and spend what they hold above zero (a member in debit is also told how far down they are), and to ask an admin. Their level stays the one their line gives them unfrozen, on their profile and their listings alike.",
             "**Promote** and **Demote**: whether they can vouch for others.",
             "**Grant Operator**: lets them act for enterprises they are a keeper of.",
             "**Re-Key**: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for **24 hours**. Their old key stops working the moment you make the code, and they are suspended until the code is used on their new phone. Their balance, role and keeper places move to the new key. See Re-Key below.",
@@ -1610,7 +1610,7 @@
         },
         {
           "type": "p",
-          "text": "An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own."
+          "text": "An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own. A member whose known floor is frozen is told so on their Ledger, with what they can still do and to ask an admin; their level stays the one their line gives them unfrozen (the known floor less what they have pledged to enterprises), on their profile and their listings alike."
         },
         {
           "type": "p",
@@ -1642,19 +1642,19 @@
         },
         {
           "type": "p",
-          "text": "While a record is open, nobody can be confirmed against that entry. If the person comes back, a second chance is an admin's decision, made with the history in front of them. There are three ways to settle a debt, as in a LETS:"
+          "text": "While a record is open, nobody can be confirmed against that entry, and the entry shows no **Invite this person** or **Confirm a member**. Each entry on an admin's phone shows its debt history: how much, when they left, what is repaid, and how each record was settled. If the person comes back, a second chance is an admin's decision, made with the history in front of them. There are three ways to settle a debt, as in a LETS:"
         },
         {
           "type": "ul",
           "items": [
-            "**Paid back.** The person, on their new account, pays the amount to the Commons for that debt. An admin then checks that payment against the record, and it is settled. A payment made for another debt, or for none, settles nothing, and no payment settles two debts.",
-            "**Worked off.** An admin confirms them with a known floor of 0 and a repayment flag. Once the confirmation counts (with a second admin's too, where your community asks for one), every Bean they receive above 0 goes to the Commons until the debt is cleared; then the flag lifts and the record is settled. The admin can raise their known floor after that. If an admin takes the confirmation back, the flag and the floor of 0 end with it: from then on they keep what they receive, and what they already repaid stays repaid.",
-            "**Forgiven.** The community votes on a Decision to forgive it. The record stays, marked forgiven, and an admin can confirm them again."
+            "**Paid back.** An admin taps **Share the pay-back code** on the entry and sends it to the person; the message carries the code and what is left to repay. On their new account they open **Ledger → Pay the Commons** (the link in the message fills in both), enter the code and pay, from Beans they hold, all that is left or part of it. Each payment comes off the debt at once, and the one that leaves nothing settles it: no admin needs to do anything. Your server refuses a payment above what is left. If they paid the Commons without the code, an admin taps **Count a payment made without the code** on the entry and enters the reference their app showed them: your server counts it once, toward that debt only, up to what is left. A payment made with a code has counted already and can't be counted again.",
+            "**Worked off.** An admin taps **Work it off** on the entry and picks the member: that confirms them with a known floor of 0 and a repayment flag. Once the confirmation counts (with a second admin's too, where your community asks for one), every Bean they receive above 0 goes to the Commons until the debt is cleared; then the flag lifts and the record is settled. Payments they make with the pay-back code count toward the same debt, so between them nobody pays more than is left, and once nothing is left no work-off can start. The admin can raise their known floor after that. If an admin takes the confirmation back, the flag and the floor of 0 end with it: from then on they keep what they receive, and what they already repaid stays repaid.",
+            "**Forgiven.** The community votes on a Decision to forgive it. An admin starts it with **Ask to forgive it** on the entry; the Decision names no one. What is left is forgiven; anything already repaid stays recorded on it, and nothing is given back. The record stays, marked forgiven, and an admin can confirm them again."
           ]
         },
         {
           "type": "p",
-          "text": "**The rule binds the entry, not the person.** Your server can't read the names, so it can't tell when an admin adds a new entry for the same person and confirms them against that one instead. That rests on your admins' honesty; the access log shows who added and who confirmed each entry. The app doesn't yet warn an admin when a new entry's name matches one with an open debt."
+          "text": "**The rule binds the entry, not the person.** Your server can't read the names, so it can't tell when an admin adds a new entry for the same person and confirms them against that one instead. That rests on your admins' honesty; the access log shows who added and who confirmed each entry. When an admin types a name that is already on an entry with an open debt, their phone says so before it saves, whatever the case, accents or spacing; a name spelled another way it can't catch."
         },
         {
           "type": "p",

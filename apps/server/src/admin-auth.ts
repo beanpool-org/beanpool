@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
 import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from './totp.js';
-import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR } from './admin-key-auth.js';
+import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, type AdminSessionBinding } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
@@ -760,35 +760,48 @@ export function revokeCsrfTokensBoundTo(binding: string): void {
 // ===================== WS TICKET STORE =====================
 // Ephemeral single-use tickets for WebSocket connection upgrades.
 // Prevents transmitting raw admin passwords in URL query parameters.
+// A ticket asked for by a session (the admin_session cookie) is bound to it: redeemed only while that session is live
+// at the same session_epoch, and the log socket it opens is closed when the session ends (https-server.ts). One asked
+// for with the password itself (no session) is bound to nothing: the caller presents the credential on each request,
+// and there is no sign-in to end.
 const WS_TICKET_TTL_MS = 30_000; // 30 seconds
-const wsTickets = new Map<string, number>(); // ticket -> expiry timestamp
+const wsTickets = new Map<string, { expiry: number; binding: AdminSessionBinding | null }>();
 
 // Periodic background cleanup for expired WebSocket tickets
 if (typeof setInterval !== 'undefined') {
     const wsCleanupTimer = setInterval(() => {
         const now = Date.now();
-        for (const [t, exp] of wsTickets) {
-            if (now > exp) wsTickets.delete(t);
+        for (const [t, entry] of wsTickets) {
+            if (now > entry.expiry) wsTickets.delete(t);
         }
     }, 60_000);
     if (wsCleanupTimer.unref) wsCleanupTimer.unref();
 }
 
-export function issueWsTicket(): string {
+/** A ticket for the session `sessionId` (ctx.state.adminSessionId), or for no session; null if that session has ended. */
+export function issueWsTicket(sessionId?: string | null): string | null {
+    const binding = sessionId ? adminSessionBinding(sessionId) : null;
+    if (sessionId && !binding) return null;
     const ticket = crypto.randomBytes(32).toString('hex');
-    wsTickets.set(ticket, Date.now() + WS_TICKET_TTL_MS);
+    wsTickets.set(ticket, { expiry: Date.now() + WS_TICKET_TTL_MS, binding });
     const now = Date.now();
-    for (const [t, exp] of wsTickets) {
-        if (now > exp) wsTickets.delete(t);
+    for (const [t, entry] of wsTickets) {
+        if (now > entry.expiry) wsTickets.delete(t);
     }
     return ticket;
 }
 
-export function isValidWsTicket(ticket: string): boolean {
-    const expiry = wsTickets.get(ticket);
-    if (!expiry) return false;
+/**
+ * Spends a ticket: what it is bound to (`binding` null for a ticket asked for with the password itself), or null if it
+ * is unknown, spent, expired, or its session has ended or been signed out everywhere since it was issued.
+ */
+export function redeemWsTicket(ticket: string): { binding: AdminSessionBinding | null } | null {
+    const entry = wsTickets.get(ticket);
+    if (!entry) return null;
     wsTickets.delete(ticket); // Single-use: consume immediately
-    return Date.now() <= expiry;
+    if (Date.now() > entry.expiry) return null;
+    if (entry.binding && !adminSessionBindingLive(entry.binding)) return null;
+    return { binding: entry.binding };
 }
 
 // ===================== 2FA SESSION TOKEN STORE =====================

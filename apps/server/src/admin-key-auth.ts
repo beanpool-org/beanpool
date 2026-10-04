@@ -569,23 +569,73 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
 }
 
 /**
+ * Which session something long-lived was opened under (a /ws/logs ticket, then its socket): the session, its member
+ * and that member's session_epoch at the time. A password session's member is '' and its epoch 0.
+ */
+export interface AdminSessionBinding {
+    sessionId: string;
+    memberPubkey: string;
+    sessionEpoch: number;
+}
+
+/** The binding for a session that is live now, or null. */
+export function adminSessionBinding(sessionId: string, now = Date.now()): AdminSessionBinding | null {
+    const session = adminSessions.get(sessionId);
+    if (!session || !adminSessionBindingLive({ sessionId, memberPubkey: session.memberPubkey, sessionEpoch: session.sessionEpoch }, now)) return null;
+    return { sessionId, memberPubkey: session.memberPubkey, sessionEpoch: session.sessionEpoch };
+}
+
+/**
+ * Whether what was opened under `b` may carry on: its session would pass validateAdminSession now, for the same member
+ * and epoch, and still holds a role above moderator (the admin's log is not a moderator route). Changes nothing: no
+ * session is ended and no idle window slides, so an open log socket keeps no session alive.
+ */
+export function adminSessionBindingLive(b: AdminSessionBinding, now = Date.now()): boolean {
+    const session = adminSessions.get(b.sessionId);
+    if (!session || session.memberPubkey !== b.memberPubkey || session.sessionEpoch !== b.sessionEpoch) return false;
+    if (now > session.hardExpiresAt || now > session.idleExpiresAt) return false;
+    if (session.kind === 'password') return !isBreakGlassMode() && session.credentialStamp === passwordCredentialStamp();
+    if (getNodeRoleSessionEpoch(session.memberPubkey) !== b.sessionEpoch) return false;
+    const liveRole = nodeRoleOf(session.memberPubkey);
+    return !!liveRole && liveRole !== 'moderator';
+}
+
+// Told whenever a session ends here, or every session of a member does: https-server.ts closes the log sockets those
+// sessions opened at once, rather than on its next sweep.
+const sessionsEndedListeners = new Set<() => void>();
+
+/** Calls `fn` each time a session or a member's sessions end; returns the call that stops it. */
+export function onAdminSessionsEnded(fn: () => void): () => void {
+    sessionsEndedListeners.add(fn);
+    return () => { sessionsEndedListeners.delete(fn); };
+}
+
+function noteSessionsEnded(): void {
+    for (const fn of sessionsEndedListeners) {
+        try { fn(); } catch (err: any) { logger.warn('AUTH', `A sessions-ended listener failed: ${err?.message || err}`); }
+    }
+}
+
+/**
  * Revokes all web sessions for a member by bumping their session_epoch in SQLite.
- * Existing sessions are invalidated on their next request via the epoch check.
+ * Existing sessions are invalidated on their next request via the epoch check, and the log sockets they opened close now.
  */
 export function revokeAllMemberSessions(memberPubkey: string): number {
     if (!memberPubkey) return 0;
     const newEpoch = bumpNodeRoleSessionEpoch(memberPubkey);
     logger.info('AUTH', `Revoked all web sessions for ${memberPubkey} (new session_epoch: ${newEpoch})`);
+    noteSessionsEnded();
     return newEpoch;
 }
 
 /**
- * Revokes a single browser session (e.g. logout).
+ * Revokes a single browser session (e.g. logout), and closes the log sockets it opened.
  */
 export function revokeAdminSession(sessionId: string): void {
     if (!sessionId) return;
-    adminSessions.delete(sessionId);
+    const had = adminSessions.delete(sessionId);
     revokeCsrfTokensBoundTo(sessionId);
+    if (had) noteSessionsEnded();
 }
 
 // ===================== PASSWORD SESSIONS =====================

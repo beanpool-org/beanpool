@@ -61,6 +61,12 @@ describe('known consent', () => {
         expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '5:50:60', consentedAt: '2026-10-04T00:00:00Z', consentedVersion: '5:50:60' }))).toBe(false);
     });
 
+    it('asks again at wording 6 (#1610: which looks at a balance are logged, and that a removal vote\'s are not)', () => {
+        const onFive = readKnownConsent({ ...TERMS, version: '6:50:60', consentedAt: '2026-10-05T00:00:00Z', consentedVersion: '5:50:60' })!;
+        expect(shouldOfferConsent(onFive)).toBe(true);
+        expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '6:50:60', consentedAt: '2026-10-05T00:00:00Z', consentedVersion: '6:50:60' }))).toBe(false);
+    });
+
     it('the join screen asks only in a known community, and an older node (404 body) shows nothing', () => {
         const terms = readConsentTerms({ known: true, debtLinePct: 50, quietDays: 60, version: '1:50:60', text: TERMS.text });
         expect(joinAsksConsent(terms)).toBe(true);

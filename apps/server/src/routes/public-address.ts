@@ -10,7 +10,7 @@
 import Router from '@koa/router';
 import http from 'node:http';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex } from '../services/registrar-client.js';
-import { syncTunnel, restartTunnel, persistAddress, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
+import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { dropAddressRequest } from '../services/public-address-agent.js';
@@ -200,6 +200,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, ...addressFields(ctx, result), ...serverSide() };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Claim failed: ${e.message}`, 'error');
+            void noteUnansweredClaim(name, e);
             ctx.status = 400;
             ctx.body = { error: e.message };
         }
@@ -242,7 +243,14 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         // agent) is shown, never stored over the newer write.
         const since = publicAddressGeneration();
         try {
-            const result = await addressStatus();
+            const stored = (getNodeConfig() as any).publicAddress;
+            const result = await addressStatus(stored?.name);
+            // A live answer about another name this key holds (an older registrar answers about its first one) is never
+            // stored: Settings shows the stored address. Any other answer is only written on the name it concerns, below.
+            if (result.status === 'live' && answersAboutAnotherName(result, stored)) {
+                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, stored), ...serverSide() };
+                return;
+            }
             if (result.status === 'live' && publicAddressGeneration() !== since) {
                 ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, result), ...serverSide() };
                 return;
@@ -328,6 +336,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             return;
         }
         const where = pa.hostname || pa.name;
+        // Stored only if nothing wrote the address while the registrar was asked (a claim or Take offline in another tab).
+        const since = publicAddressGeneration();
         try {
             probeLogs.length = 0;
             addProbeLog('1/2', `⏳ Asking the address service for a new tunnel key for ${where}...`, 'info');
@@ -341,7 +351,14 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             }
             addProbeLog('1/2', `✅ ${where} has a new tunnel key; the old one no longer works`, 'success');
             const { changed: _changed, rotated: _rotated, attest: _attest, ...answer } = res;
-            const tunnel = await persistAddress({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored');
+            const stored = persistAddressIfUnchanged({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored', since);
+            if (!stored) {
+                addProbeLog('2/2', `❌ The address changed while the new key was made; the newer change stands`, 'error');
+                ctx.status = 409;
+                ctx.body = { error: `The address changed while ${where} got a new tunnel key (a claim or Take offline elsewhere); that change stands.` };
+                return;
+            }
+            const tunnel = await stored;
             const ok = tunnel.state === 'starting' || tunnel.state === 'connected';
             addProbeLog('2/2', `${ok ? '✅' : '❌'} Tunnel ${describeTunnel(tunnel)}`, ok ? 'success' : 'error');
             ctx.body = { success: true, status: 'live', name: pa.name, hostname: res.hostname || pa.hostname, tunnel };
@@ -362,7 +379,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             addProbeLog('1/4', `⏳ Releasing domain & deleting tunnel on Cloudflare registrar...`, 'info');
             const prevConfig = (getNodeConfig() as any).publicAddress;
             const hostname = prevConfig?.hostname;
-            const result = await releaseAddress();
+            // Named: with no name the registrar releases this key's first name, which can be another one it holds. Unnamed
+            // only when nothing is stored here.
+            const result = await releaseAddress(prevConfig?.name);
             addProbeLog('1/4', `✅ Domain released on registrar`, 'success');
             // The name stays accepted here (decision D-B, pending Marty). The record keeps the registrar's hold as its
             // answer gives it (held_until), and none when it gives none: then the registrar freed the name at once.

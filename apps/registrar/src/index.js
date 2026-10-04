@@ -911,13 +911,18 @@ async function handleRotate(request, env, bodyText) {
 
 // Answers a live tunnel name's token: only to its key, and under v2 only to a request nobody sent before (signer), so a
 // captured /status can't be replayed for it.
+// `?name=`: the name the node stores, answered about while it is this key's row (a key can hold more than one: an
+// install's claim answered after the owner's pick). Without it, or for a name that is not this key's, the key's first
+// row as before. Not in the signed bytes (a GET signs its path): it only picks among this key's own rows.
 async function handleStatus(request, env) {
     const pubkey = await signer(request, env, '');
     if (pubkey instanceof Response) return pubkey;
     await db.touchContact(env, pubkey, nowS(), requestProto(request));
+    const asked = (new URL(request.url).searchParams.get('name') || '').toLowerCase();
+    const named = NAME_RE.test(asked) ? await db.getAllocation(env, asked) : null;
     // Any state: answering 'none' for a name the node still owns is what made nodes wipe their saved address
     // (2026-09-24 incident).
-    const a = await db.getOwnAllocation(env, pubkey);
+    const a = named && named.node_pubkey === pubkey ? named : await db.getOwnAllocation(env, pubkey);
     if (!a) return json({ status: 'none' });
     const out = {
         status: a.status, name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact,

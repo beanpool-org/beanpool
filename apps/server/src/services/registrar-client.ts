@@ -139,8 +139,9 @@ export function retryProto<P extends string>(sent: string, accepted: unknown, sp
     return both.sort((a, b) => protoVersion(b) - protoVersion(a))[0] ?? null;
 }
 
+// `path` may carry a query; the signature covers the path without it, as the registrar verifies it (apps/registrar sign.js).
 async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string, proto: Proto): Promise<{ ok: boolean; status: number; data: any; json: boolean }> {
-    const headers = await signRequest(method, path, bodyText, proto);
+    const headers = await signRequest(method, path.split('?')[0], bodyText, proto);
     if (bodyText) headers['content-type'] = 'application/json';
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
@@ -197,8 +198,18 @@ export const updateAddressMetadata = (communityName?: string, contact?: string) 
     signedFetch('POST', '/api/registrar/update', {
         community_name: cleanLabel(communityName, REGISTRAR_COMMUNITY_NAME_MAX), contact: cleanLabel(contact, REGISTRAR_CONTACT_MAX),
     });
-export const addressStatus = () => signedFetch('GET', '/api/registrar/status');
-export const releaseAddress = () => signedFetch('POST', '/api/registrar/offline', {});
+/**
+ * What the registrar holds for this key. `name`: the name this server stores, asked about by name. A registrar that reads
+ * it answers about that name while this key holds it; an older one answers about the key's first name (live, then
+ * pending, then paused), whatever was asked, so a caller never stores an answer that names another name.
+ */
+export const addressStatus = (name?: string | null) =>
+    signedFetch('GET', `/api/registrar/status${name ? `?name=${encodeURIComponent(name)}` : ''}`);
+/**
+ * Release `name` (Take offline). Named whenever a name is stored: with no name the registrar releases the key's first name,
+ * which with two names held can be the other one, leaving this one live with nothing running it.
+ */
+export const releaseAddress = (name?: string | null) => signedFetch('POST', '/api/registrar/offline', name ? { name } : {});
 /**
  * Bring this server's own held name back (a pause its heal lifts): never a claim, so it can't take back a release or
  * claim a name. The registrar routes it again only once this server proves its key: on a fresh tunnel only this signed

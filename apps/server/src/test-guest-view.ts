@@ -1358,7 +1358,7 @@ async function main(): Promise<void> {
             'POST /api/names/generations', 'GET /api/names/log', 'POST /api/names/settings', 'POST /api/names/shares', 'GET /api/names/state',
             'GET /api/names/debts', 'POST /api/names/debts/:id/settle', 'POST /api/names/debts/:id/work-off',
             'GET /api/names/health', 'GET /api/names/health/exceptions', 'GET /api/names/health/log', 'POST /api/names/health/settings',
-            'GET /api/names/consent', 'POST /api/names/consent',
+            'GET /api/names/consent', 'POST /api/names/consent', 'DELETE /api/names/consent',
             'POST /api/node-admin/break-glass', 'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',

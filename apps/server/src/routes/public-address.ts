@@ -11,7 +11,7 @@ import Router from '@koa/router';
 import http from 'node:http';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex } from '../services/registrar-client.js';
 import { syncTunnel, restartTunnel, persistAddress, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
-import { getNodeConfig, getNodeRole, updateNodeConfig } from '../state-engine.js';
+import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { dropAddressRequest } from '../services/public-address-agent.js';
 import { requireAdminRole } from '../admin-auth.js';
@@ -238,8 +238,15 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             };
         }
 
+        // An answer that comes after the address was written another way (a claim or Take offline in another tab, the
+        // agent) is shown, never stored over the newer write.
+        const since = publicAddressGeneration();
         try {
             const result = await addressStatus();
+            if (result.status === 'live' && publicAddressGeneration() !== since) {
+                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, result), ...serverSide() };
+                return;
+            }
             if (result.status === 'live') {
                 recordRegistrarAnswer(result, 'stored');
                 const prev = (getNodeConfig() as any).publicAddress || {};

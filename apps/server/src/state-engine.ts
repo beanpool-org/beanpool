@@ -7897,10 +7897,20 @@ export function getNodeConfig(): NodeConfig {
     return finalConfig;
 }
 
+let publicAddressWrites = 0;
+/**
+ * How many times the stored public address has been written since this server started, by any writer (Settings' claim and
+ * Take offline, the address agent, a take-over). A registrar call that began at one count stores its answer only while the
+ * count is the same (services/tunnel-connector.ts persistAddressIfUnchanged): a late answer never overwrites an address
+ * set after the call began.
+ */
+export const publicAddressGeneration = (): number => publicAddressWrites;
+
 export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     const current = getNodeConfig();
     const next = { ...current, ...update };
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('node_config', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(next));
+    if ('publicAddress' in update) publicAddressWrites++;
     // The public address (with its tunnel token) is in the take-over envelope.
     if ('publicAddress' in update) noteTakeoverInputsChanged('public address changed');
     if ('ownerAddresses' in update) noteTakeoverInputsChanged('confirmed app addresses changed');

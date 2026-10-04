@@ -30,7 +30,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
-import { getNodeRole, getNodeConfig, updateNodeConfig } from '../state-engine.js';
+import { getNodeRole, getNodeConfig, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { addressStatus, claimAddress, healAddress } from './registrar-client.js';
 import { takeoverHoldsTunnel } from './takeover.js';
@@ -434,6 +434,22 @@ export function persistAddress(pa: any, use: 'stored' | 'claim' = 'stored'): Pro
 }
 
 /**
+ * persistAddress for the answer to a registrar call that began when the address's write count was `since`
+ * (publicAddressGeneration): stored only if nothing wrote the address meanwhile (Settings' claim or Take offline, a
+ * take-over, another check's answer). Checked and written with no await between, so nothing can land in the gap.
+ * null: not stored, and nothing else done.
+ */
+export function persistAddressIfUnchanged(pa: any, use: 'stored' | 'claim', since: number): Promise<TunnelStatus> | null {
+    if (publicAddressGeneration() !== since) return null;
+    return persistAddress(pa, use);
+}
+
+/** A heal's answer that came after the address was written another way: the newer write stands, the next tick looks again. */
+function addressChangedMeanwhile(pa: any): void {
+    say('info', `the address changed while the address service was asked about ${pa.hostname || pa.name}; its answer is not stored`);
+}
+
+/**
  * Save the registrar's answer. The registrar leaves `tunnelToken` out of its status when its own call to Cloudflare
  * fails (apps/registrar/src/index.js), so saving the answer as it came would drop a token that still works, and
  * the take-over keys would be re-locked without it until the next good answer (967 follow-up #2). So a missing
@@ -461,12 +477,14 @@ function maybeHeal(): void {
 }
 
 /** The saved name, claimed again: the registrar's heal (its own name) re-asserts the tunnel, ingress and DNS. */
-async function reclaimSaved(pa: any, why: string): Promise<boolean> {
+async function reclaimSaved(pa: any, why: string, since: number): Promise<boolean> {
     say('info', `${why}: asking the address service to re-make ${pa.hostname || pa.name} (a heal of this server's own name)`);
     const res = await claimAddress(pa.name, 'tunnel', LOOPBACK_ORIGIN);
     if (res?.status === 'live') {
         const { changed: _changed, ...answer } = res;
-        await persistAddress({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored');
+        const stored = persistAddressIfUnchanged({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored', since);
+        if (!stored) { addressChangedMeanwhile(pa); return false; }
+        await stored;
         return true;
     }
     recordRegistrarAnswer({ name: pa.name, hostname: pa.hostname, ...res }, 'status');
@@ -479,22 +497,25 @@ async function healDeadTunnel(): Promise<void> {
     lastHealAt = Date.now();
     try {
         const pa = savedTunnelAddress();
+        const since = publicAddressGeneration();
         if (!pa?.name || getNodeRole() !== 'primary') return;
         const st = await addressStatus();
         if (st?.status === 'live') {
             const token = typeof st.tunnelToken === 'string' ? st.tunnelToken.trim() : '';
             if ((st.name && st.name !== pa.name) || (token && token !== running?.token)) {
+                const stored = persistAddressIfUnchanged(st, 'stored', since);
+                if (!stored) { addressChangedMeanwhile(pa); return; }
                 say('info', `Cloudflare refuses the tunnel; the address service has a new token for ${st.hostname || st.name}: running it`);
-                await persistAddress(st, 'stored');
+                await stored;
                 return;
             }
             // Live, on the same token (or the registrar couldn't read it from Cloudflare): the tunnel is gone at
             // Cloudflare though the name is still this server's.
-            await reclaimSaved(pa, 'Cloudflare refuses the tunnel although the address service has the name live');
+            await reclaimSaved(pa, 'Cloudflare refuses the tunnel although the address service has the name live', since);
             return;
         }
         // Paused by the registrar's sweep (it removes the tunnel too): this server takes it back by proving its key.
-        if (healable(st, pa)) { await healPaused(pa, st); return; }
+        if (healable(st, pa)) { await healPaused(pa, st, since); return; }
         // Any other answer is written on the name it concerns; the agent, the name watch and Settings act on it.
         recordRegistrarAnswer(st, 'status');
         say('warn', `Cloudflare refuses the tunnel, and the address service answers "${st?.status ?? 'nothing'}" for ${pa.hostname || pa.name}; Settings shows it`);
@@ -522,13 +543,15 @@ function healable(st: any, pa: any): boolean {
  * whose token only this signed request gets, or through an attestation at the name. A live answer is saved and run; any
  * other is written on the name, and the next tick asks again. Never throws.
  */
-async function healPaused(pa: any, st: any): Promise<void> {
+async function healPaused(pa: any, st: any, since: number): Promise<void> {
     say('info', `the address service paused ${pa.hostname || pa.name} (${st.reason || 'no reason given'}): asking for it back, which proves this server's key`);
     try {
         const res = await healAddress(pa.name, LOOPBACK_ORIGIN);
         if (res?.status === 'live') {
             const { changed: _changed, attest: _attest, ...answer } = res;
-            await persistAddress({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored');
+            const stored = persistAddressIfUnchanged({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored', since);
+            if (!stored) { addressChangedMeanwhile(pa); return; }
+            await stored;
             say('info', `${pa.hostname || pa.name} is live again${res.tunnelToken ? ', on a fresh tunnel' : ''}`);
             return;
         }
@@ -542,13 +565,15 @@ async function healPaused(pa: any, st: any): Promise<void> {
 /**
  * The public-address agent's tick (every 5 min): if the registrar's status `st` is a pause of this server's own tunnel
  * name that its heal lifts, heal it. True when it was one (healed or not). Not two at once with the dead-tunnel heal.
+ * `since`: the address's write count when the tick began (publicAddressGeneration); a heal answered after another write
+ * is not stored.
  */
-export async function healPausedAddress(st: any): Promise<boolean> {
+export async function healPausedAddress(st: any, since = publicAddressGeneration()): Promise<boolean> {
     const pa = savedTunnelAddress();
     if (!healable(st, pa) || getNodeRole() !== 'primary') return false;
     if (registrarBusy) return true;
     registrarBusy = true;
-    try { await healPaused(pa, st); } finally { registrarBusy = false; }
+    try { await healPaused(pa, st, since); } finally { registrarBusy = false; }
     return true;
 }
 
@@ -570,6 +595,7 @@ async function moveOriginToLoopback(): Promise<void> {
     lastOriginAttemptAt = Date.now();
     try {
         const pa = savedTunnelAddress();
+        const since = publicAddressGeneration();
         if (!pa?.name) return;
         // Only a name the registrar says is live and this key's: a claim of a released one would take it back.
         const st = await addressStatus();
@@ -577,7 +603,7 @@ async function moveOriginToLoopback(): Promise<void> {
             say('info', `not moving ${pa.hostname || pa.name} to ${LOOPBACK_ORIGIN} yet: the address service answers "${st?.status ?? 'nothing'}"`);
             return;
         }
-        if (await reclaimSaved(pa, `moving the tunnel's destination to ${LOOPBACK_ORIGIN}`)) {
+        if (await reclaimSaved(pa, `moving the tunnel's destination to ${LOOPBACK_ORIGIN}`, since)) {
             say('info', `${pa.hostname || pa.name} now leads to ${LOOPBACK_ORIGIN} inside this server`);
         }
     } catch (e: any) {

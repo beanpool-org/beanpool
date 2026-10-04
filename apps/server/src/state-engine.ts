@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, enterpriseKnownShare, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY } from '@beanpool/core';
 export type { EscrowRefundShortfall };
@@ -1850,6 +1850,8 @@ export function getMemberTrustProfile(publicKey: string): {
     tier: TierInfo;
     earnedCredit: number;
     grantedCredit: number;
+    knownGrant: number;
+    otherAllowance: number;
     qualifiedValue: number;
     avgRating: number;
     reviewCount: number;
@@ -2920,20 +2922,36 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
         legacyFloor = 0;
     }
 
-    const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit);
-    if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0) {
-        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, effectiveAllowance);
-        return { floor: -allowance, totalBacking, hasBacking: hasExplicitBacking || legacyFloor > 0 };
+    // A confirmed keeper's known grant counts at half (community modes slice 4); 0 with the confirmation dial off.
+    const knownShare = enterpriseKnownShareOf(enterprisePubkey);
+    const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit + knownShare);
+    if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0 || knownShare > 0) {
+        const allowance = Math.min(engine.creditCap(db), effectiveAllowance);
+        return { floor: -allowance, totalBacking, hasBacking: hasExplicitBacking || legacyFloor > 0 || knownShare > 0 };
     }
 
     return { floor: 0, totalBacking: 0, hasBacking: false };
 }
 
+/** Half of each active, unfrozen keeper's known grant, summed (0 when the confirmation dial is off). */
+export function enterpriseKnownShareOf(enterprisePubkey: string): number {
+    if (!engine.confirmationDialOn(db)) return 0;
+    const keepers = db.prepare(`
+        SELECT o.member_pubkey AS pk FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
+    `).all(enterprisePubkey) as { pk: string }[];
+    return enterpriseKnownShare(keepers.map(k => engine.memberKnownGrant(db, k.pk)));
+}
+
 export function usableFloor(publicKey: string): number {
     const m = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!m?.is_treasury) {
-        const { floor } = getMemberTrustProfile(publicKey);
-        return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+        const { floor, knownGrant, otherAllowance } = getMemberTrustProfile(publicKey);
+        if (knownGrant <= 0) return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+        // A confirmed member in a known community: one band for the known grant, the bands for the rest (slice 4).
+        const usable = usableAllowance({ knownGrant, otherAllowance, cap: engine.creditCap(db), liveOffers: liveOfferCount(publicKey) });
+        return Math.max(floor, -usable);
     }
 
     if (m.status === 'completed') return 0;

@@ -9,6 +9,7 @@ import type Database from 'better-sqlite3';
 import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import type { TrustStats, TierInfo } from '@beanpool/core';
 import { prepared } from './statements.js';
+import { memberKnownGrant, creditCap } from './known-floor.js';
 
 type Db = Database.Database;
 
@@ -441,6 +442,10 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     tier: TierInfo;
     earnedCredit: number;
     grantedCredit: number;
+    /** The known grant (community modes slice 4): 0 unless the confirmation dial is on and the member is confirmed. */
+    knownGrant: number;
+    /** vouch + earned + granted, before the cap: the part the offer bands meter. */
+    otherAllowance: number;
     qualifiedValue: number;
     avgRating: number;
     reviewCount: number;
@@ -463,6 +468,8 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
             tier,
             earnedCredit: ef.allowance,
             grantedCredit: ef.legacyFloor,
+            knownGrant: 0,
+            otherAllowance: ef.allowance,
             qualifiedValue: 0,
             avgRating: 5.0,
             reviewCount: 0,
@@ -507,9 +514,14 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     // appointed voucher vouches for them, or an admin/genesis grant graduates a founding member.
     // Trust Model v3: a completed real trade (earnedCredit > 0) opens the floor on its own — no
     // vouch required. Restores the documented behaviour (docs/trust-model-shipped.md §1).
-    const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0;
+    // The known floor (community modes slice 4): a confirmed member's grant, and the community's cap (default
+    // CREDIT_FLOOR_CAP). With the confirmation dial off both are today's: knownGrant 0, cap 2,000.
+    const knownGrant = memberKnownGrant(db, publicKey);
+    const cap = creditCap(db);
+    const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0 || knownGrant > 0;
+    const otherAllowance = vouchCredit + earnedCredit + grantedCredit;
     const allowance = (activated && !isCreditFrozen)
-        ? Math.min(c.CREDIT_FLOOR_CAP, vouchCredit + earnedCredit + grantedCredit)
+        ? Math.min(cap, knownGrant + otherAllowance)
         : 0;
 
     // Floor = -(voucher + earned + granted) once activated, clamped so the deepest floor is
@@ -521,6 +533,6 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     // qualifiedValue: raw diversity-capped trade value (drives the native "value traded"
     // achievement + value-to-next-tier estimate). avgRating/reviewCount: the reputation
     // multiplier inputs, surfaced so the client can show them honestly.
-    return { stats, floor, tier, earnedCredit, grantedCredit, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated };
+    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated };
 }
 

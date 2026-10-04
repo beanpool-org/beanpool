@@ -233,6 +233,48 @@ export function offersRequiredForDepth(magnitude: number): number {
     return OFFER_BANDS.length - 1; // beyond the −2000 cap (shouldn't happen) → require the max
 }
 
+// ===================== THE KNOWN FLOOR (community modes slice 4) =====================
+// In a community whose confirmation dial is on, a member an admin has confirmed (a live confirmation on the names
+// list) holds a known grant: the community's knownFloor, or that member's exception. The floor becomes
+//   floor = -min(creditCap, knownGrant + vouch + earned + granted)
+// where creditCap is the community's cap (default CREDIT_FLOOR_CAP, owner-settable up to CREDIT_CAP_MAX). With the dial
+// off, or for an unconfirmed member, knownGrant is 0 and the cap is today's: nothing changes.
+
+export const KNOWN_FLOOR_DEFAULT = 1000;           // 25 hours of work the community trusts a confirmed member for
+export const CREDIT_CAP_DEFAULT = PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP;
+export const CREDIT_CAP_MAX = 5000;
+
+/** An admin's exception for one member's known floor: a different amount (lower, or higher up to the cap), or frozen. */
+export interface KnownFloorException { amount?: number | null; frozen?: boolean }
+
+/** The known grant a member holds: 0 unless the dial is on and they are confirmed; an exception overrides, bounded by the cap. */
+export function knownGrantFor(o: { dialOn: boolean; confirmed: boolean; knownFloor: number; cap: number; exception?: KnownFloorException | null }): number {
+    if (!o.dialOn || !o.confirmed) return 0;
+    if (o.exception?.frozen) return 0;
+    const amount = o.exception?.amount != null ? o.exception.amount : o.knownFloor;
+    return Math.max(0, Math.min(o.cap, Math.floor(amount || 0)));
+}
+
+/** The credit allowance (the floor's magnitude): every source together, capped by the community's cap. */
+export function creditAllowance(o: { vouch: number; earned: number; granted: number; knownGrant: number; cap: number }): number {
+    return Math.min(o.cap, o.knownGrant + o.vouch + o.earned + o.granted);
+}
+
+/**
+ * How much of the allowance a member may use. The known part has one band: any live offer unlocks all of it, none
+ * unlocks none (a confirmed person with an offer has answered "is this person really here?"). The rest (vouch, earned,
+ * granted) keeps the offer bands. The sum stays within the cap. With knownGrant 0 this is min(other, offerCapForCount).
+ */
+export function usableAllowance(o: { knownGrant: number; otherAllowance: number; cap: number; liveOffers: number }): number {
+    const known = (o.liveOffers || 0) >= 1 ? o.knownGrant : 0;
+    return Math.min(o.cap, known + Math.min(o.otherAllowance, offerCapForCount(o.liveOffers)));
+}
+
+/** An enterprise counts half of each confirmed keeper's known grant (an enterprise's debt is written off with no recourse). */
+export function enterpriseKnownShare(keeperKnownGrants: number[]): number {
+    return keeperKnownGrants.reduce((sum, g) => sum + Math.floor(Math.max(0, g) / 2), 0);
+}
+
 /**
  * Formats a bean amount as an approximate time equivalent.
  * Examples: 5 → "≈ 8min", 40 → "≈ 1.0hr", 320 → "≈ 8hr"

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 106,
-  "hash": "0ddb7e890319f337bccc13886c0636b880a84776fd9498ff4d8262d2a22a51c8",
+  "version": 107,
+  "hash": "193026b16983c0d59bbbd7f4c7b173879635148afc9a7e82a39406cc1a40c27d",
   "sections": [
     {
       "id": "setup",
@@ -1614,11 +1614,11 @@
         },
         {
           "type": "p",
-          "text": "It is in the manager: **People & Safety → Members**, tap the member, then **Known floor**. It shows their line now: the community default, lowered or raised to an amount, or frozen. Type a whole number of Beans, from 0 to the cap, and tap **Set**; or tap **Freeze** (their known floor counts as 0), or **Restore the default**. Each asks you to confirm first. An amount above the community's known floor is a raise: the manager says so before you confirm, and the log shows it as a raise. If the server refuses, the manager shows its reason as it gave it. The members list marks everyone whose known floor an admin changed. The panel shows only when the switch is on, and only to an owner or admin. It shows the member's credit line, never their balance."
+          "text": "It is in the manager: **People & Safety → Members**, tap the member, then **Known floor**. It shows their line now: the community default, lowered or raised to an amount, or frozen. Type a whole number of Beans, from 0 to the cap, and tap **Set**; or tap **Freeze** (their known floor counts as 0), or **Restore the default**. Each asks you to confirm first. An amount above the community's known floor is a raise: the manager says so before you confirm, and the log shows it as a raise. Under the controls, **Changes to their known floor** lists every change to this member's line, newest first: which admin made it, from what to what, and when. Every owner and admin who opens the member sees it. If the server refuses, the manager shows its reason as it gave it. The members list marks everyone whose known floor an admin changed. The panel shows only when the switch is on, and only to an owner or admin. It shows the member's credit line, never their balance."
         },
         {
           "type": "p",
-          "text": "A change needs an owner or admin signed in with their own key, so the log can say who made it: the node password names nobody, and the server refuses a change made with it. The older built-in settings page signs in only with the password, so it has no known floor controls."
+          "text": "A change needs an owner or admin signed in with their own key, so the log can say who made it: the node password names nobody, and the server refuses a change made with it. Signed in with the password (or an automation token), the panel shows the line and its changes but no controls, and says \"Sign in with your own key to change it\". Nobody sets their own: on your own row it says \"Another admin or the owner sets your own known floor.\" The older built-in settings page signs in only with the password, so it has no known floor controls."
         },
         {
           "type": "p",
@@ -1630,7 +1630,7 @@
         },
         {
           "type": "p",
-          "text": "Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read it. A raise above the community's known floor is its own line, so other admins notice."
+          "text": "Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read one member's lines on that member's **Known floor** panel. A raise above the community's known floor is its own line, so other admins notice."
         },
         {
           "type": "h2",
@@ -1678,7 +1678,7 @@
         },
         {
           "type": "p",
-          "text": "Every time anyone opens the exceptions, your server writes who and when, before it answers. Every time an admin sees a member's balance while removing them, it writes who, whose and when. Every owner and admin can read that log in Community health."
+          "text": "Every time anyone opens the exceptions, your server writes who and when, before it answers. Every time an admin sees a member's balance while removing them, it writes who, whose and when. Every owner and admin can read that log in Community health. A look made by an automation token shows \"by token\" and the token's name beside the owner who made it (never the token itself), in the manager and on the phone, so a script isn't taken for a person."
         },
         {
           "type": "p",

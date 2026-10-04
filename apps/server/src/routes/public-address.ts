@@ -186,7 +186,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 name, mode, hostname: result.hostname, status: result.status, tunnelToken: result.tunnelToken, communityName, contact: b.contact,
                 ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}),
             } } as any);
-            dropAddressRequest();   // the owner's choice ends what `beanpool claim` asked for at install
+            dropAddressRequest(`the owner claimed "${name}" in Settings`);   // the owner's choice ends what `beanpool claim` asked for at install
             if (result.tunnelToken) addProbeLog('2/4', `⚡ Starting the tunnel inside this server...`, 'info');
             const tunnel = await syncTunnel();
             if (result.tunnelToken) {
@@ -369,7 +369,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // Recorded before the stored address goes.
             recordRegistrarAnswer(result, 'released');
             updateNodeConfig({ publicAddress: null } as any);
-            dropAddressRequest();   // a release never brings back the name asked for at install
+            dropAddressRequest('the owner took the address offline in Settings');   // a release never brings back the name asked for at install
             addProbeLog('2/4', `⏳ Stopping the tunnel inside this server...`, 'info');
             const tunnel = await syncTunnel();
             addProbeLog('3/4', tunnel.state === 'off' ? `✅ Tunnel stopped` : `❌ Tunnel still ${describeTunnel(tunnel)}`, tunnel.state === 'off' ? 'success' : 'error');

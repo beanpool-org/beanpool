@@ -82,13 +82,14 @@ const requestDone = (name: string): void => {
 
 /**
  * Ends a request from `beanpool claim`: this server holds an address (or its owner released one) however it got it. Left
- * standing, it would claim the install's name after a later release, against the owner's latest choice.
+ * standing, it would claim the install's name after a later release, against the owner's latest choice. `why` ends the
+ * log line: what ended it.
  */
-export function dropAddressRequest(): void {
+export function dropAddressRequest(why: string): void {
     const r = getLocalConfig().addressRequest;
     if (!r) return;
     updateLocalConfig({ addressRequest: null });
-    if (!r.refused) console.log(`[PublicAddr] beanpool claim's request for "${r.name}" ends: the address is set in Settings now`);
+    if (!r.refused) console.log(`[PublicAddr] beanpool claim's request for "${r.name}" ends: ${why}`);
 }
 
 /** One tick of the agent (every 5 min on a main server; a suite runs one at once). Never throws for a registrar failure. */
@@ -191,7 +192,11 @@ export async function checkAddressRequest(now = Date.now()): Promise<void> {
                 requestTries = 0;
             }
         }
-        if (holdsAddress()) { dropAddressRequest(); return; }
+        if (holdsAddress()) {
+            const held = (getNodeConfig() as any).publicAddress;
+            dropAddressRequest(`this server holds "${held?.name || held?.hostname}" now (the registrar's answer to this server, or a take-over)`);
+            return;
+        }
         if (!requestedName()) return;
         if (!fresh && now < nextRequestCheck) return;
         await reconcile();

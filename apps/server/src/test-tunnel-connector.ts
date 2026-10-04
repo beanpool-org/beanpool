@@ -564,6 +564,11 @@ async function main(): Promise<void> {
         await section('13. a request from beanpool claim ends once this server holds any address, however it got it', async () => {
             const post = settingsPost!;
             const request = (name: string) => updateLocalConfig({ addressRequest: { name, mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            // The log line says what ended the request.
+            const said: string[] = [];
+            const log = console.log;
+            console.log = (...a: unknown[]) => { said.push(a.map(String).join(' ')); log(...a); };
+            const ended = () => said.filter((l) => l.includes("beanpool claim's request for \"install-name\" ends")).at(-1) || '';
             reg.status = () => ({ status: 'none' });
             reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
             // The registrar did not answer during the install, so the request stood; the owner then set a name in Settings.
@@ -571,14 +576,18 @@ async function main(): Promise<void> {
             const set = await post('/api/local/admin/public-address/claim', { name: 'gamma', mode: 'tunnel' });
             assert(set.status === 200 && pa()?.name === 'gamma', `Settings claimed gamma (${set.status})`);
             assert(getLocalConfig().addressRequest == null, `the Settings claim ends the request (${JSON.stringify(getLocalConfig().addressRequest)})`);
+            assert(/the owner claimed "gamma" in Settings/.test(ended()), `and says so (${ended()})`);
             // An address saved any other way (this agent, a take-over): the 2 s tick ends it.
             request('install-name');
             await checkAddressRequest(Date.now());
             assert(getLocalConfig().addressRequest == null, 'the 2 s tick ends a request while any address is held');
+            assert(/this server holds "gamma" now/.test(ended()) && !/Settings/.test(ended()), `and says what is held, not "Settings" (${ended()})`);
             request('install-name');
             const off = await post('/api/local/admin/public-address/offline');
             assert(off.status === 200 && pa() === null, `Take offline released gamma (${off.status})`);
             assert(getLocalConfig().addressRequest == null, 'Take offline ends a standing request too');
+            assert(/the owner took the address offline in Settings/.test(ended()), `and says so (${ended()})`);
+            console.log = log;
             const before = claims().length;
             await checkAddressRequest(Date.now() + 60_000);
             await reconcile();

@@ -107,19 +107,19 @@ remove_fleet_tunnel_token() {
 
 # first_password_notice <data dir> <ssh target>
 # Run just before the container starts. A server with no locked admin password (no local-config.json yet, or one that is not
-# locked) makes one up on this start, because deploy.sh no longer sends ADMIN_PASSWORD. It never prints it: it keeps it in
-# data/first-admin-password.txt (FIRST_PASSWORD_FILE in apps/server/src/config/local-config.ts). This says where, never what.
+# locked) is a new install: it makes no admin password and ignores ADMIN_PASSWORD (initAdminPassword in
+# apps/server/src/config/local-config.ts). Its first owner claims it with a one-time claim code, which `beanpool claim` shows
+# (address first, then the code and a QR code). This says how, never the code. A locked server keeps its password: nothing.
 first_password_notice() {
-  local data_dir=$1 target=$2 file
+  local data_dir=$1 target=$2
   if sudo test -f "$data_dir/local-config.json" \
     && sudo grep -qE '"isLocked"[[:space:]]*:[[:space:]]*true' "$data_dir/local-config.json"; then
     return 0
   fi
-  file="$data_dir/first-admin-password.txt"
-  echo "🔑 This server has no admin password yet, so it makes one up as it starts. It is not in this output or in its log."
-  echo "   It will be in $file, which only root and the server can read:"
-  echo "     ssh $target 'sudo cat $file'"
-  echo "   Sign in at /settings with it, then change it there; the file is deleted when you do."
+  echo "🔑 This is a new install: it has no admin password, and ignores ADMIN_PASSWORD. Its first owner claims it with a one-time claim code."
+  echo "   Once it is up, run:"
+  echo "     ssh -t $target 'cd $(dirname "$data_dir") && sudo docker compose exec beanpool-node beanpool claim'"
+  echo "   It sets the community's address, then shows the claim code and a QR code: open BeanPool on your phone, then Claim a community."
 }
 
 # COPIES OF A NODE'S DATA. deploy.sh parks data/ at <home>/beanpool-data-backup-<DIR> and .env at

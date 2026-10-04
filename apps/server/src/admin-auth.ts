@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
 import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from './totp.js';
-import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, passwordCredentialBinding, type AdminSessionBinding } from './admin-key-auth.js';
+import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, passwordCredentialBinding, passwordCredentialStamp, type AdminSessionBinding } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
@@ -378,6 +378,8 @@ export async function checkAdminPasswordAuth(ctx: any, opts: PasswordAuthOptions
             // node-wide check it took (password-brake.ts, 3). Otherwise, after one wrong current code, the owner's
             // own dashboard polling spends the whole allowance and is refused (Fable's review of #955, B1). A code
             // this request goes on to check (requireCurrentSecondFactor) is admitted afresh, so it still costs one.
+            // If this request goes on to change the password or the 2FA, its own 2FA session carries on (restamp2faSessions).
+            ctx.state.tfaSessionInUse = sessionToken;
             if (admitted) {
                 refundNodeCheck(chargedAt);
                 ctx.state.passwordBrakeKey = undefined;
@@ -813,30 +815,44 @@ export function redeemWsTicket(ticket: string): { binding: AdminSessionBinding }
 // After successful password + TOTP login, a session token is issued so the
 // frontend doesn't need to re-enter TOTP on every API call. Tokens expire
 // after 4 hours (same as CSRF tokens). Multi-use within the session.
+// Each one holds the password and 2FA it was issued under (passwordCredentialStamp): once either changes (the
+// authenticator replaced, 2FA turned off and on, a new password), it is refused and the caller is asked for a code
+// again, as a password session is (#1577's review). Backup codes are not part of it: using or remaking them ends none.
 const TFA_SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
-const tfaSessionTokens = new Map<string, number>(); // token → expiry
+const tfaSessionTokens = new Map<string, { expiry: number; credentialStamp: string }>();
 
 export function issue2faSessionToken(): string {
     const token = crypto.randomBytes(32).toString('hex');
-    tfaSessionTokens.set(token, Date.now() + TFA_SESSION_TTL_MS);
+    tfaSessionTokens.set(token, { expiry: Date.now() + TFA_SESSION_TTL_MS, credentialStamp: passwordCredentialStamp() });
     // Prune expired tokens opportunistically
     const now = Date.now();
-    for (const [t, exp] of tfaSessionTokens) {
-        if (now > exp) tfaSessionTokens.delete(t);
+    for (const [t, entry] of tfaSessionTokens) {
+        if (now > entry.expiry) tfaSessionTokens.delete(t);
     }
     return token;
 }
 
 export function isValid2faSession(token: string): boolean {
-    const expiry = tfaSessionTokens.get(token);
-    if (!expiry) return false;
-    if (Date.now() > expiry) {
+    const entry = tfaSessionTokens.get(token);
+    if (!entry) return false;
+    if (Date.now() > entry.expiry || entry.credentialStamp !== passwordCredentialStamp()) {
         tfaSessionTokens.delete(token);
         return false;
     }
     // Sliding window: refresh TTL on valid use
-    tfaSessionTokens.set(token, Date.now() + TFA_SESSION_TTL_MS);
+    entry.expiry = Date.now() + TFA_SESSION_TTL_MS;
     return true;
+}
+
+/**
+ * After a route changed the admin password or the 2FA in force (restampPasswordSession): the 2FA session this request
+ * came with, or was just handed, carries on under the new ones; every other ends on its next use.
+ */
+export function restamp2faSessions(ctx: any): void {
+    for (const token of [ctx?.state?.tfaSessionInUse, ctx?.state?.tfaSessionToken]) {
+        const entry = typeof token === 'string' ? tfaSessionTokens.get(token) : undefined;
+        if (entry) entry.credentialStamp = passwordCredentialStamp();
+    }
 }
 
 export function revoke2faSession(token: string): void {

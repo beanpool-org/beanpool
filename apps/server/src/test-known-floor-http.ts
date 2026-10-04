@@ -57,7 +57,7 @@ const DAY = 86_400_000;
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
-type Res = { status: number; body: any };
+type Res = { status: number; body: any; cacheControl?: string | null };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 160)}`;
 
 function keypair(name: string): Id {
@@ -118,7 +118,7 @@ async function call(method: string, id: Id | null, path: string, body?: unknown,
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? bodyString : undefined });
     let json: any; try { json = await res.json(); } catch { /* empty */ }
-    return { status: res.status, body: json };
+    return { status: res.status, body: json, cacheControl: res.headers.get('cache-control') };
 }
 
 function sessionHeaders(pub: string, role: 'owner' | 'admin'): Record<string, string> {
@@ -470,6 +470,33 @@ async function main(): Promise<void> {
     assert(((await read()).body?.log as unknown[]).length === linesBefore, 'and neither wrote a line in the log');
     const byOwnerKey = await exception(owner, { memberPubkey: kim.pk, clear: true });
     assert(byOwnerKey.status === 200, `an owner's key session still can (${show(byOwnerKey)})`);
+
+    // ── 9. one member's line, for the Manager's member screen ─────────────────────────────────────
+    console.log('── 9. one member\'s line ──');
+    const lineOf = (headers: Record<string, string>, who: Id) => call('GET', null, `/api/local/admin/known-floor/member/${who.pk}`, undefined, headers);
+    const nowSettings = (await read()).body;
+    const kimLine = await lineOf(adaAdmin, kim);
+    assert(kimLine.status === 200 && kimLine.body?.confirmation === true && kimLine.body?.confirmed === true && kimLine.body?.exception === null
+        && kimLine.body?.knownGrant === nowSettings?.knownFloor && kimLine.body?.creditCap === nowSettings?.creditCap,
+        `an admin reads Kim's line: confirmed, no exception, the community's known floor (${show(kimLine)})`);
+    assert(!/balance|frozen":true|transactions/i.test(JSON.stringify(kimLine.body)) && kimLine.cacheControl === 'no-store',
+        `and it carries her credit line, never her balance, and isn't cached (${show(kimLine)})`);
+    await exception(adaAdmin, { memberPubkey: kim.pk, frozen: true });
+    const frozenLine = await lineOf(owner, kim);
+    assert(frozenLine.status === 200 && frozenLine.body?.exception?.frozen === true && frozenLine.body?.knownGrant === 0,
+        `frozen: the line reads frozen and her known grant is 0 (${show(frozenLine)})`);
+    await exception(adaAdmin, { memberPubkey: kim.pk, amount: 300 });
+    const lowLine = await lineOf(owner, kim);
+    assert(lowLine.status === 200 && lowLine.body?.exception?.amount === 300 && lowLine.body?.exception?.frozen === false && lowLine.body?.knownGrant === 300,
+        `lowered to 300: the line reads 300 (${show(lowLine)})`);
+    await exception(adaAdmin, { memberPubkey: kim.pk, clear: true });
+    const unaLine = await lineOf(owner, una);
+    assert(unaLine.status === 200 && unaLine.body?.confirmed === false && unaLine.body?.knownGrant === 0,
+        `Una isn't confirmed: her known grant is 0 (${show(unaLine)})`);
+    const kimReads = await call('GET', kim, `/api/local/admin/known-floor/member/${kim.pk}`);
+    assert(kimReads.status === 401 || kimReads.status === 403, `a member who isn't an admin can't read one (${show(kimReads)})`);
+    const nobody = await lineOf(owner, keypair('Nobody'));
+    assert(nobody.status === 404 && nobody.body?.code === 'not_member', `someone who isn't a member: 404 (${show(nobody)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

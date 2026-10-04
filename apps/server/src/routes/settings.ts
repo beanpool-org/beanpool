@@ -25,7 +25,7 @@ import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '..
 import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
 import { getDoor, setDoor, doorSettingRefusal, type CommunityDoor } from '../config/door.js';
 import { HealthError, healthSummary, readHealthAccessLog, setHealthSettings } from '../engine/community-health.js';
-import { KnownFloorError, knownFloorSettings, setKnownFloorSettings, knownFloorExceptions, readKnownFloorLog, setKnownFloorException } from '../config/known-floor.js';
+import { KnownFloorError, knownFloorSettings, setKnownFloorSettings, knownFloorExceptions, readKnownFloorLog, setKnownFloorException, knownFloorForMember } from '../config/known-floor.js';
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
@@ -320,6 +320,17 @@ router.post('/api/local/admin/community-health', async (ctx) => {
         ctx.status = e.status;
         ctx.body = { error: e.message, code: e.code };
     }
+});
+
+// One member's line for the Manager's member screen (owner or admin): confirmed, their exception, the known grant. Never
+// their balance.
+router.get('/api/local/admin/known-floor/member/:pubkey', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can see a member\'s known floor.')) return;
+    ctx.set('Cache-Control', 'no-store');
+    try {
+        ctx.body = knownFloorForMember(ctx.params.pubkey);
+    } catch (e) { knownFloorRefusal(ctx, e); }
 });
 
 router.post('/api/local/admin/known-floor/exception', async (ctx) => {

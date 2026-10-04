@@ -662,6 +662,34 @@ async function main(): Promise<void> {
             const off = await post('/api/local/admin/public-address/offline');
             assert(off.status === 200 && pa() === null, `and Take offline clears it for the next section (${off.status})`);
         });
+
+        await section('16. a 400 or 403 page from something in front of the registrar is no refusal: the request stands', async () => {
+            reg.status = () => ({ status: 'none' });
+            const refused = () => getLocalConfig().addressRequest?.refused;
+            const t3 = Date.now() + 30_000_000;
+            const page = (code: number, title: string) => ({ html: [code, `<!DOCTYPE html><html><head><title>${title}</title></head><body>no</body></html>`] });
+            reg.claim = () => page(403, 'Attention Required! | Cloudflare');
+            writeAddressRequestFile(DATA!, { name: 'behind-proxy', contact: null, at: t3 });
+            await checkAddressRequest(t3);
+            assert(getLocalConfig().addressRequest?.name === 'behind-proxy' && !refused(), `a firewall's 403 page: the request stands (${refused()})`);
+            reg.claim = () => page(400, '400 Bad Request');
+            await checkAddressRequest(t3 + 11_000);
+            assert(!refused(), `nor a proxy's 400 page (${refused()})`);
+            const n = claims().length;
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+            await checkAddressRequest(t3 + 42_000);
+            assert(claims().length === n + 1 && pa()?.name === 'behind-proxy' && getLocalConfig().addressRequest == null,
+                `asked again on the back-off, and claimed once the registrar answers (${pa()?.name})`);
+            const off = await settingsPost!('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() === null, `and Take offline clears it (${off.status})`);
+            // The registrar's own JSON 403 (a reserved name) still ends a request.
+            reg.claim = () => [403, { error: 'name reserved' }];
+            writeAddressRequestFile(DATA!, { name: 'reserved-one', contact: null, at: t3 + 1_000_000 });
+            await checkAddressRequest(t3 + 1_000_000);
+            assert(/name reserved/.test(refused() || ''), `the registrar's own JSON 403 is its word: refused (${refused()})`);
+            updateLocalConfig({ addressRequest: null });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);
     } finally {

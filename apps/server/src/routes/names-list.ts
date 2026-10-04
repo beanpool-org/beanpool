@@ -28,13 +28,14 @@
  * writes the access log, which is the main server's. Every admin's request first marks holders of the current key who
  * are no admin now (reconcileHolders).
  */
+import { DebtError, listDebts, settleByPayment } from '../engine/names-debts.js';
 import Router from '@koa/router';
 import { getMember, isVisitorKey } from '../state-engine.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { getNodeRole, STANDBY_CODE } from '../config/node-role.js';
 import {
     NamesListError, assertNamesAdmin, reconcileHolders, namesState, readEntries, addEntry, editEntry, deleteEntry,
-    addGeneration, addShare, confirmMember, secondConfirmation, revokeConfirmation, readNamesLog, setNamesSettings,
+    addGeneration, addShare, confirmMember, confirmToWorkOff, secondConfirmation, revokeConfirmation, readNamesLog, setNamesSettings,
     readNamesCopyOf, saveNamesCopy,
 } from '../engine/names-list.js';
 import type { RouteDeps } from './types.js';
@@ -83,6 +84,7 @@ function admin(ctx: any): string | null {
 }
 
 function respond(ctx: any, e: unknown): void {
+    if (e instanceof DebtError) return answer(ctx, e.status, e.message, e.code);
     if (e instanceof NamesListError) {
         answer(ctx, e.status, e.message, e.code);
         if (e.extra) ctx.body = { ...e.extra, ...ctx.body };
@@ -131,6 +133,10 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     }, 201));
     router.post('/api/names/shares', (ctx) => asAdmin(ctx, (actor, body) => addShare(actor, body)));
 
+    // Debts and a second chance (engine/names-debts.ts): every entry's debt history, and paying one back.
+    router.get('/api/names/debts', (ctx) => asAdmin(ctx, () => ({ debts: listDebts() })));
+    router.post('/api/names/debts/:id/work-off', (ctx) => asAdmin(ctx, (actor, body) => confirmToWorkOff(actor, ctx.params.id, body), 201));
+    router.post('/api/names/debts/:id/settle', (ctx) => asAdmin(ctx, (actor, body) => settleByPayment(actor, ctx.params.id, body)));
     router.post('/api/names/confirmations', (ctx) => asAdmin(ctx, (actor, body) => confirmMember(actor, body), 201));
     router.post('/api/names/confirmations/:id/second', (ctx) => asAdmin(ctx, (actor) => secondConfirmation(actor, ctx.params.id)));
     router.post('/api/names/confirmations/:id/revoke', (ctx) => asAdmin(ctx, (actor) => revokeConfirmation(actor, ctx.params.id)));

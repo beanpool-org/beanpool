@@ -2,6 +2,7 @@
  * Community Commons, Crowdfund Projects, and Community Decision routes.
  */
 
+import { repaymentOf } from '../engine/names-debts.js';
 import Router from '@koa/router';
 import {
     createProject, updateProject, deleteProject,
@@ -12,6 +13,7 @@ import {
     castDecisionVote, tallyDecision,
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
     checkProposalStanding, isNodeMember,
+    payToCommons,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { FEATURE_OFF } from '../config/node-profile.js';
@@ -41,6 +43,31 @@ export function createCommonsRoutes(deps: RouteDeps): Router {
 
 router.get('/api/commons/balance', async (ctx) => {
     ctx.body = { balance: getCommonsBalance() };
+});
+
+// Paying back a debt (community modes slice 5, design §4.2 (a)): a member sends Beans they hold to the Commons; an admin
+// links the payment to the debt record (POST /api/names/debts/:id/settle). Only what they hold: never into debt.
+router.post('/api/commons/pay', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) { ctx.status = 401; ctx.body = { error: 'A signed request is required' }; return; }
+    const { amount } = (ctx as any).requestBody || {};
+    try {
+        const txn = payToCommons(actor, amount);
+        ctx.body = { transactionId: txn.id, amount: txn.amount };
+    } catch (e: any) {
+        ctx.status = typeof e?.status === 'number' ? e.status : 400;
+        ctx.body = { error: e?.message || 'Could not pay the Commons' };
+    }
+});
+
+// A member working off a debt reads why their incoming Beans go to the Commons: what is owed and what is repaid. Their own
+// only; no entry, no name.
+router.get('/api/commons/repayment', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) { ctx.status = 401; ctx.body = { error: 'A signed request is required' }; return; }
+    ctx.set('Cache-Control', 'no-store');
+    const r = repaymentOf(actor.toLowerCase());
+    ctx.body = { repayment: r ? { amount: r.amount, repaid: r.repaid, left: Math.round((r.amount - r.repaid) * 100) / 100 } : null };
 });
 
 router.get('/api/commons/projects', async (ctx) => {

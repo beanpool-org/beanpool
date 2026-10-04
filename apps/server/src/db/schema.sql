@@ -1603,6 +1603,31 @@ CREATE TABLE IF NOT EXISTS confirmations (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_member ON confirmations(member_pubkey) WHERE revoked_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_entry ON confirmations(entry_id) WHERE revoked_at IS NULL;
 
+-- Debts and a second chance (community modes slice 5, engine/names-debts.ts): a confirmed member who left in debt. The
+-- debt went to the Commons when they left; this says so, on the entry (by id only: the names are sealed). While `open`, no
+-- key is confirmed against the entry. Settled by a payment to the Commons (`settle_ref` the transaction), worked off
+-- (`repaying_pubkey`: every Bean above 0 they receive goes to the Commons until `repaid` reaches `amount`), or forgiven by
+-- a community Decision (`settle_ref` the Decision). Each record goes 3 years after `removed_at`, whatever its status.
+CREATE TABLE IF NOT EXISTS names_debts (
+    id               TEXT PRIMARY KEY,
+    entry_id         TEXT NOT NULL,
+    amount           REAL NOT NULL CHECK (amount > 0),
+    reason           TEXT NOT NULL CHECK (reason IN ('removed', 'account_deleted')),
+    removed_at       DATETIME NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'settled', 'forgiven')),
+    repaying_pubkey  TEXT,
+    repaid           REAL NOT NULL DEFAULT 0,
+    settled_how      TEXT CHECK (settled_how IS NULL OR settled_how IN ('pay_back', 'work_off', 'forgiven')),
+    settled_by       TEXT,
+    settled_at       DATETIME,
+    settle_ref       TEXT,
+    note             TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_names_debts_entry ON names_debts(entry_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_names_debts_repaying ON names_debts(repaying_pubkey) WHERE status = 'open' AND repaying_pubkey IS NOT NULL;
+
 -- The known floor (community modes slice 4, config/known-floor.ts): an admin's exception for one member's known grant.
 -- `amount` replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
 -- it 0. Lowering never takes Beans back: a member below their new floor is spend-frozen until they climb back.

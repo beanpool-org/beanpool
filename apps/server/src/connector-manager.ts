@@ -20,6 +20,8 @@ import { sendHandshake } from './handshake.js';
 import { errorMessage } from './error-message.js';
 import { pruneTombstones as pruneExpiredTombstones, TOMBSTONE_RETENTION_DAYS } from './db/db.js';
 import { logger } from './logger.js';
+import { getNodeRole } from './config/node-role.js';
+import { sweepExpiredDebts } from './engine/names-debts.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -319,6 +321,10 @@ export function initConnectorManager(node: Libp2p): void {
     // Daily-ish tombstone GC: drop tombstones older than the retention.
     pruneTombstones();
     setInterval(pruneTombstones, 24 * 60 * 60 * 1000);
+    // A departed member's debt record goes 3 years after they left (engine/names-debts.ts), on a main server.
+    const sweepDebts = () => { try { if (getNodeRole() === 'primary') sweepExpiredDebts(); } catch (e) { console.error('[NamesDebts] sweep failed:', e); } };
+    sweepDebts();
+    setInterval(sweepDebts, 24 * 60 * 60 * 1000);
 
     // Auto‑connect enabled connectors on boot
     if (connectors.some(c => c.enabled)) {

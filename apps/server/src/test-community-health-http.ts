@@ -193,6 +193,8 @@ async function main(): Promise<void> {
         `Kimberly, confirmed and consenting, 600 past half her floor, is listed by key and entry id (${show(ex)})`);
     assert(byKey.get(lea.pk)?.reasons?.join() === 'quiet_in_debit' && byKey.get(lea.pk)?.entryId === leaEntry,
         'Leander, 100 in debit with no sale in 60 days, is listed as quiet');
+    assert((ex.body?.exceptions ?? []).every((e: any) => Object.keys(e).sort().join() === 'balance,entryId,floor,memberPubkey,reasons'),
+        `an exception says only which line was crossed: no trade fact (a last sale) on the wire (${show(ex)})`);
     assert(!byKey.has(una.pk), 'Unaleigh, confirmed but never consenting, is not listed');
     assert(!byKey.has(ugo.pk), 'Ugolino, consenting but never confirmed, is not listed');
     assert(!byKey.has(rex.pk), 'Rexford, whose confirmation was revoked, is not listed');

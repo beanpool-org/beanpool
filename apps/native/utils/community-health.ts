@@ -13,7 +13,6 @@ export interface HealthException {
     balance: number;
     floor: number;
     reasons: HealthReason[];
-    lastSaleAt: string | null;
 }
 
 /** An open debt a member left behind (#1597), by the entry id of their names-list entry. */

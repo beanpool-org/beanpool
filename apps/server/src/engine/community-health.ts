@@ -134,7 +134,6 @@ function consentOf(pubkey: string): { consented_at: string; version: string } | 
 
 export interface HealthException {
     memberPubkey: string; entryId: string; balance: number; floor: number; reasons: Array<'past_debt_line' | 'quiet_in_debit'>;
-    lastSaleAt: string | null;
 }
 
 /**
@@ -169,7 +168,8 @@ export function openExceptions(actor: string, now = Date.now()) {
         const saleAt = (lastSale.get(r.member_pubkey) as { at: string | null }).at;
         // Quiet: no sale since the window opened, and confirmed before it opened (a new member has had no chance yet).
         if ((!saleAt || saleAt < quietSince) && r.confirmed_at < quietSince) reasons.push('quiet_in_debit');
-        if (reasons.length) exceptions.push({ memberPubkey: r.member_pubkey, entryId: r.entry_id, balance: b.balance, floor, reasons, lastSaleAt: saleAt });
+        // Only which line was crossed: never a trade fact (when the last sale was), which the member did not agree to show.
+        if (reasons.length) exceptions.push({ memberPubkey: r.member_pubkey, entryId: r.entry_id, balance: b.balance, floor, reasons });
     }
     const departed = listDebts().filter(d => d.status === 'open')
         .map(d => ({ id: d.id, entryId: d.entry_id, amount: d.amount, reason: d.reason, removedAt: d.removed_at, repaid: d.repaid, repaying: !!d.repaying_pubkey }));

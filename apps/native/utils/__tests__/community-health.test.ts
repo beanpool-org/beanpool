@@ -8,8 +8,8 @@ const entries = [
 const BODY: HealthExceptionsBody = {
     settings: { debtLinePct: 50, quietDays: 60 },
     exceptions: [
-        { memberPubkey: 'k1', entryId: 'e1', balance: -120, floor: 200, reasons: ['past_debt_line', 'quiet_in_debit'], lastSaleAt: null },
-        { memberPubkey: 'k2', entryId: 'e2', balance: -20, floor: 200, reasons: ['quiet_in_debit'], lastSaleAt: null },
+        { memberPubkey: 'k1', entryId: 'e1', balance: -120, floor: 200, reasons: ['past_debt_line', 'quiet_in_debit'] },
+        { memberPubkey: 'k2', entryId: 'e2', balance: -20, floor: 200, reasons: ['quiet_in_debit'] },
     ],
     departed: [{ id: 'd1', entryId: 'e1', amount: 80, reason: 'removed', removedAt: '2026-10-01T00:00:00Z', repaid: 30, repaying: true }],
 };

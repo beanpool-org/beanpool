@@ -234,6 +234,8 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
             replay: res.replay,
             expired: res.expired,
             revoked: res.revoked,
+            // Whose link it was (only to the holder of the token): /settings compares it with any sign-in still live here.
+            mintedFor: res.mintedFor,
         };
         return;
     }
@@ -437,6 +439,8 @@ router.get('/api/local/admin/auth/session', async (ctx) => {
                 authenticated: true,
                 isKeySession: true,
                 memberPubkey: res.session.memberPubkey,
+                // Whose session, in words: /settings names it when a link from the phone finds someone else signed in.
+                callsign: getMember(res.session.memberPubkey)?.callsign ?? null,
                 role: res.session.role,
                 sessionEpoch: res.session.sessionEpoch,
                 hardExpiresAt: res.session.hardExpiresAt,

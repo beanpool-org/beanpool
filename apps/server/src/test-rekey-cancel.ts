@@ -16,7 +16,7 @@
  *     made it) and nothing changes; the owner can, and the admin signs in again; an admin cancels a code they made.
  *  C. The live incident: a completed re-key, its code refused; opening the wizard on the new key (the status read)
  *     makes nothing; a code made against the new key, then cancelled: the member ends active on the new key.
- *  D. An expired code is refused, and the member is left as the code left them.
+ *  D. An expired code is refused, and the member is left as the code left them; a new code, cancelled, frees them.
  *  E. A code made before the prior status was kept puts a re-key-suspended member back to active, and says so.
  *  F. A member suspended by an admin ('disabled') stays so; two codes in a row put back the status before the first.
  *  G. A write that would touch an unexpected row changes nothing: the key freed meanwhile, the cancel is refused.
@@ -224,6 +224,12 @@ async function runTests() {
         assert(r.status === 409 && /expired/.test(r.json.error), `D: an expired code can’t be cancelled (${r.status} ${r.json.error})`);
         assert(latestRequest(pia.pubKeyHex)?.status === 'expired' && heldReason(pia.pubKeyHex) === 'rekey_pending'
             && getMember(pia.pubKeyHex)?.status === 'suspended', 'D: the member is left as the code left them');
+        // The way out the guide gives: a new code, then cancel it. It puts back the status before the first code.
+        const again = await issue(ownerSession, pia.pubKeyHex);
+        assert(again.status === 200 && latestRequest(pia.pubKeyHex)?.prior_status === 'active', `D: a new code keeps the status before the expired one (${again.status})`);
+        const out = await cancel(ownerSession, pia.pubKeyHex);
+        assert(out.status === 200 && getMember(pia.pubKeyHex)?.status === 'active' && heldReason(pia.pubKeyHex) === undefined,
+            `D: cancelling it puts Pia back to active, her key free (${out.status} ${getMember(pia.pubKeyHex)?.status})`);
     }
 
     // ── E. A code made before the prior status was kept ─────────────────────────────────────

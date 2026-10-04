@@ -24,7 +24,8 @@
  *   ADMIN_PASSWORD
  *                Legacy, in place of BEANPOOL_TOKEN: the primary's admin password, from the environment (an
  *                argument shows in `ps`). Used ONCE, in memory. It is NEVER written to this machine: a standby
- *                that kept it held the main server's admin password in plain text.
+ *                that kept it held the main server's admin password in plain text. On a current primary (sign-in
+ *                step 7c) the password alone opens nothing, with two-factor sign-in on or off: use BEANPOOL_TOKEN.
  *   --admin-pw   The same password as an argument, as before. It still works, with a warning: an argument
  *                shows in `ps`. ADMIN_PASSWORD wins when both are set.
  *   BACKUP_REPLICATION_TOKEN
@@ -87,15 +88,25 @@ function die(msg) {
     process.exit(1);
 }
 
+/** The way out when a current primary refuses the password path, which it always does now (sign-in step 7c). */
+const PASSWORD_PATH_NEEDS_TOKEN = 'The password path needs a token now: set BEANPOOL_TOKEN (an owner\'s automation token, read or admin ' +
+    'scope, from Settings → Automation tokens) and the primary\'s replication token in BACKUP_REPLICATION_TOKEN, and stop using ' +
+    'ADMIN_PASSWORD and --admin-pw here. The password alone works only on a primary older than sign-in step 7c.';
+
 /**
- * Sign-in step 7c: a primary with two-factor sign-in off refuses the admin password sent with a request (403
- * password_needs_2fa). Its words and the way out, or null for any other answer.
+ * Sign-in step 7c: a current primary refuses the admin password this script sends, whether it is right or not. With
+ * two-factor sign-in off it answers 403 password_needs_2fa; with it on, 401 totpRequired, and this script sends no code,
+ * so it can never pass. (That 401 used to print "Check ADMIN_PASSWORD." with the right password, and the 403's hint to
+ * turn two-factor on led straight to it: #1575 review.) Its words and the way out, or null for any other answer.
  */
-function passwordNeeds2faHint(status, body) {
-    if (status !== 403 || body?.code !== 'password_needs_2fa') return null;
-    return `${body.error || 'The primary refused the admin password.'}\n` +
-        'The password alone opens nothing there: turn on two-factor sign-in on the primary, or set BEANPOOL_TOKEN ' +
-        '(an owner\'s automation token, read or admin scope) and the primary\'s replication token in BACKUP_REPLICATION_TOKEN.';
+function passwordPathRefusal(status, body) {
+    if (status === 403 && body?.code === 'password_needs_2fa') {
+        return `${body.error || 'The primary refused the admin password.'}\n${PASSWORD_PATH_NEEDS_TOKEN}`;
+    }
+    if (status === 401 && body?.totpRequired) {
+        return `The primary has two-factor sign-in on, and this script sends no code, so the password path cannot pass there.\n${PASSWORD_PATH_NEEDS_TOKEN}`;
+    }
+    return null;
 }
 
 /**
@@ -151,7 +162,7 @@ async function mintTokenIfNone(primary, adminPw) {
             body: JSON.stringify({ password: adminPw }),
         });
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) die(`Primary refused ${p} (HTTP ${res.status}). ${passwordNeeds2faHint(res.status, body) ?? (body?.totpRequired ? 'Two-factor sign-in is on: make a token in Settings → Replication Access and set it in BACKUP_REPLICATION_TOKEN.' : '')}`);
+        if (!res.ok) die(`Primary refused ${p} (HTTP ${res.status}). ${passwordPathRefusal(res.status, body) ?? ''}`);
         return body;
     };
     const status = await post('/api/local/admin/replication-token/status');
@@ -225,7 +236,8 @@ async function main() {
             const body = await res.text().catch(() => '');
             let parsed = null;
             try { parsed = JSON.parse(body); } catch { /* not JSON: printed as it came */ }
-            die(`Primary returned HTTP ${res.status}. ${res.status === 401 ? (automationToken ? 'Check BEANPOOL_TOKEN (revoked or expired?).' : `Check ${adminPwName}.`) : (passwordNeeds2faHint(res.status, parsed) ?? body)}`);
+            const refusal = automationToken ? null : passwordPathRefusal(res.status, parsed);
+            die(`Primary returned HTTP ${res.status}. ${refusal ?? (res.status === 401 ? (automationToken ? 'Check BEANPOOL_TOKEN (revoked or expired?).' : `Check ${adminPwName}.`) : body)}`);
         }
         bundle = await res.json();
     } catch (e) {

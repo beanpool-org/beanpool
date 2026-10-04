@@ -279,7 +279,9 @@ export async function buildSignedWsParams(
     assertPlainNodeAddress(wsUrl);
     if (!audienceOf(wsUrl)) throw new Error(`Cannot sign a socket for ${JSON.stringify(wsUrl)}: pass the full URL opened`);
     const sign = memberSigner(privateKeyHex);
-    return await requestSigningFormatFor(wsUrl) === 2
+    // Read the node's info first when this phone hasn't heard from it: a socket an old server refuses (401) can't be
+    // signed again the way an HTTP request is (request-signing-version.ts).
+    return await requestSigningFormatFor(wsUrl, { readInfoFirst: true }) === 2
         ? buildBoundWsParams({ wsUrl, publicKeyHex, sign, nonce: freshNonce() })
         : unboundWsParams(wsUrl, publicKeyHex, sign);
 }

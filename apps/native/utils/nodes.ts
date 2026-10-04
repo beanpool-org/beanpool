@@ -6,6 +6,7 @@ import { SAVED_NODES_STORE_KEY } from './storage-keys';
 import { assertPlainNodeAddress, isPlainNodeAddress, plainOriginOf } from './node-url';
 import {
     hydrateRequestSigning, knownRequestSigning, ratchetedRequestSigning, rememberRequestSigning, requestSigningOf,
+    setRequestSigningKeeper,
 } from './request-signing-version';
 
 export interface SavedNode {
@@ -73,6 +74,11 @@ export async function addSavedNode(url: string, alias?: string, currencyType?: '
 export async function recordRequestSigning(url: string, infoBody: unknown): Promise<void> {
     const version = requestSigningOf(infoBody);
     if (version === null) return;
+    await keepRequestSigning(url, version);
+}
+
+/** `recordRequestSigning` for a version already read: what request-signing-version.ts learns on its own goes here. */
+async function keepRequestSigning(url: string, version: number): Promise<void> {
     const host = rememberRequestSigning(url, version);
     if (!host) return;
     try {
@@ -91,6 +97,8 @@ export async function recordRequestSigning(url: string, infoBody: unknown): Prom
         // Kept in memory for this run; asked again on the next.
     }
 }
+
+setRequestSigningKeeper(keepRequestSigning);
 
 /** Load each saved node's recorded request-signing answer into memory (app start, utils/node-request-signing.ts). */
 export function loadSavedRequestSigning(): Promise<void> {

@@ -871,7 +871,6 @@ async function main(): Promise<void> {
             ['an id that is not one', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good('__proto__') }],
             ['a count out of range', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"fails":0', '"fails":-1') }],
             ['a table that is not copied', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"differs":[]', '"differs":["sqlite_master"]') }],
-            ['free text for a reason', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"why":null', '"why":"call +61 555 0100"') }],
             ['a "mending" that is not a yes or no', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"healing":false', '"healing":"yes"') }],
             ['the admin password, not the token', { 'X-Admin-Password': PW_MAIN, 'X-Standby-Report': good(newIdHex()) }],
         ];
@@ -898,6 +897,22 @@ async function main(): Promise<void> {
         const forgotAgain = await api(m, 'POST', '/api/local/admin/standby-health/forget', { admin: mOwner, body: { id: second } });
         assert(forgot.status === 200 && !(await standbysNow()).includes(second) && forgotAgain.status === 404,
             `the owner stops watching it from Settings (${forgot.status}; again ${forgotAgain.status})`);
+        // A reason M doesn't know (free text, or a newer standby's code) is none: the report is kept, the words never are.
+        const freeText = newIdHex();
+        const freeTextPull = await deltaWith({ 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(freeText).replace('"why":null', '"why":"call +61 555 0100"') });
+        const freeTextState = await main.send('health');
+        const freeTextSeen = freeTextState?.state.standbys?.find((x: any) => x.id === freeText);
+        assert(freeTextPull.status === 200 && freeTextSeen && freeTextSeen.lastWhy === null && !JSON.stringify(freeTextState).includes('555 0100'),
+            `a report with free text for a reason is kept with no reason, and the text is kept nowhere (${brief(freeTextSeen)})`);
+        // A newer standby's refused redirect: `why` says network, for main servers older than the code; `whyDetail` has it.
+        const newer = newIdHex();
+        const newerReport = good(newer).replace('"last":"ok","why":null', '"last":"refused","why":"network","whyDetail":"redirect:other.example"');
+        const newerPull = await deltaWith({ 'X-Replication-Token': replicationToken, 'X-Standby-Report': newerReport });
+        const newerSeen = (await main.send('health'))?.state.standbys?.find((x: any) => x.id === newer);
+        assert(newerReport.includes('whyDetail') && newerPull.status === 200 && newerSeen?.lastWhy === 'redirect:other.example' && newerSeen?.lastOutcome === 'refused',
+            `a newer standby's redirect, in whyDetail, is read with its host (${brief(newerSeen)})`);
+        for (const id of [freeText, newer]) await api(m, 'POST', '/api/local/admin/standby-health/forget', { admin: mOwner, body: { id } });
+        assert(JSON.stringify(await standbysNow()) === JSON.stringify(known), `and the owner stops watching both (${brief(await standbysNow())})`);
 
         // ── 6. A take-over from a copy that didn't match ──
         console.log('\n— 6. the main server dies; a take-over from the copy that did not match —');

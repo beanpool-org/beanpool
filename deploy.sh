@@ -330,6 +330,12 @@ for NODE in "${TARGETS[@]}"; do
     # off between the wipe and the extract, the old container was left running.
     (
       cd $PROJECT_DIR 2>/dev/null || cd $HOME_DIR
+      # docker stop first: SIGTERM, so the node closes its database and marks the stop clean (engine/shutdown-recovery.ts),
+      # with 20 s before Docker kills it. rm -f alone is SIGKILL, and every deploy showed owners "The node restarted after an
+      # unclean shutdown" (measured on mullum and test, 2026-10-04).
+      sudo docker stop -t 20 $PROJ_NAME-beanpool-node-1 >/dev/null 2>&1 || true
+      sudo docker stop -t 20 beanpool-$PROJ_NAME-beanpool-node-1 >/dev/null 2>&1 || true
+      sudo docker stop -t 20 beanpool-beanpool-$NAME-beanpool-node-1 >/dev/null 2>&1 || true
       sudo docker rm -f $PROJ_NAME-beanpool-node-1 2>/dev/null || true
       sudo docker rm -f beanpool-$PROJ_NAME-beanpool-node-1 2>/dev/null || true
       sudo docker rm -f beanpool-beanpool-$NAME-beanpool-node-1 2>/dev/null || true

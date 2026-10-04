@@ -32,7 +32,7 @@ async function standIn(routes) {
 function runScript(primary, dataDir) {
     const env = { ...process.env };
     delete env.BEANPOOL_TOKEN;
-    delete env.BEANPOOL_REPLICATION_TOKEN;
+    delete env.BACKUP_REPLICATION_TOKEN;
     return new Promise((resolve) => {
         execFile(process.execPath, [SCRIPT, '--primary', primary, '--admin-pw', 'pw-only', '--data-dir', dataDir], { env, timeout: 20_000 },
             (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }));
@@ -76,7 +76,7 @@ test('a wrong password at the enrolment bundle: still "Check --admin-pw"', async
     }
 });
 
-// The replication token from the environment (BEANPOOL_REPLICATION_TOKEN), not argv: argv shows in `ps` (#1550 review).
+// The replication token from the environment (BACKUP_REPLICATION_TOKEN), not argv: argv shows in `ps` (#1550 review).
 const AUTOMATION = `bp_${'a'.repeat(12)}_${'b'.repeat(64)}`;
 const REPLICATION = 'rep-token-0123456789abcdef';
 const ENROLL = { communityId: 'c1', genesis: { communityId: 'c1' }, primaryPeerId: '12D3KooWStandIn', primaryUrl: 'http://localhost' };
@@ -84,7 +84,7 @@ const ENROLL = { communityId: 'c1', genesis: { communityId: 'c1' }, primaryPeerI
 /** Runs the script with BEANPOOL_TOKEN and `envExtra`, the data dir one level down so .env lands in the temp dir. */
 function runWithToken(primary, root, args, envExtra) {
     const env = { ...process.env, BEANPOOL_TOKEN: AUTOMATION, ...envExtra };
-    if (!('BEANPOOL_REPLICATION_TOKEN' in envExtra)) delete env.BEANPOOL_REPLICATION_TOKEN;
+    if (!('BACKUP_REPLICATION_TOKEN' in envExtra)) delete env.BACKUP_REPLICATION_TOKEN;
     return new Promise((resolve) => {
         execFile(process.execPath, [SCRIPT, '--primary', primary, '--data-dir', path.join(root, 'data'), ...args], { env, timeout: 20_000 },
             (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }));
@@ -92,7 +92,7 @@ function runWithToken(primary, root, args, envExtra) {
 }
 
 for (const [label, args, envExtra, warns] of [
-    ['from BEANPOOL_REPLICATION_TOKEN', [], { BEANPOOL_REPLICATION_TOKEN: REPLICATION }, false],
+    ['from BACKUP_REPLICATION_TOKEN', [], { BACKUP_REPLICATION_TOKEN: REPLICATION }, false],
     ['from --token, as before, with a warning that argv shows in ps', ['--token', REPLICATION], {}, true],
 ]) {
     test(`the replication token ${label}: written to .env, never printed`, async () => {
@@ -118,7 +118,7 @@ test('with BEANPOOL_TOKEN and no replication token: it stops before anything is 
     try {
         const { code, out } = await runWithToken(primary.url, root, [], {});
         assert.notEqual(code, 0, out);
-        assert.ok(out.includes('BEANPOOL_REPLICATION_TOKEN'), out);
+        assert.ok(out.includes('BACKUP_REPLICATION_TOKEN'), out);
         assert.ok(!fs.existsSync(path.join(root, '.env')), 'nothing written');
     } finally {
         await primary.close();

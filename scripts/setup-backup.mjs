@@ -12,8 +12,8 @@
  * State only ever flows primary → backup. The primary imports from nobody.
  *
  * Usage:
- *   BEANPOOL_TOKEN='bp_…' BEANPOOL_REPLICATION_TOKEN='<replication token>' node scripts/setup-backup.mjs --primary <https url> [--data-dir <path>]
- *   node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--data-dir <path>]   (legacy; BEANPOOL_REPLICATION_TOKEN optional)
+ *   BEANPOOL_TOKEN='bp_…' BACKUP_REPLICATION_TOKEN='<replication token>' node scripts/setup-backup.mjs --primary <https url> [--data-dir <path>]
+ *   node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--data-dir <path>]   (legacy; BACKUP_REPLICATION_TOKEN optional)
  *
  *   BEANPOOL_TOKEN  An owner's automation token for the primary, read or admin scope (Settings → Automation
  *                tokens, made by an owner signed in with their key). From the environment only, never an
@@ -24,7 +24,7 @@
  *   --admin-pw   Legacy, in place of BEANPOOL_TOKEN: the primary's admin password. Used ONCE, in memory. It
  *                is NEVER written to this machine: a standby that kept it held the main server's admin
  *                password in plain text.
- *   BEANPOOL_REPLICATION_TOKEN
+ *   BACKUP_REPLICATION_TOKEN
  *                The primary's replication token (Settings → Replication Access), written to
  *                .env as BACKUP_REPLICATION_TOKEN; the standby copies with it. From the environment:
  *                it reads the whole ledger, and arguments show in `ps`. Required with
@@ -33,11 +33,11 @@
  *                made if it has none; if it already has one, give it (a new one would cut off any
  *                standby already using it).
  *   --token      The same replication token as an argument, as before. It still works, with a warning:
- *                an argument shows in `ps`. BEANPOOL_REPLICATION_TOKEN wins when both are set.
+ *                an argument shows in `ps`. BACKUP_REPLICATION_TOKEN wins when both are set.
  *   --data-dir   Optional. The node's data directory. Default: ./data
  *
  * Example:
- *   BEANPOOL_TOKEN='bp_…' BEANPOOL_REPLICATION_TOKEN='<token>' node scripts/setup-backup.mjs --primary https://test.beanpool.org
+ *   BEANPOOL_TOKEN='bp_…' BACKUP_REPLICATION_TOKEN='<token>' node scripts/setup-backup.mjs --primary https://test.beanpool.org
  *
  * After it finishes, set NODE_ROLE=backup is written to a sibling .env — then
  * RESTART the node. On next boot it generates a fresh PeerId, rebuilds state.db,
@@ -92,7 +92,7 @@ function passwordNeeds2faHint(status, body) {
     if (status !== 403 || body?.code !== 'password_needs_2fa') return null;
     return `${body.error || 'The primary refused the admin password.'}\n` +
         'The password alone opens nothing there: turn on two-factor sign-in on the primary, or set BEANPOOL_TOKEN ' +
-        '(an owner\'s automation token, read or admin scope) and the primary\'s replication token in BEANPOOL_REPLICATION_TOKEN.';
+        '(an owner\'s automation token, read or admin scope) and the primary\'s replication token in BACKUP_REPLICATION_TOKEN.';
 }
 
 /** Upsert a set of KEY=VALUE lines into an .env file, preserving other lines. */
@@ -134,13 +134,13 @@ async function mintTokenIfNone(primary, adminPw) {
             body: JSON.stringify({ password: adminPw }),
         });
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) die(`Primary refused ${p} (HTTP ${res.status}). ${passwordNeeds2faHint(res.status, body) ?? (body?.totpRequired ? 'Two-factor sign-in is on: make a token in Settings → Replication Access and set it in BEANPOOL_REPLICATION_TOKEN.' : '')}`);
+        if (!res.ok) die(`Primary refused ${p} (HTTP ${res.status}). ${passwordNeeds2faHint(res.status, body) ?? (body?.totpRequired ? 'Two-factor sign-in is on: make a token in Settings → Replication Access and set it in BACKUP_REPLICATION_TOKEN.' : '')}`);
         return body;
     };
     const status = await post('/api/local/admin/replication-token/status');
     if (status.hasToken) {
-        die('The primary already has a replication token, and it shows a token only once. If you saved it when it was made, set it in BEANPOOL_REPLICATION_TOKEN.\n' +
-            'If not, make a new one in Settings → Replication Access, paste it into every standby of that primary, and set it here in BEANPOOL_REPLICATION_TOKEN.\n' +
+        die('The primary already has a replication token, and it shows a token only once. If you saved it when it was made, set it in BACKUP_REPLICATION_TOKEN.\n' +
+            'If not, make a new one in Settings → Replication Access, paste it into every standby of that primary, and set it here in BACKUP_REPLICATION_TOKEN.\n' +
             '(This script will not make one itself: that would cut off any standby already using the current one.)');
     }
     const gen = await post('/api/local/admin/replication-token/generate');
@@ -155,16 +155,16 @@ async function main() {
     const automationToken = process.env.BEANPOOL_TOKEN || null;
     const adminPw = typeof args['admin-pw'] === 'string' ? args['admin-pw'] : null;
     // The replication token from the environment first: it reads the whole ledger, and an argument shows in `ps`.
-    const envReplicationToken = process.env.BEANPOOL_REPLICATION_TOKEN?.trim() || null;
+    const envReplicationToken = process.env.BACKUP_REPLICATION_TOKEN?.trim() || null;
     const argReplicationToken = typeof args.token === 'string' ? args.token.trim() : null;
     let replicationToken = envReplicationToken || argReplicationToken;
-    if (argReplicationToken && envReplicationToken) console.log('  • BEANPOOL_REPLICATION_TOKEN is set: --token is not used.');
-    else if (argReplicationToken) console.warn('  ⚠️  --token shows in `ps` to anyone on this machine: set BEANPOOL_REPLICATION_TOKEN in the environment instead.');
+    if (argReplicationToken && envReplicationToken) console.log('  • BACKUP_REPLICATION_TOKEN is set: --token is not used.');
+    else if (argReplicationToken) console.warn('  ⚠️  --token shows in `ps` to anyone on this machine: set BACKUP_REPLICATION_TOKEN in the environment instead.');
     const dataDir = path.resolve(typeof args['data-dir'] === 'string' ? args['data-dir'] : './data');
 
     if (!primary || (!automationToken && !adminPw)) {
-        die('Usage: BEANPOOL_TOKEN=bp_... BEANPOOL_REPLICATION_TOKEN=<replication token> node scripts/setup-backup.mjs --primary <https url> [--data-dir <path>]\n' +
-            '   or (legacy): node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--data-dir <path>]   (BEANPOOL_REPLICATION_TOKEN optional)');
+        die('Usage: BEANPOOL_TOKEN=bp_... BACKUP_REPLICATION_TOKEN=<replication token> node scripts/setup-backup.mjs --primary <https url> [--data-dir <path>]\n' +
+            '   or (legacy): node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--data-dir <path>]   (BACKUP_REPLICATION_TOKEN optional)');
     }
     // Each credential checked before any request, in words that never repeat it (automation-token.mjs). The replication
     // token goes into .env as well as a header: a line break in it would add a line there.
@@ -173,9 +173,9 @@ async function main() {
     if (credentialProblem) die(`${credentialProblem}${automationToken ? ' (On the primary: read or admin scope.)' : ''}`);
     // Said now, before anything is fetched or written: the step that makes the primary's replication token is an owner's.
     if (automationToken && !replicationToken) {
-        die('With BEANPOOL_TOKEN, set the primary\'s replication token in BEANPOOL_REPLICATION_TOKEN.\n' +
+        die('With BEANPOOL_TOKEN, set the primary\'s replication token in BACKUP_REPLICATION_TOKEN.\n' +
             'Making one is an owner\'s change: no automation token can. An owner makes it on their phone or in Settings → Replication Access\n' +
-            '(signed in with their key), copies it once, and it goes here in BEANPOOL_REPLICATION_TOKEN (not --token: an argument shows in `ps`).');
+            '(signed in with their key), copies it once, and it goes here in BACKUP_REPLICATION_TOKEN (not --token: an argument shows in `ps`).');
     }
     if (automationToken && adminPw) console.log('  • BEANPOOL_TOKEN is set: --admin-pw is not sent.');
     // The token alone, or the password alone: never both.

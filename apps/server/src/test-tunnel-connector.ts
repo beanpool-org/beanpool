@@ -138,7 +138,8 @@ async function startRegistrar(): Promise<http.Server> {
             // of the registrar, or a promise of one (an answer held back).
             const answer = (out: any): void => void Promise.resolve(out).then((o) => {
                 if (o?.html) { res.writeHead(o.html[0], { 'Content-Type': 'text/html' }); return void res.end(o.html[1]); }
-                Array.isArray(o) ? send(o[0], o[1]) : send(200, o);
+                if (Array.isArray(o)) send(o[0], o[1]);
+                else send(200, o);
             });
             if (p === '/api/registrar/status') return answer(reg.status());
             if (p === '/api/registrar/claim') return answer(reg.claim(body));

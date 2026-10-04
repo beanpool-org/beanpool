@@ -54,16 +54,35 @@ const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? n : n.to
 // in the web bundle (the PWA mirrors core constants throughout). Keep in sync with core if the bands change.
 const OFFER_BANDS = [0, 200, 500, 1000, 1500, 2000];
 
+/**
+ * The offer ladder's numbers. `knownGrant` (a confirmed member in a known community, slice 4) is unlocked whole by one live
+ * offer; the rest of the limit keeps the bands. Mirrors @beanpool/core usableAllowance.
+ */
+export function offerLadder(floor: number, knownGrant = 0): { usableAt: (n: number) => number; offersForFull: number; rungs: number[] } {
+    const limit = Math.abs(floor);
+    const known = Math.max(0, Math.min(limit, knownGrant));
+    const other = limit - known;
+    const usableAt = (n: number) => {
+        const i = Math.max(0, Math.min(OFFER_BANDS.length - 1, Math.floor(n)));
+        return Math.min(limit, (i >= 1 ? known : 0) + Math.min(other, OFFER_BANDS[i]));
+    };
+    let offersForFull = OFFER_BANDS.length - 1;
+    for (let n = 0; n < OFFER_BANDS.length; n++) if (usableAt(n) >= limit) { offersForFull = n; break; }
+    const rungs = [...new Set(OFFER_BANDS.map((_, n) => usableAt(n)))].filter(b => b > 0 && b < limit);
+    return { usableAt, offersForFull, rungs };
+}
+
 interface Props {
     balance: number;
     floor: number;                 // earned credit LIMIT (deepest the floor could ever reach)
     usableFloor?: number;          // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
+    knownGrant?: number;           // the known floor's part of the limit: one live offer unlocks all of it
     liveOffers?: number;           // v3: current live-offer count (for the ladder caption)
     feeFreeMax?: number;
     className?: string;
 }
 
-export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFreeMax = 200, className = '' }: Props) {
+export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGrant = 0, feeFreeMax = 200, className = '' }: Props) {
     const pct = toPct(balance, floor);
     const overFeeFree = balance > feeFreeMax;
     const nearLimit = floor < 0 && balance - floor < Math.abs(floor) * 0.12;
@@ -80,14 +99,14 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
     const usablePct = toPct(uFloor, floor);                   // right edge of the unlocked (reachable) zone
     const floorPct = toPct(floor, floor);                     // left edge (earned limit)
     // Band rungs that fall within the earned limit (skip the outermost = the limit itself, and 0).
-    const rungs = showLadder ? OFFER_BANDS.filter(b => b > 0 && b < Math.abs(floor)).map(b => ({ b, pct: toPct(-b, floor) })) : [];
+    const ladder = offerLadder(floor, knownGrant);
+    const rungs = showLadder ? ladder.rungs.map(b => ({ b, pct: toPct(-b, floor) })) : [];
     // Next unlock = the next band above what you've unlocked, capped at your earned limit
     // (a 4th offer on a −1400 limit unlocks −1400, not −1500).
-    const nextBand = OFFER_BANDS.find(b => b > Math.abs(uFloor));
-    const nextUnlock = hasLocked && nextBand ? Math.min(nextBand, Math.abs(floor)) : undefined;
+    const nextDepth = ladder.usableAt(liveOffers + 1);
+    const nextUnlock = hasLocked && nextDepth > Math.abs(uFloor) ? nextDepth : undefined;
     // Total live Offers needed to unlock the FULL earned floor (band index, capped at 5).
-    const fullIdx = OFFER_BANDS.findIndex(b => b >= Math.abs(floor));
-    const offersForFull = fullIdx === -1 ? OFFER_BANDS.length - 1 : fullIdx;
+    const offersForFull = ladder.offersForFull;
 
     // Fee ladder — the monthly circulation-fee brackets above the fee-free ceiling. Opens up as the
     // balance climbs past halfway: revealT ramps 0→1 between feeFreeMax/2 and the ceiling, then

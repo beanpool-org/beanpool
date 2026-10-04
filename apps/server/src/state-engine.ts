@@ -2138,9 +2138,9 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
     const account = ledger.getAccount(publicKey);
-    const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
+    const { floor, tier, earnedCredit, activated, knownGrant } = getMemberTrustProfile(publicKey);
     const balance = Math.round(account.balance * 100) / 100;
     const liveOffers = liveOfferCount(publicKey);
     const isTreasury = !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury;
@@ -2150,6 +2150,8 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         balance,
         floor: effectiveFloor,
         usableFloor: uFloor,
+        // The known floor's part of the limit (community modes slice 4): one live offer unlocks all of it. 0 elsewhere.
+        knownGrant: isTreasury ? 0 : knownGrant,
         liveOffers,
         frozen: balance < uFloor,
         tier,

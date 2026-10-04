@@ -340,7 +340,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
             ) : (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
                     {/* The bar itself now carries the offer ladder (locked zone, rungs, unlock caption). */}
-                    <CreditBar balance={balance} floor={floor} usableFloor={usableFloor} liveOffers={liveOffers} />
+                    <CreditBar balance={balance} floor={floor} usableFloor={usableFloor} liveOffers={liveOffers} knownGrant={balanceInfo?.knownGrant ?? 0} />
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
                     {frozen && (
                         <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">

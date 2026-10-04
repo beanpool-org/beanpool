@@ -1830,7 +1830,16 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
     if (member.status !== 'disabled' && member.status !== 'suspended') return { success: false, status: 409, error: 'Member is not suspended' };
     if (member.status === 'suspended'
         && db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").get(subjectPubkey)) {
-        return { success: false, status: 409, error: 'Their key is held for a re-key: cancel the code on Re-Key first, then lift the suspension' };
+        // An expired code can't be cancelled (member-wizards.ts cancelRekeyCode): a new code over its hold can.
+        const latest = db.prepare('SELECT status, expires_at FROM rekey_requests WHERE old_pubkey = ? ORDER BY created_at DESC, id DESC LIMIT 1')
+            .get(subjectPubkey) as { status: string; expires_at: string } | undefined;
+        const ranOut = latest?.status === 'expired' || (latest?.status === 'pending' && new Date(latest.expires_at).getTime() < Date.now());
+        return {
+            success: false, status: 409,
+            error: ranOut
+                ? 'Their key is held for a re-key code that has run out: make a new code on Re-Key and cancel it, then lift the suspension if they are still suspended'
+                : 'Their key is held for a re-key: cancel the code on Re-Key first, then lift the suspension',
+        };
     }
     const pendingRemoval = db.prepare(
         "SELECT 1 FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"

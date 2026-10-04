@@ -232,6 +232,12 @@ async function runTests() {
         assert(r.status === 409 && /expired/.test(r.json.error), `D: an expired code can’t be cancelled (${r.status} ${r.json.error})`);
         assert(latestRequest(pia.pubKeyHex)?.status === 'expired' && heldReason(pia.pubKeyHex) === 'rekey_pending'
             && getMember(pia.pubKeyHex)?.status === 'suspended', 'D: the member is left as the code left them');
+        // Both refusals name the way out that works (review 4176372949): a new code, then cancel it.
+        assert(/make a new code/i.test(r.json.error ?? '') && /cancel it/.test(r.json.error ?? ''), `D: the cancel's refusal names the way out (${r.json.error})`);
+        const liftUnder = await as(ownerSession, 'POST', `/api/local/admin/users/${pia.pubKeyHex}/status`, { status: 'active' });
+        assert(liftUnder.status === 409 && /run out/.test(liftUnder.json.error ?? '') && /make a new code/i.test(liftUnder.json.error ?? '')
+            && getMember(pia.pubKeyHex)?.status === 'suspended',
+            `D: Lift suspension under the expired code's hold is refused and names the way out (${liftUnder.status} ${liftUnder.json.error})`);
         // The way out the guide gives: a new code, then cancel it. It puts back the status before the first code.
         const again = await issue(ownerSession, pia.pubKeyHex);
         assert(again.status === 200 && latestRequest(pia.pubKeyHex)?.prior_status === 'active', `D: a new code keeps the status before the expired one (${again.status})`);
@@ -395,6 +401,23 @@ async function runTests() {
             `H: not known: Lift suspension makes Lou active, as the answer says (${lu.status} ${JSON.stringify(lu.json)})`);
         const liftLog = db.prepare("SELECT COUNT(*) AS c FROM system_logs WHERE message LIKE ?").get(`Lifted the suspension of ${lou.pubKeyHex.slice(0, 12)}%`) as any;
         assert(liftLog.c === 1, `H: the lift is logged (${liftLog.c})`);
+
+        // A report's suspension under an expired code's hold (review 4176372949): the refusals name the way out, and it works.
+        const max = makeKeypair();
+        join(max, 'MaxExpiredHold');
+        await reportSuspends(max.pubKeyHex);
+        await issue(ownerSession, max.pubKeyHex);
+        db.prepare("UPDATE rekey_requests SET expires_at = ? WHERE old_pubkey = ?").run(new Date(Date.now() - 60_000).toISOString(), max.pubKeyHex);
+        const maxLift = await lift(max.pubKeyHex);
+        assert(maxLift.status === 409 && /run out/.test(maxLift.json.error ?? '') && /make a new code/i.test(maxLift.json.error ?? ''),
+            `H: Max: Lift suspension under the expired hold names the way out (${maxLift.status} ${maxLift.json.error})`);
+        const maxCancel = await cancel(ownerSession, max.pubKeyHex);
+        assert(maxCancel.status === 409 && /make a new code/i.test(maxCancel.json.error ?? ''), `H: Max: so does the cancel's (${maxCancel.json.error})`);
+        await issue(ownerSession, max.pubKeyHex);
+        const maxOut = await cancel(ownerSession, max.pubKeyHex);
+        const maxLifted = await lift(max.pubKeyHex);
+        assert(maxOut.status === 200 && maxOut.json.status === 'suspended' && maxLifted.status === 200 && getMember(max.pubKeyHex)?.status === 'active'
+            && await acts(max, 'lifted'), `H: Max: a new code, cancelled, then Lift suspension: he is active and acts (${maxOut.status} ${maxLifted.status})`);
 
         // A later action on the same report never lowers what the first recorded (review 4176372892): a report suspends
         // Rae, and the same report is actioned again without suspendUser (a takedown after the fact sends none).

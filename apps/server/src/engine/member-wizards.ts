@@ -533,7 +533,11 @@ export function cancelRekeyCode(
         db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(req.id);
         req.status = 'expired';
     }
-    if (req.status === 'expired') throw refusal(409, 'This code has expired, so it can’t be cancelled.');
+    // An expired code's hold stays until a new code replaces it (which inherits the status recorded before it), so the
+    // way out is that new code's cancel (review 4176372949).
+    if (req.status === 'expired') {
+        throw refusal(409, 'This code has expired, so it can’t be cancelled, and their key is still held for it. Make a new code on Re-Key, then cancel it: that frees their key and puts back their status from before the first code.');
+    }
     if (req.status !== 'pending') throw refusal(409, 'This code was already cancelled.');
 
     const nowIso = new Date().toISOString();

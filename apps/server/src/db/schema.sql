@@ -1628,6 +1628,25 @@ CREATE TABLE IF NOT EXISTS names_debts (
 CREATE INDEX IF NOT EXISTS idx_names_debts_entry ON names_debts(entry_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_names_debts_repaying ON names_debts(repaying_pubkey) WHERE status = 'open' AND repaying_pubkey IS NOT NULL;
 
+-- The Community health panel (community modes slice 6, engine/community-health.ts): every opening of the exceptions list,
+-- who and when (design §4.4, §7.1: the watchers are watched). Every owner and admin reads it; no member does.
+CREATE TABLE IF NOT EXISTS health_access_log (
+    id             TEXT PRIMARY KEY,
+    actor_pubkey   TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('exceptions_opened')),
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- A member's consent at joining a known community (design §4.4, §7.5): when, and which text (`version` = wording:debt
+-- line:days). Without a row, a member is in no exception. One row per member; consenting again replaces it.
+CREATE TABLE IF NOT EXISTS known_consents (
+    member_pubkey  TEXT PRIMARY KEY,
+    version        TEXT NOT NULL,
+    consented_at   DATETIME NOT NULL,
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- The known floor (community modes slice 4, config/known-floor.ts): an admin's exception for one member's known grant.
 -- `amount` replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
 -- it 0. Lowering never takes Beans back: a member below their new floor is spend-frozen until they climb back.

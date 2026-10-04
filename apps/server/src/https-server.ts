@@ -296,6 +296,8 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/version',
     '/api/community/info',
     '/api/community/health',
+    // The consent a known community asks for at joining (engine/community-health.ts): read before joining.
+    '/api/community/consent-terms',
     '/api/node/config',
     '/api/directory/info',
     '/api/commons/balance',          // the Commons pot, a community total: public on a local community (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT)

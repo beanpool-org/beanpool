@@ -30,9 +30,10 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
     // Asked before sign-in; the form shows meanwhile and whenever the answer is not "unclaimed" (useClaimState).
     const claim = useClaimState(resolveNodeApiUrl(nodeUrl, CLAIM_PATH));
     const [passwordFoldOpen, setPasswordFoldOpen] = useState(false);
-    // Design step 10: an owner retired this node's password (the claim check answers password: false), so no password
-    // field is drawn.
-    const passwordRetired = claim.kind === 'claimed' && claim.password === false;
+    // This server has no admin password (the claim check answers password: false), so no password field is drawn: a new
+    // install never had one (node sign-in step 8), or an owner retired it (design step 10; the answer says which).
+    const noPassword = claim.kind === 'claimed' && claim.password === false;
+    const passwordRetired = claim.kind === 'claimed' && claim.password === false && claim.retired === true;
     // If the operator has entered a password or submitted (an error shown, 2FA open, or in flight)
     // before the first claim check answers "unclaimed", start the fold open so their form and result stay visible.
     const wasUnclaimedRef = useRef(claim.kind === 'unclaimed');
@@ -196,10 +197,12 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
                         </details>
                     )}
                     </>
-                ) : passwordRetired ? (
-                    <div data-testid="password-retired-signin">
+                ) : noPassword ? (
+                    <div data-testid={passwordRetired ? 'password-retired-signin' : 'no-password-signin'}>
                         <p className="text-xs text-nature-300 mt-0 mb-4 leading-relaxed">
-                            This server has no admin password: an owner retired it. Sign in with the BeanPool app on your phone.
+                            {passwordRetired
+                                ? 'This server has no admin password: an owner retired it. Sign in with the BeanPool app on your phone.'
+                                : 'This server has no admin password. Owners and admins sign in with the BeanPool app on your phone.'}
                         </p>
                         {onKeySession
                             ? <PhoneSignIn onSignedIn={onKeySession} />

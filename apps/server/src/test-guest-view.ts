@@ -1283,7 +1283,7 @@ async function main(): Promise<void> {
             'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',
             'POST /api/local/admin/members/:pubkey/burst/remove',
             'POST /api/local/admin/members/:pubkey/offboard', 'GET /api/local/admin/members/:pubkey/offboard/preview',
-            'POST /api/local/admin/members/:pubkey/rekey/complete', 'POST /api/local/admin/members/:pubkey/rekey/issue-code',
+            'POST /api/local/admin/members/:pubkey/rekey/cancel', 'POST /api/local/admin/members/:pubkey/rekey/complete', 'POST /api/local/admin/members/:pubkey/rekey/issue-code',
             'GET /api/local/admin/members/:pubkey/rekey/status', 'POST /api/local/admin/members/:pubkey/unmute', 'GET /api/local/admin/members/muted',
             'GET /api/local/admin/node-roles', 'POST /api/local/admin/node-roles', 'DELETE /api/local/admin/node-roles/:pubkey/:role',
             'GET /api/local/admin/automation-tokens', 'POST /api/local/admin/automation-tokens', 'POST /api/local/admin/automation-tokens/:id/revoke',

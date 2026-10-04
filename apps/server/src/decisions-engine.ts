@@ -45,6 +45,7 @@ import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { isNodeOwner } from './engine/node-roles.js';
+import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { getProfileSwitches, BeansOffError, FeatureOffError, FEATURE_OFF, featureOffMessage, type ProfileSwitch } from './config/node-profile.js';
@@ -1736,6 +1737,9 @@ export interface EmergencySuspendResult {
  * as a new Decision. At its end the tick lifts it (executeDecision); an admin can lift it sooner as anywhere. A
  * moderator who wants the member kept out longer suspends them again, or removes the account. Its params carry
  * `noVote`, so it stays so if the switch goes back on before it ends (madeWithoutVote).
+ *
+ * A member whom only a re-key code holds suspended is not suspended by anyone (member-wizards.ts
+ * suspendedOnlyByRekeyCode): they can be suspended, and its 'disabled' outlasts the code's cancel or completion.
  */
 export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string): EmergencySuspendResult {
     assertPlainTablesWritable();
@@ -1750,7 +1754,9 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };
     if (member.isTreasury) return { success: false, status: 400, error: 'An enterprise account cannot be suspended this way' };
-    if (member.status !== 'active') return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
+    if (member.status !== 'active' && !(member.status === 'suspended' && suspendedOnlyByRekeyCode(subjectPubkey))) {
+        return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
+    }
     if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: "The node's only owner cannot be suspended" };
     if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
     // node_roles: only an owner may take away an owner's role, and suspending removes it. A plain admin
@@ -1810,13 +1816,31 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
 /**
  * An admin lifts a suspension by hand. An open "Keep this suspension?" vote about it has nothing left to
  * decide, so it closes as halted, with the lift recorded as the reason.
+ *
+ * It lifts a report's 'suspended' as well as an admin's or a Decision's 'disabled': a cancelled re-key code leaves a
+ * member a report may have suspended 'suspended', and tells the admin to lift it here (member-wizards.ts
+ * cancelRekeyCode). Not while a re-key code holds their key: its cancel decides their status, and a lift under it would
+ * be undone by the code (the code is cancelled first).
  */
 export function adminLiftSuspension(subjectPubkey: string, adminActor: string): { success: boolean; error?: string; status?: number } {
     assertPlainTablesWritable();
     if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can lift a suspension' };
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };
-    if (member.status !== 'disabled') return { success: false, status: 409, error: 'Member is not suspended' };
+    if (member.status !== 'disabled' && member.status !== 'suspended') return { success: false, status: 409, error: 'Member is not suspended' };
+    if (member.status === 'suspended'
+        && db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").get(subjectPubkey)) {
+        // An expired code can't be cancelled (member-wizards.ts cancelRekeyCode): a new code over its hold can.
+        const latest = db.prepare('SELECT status, expires_at FROM rekey_requests WHERE old_pubkey = ? ORDER BY created_at DESC, id DESC LIMIT 1')
+            .get(subjectPubkey) as { status: string; expires_at: string } | undefined;
+        const ranOut = latest?.status === 'expired' || (latest?.status === 'pending' && new Date(latest.expires_at).getTime() < Date.now());
+        return {
+            success: false, status: 409,
+            error: ranOut
+                ? 'Their key is held for a re-key code that has run out: make a new code on Re-Key and cancel it, then lift the suspension if they are still suspended'
+                : 'Their key is held for a re-key: cancel the code on Re-Key first, then lift the suspension',
+        };
+    }
     const pendingRemoval = db.prepare(
         "SELECT 1 FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
     ).get(subjectPubkey);

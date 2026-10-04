@@ -360,26 +360,37 @@ try:
     print(f"  [success] Saved updated .env (permissions 0600)")
 
     # Reset admin password lock in local-config.json if ADMIN_PASSWORD updated
+    password_not_set = False
     if "ADMIN_PASSWORD" in updates:
         cfg_path = os.path.join(project_dir, "data", "local-config.json")
         if os.path.exists(cfg_path):
-            import json
+            import json, time
             try:
                 with open(cfg_path, "r") as f:
                     cfg = json.load(f)
-                cfg["isLocked"] = False
-                # Keep this server's token-only setting. An unset flag reads as off, but the
-                # unlocked first-boot path would turn it ON (the new-install default) and
-                # refuse any standby still copying with the admin password.
-                if "replicationTokenOnly" not in cfg:
-                    cfg["replicationTokenOnly"] = False
-                cfg.pop("adminHash", None)
-                cfg.pop("salt", None)
-                cfg_tmp = f"{cfg_path}.tmp.{os.getpid()}"
-                with open(cfg_tmp, "w") as f:
-                    json.dump(cfg, f, indent=2)
-                os.replace(cfg_tmp, cfg_path)
-                print("  [admin-lock] Cleared isLocked in local-config.json for password rotation")
+                if not (cfg.get("adminHash") or cfg.get("joinedAt")):
+                    # A new install: it never had an admin password and ignores ADMIN_PASSWORD (initAdminPassword in
+                    # apps/server/src/config/local-config.ts). Nothing to rotate: its config is left alone, the run fails.
+                    password_not_set = True
+                    print("  [not set] ADMIN_PASSWORD: this server has no admin password to rotate (a new install), and it ignores ADMIN_PASSWORD. Owners sign in with the BeanPool app; to add one run `beanpool recover` on the server. Take ADMIN_PASSWORD out of this .env.", file=sys.stderr)
+                else:
+                    cfg["isLocked"] = False
+                    # joinedAt (when this server's password was set) tells the server this unlocked config is a
+                    # rotation, not a new install. A hash from a take-over or a sealed restore comes without it.
+                    if not cfg.get("joinedAt"):
+                        cfg["joinedAt"] = int(time.time() * 1000)
+                    # Keep this server's token-only setting. An unset flag reads as off, but the
+                    # unlocked first-boot path would turn it ON (the new-install default) and
+                    # refuse any standby still copying with the admin password.
+                    if "replicationTokenOnly" not in cfg:
+                        cfg["replicationTokenOnly"] = False
+                    cfg.pop("adminHash", None)
+                    cfg.pop("salt", None)
+                    cfg_tmp = f"{cfg_path}.tmp.{os.getpid()}"
+                    with open(cfg_tmp, "w") as f:
+                        json.dump(cfg, f, indent=2)
+                    os.replace(cfg_tmp, cfg_path)
+                    print("  [admin-lock] Cleared isLocked in local-config.json for password rotation")
             except Exception as e:
                 print(f"⚠️ Warning: Failed to reset admin lock in {cfg_path}: {e}", file=sys.stderr)
 finally:
@@ -394,7 +405,9 @@ if res.returncode != 0:
     sys.exit(res.returncode)
 
 print(f"  [restarted] beanpool-node container recreated successfully")
-if password_skipped:
+# Exit 3 when the node does not take ADMIN_PASSWORD: retired for good (password_skipped, checked first: it is never
+# written), or a new install that has none to rotate (password_not_set). The "[not set]" line above says which.
+if password_skipped or password_not_set:
     sys.exit(3)
 REMOTE_PYTHON
 )
@@ -411,8 +424,8 @@ REMOTE_PYTHON
   if [ $RC -eq 0 ]; then
     echo "✅ $N_NAME completed successfully."
   elif [ $RC -eq 3 ]; then
-    echo "⚠️ $N_NAME: ADMIN_PASSWORD was NOT set: this node's admin password is retired. Any other keys were set."
-    FAILED_NODES+=("$N_NAME (admin password retired: ADMIN_PASSWORD not set)")
+    echo "⚠️ $N_NAME: ADMIN_PASSWORD was NOT set: this node's admin password is retired, or it is a new install with none (its [not set] line above says which). Any other keys were set."
+    FAILED_NODES+=("$N_NAME (ADMIN_PASSWORD not set: retired, or a new install)")
   else
     echo "❌ $N_NAME failed with exit code $RC"
     FAILED_NODES+=("$N_NAME (code $RC)")

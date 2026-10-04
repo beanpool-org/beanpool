@@ -402,9 +402,11 @@ Written:        ${new Date().toISOString()}
 ${kitBackupCodes.map((c) => `  ${c}`).join('\n')}
 
 NOT IN THIS FILE
-- The admin password. It is the ADMIN_PASSWORD you set in .env, or the
-  one the server made up on first start, in data/first-admin-password.txt
-  until the password is changed.
+- The admin password, if this server has one. A server set up before
+  new installs stopped making one keeps its own: the ADMIN_PASSWORD set
+  in .env, or the one it made up, in data/first-admin-password.txt until
+  the password is changed. A newer server has none: owners and admins
+  sign in with the BeanPool app.
 - Owners' own keys. Each owner gets back into their account with the 12
   recovery words the BeanPool app showed them.
 

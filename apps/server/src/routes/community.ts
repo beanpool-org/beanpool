@@ -43,7 +43,7 @@ import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '.
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import {
-    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
+    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword, hasAdminPassword,
     validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
     isPasswordRetired,
 } from '../config/local-config.js';
@@ -123,7 +123,9 @@ router.get('/api/local/status', async (ctx) => {
     ctx.set('Access-Control-Allow-Origin', '*');
     
     ctx.body = {
-        isLocked: config.isLocked,
+        // Has an admin password: the hash (hasAdminPassword), never the lock alone. A take-over or a restore writes a hash
+        // unlocked, and one from a community with no password leaves an older server's lock with no hash behind it.
+        isLocked: hasAdminPassword(config),
         callsign: config.callsign || null,
         location: config.location || null,
         // Design step 10: an owner retired the admin password, so sign-in screens show no password field and the fleet
@@ -789,8 +791,8 @@ router.post('/api/local/reset', async (ctx) => {
         // A retired password stays retired: the next start must not take ADMIN_PASSWORD from .env again.
         ...(config.passwordRetired ? { passwordRetired: config.passwordRetired } : {}),
     });
-    // The admin password is gone (checked on disk, as in change-password). The next start takes ADMIN_PASSWORD from
-    // .env, or makes up a new one in a new file.
+    // The admin password is gone (checked on disk, as in change-password). joinedAt is cleared too, so the next start is
+    // a new install's: no admin password, ADMIN_PASSWORD ignored, a claim code if no owner is left (initAdminPassword).
     if (!getLocalConfig().adminHash) removeFirstPasswordFile('Wipe & Reset cleared the admin password');
 
     ctx.body = { success: true, message: 'Node reset. Restart to reconfigure.' };

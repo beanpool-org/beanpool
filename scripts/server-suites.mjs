@@ -17,6 +17,10 @@ export const DEFAULT_ENV = {
     ENABLE_PEER_CONNECTORS: 'true',
     // No test node asks GitHub for the latest release (its 30s timer fires in a slow run and trips the off-machine checks).
     DISABLE_UPDATE_CHECK: 'true',
+    // A new install makes no admin password and ignores ADMIN_PASSWORD (config/local-config.ts initAdminPassword). The
+    // suites that sign in with a password on a fresh data dir still get it from ADMIN_PASSWORD with this; the ones that
+    // check a new install (test-no-password-fresh-install, test-node-claim, test-first-admin-password) remove it.
+    BEANPOOL_SUITE_ENV_PASSWORD: '1',
 };
 
 /**
@@ -55,6 +59,7 @@ export const SUITES = [
     'test-activity-feed',
     'test-member-purge',
     'test-purge-during-rekey',
+    'test-rekey-cancel',
     'test-removed-member-delete',
     'test-keeper-deposit',
     'test-keeper-routes',
@@ -145,6 +150,7 @@ export const SUITES = [
     'test-admin-auth',
     'test-first-admin-password',
     'test-node-claim',
+    'test-no-password-fresh-install',
     'test-config-write-races',
     'test-admin-key-auth',
     'test-app-admin-handoff',

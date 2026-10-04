@@ -1,30 +1,32 @@
 /**
- * The first admin password never goes into the log.
+ * The first admin password never goes into the log, and a new install makes none.
  *
- * With no ADMIN_PASSWORD in .env, the first start makes one up. It used to print it in a box on stdout, which in
- * Docker IS the container log: the password stayed in `docker logs` (and any log shipper, support bundle or
- * screenshot) for the life of the container, and the admin password counts as an owner. Now it goes in
- * data/first-admin-password.txt (0600) and the log says only where it is and how to read it.
+ * With no ADMIN_PASSWORD in .env, a first start used to make one up and print it in a box on stdout, which in Docker IS
+ * the container log. Then it went in data/first-admin-password.txt (0600) and the log said only where it was. Since
+ * node sign-in step 8 a new install makes no password at all (its first owner claims it with the claim code), so that
+ * file is only on an older install that still has it: the cases from B on start from such an install's data folder
+ * (olderInstall), as that version left it.
  *
  * Each boot is its own process on its own data dir, booted in the order index.ts boots (genesis, the admin
  * password, TLS, the database, the real HTTPS server), and everything it prints on stdout and stderr is kept and
  * searched for the password. Sign-ins and the password change go over HTTP to the real routes.
  *
- *   A. First start, no ADMIN_PASSWORD: the file exists, 0600, holds a password that signs in; the password is in
- *      no line of the output; the output says where the file is.
- *   B. A later start with the file still there: the same password, not a new one; the log reminds, without it.
+ *   A. First start of a new install, no ADMIN_PASSWORD: no file, no password hash, and no password-shaped word in the
+ *      output signs in.
+ *   B. An older install's start with the file still there: the same password, not a new one; the log reminds, without it.
  *      Changing the password deletes the file at once, and the log says so.
  *   C. A start after the change: no file, no reminder, neither password printed.
- *   D. ADMIN_PASSWORD from .env: no file, nothing printed, it signs in.
- *   E. Wipe & Reset deletes the file; the next start makes a new password in a new file, printed nowhere.
+ *   D. ADMIN_PASSWORD from .env on a new install: no file, nothing printed, and it does not sign in (it is ignored).
+ *   E. Wipe & Reset deletes the file; the next start is a new install: no password, no file, the old one does not sign in.
  *   F. A file that no longer holds the admin password (a restore or a take-over replaced it) is deleted at boot.
- *   G. The file cannot be written: the server does not start, prints no password, locks nothing; the next start
- *      after the fix works.
+ *   G. A new install never writes the file: a folder in its place does not stop the start, and nothing is locked.
  *   H. A password change that never reached the disk is reported as a failure and keeps the file: it still holds the
- *      password that works. A first start whose config cannot be saved does not start, and leaves no file.
+ *      password that works. A first start whose config cannot be saved still starts (there is no password to save),
+ *      leaves no file and prints nothing shaped like a password.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-first-admin-password.ts
  */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -80,8 +82,10 @@ interface Boot {
 function boot(dataDir: string, env: Record<string, string | undefined> = {}): Promise<Boot | { exited: number | null; output: string }> {
     fs.mkdirSync(dataDir, { recursive: true });
     const childEnv: Record<string, string | undefined> = { ...process.env, BEANPOOL_DATA_DIR: dataDir, ...env };
-    // A first boot with no password in .env unless the case sets one; no Let's Encrypt, no DNS.
+    // A first boot with no password in .env unless the case sets one; no Let's Encrypt, no DNS. Never the suites' seam
+    // (BEANPOOL_SUITE_ENV_PASSWORD): this is what a real node does with ADMIN_PASSWORD.
     if (!('ADMIN_PASSWORD' in env)) delete childEnv.ADMIN_PASSWORD;
+    delete childEnv.BEANPOOL_SUITE_ENV_PASSWORD;
     delete childEnv.CF_RECORD_NAME;
     delete childEnv.CF_API_TOKEN;
     delete childEnv.CF_ZONE_ID;
@@ -213,36 +217,46 @@ const readFile = (dir: string) => fs.readFileSync(fileIn(dir), 'utf-8').trim();
 const modeOf = (file: string) => fs.statSync(file).mode & 0o777;
 const strong = (p: string) => p.length >= 20 && /[A-Z]/.test(p) && /[a-z]/.test(p) && /[0-9]/.test(p) && /[^A-Za-z0-9]/.test(p);
 const tmpLeft = (dir: string) => fs.readdirSync(dir).filter((n) => n.startsWith(FILE_NAME) && n !== FILE_NAME);
+/** An older install's data folder, as that version left it: its config locked with `password`, and the file holding it. */
+function olderInstall(dir: string, password: string): void {
+    fs.mkdirSync(dir, { recursive: true });
+    const salt = crypto.randomBytes(32).toString('hex');
+    fs.writeFileSync(path.join(dir, 'local-config.json'), JSON.stringify({
+        isLocked: true, callsign: null, location: null, adminHash: crypto.scryptSync(password, salt, 64).toString('hex'), salt,
+        joinedAt: Date.now() - 86_400_000, communityName: null, contactEmail: null, contactPhone: null, replicationTokenOnly: true,
+    }, null, 2));
+    fs.writeFileSync(fileIn(dir), password + '\n', { mode: 0o600 });
+}
 
 async function main(): Promise<void> {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     const root = fs.mkdtempSync(path.join(process.env.BEANPOOL_DATA_DIR || os.tmpdir(), 'first-pw-'));
     const NEW_PW = 'Changed-Pw-4-Test!';
     const ENV_PW = 'FromEnv-Pw-7-Test!';
+    const OLD_PW = 'Older-Install-Pw-3-Test!';
 
-    // ── A. First start, no ADMIN_PASSWORD ────────────────────────────────────────────────────
-    console.log('\nA. First start with no ADMIN_PASSWORD');
-    const dirA = path.join(root, 'a');
-    let a = await started(dirA);
-    const fileA = fileIn(dirA);
-    assert(fs.existsSync(fileA), `A1. the password is in ${FILE_NAME} in the data folder`);
-    const firstPw = fs.existsSync(fileA) ? readFile(dirA) : '';
-    assert(fs.existsSync(fileA) && modeOf(fileA) === 0o600, `A2. the file is 0600 (${fs.existsSync(fileA) ? modeOf(fileA).toString(8) : 'missing'})`);
-    assert(strong(firstPw), 'A3. it holds one strong, 20-character password');
-    // The check this change is for. On a first boot the log used to carry the password in a box.
+    // ── A. First start of a new install, no ADMIN_PASSWORD ──────────────────────────────────
+    console.log('\nA. First start of a new install with no ADMIN_PASSWORD');
+    const dirA0 = path.join(root, 'a0');
+    let a = await started(dirA0);
     const bootA = a.output();
-    assert(!!firstPw && !printed(bootA, firstPw), 'A4. the password is in NO line the server printed, stdout or stderr');
-    assert(bootA.includes(fileA) && bootA.includes(`cat ${fileA}`), 'A5. the log says where the file is and how to read it');
-    assert(tmpLeft(dirA).length === 0, `A6. no temporary copy is left beside it (${tmpLeft(dirA).join(', ') || 'none'})`);
-    assert(await signsIn(a, firstPw), 'A7. the password in the file signs in to Settings');
-    assert(!(await signsIn(a, firstPw + 'x')), 'A8. (control) a wrong password does not');
-    assert(!printed(a.output(), firstPw), 'A9. and the sign-ins did not print it either');
-    // The same check without the file: whatever the server made up, no word it printed is a password that works.
+    assert(!fs.existsSync(fileIn(dirA0)), `A1. no ${FILE_NAME}: a new install makes no admin password`);
+    const cfgA = JSON.parse(fs.readFileSync(path.join(dirA0, 'local-config.json'), 'utf-8'));
+    assert(!cfgA.isLocked && !cfgA.adminHash, 'A2. its config holds no password hash and is not locked');
+    assert(!bootA.includes(FILE_NAME), 'A3. the log does not mention the file');
+    assert(tmpLeft(dirA0).length === 0, `A4. no temporary copy is left in the data folder (${tmpLeft(dirA0).join(', ') || 'none'})`);
+    // Whatever the server printed, no word of it is a password that works.
     const shaped = passwordShapedWords(bootA).slice(0, 5);
     const working: string[] = [];
     for (const w of shaped) if (await signsIn(a, w)) working.push(w);
-    assert(working.length === 0, `A10. no password-shaped word in the first boot's output signs in (${shaped.length} looked like one, ${working.length} worked)`);
+    assert(working.length === 0, `A5. no password-shaped word in the first boot's output signs in (${shaped.length} looked like one, ${working.length} worked)`);
     await a.stop();
+
+    // The rest starts from an older install that still has its file.
+    const dirA = path.join(root, 'a');
+    olderInstall(dirA, OLD_PW);
+    const fileA = fileIn(dirA);
+    const firstPw = OLD_PW;
 
     // ── B. A later start with the file still there; then change the password ────────────────
     console.log('\nB. A later start before the password is changed, then the change');
@@ -283,12 +297,13 @@ async function main(): Promise<void> {
     assert(!fs.existsSync(fileIn(dirD)), 'D1. no file is written');
     assert(!d.output().includes(FILE_NAME), 'D2. the log does not mention one');
     assert(!printed(d.output(), ENV_PW), 'D3. the password is not printed');
-    assert(await signsIn(d, ENV_PW), 'D4. it signs in');
+    assert(!(await signsIn(d, ENV_PW)), 'D4. it does not sign in: a new install ignores ADMIN_PASSWORD');
     await d.stop();
 
     // ── E. Wipe & Reset ─────────────────────────────────────────────────────────────────────
-    console.log('\nE. Wipe & Reset, then the start that makes a new password');
+    console.log('\nE. Wipe & Reset, then the start after it');
     const dirE = path.join(root, 'e');
+    olderInstall(dirE, OLD_PW);
     let e = await started(dirE);
     const pwBefore = fs.existsSync(fileIn(dirE)) ? readFile(dirE) : '';
     assert(!!pwBefore && await signsIn(e, pwBefore), 'E1. (setup) a first password in the file, and it signs in');
@@ -301,43 +316,38 @@ async function main(): Promise<void> {
     assert(/deleted/i.test(e.output().slice(beforeReset)), 'E4. and the log says so');
     await e.stop();
     e = await started(dirE);
-    const pwAfter = fs.existsSync(fileIn(dirE)) ? readFile(dirE) : '';
-    assert(strong(pwAfter) && pwAfter !== pwBefore, 'E5. the next start makes a new password, in a new file');
-    assert(fs.existsSync(fileIn(dirE)) && modeOf(fileIn(dirE)) === 0o600, 'E6. 0600');
-    assert(!!pwAfter && !printed(e.output(), pwAfter) && !printed(e.output(), pwBefore), 'E7. printed nowhere, and neither is the old one');
-    assert(await signsIn(e, pwAfter), 'E8. the new one signs in');
-    assert(!(await signsIn(e, pwBefore)), 'E9. the old one does not');
+    assert(!fs.existsSync(fileIn(dirE)), 'E5. the next start is a new install: it makes no password and no file');
+    const cfgE = JSON.parse(fs.readFileSync(path.join(dirE, 'local-config.json'), 'utf-8'));
+    assert(!cfgE.isLocked && !cfgE.adminHash, 'E6. no password hash, not locked');
+    assert(!printed(e.output(), pwBefore), 'E7. the old one is printed nowhere');
+    assert(!(await signsIn(e, pwBefore)), 'E8. the old one does not sign in');
     await e.stop();
 
     // ── F. A file whose password is no longer the admin password ────────────────────────────
     console.log('\nF. A file left over from a password that was replaced (a restore, a take-over)');
     const STALE = 'Stale-Pw-9-Leftover!';
-    fs.writeFileSync(fileIn(dirD), STALE + '\n', { mode: 0o600 });
-    const f = await started(dirD, { ADMIN_PASSWORD: ENV_PW });
-    assert(!fs.existsSync(fileIn(dirD)), 'F1. the boot deletes it: it would send the operator to a password that does not work');
-    assert(f.output().includes(fileIn(dirD)) && /deleted/i.test(f.output()), 'F2. and the log says so');
+    const dirF = path.join(root, 'f');
+    olderInstall(dirF, OLD_PW);
+    fs.writeFileSync(fileIn(dirF), STALE + '\n', { mode: 0o600 });
+    const f = await started(dirF, { ADMIN_PASSWORD: ENV_PW });
+    assert(!fs.existsSync(fileIn(dirF)), 'F1. the boot deletes it: it would send the operator to a password that does not work');
+    assert(f.output().includes(fileIn(dirF)) && /deleted/i.test(f.output()), 'F2. and the log says so');
     assert(!printed(f.output(), STALE), 'F3. without printing what was in it');
-    assert(await signsIn(f, ENV_PW), 'F4. the admin password is untouched');
+    assert(await signsIn(f, OLD_PW), 'F4. the admin password is untouched');
     await f.stop();
 
-    // ── G. The file cannot be written ───────────────────────────────────────────────────────
-    console.log('\nG. The file cannot be written');
+    // ── G. A new install never writes the file ──────────────────────────────────────────────
+    console.log('\nG. A new install never writes the file');
     const dirG = path.join(root, 'g');
-    fs.mkdirSync(fileIn(dirG), { recursive: true }); // a folder in its place: the write fails, whatever the user
+    fs.mkdirSync(fileIn(dirG), { recursive: true }); // a folder in its place: a write would fail, whatever the user
     const g = await boot(dirG);
-    assert('exited' in g && g.exited !== 0, `G1. the server does not start (${'exited' in g ? g.exited : 'it served'})`);
+    assert(!('exited' in g), `G1. the server starts (${'exited' in g ? g.exited : 'it served'})`);
     const gOut = 'exited' in g ? g.output : g.output();
     if (!('exited' in g)) await g.stop();
-    assert(gOut.includes(fileIn(dirG)), 'G2. it says which file it could not write');
     const cfgG = JSON.parse(fs.existsSync(path.join(dirG, 'local-config.json')) ? fs.readFileSync(path.join(dirG, 'local-config.json'), 'utf-8') : '{}');
-    assert(!cfgG.isLocked && !cfgG.adminHash, 'G3. nothing is locked, so the next start makes a password again');
-    assert(tmpLeft(dirG).length === 0, 'G4. no temporary copy is left behind');
-    fs.rmSync(fileIn(dirG), { recursive: true });
-    const g2 = await started(dirG);
-    const pwG = fs.existsSync(fileIn(dirG)) ? readFile(dirG) : '';
-    assert(strong(pwG) && !printed(gOut + g2.output(), pwG), 'G5. once it can be written, the next start writes it, printed nowhere');
-    assert(await signsIn(g2, pwG), 'G6. and it signs in');
-    await g2.stop();
+    assert(!cfgG.isLocked && !cfgG.adminHash, 'G2. nothing is locked, no password hash');
+    assert(fs.statSync(fileIn(dirG)).isDirectory() && tmpLeft(dirG).length === 0, 'G3. the folder is left as it was, and no temporary copy is beside it');
+    assert(passwordShapedWords(gOut).length === 0, 'G4. nothing shaped like a password is printed');
 
     // ── H. A change that never reached the disk ─────────────────────────────────────────────
     console.log('\nH. A password change whose save failed');
@@ -346,6 +356,7 @@ async function main(): Promise<void> {
         console.log('  (not run: this runs as root, and a read-only file does not stop root writing)');
     } else {
         const dirH = path.join(root, 'h');
+        olderInstall(dirH, OLD_PW);
         const h = await started(dirH);
         const pwH = fs.existsSync(fileIn(dirH)) ? readFile(dirH) : '';
         const cfgH = path.join(dirH, 'local-config.json');
@@ -359,15 +370,15 @@ async function main(): Promise<void> {
         assert(!(await signsIn(h, NEW_PW)), 'H3. (control) the new one was never saved');
         await h.stop();
 
-        // The first start's own save fails: the file would name a password that was never stored.
+        // A new install's first start whose config cannot be saved: it has no password to lose.
         const dirI = path.join(root, 'i');
         fs.mkdirSync(dirI, { recursive: true });
         fs.writeFileSync(path.join(dirI, 'local-config.json'), '{}', { mode: 0o444 });
         const i = await boot(dirI);
         const iOut = 'exited' in i ? i.output : i.output();
         if (!('exited' in i)) await i.stop();
-        assert('exited' in i && i.exited !== 0, `H4. a first start whose config cannot be saved does not start (${'exited' in i ? i.exited : 'it served'})`);
-        assert(!fs.existsSync(fileIn(dirI)), 'H5. and leaves no file naming a password that was never saved');
+        assert(!('exited' in i), `H4. a first start whose config cannot be saved still starts: there is no password to save (${'exited' in i ? i.exited : 'it served'})`);
+        assert(!fs.existsSync(fileIn(dirI)), 'H5. and leaves no file');
         assert(iOut.includes('local-config.json') && passwordShapedWords(iOut).length === 0, 'H6. it says which file, and prints nothing shaped like a password');
     }
 

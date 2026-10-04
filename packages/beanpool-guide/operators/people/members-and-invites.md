@@ -101,7 +101,7 @@ Owners and admins can:
 - **Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation.
 - **Promote** and **Demote**: whether they can vouch for others.
 - **Grant Operator**: lets them act for enterprises they are a keeper of.
-- **Re-Key**: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for **24 hours**. Their old key stops working the moment you make the code, and they are suspended until the code is used on their new phone. Their balance, role and keeper places move to the new key.
+- **Re-Key**: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for **24 hours**. Their old key stops working the moment you make the code, and they are suspended until the code is used on their new phone. Their balance, role and keeper places move to the new key. See Re-Key below.
 - **Offboard**: the careful way out. It refuses while they have beans held in a deal or open requests. Money they are owed goes to the commons or to a member you choose (choosing a member needs a sign-in from the app, not the password). A debt is written off against the commons. Then they are removed.
 - **Prune Account**: removes them at once. Their balance goes to the commons, and the commons pays any debt. Their posts come down, and their role and Pulse items go. It does not check for deals in progress, so prefer Offboard. Their record stays in the database, and so do the words, photos and places of their posts.
 - **Prune Branch**: removes them and everyone they invited, and everyone those people invited. You type their name to confirm.
@@ -124,10 +124,20 @@ So what protects the community is how little a new account can do. Someone who j
 
 A member who deletes their own account is not removed, and nothing about their connection is kept longer. If they were not suspended or removed at the time, the sign-in they joined with is freed and can join again; a suspended or removed member's stays turned away.
 
+## Re-Key
+
+Use Re-Key when someone has lost their phone and their 12 words, and you have checked in person that they are who they say. Someone who still has their 12 words doesn't need it: they restore them on the new phone.
+
+Opening Re-Key changes nothing. It shows the checklist, or the code that is already waiting. Only **Make a re-key code** does something: from that moment their old key stops working, they are signed out everywhere, and they are suspended until the code is used on their new phone. The code starts RK- and lasts **24 hours**; the window shows how long it has left.
+
+If they already moved to a new key, the window opens on **Already moved to** that key and the date. A new code would stop the phone they use now, so you type NEW CODE first. Do that only if the new phone is lost too.
+
+**Cancel this code** undoes a code nobody has used: their key works again and they can sign in again, and they are back to what they were before the code (active, or still suspended if they were suspended already). If a report suspended them, before or while the code waited, they stay suspended and the window says why; **Lift suspension** on their page lifts it if that's no longer right. A report dealt with without suspending them changes nothing. An admin can suspend them while the code waits, and that suspension stays after a cancel. Whoever may make the code may cancel it; for an owner or an admin, that is an owner. A code that was used or has run out can't be cancelled. A code made before this server kept the earlier status puts them back to active, unless a report may have suspended them (one dealt with before this server noted which reports did): then they stay suspended, the window says so, and **Lift suspension** lifts it. Completing the code doesn't lift a report's suspension either: their new key stays suspended until it is lifted.
+
 ## Things to know
 
 - A member can delete their own account in the app. That erases more than Prune Account: their profile, and the words, photos and places of all their posts, done or not, except their polls. A poll stays, closed, with its question and votes. The deals made on their posts still show, as "Deleted post".
-- A Re-Key code that is never used leaves the person suspended in a way the Lift button cannot undo. Make a new Re-Key code instead.
+- A Re-Key code that runs out unused leaves the person suspended in a way neither the Lift button nor Cancel this code undoes. Make a new Re-Key code, then cancel it if they don't need it: they are back to what they were before the first code.
 - The trust score shown on a member's page is not calculated yet. Do not act on it.
 - Suspended members can still make invites from their app, where any member invites.
 - While suspended, a member sees what someone who has not joined sees: no one's contact details, not who voted in a Poll, not the activity feed, not how far away people are. They still get their own messages and deals. All of it comes back when the suspension lifts.

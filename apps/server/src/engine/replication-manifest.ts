@@ -596,6 +596,10 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     totpSecret: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
     totpBackupCodesHashes: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
     breakGlassMode: { kind: 'takeover-bundle', reason: 'break-glass sign-in' },
+    passwordRetired: {
+        kind: 'takeover-bundle',
+        reason: 'the admin password retired for good; merged sticky, so an older bundle never brings the password back',
+    },
     recoveryCode: { kind: 'takeover-bundle', reason: "the public record of the community's recovery code" },
     identityEpoch: { kind: 'takeover-bundle', reason: 'how many take-overs this identity has been through', differsByDesign: 'a take-over writes the bundle\'s epoch + 1' },
     isLocked: { kind: 'per-server', reason: "whether this server's admin password has been set" },

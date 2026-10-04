@@ -94,7 +94,7 @@ import {
 } from '../state-engine.js';
 import { listHeldEnvelopes, readHeldEnvelope, checkEnvelopeFromMirror, HELD_ENVELOPES_DIR } from './standby-envelopes.js';
 import {
-    BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS, ensureTakeoverEnvelope, nodeIdentityOfKeyFile, type TakeoverBundle,
+    BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS, bundledLocalConfigUpdates, ensureTakeoverEnvelope, nodeIdentityOfKeyFile, type TakeoverBundle,
 } from './takeover-envelope.js';
 import { checkBundle } from './sealed-backup.js';
 import { ledgerAgainstLastCopy } from '../engine/audit.js';
@@ -870,9 +870,10 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             return `node key kept (${j.peerId}); ${connectors.length} link(s) with other communities; ${installSealKey(bundle)}`;
         }
         case 'admin-settings': {
-            const updates: Record<string, unknown> = {};
-            for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) updates[f] = (bundle.localConfig as any)[f] ?? null;
             const config = getLocalConfig();
+            // The password's retirement is sticky (bundledLocalConfigUpdates): an envelope sealed before it never brings
+            // the password back.
+            const updates = bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config as any);
             if (bundle.recoveryCode) {
                 updates.recoveryCode = bundle.recoveryCode;
                 updates.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);

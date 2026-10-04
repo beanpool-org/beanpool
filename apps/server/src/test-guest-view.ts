@@ -1271,6 +1271,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/auth/enrol', 'POST /api/local/admin/auth/exchange', 'POST /api/local/admin/auth/logout',
             'POST /api/local/admin/auth/pairing', 'GET /api/local/admin/auth/pairing/:id', 'POST /api/local/admin/auth/pairing/:id/approve',
             'POST /api/local/admin/auth/pairing/:id/confirm', 'POST /api/local/admin/auth/pairing/:id/decline', 'POST /api/local/admin/auth/pairing/:id/wait', 'POST /api/local/admin/auth/password',
+            'GET /api/local/admin/auth/password-retirement', 'POST /api/local/admin/auth/retire-password',
             'POST /api/local/admin/auth/revoke-all',
             'GET /api/local/admin/auth/session', 'POST /api/local/admin/auth/verify-challenge', 'POST /api/local/admin/backup',
             'POST /api/local/admin/backup-config', 'GET /api/local/admin/backup-enroll', 'POST /api/local/admin/backup-status',

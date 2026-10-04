@@ -44,6 +44,7 @@ import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/o
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
     validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
+    isPasswordRetired,
 } from '../config/local-config.js';
 import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from '../totp.js';
 import {
@@ -78,7 +79,7 @@ import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { doorRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
-import { issue2faSessionToken, requireAdminRole, type AdminRole } from '../admin-auth.js';
+import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
@@ -124,6 +125,9 @@ router.get('/api/local/status', async (ctx) => {
         isLocked: config.isLocked,
         callsign: config.callsign || null,
         location: config.location || null,
+        // Design step 10: an owner retired the admin password, so sign-in screens show no password field and the fleet
+        // manager knows to use a token. Absent on a node from before.
+        passwordRetired: !!config.passwordRetired,
     };
 });
 
@@ -131,6 +135,7 @@ router.get('/api/local/status', async (ctx) => {
 
 router.post('/api/local/verify-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
+    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
     const body = (ctx as any).requestBody || {};
     const password = body.password;
     const headerPass = ctx.request?.headers?.['x-admin-password'] || (ctx as any).headers?.['x-admin-password'];
@@ -365,6 +370,8 @@ router.post('/api/funnel-event', async (ctx) => {
 
 router.post('/api/local/change-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
+    // Retired for good: no route sets a password again, a key session's included.
+    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
     // The password this request replaces, read before any wait. It must still be the one on disk when the new one is
     // written (below).
     const replacing = getLocalConfig();
@@ -778,6 +785,8 @@ router.post('/api/local/reset', async (ctx) => {
         communityName: null,
         contactEmail: null,
         contactPhone: null,
+        // A retired password stays retired: the next start must not take ADMIN_PASSWORD from .env again.
+        ...(config.passwordRetired ? { passwordRetired: config.passwordRetired } : {}),
     });
     // The admin password is gone (checked on disk, as in change-password). The next start takes ADMIN_PASSWORD from
     // .env, or makes up a new one in a new file.

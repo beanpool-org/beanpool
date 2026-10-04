@@ -52,7 +52,7 @@ import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { getAppVersionCounts } from '../app-version-counts.js';
 import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
@@ -79,8 +79,9 @@ import {
     setAdminSessionCookie,
     clearAdminSessionCookie,
     ADMIN_SESSION_COOKIE,
+    endPasswordSessions,
 } from '../admin-key-auth.js';
-import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
+import { isBreakGlassMode, setBreakGlassMode, isPasswordRetired, updateLocalConfig, removeFirstPasswordFile } from '../config/local-config.js';
 import {
     issueRekeyCode,
     completeRekey,
@@ -266,6 +267,7 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
  */
 router.post('/api/local/admin/auth/password', async (ctx) => {
     ctx.set('Cache-Control', 'no-store');
+    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     if (typeof body.password !== 'string' || !body.password.trim()) {
         ctx.status = 400;
@@ -662,6 +664,104 @@ router.get('/api/local/admin/auth/break-glass-status', async (ctx) => {
 });
 router.get('/api/local/admin/auth/break-glass/status', async (ctx) => {
     ctx.body = { breakGlassMode: isBreakGlassMode() };
+});
+
+// ===================== RETIRE THE ADMIN PASSWORD (node sign-in design step 10, D1(c), D6) =====================
+
+/** The owners whose role acts now (a visitor's old row or a suspended owner is not one). */
+function actingOwners() {
+    return listNodeRoles().filter(r => r.role === 'owner' && nodeRoleOf(r.member_pubkey) === 'owner');
+}
+
+/** What Access & Security's "Retire the admin password" card shows. */
+function passwordRetirementView(callerPubkey: string | null) {
+    const retired = getLocalConfig().passwordRetired || null;
+    const owners = actingOwners();
+    return {
+        passwordRetired: !!retired,
+        retiredAt: retired?.at ?? null,
+        retiredByCallsign: retired?.byCallsign ?? null,
+        owners: owners.length,
+        // The caller's own break-glass code: retiring needs one (below). Null for a caller with no key (the password).
+        hasBreakGlassCode: callerPubkey ? !!owners.find(o => o.member_pubkey === callerPubkey)?.has_break_glass : null,
+    };
+}
+
+/**
+ * GET /api/local/admin/auth/password-retirement — owners only.
+ */
+router.get('/api/local/admin/auth/password-retirement', async (ctx) => {
+    ctx.set('Cache-Control', 'no-store');
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can see whether the admin password is retired')) return;
+    const state = ctx.state as any;
+    ctx.body = passwordRetirementView(state.isKeySession ? state.actor : null);
+});
+
+/**
+ * POST /api/local/admin/auth/retire-password { acceptOneOwner?: true } — retires the admin password for good.
+ * An owner signed in with their own key only (never the password itself, never a token), with the phone step-up of every
+ * owner-only change. Refused while the caller has no break-glass code: with the password gone it is how an owner whose
+ * phone is lost gets back in without the server's shell, and Settings makes one in a tap (step 3). Refused with one owner
+ * unless the owner ticks "I accept one owner" (D6), which is logged. Then: the hash, the salt and the 2FA that guarded the
+ * password are deleted, passwordRetired records when and by whom, every password session ends now (and the log sockets
+ * they opened), the first-password file goes, a SECURITY line is logged and the community gets a critical announcement.
+ * No route sets a password again; ADMIN_PASSWORD in .env is ignored on every later start (initAdminPassword).
+ */
+router.post('/api/local/admin/auth/retire-password', async (ctx) => {
+    ctx.set('Cache-Control', 'no-store');
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const state = ctx.state as any;
+    if (!state.isKeySession || state.adminRole !== 'owner') {
+        ctx.status = 403;
+        ctx.body = {
+            error: 'Only an owner signed in with their own key (Manage in the app, or "Sign in with your phone" on a computer) can retire the admin password',
+            code: 'owner_key_required',
+        };
+        return;
+    }
+    if (!requirePhoneStepUp(ctx)) return;
+    if (isPasswordRetired()) {
+        ctx.status = 409;
+        ctx.body = { error: 'The admin password is already retired', code: 'password_retired', ...passwordRetirementView(state.actor) };
+        return;
+    }
+    const owners = actingOwners();
+    const me = owners.find(o => o.member_pubkey === state.actor);
+    if (!me?.has_break_glass) {
+        ctx.status = 409;
+        ctx.body = {
+            error: 'Make your break-glass code first (Access & Security, Break-glass code) and keep it somewhere safe: once the password is gone, it is how you get back in if your phone is lost.',
+            code: 'break_glass_code_needed',
+        };
+        return;
+    }
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const oneOwner = owners.length < 2;
+    if (oneOwner && body.acceptOneOwner !== true) {
+        ctx.status = 409;
+        ctx.body = {
+            error: 'This community has one owner. Add a second owner first, or tick "I accept one owner": if your phone and your 12 words are both lost, only your break-glass code or "beanpool recover" on the server get you back in.',
+            code: 'one_owner',
+            owners: owners.length,
+        };
+        return;
+    }
+    const at = Date.now();
+    const callsign = me.callsign || null;
+    updateLocalConfig({
+        adminHash: null, salt: null,
+        totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [],
+        passwordRetired: { at, by: state.actor, byCallsign: callsign, acceptedOneOwner: oneOwner },
+    });
+    removeFirstPasswordFile('The admin password was retired');
+    const ended = endPasswordSessions();
+    const who = `${callsign || 'an owner'} (${String(state.actor).slice(0, 12)}…)`;
+    logger.security('AUTH', `The admin password was retired for good by ${who}${oneOwner ? ', who accepted being the only owner' : ''}; ${ended} password session(s) ended`);
+    adminBroadcastAnnouncement('Admin Password Retired',
+        `${callsign || 'An owner'} retired this community's admin password. Settings now opens only with an owner's or admin's phone. If you did not expect this, tell your community's owners.`,
+        'critical');
+    ctx.body = { success: true, ...passwordRetirementView(state.actor), acceptedOneOwner: oneOwner, endedSessions: ended };
 });
 
 // ===================== LEDGER AUDIT ENDPOINTS =====================

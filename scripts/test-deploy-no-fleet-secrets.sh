@@ -205,6 +205,10 @@ printf '{\n  "isLocked": false\n}\n' > "$DATA/local-config.json"
 assert "an unlocked config also makes one up, and says so" "$(first_password_notice "$DATA" x | grep -c 'first-admin-password.txt')" "2"
 printf '{\n  "isLocked": true,\n  "adminHash": "h"\n}\n' > "$DATA/local-config.json"
 assert "a locked server says nothing" "$(first_password_notice "$DATA" x)" ""
+printf '{\n  "isLocked": false,\n  "adminHash": null,\n  "passwordRetired": {\n    "at": 1,\n    "by": "ab"\n  }\n}\n' > "$DATA/local-config.json"
+out=$(first_password_notice "$DATA" x)
+assert "a retired password, unlocked after Wipe & Reset, promises no made-up one" "$(echo "$out" | grep -c 'first-admin-password')" "0"
+assert "and says the password is retired" "$(echo "$out" | grep -c 'admin password is retired')" "1"
 LC="$ROOT/apps/server/src/config/local-config.ts"
 assert "the file name is the server's own (FIRST_PASSWORD_FILE)" \
        "$(grep -c "FIRST_PASSWORD_FILE = 'first-admin-password.txt'" "$LC")" "1"

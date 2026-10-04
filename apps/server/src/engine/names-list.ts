@@ -540,6 +540,11 @@ export function readBoundInvites(): BoundInvite[] {
     ).all() as BoundInvite[]);
 }
 
+/** The codes of the invites `maker` bound to entries: left out of their invite list for any reader but them. */
+export function boundInviteCodesOf(maker: string): Set<string> {
+    return new Set((db.prepare('SELECT code FROM invite_codes WHERE created_by = ? AND names_entry_id IS NOT NULL').all(maker) as { code: string }[]).map((r) => r.code));
+}
+
 export function secondConfirmation(actor: string, id: unknown): { id: string; status: ConfirmationStatus } {
     assertPlainTablesWritable();
     const row = confirmationRow(id);

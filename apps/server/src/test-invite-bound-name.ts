@@ -9,6 +9,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
+/** The manifest's readauth-off run: the operator opted out of read enforcement (ENFORCE_READ_AUTH=false). */
+const OPEN_READS = process.env.ENFORCE_READ_AUTH === 'false';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -327,8 +329,17 @@ async function main(): Promise<void> {
         '9. but never its code, nor any other invite\'s code');
     const owenLists = await call(owen, 'GET', '/api/names/invites');
     assert(owenLists.status === 200 && !owenLists.text.toLowerCase().includes(rueCode.toLowerCase()), '9. nor to Owen on a later read: the code is shown once, when it is made');
+    // Owen's own invite list: refused to anyone else, or (read auth opted out) without his bound invites. Ever his own.
     const adaReadsOwens = await call(ada, 'GET', `/api/invite/mine/${owen.pk}`);
-    assert(adaReadsOwens.status === 403 && !adaReadsOwens.text.toLowerCase().includes(rueCode.toLowerCase()), `9. nor through Owen's own invite list (${show(adaReadsOwens)})`);
+    assert((OPEN_READS ? adaReadsOwens.status === 200 && Array.isArray(adaReadsOwens.body?.invites) : adaReadsOwens.status === 403)
+        && !adaReadsOwens.text.toLowerCase().includes(rueCode.toLowerCase()), `9. nor through Owen's own invite list (${show(adaReadsOwens)})`);
+    if (OPEN_READS) {
+        const unsignedReadsOwens = await call(null, 'GET', `/api/invite/mine/${owen.pk}`);
+        assert(unsignedReadsOwens.status === 200 && !unsignedReadsOwens.text.toLowerCase().includes(rueCode.toLowerCase())
+            && unsignedReadsOwens.body.invites.some((i: any) => i.code === plain.body.invite.code), `9. nor to an unsigned read, which still gets his ordinary invites (${show(unsignedReadsOwens)})`);
+    }
+    const owenReadsOwn = await call(owen, 'GET', `/api/invite/mine/${owen.pk}`);
+    assert(owenReadsOwn.status === 200 && owenReadsOwn.body?.invites?.some((i: any) => i.code === rueCode), `9. Owen's own read of his list has it (${show(owenReadsOwn)})`);
     const rueId = newId('Rue');
     const rueJoins = await redeem(rueId, rueCode);
     const rueConf = db.prepare('SELECT id, confirmed_by, needs_second FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(rueId.pk) as { id: string; confirmed_by: string; needs_second: number } | undefined;

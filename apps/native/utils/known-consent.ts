@@ -83,3 +83,45 @@ export function readConsentTerms(v: unknown): ConsentTerms | null {
 export function joinAsksConsent(t: ConsentTerms | null): t is ConsentTerms {
     return !!t && t.known && t.text.length > 0 && t.version.length > 0;
 }
+
+/**
+ * The consent text laid out to read on a small screen, without changing a word of it (rehearsal 5 Oct, d1: one
+ * 2,500-character paragraph, the tick at its end, about four screens at 320 dp and 130% text). `summary` is the
+ * sentences before the first list; `rest` is everything after, the long "…: a; b; and c." sentence as its lead and one
+ * item per clause, each later sentence its own paragraph. The screens show the summary, then the rest behind "Read all
+ * of it". Joined with single spaces the parts are the text again, character for character; any text that doesn't split
+ * that way comes back whole as the summary.
+ */
+export interface ConsentTextParts {
+    summary: string;
+    rest: { text: string; item: boolean }[];
+}
+
+export function consentTextParts(text: string): ConsentTextParts {
+    const sentences: string[] = [];
+    let start = 0;
+    for (let i = 1; i < text.length - 1; i++) {
+        if (text[i] === ' ' && '.!?'.includes(text[i - 1]) && /[A-Z]/.test(text[i + 1])) {
+            sentences.push(text.slice(start, i));
+            start = i + 1;
+        }
+    }
+    sentences.push(text.slice(start));
+    const blocks: { text: string; item: boolean }[] = [];
+    for (const s of sentences) {
+        const colon = s.indexOf(': ');
+        if (colon > 0 && s.indexOf('; ', colon) > 0) {
+            blocks.push({ text: s.slice(0, colon + 1), item: false });
+            const clauses = s.slice(colon + 2).split('; ');
+            clauses.forEach((c, i) => blocks.push({ text: i < clauses.length - 1 ? `${c};` : c, item: true }));
+        } else {
+            blocks.push({ text: s, item: false });
+        }
+    }
+    const firstItem = blocks.findIndex((b) => b.item);
+    const summaryEnd = firstItem < 0 ? blocks.length : firstItem - 1;
+    const summary = blocks.slice(0, summaryEnd).map((b) => b.text).join(' ');
+    const rest = blocks.slice(summaryEnd);
+    if (!summary || [summary, ...rest.map((b) => b.text)].join(' ') !== text) return { summary: text, rest: [] };
+    return { summary, rest };
+}

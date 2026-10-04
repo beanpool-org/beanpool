@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { colors } from '../constants/colors';
 import { signedGet, signedRequestWithMethod } from '../utils/db';
+import { ConsentText } from './ConsentText';
 import { readKnownConsent, saveKnownConsent, shouldOfferConsent, showsConsentCard, canWithdrawConsent, consentHeading, type KnownConsent } from '../utils/known-consent';
 
 export function KnownConsentCard() {
@@ -50,7 +51,7 @@ export function KnownConsentCard() {
     return (
         <View style={styles.card} accessibilityRole="summary" testID="known-consent-card">
             <Text style={styles.heading} accessibilityRole="header">{offer ? consentHeading(consent) : 'What you agreed the admins can see'}</Text>
-            <Text style={styles.body}>{consent.text}</Text>
+            <ConsentText text={consent.text} />
             {agreed && <Text style={styles.body}>You agreed{agreedOn ? ` on ${agreedOn}` : ''}{offer ? ' to the earlier text' : ''}. You can take it back at any time: from that moment the admins don&apos;t see your balance.</Text>}
             {!agreed && <Text style={styles.body}>Agreeing is up to you. If you don&apos;t, nothing else changes: the admins just never see your balance. You can take it back at any time, here in Settings.</Text>}
             {note && <Text style={styles.body} accessibilityLiveRegion="polite">{note}</Text>}

@@ -283,6 +283,29 @@ async function main(): Promise<void> {
     const byMelTicket = await redeemTicket(vee, melTicket);
     assert(byMelTicket.status === 200 && !liveConfirmation(vee.pk), `7a. a member's ticket bound to an entry: the joiner is a member, unconfirmed (the maker isn't an admin) (${show(byMelTicket)})`);
 
+    // ── 8. Answering a knock adds the entry and binds it in one step ─────────────────────────────
+    const kim = newId('Kim');
+    const knocked = await call(kim, 'POST', '/api/join/knock', { callsign: kim.name, message: 'Hello, I live by the river.' });
+    require_(knocked.status === 200 || knocked.status === 201, `8. Kim knocks (${show(knocked)})`);
+    const open = await call(owen, 'GET', '/api/join/knocks');
+    const knockId = open.body?.knocks?.find((k: any) => k.pubkey === kim.pk)?.id as string;
+    require_(!!knockId, `8. Owen sees Kim's knock (${show(open)})`);
+    const kimEntryId = newNamesEntryId();
+    const sealed = { id: kimEntryId, ciphertext: sealNamesEntry(owenP.key(), kimEntryId, owenP.head(), { name: 'Kimberley Riverside', note: '' }), keyId: owenP.head() };
+    const entriesBefore = count('names_entries');
+    const melAnswers = await call(mel, 'POST', `/api/join/knocks/${knockId}/approve`, { namesEntry: sealed });
+    assert(melAnswers.status === 403 && melAnswers.body?.code === 'admins_only', `8. a member who is no admin can't add a name with the answer (${show(melAnswers)})`);
+    assert(count('names_entries') === entriesBefore && (db.prepare('SELECT status FROM join_requests WHERE id = ?').get(knockId) as any)?.status === 'pending',
+        '8. and nothing commits: no entry, the knock still waiting');
+    const owenAnswers = await call(owen, 'POST', `/api/join/knocks/${knockId}/approve`, { namesEntry: sealed });
+    assert(owenAnswers.status === 200 && /^INV-/.test(owenAnswers.body?.invite?.code), `8. Owen answers with the sealed entry (${show(owenAnswers)})`);
+    const kimCode = owenAnswers.body?.invite?.code as string;
+    assert(!!db.prepare('SELECT 1 FROM names_entries WHERE id = ?').get(kimEntryId) && inviteRow(kimCode)?.names_entry_id === kimEntryId,
+        '8. the entry is on the list and the knock\'s invite is bound to it');
+    const kimJoins = await redeem(kim, kimCode);
+    assert(kimJoins.status === 200 && liveConfirmation(kim.pk)?.entry_id === kimEntryId && liveConfirmation(kim.pk)?.confirmed_by === owen.pk,
+        `8. Kim joins with it, confirmed by Owen (${show(kimJoins)})`);
+
     // ── 7. Replication carries the binding ──────────────────────────────────────────────────────
     const cols = JSON.stringify(TABLES.invite_codes);
     assert(cols.includes('names_entry_id') && cols.includes('names_bind_outcome'), `7. the replication manifest carries both columns as plain (${cols.slice(0, 200)})`);

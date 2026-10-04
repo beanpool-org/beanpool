@@ -1503,6 +1503,7 @@ router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
+    logger.info('ADMIN', `Lifted the suspension of ${ctx.params.pubkey.substring(0, 12)} by ${actor.substring(0, 12)}`);
     ctx.body = { success: true };
 });
 

@@ -1810,13 +1810,22 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
 /**
  * An admin lifts a suspension by hand. An open "Keep this suspension?" vote about it has nothing left to
  * decide, so it closes as halted, with the lift recorded as the reason.
+ *
+ * It lifts a report's 'suspended' as well as an admin's or a Decision's 'disabled': a cancelled re-key code leaves a
+ * member a report may have suspended 'suspended', and tells the admin to lift it here (member-wizards.ts
+ * cancelRekeyCode). Not while a re-key code holds their key: its cancel decides their status, and a lift under it would
+ * be undone by the code (the code is cancelled first).
  */
 export function adminLiftSuspension(subjectPubkey: string, adminActor: string): { success: boolean; error?: string; status?: number } {
     assertPlainTablesWritable();
     if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can lift a suspension' };
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };
-    if (member.status !== 'disabled') return { success: false, status: 409, error: 'Member is not suspended' };
+    if (member.status !== 'disabled' && member.status !== 'suspended') return { success: false, status: 409, error: 'Member is not suspended' };
+    if (member.status === 'suspended'
+        && db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").get(subjectPubkey)) {
+        return { success: false, status: 409, error: 'Their key is held for a re-key: cancel the code on Re-Key first, then lift the suspension' };
+    }
     const pendingRemoval = db.prepare(
         "SELECT 1 FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
     ).get(subjectPubkey);

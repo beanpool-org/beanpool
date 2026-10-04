@@ -951,6 +951,7 @@ export function initSchema() {
     // A report can target a Pulse item. Before schema.sql like its neighbours, so any later index
     // or trigger naming it compiles on already-live DBs.
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN target_pulse_item_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN suspended_member INTEGER`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // The open door's replication watermark (engine/open-join.ts). Before schema.sql, which indexes it; a node that has
     // no open_joins table yet gets the column from schema.sql itself. Backfilled from joined_at after the exec.

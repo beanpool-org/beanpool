@@ -6554,6 +6554,8 @@ export function actionReport(
             bumpPostsVersion();
             suspended = subject;
         }
+        // Whether this action suspended its member, read by a cancel of a code with no prior status (cancelRekeyCode).
+        db.prepare('UPDATE abuse_reports SET suspended_member = ? WHERE id = ?').run(suspended ? 1 : 0, reportId);
         return true;
     })();
     const suspendedKey = suspended as string | null;

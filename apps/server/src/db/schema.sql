@@ -565,7 +565,10 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     reason TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Whether actioning it suspended its member: 1 it did, 0 it didn't, NULL not actioned or actioned before this was kept
+    -- (state-engine.ts actionReport; read by member-wizards.ts cancelRekeyCode for a code with no prior status).
+    suspended_member INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated_at);

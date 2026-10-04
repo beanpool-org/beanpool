@@ -321,6 +321,41 @@ async function main(): Promise<void> {
     assert(vicSock.events.some((e) => e?.type === 'debt_repaid' && e.amount === 120), `Vic's own socket hears it (${JSON.stringify(vicSock.events.map((e) => e?.type))})`);
     for (const s of [samSock, vicSock, anonSock]) s.ws.close();
 
+    // ── 9. the sweep runs only for a live confirmation bound to the debt's entry ───────────────
+    console.log('── 9. a revoked or unseconded work-off sweeps nothing ──');
+    const wrenEntry = makeEntry();
+    const wrenOld = await debtor('Wren', 160, wrenEntry);
+    await call('POST', wrenOld, '/api/member/purge', { action: 'purge_account' });
+    const wrenDebt = debtsOf(wrenEntry)[0];
+    const wil = makeMember('Wil');
+    const wrong = await call('POST', ada, `/api/names/debts/${wrenDebt?.id}/work-off`, { memberPubkey: wil.pk });
+    const revoked = await call('POST', ada, `/api/names/confirmations/${wrong.body?.id}/revoke`);
+    assert(wrong.status === 201 && revoked.status === 200, `setup: Ada confirms Wil against Wren's entry to work it off, then revokes it (${show(wrong)}; ${show(revoked)})`);
+    transfer('genesis', wil.pk, 40, 'Wil weeds a bed', 'direct', true);
+    const wilFloor = db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(wil.pk) as any;
+    const wilWhy = await call('GET', wil, '/api/commons/repayment');
+    assert(balanceRow(wil) === 40 && debtsOf(wrenEntry)[0].repaid === 0, `40 Beans in after the revoke: Wil keeps all 40, nothing repaid (${balanceRow(wil)}, ${JSON.stringify(debtsOf(wrenEntry)[0])})`);
+    assert(debtsOf(wrenEntry)[0].repaying_pubkey === null && !wilFloor && wilWhy.body?.repayment === null,
+        `the flag and the 0 floor ended with the confirmation (${JSON.stringify(wilFloor)}; ${show(wilWhy)})`);
+    db.prepare(`INSERT INTO node_config (key, value) VALUES ('names_two_admins', 'true') ON CONFLICT(key) DO UPDATE SET value = 'true'`).run();
+    const bea = makeMember('Bea');
+    grantNodeRole(bea.pk, 'admin', 'SYSTEM');
+    db.prepare(`INSERT INTO names_shares (from_pubkey, to_pubkey, head_id, key_ids, trusts, sealed_ring, ring_iv, ring_tag, ephemeral_pubkey, kdf_params, box_digest, header, signature)
+                VALUES (?, ?, ?, ?, '', '', '', '', '', '', '', '', '')`).run(ada.pk, bea.pk, KEY_ID, KEY_ID);
+    const wren = makeMember('Wren again');
+    const right = await call('POST', ada, `/api/names/debts/${wrenDebt?.id}/work-off`, { memberPubkey: wren.pk });
+    assert(right.status === 201 && right.body?.status === 'awaiting_second', `the right person can be confirmed to work it off now, awaiting a second admin (${show(right)})`);
+    transfer('genesis', wren.pk, 40, 'Wren sweeps a path', 'direct', true);
+    const early = db.prepare('SELECT amount FROM known_floor_exceptions WHERE member_pubkey = ?').get(wren.pk) as any;
+    assert(balanceRow(wren) === 40 && debtsOf(wrenEntry)[0].repaid === 0 && !early, `before the second admin agrees, nothing is swept and no 0 floor is set (${balanceRow(wren)}, ${JSON.stringify(early)})`);
+    const second = await call('POST', bea, `/api/names/confirmations/${right.body?.id}/second`);
+    const live = db.prepare('SELECT amount FROM known_floor_exceptions WHERE member_pubkey = ?').get(wren.pk) as any;
+    assert(second.status === 200 && live?.amount === 0, `Bea seconds it: now the 0 floor (${show(second)}; ${JSON.stringify(live)})`);
+    transfer('genesis', wren.pk, 10, 'Wren sweeps another path', 'direct', true);
+    assert(balanceRow(wren) === 0 && debtsOf(wrenEntry)[0].repaid === 50, `and the sweep: what she holds above 0 goes (${balanceRow(wren)}, ${JSON.stringify(debtsOf(wrenEntry)[0])})`);
+    db.prepare(`UPDATE node_config SET value = 'false' WHERE key = 'names_two_admins'`).run();
+    assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
+
     // ── 7. the 3-year sweep ────────────────────────────────────────────────────────────────────
     console.log('── 7. the 3-year sweep ──');
     const count = () => (db.prepare('SELECT COUNT(*) n FROM names_debts').get() as any).n as number;

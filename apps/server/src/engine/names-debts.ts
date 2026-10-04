@@ -60,7 +60,11 @@ export function listDebts(): DebtRecord[] {
 
 /** The open record a member is working off, if any: what the app shows them, and what the repayment sweep reads. */
 export function repaymentOf(pubkey: string): DebtRecord | undefined {
-    return db.prepare("SELECT * FROM names_debts WHERE repaying_pubkey = ? AND status = 'open'").get(pubkey) as DebtRecord | undefined;
+    // Only while the member's confirmation against the debt's own entry is live: not revoked, and seconded where a second
+    // admin was needed. A flag without one sweeps nothing (Beans would be taken from someone who owes nothing).
+    return db.prepare(`SELECT d.* FROM names_debts d JOIN confirmations c ON c.member_pubkey = d.repaying_pubkey AND c.entry_id = d.entry_id
+                       WHERE d.repaying_pubkey = ? AND d.status = 'open' AND c.revoked_at IS NULL AND (c.needs_second = 0 OR c.seconded_at IS NOT NULL)`)
+        .get(pubkey) as DebtRecord | undefined;
 }
 
 /** The 3-year sweep (Marty's answer 8): every record whose member left more than 3 years ago goes, with a tombstone. */
@@ -72,17 +76,50 @@ export function debtRecord(id: string): DebtRecord | undefined {
     return db.prepare('SELECT * FROM names_debts WHERE id = ?').get(id) as DebtRecord | undefined;
 }
 
+const WORK_OFF_FLOOR = '0 (working off a debt)';
+
 /**
- * The repayment flag and a known floor of 0 for the member confirmed to work debt `debtId` off. Inside confirmMember's
- * transaction (engine/names-list.ts confirmToWorkOff). The floor change is a line in the known floor's log.
+ * The repayment flag for the member confirmed to work debt `debtId` off, and, once that confirmation is live, a known
+ * floor of 0. Inside confirmMember's transaction (engine/names-list.ts confirmToWorkOff). Where a second admin must
+ * agree, the flag only reserves the debt: the floor waits for secondConfirmation (workOffGoesLive), and the sweep reads
+ * a live confirmation (repaymentOf).
  */
-export function startWorkOff(actor: string, debtId: string, member: string): void {
+export function startWorkOff(actor: string, debtId: string, member: string, live: boolean): void {
     db.prepare("UPDATE names_debts SET repaying_pubkey = ? WHERE id = ? AND status = 'open'").run(member, debtId);
+    if (live) setWorkOffFloor(actor, member);
+}
+
+/** A seconded confirmation: where it is a work-off (the open debt on its entry flags this member), the 0 floor starts. */
+export function workOffGoesLive(actor: string, member: string, entryId: string): void {
+    if (db.prepare("SELECT 1 FROM names_debts WHERE entry_id = ? AND repaying_pubkey = ? AND status = 'open'").get(entryId, member)) setWorkOffFloor(actor, member);
+}
+
+/**
+ * A work-off confirmation revoked (or its member's confirmation against the entry gone otherwise): the flag ends, and the
+ * known floor goes back to what it was before the work-off started, from the known floor's log. Inside the revoke's
+ * transaction. Nothing already repaid moves back: it was swept while the confirmation was live.
+ */
+export function endWorkOff(actor: string, member: string, entryId: string): void {
+    const ended = db.prepare("UPDATE names_debts SET repaying_pubkey = NULL WHERE entry_id = ? AND repaying_pubkey = ? AND status = 'open'").run(entryId, member);
+    if (ended.changes === 0) return;
+    const set = db.prepare(`SELECT old_value FROM known_floor_log WHERE member_pubkey = ? AND action = 'exception_lowered' AND new_value = ?
+                            ORDER BY at DESC, rowid DESC LIMIT 1`).get(member, WORK_OFF_FLOOR) as { old_value: string } | undefined;
+    if (!set) return;
+    const now = db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(member) as { amount: number | null; frozen: number } | undefined;
+    if (!now || now.frozen || now.amount !== 0) return; // changed since by an admin: theirs stands
+    if (set.old_value === 'default') db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(member);
+    else if (set.old_value === 'frozen') db.prepare(`UPDATE known_floor_exceptions SET frozen = 1, set_by = ?, set_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE member_pubkey = ?`).run(actor, member);
+    else db.prepare(`UPDATE known_floor_exceptions SET amount = ?, set_by = ?, set_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE member_pubkey = ?`).run(Number(set.old_value), actor, member);
+    db.prepare('INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(crypto.randomBytes(16).toString('hex'), actor, 'exception_restored', member, WORK_OFF_FLOOR, set.old_value + ' (the work-off confirmation was revoked)');
+}
+
+function setWorkOffFloor(actor: string, member: string): void {
     const old = db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(member) as { amount: number | null; frozen: number } | undefined;
     db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by, set_at) VALUES (?, 0, 0, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 ON CONFLICT(member_pubkey) DO UPDATE SET amount = 0, frozen = 0, set_by = excluded.set_by, set_at = excluded.set_at`).run(member, actor);
     db.prepare('INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(crypto.randomBytes(16).toString('hex'), actor, 'exception_lowered', member, !old ? 'default' : old.frozen ? 'frozen' : String(old.amount), '0 (working off a debt)');
+        .run(crypto.randomBytes(16).toString('hex'), actor, 'exception_lowered', member, !old ? 'default' : old.frozen ? 'frozen' : String(old.amount), WORK_OFF_FLOOR);
 }
 
 function debtRow(id: unknown): DebtRecord {

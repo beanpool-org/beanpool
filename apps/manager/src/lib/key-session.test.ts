@@ -88,14 +88,51 @@ describe('startKeySession', () => {
         expect(fetchMock.mock.calls.map(c => c[0])).toEqual(['/api/local/admin/auth/session']);
     });
 
-    it('a refused link with a live session cookie in the browser resumes that session (a page loaded twice)', async () => {
+    it('a refused link with a live session cookie FOR THE SAME KEY resumes it, and says the link was not used (a page loaded twice)', async () => {
         vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
-            ? reply(401, { error: 'x', replay: true })
+            ? reply(401, { error: 'x', replay: true, mintedFor: 'cd'.repeat(32) })
             : url.endsWith('/auth/session')
-                ? reply(200, { authenticated: true, isKeySession: true, role: 'owner', memberPubkey: 'cd'.repeat(32) })
+                ? reply(200, { authenticated: true, isKeySession: true, role: 'owner', memberPubkey: 'cd'.repeat(32), callsign: 'Ada' })
                 : reply(200, { csrfToken: 'csrf3' })));
         const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}&section=home`).win);
-        expect(r).toEqual({ kind: 'session', session: { memberPubkey: 'cd'.repeat(32), role: 'owner' }, csrfToken: 'csrf3', section: 'home' });
+        expect(r).toMatchObject({ kind: 'session', session: { memberPubkey: 'cd'.repeat(32), role: 'owner' }, csrfToken: 'csrf3', section: 'home' });
+        expect(r.kind === 'session' && r.notice).toMatch(/link from your phone was already used.*earlier sign-in.*same account/i);
+    });
+
+    it('a refused link with a live session cookie for ANOTHER key does not resume it: it names who is signed in and asks to sign out', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
+            ? reply(401, { error: 'x', expired: true, mintedFor: 'ef'.repeat(32) })
+            : url.endsWith('/auth/session')
+                ? reply(200, { authenticated: true, isKeySession: true, role: 'admin', memberPubkey: 'cd'.repeat(32), callsign: 'Ada' })
+                : reply(200, { csrfToken: 'csrf4' })));
+        const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}&section=home`).win);
+        expect(r).toEqual({
+            kind: 'other-session',
+            message: "You're still signed in here as Ada — not the account your phone just sent. Sign out, then tap Manage again.",
+            csrfToken: 'csrf4',
+            section: 'home',
+        });
+    });
+
+    it('a refused link that names no key, with a live key session, does not resume it either', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
+            ? reply(401, { error: 'Invalid handshake token' })
+            : url.endsWith('/auth/session')
+                ? reply(200, { authenticated: true, isKeySession: true, role: 'owner', memberPubkey: 'cd'.repeat(32), callsign: 'Ada' })
+                : reply(200, { csrfToken: 'csrf5' })));
+        const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}`).win);
+        expect(r.kind).toBe('other-session');
+        expect(r.kind === 'other-session' && r.message).toBe("You're still signed in here as Ada — maybe not the account your phone just sent. Sign out, then tap Manage again.");
+    });
+
+    it('a refused link with a live PASSWORD session does not resume it: the phone sent a key, never the password', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
+            ? reply(401, { error: 'x', replay: true, mintedFor: 'cd'.repeat(32) })
+            : url.endsWith('/auth/session')
+                ? reply(200, { authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null })
+                : reply(200, { csrfToken: 'csrf6' })));
+        const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}`).win);
+        expect(r.kind === 'other-session' && r.message).toBe("You're still signed in here with the admin password — not the account your phone just sent. Sign out, then tap Manage again.");
     });
 
     it('never treats a password-authenticated answer as a key session', async () => {

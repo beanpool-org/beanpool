@@ -188,6 +188,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const [keySessionChecked, setKeySessionChecked] = useState<boolean>(isFleetMode);
     const [keySessionNotice, setKeySessionNotice] = useState<string | null>(null);
     /**
+     * The phone's link could not be used and the browser is still signed in as someone else (lib/key-session.ts,
+     * 'other-session'): that session is NOT resumed; the page says who it is and offers Sign out, with its CSRF token.
+     */
+    const [otherSession, setOtherSession] = useState<{ message: string; csrfToken: string } | null>(null);
+    /**
      * A moderator's Settings is Reports only (ModeratorView). The owners' loaders (diagnostics, members' data,
      * gateway, logs) never run for them: the node would refuse every one, and none of it is theirs to see.
      */
@@ -991,8 +996,10 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     setActiveTab(target.tab);
                     setNavSubTab(target.subTab);
                 }
+                setOtherSession(null);
                 if (res.kind === 'session' || res.kind === 'password') {
-                    setKeySessionNotice(null);
+                    // The same account's earlier sign-in, carried on after the phone's link was refused: said, not silent.
+                    setKeySessionNotice(res.kind === 'session' ? res.notice ?? null : null);
                     setKeySessionCsrfToken(res.csrfToken);
                     setKeySessionCsrf(res.csrfToken);
                     if (res.kind === 'session') {
@@ -1012,6 +1019,10 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     // A new link that found no live session: whatever this page showed as signed in is over.
                     if (fromNewLink) dropSession();
                     if (res.kind === 'failed') setKeySessionNotice(res.message);
+                    if (res.kind === 'other-session') {
+                        setKeySessionNotice(null);
+                        setOtherSession({ message: res.message, csrfToken: res.csrfToken });
+                    }
                 }
                 setKeySessionChecked(true);
             });
@@ -1231,6 +1242,28 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         );
     }
 
+    if (!isFleetMode && !passwordSession && !keySession && otherSession) {
+        return (
+            <div className="bp-settings min-h-screen bg-nature-950 text-nature-100 flex items-center justify-center p-4 font-sans">
+                <div role="alert" className="max-w-md w-full bg-nature-900 border border-terra-600 rounded-xl p-5 space-y-4">
+                    <p className="text-sm">{otherSession.message}</p>
+                    <button
+                        type="button"
+                        className="w-full bg-terra-600 hover:bg-terra-500 text-white font-medium rounded-lg px-4 py-3"
+                        onClick={() => {
+                            const { csrfToken } = otherSession;
+                            setOtherSession(null);
+                            forgetStoredAdminSecrets();
+                            void endKeySession(csrfToken).then(() => setKeySessionNotice('Signed out. Tap Manage again in the BeanPool app.'));
+                        }}
+                    >
+                        Sign out
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (!isFleetMode && !passwordSession && !keySession) {
         return (
             <div className="bp-settings">
@@ -1417,6 +1450,13 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
                 {/* Workspace Body */}
                 <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
+                    {/* The phone's link couldn't be used, so this is the same account's earlier sign-in, carried on. */}
+                    {!isFleetMode && keySession && keySessionNotice && (
+                        <div role="status" className="bg-nature-900 border border-terra-600 text-nature-100 text-sm rounded-lg px-4 py-3 flex items-start gap-3">
+                            <span className="flex-1">{keySessionNotice}</span>
+                            <button type="button" className="text-nature-300 hover:text-white" aria-label="Dismiss" onClick={() => setKeySessionNotice(null)}>×</button>
+                        </div>
+                    )}
                     {!isFleetMode ? (
                         <>
                             {activeTab === 'home' && (() => {

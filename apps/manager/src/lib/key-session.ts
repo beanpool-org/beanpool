@@ -58,14 +58,20 @@ export function parseHandoffFragment(hash: string): { token: string | null; sect
 }
 
 export type KeySessionStart =
-    | { kind: 'session'; session: KeySession; csrfToken: string; section: HandoffSection | null }
+    /** `notice`: the phone's link could not be used and this is the same account's earlier sign-in, resumed. Shown on the page. */
+    | { kind: 'session'; session: KeySession; csrfToken: string; section: HandoffSection | null; notice?: string }
     /**
      * An earlier password sign-in whose cookie is still live: the node's owner, no member. `totpSetupRequired`: the
      * node's 2FA is off, so the session opens only the 2FA setup card (design step 6, components/auth/TotpSetupGate).
      */
     | { kind: 'password'; csrfToken: string; section: HandoffSection | null; totpSetupRequired: boolean }
     | { kind: 'none'; section: HandoffSection | null }
-    | { kind: 'failed'; message: string; section: HandoffSection | null };
+    | { kind: 'failed'; message: string; section: HandoffSection | null }
+    /**
+     * The phone's link could not be used and the browser is still signed in as someone else (another key, the password,
+     * or a key the refusal didn't name). Not resumed: the page says who and offers Sign out. `csrfToken` is for that.
+     */
+    | { kind: 'other-session'; message: string; csrfToken: string; section: HandoffSection | null };
 
 function asRole(r: unknown): KeySessionRole | null {
     return r === 'owner' || r === 'admin' || r === 'moderator' ? r : null;
@@ -88,13 +94,30 @@ export function handoffRefusedMessage(why: 'expired' | 'replay' | 'refused' | 'd
     }
 }
 
+/** The phone's link was refused and the browser's live sign-in is the SAME key: carried on, and said. */
+export function handoffResumedMessage(why: 'expired' | 'replay' | 'refused'): string {
+    const what = why === 'expired' ? 'had expired' : why === 'replay' ? 'was already used' : "couldn't be used";
+    return `The sign-in link from your phone ${what}, so Settings carried on with this browser's earlier sign-in to the same account.`;
+}
+
+/**
+ * The phone's link was refused and the browser is still signed in as someone else: `who` is the callsign, or null for
+ * the password. `sure`: the refusal named the link's key, so it is certainly not this one.
+ */
+export function otherSessionMessage(who: { callsign: string | null } | 'password', sure: boolean): string {
+    const as = who === 'password' ? 'with the admin password' : `as ${who.callsign || 'another account'}`;
+    return `You're still signed in here ${as} — ${sure ? 'not' : 'maybe not'} the account your phone just sent. Sign out, then tap Manage again.`;
+}
+
 /**
  * Run when the single-node /settings page loads, and again whenever a new link reaches the page already open
  * (App.tsx, hashchange: an Android Custom Tab brought back to the front loads `/settings#handoff=…` into the page it
  * still shows, and a change of fragment alone reloads nothing). `win` is injectable for tests.
  *
- * A link that can't be used is SAID (`failed`), never left as a silent password form, unless the browser already holds a
- * live session, which is resumed as a reload would: a page that loaded twice burns its own link the first time.
+ * A link that can't be used is SAID (`failed`), never left as a silent password form. If the browser still holds a live
+ * session, it is resumed (with a `notice`) only when it is the key the link was made for: a page that loaded twice burns
+ * its own link the first time. Any other live session (another key, the password, or a refusal that named no key) is
+ * `other-session`: the person would otherwise believe the phone's account had signed in.
  */
 export async function startKeySession(win: Pick<Window, 'location' | 'history'> = window): Promise<KeySessionStart> {
     const hash = win.location.hash || '';
@@ -106,6 +129,8 @@ export async function startKeySession(win: Pick<Window, 'location' | 'history'> 
     }
 
     let refused: string | null = null;
+    /** Why the phone's link was refused, and for whose key (when the node said): null when no link was tried. */
+    let refusal: { why: 'expired' | 'replay' | 'refused'; mintedFor: string | null } | null = null;
     if (token) {
         try {
             const res = await fetch('/api/local/admin/auth/exchange', {
@@ -119,12 +144,16 @@ export async function startKeySession(win: Pick<Window, 'location' | 'history'> 
             if (res.ok && role && typeof body.memberPubkey === 'string' && typeof body.csrfToken === 'string') {
                 return { kind: 'session', session: { memberPubkey: body.memberPubkey, role }, csrfToken: body.csrfToken, section };
             }
-            refused = handoffRefusedMessage(body.expired ? 'expired' : body.replay ? 'replay' : 'refused');
+            const why = body.expired ? 'expired' : body.replay ? 'replay' : 'refused';
+            refused = handoffRefusedMessage(why);
+            refusal = { why, mintedFor: typeof body.mintedFor === 'string' ? body.mintedFor : null };
         } catch {
             refused = handoffRefusedMessage('unreachable');
+            refusal = { why: 'refused', mintedFor: null };
         }
     } else if (carriesHandoff(hash)) {
         refused = handoffRefusedMessage('damaged');
+        refusal = { why: 'refused', mintedFor: null };
     }
 
     // No usable link: an earlier sign-in (a key's or the password's) may still hold a live cookie.
@@ -138,8 +167,17 @@ export async function startKeySession(win: Pick<Window, 'location' | 'history'> 
             const csrfRes = await fetch('/api/local/admin/csrf-token', { method: 'POST', credentials: 'same-origin' });
             const csrfBody = await csrfRes.json().catch(() => ({})) as Record<string, unknown>;
             if (csrfRes.ok && typeof csrfBody.csrfToken === 'string') {
-                if (isPassword) return { kind: 'password', csrfToken: csrfBody.csrfToken, section, totpSetupRequired: body.totpSetupRequired === true };
-                return { kind: 'session', session: { memberPubkey: body.memberPubkey as string, role: role! }, csrfToken: csrfBody.csrfToken, section };
+                const csrfToken = csrfBody.csrfToken;
+                const memberPubkey = isPassword ? null : body.memberPubkey as string;
+                if (refusal && (!memberPubkey || memberPubkey !== refusal.mintedFor)) {
+                    const who = memberPubkey ? { callsign: typeof body.callsign === 'string' ? body.callsign : null } : 'password' as const;
+                    return { kind: 'other-session', message: otherSessionMessage(who, !memberPubkey || refusal.mintedFor !== null), csrfToken, section };
+                }
+                if (isPassword) return { kind: 'password', csrfToken, section, totpSetupRequired: body.totpSetupRequired === true };
+                return {
+                    kind: 'session', session: { memberPubkey: memberPubkey!, role: role! }, csrfToken, section,
+                    ...(refusal ? { notice: handoffResumedMessage(refusal.why) } : {}),
+                };
             }
         }
     } catch { /* fall through to the password login */ }

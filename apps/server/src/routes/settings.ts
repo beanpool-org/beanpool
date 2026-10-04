@@ -24,6 +24,7 @@ import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
 import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
 import { getDoor, setDoor, doorSettingRefusal, type CommunityDoor } from '../config/door.js';
+import { HealthError, healthSummary, readHealthAccessLog, setHealthSettings } from '../engine/community-health.js';
 import { KnownFloorError, knownFloorSettings, setKnownFloorSettings, knownFloorExceptions, readKnownFloorLog, setKnownFloorException } from '../config/known-floor.js';
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
@@ -297,6 +298,28 @@ router.post('/api/local/admin/known-floor', async (ctx) => {
     try {
         ctx.body = setKnownFloorSettings((ctx.state as any)?.actor || 'owner:password', (ctx as any).requestBody || {});
     } catch (e) { knownFloorRefusal(ctx, e); }
+});
+
+// The Community health panel in Settings (engine/community-health.ts): every owner and admin reads the totals, the two
+// lines and who opened the exceptions; only an owner moves the lines. The exceptions themselves open on an admin's phone,
+// where the names list is (GET /api/names/health/exceptions, signed with their key, logged).
+router.get('/api/local/admin/community-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can open Community health.')) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { ...healthSummary(), log: readHealthAccessLog(100) };
+});
+
+router.post('/api/local/admin/community-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change what the admins see.')) return;
+    try {
+        ctx.body = setHealthSettings((ctx.state as any)?.actor || 'owner:password', (ctx as any).requestBody || {});
+    } catch (e) {
+        if (!(e instanceof HealthError)) throw e;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code };
+    }
 });
 
 router.post('/api/local/admin/known-floor/exception', async (ctx) => {

@@ -96,16 +96,6 @@ async function stubFetch(input: string, init?: RequestInit): Promise<Response> {
     return reply(200, a);
 }
 
-/** What was sent other than reads of a node's info: before the first signed request to a node the phone hasn't heard
- * from, it reads that node's info, unsigned (request-signing-version.ts learnRequestSigning). */
-const sent = () => calls.filter(c => new URL(c.url).pathname !== '/api/community/info');
-/** The phone read `origin`'s info first, and sent it no key or signature. */
-function readInfoFirst(origin: string) {
-    expect(calls[0].url).toBe(`${origin}/api/community/info`);
-    expect(calls[0].headers['X-Public-Key']).toBeUndefined();
-    expect(calls[0].headers['X-Signature']).toBeUndefined();
-}
-
 beforeEach(() => {
     calls = [];
     answers = {};
@@ -130,9 +120,8 @@ function boundFor(host: string, c: Call, path: string): boolean {
 describe('every request is signed for the community it goes to', () => {
     it('a request to https://a.test carries X-Signed-For: a.test and a signature over core\'s format-2 bytes for that URL', async () => {
         await signedPost('https://a.test', '/api/member/purge', { action: 'purge_account' }, identity);
-        readInfoFirst('https://a.test');
-        expect(sent()).toHaveLength(1);
-        const [c] = sent();
+        expect(calls).toHaveLength(1);
+        const [c] = calls;
         expect(c.url).toBe('https://a.test/api/member/purge');
         expect(c.headers['X-Public-Key']).toBe(PUB);
         expect(c.headers['X-Signed-For']).toBe('a.test');
@@ -158,16 +147,15 @@ describe('every request is signed for the community it goes to', () => {
         (globalThis as any).fetch = underlying;
         installNodeRequestSigning();
         await fetch('https://w.test/api/community/me?fresh=1');
-        expect(underlying).toHaveBeenCalledTimes(2);
-        readInfoFirst('https://w.test');
-        const [c] = sent();
+        expect(underlying).toHaveBeenCalledTimes(1);
+        const [c] = calls;
         expect(c.headers['X-Signed-For']).toBe('w.test');
         expect(boundFor('w.test', c, '/api/community/me')).toBe(true);
     });
 
     it('the directory call to the global node signs for the global node\'s host', async () => {
         await fetchGlobalHome(null, identity);
-        const [c] = sent();
+        const [c] = calls;
         expect(new URL(c.url).origin).toBe('https://global.beanpool.org');
         expect(c.headers['X-Signed-For']).toBe('global.beanpool.org');
         expect(boundFor('global.beanpool.org', c, '/api/global/home')).toBe(true);
@@ -554,17 +542,16 @@ describe('the phone remembers across app starts', () => {
             await fetch(url);
         }
         await fetch('https://a4.test/api/community/me');
-        expect(sent()).toHaveLength(4);
-        for (const c of calls.filter(c => !c.url.startsWith('https://a4.test/api/community/me'))) {
+        expect(calls).toHaveLength(4);
+        for (const c of calls.slice(0, 3)) {
             expect(c.headers['X-Public-Key'], c.url).toBeUndefined();
             expect(c.headers['X-Signature'], c.url).toBeUndefined();
         }
-        expect(sent()[3].headers['X-Public-Key']).toBe(PUB);
-        expect(boundFor('a4.test', sent()[3], '/api/community/me')).toBe(true);
+        expect(calls[3].headers['X-Public-Key']).toBe(PUB);
+        expect(boundFor('a4.test', calls[3], '/api/community/me')).toBe(true);
         // An address that names the community and reaches another is refused, never sent unsigned (#1224).
-        const before = calls.length;
         await expect(fetch('https://a4.test\\@evil.test/api/x')).rejects.toBeInstanceOf((await import('../node-url')).UnsafeNodeAddressError);
-        expect(calls).toHaveLength(before);
+        expect(calls).toHaveLength(4);
     });
 
     it('a stored 2 holds on the next run, whatever the node answers first: before its stored answer loads, or after (F2)', async () => {

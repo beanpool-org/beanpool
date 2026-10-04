@@ -135,12 +135,14 @@ beforeEach(() => {
 });
 
 describe('a restore onto a community whose server is older than request binding', () => {
-    it('reads its info first, unsigned, then signs everything in the old format it reads: reads, writes, the socket, push', async () => {
+    it('the tab strip\'s info read goes unsigned and is answered; then reads, writes, the socket and push go in the old format', async () => {
         const OLD = 'https://old1.test';
         nodes[OLD] = 'old';
         // Restored with 12 words: the phone holds the key and the community's address, and has never heard from it.
         mem.set('beanpool_anchor_url', OLD);
         await addSavedNode(OLD);
+        // The tab strip asks the community what it is on every switch ((tabs)/_layout.tsx): through the signing wrapper.
+        expect(await fetchNodeProfile(OLD)).not.toBeNull();
 
         expect(await (await fetch(`${OLD}/api/community/me`)).status).toBe(200);
         expect(await post(OLD, '/api/push-tokens', { token: 'ExponentPushToken[x]', platform: 'android' })).toBe(200);
@@ -156,6 +158,28 @@ describe('a restore onto a community whose server is older than request binding'
         expect(calls[0].headers['X-Public-Key']).toBeUndefined();
         // Kept on its saved entry for the next run.
         expect((await getSavedNodes()).find(n => n.url === OLD)?.requestSigning).toBe(1);
+    });
+
+    it('a socket opened before anything was heard from the node reads its info first, and is signed in the old format', async () => {
+        const OLD = 'https://old4.test';
+        nodes[OLD] = 'old';
+        mem.set('beanpool_anchor_url', OLD);
+        const ws = await buildSignedWsParams('wss://old4.test/ws', identity.privateKey, PUB);
+        expect(socketAccepted('wss://old4.test/ws', ws)).toBe(true);
+        expect(infoReads(OLD)).toHaveLength(1);
+        expect(infoReads(OLD)[0].headers['X-Signature']).toBeUndefined();
+    });
+
+    it('a request signed before any info read is refused once by the old node, signed again in the old format, and that is kept', async () => {
+        const OLD = 'https://old5.test';
+        nodes[OLD] = 'old';
+        mem.set('beanpool_anchor_url', OLD);
+        expect(await post(OLD, '/api/push-tokens', { token: 'ExponentPushToken[q]', platform: 'android' })).toBe(200);
+        expect(calls.map(c => c.status)).toEqual([403, 200]);
+        calls = [];
+        expect(await (await fetch(`${OLD}/api/community/me`)).status).toBe(200);
+        expect(await post(OLD, '/api/profile/update', { publicKey: PUB })).toBe(200);
+        expect(refused()).toEqual([]);
     });
 
     it('the tab strip\'s own info read (node-profile.ts) is the one waited for: no second read while it is in flight', async () => {
@@ -204,7 +228,7 @@ describe('a restore onto a community whose server is older than request binding'
 });
 
 describe('a current community, and no downgrade', () => {
-    it('a node that says it reads 2: format 2 for reads, writes and the socket, after one unsigned info read', async () => {
+    it('a node that says it reads 2: format 2 for reads, writes and the socket, and its info read once, unsigned', async () => {
         const NEW = 'https://new1.test';
         nodes[NEW] = 'new';
         mem.set('beanpool_anchor_url', NEW);
@@ -213,6 +237,7 @@ describe('a current community, and no downgrade', () => {
         expect(socketAccepted('wss://new1.test/ws', await buildSignedWsParams('wss://new1.test/ws', identity.privateKey, PUB))).toBe(true);
         expect(refused()).toEqual([]);
         expect(infoReads(NEW)).toHaveLength(1);
+        expect(infoReads(NEW)[0].headers['X-Signature']).toBeUndefined();
         expect(calls.filter(c => c.headers['X-Signature']).every(c => c.headers['X-Signed-For'] === 'new1.test')).toBe(true);
     });
 
@@ -232,11 +257,15 @@ describe('a current community, and no downgrade', () => {
         expect(knownRequestSigning(NEW)).toBe(2);
     });
 
-    it('a node that answered its info with 2 is not moved by a refusal even before anything was saved', async () => {
+    it('a request signed while the node\'s info read is in flight waits for it: an answer of 2 is not moved by a refusal', async () => {
         const NEW = 'https://new3.test';
         nodes[NEW] = 'new-refusing';
         mem.set('beanpool_anchor_url', NEW);
-        expect(await post(NEW, '/api/push-tokens', { token: 'ExponentPushToken[r]', platform: 'android' })).toBe(403);
+        const [, status] = await Promise.all([
+            fetchNodeProfile(NEW),
+            post(NEW, '/api/push-tokens', { token: 'ExponentPushToken[r]', platform: 'android' }),
+        ]);
+        expect(status).toBe(403);
         // The info read said 2 (it is answered unsigned), so the refusal is not taken as an old server's.
         expect(calls.filter(c => c.url === `${NEW}/api/push-tokens`)).toHaveLength(1);
         expect(knownRequestSigning(NEW)).toBe(2);

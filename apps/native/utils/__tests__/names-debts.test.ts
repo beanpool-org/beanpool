@@ -193,3 +193,25 @@ describe('the names list screen (app/names-list.tsx): every debt control asks fi
         expect(screen).toContain("btn('Save', saveChecked, 'primary')");
     });
 });
+
+describe('the member’s side: the Ledger’s repayment card and Pay the Commons', () => {
+    const fsMod = require('node:fs') as typeof import('node:fs');
+    const pathMod = require('node:path') as typeof import('node:path');
+    const read = (...p: string[]) => fsMod.readFileSync(pathMod.join(__dirname, '..', '..', ...p), 'utf8');
+    it('the Ledger shows the card; the card reads the member’s own repayment and links to Pay the Commons', () => {
+        expect(read('app', '(tabs)', 'ledger.tsx')).toContain('<RepaymentCard />');
+        const card = read('components', 'RepaymentCard.tsx');
+        expect(card).toContain('fetchMyRepayment(node, identity)');
+        expect(card).toContain("router.push('/pay-commons')");
+    });
+    it('Pay the Commons checks the amount and code, asks first, then pays with the code as the debt id', () => {
+        const pay = read('app', 'pay-commons.tsx');
+        expect(pay).toMatch(/parseBeans\(amount\)[\s\S]{0,300}debtCodeOk\(debt\)[\s\S]{0,200}Alert\.alert\(REPAYMENT_COPY\.payTitle[\s\S]{0,500}payTheCommons\(node, identity, beans, debt \|\| undefined\)/);
+        expect(pay).toContain('if (!r.ok) { setError(r.message); return; }');
+    });
+    it('the shared pay-back code opens Pay the Commons with it filled in', () => {
+        expect(DEBT_COPY.shareCode(DEBT)).toContain(`beanpool://pay-commons?code=${DEBT.id}`);
+        expect(REPAYMENT_COPY.paid(80, 'tx-7', true)).toBe('Paid 80 Beans to the Commons. Give this reference to an admin, who settles your debt with it: tx-7');
+        expect(REPAYMENT_COPY.paid(80, 'tx-7', false)).toBe('Paid 80 Beans to the Commons.');
+    });
+});

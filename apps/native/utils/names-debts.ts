@@ -87,8 +87,8 @@ export const DEBT_COPY = {
         + 'Commons took the debt when they left. If it passes, the record stays, marked forgiven, and an admin can confirm them again. '
         + 'The Decision names no one.',
     forgiveButton: 'Start the Decision',
-    shareCode: (d: NamesDebt) => `To pay back your debt to the Commons (${beans(leftOf(d))}), open BeanPool, go to Ledger, tap Pay the Commons, `
-        + `and enter this pay-back code: ${d.id}`,
+    shareCode: (d: NamesDebt) => `To pay back your debt to the Commons (${beans(leftOf(d))}), open beanpool://pay-commons?code=${d.id} `
+        + `on your phone, or open BeanPool, go to Ledger, tap Pay the Commons, and enter this pay-back code: ${d.id}`,
     /** The matching-name warning: an admin adding a name the list holds already, with an open debt on it. */
     sameNameTitle: 'This name has an open debt',
     sameName: (name: string, d: NamesDebt) => `${name} is on the list already, and left owing the Commons ${beans(leftOf(d))}, still open. `

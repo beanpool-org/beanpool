@@ -261,6 +261,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('known_consent_log', 'member_pubkey');
     move('names_debts', 'settled_by');
     move('names_debt_payments', 'payer_pubkey');
+    move('money_requests', 'payer_pubkey');
     move('known_floor_log', 'actor_pubkey');
     move('known_floor_log', 'member_pubkey');
     // The old key's locked copy of its names-list record (engine/names-list.ts): sealed to the old key, so the new one

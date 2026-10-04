@@ -55,6 +55,7 @@ import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neu
 import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
 import { repaymentOf, assertPayableDebt, linkDebtPayment } from './engine/names-debts.js';
+import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
 import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
@@ -5048,8 +5049,17 @@ export function sweepRepayment(memberPubkey: string): number {
  * Paying back a debt (design §4.2 (a)): a member sends Beans they hold to the Commons. Only what is above 0: a payment to
  * the Commons never takes anyone into debt, so it skips no floor rule. An admin then links it to the debt record
  * (engine/names-debts.ts settleByPayment).
+ *
+ * Safe to retry (engine/money-requests.ts): with a `requestId`, a repeat of the same payment gets the first answer back
+ * and pays nothing; the same id for a different payment is refused (409). Without one (an older app), paid each time.
+ * The checks run before the payment's conservingTransaction (a refusal is no ledger rebuild); the id is written inside it.
  */
-export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unknown): Transaction {
+export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unknown, requestId?: unknown): PaidToCommons {
+    const request = moneyRequestOf(memberPubkey, PAY_COMMONS_ROUTE, requestId, { amount, debtId });
+    if (request) {
+        const first = priorAnswer<PaidToCommons>(request);
+        if (first) return first;
+    }
     const m = getMember(memberPubkey);
     if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
         throw Object.assign(new Error('Only an active member pays the Commons.'), { status: 403 });
@@ -5059,19 +5069,28 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     }
     // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
     const beans = Math.round(amount * 100) / 100;
-    const txn = conservingTransaction(() => {
-        const { balance } = getBalance(memberPubkey);
-        if (beans > balance) throw Object.assign(new Error(`You hold ${balance} Beans: you can pay the Commons only what you hold.`), { status: 409 });
-        const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId);
+    const { balance } = getBalance(memberPubkey);
+    if (beans > balance) throw Object.assign(new Error(`You hold ${balance} Beans: you can pay the Commons only what you hold.`), { status: 409 });
+    const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId);
+    const answer = conservingTransaction(() => {
         const t = moveToCommons(memberPubkey, beans, 'Paid to the Commons', { allowMemberDebit: true, authSigner: memberPubkey });
         if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });
         // Made for a debt: the link an admin's settle reads (engine/names-debts.ts settleByPayment).
         if (debt) linkDebtPayment(debt, t.id, memberPubkey, beans);
-        return t;
+        const paid: PaidToCommons = { transactionId: t.id, amount: t.amount };
+        if (request) recordAnswer(request, paid);
+        return paid;
     });
     try { broadcast({ type: 'profile_updated', publicKey: memberPubkey }); } catch { }
-    return txn;
+    return answer;
 }
+
+/** POST /api/commons/pay's answer: the payment's reference (what an admin settles a debt with) and the Beans paid. */
+export interface PaidToCommons {
+    transactionId: string;
+    amount: number;
+}
+const PAY_COMMONS_ROUTE = 'POST /api/commons/pay';
 
 export { recordDeferredWageClaim } from './engine/escrow.js';
 

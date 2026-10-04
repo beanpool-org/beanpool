@@ -1655,6 +1655,22 @@ CREATE TABLE IF NOT EXISTS names_debt_payments (
 );
 CREATE INDEX IF NOT EXISTS idx_names_debt_payments_debt ON names_debt_payments(debt_id);
 
+-- A member's money write made safe to retry (engine/money-requests.ts; POST /api/commons/pay first): the id the app made
+-- for one payment, written with the payment, and the answer it got, which a repeat with the same id gets back without paying
+-- again. `fingerprint` is what the payment was, so the same id for a different one is refused. Kept 7 days (the age rule).
+CREATE TABLE IF NOT EXISTS money_requests (
+    payer_pubkey     TEXT NOT NULL,
+    request_id       TEXT NOT NULL,
+    route            TEXT NOT NULL,
+    fingerprint      TEXT NOT NULL,
+    answer           TEXT NOT NULL,
+    created_at       DATETIME NOT NULL,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (payer_pubkey, request_id)
+);
+CREATE INDEX IF NOT EXISTS idx_money_requests_created ON money_requests(created_at);
+
 -- The Community health panel (community modes slice 6, engine/community-health.ts): every opening of the exceptions list,
 -- who and when (design §4.4, §7.1: the watchers are watched), and every other look an admin takes at one member's
 -- balance outside that member's consent: while removing them (`subject_pubkey` is whose). And every look an admin takes

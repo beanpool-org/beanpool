@@ -50,7 +50,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { automationTokenProblem, headerValueProblem } from './automation-token.mjs';
+import { automationTokenProblem, headerValueProblem, fetchNoRedirect } from './automation-token.mjs';
 
 function parseArgs(argv) {
     const args = {};
@@ -145,7 +145,7 @@ function ownerOnly(file) {
  */
 async function mintTokenIfNone(primary, adminPw) {
     const post = async (p) => {
-        const res = await fetch(`${primary}${p}`, {
+        const res = await fetchNoRedirect(`${primary}${p}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPw },
             body: JSON.stringify({ password: adminPw }),
@@ -217,7 +217,7 @@ async function main() {
     console.log(`→ Fetching enrollment bundle from ${enrollUrl} ...`);
     let bundle;
     try {
-        const res = await fetch(enrollUrl, {
+        const res = await fetchNoRedirect(enrollUrl, {
             method: 'GET',
             headers: auth,
         });
@@ -229,6 +229,7 @@ async function main() {
         }
         bundle = await res.json();
     } catch (e) {
+        if (e?.redirect) die(e.message);
         die(`Could not reach the primary: ${e?.message || e}\n` +
             '(For a self-signed-CA LAN primary, set NODE_EXTRA_CA_CERTS to its CA pem.)');
     }

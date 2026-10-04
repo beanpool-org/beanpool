@@ -12,7 +12,7 @@
 // credit line so it can run at a deficit. Mints no beans. The offer step needs the admin-offer route
 // (POST /api/local/admin/treasury/:id/offer) deployed — if the node predates it you'll get a clear 404.
 
-import { automationTokenProblem, headerValueProblem } from './automation-token.mjs';
+import { automationTokenProblem, headerValueProblem, fetchNoRedirect } from './automation-token.mjs';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // tolerate a direct self-signed node; harmless via Cloudflare
 
@@ -31,15 +31,19 @@ const admin = { 'content-type': 'application/json', ...auth };
 // now refuses any `data:` avatar that is not a base64 JPEG/PNG/WebP/GIF.
 const avatar = 'bundled://sunflower';
 
+// Every request carries the credential, so none follows a redirect (automation-token.mjs): a redirect, or no answer at
+// all, stops the script with a plain message.
+const toNode = (route, init, doing, after = '') => fetchNoRedirect(`${NODE_URL}${route}`, init).catch((e) => {
+    console.error(e?.redirect ? `✗ ${e.message}` : `✗ Could not reach ${NODE_URL} to ${doing}: ${e?.cause?.code || e?.message || e}.${after}`);
+    process.exit(1);
+});
+
 // 1. Find or create the treasury.
 // The admin list (the same answer as /api/treasuries, which is members-only now): an unsigned ask of that one is refused,
 // and an empty list made this create a second "Community Eggs" on every run.
 // Only an OK answer says whether one exists: a rate limit, a restart or a refused credential is not "none yet", and
 // reading it as that made a second one.
-const listRes = await fetch(`${NODE_URL}/api/local/admin/treasury`, { headers: auth }).catch((e) => {
-    console.error(`✗ Could not reach ${NODE_URL} to list the treasuries: ${e?.cause?.code || e?.message || e}. Nothing was created.`);
-    process.exit(1);
-});
+const listRes = await toNode('/api/local/admin/treasury', { headers: auth }, 'list the treasuries', ' Nothing was created.');
 const list = await listRes.json().catch(() => null);
 if (!listRes.ok || !Array.isArray(list?.treasuries)) {
     console.error(`✗ Listing the treasuries failed (HTTP ${listRes.status}): ${list?.error || listRes.statusText || 'no list in the answer'}. Nothing was created; run it again once the node answers.`);
@@ -47,7 +51,7 @@ if (!listRes.ok || !Array.isArray(list?.treasuries)) {
 }
 let eggs = list.treasuries.find(t => t.name === 'Community Eggs');
 if (!eggs) {
-    const res = await fetch(`${NODE_URL}/api/local/admin/treasury`, { method: 'POST', headers: admin, body: JSON.stringify({ name: 'Community Eggs', avatar, creditLine: 200 }) });
+    const res = await toNode('/api/local/admin/treasury', { method: 'POST', headers: admin, body: JSON.stringify({ name: 'Community Eggs', avatar, creditLine: 200 }) }, 'create the treasury');
     const d = await res.json().catch(() => ({}));
     if (!res.ok || !d.success) { console.error(`✗ create failed (HTTP ${res.status}):`, d.error || d); process.exit(1); }
     eggs = { publicKey: d.publicKey, liveOffers: 0 };
@@ -60,10 +64,10 @@ if (!eggs) {
 if ((eggs.liveOffers ?? 0) > 0) {
     console.log('   Already has a live offer — nothing to post. Done. 🥚');
 } else {
-    const res = await fetch(`${NODE_URL}/api/local/admin/treasury/${eggs.publicKey}/offer`, {
+    const res = await toNode(`/api/local/admin/treasury/${eggs.publicKey}/offer`, {
         method: 'POST', headers: admin,
         body: JSON.stringify({ category: 'food', title: 'Dozen free-range eggs', description: 'Fresh daily from the community flock — pays for the feed.', credits: 12, priceType: 'fixed', repeatable: true }),
-    });
+    }, 'post the offer');
     const d = await res.json().catch(() => ({}));
     if (res.ok && d.success) {
         console.log(`✅ Posted recurring offer: "Dozen free-range eggs" @ 12 Beans`);

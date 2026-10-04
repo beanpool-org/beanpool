@@ -31,7 +31,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 // The one definition of what an app signs. Not a workspace dependency of the repo root, so by path to its build.
 import { buildBoundRequestHeaders, ed25519Signer } from '../../packages/beanpool-core/dist/index.js';
-import { automationTokenProblem, headerValueProblem } from '../automation-token.mjs';
+import { automationTokenProblem, headerValueProblem, fetchNoRedirect } from '../automation-token.mjs';
 
 // fileURLToPath, not `.pathname` (review finding): `.pathname` yields "/C:/..." on Windows and leaves %20 in
 // any path containing a space, so it silently reads and writes the wrong file rather than failing.
@@ -71,9 +71,12 @@ export function newIdentity(callsign) {
     };
 }
 
-/** Plain request — for the /api/local/ paths, which bypass the signature middleware. (An invite redeem is signed.) */
+/**
+ * Plain request — for the /api/local/ paths, which bypass the signature middleware. (An invite redeem is signed.) It
+ * carries the admin headers (admin()), so it never follows a redirect: a 3xx throws (automation-token.mjs).
+ */
 export async function plain(node, method, path, body, headers = {}) {
-    const res = await fetch(`${base(node)}${path}`, {
+    const res = await fetchNoRedirect(`${base(node)}${path}`, {
         method,
         headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
         body: body ? JSON.stringify(body) : undefined,

@@ -293,7 +293,7 @@ run_check "setup_backup" node --test scripts/setup-backup.test.mjs
 
 # The owner scripts that send an automation token (bootstrap-community-eggs, grant-operator, the shared token check)
 # against a stand-in node on localhost. Instant.
-run_check "token_scripts" node --test scripts/automation-token.test.mjs scripts/bootstrap-community-eggs.test.mjs scripts/grant-operator.test.mjs
+run_check "token_scripts" node --test scripts/automation-token.test.mjs scripts/bootstrap-community-eggs.test.mjs scripts/grant-operator.test.mjs scripts/credential-redirects.test.mjs
 
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '

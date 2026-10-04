@@ -2737,6 +2737,16 @@ export interface IssueRekeyCodeResponse {
     operator: string;
 }
 
+/** The node’s answer to a cancelled re-key code: the member’s status now, and a note when it was guessed (an older code). */
+export interface CancelRekeyCodeResponse {
+    success: boolean;
+    cancelled: true;
+    oldPubkey: string;
+    callsign: string;
+    status: string;
+    note?: string;
+}
+
 export interface CompleteRekeyResponse {
     success: boolean;
     oldPubkey: string;
@@ -2799,6 +2809,26 @@ export async function issueRekeyCodeApi(
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+/** Cancels a re-key code nobody has used: the member’s key works again and their status is put back. */
+export async function cancelRekeyCodeApi(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<CancelRekeyCodeResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/cancel`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        // A node before the cancel answers 404 with no message.
+        throw new Error(body.error || (res.status === 404 ? 'This node can’t cancel a re-key code yet: update it first.' : `HTTP ${res.status}: ${res.statusText}`));
     }
     return res.json();
 }

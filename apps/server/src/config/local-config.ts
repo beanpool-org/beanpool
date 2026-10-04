@@ -2,9 +2,9 @@
  * Local Configuration — Node Identity & Admin Auth
  *
  * First boot:
- *   - Reads ADMIN_PASSWORD env var → hashes with scrypt → saves to data/local-config.json
- *   - If no env var, auto-generates a random password and writes it to data/first-admin-password.txt (0600).
- *     Never printed: the log says only where the file is. Changing the password deletes the file.
+ *   - A new install makes no admin password (initAdminPassword): its first owner claims it with the claim code.
+ *   - An existing node keeps the password it has (scrypt hash in data/local-config.json). An older install's
+ *     data/first-admin-password.txt is never printed: the log says only where it is. Changing the password deletes it.
  *
  * Subsequent boots:
  *   - Loads existing config from disk (env var ignored)
@@ -348,10 +348,10 @@ export function generateStrongPassword(): string {
 }
 
 // ===================== FIRST ADMIN PASSWORD =====================
-// The password a first boot makes up when .env has no ADMIN_PASSWORD. It is never printed: in Docker stdout IS the
-// container log, which outlives the password (docker logs, log shippers, support bundles, screenshots), and the
-// admin password counts as an owner. It goes in this file, readable by the server's user only, until the password
-// is changed. Backups never carry it: they take named files only.
+// The password an older version's first boot made up when .env had no ADMIN_PASSWORD (a new install makes none now:
+// initAdminPassword). It was never printed: in Docker stdout IS the container log. It went in this file, readable by the
+// server's user only, until the password is changed; an install that still has it is reminded at boot. Backups never
+// carry it: they take named files only.
 
 export const FIRST_PASSWORD_FILE = 'first-admin-password.txt';
 
@@ -373,32 +373,6 @@ function fsyncDir(dir: string): void {
     } catch { /* not every filesystem (or platform) syncs a directory */ } finally {
         if (fd !== null) try { fs.closeSync(fd); } catch { /* closed */ }
     }
-}
-
-/**
- * Write the file whole or not at all: a fresh 0600 temp file beside it, renamed over it. A file left from an earlier
- * password is replaced. Throws when it cannot be written; the error names the file, never the password.
- */
-function writeFirstPasswordFile(password: string): void {
-    const target = firstPasswordPath();
-    const tmp = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
-    try {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-        const fd = fs.openSync(tmp, 'wx', 0o600);
-        try {
-            fs.writeSync(fd, password + '\n');
-            fs.fsyncSync(fd);
-        } finally {
-            fs.closeSync(fd);
-        }
-        fs.chmodSync(tmp, 0o600);
-        fs.renameSync(tmp, target);
-    } catch (e) {
-        try { fs.rmSync(tmp, { force: true }); } catch { /* never made */ }
-        throw new Error(`[Config] Could not write the first admin password to ${target} (${(e as NodeJS.ErrnoException).code || 'error'}). ` +
-            'Nothing was saved, so the next start makes one again. Check the data folder is writable and has free space, or set ADMIN_PASSWORD in .env.');
-    }
-    fsyncDir(DATA_DIR);
 }
 
 /**
@@ -444,10 +418,13 @@ function checkFirstPasswordFile(config: LocalConfig): void {
 }
 
 /**
- * Initialize admin password on first boot.
- * - If config already locked → skip (password already set), but look at the first-password file if it is there
- * - If ADMIN_PASSWORD env var set → hash and save
- * - If no env var → auto-generate, write it to the first-password file, and log only where it is
+ * The admin password at boot (node sign-in step 8: no password on new installs).
+ * - Config locked → an existing node: its password stays exactly as it is, and the first-password file is looked at
+ * - Not locked → a new install (no local-config.json, or one never locked, or a Wipe & Reset): no password is made and
+ *   ADMIN_PASSWORD in .env is ignored. The claim code (claim-code.ts) is the only way to the first owner. Such a node is
+ *   never locked here, so a claimed node rebooted with ADMIN_PASSWORD set still has none.
+ * - The server suites' fresh data dirs still take ADMIN_PASSWORD when BEANPOOL_SUITE_ENV_PASSWORD=1
+ *   (scripts/server-suites.mjs DEFAULT_ENV): the old first boot, kept for the suites that sign in with a password
  */
 export function initAdminPassword(): void {
     const config = getLocalConfig();
@@ -458,19 +435,22 @@ export function initAdminPassword(): void {
         return;
     }
 
-    let password = process.env.ADMIN_PASSWORD;
-    const generated = !password;
-
-    if (password) {
-        const validation = validatePasswordStrength(password);
-        if (!validation.valid) {
-            throw new Error(`[Config] ADMIN_PASSWORD environment variable is invalid: ${validation.error}`);
+    if (!process.env.ADMIN_PASSWORD || process.env.BEANPOOL_SUITE_ENV_PASSWORD !== '1') {
+        if (process.env.ADMIN_PASSWORD) {
+            console.log('🔑 ADMIN_PASSWORD in .env is ignored: a new install has no admin password. Claim this community with its one-time claim code: run `beanpool claim` on this server.');
         }
-    } else {
-        password = generateStrongPassword();
-        // Before the config is locked: if the file cannot be written this throws with nothing saved, and the
-        // next start tries again. Never a fall back to printing it.
-        writeFirstPasswordFile(password);
+        // First boot of a new install: standbys copy with a replication token only, never the admin password.
+        if (config.replicationTokenOnly === undefined) updateLocalConfig({ replicationTokenOnly: true });
+        // A file left by an earlier install whose config was deleted: it holds a password this one does not use.
+        checkFirstPasswordFile(config);
+        return;
+    }
+
+    // The suites' seam: the old first boot with the password from .env.
+    const password = process.env.ADMIN_PASSWORD;
+    const validation = validatePasswordStrength(password);
+    if (!validation.valid) {
+        throw new Error(`[Config] ADMIN_PASSWORD environment variable is invalid: ${validation.error}`);
     }
 
     const { hash, salt } = hashPassword(password);
@@ -481,36 +461,12 @@ export function initAdminPassword(): void {
         adminHash: hash,
         salt: salt,
         joinedAt: Date.now(),
-        // First boot of a new install: standbys copy with a replication token only, never
-        // the admin password. Existing installs never reach this line (isLocked above), so
-        // their setting is left as it is.
         replicationTokenOnly: config.replicationTokenOnly ?? true,
     };
     saveLocalConfig(saved);
 
-    if (generated && getLocalConfig().adminHash !== hash) {
-        // saveLocalConfig logs a failed write and carries on. Unsaved, the file would hold a password that does not
-        // work, and the next start makes another: take it away and stop here, as when the file cannot be written.
-        fs.rmSync(firstPasswordPath(), { force: true });
-        throw new Error(`[Config] Could not save the admin password to ${CONFIG_PATH}, so none was made. ` +
-            'Check the data folder is writable and has free space, or set ADMIN_PASSWORD in .env.');
-    }
-
     console.log('🔒 Admin password configured and saved.');
-
-    if (generated) {
-        const file = firstPasswordPath();
-        console.log('');
-        console.log('🔑 No ADMIN_PASSWORD was set, so this server made up an admin password. It is not in this log.');
-        console.log(`   It is in ${file}, which only the server's own user can read.`);
-        console.log(`   Read it with: ${firstPasswordReadCommand(file)}`);
-        console.log('   Sign in at /settings with it, then change it in Settings → Appliance & Data → Access & Security.');
-        console.log('   The file is deleted when you do.');
-        console.log('');
-    } else {
-        // A file left by an earlier install whose config was deleted: it holds a password this one does not use.
-        checkFirstPasswordFile(saved);
-    }
+    checkFirstPasswordFile(saved);
 }
 
 // ===================== REPLICATION TOKEN =====================

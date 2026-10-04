@@ -2041,8 +2041,9 @@ router.post('/api/local/admin/decisions', async (ctx) => {
     const actionable = [...getAllDecisions('open'), ...getAllDecisions('execution_pending_grace')];
     // The subject's name only: getMember read their photo too, once a Decision (#1478).
     const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
-    // The admin's own key, from their key session; a password session or an automation token has none.
-    const reader = (ctx.state as any)?.actor as string | undefined;
+    // The admin's own key, from their key session only. An automation token carries its maker's key as the actor, but a
+    // token is a script, not a voter (#1613's deciding review); a password session has no key at all.
+    const reader = (ctx.state as any)?.isKeySession ? (ctx.state as any).actor as string | undefined : undefined;
     ctx.body = {
         decisions: actionable.map(d => {
             const subject = d.subject ? callsignOfKey.get(d.subject) as { callsign: string } | undefined : null;

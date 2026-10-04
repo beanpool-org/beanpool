@@ -299,10 +299,11 @@ export function decisionForReader(decision: Decision, reader: string | null | un
 }
 
 /**
- * A Decision as an admin route (/api/local/admin/*) serves it to `reader`, the admin's verified key: the full Decision,
- * except a member's balance and debt recorded in its params. Those go only where decisionForReader sends them: to an
- * admin who may vote in this Decision, or is its subject. Being an admin or the owner is not a reason to see them, and a
- * password session or an automation token has no key, so it never does. balanceHidden says they were left off.
+ * A Decision as an admin route (/api/local/admin/*) serves it to `reader`, the key of the admin's key session: the full
+ * Decision, except a member's balance and debt recorded in its params. Those go only where decisionForReader sends them:
+ * to an admin who may vote in this Decision, or is its subject. Being an admin or the owner is not a reason to see them.
+ * The route passes no reader for a password session or an automation token (a token's actor is its maker's key, but a
+ * token is not a voter), so neither ever does. balanceHidden says they were left off.
  */
 export function decisionForAdmin(decision: Decision, reader: string | null | undefined): Decision & { balanceHidden?: true } {
     if (!carriesMemberBalance(decision.params)) return decision;

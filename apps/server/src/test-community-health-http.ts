@@ -33,7 +33,7 @@ import fs from 'node:fs';
 import { initTls } from './services/tls.js';
 import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance, injectSystemMessage, createDecision } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
-import { ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -416,6 +416,13 @@ async function main(): Promise<void> {
         `being the owner is no reason either: an owner who can't vote in it gets it hidden (${show(asLateOwner)})`);
     const asSignedLate = await call('POST', lateAdmin, '/api/local/admin/decisions', {}, lateSession);
     assert(adminCard(asSignedLate)?.balanceHidden === true && !/-600/.test(asSignedLate.text), `signing the request as well changes nothing for an admin who can't vote (${show(asSignedLate)})`);
+    // #1613's deciding review, finding 1: a token is a script, not a voter. One made by an owner who can vote in it
+    // still gets the vote without the balance or the debt.
+    const asVoterToken = await call('POST', null, '/api/local/admin/decisions', {}, ownerTokenHeaders('admin', founder.pk));
+    const tokenCard = adminCard(asVoterToken);
+    assert(asVoterToken.status === 200 && tokenCard?.balanceHidden === true && !('balance' in (tokenCard?.params ?? {})) && !('debt' in (tokenCard?.params ?? {}))
+        && !/-600|"debt":600/.test(asVoterToken.text),
+        `an automation token gets it hidden, even one made by an owner who can vote in it (${show(asVoterToken)})`);
     const asVoter = await call('GET', sam, `/api/commons/decisions/${removal.id}`);
     assert(asVoter.status === 200 && asVoter.body?.decision?.params?.balance === -600 && asVoter.body?.decision?.params?.debt === 600,
         `a plain member who can vote in it still sees the balance and the debt (${show(asVoter)})`);

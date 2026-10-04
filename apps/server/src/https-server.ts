@@ -646,8 +646,10 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
             conn.msgSentCount++;
             conn.lastActivityAt = Date.now();
 
+            // A member's socket only: a line about a log socket's frame went to every other log socket, whose own
+            // send made a line back, until the stack ran out (thousands of frames a log line with two streams open).
             let watching = false;
-            for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
+            if (type === 'sync') for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
             if (watching) {
                 const dataStr = typeof data === 'string' ? data : data.toString();
                 // What kind of frame, how big, which way and when: never what it says (wsTrafficLine).

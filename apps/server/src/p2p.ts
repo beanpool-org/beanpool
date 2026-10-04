@@ -47,7 +47,7 @@ export class NodeKeyUnreadableError extends Error {}
  * there and can't be read, or a new key that can't be saved, stops the start (NodeKeyUnreadableError): never a new
  * random identity for this run only, and never a write over the file.
  */
-export async function loadOrCreateIdentity() {
+export async function loadOrCreateIdentity(): Promise<ReturnType<typeof privateKeyFromProtobuf>> {
     if (!fs.existsSync(DATA_DIR)) {
         fs.mkdirSync(DATA_DIR, { recursive: true });
     }

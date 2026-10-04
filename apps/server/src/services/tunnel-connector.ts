@@ -32,7 +32,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { getNodeRole, getNodeConfig, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
-import { addressStatus, claimAddress, healAddress } from './registrar-client.js';
+import { addressStatus, askNameHolder, claimAddress, healAddress } from './registrar-client.js';
 import { takeoverHoldsTunnel } from './takeover.js';
 import { logger } from '../logger.js';
 
@@ -461,6 +461,26 @@ export function answersAboutAnotherName(answer: any, stored: any): boolean {
             + `not stored; this server stays on "${stored.name}"`);
     }
     return true;
+}
+
+/**
+ * A claim of `name` that got no answer in time (registrar-client gives up after 5 s) can still complete at the registrar:
+ * then this key holds the name, and nothing here says so. Asks who holds it and says it when it is this key's; an older
+ * registrar (no /holder) or none answering: said as a maybe. `err`: the claim's error; anything but a timeout is no
+ * concern here.
+ */
+export async function noteUnansweredClaim(name: string, err: any): Promise<void> {
+    if (!/timed out/.test(String(err?.message || ''))) return;
+    try {
+        const r = await askNameHolder(name);
+        if (r.json && r.data?.held === 'you') {
+            say('warn', `the claim of "${name}" got no answer in time, but the address service gives it to this server's key `
+                + `(${r.data.state || 'held'}); it is not used here: claim "${name}" in Settings to use it`);
+            return;
+        }
+        if (r.ok && r.json && typeof r.data?.held === 'string') return;   // not this key's: nothing is held
+    } catch { /* nothing answered */ }
+    say('warn', `the claim of "${name}" got no answer in time; the address service may still give it to this server's key`);
 }
 
 /** A heal's answer that came after the address was written another way: the newer write stands, the next tick looks again. */

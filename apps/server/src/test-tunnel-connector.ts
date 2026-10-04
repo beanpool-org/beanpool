@@ -116,6 +116,7 @@ const reg = {
     status: (_name?: string | null): any => ({ status: 'none' }),
     claim: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-claim-${b.name}` }),
     offline: (): any => ({ status: 'released' }),
+    holder: (b: any): any => ({ name: b?.name, held: 'free' }),
     heal: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', changed: [] }),
     /** [HTTP status, body]: the registrar refuses a rotate with a 403, 404 or 409. */
     rotate: (b: any): [number, any] | Promise<[number, any]> => [200, { status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-rotate-${b.name}`, rotated: true }],
@@ -147,6 +148,7 @@ async function startRegistrar(): Promise<http.Server> {
             if (p === '/api/registrar/claim') return answer(reg.claim(body));
             if (p === '/api/registrar/offline') return send(200, reg.offline());
             if (p === '/api/registrar/heal') return send(200, reg.heal(body));
+            if (p === '/api/registrar/holder') return send(200, reg.holder(body));
             if (p === '/api/registrar/rotate') return answer(reg.rotate(body));
             send(404, { error: 'not found' });
         });
@@ -751,6 +753,16 @@ async function main(): Promise<void> {
             const off = await post('/api/local/admin/public-address/offline');
             const sent = reg.calls.filter((c) => c.path === '/api/registrar/offline')[offs];
             assert(off.status === 200 && sent?.body?.name === 'owner-next', `Take offline releases the stored name by name (${JSON.stringify(sent?.body)})`);
+            // A claim that gets no answer here in time but completes at the registrar: said, so the owner sees the key holds it.
+            let finish: () => void = () => {};
+            reg.claim = (b) => new Promise((r) => { finish = () => r(live(b.name, 'eyJ.token-slow')); });
+            reg.holder = (b) => ({ name: b?.name, held: 'you', state: 'live' });
+            const slow = await post('/api/local/admin/public-address/claim', { name: 'slow-one', mode: 'tunnel' });
+            assert(slow.status === 400 && /timed out/.test(slow.body?.error || '') && pa() === null, `the claim timed out here (${slow.status} ${slow.body?.error})`);
+            assert(await until(() => tunnelLogs().some((l) => /claim of "slow-one" got no answer in time, but the address service gives it to this server's key/.test(l.message))),
+                'the log says the key holds the name the timed-out claim asked for');
+            finish();
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
             reg.status = () => ({ status: 'none' });
             reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
         });

@@ -10,7 +10,7 @@
 import Router from '@koa/router';
 import http from 'node:http';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex } from '../services/registrar-client.js';
-import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
+import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { dropAddressRequest } from '../services/public-address-agent.js';
@@ -200,6 +200,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, ...addressFields(ctx, result), ...serverSide() };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Claim failed: ${e.message}`, 'error');
+            void noteUnansweredClaim(name, e);
             ctx.status = 400;
             ctx.body = { error: e.message };
         }

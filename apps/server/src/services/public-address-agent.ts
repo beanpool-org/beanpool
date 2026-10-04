@@ -29,7 +29,7 @@ import { isAddressLabel, takeAddressRequestFile } from '../address-request.js';
 import { claimAddress, addressStatus } from './registrar-client.js';
 import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
-import { persistAddressIfUnchanged, healPausedAddress, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
+import { persistAddressIfUnchanged, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
 
 // Where it always lived; the take-over suites import it from here.
 export { withKeptTunnelToken };
@@ -142,6 +142,7 @@ export async function reconcile(): Promise<void> {
         else console.log(`[PublicAddr] ⏳ "${name}" claimed — awaiting approval`);
     } catch (e: any) {
         console.warn('[PublicAddr] claim failed:', e.message);
+        await noteUnansweredClaim(name, e);
         // The registrar refused the requested name (taken, not allowed): kept with its reason, never asked for again. A
         // registrar that did not answer, or answered anything else, leaves the request standing for the next check.
         const r = getLocalConfig().addressRequest;
@@ -154,17 +155,18 @@ export async function reconcile(): Promise<void> {
 
 /**
  * This agent's claim answered after the address was written another way (the owner's Settings claim or Take offline, a
- * take-over): the newer write stands, and the name the claim got is kept by this key, unused. It is not released: a
- * release names the name, but a registrar that does not read the name (older than #1116, or another one) releases this
- * key's own allocation, which can be the owner's pick, and a release only holds the name for this key for the cool-off
- * anyway. The owner can claim it in Settings, or let it go. Said once, here.
+ * take-over): the newer write stands, and the name the claim got is kept by this key, unused. No registrar answer moves
+ * the community onto it: /status is asked about the stored name, and an answer about another name is never stored
+ * (tunnel-connector.ts answersAboutAnotherName). It is not released: a registrar that does not read a release's name
+ * (older than #1116, or another one) releases this key's first name, which can be the owner's pick, and a release only
+ * holds the name for this key for the cool-off anyway. The owner can claim it in Settings, or let it go. Said once, here.
  */
 function lateClaim(name: string, res: any): void {
     const now = (getNodeConfig() as any).publicAddress;
     if (res?.status !== 'live' && res?.status !== 'pending') return;
     if (now?.name === name) return;
     console.warn(`[PublicAddr] "${name}" was claimed for this server's key, but the address was set ${now?.name ? `to "${now.name}"` : 'offline'} `
-        + 'while the claim was answered: that stands. The claimed name is kept unused, not released; claim it in Settings to use it.');
+        + 'while the claim was answered: that stands. This server\'s key holds the claimed name too, unused and never moved onto; claim it in Settings to use it.');
 }
 
 let checking = false;

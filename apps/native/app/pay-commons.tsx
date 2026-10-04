@@ -1,10 +1,12 @@
 /**
  * Pay the Commons (#1597 item 4): a member pays Beans they hold to the Commons (POST /api/commons/pay), never more than
  * they hold (the node refuses that). Paying back a debt, they enter the pay-back code an admin shared (the debt record's
- * id; also opened as beanpool://pay-commons?code=…&amount=…, the amount left, prefilled): the node links the payment to that
- * debt, and this screen shows the payment's reference to give the admin. The node settles a debt only with one payment of
- * at least what is left, so the screen promises a settle only then. Asked first; the node's refusals in its own words; a
- * lost answer says the payment may have gone through. One payment at a time (busy before anything is awaited).
+ * id; also opened as beanpool://pay-commons?code=…&amount=…, prefilled with what was left when the admin shared it): the
+ * node links the payment to that debt (refusing one above what is left now, in its words), and this screen shows the
+ * payment's reference to give the admin. The node settles a debt only with one payment of at least what is left, so the
+ * screen promises a settle only when the node's answer says the payment covers it. Asked first; the node's refusals in its
+ * own words. Each confirmed payment has one id (utils/payment-request.ts): a lost answer keeps that payment here for Try
+ * again with the same id, so it is never paid twice. One payment at a time (busy before anything is awaited).
  * Styles: the names list's (utils/names-list-style.ts), held to 48dp targets and wrapping at 320dp and 1.3× text.
  */
 import React, { useRef, useState } from 'react';
@@ -18,7 +20,8 @@ import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl } from '../utils/node-post';
 import { namesListStyleSpec } from '../utils/names-list-style';
-import { payTheCommons, parseBeans, debtCodeOk, oneAtATime, REPAYMENT_COPY, DEBT_UNREACHABLE } from '../utils/names-debts';
+import { payTheCommons, confirmCommonsPayment, unanswered, parseBeans, debtCodeOk, oneAtATime, REPAYMENT_COPY, DEBT_UNREACHABLE, PAY_UNANSWERED_RETRY, type CommonsPayment } from '../utils/names-debts';
+import type { ConfirmedPayment } from '../utils/payment-request';
 
 export { ErrorBoundary };
 
@@ -28,7 +31,7 @@ export default function PayCommonsScreen() {
     const { identity } = useIdentity();
     const params = useLocalSearchParams<{ code?: string; amount?: string }>();
     const linkCode = typeof params.code === 'string' ? params.code.trim().toLowerCase() : '';
-    // What is left on the debt, from the admin's link: known only for the code the link carried.
+    // What was left on the debt when the admin shared the link (a work-off may have lowered it since): for that code only.
     const linkLeft = linkCode && typeof params.amount === 'string' ? parseBeans(params.amount) : null;
     const [amount, setAmount] = useState(linkLeft !== null ? String(linkLeft) : '');
     const [code, setCode] = useState(typeof params.code === 'string' ? params.code : '');
@@ -36,26 +39,34 @@ export default function PayCommonsScreen() {
     const [paid, setPaid] = useState<{ words: string; ref: string | null } | null>(null);
     const [busy, setBusy] = useState(false);
     const once = useRef(oneAtATime(setBusy)).current;
+    // The payment the member confirmed whose answer was lost: Try again sends it with the same id. Changing it drops it.
+    const [held, setHeld] = useState<ConfirmedPayment<CommonsPayment> | null>(null);
+    const edit = (set: (v: string) => void) => (v: string) => { set(v); setHeld(null); };
+
+    const send = (payment: ConfirmedPayment<CommonsPayment>) => once(async () => {
+        setError(null);
+        const node = await anchorUrl();
+        if (!node || !identity) { setHeld(payment); setError(DEBT_UNREACHABLE); return; }
+        const r = await payTheCommons(node, identity, payment);
+        if (!r.ok && unanswered(r)) { setHeld(payment); setError(PAY_UNANSWERED_RETRY); return; }
+        setHeld(null);
+        if (!r.ok) { setError(r.message); return; }
+        DeviceEventEmitter.emit('transaction_completed');
+        const forDebt = !!payment.body.debtId;
+        setPaid({ words: REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, forDebt, r.value.left ?? null), ref: forDebt ? r.value.transactionId : null });
+    });
 
     const pay = () => {
+        if (held) { send(held); return; }
         setError(null);
         const beans = parseBeans(amount);
         if (beans === null) { setError(REPAYMENT_COPY.badAmount); return; }
         const debt = code.trim();
         if (debt && !debtCodeOk(debt)) { setError(REPAYMENT_COPY.badCode); return; }
-        const left = debt && debt.toLowerCase() === linkCode ? linkLeft : null;
-        Alert.alert(REPAYMENT_COPY.payTitle, REPAYMENT_COPY.payConfirm(beans, !!debt, left), [
+        const shared = debt && debt.toLowerCase() === linkCode ? linkLeft : null;
+        Alert.alert(REPAYMENT_COPY.payTitle, REPAYMENT_COPY.payConfirm(beans, !!debt, shared), [
             { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Pay', onPress: () => once(async () => {
-                    const node = await anchorUrl();
-                    if (!node || !identity) { setError(DEBT_UNREACHABLE); return; }
-                    const r = await payTheCommons(node, identity, beans, debt || undefined);
-                    if (!r.ok) { setError(r.message); return; }
-                    DeviceEventEmitter.emit('transaction_completed');
-                    setPaid({ words: REPAYMENT_COPY.paid(r.value.amount, r.value.transactionId, !!debt, left), ref: debt ? r.value.transactionId : null });
-                }),
-            },
+            { text: 'Pay', onPress: () => send(confirmCommonsPayment(beans, debt || undefined)) },
         ]);
     };
 
@@ -86,20 +97,21 @@ export default function PayCommonsScreen() {
                 ) : (
                     <>
                         <Text style={styles.body}>{REPAYMENT_COPY.payIntro}</Text>
+                        {linkLeft !== null && code.trim().toLowerCase() === linkCode ? <Text style={styles.body}>{REPAYMENT_COPY.linkLeft(linkLeft)}</Text> : null}
                         <Text style={styles.label}>BEANS</Text>
                         <TextInput
-                            style={styles.input} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="For example 12.50"
+                            style={styles.input} value={amount} onChangeText={edit(setAmount)} keyboardType="decimal-pad" placeholder="For example 12.50"
                             placeholderTextColor={colors.text.muted} accessibilityLabel="How many Beans" maxLength={12} editable={!busy}
                         />
                         <Text style={styles.label}>PAY-BACK CODE (IF YOU HAVE ONE)</Text>
                         <TextInput
-                            style={styles.input} value={code} onChangeText={setCode} placeholder="From an admin" autoCapitalize="none" autoCorrect={false}
+                            style={styles.input} value={code} onChangeText={edit(setCode)} placeholder="From an admin" autoCapitalize="none" autoCorrect={false}
                             placeholderTextColor={colors.text.muted} accessibilityLabel="The pay-back code an admin gave you" maxLength={64} editable={!busy}
                         />
                         {error ? <View style={styles.error}><Text style={styles.errorText}>{error}</Text></View> : null}
                         <View style={styles.buttonRow}>
                             <Pressable style={[styles.primaryBtn, busy && styles.disabled]} onPress={pay} disabled={busy} accessibilityRole="button" accessibilityState={{ disabled: busy, busy }}>
-                                <Text style={styles.primaryBtnText}>{REPAYMENT_COPY.payTitle}</Text>
+                                <Text style={styles.primaryBtnText}>{held ? 'Try again' : REPAYMENT_COPY.payTitle}</Text>
                             </Pressable>
                         </View>
                     </>

@@ -96,6 +96,7 @@ import { checkImageStoreAtBoot } from './storage/image-store.js';
 import { startOrphanObjectSweep } from './engine/storage-health.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
 import { initShutdownRecovery } from './engine/shutdown-recovery.js';
+import { secureDataDirAtBoot } from './boot-file-safety.js';
 
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
 const PORT_HTTPS = Number(process.env.PORT_HTTPS ?? 8443);
@@ -104,6 +105,10 @@ const PORT_P2P_WS = PORT_P2P + 1; // 4002
 
 async function main() {
     console.log('\n🫘  BeanPool Node starting...\n');
+
+    // Step 0.5: the data dir's files before anything reads them: a crash's temp files removed, key files made 0600,
+    // local-config.json's last good copy written when it has none (boot-file-safety.ts).
+    secureDataDirAtBoot(process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'));
 
     // Step 1: Ensure genesis state exists
     const genesis = await ensureGenesis();

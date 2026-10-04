@@ -156,7 +156,7 @@ async function requestLetsEncryptCert(): Promise<boolean> {
                 privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
             });
             accountKey = privateKey;
-            writeFileAtomic(LE_ACCOUNT_PATH, JSON.stringify({ key: accountKey }));
+            writeFileAtomic(LE_ACCOUNT_PATH, JSON.stringify({ key: accountKey }), { mode: 0o600 });
             console.log('   ACME account key generated');
         }
 
@@ -251,7 +251,7 @@ async function requestLetsEncryptCert(): Promise<boolean> {
         serverCertPem = cert;
         serverKeyPem = serverKeyPemStr;
         writeFileAtomic(LE_CERT_PATH, serverCertPem);
-        writeFileAtomic(LE_KEY_PATH, serverKeyPem);
+        writeFileAtomic(LE_KEY_PATH, serverKeyPem, { mode: 0o600 });
 
         console.log(`✅ Let's Encrypt cert obtained for ${CF_RECORD_NAME}`);
         return true;
@@ -383,9 +383,9 @@ function generateSelfSigned(): void {
 
     // Persist
     writeFileAtomic(CA_CERT_PATH, caCertPem);
-    writeFileAtomic(CA_KEY_PATH, caKeyPem);
+    writeFileAtomic(CA_KEY_PATH, caKeyPem, { mode: 0o600 });
     writeFileAtomic(SERVER_CERT_PATH, serverCertPem);
-    writeFileAtomic(SERVER_KEY_PATH, serverKeyPem);
+    writeFileAtomic(SERVER_KEY_PATH, serverKeyPem, { mode: 0o600 });
 
     console.log('🔐 Certificates generated and saved to data/tls/');
 }

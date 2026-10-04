@@ -31,6 +31,16 @@ export async function ensureGenesis(): Promise<GenesisState> {
         return JSON.parse(raw) as GenesisState;
     }
 
+    // genesis.json gone but the community's key still here: not a first boot. A new genesis would write a new community
+    // key over this one, and the community's trust root would change for good. Stop, and leave the key as it is.
+    const communityKeyPath = path.join(DATA_DIR, 'community.key');
+    if (fs.existsSync(communityKeyPath)) {
+        const msg = `${GENESIS_PATH} is missing, but this server already has a community key (${communityKeyPath}). This server `
+            + 'will not start a new community over it. Put back genesis.json from a backup of this server\'s data dir, then restart.';
+        console.error(`🛑 [Genesis] ${msg}`);
+        throw new Error(msg);
+    }
+
     console.log('🌱 First boot detected — generating Genesis Block...');
 
     // Ensure data dir exists
@@ -59,8 +69,9 @@ export async function ensureGenesis(): Promise<GenesisState> {
     // Persist the private key separately (never exposed via API)
     const privateKeyBytes = keypair.raw;
     writeFileAtomic(
-        path.join(DATA_DIR, 'community.key'),
-        Buffer.from(privateKeyBytes)
+        communityKeyPath,
+        Buffer.from(privateKeyBytes),
+        { mode: 0o600 }
     );
 
     // Persist genesis state

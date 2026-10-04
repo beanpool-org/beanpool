@@ -5,7 +5,10 @@
  * rename itself survives a power cut. A reader sees the old file or the new one, never a part of either.
  *
  * The file keeps its mode: a target that exists keeps the one it has (0600 stays 0600), unless `mode` is given;
- * a new one gets `mode`, or the default a plain writeFileSync would give it.
+ * a new one gets `mode`, else `newMode`, else the default a plain writeFileSync would give it.
+ *
+ * A crash between the temp file's creation and the rename leaves the temp file behind (the target is untouched):
+ * cleanStaleWriteTemps removes such leftovers at the next start.
  */
 
 import fs from 'node:fs';
@@ -23,7 +26,41 @@ export function fsyncDir(dir: string): void {
     }
 }
 
-export function writeFileAtomic(file: string, data: string | Uint8Array, opts: { mode?: number } = {}): void {
+/** `.<name>.tmp-<pid>-<8 hex>`: the temp file writeFileAtomic writes beside `<name>`. */
+const WRITE_TEMP = /^\.(.+)\.tmp-(\d+)-[0-9a-f]{8}$/;
+
+/**
+ * Remove the temp files a crash mid-write left in `dir` (not below it), and nothing else: only names of
+ * writeFileAtomic's exact pattern, and only one no live writer can still own: its process is this one (at a start,
+ * before this process wrote anything: a container restarts with the same pid) or is gone, or it is over an hour old (a
+ * write takes milliseconds). Returns the names removed. Never throws.
+ */
+export function cleanStaleWriteTemps(dir: string): string[] {
+    const removed: string[] = [];
+    let names: string[];
+    try { names = fs.readdirSync(dir); } catch { return removed; }
+    for (const name of names) {
+        const m = WRITE_TEMP.exec(name);
+        if (!m) continue;
+        const pid = Number(m[2]);
+        const file = path.join(dir, name);
+        let stale = pid === process.pid;
+        if (!stale) {
+            try { process.kill(pid, 0); } catch (e) { stale = (e as NodeJS.ErrnoException).code === 'ESRCH'; }
+        }
+        try {
+            const st = fs.lstatSync(file);
+            if (!st.isFile()) continue;
+            if (!stale && Date.now() - st.mtimeMs > 60 * 60_000) stale = true;
+            if (!stale) continue;
+            fs.unlinkSync(file);
+            removed.push(name);
+        } catch { /* gone since, or not ours to remove */ }
+    }
+    return removed;
+}
+
+export function writeFileAtomic(file: string, data: string | Uint8Array, opts: { mode?: number; newMode?: number } = {}): void {
     // A target this process may not write is refused, as a plain write to it would be: a rename would replace a
     // read-only file regardless, and a file made read-only is one its owner meant to stay as it is.
     let exists = true;
@@ -35,6 +72,7 @@ export function writeFileAtomic(file: string, data: string | Uint8Array, opts: {
     if (mode === undefined && exists) {
         try { mode = fs.statSync(file).mode & 0o777; } catch { /* gone since */ }
     }
+    if (mode === undefined) mode = opts.newMode;
     const dir = path.dirname(file);
     const tmp = path.join(dir, `.${path.basename(file)}.tmp-${process.pid}-${randomBytes(4).toString('hex')}`);
     let fd: number | null = null;

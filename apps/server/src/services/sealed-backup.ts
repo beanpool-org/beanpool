@@ -908,6 +908,19 @@ function writeAtomic(file: string, data: Buffer, mode: number): void {
 export function applyBundle(bundle: TakeoverBundle): string[] {
     const dir = dataDir();
     const written: string[] = [];
+    // local-config.json: the community's admin and 2FA credentials, and its recovery code's public record, so this
+    // server signs owners in with the community's password and keeps locking to the same paper. Everything else
+    // in this server's config (its own replication token, callsign, gateway) stays.
+    // Read and merged BEFORE any identity file is written: a config that can't be read (broken, with no good last
+    // copy) stops the restore with nothing written, never half applied. A broken file is read from its last good
+    // copy, never as empty: that would drop this server's address and settings.
+    const config = readLocalConfigFileIn(dir);
+    // A retired password stays retired, and an older backup never brings it back (bundledLocalConfigUpdates).
+    Object.assign(config, bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config));
+    if (bundle.recoveryCode) {
+        config.recoveryCode = bundle.recoveryCode;
+        config.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);
+    }
     for (const f of BUNDLED_FILES) {
         if (f === RECOVERY_SEAL_KEY_FILE || f === OPEN_JOIN_KEY_FILE) continue;
         const b64 = bundle.files[f];
@@ -926,17 +939,6 @@ export function applyBundle(bundle: TakeoverBundle): string[] {
     const doorKey = installCarriedOpenJoinKey(bundle.files[OPEN_JOIN_KEY_FILE]);
     if (doorKey.outcome === 'installed' || doorKey.outcome === 'same') written.push(OPEN_JOIN_KEY_FILE);
     else if (doorKey.outcome === 'replaced') written.push(`${OPEN_JOIN_KEY_FILE} (this server's own kept as ${doorKey.retiredAs})`);
-    // local-config.json: the community's admin and 2FA credentials, and its recovery code's public record, so this
-    // server signs owners in with the community's password and keeps locking to the same paper. Everything else
-    // in this server's config (its own replication token, callsign, gateway) stays.
-    // A broken file is read from its last good copy, never as empty: that would drop this server's address and settings.
-    const config = readLocalConfigFileIn(dir);
-    // A retired password stays retired, and an older backup never brings it back (bundledLocalConfigUpdates).
-    Object.assign(config, bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config));
-    if (bundle.recoveryCode) {
-        config.recoveryCode = bundle.recoveryCode;
-        config.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);
-    }
     writeLocalConfigFileIn(dir, config, 0o600);
     written.push('local-config.json (admin, 2FA, recovery code record)');
     return written;

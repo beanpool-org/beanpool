@@ -575,7 +575,18 @@ export default function PulseIntakeScreen() {
                                 pressed && styles.submitButtonPressed,
                             ]}
                             accessibilityRole="button"
-                            accessibilityLabel="Share to Pulse"
+                            accessibilityLabel={
+                                submitting
+                                    ? 'Sharing post to Pulse...'
+                                    : previewData?.isDuplicate
+                                    ? 'Update on Pulse'
+                                    : 'Share to Pulse'
+                            }
+                            accessibilityHint="Publishes selected external channel post to community Pulse feed"
+                            accessibilityState={{
+                                disabled: submitting || submitSuccess || !urlInput.trim() || channels.length === 0,
+                                busy: submitting,
+                            }}
                         >
                             {submitting ? (
                                 <ActivityIndicator size="small" color={colors.text.inverse} />

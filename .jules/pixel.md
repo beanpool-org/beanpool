@@ -162,3 +162,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-11-08 - Add dynamic accessibilityLabel and hint to AddWordsForm submit button
 **Learning:** Recovery phrase submit buttons whose child text is replaced by an `ActivityIndicator` during verification leave screen readers without explicit accessible labels unless dynamic `accessibilityLabel` and `accessibilityHint` attributes are provided on the parent `Pressable`.
 **Action:** Always supply dynamic `accessibilityLabel` (`busy ? ADD_WORDS_COPY.checking : ADD_WORDS_COPY.submit`) and `accessibilityHint` on recovery phrase submit buttons rendering `ActivityIndicator` when busy.
+
+## 2026-11-15 - Add dynamic accessibilityLabel, hint, and busy state to PulseIntake submit button
+**Learning:** Action buttons in pulse post intake whose text is conditionally replaced by an `ActivityIndicator` during async submission leave screen readers without accessible text unless provided with dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` attributes.
+**Action:** Always supply dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState` on action buttons that render `ActivityIndicator` in place of text when busy.

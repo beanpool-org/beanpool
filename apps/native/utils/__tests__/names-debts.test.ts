@@ -20,7 +20,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { signedRequestBytes, signedRequestText, unboundRequestText, utf8Bytes } from '@beanpool/core';
 import {
     beans, debtLine, debtsOfEntry, openDebtOf, openDebtForName, sameName, leftOf, parseBeans, debtCodeOk, DEBT_COPY, REPAYMENT_COPY, DEBT_UNREACHABLE,
-    PAY_UNANSWERED, PAY_UNANSWERED_RETRY, SETTLE_UNANSWERED, coversLeft, oneAtATime, fetchNamesDebts, workOffDebt, settleDebt, fetchMyRepayment, payTheCommons,
+    PAY_UNANSWERED, PAY_UNANSWERED_RETRY, PAY_REFUSED_UNSAID, SETTLE_UNANSWERED, coversLeft, oneAtATime, fetchNamesDebts, workOffDebt, settleDebt, fetchMyRepayment, payTheCommons,
     confirmCommonsPayment, unanswered, type NamesDebt,
 } from '../names-debts';
 
@@ -107,7 +107,9 @@ describe('an admin’s routes', () => {
         expect(await payTheCommons(NODE, identity, confirmCommonsPayment(3), noWait)).toEqual({ ok: false, status: 0, message: PAY_UNANSWERED });
         // A 2xx without JSON, and a proxy's 502 page: the node may have paid.
         (globalThis as any).fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected end of JSON'); } }));
-        expect(await payTheCommons(NODE, identity, confirmCommonsPayment(3, DEBT.id), noWait)).toEqual({ ok: false, status: 200, message: PAY_UNANSWERED });
+        const noJson = await payTheCommons(NODE, identity, confirmCommonsPayment(3, DEBT.id), noWait);
+        expect(noJson).toEqual({ ok: false, status: 0, message: PAY_UNANSWERED });
+        expect(unanswered(noJson)).toBe(true);
         (globalThis as any).fetch = vi.fn(async () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError('<html>'); } }));
         expect(await payTheCommons(NODE, identity, confirmCommonsPayment(3), noWait)).toEqual({ ok: false, status: 502, message: PAY_UNANSWERED });
         // A 5xx with the node's words in it: it may have paid before it failed, so not its words (as the web).
@@ -123,6 +125,49 @@ describe('an admin’s routes', () => {
         // A read without an answer still says nothing changed.
         (globalThis as any).fetch = vi.fn(async () => { throw new TypeError('Network request failed'); });
         expect(await fetchMyRepayment(NODE, identity)).toEqual({ ok: false, status: 0, message: DEBT_UNREACHABLE });
+    });
+
+    it('a 2xx without JSON is no answer: sent again with the same id, then kept for Try again; the node\'s answer after it is paid once', async () => {
+        const p = confirmCommonsPayment(40, DEBT.id);
+        const page = { ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token <'); } };
+        let n = 0;
+        (globalThis as any).fetch = vi.fn(async (url: string, init: any) => {
+            sent.push({ url, method: init.method, headers: init.headers, body: init.body ?? '' });
+            return (n++ === 0 ? page : { ok: true, status: 200, json: async () => ({ transactionId: 'tx-7', amount: 40, left: 40 }) }) as Response;
+        });
+        expect(await payTheCommons(NODE, identity, p, noWait)).toEqual({ ok: true, value: { transactionId: 'tx-7', amount: 40, left: 40 } });
+        expect(sent.map((s) => JSON.parse(s.body))).toEqual([p.body, p.body]);
+        // On every send: the cap (3 sends, one id), then PAY_UNANSWERED, held for Try again; Try again sends the same id.
+        sent = [];
+        (globalThis as any).fetch = vi.fn(async (url: string, init: any) => {
+            sent.push({ url, method: init.method, headers: init.headers, body: init.body ?? '' });
+            return page as unknown as Response;
+        });
+        const lost = await payTheCommons(NODE, identity, p, noWait);
+        expect(lost).toEqual({ ok: false, status: 0, message: PAY_UNANSWERED });
+        expect(unanswered(lost)).toBe(true);
+        expect(sent.length).toBe(3);
+        expect(new Set(sent.map((s) => JSON.parse(s.body).requestId))).toEqual(new Set([p.requestId]));
+        // A JSON null is no answer either.
+        answerWith(200, null);
+        expect(await payTheCommons(NODE, identity, p, noWait)).toEqual({ ok: false, status: 0, message: PAY_UNANSWERED });
+    });
+
+    it('a proxy\'s 429 page (no JSON) refused the payment without saying why: nothing was paid, sent once, not held', async () => {
+        expect(PAY_REFUSED_UNSAID).toBe('Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.');
+        (globalThis as any).fetch = vi.fn(async (url: string, init: any) => {
+            sent.push({ url, method: init.method, headers: init.headers, body: init.body ?? '' });
+            return { ok: false, status: 429, json: async () => { throw new SyntaxError('<html>'); } } as unknown as Response;
+        });
+        const turned = await payTheCommons(NODE, identity, confirmCommonsPayment(3, DEBT.id), noWait);
+        expect(turned).toEqual({ ok: false, status: 429, message: PAY_REFUSED_UNSAID });
+        expect(unanswered(turned)).toBe(false);
+        expect(sent.length).toBe(1);
+        // The node's own 429, in its words, is shown as it is; a settle's wordless 4xx keeps its own words.
+        answerWith(429, { error: 'Too many payments at once. Wait a minute.' });
+        expect(await payTheCommons(NODE, identity, confirmCommonsPayment(3), noWait)).toEqual({ ok: false, status: 429, message: 'Too many payments at once. Wait a minute.' });
+        answerWith(429, null);
+        expect(await settleDebt(NODE, identity, DEBT.id, 'tx')).toEqual({ ok: false, status: 429, message: SETTLE_UNANSWERED });
     });
 
     it('a settle whose answer was lost may have settled it: open the entry again, never "Nothing was changed"', async () => {

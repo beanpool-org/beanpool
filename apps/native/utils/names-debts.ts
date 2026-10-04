@@ -49,6 +49,9 @@ export const PAY_UNANSWERED = 'Your community’s server didn’t answer, so thi
 export const PAY_UNANSWERED_RETRY = 'Your community’s server didn’t answer, so this payment may have gone through. Tap Try again: the '
     + 'same payment is never paid twice. If you change it or leave this screen, check your Ledger before you pay again.';
 
+/** A refusal below 500 without the node's words (a proxy's page, such as 429 Too Many Requests): nothing was paid. */
+export const PAY_REFUSED_UNSAID = 'Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.';
+
 /** A settle whose answer was lost: the node may have settled it before the answer was lost. */
 export const SETTLE_UNANSWERED = 'Your community’s server didn’t answer, so this debt may have been settled. Open the entry again to see before you settle it again.';
 
@@ -141,15 +144,18 @@ export function openDebtForName(
 /**
  * `lost`: the words when no answer came, or one without the node's words in it (PAY_UNANSWERED for the pay write,
  * SETTLE_UNANSWERED for a settle). For a write that may have gone through (any `lost` but DEBT_UNREACHABLE), a 5xx is a
- * lost answer too, whatever words it carries: the node may have written before it failed.
+ * lost answer too, whatever words it carries: the node may have written before it failed. A 2xx without JSON (a proxy's
+ * or a captive portal's page) is no answer from the node, as the web counts it: status 0, so a payment is sent again with
+ * the same id and then kept for Try again. `unsaid`: the words for a refusal below 500 without the node's words (a
+ * proxy's 429 page; PAY_REFUSED_UNSAID for the pay write: nothing was paid).
  */
-async function answer<T>(res: Promise<Response>, pick: (body: any) => T, lost = DEBT_UNREACHABLE): Promise<DebtResult<T>> {
+async function answer<T>(res: Promise<Response>, pick: (body: any) => T, lost = DEBT_UNREACHABLE, unsaid = lost): Promise<DebtResult<T>> {
     let r: Response;
     try { r = await res; } catch { return { ok: false, status: 0, message: lost }; }
     const body = await r.json().catch(() => null) as any;
     if (!r.ok && r.status >= 500 && lost !== DEBT_UNREACHABLE) return { ok: false, status: r.status, message: lost };
-    if (!r.ok) return { ok: false, status: r.status, message: typeof body?.error === 'string' && body.error.trim() ? body.error : lost };
-    if (body === null) return { ok: false, status: r.status, message: lost };
+    if (!r.ok) return { ok: false, status: r.status, message: typeof body?.error === 'string' && body.error.trim() ? body.error : isNoAnswer(r.status) ? lost : unsaid };
+    if (body === null) return { ok: false, status: 0, message: lost };
     return { ok: true, value: pick(body) };
 }
 
@@ -202,20 +208,21 @@ export function confirmCommonsPayment(amount: number, debtId?: string): Confirme
  * Pays the Commons from what the member holds (never into debt), for a debt when the payment names one: the node links
  * the payment to that debt (and refuses one above what is left, in its own words), and an admin settles it with the
  * reference this returns, if this one payment covers what is left (a smaller one settles nothing and doesn't count toward
- * it). Sent again with the same id while no answer comes (utils/payment-request.ts); a lost answer, or a 5xx, says
- * PAY_UNANSWERED: it may have paid. `unanswered(r)` tells the screen to keep the payment for a retry by hand.
+ * it). Sent again with the same id while no answer comes (utils/payment-request.ts); a lost answer, a 2xx without JSON,
+ * or a 5xx, says PAY_UNANSWERED: it may have paid. `unanswered(r)` tells the screen to keep the payment for a retry by
+ * hand. A refusal below 500 without the node's words (a proxy's 429 page) says PAY_REFUSED_UNSAID: nothing was paid.
  */
 export function payTheCommons(
     node: string, identity: BeanPoolIdentity, payment: ConfirmedPayment<CommonsPayment>, opts?: { wait?: (ms: number) => Promise<void> },
 ): Promise<DebtResult<PaidToCommons>> {
     return sendConfirmedPayment<CommonsPayment, DebtResult<PaidToCommons> & SendResult>(payment, (body) => answer(signedPost(node, '/api/commons/pay', body, identity),
-        (b) => b as PaidToCommons, PAY_UNANSWERED), opts);
+        (b) => b as PaidToCommons, PAY_UNANSWERED, PAY_REFUSED_UNSAID), opts);
 }
 
 /** The node's answer to a payment: its reference, the Beans paid, and for a debt what was left on it when paid. */
 export type PaidToCommons = { transactionId: string; amount: number; left?: number };
 
-/** No answer from the node (none came, a proxy's gateway status, or a 5xx): the payment may have gone through. */
+/** No answer from the node (none came, a 2xx without JSON, a proxy's gateway status, or a 5xx): the payment may have gone through. */
 export const unanswered = (r: DebtResult<unknown>): boolean => !r.ok && (isNoAnswer(r.status) || r.status >= 500);
 
 /**

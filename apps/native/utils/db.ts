@@ -2559,7 +2559,9 @@ export type DecisionEffect =
     | 'remove_member'
     | 'grant_enterprise'
     | 'grant_hardship'
-    | 'write_off_deficit';
+    | 'write_off_deficit'
+    /** A departed member's open debt, by its record id (#1597): no Beans move; the record is marked forgiven. */
+    | 'forgive_debt';
 
 export interface Decision {
     id: string;

@@ -172,3 +172,24 @@ describe('words and checks', () => {
         expect(debtCodeOk('a'.repeat(31))).toBe(false);
     });
 });
+
+describe('the names list screen (app/names-list.tsx): every debt control asks first, then calls its route', () => {
+    const fsMod = require('node:fs') as typeof import('node:fs');
+    const pathMod = require('node:path') as typeof import('node:path');
+    const screen = fsMod.readFileSync(pathMod.join(__dirname, '..', '..', 'app', 'names-list.tsx'), 'utf8');
+    it('work off, settle and forgive each sit inside an ask(…) with its own words', () => {
+        expect(screen).toMatch(/ask\(DEBT_COPY\.workOffTitle[\s\S]{0,300}workOffDebt\(anchor, identity, debt\.id, member\.publicKey\)/);
+        expect(screen).toMatch(/ask\(DEBT_COPY\.settleTitle[\s\S]{0,300}settleDebt\(anchor, identity, debt\.id, payRef, settleNote\)/);
+        expect(screen).toMatch(/ask\(DEBT_COPY\.forgiveTitle[\s\S]{0,300}effect: 'forgive_debt', subject: debt\.id/);
+    });
+    it('a refusal is shown in the node’s words; an entry with an open debt offers settling, not inviting or confirming', () => {
+        expect(screen.match(/if \(!done\.ok\) \{ setError\(done\.message\); return; \}/g)?.length).toBeGreaterThanOrEqual(3);
+        expect(screen).toContain("!e.confirmation && e.text && !open ? btn('Invite this person'");
+        expect(screen).toContain("!e.confirmation && e.text && !open ? btn('Confirm a member'");
+        expect(screen).toContain("btn('Work it off'");
+    });
+    it('Save says first when the name matches an entry with an open debt', () => {
+        expect(screen).toMatch(/const saveChecked = \(\) => \{[\s\S]{0,200}openDebtForName\(name, entries, debts, mode\.entry\?\.id\)/);
+        expect(screen).toContain("btn('Save', saveChecked, 'primary')");
+    });
+});

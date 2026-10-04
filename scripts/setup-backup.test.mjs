@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
+import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'setup-backup.mjs');
@@ -22,7 +23,7 @@ const HINT = 'turn on two-factor sign-in on the primary, or set BEANPOOL_TOKEN';
 async function standIn(routes) {
     const seen = [];
     const server = http.createServer((req, res) => {
-        seen.push({ path: req.url.split('?')[0], adminPw: req.headers['x-admin-password'] ?? null });
+        seen.push({ path: req.url.split('?')[0], adminPw: req.headers['x-admin-password'] ?? null, authorization: req.headers.authorization ?? null });
         const [status, body] = routes[req.url.split('?')[0]] ?? [404, '{}'];
         res.writeHead(status, { 'Content-Type': 'application/json' }).end(body);
     });
@@ -200,6 +201,68 @@ test('a wrong ADMIN_PASSWORD at the enrolment bundle: "Check ADMIN_PASSWORD"', a
         assert.notEqual(code, 0, out);
         assert.ok(out.includes('Check ADMIN_PASSWORD.'), out);
         assert.ok(!out.includes(ENV_PW), out);
+    } finally {
+        await primary.close();
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+// The command the node's Settings backup tab shows (apps/server/static/settings.js, generateBackupCommand): the
+// secrets go in the environment, in front of the node command, never as arguments, which show in `ps` (#1571 review).
+// The function is run as the page runs it, and the command it shows is then run as shown, placeholders filled in.
+const SETTINGS_JS = path.join(path.dirname(SCRIPT), '..', 'apps', 'server', 'static', 'settings.js');
+
+/** The command generateBackupCommand puts on the page, for a primary at `primaryUrl`. */
+async function shownBackupCommand(primaryUrl) {
+    const src = fs.readFileSync(SETTINGS_JS, 'utf8');
+    const start = src.indexOf('async function generateBackupCommand()');
+    assert.ok(start >= 0, 'generateBackupCommand is in settings.js');
+    let depth = 0, end = src.indexOf('{', start);
+    for (let i = end; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}' && --depth === 0) { end = i + 1; break; }
+    }
+    const els = {};
+    for (const id of ['backup-enroll-btn', 'backup-enroll-status', 'backup-setup-command', 'backup-enroll-result']) {
+        els[id] = { textContent: '', style: {}, classList: { add() {}, remove() {} }, disabled: false };
+    }
+    const ctx = vm.createContext({
+        API: '/api/local', authToken: 'a-session', adminHeaders: () => ({}),
+        fetch: async () => ({ ok: true, json: async () => ({ primaryUrl }) }),
+        document: { getElementById: (id) => els[id] || null },
+    });
+    vm.runInContext(`${src.slice(start, end)}\nthis.generateBackupCommand = generateBackupCommand;`, ctx);
+    await ctx.generateBackupCommand();
+    assert.equal(els['backup-enroll-status'].textContent, '', 'no error shown');
+    return els['backup-setup-command'].textContent;
+}
+
+test('the Settings backup tab shows the secrets in the environment, not as arguments, and the command runs as shown', async () => {
+    const primary = await standIn({ '/api/local/admin/backup-enroll': [200, JSON.stringify(ENROLL)] });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-setup-backup-test-'));
+    try {
+        const cmd = await shownBackupCommand(primary.url);
+        const at = cmd.indexOf('node scripts/setup-backup.mjs');
+        assert.ok(at > 0, `the node command comes after the environment: ${cmd}`);
+        const [envPart, argv] = [cmd.slice(0, at), cmd.slice(at)];
+        assert.match(envPart, /^BEANPOOL_TOKEN='<[A-Z_]+>' BACKUP_REPLICATION_TOKEN='<[A-Z_]+>' $/, cmd);
+        assert.equal(argv, `node scripts/setup-backup.mjs --primary ${primary.url}`, 'the arguments carry no secret');
+        assert.doesNotMatch(argv, /<|--admin-pw|--token/, cmd);
+
+        // Run as shown, the placeholders filled in, from the repository root (where the page says to run it).
+        const filled = envPart.replace(/^BEANPOOL_TOKEN='<[A-Z_]+>'/, `BEANPOOL_TOKEN='${AUTOMATION}'`)
+            .replace(/BACKUP_REPLICATION_TOKEN='<[A-Z_]+>'/, `BACKUP_REPLICATION_TOKEN='${REPLICATION}'`) + argv;
+        const env = { ...process.env, PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH}` };
+        for (const name of ['BEANPOOL_TOKEN', 'BACKUP_REPLICATION_TOKEN', 'ADMIN_PASSWORD']) delete env[name];
+        const { code, out } = await new Promise((resolve) => {
+            execFile('/bin/sh', ['-c', `${filled} --data-dir "$DATA_DIR"`], { cwd: path.join(path.dirname(SCRIPT), '..'), env: { ...env, DATA_DIR: path.join(root, 'data') }, timeout: 20_000 },
+                (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` }));
+        });
+        assert.equal(code, 0, out);
+        assert.equal(primary.seen[0]?.authorization, `Bearer ${AUTOMATION}`, 'the automation token reached the primary');
+        assert.equal(primary.seen[0]?.adminPw, null, 'no password sent');
+        assert.ok(fs.readFileSync(path.join(root, '.env'), 'utf8').includes(`BACKUP_REPLICATION_TOKEN=${REPLICATION}`), 'the replication token is in .env');
+        assert.doesNotMatch(out, /shows in `ps`/, out);
     } finally {
         await primary.close();
         fs.rmSync(root, { recursive: true, force: true });

@@ -3148,8 +3148,9 @@
                     throw new Error(err.error || `HTTP ${res.status}`);
                 }
                 const d = await res.json();
-                // Prefill the primary URL; NEVER echo the admin password or token into the page.
-                const cmd = `node scripts/setup-backup.mjs --primary ${d.primaryUrl} --admin-pw '<ADMIN_PASSWORD>' --token '<REPLICATION_TOKEN>'`;
+                // Prefill the primary URL; NEVER echo a token or the password into the page. The secrets go in the
+                // environment in front of the node command, not as arguments: arguments show in `ps`.
+                const cmd = `BEANPOOL_TOKEN='<AUTOMATION_TOKEN>' BACKUP_REPLICATION_TOKEN='<REPLICATION_TOKEN>' node scripts/setup-backup.mjs --primary ${d.primaryUrl}`;
                 document.getElementById('backup-setup-command').textContent = cmd;
                 document.getElementById('backup-enroll-result').style.display = '';
             } catch (e) {

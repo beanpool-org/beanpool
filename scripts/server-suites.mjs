@@ -202,6 +202,7 @@ export const SUITES = [
     'test-standby-ledger-gate',
     'test-standby-community-settings',
     'test-standby-names-list',
+    'test-standby-known-consents',
     'test-standby-listings-verbatim',
     'test-standby-standing',
     'test-standby-health',

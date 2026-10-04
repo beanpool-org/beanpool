@@ -1669,7 +1669,8 @@ CREATE TABLE IF NOT EXISTS known_consents (
 );
 
 -- A member's consent history: every agreement and every withdrawal (GDPR Art. 7(3): a member withdraws at any time, as
--- easily as they agreed). Withdrawing deletes their known_consents row, so they are in no exception from that moment;
+-- easily as they agreed). Withdrawing deletes their known_consents row with its tombstone, so they are in no exception from
+-- that moment, on a standby too;
 -- this keeps that it happened, and to which text. Only the member reads their own.
 CREATE TABLE IF NOT EXISTS known_consent_log (
     id             TEXT PRIMARY KEY,

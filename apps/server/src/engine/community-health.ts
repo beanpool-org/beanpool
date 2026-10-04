@@ -15,7 +15,7 @@
  * (when, which text). A member who joined before it existed is in no exception until they consent in their app.
  */
 import crypto from 'node:crypto';
-import { db } from '../db/db.js';
+import { db, deletePlainRows } from '../db/db.js';
 import { confirmationDialOn, isConfirmed } from '@beanpool/engine';
 import { getBalance, getCommonsBalance, getMember, isVisitorKey } from '../state-engine.js';
 import { listDebts } from './names-debts.js';
@@ -224,7 +224,9 @@ export function withdrawConsent(pubkey: string) {
     db.transaction(() => {
         const c = consentOf(pubkey);
         if (!c) return;
-        db.prepare('DELETE FROM known_consents WHERE member_pubkey = ?').run(pubkey);
+        // With its tombstone: a delta carries a delete only so, and a standby that kept the row would put them back in
+        // the exceptions on a take-over (review r4176631105; test-standby-known-consents).
+        deletePlainRows('known_consents', 'member_pubkey = ?', pubkey);
         logConsent(pubkey, 'withdrawn', c.version);
     })();
     return myConsent(pubkey);

@@ -22,7 +22,7 @@
  */
 
 import crypto from 'node:crypto';
-import { db, deletePlainRows } from '../db/db.js';
+import { db, deletePlainRows, writeTombstone } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import {
     conservingTransaction,
@@ -503,6 +503,9 @@ export function cancelRekeyCode(
             'the code is no longer waiting');
         exactly(db.prepare("DELETE FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").run(cleanOld).changes,
             'the member’s key isn’t held for this re-key');
+        // A standby only adds replaced keys, so the hold's delete reaches it as a tombstone (engine/sync.ts
+        // applyTombstoneLocally), and a server that takes over lets the key in, as this one now does.
+        writeTombstone('invalidated_keys', cleanOld);
         // issueRekeyCode wrote 'suspended' unless the member was 'disabled'; only that 'suspended' is put back.
         const now = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(cleanOld) as { status: string } | undefined)?.status;
         let target: string | null = req.prior_status ?? null;

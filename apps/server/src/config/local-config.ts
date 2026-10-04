@@ -420,7 +420,11 @@ function checkFirstPasswordFile(config: LocalConfig): void {
 /**
  * The admin password at boot (node sign-in step 8: no password on new installs).
  * - Config locked → an existing node: its password stays exactly as it is, and the first-password file is looked at
- * - Not locked → a new install (no local-config.json, or one never locked, or a Wipe & Reset): no password is made and
+ * - Not locked, but joinedAt set (when this server's password was set; only a boot that sets one writes it, and Wipe &
+ *   Reset clears it) → an existing node whose password is being rotated: scripts/rotate-node-env.sh unlocks the config
+ *   and drops the hash, then restarts it with the new ADMIN_PASSWORD, which is taken as before. Never read as a new
+ *   install (deciding review r4176337954). With no ADMIN_PASSWORD it has none until one is set and it restarts.
+ * - Otherwise → a new install (no local-config.json, or one never locked, or a Wipe & Reset): no password is made and
  *   ADMIN_PASSWORD in .env is ignored. The claim code (claim-code.ts) is the only way to the first owner. Such a node is
  *   never locked here, so a claimed node rebooted with ADMIN_PASSWORD set still has none.
  * - The server suites' fresh data dirs still take ADMIN_PASSWORD when BEANPOOL_SUITE_ENV_PASSWORD=1
@@ -435,7 +439,15 @@ export function initAdminPassword(): void {
         return;
     }
 
-    if (!process.env.ADMIN_PASSWORD || process.env.BEANPOOL_SUITE_ENV_PASSWORD !== '1') {
+    // A password was set on this server once: its rotation (above), never a new install.
+    const rotating = config.joinedAt != null;
+    if (rotating && !process.env.ADMIN_PASSWORD) {
+        console.warn('⚠️  This server had an admin password, and its lock was cleared for a new one (scripts/rotate-node-env.sh), but .env has no ADMIN_PASSWORD.');
+        console.warn('   It has no admin password until you set ADMIN_PASSWORD in .env and restart. Owners still sign in with the BeanPool app; `beanpool recover` adds an owner.');
+        return;
+    }
+
+    if (!rotating && (!process.env.ADMIN_PASSWORD || process.env.BEANPOOL_SUITE_ENV_PASSWORD !== '1')) {
         if (process.env.ADMIN_PASSWORD) {
             console.log('🔑 ADMIN_PASSWORD in .env is ignored: a new install has no admin password. Claim this community with its one-time claim code: run `beanpool claim` on this server.');
         }
@@ -446,8 +458,8 @@ export function initAdminPassword(): void {
         return;
     }
 
-    // The suites' seam: the old first boot with the password from .env.
-    const password = process.env.ADMIN_PASSWORD;
+    // A rotation, or the suites' seam: the old first boot with the password from .env.
+    const password = process.env.ADMIN_PASSWORD!;
     const validation = validatePasswordStrength(password);
     if (!validation.valid) {
         throw new Error(`[Config] ADMIN_PASSWORD environment variable is invalid: ${validation.error}`);

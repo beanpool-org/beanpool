@@ -110,11 +110,21 @@ export function readKnownFloorLog(limit = 100): KnownFloorLogLine[] {
         .map(r => ({ id: r.id, actor: r.actor_pubkey, action: r.action, memberPubkey: r.member_pubkey, oldValue: r.old_value, newValue: r.new_value, at: r.at }));
 }
 
+/** One member's lines in the log, newest first, each naming who made the change: what every admin reads on their panel. */
+export function readKnownFloorLogFor(pk: string, limit = 20) {
+    return (db.prepare('SELECT * FROM known_floor_log WHERE member_pubkey = ? ORDER BY at DESC, rowid DESC LIMIT ?').all(pk, Math.max(1, Math.min(100, limit))) as any[])
+        .map(r => ({ id: r.id, actor: r.actor_pubkey, actorCallsign: getMember(r.actor_pubkey)?.callsign ?? null, action: r.action,
+            oldValue: r.old_value, newValue: r.new_value, at: r.at }));
+}
+
 /**
- * One member's known-floor line, for the Manager's member screen: whether they are confirmed, their exception, and the
- * known grant it comes to (0 with the dial off or unconfirmed). Their credit line only, never their balance.
+ * One member's known-floor line, for the Manager's member screen: whether they are confirmed, their exception, the
+ * known grant it comes to (0 with the dial off or unconfirmed), and their lines in the log. Their credit line only, never
+ * their balance. `changeRefused` is the refusal the exception route would give this viewer, so the screen says why in
+ * place of controls that can't work: 'key_session_only' (the node password or a token), 'own_floor' (their own line),
+ * or null.
  */
-export function knownFloorForMember(pk: string) {
+export function knownFloorForMember(pk: string, viewerKey: string | null = null) {
     const m = getMember(pk);
     if (!m || m.status !== 'active' || m.isTreasury) throw new KnownFloorError(404, 'not_member', 'Only an active member of this community has a known floor.');
     return {
@@ -125,6 +135,8 @@ export function knownFloorForMember(pk: string) {
         confirmed: isConfirmed(db, pk),
         exception: knownFloorExceptions().find(e => e.memberPubkey === pk) ?? null,
         knownGrant: memberKnownGrant(db, pk),
+        log: readKnownFloorLogFor(pk),
+        changeRefused: !viewerKey ? 'key_session_only' : viewerKey === pk ? 'own_floor' : null,
     };
 }
 

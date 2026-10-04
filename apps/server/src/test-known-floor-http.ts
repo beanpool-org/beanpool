@@ -490,6 +490,27 @@ async function main(): Promise<void> {
     assert(lowLine.status === 200 && lowLine.body?.exception?.amount === 300 && lowLine.body?.exception?.frozen === false && lowLine.body?.knownGrant === 300,
         `lowered to 300: the line reads 300 (${show(lowLine)})`);
     await exception(adaAdmin, { memberPubkey: kim.pk, clear: true });
+    // Her lines in the log come with her line (#1614 review r4178406925: "no screen shows that log"), newest first, each
+    // naming who changed it and from what to what.
+    const loggedLine = await lineOf(owner, kim);
+    const kimLog = (loggedLine.body?.log ?? []) as Array<Record<string, unknown>>;
+    assert(kimLog.length >= 3 && kimLog[0]?.action === 'exception_cleared' && kimLog[0]?.oldValue === '300' && kimLog[0]?.newValue === 'default'
+        && kimLog[0]?.actor === ada.pk && kimLog[0]?.actorCallsign === 'Ada'
+        && kimLog[1]?.action === 'exception_lowered' && kimLog[1]?.oldValue === 'frozen' && kimLog[1]?.newValue === '300'
+        && kimLog[2]?.action === 'exception_frozen' && kimLog.every(l => typeof l.at === 'string' && !('memberPubkey' in l)),
+        `her line carries her lines in the log: who changed it, from what to what, when (${JSON.stringify(kimLog.slice(0, 3))})`);
+    // Where the node would refuse a change, the line says so first (#1614 review r4178406974), so the screen shows why in
+    // place of the controls: the node password and a token name nobody, and nobody sets their own.
+    const pwLine = await lineOf(twoFa.headers(), kim);
+    const tokenLine = await lineOf(token, kim);
+    const adaOwn = await lineOf(adaAdmin, ada);
+    const adaOnKim = await lineOf(adaAdmin, kim);
+    assert(pwLine.status === 200 && pwLine.body?.changeRefused === 'key_session_only' && tokenLine.status === 200 && tokenLine.body?.changeRefused === 'key_session_only',
+        `the node password and a token read the line marked key_session_only (${show(pwLine)}; ${show(tokenLine)})`);
+    assert(adaOwn.status === 200 && adaOwn.body?.changeRefused === 'own_floor' && adaOnKim.body?.changeRefused === null,
+        `an admin's own line is marked own_floor, another member's isn't (${show(adaOwn)}; ${show(adaOnKim)})`);
+    const adaSetsOwn = await exception(adaAdmin, { memberPubkey: ada.pk, amount: 10 });
+    assert(adaSetsOwn.status === 403 && adaSetsOwn.body?.code === 'own_floor', `and the node refuses what the mark says (${show(adaSetsOwn)})`);
     const unaLine = await lineOf(owner, una);
     assert(unaLine.status === 200 && unaLine.body?.confirmed === false && unaLine.body?.knownGrant === 0,
         `Una isn't confirmed: her known grant is 0 (${show(unaLine)})`);

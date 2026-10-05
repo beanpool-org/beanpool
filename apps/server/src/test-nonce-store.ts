@@ -27,9 +27,8 @@ class CountingMap extends Map<string, number> {
         super.forEach((v, k, m) => { this.iterated++; cb(v, k, m); });
     }
     private counted<T>(it: MapIterator<T>): MapIterator<T> {
-        const self = this;
         const wrapped = {
-            next(): IteratorResult<T> { const r = it.next(); if (!r.done) self.iterated++; return r; },
+            next: (): IteratorResult<T> => { const r = it.next(); if (!r.done) this.iterated++; return r; },
             [Symbol.iterator]() { return wrapped; },
         };
         return wrapped as unknown as MapIterator<T>;

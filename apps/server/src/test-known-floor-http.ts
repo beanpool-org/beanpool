@@ -21,6 +21,8 @@
  *      default clears both; the log reads 50 → frozen → 50. Another member reading the board gets the badge (the tier's
  *      least credit) and the trust profile their Trust Points, never the line itself (50, 1,500, 1,000 less pledges)
  *   8. one member's exception needs an owner's or admin's own key session: no automation token, no node password
+ *   10. a change that changes nothing (the same amount, the same freeze, the default restored where it is) answers 200
+ *      and writes no line; a freeze at the same amount, an unfreeze, an exception at the community's floor still do
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-known-floor-http.ts
  */

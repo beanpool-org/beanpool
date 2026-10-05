@@ -27,11 +27,11 @@ export const STANDBY_ENV = { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' };
 
 /**
  * node_config rows a main server's boot writes and a standby's does not (the 2026-10-02 review of #1433): the listing-photo
- * URLs' shape and when it changed (engine/photo-keys.ts), the members' schema-rules pass (db.ts), and the recovery seal's
+ * URLs' shape and when it changed (engine/photo-keys.ts), the face URLs' (engine/avatar-keys.ts), the members' schema-rules pass (db.ts), and the recovery seal's
  * clear and the epoch its main server sent (services/recovery-seal-key.ts).
  */
 export const MAIN_BOOT_ROWS = [
-    'photoKeysShape', 'photoKeysSince', 'migration_members_schema_rules_v1',
+    'photoKeysShape', 'photoKeysSince', 'avatarKeysShape', 'avatarKeysSince', 'migration_members_schema_rules_v1',
     'recovery_seal_cleared', 'recovery_seal_main_epoch', 'recovery_seal_reopened',
 ];
 

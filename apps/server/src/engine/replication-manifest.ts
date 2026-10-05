@@ -675,6 +675,8 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
             + 'so in-flight governance, not a setting',
     },
     avatarKeySecret: { kind: 'per-server', reason: "the key behind members' avatar URLs, made at boot (engine/avatar-keys.ts)" },
+    avatarKeysShape: { kind: 'per-server', reason: "what this server's face URLs look like (keyed by its own secret, or not), recorded at boot (engine/avatar-keys.ts)" },
+    avatarKeysSince: { kind: 'per-server', reason: "when this server's face URLs last changed shape; a phone's members delta from before it is answered whole (engine/avatar-keys.ts)" },
     photoKeySecret: { kind: 'per-server', reason: "the key behind listings' photo URLs, made at boot (engine/photo-keys.ts)" },
     photoKeysShape: { kind: 'per-server', reason: "what this server's listing-photo URLs look like (keyed by its own secret, or not), recorded at boot (engine/photo-keys.ts)" },
     photoKeysSince: { kind: 'per-server', reason: "when this server's listing-photo URLs last changed shape; a phone's sync from before it is answered whole (engine/photo-keys.ts)" },

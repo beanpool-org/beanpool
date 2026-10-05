@@ -74,7 +74,7 @@ import { inviteLogTag } from '../sanitize-message.js';
 import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
-import { avatarKeysRequired } from '../engine/avatar-keys.js';
+import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
 import { membersOnlyHere, memberReadsOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
@@ -2163,9 +2163,13 @@ router.get('/api/members', async (ctx) => {
     const point = peoplePoint(ctx);
     if (point === undefined) return;
     const cursor = ctx.query.updatedAfter;
+    // A delta from a phone with no sync since the face URLs changed shape (keys switched on or off, a new secret:
+    // engine/avatar-keys.ts) is answered with the whole directory: every member's face at its URL as it is now. The phone
+    // stores a delta's members over its own, so a whole one heals every face it holds.
+    const facesHeal = faceUrlsChangedAfter(cursor);
     // The whole directory, the same for every reader let in, is one shared answer per members version
     // (members-snapshot.ts). Only the forms that differ by reader (lat/lng) or by cursor (a delta) are built per read.
-    const shared = !point && !cursor;
+    const shared = !point && (!cursor || facesHeal);
     const snapshotKey = shared ? membersSnapshotKey(getMembersVersion(), avatarKeysRequired()) : '';
     const ready = shared ? usableMembersSnapshot(snapshotKey) : null;
     const querySig = ctx.querystring ? '-' + crypto.createHash('sha256').update(ctx.querystring).digest('hex').slice(0, 8) : '';
@@ -2210,7 +2214,7 @@ router.get('/api/members', async (ctx) => {
     // is read: each URL is made from the row's avatar_ref (@beanpool/core avatarUrlOf). Reading each photo to version
     // its URL ran a 256 MB heap out of memory with one full list at ~6,400 members with photos.
     const build = (): string => {
-        const rows = getMemberDirectoryRows(ctx.query.updatedAfter || undefined)
+        const rows = getMemberDirectoryRows(facesHeal ? undefined : ctx.query.updatedAfter || undefined)
             .filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
 
         const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
@@ -2255,7 +2259,7 @@ router.get('/api/members', async (ctx) => {
     // the last hour, and goes straight through. Any other (0, 1970, a phone back after a day, an array) can be the whole
     // directory, so it waits under the cap too, weighed by the last answer to that same cursor: a cursor's answer only
     // grows as members join, so a small one never stands in for a bigger one under its key.
-    if (!cursor) await heavyRead(ctx, 'members', answer);
+    if (!cursor || facesHeal) await heavyRead(ctx, 'members', answer);
     else if (typeof cursor === 'string' && cursor >= new Date(Date.now() - MEMBERS_DELTA_FRESH_MS).toISOString()) answer();
     else await heavyRead(ctx, heavyReadKey('members-delta', { after: JSON.stringify(cursor) }), answer);
 });

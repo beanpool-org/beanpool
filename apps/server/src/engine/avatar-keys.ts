@@ -18,6 +18,14 @@
  *   saved URLs show initials until their next members sync brings the new ones: a nuisance, never a leak.
  * - Decided at boot, like the rest of what a node runs as: an operator who switches `guestListingsOnly` restarts the
  *   node, so the URLs it emits and the URLs it serves always agree.
+ * - A phone keeps the face URLs it was handed in its own copy of the members, and between its hourly whole reads asks
+ *   only for the members changed since its cursor (apps/native services/pillar-sync.ts, `/api/members?updatedAfter=`).
+ *   Keying faces or no longer keying them (`guestListingsOnly` or a private preview switched), or a new secret, changes
+ *   every member's URL and no member's row, so the URLs such a phone holds would stop opening until its next whole read
+ *   (review of #1645). So the boot that changes the URLs' shape records when (`node_config.avatarKeysSince`, beside
+ *   `avatarKeysShape`, what they were), and a delta from a phone with no sync since then is answered with the whole
+ *   directory (routes/community.ts, faceUrlsChangedAfter), as listing photos are healed (engine/photo-keys.ts). A
+ *   restart that changes nothing keeps both, and every delta is as before.
  *
  * A GROUP's own picture (#1486) is served the same way, at `/api/groups/:id/picture`, and keyed on EVERY node: a group is
  * a members' read everywhere (https-server.ts gates every /api/groups read), so its picture goes only to a URL a group read
@@ -29,8 +37,22 @@ import { avatarVersionOfRef, configureAvatarKeys, configureGroupPictureKeys } fr
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { isPrivatePreview } from '../config/private-preview.js';
+import { getNodeRole } from '../config/node-role.js';
 
 export const AVATAR_KEY_SECRET_ROW = 'avatarKeySecret';
+
+/**
+ * What the face URLs this server emits look like (faceUrlShape): `open` (no key), or `keyed:` and a fingerprint of the
+ * secret; `@standby` on a standby, whose own secret is not the one its main server's phones hold.
+ */
+export const AVATAR_KEYS_SHAPE_ROW = 'avatarKeysShape';
+/** When that last changed (ISO 8601): a members delta from before it holds face URLs that may no longer open. */
+export const AVATAR_KEYS_SINCE_ROW = 'avatarKeysSince';
+/**
+ * How far a phone's cursor trails its last successful sync (apps/native services/pillar-sync.ts: its last sync less
+ * 300,000 ms): a cursor this much older than avatarKeysSince, or more, comes from a device with no sync since the change.
+ */
+const PHONE_CURSOR_LAG_MS = 5 * 60 * 1000;
 
 /** The key's length: 22 base64url characters, 132 bits. */
 const KEY_CHARS = 22;
@@ -94,7 +116,11 @@ export function installAvatarKeysAtBoot(): boolean {
     const s = crypto.createSecretKey(avatarKeySecret());
     groupSecret = s;
     configureGroupPictureKeys((id, version) => keyFor(s, `group-picture|${id}`, version));
-    if (!getProfileSwitches().guestListingsOnly && !isPrivatePreview()) {
+    const guestListingsOnly = getProfileSwitches().guestListingsOnly;
+    const keyed = guestListingsOnly || isPrivatePreview();
+    // Before this record, faces were keyed by guestListingsOnly alone (the preview came later): what a node with none had.
+    noteFaceUrlShape(faceUrlShape(s, keyed), faceUrlShape(s, guestListingsOnly));
+    if (!keyed) {
         secret = null;
         configureAvatarKeys(null);
         return false;
@@ -102,6 +128,57 @@ export function installAvatarKeysAtBoot(): boolean {
     secret = s;
     configureAvatarKeys((id, version) => keyFor(s, id, version));
     return true;
+}
+
+/** avatarKeysSince in ms, as this boot found or wrote it; null before installAvatarKeysAtBoot. */
+let facesChangedAtMs: number | null = null;
+
+/** The shape of the face URLs this server emits (AVATAR_KEYS_SHAPE_ROW). The fingerprint is an HMAC of a fixed text. */
+function faceUrlShape(s: crypto.KeyObject, keyed: boolean): string {
+    const shape = keyed ? `keyed:${crypto.createHmac('sha256', s).update('avatar-url-shape', 'utf-8').digest('base64url').slice(0, 16)}` : 'open';
+    return getNodeRole() === 'backup' ? `${shape}@standby` : shape;
+}
+
+/**
+ * At boot: when the face URLs' shape is not the one recorded (or, with no record, not `unrecorded`, the shape the node
+ * had before this record), record it, and as avatarKeysSince now, or the start of time where no member has a face (no
+ * phone holds a URL that stopped opening). Otherwise keep both, so no delta changes.
+ */
+function noteFaceUrlShape(shape: string, unrecorded: string): void {
+    const read = (key: string) => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+    const stored = read(AVATAR_KEYS_SHAPE_ROW);
+    const found = read(AVATAR_KEYS_SINCE_ROW);
+    const kept = found && Number.isFinite(Date.parse(found)) ? found : null;
+    let since: string;
+    if ((stored ?? unrecorded) === shape && kept !== null) {
+        since = kept;
+    } else {
+        const changed = (stored ?? unrecorded) !== shape;
+        const anyFace = db.prepare('SELECT 1 FROM members WHERE avatar_ref IS NOT NULL LIMIT 1').get() !== undefined;
+        since = changed && anyFace ? new Date().toISOString() : new Date(0).toISOString();
+    }
+    if (stored !== shape || found !== since) {
+        const put = db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)');
+        db.transaction(() => {
+            put.run(AVATAR_KEYS_SHAPE_ROW, shape);
+            put.run(AVATAR_KEYS_SINCE_ROW, since);
+        })();
+    }
+    facesChangedAtMs = Date.parse(since);
+}
+
+/**
+ * Whether a members delta whose cursor is `updatedAfter` comes from a device with no sync since this server's face URLs
+ * last changed shape (avatarKeysSince): its cursor, its last sync less five minutes, is older than that by more than the
+ * five minutes. Then the faces it holds may not open, and it is answered with the whole directory. A device that synced
+ * since (inside those five minutes, or after) gets its delta as before, so each phone gets the whole directory once. A
+ * phone whose clock is fast by more than the time between its last sync and the change gets a delta, and its faces come
+ * back at its next hourly whole read. False without a cursor, or with one that isn't a time.
+ */
+export function faceUrlsChangedAfter(updatedAfter: unknown): boolean {
+    if (facesChangedAtMs === null || typeof updatedAfter !== 'string') return false;
+    const cursor = Date.parse(updatedAfter);
+    return Number.isFinite(cursor) && cursor + PHONE_CURSOR_LAG_MS < facesChangedAtMs;
 }
 
 // The secret groups' pictures are keyed with: installed at every boot (installAvatarKeysAtBoot).

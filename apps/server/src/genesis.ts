@@ -9,6 +9,7 @@
  */
 
 import fs from 'node:fs';
+import Database from 'better-sqlite3';
 import { writeFileAtomic } from './write-file-atomic.js';
 import path from 'node:path';
 import { generateKeyPair } from '@libp2p/crypto/keys';
@@ -31,14 +32,27 @@ export async function ensureGenesis(): Promise<GenesisState> {
         return JSON.parse(raw) as GenesisState;
     }
 
-    // genesis.json gone but the community's key still here: not a first boot. A new genesis would write a new community
-    // key over this one, and the community's trust root would change for good. Stop, and leave the key as it is.
+    // genesis.json gone but the community's key still here. A new install stopped between its two first writes (a kill,
+    // a power cut, a full disk) starts again with a new community; anything else stops, and the key is left as it is: a
+    // new genesis would write a new community key over this one, and the community's trust root would change for good.
     const communityKeyPath = path.join(DATA_DIR, 'community.key');
     if (fs.existsSync(communityKeyPath)) {
-        const msg = `${GENESIS_PATH} is missing, but this server already has a community key (${communityKeyPath}). This server `
-            + 'will not start a new community over it. Put back genesis.json from a backup of this server\'s data dir, then restart.';
-        console.error(`🛑 [Genesis] ${msg}`);
-        throw new Error(msg);
+        const why = notABrandNewInstall(DATA_DIR);
+        if (why) {
+            const msg = `${GENESIS_PATH} is missing, but this server already has a community key (${communityKeyPath}), and it is not a `
+                + `new install (${why}). This server will not start a new community over it; the key is left as it is. `
+                + 'To start again, put back genesis.json from a backup of this server\'s data dir: a sealed backup, or a standby of '
+                + 'this community, holds the same file. With no backup: move community.key aside (rename it, for example to '
+                + 'community.key.old, and keep it) and restart. This server then starts a new community, with a new community key '
+                + 'and community ID. Its database (members and balances) and local-config.json are not touched, but its standbys '
+                + 'and the backups made so far carry the old community ID and genesis.json.';
+            console.error(`🛑 [Genesis] ${msg}`);
+            throw new Error(msg);
+        }
+        const keptAs = `${communityKeyPath}.unfinished-${Date.now()}`;
+        fs.renameSync(communityKeyPath, keptAs);
+        console.warn(`🌱 [Genesis] This server stopped during its first start, before genesis.json was written (it has no node key, `
+            + `no members and no ledger yet). Its unfinished community key is kept as ${keptAs}; the community is made again.`);
     }
 
     console.log('🌱 First boot detected — generating Genesis Block...');
@@ -79,4 +93,41 @@ export async function ensureGenesis(): Promise<GenesisState> {
     console.log('🌱 Genesis Block written to data/genesis.json');
 
     return genesis;
+}
+
+/** Files a server holds once it has finished a first start, or once a take-over or a restore has begun writing into it. */
+const NOT_NEW_INSTALL_FILES = ['libp2p_key', 'connectors.json', 'recovery-seal.key', 'open-join.key', 'takeover-journal.json'];
+
+/**
+ * Null only when this data dir is provably a new install that never finished its first start; otherwise why not.
+ *
+ * The proof: none of NOT_NEW_INSTALL_FILES is there, and state.db is missing or has no member (other than the synthetic
+ * SYSTEM and genesis rows) and no ledger row. A new install writes community.key and genesis.json before it makes its
+ * node key (startP2P, later in the same start), so every server that ever finished a start holds libp2p_key. A take-over
+ * or sealed restore writes libp2p_key first, then community.key, then genesis.json (BUNDLED_FILES's order; a bundle with
+ * no node key is refused), and a take-over keeps its journal while it runs, so one stopped half way is never taken for a
+ * new install. A database that can't be read is no proof: the start stops.
+ */
+export function notABrandNewInstall(dataDir: string): string | null {
+    for (const f of NOT_NEW_INSTALL_FILES) {
+        if (fs.existsSync(path.join(dataDir, f))) return `it has ${f}`;
+    }
+    const dbPath = path.join(dataDir, 'state.db');
+    if (!fs.existsSync(dbPath)) return null;
+    try {
+        const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+        try {
+            const tables = new Set((db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((r) => r.name));
+            const count = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
+            const members = tables.has('members') ? count("SELECT COUNT(*) AS n FROM members WHERE public_key NOT IN ('SYSTEM', 'genesis')") : 0;
+            if (members > 0) return `its database has ${members} member${members === 1 ? '' : 's'}`;
+            const ledger = tables.has('transactions') ? count('SELECT COUNT(*) AS n FROM transactions') : 0;
+            if (ledger > 0) return `its database has ${ledger} ledger row${ledger === 1 ? '' : 's'}`;
+        } finally {
+            db.close();
+        }
+    } catch (e) {
+        return `its database can't be read (${(e as Error).message})`;
+    }
+    return null;
 }

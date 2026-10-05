@@ -248,7 +248,10 @@ function restoreFromBackup(why: string): LocalConfig {
     if (!('config' in backup)) {
         const msg = `${CONFIG_PATH} is unreadable (${why}) and its last good copy ${CONFIG_BACKUP_PATH} is too (${backup.error}). `
             + 'This server will not start as a new install over it: that would forget its address and settings. '
-            + 'Put back a good local-config.json (from a backup) and restart.';
+            + 'Put back a good local-config.json (from a backup) and restart. With no backup: it is a JSON file, and a cut-off one '
+            + 'can often be mended by hand. Otherwise move local-config.json and local-config.json.bak aside (rename them and keep '
+            + 'them) and restart. This server then starts with no settings: the address it asked for, the owner password and '
+            + 'the community\'s name and contact details must be set again. Its community, node key and database are not touched.';
         console.error(`🛑 [Config] ${msg}`);
         throw new LocalConfigUnreadableError(msg);
     }

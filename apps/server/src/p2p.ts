@@ -67,10 +67,11 @@ export async function loadOrCreateIdentity(): Promise<ReturnType<typeof privateK
             + 'start on a new random identity: its standbys, take-over bundles and federation links know it by this key. The file is '
             + 'left as it is. Put back libp2p_key from a backup of this server\'s data dir (a sealed backup restores it too), then restart. '
             + 'With no backup: move libp2p_key aside (rename it, for example to libp2p_key.old, and keep it) and restart. This server then '
-            + 'starts with a new node key and a new PeerId. The community (genesis.json, community.key), its members and its address '
-            + 'stay. But its standbys and federated servers know it by the old PeerId and must be given the new one (a standby is set '
-            + 'up again), a backup collector pinned to the old PeerId must be told the new one, and members\' apps that pinned this '
-            + 'server\'s notice key see its notices signed by a different key.';
+            + 'starts with a new node key and a new PeerId. The community (genesis.json, community.key) and its members, beans and '
+            + 'posts (state.db) stay. But everything that knows the server by this key must learn the new one: its web address is '
+            + 'held by the old key and has to be claimed again with help, its standbys and federated servers know it by the old '
+            + 'PeerId (each standby is set up again, each link with another community made again on both sides), and its '
+            + 'notices to members\' apps are signed by a different key.';
         console.error(`🛑 [P2P] ${msg}`);
         throw new NodeKeyUnreadableError(msg);
     }

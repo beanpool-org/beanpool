@@ -174,7 +174,7 @@ async function main(): Promise<void> {
         check(r.code !== 0 && r.code !== null && !r.result, `${how}: the node exits non-zero and never runs (exit ${r.code})`);
         check(fs.readFileSync(keyFile).equals(before), `${how}: libp2p_key is unchanged (${fs.readFileSync(keyFile).length} bytes)`);
         check(/libp2p_key/.test(r.out) && /backup/i.test(r.out) && !/ephemeral/i.test(r.out), `${how}: the log names the file and how to put it back, and no ephemeral identity`);
-        check(/With no backup: move libp2p_key aside/.test(r.out) && /new node key and a new PeerId/.test(r.out) && /standbys and federated servers know it by the old PeerId/.test(r.out),
+        check(/With no backup: move libp2p_key aside/.test(r.out) && /new node key and a new PeerId/.test(r.out) && /web address is held by the old key/.test(r.out) && /standbys and federated servers know it by the old PeerId/.test(r.out),
             `${how}: the log gives a way on with no backup: move libp2p_key aside, a new PeerId, what that costs`);
     }
 

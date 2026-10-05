@@ -21,6 +21,16 @@ Everything lives in the **data** folder next to docker-compose.yml:
 
 The simplest complete backup: stop the server, copy the whole data folder somewhere else, start it again. Do it before every update. That copy is not locked: it is everything, in the clear, recovery-seal.key and open-join.key included, so keep it somewhere only owners can reach. Until the server has a recovery code it is also the only backup that holds the server's keys.
 
+### When the server will not start over a broken file
+
+The server stops at start, rather than start as someone new, when one of these files is broken. It leaves the file as it is, and its log line (marked 🛑) says which file and what to do. The way back is always a backup: put the file back from a copy of the data folder, a locked backup, or (for genesis.json) a standby of this community, then start the server again. With no backup, there is a way on, and it costs something:
+
+- **libp2p_key** empty, cut off or not a key: move it aside (rename it, and keep it) and start again. The server makes a new key and comes back as a stranger, as above: the address claimed again with help, links with other communities made again on both sides, standbys set up again. The community, members, beans and posts stay.
+- **genesis.json** missing while **community.key** is there: move community.key aside (rename it, and keep it) and start again. The server starts a new community, with a new community key and community ID. state.db and local-config.json are not touched, but standbys and the backups made so far carry the old community ID.
+- **local-config.json** and its last good copy local-config.json.bak both broken: it is a JSON file, and a cut-off one can often be mended by hand. Otherwise move both aside and start again: the address the server asked for, the owner password and the community's name and contact details are set again.
+
+One case needs nothing from you: a new server stopped during its very first start (a power cut or a full disk), after it wrote community.key and before genesis.json. If it has no libp2p_key, no connectors.json, no take-over in progress, and no member or bean in its database, it starts the community again by itself, and keeps the unfinished key as community.key.unfinished- and a number. Any other server with that pair of files stops, as above.
+
 ## Locked or not: the recovery code decides
 
 A backup from Settings is **locked** only when the server has a printed recovery code. A locked backup opens with that code, or with any one owner's phone (see Restoring). Until you make a recovery code, the server keeps making the backups it always made: **not locked**, readable by anyone who has the file.

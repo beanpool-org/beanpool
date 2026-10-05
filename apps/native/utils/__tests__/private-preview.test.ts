@@ -14,7 +14,7 @@ vi.mock('expo-apple-authentication', () => ({ isAvailableAsync: vi.fn(async () =
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8Array(len)), digest: vi.fn(), CryptoDigestAlgorithm: { SHA256: 'SHA-256' } }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => undefined), removeItem: vi.fn(async () => undefined) } }));
 vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined), deleteItemAsync: vi.fn(async () => undefined) }));
-import { readNodeProfile, privatePreviewOn } from '../node-profile';
+import { readNodeProfile, privatePreviewOn, checkGlobalDoor, GLOBAL_DOOR_MESSAGES, GLOBAL_NODE_URL } from '../node-profile';
 import { readDoorAnswer, readWordsDoorAnswer, PRIVATE_PREVIEW_MESSAGE } from '../global-join';
 
 const SENTENCE = 'This community is in a private preview. Ask its owner for an invite.';
@@ -33,5 +33,13 @@ describe('private preview', () => {
         expect(readDoorAnswer(403, body)).toEqual({ kind: 'door_closed', message: SENTENCE });
         expect(readWordsDoorAnswer(403, body)).toEqual({ kind: 'door_closed', message: SENTENCE });
         expect(readDoorAnswer(403, { code: 'private_preview' })).toEqual({ kind: 'door_closed', message: PRIVATE_PREVIEW_MESSAGE });
+    });
+
+    it('the door is not offered in a preview, and the welcome screens say the node\'s sentence (even with the door switch on)', async () => {
+        const info = { profile: 'global', features: { beans: false, openJoin: true, wordsDoor: true, invites: true, privatePreview: true } };
+        const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => info }) as unknown as Response);
+        await expect(checkGlobalDoor(GLOBAL_NODE_URL, fetchImpl)).resolves.toEqual({ ok: false, reason: 'private_preview' });
+        expect(GLOBAL_DOOR_MESSAGES.private_preview).toBe(SENTENCE);
+        expect(PRIVATE_PREVIEW_MESSAGE).toBe(SENTENCE);
     });
 });

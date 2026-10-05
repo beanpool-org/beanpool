@@ -186,7 +186,9 @@ export type GlobalDoorRefusal =
     /** It answered, and it is not the worldwide community (a stale build must never open-join a local node). */
     | 'not_global'
     /** It is the worldwide community, and its door is shut (`features.openJoin` is not on). */
-    | 'door_closed';
+    | 'door_closed'
+    /** It is the worldwide community in a private preview (`features.privatePreview`): only an owner's or admin's invite. */
+    | 'private_preview';
 
 export type GlobalDoorCheck = { ok: true; profile: NodeProfile } | { ok: false; reason: GlobalDoorRefusal };
 
@@ -202,6 +204,7 @@ export async function checkGlobalDoor(
     const profile = await fetchNodeProfile(url, fetchImpl, timeoutMs);
     if (!profile) return { ok: false, reason: 'unreachable' };
     if (profile.profile !== 'global') return { ok: false, reason: 'not_global' };
+    if (privatePreviewOn(profile.features)) return { ok: false, reason: 'private_preview' };
     if (profile.features.openJoin !== true) return { ok: false, reason: 'door_closed' };
     return { ok: true, profile };
 }
@@ -211,17 +214,19 @@ export const GLOBAL_DOOR_MESSAGES: Record<GlobalDoorRefusal, string> = {
     unreachable: "Can't reach the global community right now. Try again, or join with an invite.",
     not_global: "The global community isn't available right now. You can still join a community with an invite.",
     door_closed: "The global community isn't taking new members right now. You can still join a community with an invite.",
+    // The node's own sentence (apps/server config/private-preview.ts), word for word.
+    private_preview: 'This community is in a private preview. Ask its owner for an invite.',
 };
 
-/**
- * Whether the door offers the 12-words way in beside a sign-in. Only a node that says so outright: a node from before
- * the 12-words door says nothing, and its door stays exactly as it was (the sign-in alone).
- */
 /** Whether this node is in a private preview (an invite from its owner or an admin is the only way in). */
 export function privatePreviewOn(features: NodeFeatures | null | undefined): boolean {
     return features?.privatePreview === true;
 }
 
+/**
+ * Whether the door offers the 12-words way in beside a sign-in. Only a node that says so outright: a node from before
+ * the 12-words door says nothing, and its door stays exactly as it was (the sign-in alone).
+ */
 export function wordsDoorOn(features: NodeFeatures | null | undefined): boolean {
     return features?.wordsDoor === true;
 }

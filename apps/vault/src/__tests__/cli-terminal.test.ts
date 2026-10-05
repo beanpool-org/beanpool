@@ -92,16 +92,24 @@ writeFileSync(scriptFile, SCRIPT);
 type Drive = 'yes' | 'no' | 'ctrlc' | 'pasted-enter' | 'pasted-yes' | 'new-key';
 const ANSWER: Record<Drive, string> = { yes: 'yes', no: 'no', ctrlc: '', 'pasted-enter': '', 'pasted-yes': 'yes', 'new-key': '' };
 
+// On a terminal, console.log colours a number it is given: the tool's "200 {…}" comes out as ESC[33m200ESC[39m {…}. Whether it
+// does hangs on the environment (CI with GITHUB_ACTIONS turns it on, a plain shell may not), so colour is forced on for every
+// run, as on a custodian's terminal, and only the colour (SGR) sequences are dropped from what the tool printed.
+// eslint-disable-next-line no-control-regex -- removing the colour escapes is the point
+const SGR = /\x1b\[[0-9;]*m/g;
+
 async function onTerminal(mode: Drive, args: string[]): Promise<{ code: number; out: string; terminalRestored: boolean }> {
-    const env: NodeJS.ProcessEnv = { ...process.env, PTY_MODE: mode, PTY_PASS: PASS, PTY_ANSWER: ANSWER[mode] };
+    const env: NodeJS.ProcessEnv = { ...process.env, PTY_MODE: mode, PTY_PASS: PASS, PTY_ANSWER: ANSWER[mode], FORCE_COLOR: '1' };
     delete env.VAULT_CUSTODIAN_PASSPHRASE;
+    delete env.NO_COLOR;
+    delete env.NODE_DISABLE_COLORS;
     const out = await new Promise<string>((resolve, reject) => {
         const child = spawn('expect', ['-f', scriptFile, '--', tool, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
         let text = '';
         child.stdout.on('data', (d: Buffer) => { text += d.toString(); });
         child.stderr.on('data', (d: Buffer) => { text += d.toString(); });
         child.once('error', reject);
-        child.once('exit', () => resolve(text));
+        child.once('exit', () => resolve(text.replace(SGR, '')));
     });
     const m = /PTY-EXIT=(\d+)/.exec(out);
     if (!m) throw new Error(`the pty run did not finish:\n${out}`);

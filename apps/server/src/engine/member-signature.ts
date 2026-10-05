@@ -92,9 +92,26 @@ export const SIGNATURE_FRESHNESS_MS = 5 * 60 * 1000;
 /**
  * Single-use nonces within a freshness window (`windowMs`, the one its requests are checked with). `consume` is atomic
  * (check-and-set): concurrent duplicates can't both pass.
+ *
+ * Forgetting is driven by a min-heap of (expiry, nonce), kept beside the map. Once the map holds more than
+ * {@link NONCE_SWEEP_ABOVE}, each `consume` first pops the heap while its earliest expiry has passed, so it visits only
+ * the nonces it frees (plus one look at the top): O(log n) a request, where it used to walk the whole map on every
+ * request and, with every nonce still fresh, free nothing (load model 2026-10-05: 7.9% of all CPU at 1000 members).
+ * The heap is needed, not just the map's insertion order: a phone whose clock runs ahead stores a later expiry than
+ * nonces that arrive after it, so "stop at the first live entry" would leave expired ones behind it.
+ *
+ * Why no nonce is forgotten early: a nonce is deleted only when the map's own expiry for it is at or before `now`,
+ * the same test as before. Why every expired one is found: every `set` pushes its (expiry, nonce), and a pair leaves the
+ * heap only once its expiry has passed, when the map's entry is deleted if that expiry has passed too; a pair left
+ * behind by a re-spend (the map moved on to a later expiry) is skipped when it comes up.
  */
 export class NonceStore {
     private readonly seen = new Map<string, number>();
+    /** A binary min-heap in two parallel arrays: `heapExp[i]` is the expiry stored for `heapNonce[i]`. */
+    private readonly heapExp: number[] = [];
+    private readonly heapNonce: string[] = [];
+    /** Heap entries the sweeps have looked at, freed or not: what a test counts the forgetting's work by. */
+    sweepVisits = 0;
     constructor(private readonly windowMs: number) {}
 
     /**
@@ -105,18 +122,19 @@ export class NonceStore {
      * millisecond is held too.
      */
     consume(nonce: string, now: number, signedAt = now): boolean {
-        if (this.seen.size > 10_000) {
-            for (const [n, exp] of this.seen) if (exp <= now) this.seen.delete(n);
-        }
+        if (this.seen.size > NONCE_SWEEP_ABOVE) this.forgetExpired(now);
         const exp = this.seen.get(nonce);
         if (exp !== undefined && exp > now) return false;
-        this.seen.set(nonce, (Number.isFinite(signedAt) ? Math.max(now, signedAt) : now) + this.windowMs + 1);
+        const until = (Number.isFinite(signedAt) ? Math.max(now, signedAt) : now) + this.windowMs + 1;
+        this.seen.set(nonce, until);
+        // A NaN expiry (a NaN `now`) is never spent and never freed, as before; on the heap it would block every sweep.
+        if (!Number.isNaN(until)) this.push(until, nonce);
         return true;
     }
 
     /** Forget every nonce whose window has passed. */
     prune(now: number): void {
-        for (const [n, exp] of this.seen) if (exp <= now) this.seen.delete(n);
+        this.forgetExpired(now);
     }
 
     /** Whether `nonce` is spent and still inside its window. Read only. */
@@ -124,7 +142,64 @@ export class NonceStore {
         const exp = this.seen.get(nonce);
         return exp !== undefined && exp > now;
     }
+
+    /** How many nonces are held, expired or not. */
+    get size(): number {
+        return this.seen.size;
+    }
+
+    private forgetExpired(now: number): void {
+        while (this.heapExp.length > 0) {
+            this.sweepVisits++;
+            if (!(this.heapExp[0] <= now)) return;
+            const nonce = this.pop();
+            const exp = this.seen.get(nonce);
+            if (exp !== undefined && exp <= now) this.seen.delete(nonce);
+        }
+    }
+
+    private push(exp: number, nonce: string): void {
+        const e = this.heapExp, n = this.heapNonce;
+        let i = e.length;
+        e.push(exp);
+        n.push(nonce);
+        while (i > 0) {
+            const p = (i - 1) >> 1;
+            if (e[p] <= exp) break;
+            e[i] = e[p];
+            n[i] = n[p];
+            i = p;
+        }
+        e[i] = exp;
+        n[i] = nonce;
+    }
+
+    /** Remove and return the nonce with the earliest expiry. The heap is not empty. */
+    private pop(): string {
+        const e = this.heapExp, n = this.heapNonce;
+        const top = n[0];
+        const lastExp = e.pop()!;
+        const lastNonce = n.pop()!;
+        const len = e.length;
+        if (len === 0) return top;
+        let i = 0;
+        for (;;) {
+            const l = 2 * i + 1;
+            if (l >= len) break;
+            const c = l + 1 < len && e[l + 1] < e[l] ? l + 1 : l;
+            if (e[c] >= lastExp) break;
+            e[i] = e[c];
+            n[i] = n[c];
+            i = c;
+        }
+        e[i] = lastExp;
+        n[i] = lastNonce;
+        return top;
+    }
 }
+
+/** A store this small is not swept on `consume`: the minute timer's `prune` (https-server.ts) is enough for it. */
+export const NONCE_SWEEP_ABOVE = 10_000;
 
 /** The nonces of signed requests and `/ws` connect tokens, one store for the process. */
 export const requestNonces = new NonceStore(SIGNATURE_FRESHNESS_MS);

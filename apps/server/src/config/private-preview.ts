@@ -85,6 +85,28 @@ export function isVisitorOpenRoute(path: string): boolean {
 }
 
 /**
+ * Koa middleware, mounted BEFORE the signature middleware (https-server.ts): a join, and an unsigned request (which
+ * can't be a member's), or one claiming a key that is no member here, to anything but the open routes, get the
+ * preview's sentence rather than "missing signature" or "members only", so the apps show it as-is. It only ever
+ * refuses on the claimed key, never admits on it: a request claiming a member's key goes on to be verified, and meets
+ * privatePreviewGate below with the verified signer.
+ */
+export function privatePreviewEarlyGate(isMember: (pubkey: string | undefined) => boolean) {
+    return async function privatePreviewEarlyGateMiddleware(ctx: Context, next: Next): Promise<void> {
+        if (!isPrivatePreview()) return next();
+        const path = ctx.path.toLowerCase();
+        if (!path.startsWith('/api/')) return next();
+        const claimed = ctx.get('X-Public-Key').trim().toLowerCase();
+        if (isRefusedJoin(path) || (!isVisitorOpenRoute(path) && (!claimed || !isMember(claimed)))) {
+            ctx.status = 403;
+            ctx.body = privatePreviewRefusal();
+            return;
+        }
+        await next();
+    };
+}
+
+/**
  * Koa middleware, mounted after the signature middleware (so `ctx.state.actor` is the verified signer) and before the
  * route modules (https-server.ts). `isMember` is the act test (state-engine isNodeMember): a suspended member is still
  * a member and signs in to see why.

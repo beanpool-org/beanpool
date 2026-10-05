@@ -119,7 +119,7 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate.js';
-import { privatePreviewGate, isPrivatePreview } from './config/private-preview.js';
+import { privatePreviewGate, privatePreviewEarlyGate, isPrivatePreview } from './config/private-preview.js';
 import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
 import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
@@ -1696,6 +1696,8 @@ export async function startHttpsServer(port: number): Promise<number> {
 
         await next();
     }
+    // A private preview answers a join, and an unsigned visitor, with its own sentence first (config/private-preview.ts).
+    app.use(privatePreviewEarlyGate(isNodeMember));
     app.use(requireSignature);
 
     // The app's version (X-BeanPool-App), counted for the verified signer only, a member or a visitor's row, for the

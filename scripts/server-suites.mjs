@@ -87,6 +87,7 @@ export const SUITES = [
     'test-distance-search',
     'test-distance-query-parsing',
     'test-guest-view',
+    'test-private-preview',
     'test-guest-board-cost',
     'test-distance-search-perf',
     'test-global-directory',

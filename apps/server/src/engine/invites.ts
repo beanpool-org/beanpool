@@ -40,6 +40,12 @@ function canInvite(inviterPubkey: string): boolean {
     return mayBringSomeoneIn(db, inviterPubkey);
 }
 
+/** Whether an invite row is an owner's or admin's (a private preview admits no other: redeemInvite). */
+function madeByOwnerOrAdmin(invite: { issued_by?: string | null; created_by: string }): boolean {
+    if (invite.issued_by) return invite.issued_by === 'owner:password' || isNodeAdmin(invite.issued_by);
+    return isNodeAdmin(invite.created_by);
+}
+
 const INVITER_GONE = 'The member who made this invite is no longer in this community, so it can’t be used. Ask a member for a fresh one.';
 
 /**
@@ -187,10 +193,11 @@ export function redeemInvite(
         return { success: false, error: 'This invite code has expired (maximum 30 days validation)' };
     }
 
-    // A private preview (config/private-preview.ts) admits only an owner's or admin's invite: the admin who issued a
-    // seed invite (`issued_by`), else the code's maker, and an owner or admin here now. A member's code, made before
-    // the preview or not, is refused with the preview's own sentence.
-    if (isPrivatePreview() && !isNodeAdmin(String(invite.issued_by ?? invite.created_by))) {
+    // A private preview (config/private-preview.ts) admits only an owner's or admin's invite: a seed invite issued
+    // under the node password (`owner:password`, routes/community.ts) or by a key that is an owner or admin here now,
+    // or a code whose maker is one now. A member's code, made before the preview or not, is refused with the preview's
+    // own sentence.
+    if (isPrivatePreview() && !madeByOwnerOrAdmin(invite)) {
         recordFunnelEvent('invite_failed', 'private_preview');
         return { success: false, error: PRIVATE_PREVIEW_MESSAGE };
     }

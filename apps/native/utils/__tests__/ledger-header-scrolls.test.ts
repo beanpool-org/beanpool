@@ -23,9 +23,32 @@ function fnBody(name: string): string {
     return src.slice(start, end);
 }
 
+/** The `{…}` value of a JSX prop in `text`, braces balanced (so a reformatted prop still reads the same). */
+function propValue(text: string, prop: string): string {
+    const at = text.indexOf(`${prop}={`);
+    expect(at, prop).toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = at + prop.length + 1; i < text.length; i++) {
+        if (text[i] === '{') depth++;
+        else if (text[i] === '}' && --depth === 0) return text.slice(at + prop.length + 2, i);
+    }
+    throw new Error(`${prop}: unbalanced braces`);
+}
+
 describe('the Ledger header scrolls with the page', () => {
     // What sits between the page title and the end of the keyboard-avoiding area: the fixed part of the page.
     const fixed = src.slice(src.indexOf('<PageTitle title="Ledger"'), src.indexOf('</KeyboardAvoidingView>'));
+
+    it('the shared header is drawn once, inside the one list’s header, and nothing pins it (#1633 review r4180150904)', () => {
+        expect(fixed.match(/renderLedgerHeader\(\)/g)?.length).toBe(1);
+        const listHeader = propValue(fixed.slice(fixed.indexOf('<FlatList')), 'ListHeaderComponent');
+        expect(listHeader).toContain('renderLedgerHeader()');
+        expect(listHeader.indexOf('renderLedgerHeader()')).toBeLessThan(listHeader.indexOf('renderTrustTab()'));
+        expect(listHeader).toContain('renderActivityHeader()');
+        // A sticky header would pin the cards again and hide the tabs at 320 dp / 1.3x. If only the tab bar should
+        // ever stick, give it its own cell and change this line with it.
+        expect(fixed).not.toMatch(/stickyHeaderIndices|stickySectionHeadersEnabled/);
+    });
 
     it('nothing but the page title and one list is fixed: the cards and the tab bar are not', () => {
         expect(fixed.length).toBeGreaterThan(0);
@@ -36,7 +59,6 @@ describe('the Ledger header scrolls with the page', () => {
     });
 
     it('the list’s header is the shared header followed by the open tab, in both tabs', () => {
-        expect(fixed).toContain('ListHeaderComponent={<View>{renderLedgerHeader()}{activeTab === \'trust\' ? renderTrustTab() : renderActivityHeader()}</View>}');
         const header = fnBody('renderLedgerHeader');
         for (const piece of ['styles.topBar', '<CreditBar', 'testID="ledger-known-frozen"', 'testID="ledger-frozen-debit"', '<RepaymentCard />', 'styles.tabBar', 'testID="ledger-wallet-tab"']) {
             expect(header, piece).toContain(piece);

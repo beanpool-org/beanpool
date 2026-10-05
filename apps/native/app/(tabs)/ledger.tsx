@@ -45,8 +45,8 @@ function valueForEarned(target: number): number {
 }
 
 export default function LedgerScreen() {
-    // Large "Ledger" title above the pinned balance bar and Levels/Wallet switch; folds
-    // away once either tab's list scrolls. One ref, pointed at whichever list is showing.
+    // Large "Ledger" title above the page's one list; folds away once the list scrolls. The
+    // profile/balance bar, cards and Levels/Wallet switch are the top of that list (#1633).
     const pageTitle = useCollapsingTitle();
     const listRef = useRef<any>(null);
     useTabRetapScrollTop(listRef);

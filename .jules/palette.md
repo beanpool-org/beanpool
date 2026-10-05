@@ -225,3 +225,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-04 - KnownConsentCard Focus Ring Styling
 **Learning:** `KnownConsentCard.tsx` action buttons ("I agree", "Withdraw", and "Not now") lacked explicit focus-visible ring indicators, making keyboard focus highlights hard to discern during keyboard navigation.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2` styling to buttons in `KnownConsentCard.tsx` and created `KnownConsentCard.test.tsx`.
+
+## 2026-10-05 - RepaymentCard Disclosure State & Focus Ring Styling
+**Learning:** `RepaymentCard.tsx` disclosure trigger button lacked explicit ARIA disclosure state (`aria-expanded={false}`) when closed and keyboard focus-visible ring indicators, and inputs and action buttons lacked explicit focus-visible ring indicators.
+**Action:** Added `aria-expanded={false}` and `focus-visible:ring-2 focus-visible:ring-emerald-500` to disclosure trigger, inputs, and action buttons in `RepaymentCard.tsx`, and updated `RepaymentCard.test.tsx`.

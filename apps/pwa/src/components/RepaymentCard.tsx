@@ -80,7 +80,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
         }
     };
 
-    const input = 'w-full min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-950 dark:text-white';
+    const input = 'w-full min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-950 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
     return (
         <div className="mb-4 flex flex-col gap-2">
             {repayment && (
@@ -89,7 +89,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
                 </div>
             )}
             {!open ? (
-                <button type="button" onClick={() => setOpen(true)} className="self-start min-h-[48px] px-1 text-sm font-semibold text-terra-600 dark:text-terra-500">
+                <button type="button" onClick={() => setOpen(true)} aria-expanded={false} className="self-start min-h-[48px] px-1 text-sm font-semibold text-terra-600 dark:text-terra-500 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                     {REPAYMENT_WORDS.payTitle}
                 </button>
             ) : (
@@ -112,11 +112,11 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
                     )}
                     <div className="flex flex-wrap gap-2">
                         {!paid && (
-                            <button type="button" onClick={pay} disabled={busy} className="flex-1 min-h-[48px] px-4 rounded-xl bg-emerald-700 text-white font-bold disabled:opacity-50">
+                            <button type="button" onClick={pay} disabled={busy} className="flex-1 min-h-[48px] px-4 rounded-xl bg-emerald-700 text-white font-bold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">
                                 {held ? 'Try again' : REPAYMENT_WORDS.payTitle}
                             </button>
                         )}
-                        <button type="button" onClick={() => { setOpen(false); setPaid(null); setError(null); setHeld(null); }} className="flex-1 min-h-[48px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 font-semibold">
+                        <button type="button" onClick={() => { setOpen(false); setPaid(null); setError(null); setHeld(null); }} className="flex-1 min-h-[48px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">
                             {paid ? 'Done' : 'Cancel'}
                         </button>
                     </div>

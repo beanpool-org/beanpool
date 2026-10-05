@@ -36,6 +36,13 @@ describe('RepaymentCard', () => {
         expect(screen.queryByRole('status')).toBeNull();
     });
 
+    it('sets aria-expanded={false} on the disclosure button when closed', async () => {
+        debts.getMyRepayment.mockResolvedValue(null);
+        render(<RepaymentCard />);
+        const payBtn = screen.getByRole('button', { name: 'Pay the Commons' });
+        expect(payBtn).toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('pays for a debt after asking; a node that doesn’t say what is left gets the reference, and no promise', async () => {
         debts.getMyRepayment.mockResolvedValue(null);
         debts.payTheCommons.mockResolvedValue({ transactionId: 'tx-42', amount: 80 });

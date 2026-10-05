@@ -11,6 +11,8 @@ A private preview keeps a new server closed while you and a few people you choos
 
 Set PRIVATE_PREVIEW=1 in the server's environment and restart it. To open the server, remove the setting (or set it to 0) and restart again. It is off unless you set it.
 
+Either way, members' faces change address with the restart. Phones that already hold the community fetch the new addresses at their next sync, so faces don't disappear.
+
 The Manager shows whether it is on, under Node Identity ("Private preview: on" or "off"). It can't be changed there: only the server's setting changes it.
 
 ## What changes while it is on

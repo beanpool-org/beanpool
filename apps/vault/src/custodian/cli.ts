@@ -130,58 +130,88 @@ function stop(message: string, code = 2): never {
 
 // ─── The terminal ────────────────────────────────────────────────────────────────────────────
 
-let stdinLines: string[] | null = null;
+// One reader for stdin, piped or a terminal. It is resumed only while a read waits and paused again after it: a paused
+// stream delivers nothing (a 'data' listener alone does not restart it), and a resumed one keeps the process alive.
+let stdinBuf = '';
 let stdinEnded = false;
-let stdinWaiters: (() => void)[] = [];
+let stdinListening = false;
+let stdinWaiter: (() => void) | null = null;
+let rawMode = false;
 
-/** One line typed (or piped) in; null when there is none. Hidden on a terminal when `hidden`. */
+function setRaw(on: boolean): void {
+    if (rawMode === on) return;
+    process.stdin.setRawMode(on);
+    rawMode = on;
+}
+
+/** Ctrl-C at a hidden read (raw mode passes it as a character, not a signal): the terminal back as it was, and not 0. */
+function interrupted(): never {
+    setRaw(false);
+    process.stderr.write('\n');
+    return stop('Stopped (Ctrl-C). Nothing more was done.', 130);
+}
+
+/** One line typed (or piped) in; null when there is none. Hidden on a terminal when `hidden`: no echo, raw mode until Enter. */
 async function readLine(prompt: string, hidden = false): Promise<string | null> {
+    const secret = Boolean(process.stdin.isTTY) && hidden;
+    if (secret) setRaw(true); // before the prompt, so nothing typed after it is ever echoed
     process.stderr.write(prompt);
-    if (process.stdin.isTTY && hidden) {
-        return new Promise(resolve => {
-            let text = '';
-            process.stdin.setRawMode(true);
-            process.stdin.resume();
-            const onData = (d: Buffer) => {
-                for (const ch of d.toString('utf8')) {
-                    if (ch === '\r' || ch === '\n') {
-                        process.stdin.setRawMode(false);
-                        process.stdin.pause();
-                        process.stdin.off('data', onData);
-                        process.stderr.write('\n');
-                        return resolve(text);
-                    }
-                    if (ch === '\u0003') process.exit(130);
-                    if (ch === '\u007f') text = text.slice(0, -1);
-                    else text += ch;
-                }
-            };
-            process.stdin.on('data', onData);
-        });
-    }
-    if (!stdinLines) {
-        stdinLines = [];
-        let buf = '';
+    if (!stdinListening) {
+        stdinListening = true;
         process.stdin.setEncoding('utf8');
         process.stdin.on('data', (d: string) => {
-            buf += d;
-            const parts = buf.split('\n');
-            buf = parts.pop() ?? '';
-            stdinLines?.push(...parts.map(l => l.replace(/\r$/, '')));
-            stdinWaiters.forEach(w => w());
-            stdinWaiters = [];
+            stdinBuf += d;
+            stdinWaiter?.();
         });
         process.stdin.on('end', () => {
-            if (buf) stdinLines?.push(buf);
             stdinEnded = true;
-            stdinWaiters.forEach(w => w());
-            stdinWaiters = [];
+            stdinWaiter?.();
         });
     }
-    for (;;) {
-        if (stdinLines.length) return stdinLines.shift() as string;
-        if (stdinEnded) return null;
-        await new Promise<void>(resolve => stdinWaiters.push(resolve));
+    let text = '';
+    try {
+        for (;;) {
+            if (secret) {
+                const chars = Array.from(stdinBuf);
+                stdinBuf = '';
+                for (let i = 0; i < chars.length; i++) {
+                    const ch = chars[i];
+                    if (ch === '\r' || ch === '\n') {
+                        stdinBuf = chars.slice(i + 1).join('').replace(/^\n/, '');
+                        process.stderr.write('\n');
+                        return text;
+                    }
+                    if (ch === '\u0003') interrupted();
+                    if (ch === '\u0004') {
+                        process.stderr.write('\n');
+                        return null;
+                    }
+                    if (ch === '\u007f' || ch === '\b') text = Array.from(text).slice(0, -1).join('');
+                    else text += ch;
+                }
+            } else {
+                const nl = stdinBuf.indexOf('\n');
+                if (nl !== -1) {
+                    const line = stdinBuf.slice(0, nl).replace(/\r$/, '');
+                    stdinBuf = stdinBuf.slice(nl + 1);
+                    return line;
+                }
+                if (stdinEnded && stdinBuf) {
+                    const line = stdinBuf;
+                    stdinBuf = '';
+                    return line;
+                }
+            }
+            if (stdinEnded) return null;
+            await new Promise<void>(resolve => {
+                stdinWaiter = resolve;
+                process.stdin.resume();
+            });
+            stdinWaiter = null;
+        }
+    } finally {
+        process.stdin.pause();
+        if (secret) setRaw(false);
     }
 }
 
@@ -506,6 +536,18 @@ async function main(): Promise<void> {
     }
     if (result.status !== 200 || (confirmed && confirmed.status !== 200)) process.exit(1);
 }
+
+// Raw mode never outlives the tool, however it ends.
+process.on('exit', () => {
+    if (rawMode) process.stdin.setRawMode(false);
+});
+// Every way main() settles calls process.exit, so the event loop can only empty while main() still waits on something that
+// will never come. That is never a success: say so and exit non-zero (exit 0 would read as "done" to a custodian or a script).
+process.on('beforeExit', () => {
+    if (rawMode) setRaw(false);
+    console.error('\nvault-custodian stopped before the command finished: it was waiting for something that will not come. The command did not complete; read what it printed above and run it again.');
+    process.exit(1);
+});
 
 main().then(() => process.exit(0), e => {
     console.error(e instanceof CustodianRefusal ? `refused: ${e.message}` : (e as Error).message);

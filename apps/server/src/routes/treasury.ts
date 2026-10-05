@@ -26,7 +26,7 @@ import {
     getKeeperChanges, proposeKeeperRemoval, objectToKeeperChange, stepDownAsKeeper,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly, getActingMember, isVisitorKey,
-    passesReadGate,
+    passesReadGate, type KeeperJoinRequest,
 } from '../state-engine.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
@@ -57,6 +57,15 @@ export function pledgeDispatchKind(treasury: string, body: { type?: unknown; mem
     if (body?.memo !== undefined) return 'crowdfund';
     const ent = db.prepare('SELECT goal_amount FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as { goal_amount: number | null } | undefined;
     return ent && ent.goal_amount != null ? 'crowdfund' : 'backing';
+}
+
+/**
+ * The actor's own pending request to keep this enterprise, with what they have left to back with. That figure is theirs
+ * alone: getKeeperRequests rows, which the lead keeper and admins read, carry only canBackPledge (#1612 review).
+ */
+function ownPendingRequest(treasury: string, actor: string): (KeeperJoinRequest & { availableToBack: number }) | null {
+    const mine = getKeeperRequests(treasury, 'pending').find(r => r.memberPubkey === actor);
+    return mine ? { ...mine, availableToBack: getAvailableBacking(actor) } : null;
 }
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
@@ -464,8 +473,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             keeperRequests: actor && isLeadOrSoleKeeperOrAdmin(treasury, actor)
                 ? getKeeperRequests(treasury, 'pending')
                 : [],
+            // The applicant's own request carries their own figure; the lead keeper's rows above carry only canBackPledge.
             myPendingRequest: actor
-                ? (getKeeperRequests(treasury, 'pending').find(r => r.memberPubkey === actor) || null)
+                ? ownPendingRequest(treasury, actor)
                 : null,
             // Keeper additions and removals waiting out the other keepers' 3-day objection window (answers A, M).
             // Only the keepers (who may object) and node admins see them: they name an applicant and their pledge,

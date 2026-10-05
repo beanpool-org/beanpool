@@ -299,6 +299,40 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
         });
     });
 
+    it('tells the lead keeper in words whether each applicant can back their pledge, with no figure of their standing', async () => {
+        const row = (id: string, callsign: string, canBackPledge?: boolean) => ({
+            id, enterprisePubkey: 'enterprise-eggs-pubkey', memberPubkey: `${id}-pubkey`, callsign,
+            pledgedBacking: 25, status: 'pending' as const, createdAt: new Date().toISOString(),
+            ...(canBackPledge === undefined ? {} : { canBackPledge }),
+        });
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({
+            publicKey: 'enterprise-eggs-pubkey',
+            name: 'Community Eggs',
+            status: 'active',
+            paused: false,
+            balance: 100,
+            isLeadOrSoleKeeperOrAdmin: true,
+            keepers: [{ publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 }],
+            // Dana's row is from a node too old to send canBackPledge: no line, never "undefined".
+            keeperRequests: [row('req-charlie', 'Charlie', true), row('req-erin', 'Erin', false), row('req-dana', 'Dana')],
+            posts: [],
+            flow: [],
+        });
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, keeperOf: ['enterprise-eggs-pubkey'] } as any);
+
+        const { container } = render(
+            <TreasuryDetailPage identity={mockLeadIdentity} pubkey="enterprise-eggs-pubkey" onBack={vi.fn()} />
+        );
+
+        expect(await screen.findByText(/Pending Keeper Requests \(3\)/i)).toBeInTheDocument();
+        expect(screen.getByText('Their standing covers this pledge.')).toBeInTheDocument();
+        expect(screen.getByText("Their standing doesn't cover this pledge right now, so it can't be approved yet.")).toBeInTheDocument();
+        expect(screen.getAllByText(/Their standing/)).toHaveLength(2);
+        const panel = screen.getByText(/Pending Keeper Requests/i).closest('div.rounded-2xl') as HTMLElement;
+        expect(panel.textContent).not.toMatch(/undefined|NaN|available/i);
+        expect(container.textContent).not.toMatch(/undefined|NaN/);
+    });
+
     it('renders lead succession section when lead is inactive >= 30 days and allows keeper to propose or vote', async () => {
         const mockTreasury = {
             publicKey: 'enterprise-eggs-pubkey',

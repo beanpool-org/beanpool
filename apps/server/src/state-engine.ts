@@ -3319,12 +3319,16 @@ function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: num
     return { earnedPart, knownPart: amount - earnedPart };
 }
 
-function assertKeeperOwnDebtCovered(keeperPubkey: string): void {
+/**
+ * The keeper's own figures go only into their own refusal. Where someone else reads it (the lead keeper or an admin
+ * approving them, or the scheduler storing a failed change), the caller passes `othersRefusal`, a refusal in words.
+ */
+function assertKeeperOwnDebtCovered(keeperPubkey: string, othersRefusal?: string): void {
     const { balance } = getBalance(keeperPubkey);
     const floor = usableFloor(keeperPubkey);
     if (balance < floor) {
         // A refusal, not a passing database error: the scheduler's applyKeeperChange closes the change instead of retrying it.
-        throw new KeeperChangeRefused(`Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
+        throw new KeeperChangeRefused(othersRefusal ?? `Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
     }
 }
 
@@ -3664,7 +3668,13 @@ export interface KeeperJoinRequest {
     createdAt: string;
     decidedAt?: string | null;
     decidedBy?: string | null;
-    availableToBack?: number;
+    /**
+     * On a pending request, whether approving it would go through as far as the applicant's standing goes
+     * (applicantCanBackPledge: not frozen, the pledge fits, the own-debt lock wouldn't refuse); null on a closed one.
+     * Everyone who may read the request gets this yes or no; the figure itself is private (it carries their known grant,
+     * which an admin may lower, raise or freeze), so it is only ever added to the applicant's own view (myPendingRequest).
+     */
+    canBackPledge: boolean | null;
     earnedCredit?: number;
     /** Approved by the lead and waiting out the other keepers' 3-day objection window (answer A). */
     pendingChange?: KeeperChangeInfo | null;
@@ -3745,6 +3755,7 @@ export function requestToJoinEnterprise(
         pledgedBacking: parsedAmount,
         status: 'pending',
         createdAt: now,
+        canBackPledge: true, // checked just above
     };
 }
 
@@ -3773,19 +3784,20 @@ export function getKeeperRequests(enterprisePubkey: string, filterStatus?: strin
 
     return (db.prepare(sql).all(...params) as any[]).map(r => {
         const trust = getMemberTrustProfile(r.member_pubkey);
-        const available = getAvailableBacking(r.member_pubkey);
+        const pledged = Number(r.pledged_backing);
         return {
             id: r.id,
             enterprisePubkey: r.enterprise_pubkey,
             memberPubkey: r.member_pubkey,
             callsign: r.callsign,
             avatarUrl: avatarUrlOf(r.member_pubkey, r.avatar_ref),
-            pledgedBacking: Number(r.pledged_backing),
+            pledgedBacking: pledged,
             status: r.status,
             createdAt: r.created_at,
             decidedAt: r.decided_at,
             decidedBy: r.decided_by,
-            availableToBack: available,
+            // Only while the request is open: a closed row gives no live view of someone's standing.
+            canBackPledge: r.status === 'pending' ? applicantCanBackPledge(r.enterprise_pubkey, r.member_pubkey, pledged) : null,
             earnedCredit: trust.earnedCredit,
             pendingChange: pendingByRequest.get(r.id) ?? null,
         };
@@ -3823,6 +3835,47 @@ export class KeeperChangeRefused extends Error {
 }
 
 /**
+ * What the lead keeper, an admin or the scheduler is told when an applicant's standing doesn't cover their pledge. In
+ * words only: their figure, balance, floor, known grant and any freeze are theirs alone (they see the detail in their own
+ * view), and a failed change keeps this as its reason.
+ */
+const APPLICANT_STANDING_REFUSAL = "The applicant's standing doesn't cover this pledge right now, so they can't be approved yet.";
+
+class PledgeDryRun extends Error {
+    constructor(readonly covered: boolean) { super('pledge dry run'); }
+}
+
+/**
+ * Whether approving this applicant with this pledge would go through now, as far as their own standing goes: their
+ * credit isn't frozen, the pledge fits what they can back, and a known part of it would not take their own balance below
+ * their own floor (assertKeeperOwnDebtCovered). One predicate for the request rows' canBackPledge and the approval check,
+ * so a row never says "covers" for a request Approve refuses. The own-debt part writes the pledge rows inside a savepoint
+ * and rolls them back, so it measures the floor exactly as binding them would.
+ */
+function applicantCanBackPledge(enterprisePubkey: string, memberPubkey: string, pledged: number): boolean {
+    const km = db.prepare("SELECT credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
+    if (!km || km.credit_frozen === 1) return false;
+    if (pledged > getAvailableBacking(memberPubkey)) return false;
+    if (pledged <= 0) return true;
+    const earnedPart = Math.min(pledged, earnedPledgeRoom(memberPubkey));
+    const knownPart = pledged - earnedPart;
+    if (knownPart <= 0) return true;
+    try {
+        db.transaction(() => {
+            insertPledgeRows(memberPubkey, enterprisePubkey, earnedPart, knownPart, new Date().toISOString());
+            throw new PledgeDryRun(getBalance(memberPubkey).balance >= usableFloor(memberPubkey));
+        })();
+    } catch (e) {
+        if (e instanceof PledgeDryRun) return e.covered;
+        throw e;
+    } finally {
+        // Nothing read inside the savepoint may outlive it: the enterprise's floor counts the pledge just rolled back.
+        clearEnterpriseFloorCache(enterprisePubkey);
+    }
+    return false;
+}
+
+/**
  * Validate that an approved applicant may still become a keeper, then bind them with their pledge. Runs inside the
  * caller's transaction. Used by an immediate approval and by the scheduler when an objection window closes, so the
  * pledge is re-checked against the applicant's available backing at the moment the binding is made.
@@ -3838,9 +3891,6 @@ function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: st
     if (!km || km.is_visitor || km.status !== 'active') {
         throw new KeeperChangeRefused('Applicant account is not active, so they cannot be approved as a keeper');
     }
-    if (km.credit_frozen === 1) {
-        throw new KeeperChangeRefused('Applicant credit is frozen, so they cannot be approved as a keeper');
-    }
     // A lead's approval must never reverse an admin suspension (PR #838 B3).
     if (isOperatorSwitchedOff(memberPubkey)) {
         throw new KeeperChangeRefused("Applicant's operator access is switched off by a node admin, so they cannot be approved as a keeper");
@@ -3848,9 +3898,9 @@ function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: st
     if (db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, memberPubkey)) {
         throw new KeeperChangeRefused('Already a keeper of this enterprise');
     }
-    const available = getAvailableBacking(memberPubkey);
-    if (pledged > available) {
-        throw new KeeperChangeRefused(`Pledge amount (${pledged}) exceeds available earned credit at approval (${available} available)`);
+    // A freeze, a pledge beyond what they can back, or the own-debt lock: one refusal in words, never which or by how much.
+    if (!applicantCanBackPledge(enterprisePubkey, memberPubkey, pledged)) {
+        throw new KeeperChangeRefused(APPLICANT_STANDING_REFUSAL);
     }
 }
 
@@ -3870,9 +3920,17 @@ function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pled
     }
 
     if (pledged > 0) {
-        const { earnedPart, knownPart } = splitNewPledge(memberPubkey, pledged);
+        // Checked just before (assertApplicantStillEligible); should either still refuse, the lead keeper, an admin or the
+        // scheduler reads it, so in words with no figure.
+        let split: { earnedPart: number; knownPart: number };
+        try {
+            split = splitNewPledge(memberPubkey, pledged);
+        } catch {
+            throw new KeeperChangeRefused(APPLICANT_STANDING_REFUSAL);
+        }
+        const { earnedPart, knownPart } = split;
         insertPledgeRows(memberPubkey, enterprisePubkey, earnedPart, knownPart, new Date().toISOString());
-        if (knownPart > 0) assertKeeperOwnDebtCovered(memberPubkey);
+        if (knownPart > 0) assertKeeperOwnDebtCovered(memberPubkey, APPLICANT_STANDING_REFUSAL);
 
         // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
         const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
@@ -4221,7 +4279,8 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' | 'retr
             broadcast({ type: 'enterprise_pledge_updated', enterprise: c.enterprise_pubkey, keeper: c.member_pubkey });
         }
     }
-    broadcast({ type: 'enterprise_keeper_change_resolved', enterprisePubkey: c.enterprise_pubkey, changeId: c.id, kind: c.kind, memberPubkey: c.member_pubkey, status: outcome, reason: failReason });
+    // To the people who heard of the request (keeperRequestRecipients: the member, the lead or sole keeper, node admins), never every socket.
+    broadcast({ type: 'enterprise_keeper_change_resolved', enterprisePubkey: c.enterprise_pubkey, changeId: c.id, kind: c.kind, memberPubkey: c.member_pubkey, status: outcome, reason: failReason }, keeperRequestRecipients(c.enterprise_pubkey, c.member_pubkey));
     return outcome;
 }
 

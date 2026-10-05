@@ -267,7 +267,7 @@ async function main() {
         approveKeeperRequest(reqValidAtStart.id, lead1.pubKeyHex);
     } catch (e: any) {
         approveOverpledgeThrew = true;
-        assert(e.message.includes('exceeds available earned credit at approval'), 'Approval rejected when pledge exceeds available at approval');
+        assert(e.message.includes("standing doesn't cover this pledge") && !/\d/.test(e.message), 'Approval rejected when pledge exceeds available at approval');
     }
     assert(approveOverpledgeThrew, 'Re-validation at approval threw when standing dropped');
 

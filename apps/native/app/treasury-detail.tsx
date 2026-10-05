@@ -24,7 +24,7 @@ import {
 } from '../utils/enterprise-season';
 import {
     timeLeftText, keeperChangeTitle, keeperChangeBody, canObjectToChange, canRemoveKeeper, canStepDown,
-    stepDownConfirmText, removeKeeperConfirmText, approvedApplicantText, successionTallyText,
+    stepDownConfirmText, removeKeeperConfirmText, approvedApplicantText, applicantBackingText, successionTallyText,
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
@@ -177,6 +177,8 @@ export default function TreasuryDetailScreen() {
         requestInfo: { marginBottom: 10 },
         requestCallsign: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
         requestBacking: { fontSize: 12, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
+        requestStanding: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
+        requestStandingShort: { color: colors.feedback.warning.fg, fontWeight: '600' },
         requestBtnRow: { flexDirection: 'row', gap: 8 },
         approveBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.primary, paddingHorizontal: 12, borderRadius: 8 },
         approveBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
@@ -994,6 +996,11 @@ export default function TreasuryDetailScreen() {
                                             <Text style={styles.requestBacking} numberOfLines={1}>
                                                 Backing pledge: {req.pledgedBacking} 🫘
                                             </Text>
+                                            {applicantBackingText(req.canBackPledge) ? (
+                                                <Text style={[styles.requestStanding, req.canBackPledge === false && styles.requestStandingShort]}>
+                                                    {applicantBackingText(req.canBackPledge)}
+                                                </Text>
+                                            ) : null}
                                         </View>
                                         {req.pendingChange ? (
                                             <Text style={styles.requestBacking}>

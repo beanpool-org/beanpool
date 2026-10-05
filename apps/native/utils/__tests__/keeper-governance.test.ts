@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     timeLeftText, keeperChangeTitle, keeperChangeBody, canObjectToChange, canRemoveKeeper, canStepDown, nextLead,
     stepDownConfirmText, approvedApplicantText, successionTallyText, successionDeadlineText, myChoice,
-    successionClosedText, successionHeading, successionExplainer, removeKeeperConfirmText,
+    successionClosedText, successionHeading, successionExplainer, removeKeeperConfirmText, applicantBackingText,
 } from '../keeper-governance';
 
 const HOUR = 60 * 60 * 1000;
@@ -55,6 +55,15 @@ describe('pending keeper changes (answers A and M)', () => {
 
     it('the applicant is told the window is running', () => {
         expect(approvedApplicantText(ADD.appliesAt, NOW)).toContain('(2 days 5 hours left)');
+    });
+
+    it('the lead keeper is told in words whether the applicant can back the pledge, never a figure', () => {
+        expect(applicantBackingText(true)).toBe('Their standing covers this pledge.');
+        expect(applicantBackingText(false)).toBe("Their standing doesn't cover this pledge right now, so it can't be approved yet.");
+        for (const v of [true, false]) expect(applicantBackingText(v)).not.toMatch(/\d|undefined|NaN/);
+        // A node too old to send canBackPledge: no line at all rather than a guess.
+        expect(applicantBackingText(undefined)).toBeNull();
+        expect(applicantBackingText(null)).toBeNull();
     });
 });
 

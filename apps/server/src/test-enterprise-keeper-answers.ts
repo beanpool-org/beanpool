@@ -181,7 +181,7 @@ async function main() {
         assert(getAvailableBacking(app3.pubKeyHex) === 10, 'A: applicant pledged elsewhere during the window (10 left)');
         tickEnterpriseKeepers(AFTER_WINDOW());
         const c3 = getKeeperChanges(ent).find(c => c.id === res3.change!.id)!;
-        assert(c3.status === 'failed' && /exceeds available earned credit/.test(c3.reason || ''), 'A: an over-pledge at apply time fails the change');
+        assert(c3.status === 'failed' && /standing doesn't cover this pledge/.test(c3.reason || '') && !/\d/.test(c3.reason || ''), 'A: an over-pledge at apply time fails the change');
         assert(role(ent, app3.pubKeyHex) === null && activePledge(ent, app3.pubKeyHex) === 0, 'A: no binding and no pledge after a failed apply');
 
         // The lead who approved it is no longer lead when the window ends.

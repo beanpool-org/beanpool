@@ -103,6 +103,7 @@ export const SUITES = [
     'test-enterprise-credit-rules',
     'test-derived-enterprise-floor',
     'test-known-floor-http',
+    'test-balance-tier-credit-http',
     'test-names-debts-http',
     'test-commons-pay-idempotent-http',
     'test-community-health-http',
@@ -464,6 +465,8 @@ export const VARIANTS = [
     // default, so the plain run is the pass that matters (the public-read allowlist under enforcement); this covers a
     // node whose operator set ENFORCE_READ_AUTH=false.
     { name: 'test-keeper-http', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // A member's own balance answer carries tierCredit (the apps' trust figure) with read auth opted out too (#1644 r4183873149).
+    { name: 'test-balance-tier-credit-http', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // Messaging IDOR (A2-2/A2-3/A2-15): one member cannot read another member's conversations. Refuses to run without
     // ENFORCE_READ_AUTH rather than passing vacuously, which is why it sat unregistered.

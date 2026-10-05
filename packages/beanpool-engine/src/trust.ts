@@ -441,8 +441,10 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
 /**
  * Returns the full trust profile for a member: stats, floor, ceiling, and tier.
  * Incorporates any pre-seeded earned_credit from admin genesis invites.
+ * `extraKnownPledged`: a known pledge of this member's not yet written, counted as if it were (a keeper request's check
+ * reads the floor binding them would leave, without writing the pledge). 0 everywhere else; an enterprise ignores it.
  */
-export function getMemberTrustProfile(db: Db, publicKey: string): {
+export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledged = 0): {
     stats: TrustStats;
     floor: number;
     tier: TierInfo;
@@ -535,7 +537,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     // The known floor (community modes slice 4): a confirmed member's grant, and the community's cap (default
     // CREDIT_FLOOR_CAP). With the confirmation dial off both are today's: knownGrant 0, cap 2,000.
     // Less what of it they have pledged to enterprises (known-floor.ts: own line + known pledges <= their grant).
-    const knownGrant = memberUsableKnownGrant(db, publicKey);
+    const knownGrant = memberUsableKnownGrant(db, publicKey, undefined, extraKnownPledged);
     const cap = creditCap(db);
     const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0 || knownGrant > 0;
     const otherAllowance = vouchCredit + earnedCredit + grantedCredit;
@@ -556,7 +558,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     const exception = knownFloorException(db, publicKey);
     const knownFrozen = confirmationDialOn(db) && exception?.frozen === true && isConfirmed(db, publicKey);
     const tierKnownGrant = knownFrozen
-        ? memberUsableKnownGrant(db, publicKey, knownGrantFor({ dialOn: true, confirmed: true, knownFloor: knownFloor(db), cap, exception: { amount: exception!.amount, frozen: false } }))
+        ? memberUsableKnownGrant(db, publicKey, knownGrantFor({ dialOn: true, confirmed: true, knownFloor: knownFloor(db), cap, exception: { amount: exception!.amount, frozen: false } }), extraKnownPledged)
         : knownGrant;
     const tierAllowance = (activated || tierKnownGrant > 0) ? Math.min(cap, tierKnownGrant + otherAllowance) : 0;
     const tier = getTier(c.CREDIT_BASE_FLOOR - tierAllowance);

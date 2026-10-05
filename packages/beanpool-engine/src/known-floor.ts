@@ -105,23 +105,35 @@ export function memberKnownGrant(db: Db, pubkey: string): number {
  */
 export const KNOWN_PLEDGE_PREFIX = 'known:';
 
-/** The known part of a keeper's active pledges, across every enterprise (as recorded, before any shrink of G). */
-export function memberKnownPledged(db: Db, pubkey: string): number {
+/**
+ * The known part of a keeper's active pledges, across every enterprise (as recorded, before any shrink of G).
+ * `extraPledged` (> 0): a known pledge not yet written, summed in the same SUM after the written rows, where its row would
+ * land (the highest rowid in the keeper index). SQLite's SUM over REAL is compensated (3.43+), so SUM(rows) + x in JS is not
+ * always the double SUM gives once the row is written: at the cent edge a keeper request's row would say yes and Approve no.
+ */
+export function memberKnownPledged(db: Db, pubkey: string, extraPledged = 0): number {
     try {
-        const row = prepared(db,
-            "SELECT COALESCE(SUM(amount), 0) AS total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id LIKE 'known:%'",
-        ).get(pubkey) as { total: number } | undefined;
+        const row = (extraPledged > 0
+            ? prepared(db,
+                "SELECT COALESCE(SUM(amount), 0) AS total FROM (SELECT amount FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id LIKE 'known:%' UNION ALL SELECT CAST(? AS REAL))",
+            ).get(pubkey, extraPledged)
+            : prepared(db,
+                "SELECT COALESCE(SUM(amount), 0) AS total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id LIKE 'known:%'",
+            ).get(pubkey)) as { total: number } | undefined;
         return Number(row?.total || 0);
     } catch {
-        return 0;
+        return extraPledged;
     }
 }
 
-/** How much of a keeper's known pledges counts today: never above half their grant now (0 with the dial off or unconfirmed). */
-function countedKnownPledged(db: Db, pubkey: string, grant = memberKnownGrant(db, pubkey)): { grant: number; pledged: number; counted: number } {
+/**
+ * How much of a keeper's known pledges counts today: never above half their grant now (0 with the dial off or unconfirmed).
+ * `extraPledged` counts a known pledge not yet written, as if it were (a keeper request's check, without a write).
+ */
+function countedKnownPledged(db: Db, pubkey: string, grant = memberKnownGrant(db, pubkey), extraPledged = 0): { grant: number; pledged: number; counted: number } {
     // No grant (the dial off, or not confirmed): nothing of it counts and no room is left, so the pledges aren't read.
     if (grant === 0) return { grant, pledged: 0, counted: 0 };
-    const pledged = memberKnownPledged(db, pubkey);
+    const pledged = memberKnownPledged(db, pubkey, extraPledged);
     return { grant, pledged, counted: Math.min(pledged, Math.floor(grant / 2)) };
 }
 
@@ -134,9 +146,10 @@ export function knownPledgeRoom(db: Db, pubkey: string): number {
 /**
  * A member's own known line: their grant less what of it is pledged to enterprises (the bound above). `grant` stands in for
  * their grant now: trust.ts passes the grant they hold unfrozen, so a frozen member's tier is the one their line gives them.
+ * `extraPledged`: a known pledge not yet written, counted as if it were (countedKnownPledged).
  */
-export function memberUsableKnownGrant(db: Db, pubkey: string, grant?: number): number {
-    const { grant: g, counted } = countedKnownPledged(db, pubkey, grant);
+export function memberUsableKnownGrant(db: Db, pubkey: string, grant?: number, extraPledged = 0): number {
+    const { grant: g, counted } = countedKnownPledged(db, pubkey, grant, extraPledged);
     return Math.max(0, g - counted);
 }
 

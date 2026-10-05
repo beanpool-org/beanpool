@@ -2145,10 +2145,14 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
+/** A member's balance as getBalance gives it, rounded to the cent. */
+function roundedBalance(publicKey: string): number {
+    return Math.round(ledger.getAccount(publicKey).balance * 100) / 100;
+}
+
 export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; liveOffers: number; frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
-    const account = ledger.getAccount(publicKey);
     const { floor, tier, earnedCredit, activated, knownGrant, knownFrozen, creditFrozen } = getMemberTrustProfile(publicKey);
-    const balance = Math.round(account.balance * 100) / 100;
+    const balance = roundedBalance(publicKey);
     const liveOffers = liveOfferCount(publicKey);
     const isTreasury = !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury;
     const effectiveFloor = isTreasury ? getEnterpriseUnderlyingFloor(publicKey).floor : floor;
@@ -2957,9 +2961,18 @@ export function enterpriseKnownShareOf(enterprisePubkey: string): number {
 }
 
 export function usableFloor(publicKey: string): number {
+    return usableFloorWithKnownPledge(publicKey, 0);
+}
+
+/**
+ * A member's usable floor with `extraKnownPledged` more of their known grant pledged than is written: the floor binding
+ * them with that pledge would leave (applicantCanBackPledge), read without writing it. An enterprise's own floor never
+ * counts what it pledges as a keeper, so it ignores the extra.
+ */
+function usableFloorWithKnownPledge(publicKey: string, extraKnownPledged: number): number {
     const m = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!m?.is_treasury) {
-        const { floor, knownGrant, otherAllowance } = getMemberTrustProfile(publicKey);
+        const { floor, knownGrant, otherAllowance } = engine.getMemberTrustProfile(db, publicKey, extraKnownPledged);
         if (knownGrant <= 0) return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
         // A confirmed member in a known community: one band for the known grant, the bands for the rest (slice 4).
         const usable = usableAllowance({ knownGrant, otherAllowance, cap: engine.creditCap(db), liveOffers: liveOfferCount(publicKey) });
@@ -3324,7 +3337,7 @@ function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: num
  * approving them, or the scheduler storing a failed change), the caller passes `othersRefusal`, a refusal in words.
  */
 function assertKeeperOwnDebtCovered(keeperPubkey: string, othersRefusal?: string): void {
-    const { balance } = getBalance(keeperPubkey);
+    const balance = roundedBalance(keeperPubkey);
     const floor = usableFloor(keeperPubkey);
     if (balance < floor) {
         // A refusal, not a passing database error: the scheduler's applyKeeperChange closes the change instead of retrying it.
@@ -3841,38 +3854,33 @@ export class KeeperChangeRefused extends Error {
  */
 const APPLICANT_STANDING_REFUSAL = "The applicant's standing doesn't cover this pledge right now, so they can't be approved yet.";
 
-class PledgeDryRun extends Error {
-    constructor(readonly covered: boolean) { super('pledge dry run'); }
-}
-
 /**
  * Whether approving this applicant with this pledge would go through now, as far as their own standing goes: their
- * credit isn't frozen, the pledge fits what they can back, and a known part of it would not take their own balance below
- * their own floor (assertKeeperOwnDebtCovered). One predicate for the request rows' canBackPledge and the approval check,
- * so a row never says "covers" for a request Approve refuses. The own-debt part writes the pledge rows inside a savepoint
- * and rolls them back, so it measures the floor exactly as binding them would.
+ * credit isn't frozen, the pledge fits what they can back (getAvailableBacking), and a known part of it would not take
+ * their own balance below their own floor (assertKeeperOwnDebtCovered). One predicate for the request rows' canBackPledge
+ * and the approval check, so a row never says "covers" for a request Approve refuses.
+ *
+ * Read only: a GET (the requests list, the lead keeper's enterprise read) never writes, waits on the write lock or fails
+ * on a write error. The own-debt part reads the floor binding would leave with the known part counted as pledged
+ * (usableFloorWithKnownPledge): a member's floor depends on their pledges only through their known pledged total
+ * (engine memberUsableKnownGrant), and the binding itself moves neither their balance nor their floor. Approve still
+ * writes the rows and checks again in its own transaction (bindApprovedKeeper).
+ *
+ * With a pledge, all three parts are read whatever the others say and combined at the end, so a freeze, a pledge with no
+ * room and the own-debt lock take the same path: the time an answer takes doesn't tell the lead keeper which one it was.
  */
-function applicantCanBackPledge(enterprisePubkey: string, memberPubkey: string, pledged: number): boolean {
-    const km = db.prepare("SELECT credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
-    if (!km || km.credit_frozen === 1) return false;
-    if (pledged > getAvailableBacking(memberPubkey)) return false;
-    if (pledged <= 0) return true;
-    const earnedPart = Math.min(pledged, earnedPledgeRoom(memberPubkey));
-    const knownPart = pledged - earnedPart;
-    if (knownPart <= 0) return true;
-    try {
-        db.transaction(() => {
-            insertPledgeRows(memberPubkey, enterprisePubkey, earnedPart, knownPart, new Date().toISOString());
-            throw new PledgeDryRun(getBalance(memberPubkey).balance >= usableFloor(memberPubkey));
-        })();
-    } catch (e) {
-        if (e instanceof PledgeDryRun) return e.covered;
-        throw e;
-    } finally {
-        // Nothing read inside the savepoint may outlive it: the enterprise's floor counts the pledge just rolled back.
-        clearEnterpriseFloorCache(enterprisePubkey);
-    }
-    return false;
+function applicantCanBackPledge(_enterprisePubkey: string, memberPubkey: string, pledged: number): boolean {
+    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
+    if (!km) return false;
+    // getAvailableBacking's 0: an inactive or frozen account has nothing to back a pledge with.
+    const blocked = km.status === 'disabled' || km.status === 'pruned' || km.credit_frozen === 1;
+    if (pledged <= 0) return km.credit_frozen !== 1;
+    const earnedRoom = earnedPledgeRoom(memberPubkey);
+    const fits = pledged <= earnedRoom + engine.knownPledgeRoom(db, memberPubkey);
+    // Split as splitNewPledge does: earned credit first, then the known grant.
+    const knownPart = Math.max(0, pledged - Math.min(pledged, earnedRoom));
+    const covered = roundedBalance(memberPubkey) >= usableFloorWithKnownPledge(memberPubkey, knownPart);
+    return !blocked && fits && (knownPart <= 0 || covered);
 }
 
 /**

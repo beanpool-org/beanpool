@@ -55,10 +55,11 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, removeOldKeyAndOpen, unkeptRemovalsOf, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, mergeNamesPins, namesSignOutWords, namesPinAddresses, NAMES_SIGN_OUT_REQUEST_MS, NAMES_SIGN_OUT_TOTAL_MS, COPY_REFUSED_CODES, NAMES_COPY, firstSentence, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
+    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, mergeNamesPins, namesSignOutWords, namesPinAddresses, NAMES_SIGN_OUT_REQUEST_MS, NAMES_SIGN_OUT_TOTAL_MS, COPY_REFUSED_CODES, NAMES_COPY, firstSentence, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny, fetchHealthExceptions, UNREACHABLE,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
+import { exceptionsFailureText, HEALTH_COPY } from '../community-health';
 import type { BeanPoolIdentity } from '../identity';
 
 const COMMUNITY = 'https://mullum.beanpool.org';
@@ -2653,6 +2654,39 @@ describe('reads and refusals', () => {
         const r = await confirmMember(COMMUNITY, mel, 'a'.repeat(64), newNamesEntryId());
         expect(r.ok).toBe(false);
         if (!r.ok) expect(r.message).toMatch(/Couldn't reach your community/);
+    });
+
+    it('Community health: "couldn\'t reach" only when nothing answered; an error answer says the community answered and which part is missing', async () => {
+        const ada = await admin('Ada');
+        const card = async () => exceptionsFailureText(await fetchHealthExceptions(COMMUNITY, ada));
+        // The exceptions came: no card.
+        answer = () => ({ status: 200, body: { settings: { debtLinePct: 50, quietDays: 60 }, exceptions: [], departed: [] } });
+        expect(await card()).toBeNull();
+        // No answer at all (rehearsal 5 Oct b: the only case where "check your connection" is true).
+        (globalThis as any).fetch = vi.fn(async () => { throw new Error('offline'); });
+        expect(await card()).toBe(UNREACHABLE);
+        expect(UNREACHABLE).toMatch(/Check your connection/);
+    });
+
+    it('Community health: the node failing (a 500 with no JSON, a 2xx it could not read) is never "check your connection"', async () => {
+        const ada = await admin('Ada');
+        const card = async () => exceptionsFailureText(await fetchHealthExceptions(COMMUNITY, ada));
+        // The rehearsal's case: the node's log table unreadable, so the opening (logged first) failed: Koa's plain 500.
+        answer = () => ({ status: 500 });
+        expect(await card()).toBe(HEALTH_COPY.exceptionsAnswerError);
+        answer = () => ({ status: 200 });
+        expect(await card()).toBe(HEALTH_COPY.exceptionsAnswerError);
+        answer = () => ({ status: 502, body: { nothing: 'useful' } });
+        expect(await card()).toBe(HEALTH_COPY.exceptionsAnswerError);
+        expect(HEALTH_COPY.exceptionsAnswerError).not.toMatch(/reach|connection/i);
+        expect(HEALTH_COPY.exceptionsAnswerError).toMatch(/answered/);
+        expect(HEALTH_COPY.exceptionsAnswerError).toMatch(/past a line or left with a debt/);
+        expect(HEALTH_COPY.exceptionsAnswerError).toMatch(/runs your community’s server/);
+        // A refusal the node worded itself keeps its words; an older node with no such route needs an update.
+        answer = () => ({ status: 409, body: { error: 'This is a standby copy of the community.', code: 'standby' } });
+        expect(await card()).toBe('This is a standby copy of the community.');
+        answer = () => ({ status: 404 });
+        expect(await card()).toBe(HEALTH_COPY.exceptionsNotOnThisNode);
     });
 
     it('a delete is a signed DELETE with no body', async () => {

@@ -21,6 +21,10 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
     const { height: windowHeight } = useWindowDimensions();
     const insets = useSafeAreaInsets();
     const layout = bottomSheetLayout(windowHeight, insets);
+    // The footer appears with the first pick and takes its height from the body: at 320 dp and 130% text the body then
+    // ended mid-row, the avatars cut at the footer's line (rehearsal 5 Oct b, item 4). The row is the body's last part, so
+    // when the body's height changes with an avatar picked, it scrolls to its end and the whole row shows above the footer.
+    const bodyScrollRef = useRef<ScrollView>(null);
 
     // Scroll affordance for the horizontal avatar strip: without an on-screen cue it isn't
     // obvious there are more avatars off the right edge. We show a chevron on whichever side
@@ -117,7 +121,12 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                     </View>
 
                     {/* Content: scrolls when taller than the sheet, so the footer below always shows */}
-                    <ScrollView style={styles.body} contentContainerStyle={styles.content}>
+                    <ScrollView
+                        ref={bodyScrollRef}
+                        style={styles.body}
+                        contentContainerStyle={styles.content}
+                        onLayout={() => { if (selectedAvatarId && !loading) bodyScrollRef.current?.scrollToEnd({ animated: true }); }}
+                    >
                         {loading ? (
                             <View style={styles.loadingContainer}>
                                 <ActivityIndicator size="large" color={palette.blue600} />

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    exceptionRows, departedRows, nameFor, healthLogText, tradeLookText, readHealthTotals, totalsRows, healthLogSections, notOnThisNode, HEALTH_COPY, type HealthExceptionsBody,
+    exceptionRows, departedRows, nameFor, healthLogText, tradeLookText, readHealthTotals, totalsRows, healthLogSections, notOnThisNode, healthFailure, exceptionsFailureText, HEALTH_COPY, type HealthExceptionsBody,
 } from '../community-health';
 
 const entries = [
@@ -122,6 +122,34 @@ describe('the Community health screen: totals and the two lists (rehearsal 5 Oct
         expect(notOnThisNode({ ok: false, status: 0, code: null })).toBe(false);
         expect(notOnThisNode({ ok: true })).toBe(false);
         expect(HEALTH_COPY.totalsNotOnThisNode).toMatch(/needs an update/);
+    });
+
+    it('one split for every part: no answer, an older node, or the node answering with an error', () => {
+        expect(healthFailure({ ok: false, status: 0, code: null })).toBe('unreachable');
+        expect(healthFailure({ ok: false, status: 0, code: 'timed_out' })).toBe('unreachable');
+        expect(healthFailure({ ok: false, status: 404, code: null })).toBe('not_on_this_node');
+        for (const r of [
+            { ok: false as const, status: 500, code: null }, { ok: false as const, status: 200, code: null },
+            { ok: false as const, status: 404, code: 'feature_off' }, { ok: false as const, status: 409, code: 'standby' },
+        ]) expect(healthFailure(r)).toBe('answered_error');
+    });
+
+    it('the exceptions card: the connection sentence only with no answer, never when the node answered (rehearsal 5 Oct b)', () => {
+        const NO_ANSWER = "Couldn't reach your community. Check your connection and try again.";
+        expect(exceptionsFailureText({ ok: true })).toBeNull();
+        expect(exceptionsFailureText({ ok: false, status: 0, code: null, message: NO_ANSWER })).toBe(NO_ANSWER);
+        // The node crashed (a plain 500) or sent a 2xx the phone couldn't read: names-list.ts gave both the connection sentence.
+        expect(exceptionsFailureText({ ok: false, status: 500, code: null, message: NO_ANSWER })).toBe(HEALTH_COPY.exceptionsAnswerError);
+        expect(exceptionsFailureText({ ok: false, status: 200, code: null, message: NO_ANSWER })).toBe(HEALTH_COPY.exceptionsAnswerError);
+        // A refusal the node worded keeps its words; an older node needs an update.
+        expect(exceptionsFailureText({ ok: false, status: 403, code: 'not_member', message: 'Not an active member of this community.' })).toBe('Not an active member of this community.');
+        expect(exceptionsFailureText({ ok: false, status: 404, code: null, message: NO_ANSWER })).toBe(HEALTH_COPY.exceptionsNotOnThisNode);
+        expect(HEALTH_COPY.exceptionsNotOnThisNode).toMatch(/needs an update/);
+        for (const words of [HEALTH_COPY.exceptionsAnswerError, HEALTH_COPY.exceptionsNotOnThisNode]) {
+            expect(words).not.toMatch(/reach|connection/i);
+            // Which part failed, in the screen's own headings' words (PAST A LINE, LEFT WITH A DEBT).
+            expect(words).toMatch(/past a line or left with a debt/);
+        }
     });
 
     it('two lists: the looks at a balance, and the looks at trades and alerts, each line in plain words, newest first', () => {

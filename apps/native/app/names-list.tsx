@@ -33,7 +33,7 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getAllCommunityMembers, createDecision } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
-    exceptionRows, departedRows, healthLogSections, readHealthTotals, totalsRows, notOnThisNode, HEALTH_COPY, type HealthExceptionsBody, type HealthLogSection, type HealthTotals,
+    exceptionRows, departedRows, healthLogSections, readHealthTotals, totalsRows, notOnThisNode, exceptionsFailureText, HEALTH_COPY, type HealthExceptionsBody, type HealthLogSection, type HealthTotals,
 } from '../utils/community-health';
 import {
     NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, fetchHealthExceptions, fetchHealthLog, fetchHealthSummary, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
@@ -537,7 +537,8 @@ export default function NamesListScreen() {
             totalsMissing: notOnThisNode(summary) ? HEALTH_COPY.totalsNotOnThisNode : HEALTH_COPY.totalsMissing,
             // A log the phone couldn't read says so in both lists, never "nobody has looked".
             logs: lines.ok ? healthLogSections(lines.value) : healthLogSections(null, notOnThisNode(lines) ? 'not_on_this_node' : 'unreadable'),
-            refused: ex.ok ? null : ex.message,
+            // "Couldn't reach" only when nothing answered; an error answer says which part is missing (exceptionsFailureText).
+            refused: exceptionsFailureText(ex),
         });
     };
 

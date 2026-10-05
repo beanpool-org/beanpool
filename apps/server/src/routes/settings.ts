@@ -4,6 +4,7 @@
 
 import Router from '@koa/router';
 import { getVersion, getCommit } from '../version.js';
+import { backgroundUpdateCheck, cachedNodeUpdateInfo, lookUpNewestNodeRelease, semverGreater } from '../node-release-check.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'url';
@@ -441,60 +442,8 @@ router.get('/api/directory/info', async (ctx) => {
 // cannot drift apart again. So does the commit, asked of git once rather than on every request.
 
 // ===================== BACKGROUND UPDATE CHECKER =====================
-let cachedUpdateInfo: {
-    updateAvailable: boolean;
-    latestVersion: string;
-    releaseNotes: string;
-    releaseUrl: string;
-    publishedAt: string;
-    lastChecked: string;
-} | null = null;
-
-async function backgroundUpdateCheck() {
-    try {
-        const response = await fetch(
-            'https://api.github.com/repos/beanpool-org/beanpool/releases/latest',
-            { headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'BeanPool-Node' } }
-        );
-        if (response.ok) {
-            const release = await response.json() as any;
-            const latestVersion = (release.tag_name || '').replace(/^v/, '');
-            const currentVersion = getVersion();
-            cachedUpdateInfo = {
-                updateAvailable: semverGreater(latestVersion, currentVersion),
-                latestVersion,
-                releaseNotes: release.body || '',
-                releaseUrl: release.html_url || '',
-                publishedAt: release.published_at || '',
-                lastChecked: new Date().toISOString(),
-            };
-        } else {
-            // Fallback to tags
-            const tagsResponse = await fetch(
-                'https://api.github.com/repos/beanpool-org/beanpool/tags?per_page=1',
-                { headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'BeanPool-Node' } }
-            );
-            if (tagsResponse.ok) {
-                const tags = await tagsResponse.json() as any[];
-                const latestTag = tags[0]?.name?.replace(/^v/, '') || '';
-                const currentVersion = getVersion();
-                cachedUpdateInfo = {
-                    updateAvailable: semverGreater(latestTag, currentVersion),
-                    latestVersion: latestTag,
-                    releaseNotes: '',
-                    releaseUrl: '',
-                    publishedAt: '',
-                    lastChecked: new Date().toISOString(),
-                };
-            }
-        }
-        if (cachedUpdateInfo?.updateAvailable) {
-            console.log(`[Update] New version available: v${cachedUpdateInfo.latestVersion} (current: v${getVersion()})`);
-        }
-    } catch (e: any) {
-        console.log(`[Update] Background check failed: ${e.message || 'unknown error'}`);
-    }
-}
+// The lookup and its cache live in ../node-release-check.ts: only v<semver> releases are node releases (a vault-v* or
+// native-v* release never reads as a newer node).
 
 // Run initial check after 30s startup delay, then every 6 hours (unref'd so timers don't block process exit).
 // DISABLE_UPDATE_CHECK=true turns the background lookup off (the server-suites runner sets it: a test node must never
@@ -507,6 +456,7 @@ if (process.env.DISABLE_UPDATE_CHECK !== 'true') {
 
 router.get('/api/version', (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    const cachedUpdateInfo = cachedNodeUpdateInfo();
     ctx.body = {
         version: getVersion(),
         commit: getCommit(),
@@ -551,65 +501,30 @@ router.post('/api/admin/thresholds/get', async (ctx) => {
     ctx.body = { thresholds: getThresholds(), defaults: DEFAULT_THRESHOLDS };
 });
 
-function semverGreater(a: string, b: string): boolean {
-    const pa = a.split('.').map(Number);
-    const pb = b.split('.').map(Number);
-    for (let i = 0; i < 3; i++) {
-        if ((pa[i] || 0) > (pb[i] || 0)) return true;
-        if ((pa[i] || 0) < (pb[i] || 0)) return false;
-    }
-    return false;
-}
-
 router.post('/api/admin/check-update', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can check for updates')) return;
     try {
-        const response = await fetch(
-            'https://api.github.com/repos/beanpool-org/beanpool/releases/latest',
-            { headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'BeanPool-Node' } }
-        );
-        if (response.ok) {
-            const release = await response.json() as any;
-            const latestVersion = (release.tag_name || '').replace(/^v/, '');
+        const release = await lookUpNewestNodeRelease();
+        if (release) {
             const currentVersion = getVersion();
-            const isNewer = semverGreater(latestVersion, currentVersion);
             ctx.body = {
                 currentVersion,
-                latestVersion,
-                updateAvailable: isNewer,
-                releaseUrl: release.html_url || '',
-                releaseNotes: release.body || '',
-                publishedAt: release.published_at || '',
+                latestVersion: release.latestVersion,
+                updateAvailable: semverGreater(release.latestVersion, currentVersion),
+                releaseUrl: release.releaseUrl,
+                releaseNotes: release.releaseNotes,
+                publishedAt: release.publishedAt,
             };
         } else {
-            // No releases yet — check tags instead
-            const tagsResponse = await fetch(
-                'https://api.github.com/repos/beanpool-org/beanpool/tags?per_page=1',
-                { headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'BeanPool-Node' } }
-            );
-            if (tagsResponse.ok) {
-                const tags = await tagsResponse.json() as any[];
-                const latestTag = tags[0]?.name?.replace(/^v/, '') || '';
-                const currentVersion = getVersion();
-                ctx.body = {
-                    currentVersion,
-                    latestVersion: latestTag,
-                    updateAvailable: semverGreater(latestTag, currentVersion),
-                    releaseUrl: '',
-                    releaseNotes: '',
-                    publishedAt: '',
-                };
-            } else {
-                // Return Bad Gateway if upstream update source (GitHub API) is unreachable
-                ctx.status = 502;
-                ctx.body = {
-                    currentVersion: getVersion(),
-                    latestVersion: '',
-                    updateAvailable: false,
-                    error: 'Could not reach GitHub',
-                };
-            }
+            // Return Bad Gateway if upstream update source (GitHub API) is unreachable
+            ctx.status = 502;
+            ctx.body = {
+                currentVersion: getVersion(),
+                latestVersion: '',
+                updateAvailable: false,
+                error: 'Could not reach GitHub',
+            };
         }
     } catch (e: any) {
         // Return Internal Server Error on unhandled update check exceptions

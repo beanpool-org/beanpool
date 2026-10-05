@@ -211,8 +211,10 @@ import {
     generateInvite,
     adminGenerateInvite,
     redeemInvite as redeemInviteEngine,
-    redeemOfflineTicket as redeemOfflineTicketEngine
+    redeemOfflineTicket as redeemOfflineTicketEngine,
+    previewAdmitsInvite,
 } from './engine/invites.js';
+import { isPrivatePreview, PRIVATE_PREVIEW, PRIVATE_PREVIEW_MESSAGE } from './config/private-preview.js';
 import { avatarUrlOf } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
@@ -1675,9 +1677,17 @@ export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, 
  * The pre-flight before a join: what the redeem would say, without spending anything. Where only admins invite (the
  * door, config/door.ts), a ticket a member made is `admins_only`, as redeemOfflineTicket refuses it.
  */
-export function checkInvite(codeOrTicket: string): InviteCheckResult {
+/** The check's answer: the engine's, or, in a private preview, `private_preview` with its sentence. */
+export type ServerInviteCheckResult = Omit<InviteCheckResult, 'reason'> & { reason?: InviteCheckResult['reason'] | typeof PRIVATE_PREVIEW; error?: string };
+
+export function checkInvite(codeOrTicket: string): ServerInviteCheckResult {
     const result = checkInviteEngine(db, codeOrTicket, ticketBinding);
     const raw = codeOrTicket.trim();
+    // A private preview (config/private-preview.ts) redeems only an owner's or admin's invite or ticket: a code it would
+    // refuse is answered as not valid, with the preview's own sentence and no inviter's name.
+    if (result.valid && isPrivatePreview() && !previewAdmitsInvite(raw)) {
+        return { valid: false, reason: PRIVATE_PREVIEW, error: PRIVATE_PREVIEW_MESSAGE };
+    }
     if (result.valid && raw.startsWith('BP-')) {
         const ticket = verifyOfflineTicketEngine(db, raw.substring(3), ticketBinding);
         if (ticket.ok && !mayInviteHere(ticket.inviterPubkey)) return { valid: false, reason: 'admins_only' };

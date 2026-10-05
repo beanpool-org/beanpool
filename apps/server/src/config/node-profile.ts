@@ -52,7 +52,7 @@
  */
 import { db } from '../db/db.js';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
-import { isPrivatePreview } from './private-preview.js';
+import { isPrivatePreview, privatePreviewAtBoot } from './private-preview.js';
 
 export type NodeProfile = 'local' | 'global';
 
@@ -693,6 +693,14 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
     if (profile === 'global' && Object.keys(NOT_BUILT_YET).length > 0) console.log(pinnedLine(profile));
 
     const configured = { ...getConfiguredSwitches(profile), ...NOT_BUILT_YET };
+    // A private preview (config/private-preview.ts) says so, and the door lines below would be false while it is on: no
+    // open door takes a join and invites are on (an owner's or admin's). A value it doesn't know stops the boot here.
+    const preview = privatePreviewAtBoot();
+    if (preview) {
+        console.log(preview);
+        configured.openJoin = false;
+        configured.invites = true;
+    }
     const off = MONEY_SWITCHES.filter((k) => !configured[k]);
     const history = off.length > 0 || configured.openJoin ? ledgerHistory() : null;
     if (history) historyFound = history;

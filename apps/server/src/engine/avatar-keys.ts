@@ -28,6 +28,7 @@ import crypto from 'node:crypto';
 import { avatarVersionOfRef, configureAvatarKeys, configureGroupPictureKeys } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { isPrivatePreview } from '../config/private-preview.js';
 
 export const AVATAR_KEY_SECRET_ROW = 'avatarKeySecret';
 
@@ -58,7 +59,8 @@ function keyFor(s: crypto.KeyObject, id: string, version: string): string {
 }
 
 /**
- * At boot: on a node whose `guestListingsOnly` switch is on, every avatar URL carries its key from now on and the route
+ * At boot: on a node whose `guestListingsOnly` switch is on, or in a private preview (config/private-preview.ts: a member's
+ * face reaches the apps' unsigned `<img>` only with its key), every avatar URL carries its key from now on and the route
  * asks for it; elsewhere neither. Returns whether faces are keyed.
  */
 export function installAvatarKeysAtBoot(): boolean {
@@ -66,7 +68,7 @@ export function installAvatarKeysAtBoot(): boolean {
     const s = crypto.createSecretKey(avatarKeySecret());
     groupSecret = s;
     configureGroupPictureKeys((id, version) => keyFor(s, `group-picture|${id}`, version));
-    if (!getProfileSwitches().guestListingsOnly) {
+    if (!getProfileSwitches().guestListingsOnly && !isPrivatePreview()) {
         secret = null;
         configureAvatarKeys(null);
         return false;

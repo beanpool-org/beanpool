@@ -119,7 +119,9 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate.js';
-import { privatePreviewGate, privatePreviewEarlyGate, isPrivatePreview } from './config/private-preview.js';
+import { privatePreviewGate, privatePreviewEarlyGate, isPrivatePreview, type KeyedImageChecks } from './config/private-preview.js';
+import { avatarKeyMatches, groupPictureKeyMatches } from './engine/avatar-keys.js';
+import { photoKeyMatches } from './engine/photo-keys.js';
 import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
 import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
@@ -1697,7 +1699,16 @@ export async function startHttpsServer(port: number): Promise<number> {
         await next();
     }
     // A private preview answers a join, and an unsigned visitor, with its own sentence first (config/private-preview.ts).
-    app.use(privatePreviewEarlyGate(isNodeMember));
+    // A member's image passes at a URL carrying its own key, as the apps' unsigned <img> asks for it.
+    const previewImages: KeyedImageChecks = {
+        avatar: avatarKeyMatches,
+        postPhoto: (postId, orderNum, k) => {
+            const row = db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ? AND order_num = ?').get(postId, orderNum) as { updated_at: string | null } | undefined;
+            return !!row && photoKeyMatches(postId, orderNum, row.updated_at, k);
+        },
+        groupPicture: groupPictureKeyMatches,
+    };
+    app.use(privatePreviewEarlyGate(isNodeMember, previewImages));
     app.use(requireSignature);
 
     // The app's version (X-BeanPool-App), counted for the verified signer only, a member or a visitor's row, for the
@@ -1729,7 +1740,7 @@ export async function startHttpsServer(port: number): Promise<number> {
 
     // A private preview (config/private-preview.ts): joins other than an owner's or admin's invite, and every read a
     // non-member makes but the few it lists, answer 403 private_preview. Off (the default), it passes everything.
-    app.use(privatePreviewGate(isNodeMember));
+    app.use(privatePreviewGate(isNodeMember, previewImages));
     // The routes a node profile switch has turned off (Beans, escrow, enterprises and treasuries, crowdfunds)
     // answer 404 feature_off before any handler runs (routes/profile-feature-gate.ts).
     app.use(profileFeatureGate);

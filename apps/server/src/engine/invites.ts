@@ -46,6 +46,21 @@ function madeByOwnerOrAdmin(invite: { issued_by?: string | null; created_by: str
     return isNodeAdmin(invite.created_by);
 }
 
+/**
+ * Whether a private preview would redeem this code or offline ticket (checkInvite in state-engine.ts asks, so the check
+ * never vouches for a code redeemInvite refuses): an invite code an owner or admin made (madeByOwnerOrAdmin), or a
+ * ticket whose maker may invite here now (the door is `admins` in a preview: config/door.ts).
+ */
+export function previewAdmitsInvite(codeOrTicket: string): boolean {
+    const raw = codeOrTicket.trim();
+    if (raw.startsWith('BP-')) {
+        const ticket = verifyOfflineTicket(db, raw.substring(3), ticketBinding);
+        return ticket.ok && mayInviteHere(ticket.inviterPubkey);
+    }
+    const invite = db.prepare('SELECT issued_by, created_by FROM invite_codes WHERE code COLLATE NOCASE = ?').get(raw) as { issued_by: string | null; created_by: string } | undefined;
+    return !!invite && madeByOwnerOrAdmin(invite);
+}
+
 const INVITER_GONE = 'The member who made this invite is no longer in this community, so it can’t be used. Ask a member for a fresh one.';
 
 /**

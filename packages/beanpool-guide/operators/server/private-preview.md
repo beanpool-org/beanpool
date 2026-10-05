@@ -11,6 +11,8 @@ A private preview keeps a new server closed while you and a few people you choos
 
 Set PRIVATE_PREVIEW=1 in the server's environment and restart it. To open the server, remove the setting (or set it to 0) and restart again. It is off unless you set it.
 
+The Manager shows whether it is on, under Node Identity ("Private preview: on" or "off"). It can't be changed there: only the server's setting changes it.
+
 ## What changes while it is on
 
 - **Joining.** Only an invite made by the server's owner or an admin lets someone in. Every other way in is refused with one sentence that the apps show as it is: "This community is in a private preview. Ask its owner for an invite." That covers the open door (12 secret words or a sign-in), asking to join, and an invite a member made, even one made before the preview. Members can't make invites during a preview; owners and admins can, even on a server that normally takes no invites, such as the global community. Each invite lets one person in and lapses after 30 days, as usual.

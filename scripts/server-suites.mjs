@@ -328,6 +328,7 @@ export const SUITES = [
     'test-escrow-write-off',
     'test-version-resolution',
     'test-version-route',
+    'test-update-check-node-tags',
     'test-avatar-endpoint',
     'test-avatar-keys',
     'test-etag-short-circuit',

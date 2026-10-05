@@ -45,7 +45,8 @@ export async function ensureGenesis(): Promise<GenesisState> {
                 + 'this community, holds the same file. With no backup: move community.key aside (rename it, for example to '
                 + 'community.key.old, and keep it) and restart. This server then starts a new community, with a new community key '
                 + 'and community ID. Its database (members and balances) and local-config.json are not touched, but its standbys '
-                + 'and the backups made so far carry the old community ID and genesis.json.';
+                + 'and the backups made so far carry the old community ID and genesis.json, and the admins\' copies of the names '
+                + 'list and their key statements are bound to the old community ID, so this server refuses them from then on.';
             console.error(`🛑 [Genesis] ${msg}`);
             throw new Error(msg);
         }
@@ -95,8 +96,15 @@ export async function ensureGenesis(): Promise<GenesisState> {
     return genesis;
 }
 
-/** Files a server holds once it has finished a first start, or once a take-over or a restore has begun writing into it. */
-const NOT_NEW_INSTALL_FILES = ['libp2p_key', 'connectors.json', 'recovery-seal.key', 'open-join.key', 'takeover-journal.json'];
+/**
+ * Files a server holds once it has finished a first start, or once a take-over or a restore has begun writing into it.
+ * local-config.json and shutdown-sentinel.json are written in the start's steps 2 and 2.1 (initAdminPassword,
+ * initShutdownRecovery), straight after genesis, and nothing writes them earlier; state.json is a pre-SQLite node's.
+ */
+const NOT_NEW_INSTALL_FILES = [
+    'libp2p_key', 'connectors.json', 'recovery-seal.key', 'open-join.key', 'takeover-journal.json',
+    'local-config.json', 'shutdown-sentinel.json', 'state.json',
+];
 
 /**
  * Null only when this data dir is provably a new install that never finished its first start; otherwise why not.

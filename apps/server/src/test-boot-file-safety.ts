@@ -174,7 +174,7 @@ async function main(): Promise<void> {
         check(r.code !== 0 && r.code !== null && !r.result, `${how}: the node exits non-zero and never runs (exit ${r.code})`);
         check(fs.readFileSync(keyFile).equals(before), `${how}: libp2p_key is unchanged (${fs.readFileSync(keyFile).length} bytes)`);
         check(/libp2p_key/.test(r.out) && /backup/i.test(r.out) && !/ephemeral/i.test(r.out), `${how}: the log names the file and how to put it back, and no ephemeral identity`);
-        check(/With no backup: move libp2p_key aside/.test(r.out) && /new node key and a new PeerId/.test(r.out) && /web address is held by the old key/.test(r.out) && /standbys and federated servers know it by the old PeerId/.test(r.out),
+        check(/With no backup: move libp2p_key aside/.test(r.out) && /new node key and a new PeerId/.test(r.out) && /web address stops reaching this server/.test(r.out) && /counts that as an impostor and pauses the name/.test(r.out) && /address service's operator moves it to the new key/.test(r.out) && /standbys and federated servers know it by the old PeerId/.test(r.out),
             `${how}: the log gives a way on with no backup: move libp2p_key aside, a new PeerId, what that costs`);
     }
 
@@ -187,7 +187,7 @@ async function main(): Promise<void> {
     const rg = await run(g, ['--boot']);
     check(rg.code !== 0 && rg.code !== null, `the node exits non-zero (exit ${rg.code})`);
     check(fs.readFileSync(ck).equals(ckBefore) && !fs.existsSync(path.join(g, 'genesis.json')), 'community.key is unchanged and no new genesis.json is written');
-    check(/not a new install \(it has libp2p_key\)/.test(rg.out) && /With no backup: move community\.key aside/.test(rg.out) && /new community key and community ID/.test(rg.out)
+    check(/not a new install \(it has libp2p_key\)/.test(rg.out) && /With no backup: move community\.key aside/.test(rg.out) && /new community key and community ID/.test(rg.out) && /copies of the names list and their key statements are bound to the old community ID/.test(rg.out)
         && /standby of this community, holds the same file/.test(rg.out), `the log says why it is not a new install and the way on with no backup ${tail(rg.out)}`);
 
     console.log('\n3b. A new install killed during its first genesis.json write starts again, with one identity');
@@ -223,6 +223,12 @@ async function main(): Promise<void> {
         }, /its database has 1 member\)/],
         ['a take-over journal', (d) => fs.writeFileSync(path.join(d, 'takeover-journal.json'), '{}'), /it has takeover-journal\.json/],
         ['connectors.json', (d) => fs.writeFileSync(path.join(d, 'connectors.json'), '[]'), /it has connectors\.json/],
+        // A pre-SQLite node: its members only in state.json, which the database imports later in a start than genesis.
+        ['a member only in state.json', (d) => fs.writeFileSync(path.join(d, 'state.json'), JSON.stringify({ members: [{ publicKey: 'ab12', callsign: 'Alice', joinedAt: '2026-01-01', invitedBy: 'genesis', inviteCode: 'genesis' }] })),
+            /it has state\.json/],
+        // Written in steps 2 and 2.1, straight after genesis: a new install stopped at genesis has neither.
+        ['local-config.json', (d) => fs.writeFileSync(path.join(d, 'local-config.json'), '{}'), /it has local-config\.json/],
+        ['shutdown-sentinel.json', (d) => fs.writeFileSync(path.join(d, 'shutdown-sentinel.json'), '{}'), /it has shutdown-sentinel\.json/],
         ['an unreadable state.db', (d) => { for (const x of ['state.db', 'state.db-wal', 'state.db-shm']) fs.rmSync(path.join(d, x), { force: true }); fs.writeFileSync(path.join(d, 'state.db'), 'not a database at all, cut off'); },
             /its database can't be read/],
     ];
@@ -294,6 +300,12 @@ async function main(): Promise<void> {
     const after = snapshot();
     const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((n) => before[n] !== after[n]);
     check(changed.length === 0, `every file in the data dir is as it was: no identity file written, none added (changed: ${changed.join(', ') || 'none'})`);
+    // A start over the same two broken files stops, and its way on warns about the role first and names its true costs.
+    const rBoot = await run(s, ['--boot']);
+    check(rBoot.code !== 0 && rBoot.code !== null && /will not start as a new install over it/.test(rBoot.out), `a start over them stops (exit ${rBoot.code})`);
+    check(/Do not move them aside on a server that took over from another/.test(rBoot.out) && /start as a standby again and copy from BACKUP_PRIMARY_URL/.test(rBoot.out)
+        && /set NODE_ROLE=primary/.test(rBoot.out) && /`beanpool recover` adds an owner/.test(rBoot.out) && /an address it already holds is kept in the database/.test(rBoot.out),
+        `the log warns about the role first, then gives the way on and its true costs ${tail(rBoot.out)}`);
 
     console.log('\n8. A restore that can\'t put the good copy back runs once per process');
     const r1 = fresh('restore-once');

@@ -88,18 +88,21 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // never by asking the store whether a file happens to be lying around: the delete paths remove the row
     // inside their transaction and the object only after it commits, so between those two moments the file
     // still exists and must not be served. Reading the row first is what makes that window safe.
-    // With its listing's audience as the row says now; `listed` is 0 for a photo whose listing is gone.
+    // With its listing as the row says now: its audience, its author, and `off` 1 for a listing taken off (below). A photo
+    // whose listing is gone is no photo, to anyone: nobody may read that listing. With foreign keys off (db.ts), a
+    // listing's row can go without its photos' (a linked community's listings when the link goes, federation-listings.ts).
     const photo = db.prepare(
-        `SELECT pp.photo_data, pp.storage_key, pp.sha256, pp.bytes, pp.mime, pp.updated_at, p.audience_scope, p.id IS NOT NULL AS listed
-           FROM post_photos pp LEFT JOIN posts p ON p.id = pp.post_id
+        `SELECT pp.photo_data, pp.storage_key, pp.sha256, pp.bytes, pp.mime, pp.updated_at, p.audience_scope, p.author_pubkey,
+                p.active = 0 AS off
+           FROM post_photos pp JOIN posts p ON p.id = pp.post_id
           WHERE pp.post_id = ? AND pp.order_num = ?`
-    ).get(id, Number(orderNum)) as (PostPhotoRow & { updated_at: string | null; audience_scope: string | null; listed: number }) | undefined;
+    ).get(id, Number(orderNum)) as (PostPhotoRow & { updated_at: string | null; audience_scope: string | null; author_pubkey: string; off: number }) | undefined;
 
     // A photo that isn't everyone's goes only to a URL carrying the key the node hands out with its listing
     // (engine/photo-keys.ts): an <img> cannot sign. Every listing's where the listings are members' (a local community
-    // with reads enforced); where they are a public read, a listing's off the board (a group's, one for one person),
-    // and one whose listing is gone. Anything else is answered as no photo, so neither says whether there is one.
-    const keyed = !!photo && photoKeyRequiredFor(photo.listed ? photo.audience_scope : undefined);
+    // with reads enforced); where they are a public read, a listing's off the board (a group's, one for one person).
+    // Anything else is answered as no photo, so neither says whether there is one.
+    const keyed = !!photo && photoKeyRequiredFor(photo.audience_scope);
     if (!photo || (keyed && !photoKeyMatches(id, Number(orderNum), photo.updated_at, ctx.query.k))) {
         ctx.status = 404;
         ctx.body = { error: 'Photo not found' };
@@ -111,6 +114,22 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     if (hidden) {
         const viewer = ctx.state.actor as string | undefined;
         if (!viewer || (viewer !== hidden.author_pubkey && !nodeRoleOf(viewer))) {
+            ctx.status = 404;
+            ctx.body = { error: 'Photo not found' };
+            return;
+        }
+    }
+    // A listing taken off (`active` 0: cancelled or removed by its author, a keeper, a convenor or a moderator, replaced
+    // by its author's next Pulse listing, closed by a prune, paused by its author's suspension, an event over and
+    // scrubbed) is read by id by nobody, but a cancelled event by its hosts and the people Going while it stays readable
+    // (@beanpool/engine getPosts). Its photos go to whoever may still read it, and its author and the moderators, as a
+    // hidden one's do: only when they sign the request; to anyone else, as to an <img> with a key it was handed before,
+    // it has none. Never stored by a shared cache. A phone that holds the old URL shows the placeholder it shows for
+    // any photo that does not load.
+    const off = !!photo.off;
+    if (off) {
+        const viewer = ctx.state.actor as string | undefined;
+        if (!viewer || (viewer !== photo.author_pubkey && !nodeRoleOf(viewer) && getPosts({ id, viewerPubkey: viewer }).length === 0)) {
             ctx.status = 404;
             ctx.body = { error: 'Photo not found' };
             return;
@@ -163,8 +182,8 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // members' (engine/photo-keys.ts), and its key is what can be taken back: a new secret, the listing made private, a
     // member removed. A shared cache's copy would outlive that for the year (review FABLE-sec-images, MEDIUM). `private`
     // keeps it cached as long in the browser or app that fetched it, which has already been shown those bytes. No Vary:
-    // the bytes a URL is answered with differ by who asks only for a hidden listing's, which no cache keeps.
-    ctx.set('Cache-Control', hidden ? 'private, no-store' : keyed ? 'private, max-age=31536000, immutable' : 'public, max-age=31536000, immutable');
+    // the bytes a URL is answered with differ by who asks only for a hidden or taken-off listing's, which no cache keeps.
+    ctx.set('Cache-Control', hidden || off ? 'private, no-store' : keyed ? 'private, max-age=31536000, immutable' : 'public, max-age=31536000, immutable');
     ctx.type = served.contentType;
     ctx.body = served.body;
     if (served.bytes !== null) ctx.length = served.bytes;

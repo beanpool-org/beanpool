@@ -337,6 +337,7 @@ export const SUITES = [
     'test-etag-short-circuit',
     'test-photo-keys-resync',
     'test-photo-keys-audience',
+    'test-photo-off-listing',
     'test-photo-key-collision',
     'test-api-headers-and-feed-etag',
     'test-directory-publisher',

@@ -141,3 +141,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `settings-signin.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error handling and typed search parameters strictly as `{ community?: string }`.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` and updated search parameter types and array parameter extraction to allow `string | string[]`.
 **Pattern:** Check Expo Router screen components for missing `ErrorBoundary` exports and overly strict search parameter type constraints.
+
+## 2026-10-28 - [Export ErrorBoundary and refine search parameters in invite.tsx]
+**Issue:** `invite.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling and typed search parameters strictly as `{ invite?: string; code?: string; server?: string }`.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` and updated search parameter types and scalar unwrapping to handle optional `string | string[]` parameters safely.
+**Pattern:** Check Expo Router screen components for missing `ErrorBoundary` exports and overly strict search parameter type constraints.

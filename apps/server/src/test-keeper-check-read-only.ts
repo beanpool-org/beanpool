@@ -7,8 +7,10 @@
  * process could keep the event loop waiting on a GET for the busy timeout. It now reads the floor binding would leave.
  *
  *   1. an equivalence table, in-process: for each state (clean, frozen, no room, own debt by various amounts and exactly at
- *      the edge, granted credit, the dial off, an exception or a frozen known floor, a pledge in another enterprise) the
- *      row's canBackPledge is exactly whether Approve goes through
+ *      the edge, granted credit, the dial off, an exception or a frozen known floor, a pledge in another enterprise,
+ *      fractional known pledges at the cent edge) the row's canBackPledge is exactly whether Approve goes through
+ *   1b. the same at the cent edge for random cent-valued known pledges (2–4 written, one asked): SQLite's SUM over REAL is
+ *      compensated, so the row must sum the ask in SQL as Approve's re-check does (#1640 review F1)
  *   2. over real HTTPS, through the real middleware: with a TEMP trigger refusing any write to enterprise_pledges, the
  *      requests list and the enterprise read answer 200 with the same answers
  *   3. with a second connection holding the write lock, both GETs answer 200 at once (no busy wait)
@@ -173,6 +175,10 @@ async function main(): Promise<void> {
         { name: 'a known pledge made elsewhere after asking leaves no room', pledge: 400,
           after: a => { keepElsewhere(a, 200); }, expect: false },
         { name: 'own debt then the dial off', pledge: 400, before: (a, g) => { spend(a, g - 400); }, after: () => setDial(false), expect: false },
+        // #1640 review F1: SUM(193.86, 113.78) + 1.03 in JS is not the double SQLite's compensated SUM gives with the 1.03 row
+        // written. Approve's re-check reads the SQL sum (floor -691.3299999999999), so it refuses; the row must say so too.
+        { name: 'known pledges 193.86 + 113.78 elsewhere, ask 1.03, debt at the cent edge (#1640 F1)', pledge: 1.03,
+          before: (a, g) => { keepElsewhere(a, 193.86); keepElsewhere(a, 113.78); spend(a, (g * 100 - 19386 - 11378 - 103) / 100); }, expect: false },
     ];
     for (const c of cases) {
         setDial(true);
@@ -188,6 +194,43 @@ async function main(): Promise<void> {
             `${c.name} (grant ${grant}, pledge ${c.pledge}): row ${row?.canBackPledge}, Approve ${approved ? 'went through' : `refused: ${refusal}`}`);
     }
     setDial(true);
+
+    // ── 1b. random cent-valued known pledges at the cent edge ─────────────────────────────────────
+    console.log('── 1b. random fractional known pledges at the cent edge: the row agrees with Approve ──');
+    const SEED = Number(process.env.KEEPER_CHECK_SEED ?? 1640);
+    const RUNS = Number(process.env.KEEPER_CHECK_RUNS ?? 300);
+    let rnd = SEED >>> 0;
+    const random = (): number => { // mulberry32: the same sets on every run for a seed
+        rnd = (rnd + 0x6D2B79F5) >>> 0;
+        let t = rnd;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const cents = (max: number) => 1 + Math.floor(random() * max);
+    const elsewhere = createTreasury(`Elsewhere ${lead.pk.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pk }).publicKey;
+    const writeKnown = db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                                   VALUES (?, ?, ?, ?, ?, NULL)`);
+    let agree = 0, yes = 0, no = 0;
+    const disagreements: string[] = [];
+    for (let i = 0; i < RUNS; i++) {
+        const { a, ent, grant } = freshApplicant();
+        // Up to 4 written known pledges of at most 100.00 and an ask of at most 100.00: inside half of a grant of 1,000.
+        const written = Array.from({ length: 2 + Math.floor(random() * 3) }, () => cents(10_000));
+        const ask = cents(10_000);
+        for (const c of written) writeKnown.run(`known:${crypto.randomUUID()}`, a.pk, elsewhere, c / 100, new Date().toISOString());
+        const edge = grant * 100 - written.reduce((x, y) => x + y, 0) - ask;
+        spend(a, edge / 100);
+        const req = requestToJoinEnterprise(ent, a.pk, ask / 100);
+        const row = getKeeperRequests(ent, 'pending').find(r => r.id === req.id)?.canBackPledge;
+        let approved = false;
+        try { approved = approveKeeperRequest(req.id, lead.pk).applied === true; } catch { /* a refusal */ }
+        if (row === approved) agree++;
+        else disagreements.push(`[${written.map(c => c / 100).join(', ')}] + ${ask / 100}, debt ${edge / 100}: row ${row}, Approve ${approved}`);
+        if (approved) yes++; else no++;
+    }
+    assert(agree === RUNS, `seed ${SEED}: the row agrees with Approve in ${agree}/${RUNS} random sets at the cent edge `
+        + `(Approve ${yes} yes, ${no} no)${disagreements.length ? `; first: ${disagreements.slice(0, 3).join('; ')}` : ''}`);
 
     // ── 2–5. over HTTPS: the GETs never write ─────────────────────────────────────────────────────
     const { a: bea, ent: solo, grant: beaGrant } = freshApplicant();

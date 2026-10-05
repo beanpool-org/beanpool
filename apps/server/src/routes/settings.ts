@@ -281,7 +281,7 @@ router.get('/api/node/config', async (ctx) => {
     // (apps/native map.tsx, which can't change here), so it is open, and a reader who is no member here (as that read
     // is) gets the area alone: the place the community serves, no member's anything, and none of the other settings.
     if (isPrivatePreview() && !isNodeMember(ctx.state.actor as string | undefined)) {
-        ctx.body = { serviceRadius: config.serviceRadius };
+        ctx.body = { serviceRadius: config.serviceRadius ?? null };
         return;
     }
     ctx.body = withKnockSetting(config);

@@ -29,7 +29,35 @@ import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
-import { PRIVATE_PREVIEW_MESSAGE, VISITOR_OPEN_ROUTES } from './config/private-preview.js';
+import { PRIVATE_PREVIEW_MESSAGE, VISITOR_OPEN_ROUTES, PRIVATE_PREVIEW_BOOT_LINE, privatePreviewAtBoot } from './config/private-preview.js';
+import { setMemberPhoto } from '@beanpool/engine';
+import * as se from './state-engine.js';
+import { mirrorNodeProfileAtBoot } from './config/node-profile.js';
+
+const RED_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4IScHAAK2AQU0pnWqAAAAAElFTkSuQmCC';
+const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
+
+/** An image fetched as the apps fetch it: unsigned, no headers. */
+async function image(urlPath: string): Promise<{ status: number; type: string; body: any }> {
+    const res = await fetch(BASE + urlPath);
+    const type = res.headers.get('content-type') ?? '';
+    const text = type.startsWith('image/') ? '' : await res.text();
+    let body: any = null;
+    try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+    return { status: res.status, type, body };
+}
+
+/** The first URL in a read's JSON matching `re`. */
+function urlIn(body: unknown, re: RegExp): string | null {
+    const m = JSON.stringify(body ?? null).match(re);
+    return m ? m[0].replace(/\\u0026/g, '&') : null;
+}
+
+function withKey(url: string, k: string | null): string {
+    const u = new URL(url, 'https://x');
+    if (k === null) u.searchParams.delete('k'); else u.searchParams.set('k', k);
+    return u.pathname + u.search;
+}
 
 let BASE = '';
 let WS_BASE = '';
@@ -161,6 +189,94 @@ async function main() {
     assert(!isPreviewRefusal(ssoNonce), `recovery by a sign-in still reaches its route (${show(ssoNonce)})`);
     const reEnroll = await call('POST', newId(), '/api/member/re-enroll', {});
     assert(!isPreviewRefusal(reEnroll), `re-enrol (a member's new key) still reaches its route (${show(reEnroll)})`);
+
+    // ── 4b. members' images load unsigned with their own key, and only with it (fix round 1, B1) ──
+    setMemberPhoto(db, damo.pk, RED_PNG);
+    setMemberPhoto(db, marty.pk, TINY_PNG);
+    const AT = { lat: -28.55, lng: 153.5 };
+    const listing = se.createPost('offer', 'food', 'Preview soup', 'Soup, described', 0, 'fixed', damo.pk, AT.lat, AT.lng, [RED_PNG], false, undefined, false, {})!;
+    const event = se.createPost('event', 'community', 'Preview picnic', 'A picnic, described', 0, 'fixed', marty.pk, AT.lat, AT.lng, [TINY_PNG], false, undefined, false,
+        { eventStartAt: new Date(Date.now() + 7 * 86_400_000).toISOString() } as any)!;
+    const group = se.createGroup({ name: 'Preview club', createdBy: marty.pk, joinPolicy: 'open', avatarUrl: RED_PNG });
+    const membersRead = await call('GET', marty, '/api/community/members');
+    const postsRead = await call('GET', marty, '/api/marketplace/posts');
+    const groupRead = await call('GET', marty, `/api/groups/${group.id}`);
+    const eventRead = await call('GET', marty, '/api/marketplace/posts?type=event');
+    const urls = {
+        damoFace: urlIn(membersRead.body, new RegExp(`/api/avatar/${damo.pk}\\?[^"]*`)),
+        martyFace: urlIn(membersRead.body, new RegExp(`/api/avatar/${marty.pk}\\?[^"]*`)),
+        listingPhoto: urlIn(postsRead.body, new RegExp(`/api/marketplace/posts/${listing.id}/photos/0\\?[^"]*`)),
+        eventPhoto: urlIn(eventRead.body, new RegExp(`/api/marketplace/posts/${event.id}/photos/0\\?[^"]*`)),
+        groupPicture: urlIn(groupRead.body, new RegExp(`/api/groups/${group.id}/picture\\?[^"]*`)),
+    };
+    for (const [what, url] of Object.entries(urls)) {
+        assert(!!url && new URL(url, 'https://x').searchParams.get('k')?.length === 22, `a member's read hands out ${what} with its own key (${url})`);
+        if (!url) continue;
+        const keyed = await image(url);
+        assert(keyed.status === 200 && keyed.type.startsWith('image/'), `${what}: the keyed URL loads unsigned, as the apps load it (${keyed.status} ${keyed.type} ${JSON.stringify(keyed.body)})`);
+        for (const [how, k] of [['no k', null], ['a wrong k', 'B'.repeat(22)], ['a short k', 'abc']] as const) {
+            const r = await image(withKey(url, k));
+            assert(r.status === 403 && r.body?.code === 'private_preview', `${what} with ${how}: refused with the preview's sentence (${r.status} ${JSON.stringify(r.body)})`);
+        }
+    }
+    // A key leaked from one image opens only that image.
+    const kOf = (url: string | null) => (url ? new URL(url, 'https://x').searchParams.get('k') : null);
+    for (const [what, url, other] of [
+        ['Marty\'s face with Damo\'s face key', urls.martyFace, kOf(urls.damoFace)],
+        ['the event photo with the listing photo\'s key', urls.eventPhoto, kOf(urls.listingPhoto)],
+        ['the group picture with Damo\'s face key', urls.groupPicture, kOf(urls.damoFace)],
+        ['Damo\'s face with the group picture\'s key', urls.damoFace, kOf(urls.groupPicture)],
+        ['the listing photo #1 (none) with photo #0\'s key', urls.listingPhoto?.replace('/photos/0', '/photos/1') ?? null, kOf(urls.listingPhoto)],
+    ] as const) {
+        if (!url || !other) { assert(false, `${what}: URLs to try`); continue; }
+        const r = await image(withKey(url, other));
+        assert(r.status === 403 && r.body?.code === 'private_preview', `${what}: refused (${r.status})`);
+    }
+    // A keyed image is GET or HEAD only; a write to its path is refused like any visitor's.
+    if (urls.damoFace) {
+        const post = await fetch(BASE + urls.damoFace, { method: 'POST' });
+        assert(post.status === 403, `POST to a keyed face URL: refused (${post.status})`);
+    }
+    // The phone map's unsigned read of the service area: the area alone, none of the other settings.
+    const cfgVisitor = await call('GET', null, '/api/node/config');
+    assert(cfgVisitor.status === 200 && Object.keys(cfgVisitor.body ?? {}).join(',') === 'serviceRadius',
+        `unsigned /api/node/config: the service area alone (${show(cfgVisitor)})`);
+    const cfgMember = await call('GET', marty, '/api/node/config');
+    assert(cfgMember.status === 200 && 'door' in (cfgMember.body ?? {}) && 'publishMembers' in (cfgMember.body ?? {}), `a member's /api/node/config: the whole public config (${show(cfgMember)})`);
+
+    // ── 4c. the invite check vouches for no code the preview refuses (fix round 1, N2) ──
+    db.prepare('INSERT INTO invite_codes (code, created_by, created_at) VALUES (?, ?, ?)').run('PREVIEWOLD2', damo.pk, new Date().toISOString());
+    const chkMember = await call('GET', null, '/api/invite/check?code=PREVIEWOLD2');
+    assert(chkMember.status === 200 && chkMember.body?.valid === false && chkMember.body?.error === PRIVATE_PREVIEW_MESSAGE
+        && !('inviterCallsign' in chkMember.body) && !JSON.stringify(chkMember.body).includes('Damo'),
+        `invite/check, a member's code: valid false, the preview's sentence, no inviter (${show(chkMember)})`);
+    const adminCode = await call('POST', marty, '/api/invite/generate', { publicKey: marty.pk });
+    const chkAdmin = await call('GET', null, `/api/invite/check?code=${encodeURIComponent(adminCode.body?.invite?.code ?? '')}`);
+    assert(chkAdmin.status === 200 && chkAdmin.body?.valid === true && chkAdmin.body?.inviterCallsign === 'Marty', `invite/check, an admin's code: valid (${show(chkAdmin)})`);
+
+    // ── 4d. the boot's word on the setting (fix round 1, N1) ──
+    for (const v of ['1', 'true', 'TRUE', ' yes ', 'On']) {
+        assert(privatePreviewAtBoot({ PRIVATE_PREVIEW: v }) === PRIVATE_PREVIEW_BOOT_LINE, `boot: PRIVATE_PREVIEW=${JSON.stringify(v)} says the preview is ON`);
+    }
+    assert(PRIVATE_PREVIEW_BOOT_LINE.includes('Private preview: ON (only owner/admin invites join; visitors see nothing)'), 'boot line says it plainly');
+    for (const v of [undefined, '', '0', 'false', 'no', 'OFF']) {
+        assert(privatePreviewAtBoot({ PRIVATE_PREVIEW: v }) === null, `boot: PRIVATE_PREVIEW=${JSON.stringify(v)} is off, no line`);
+    }
+    for (const v of ['y', 'enabled', '2', '"1"', "'1'"]) {
+        let err = '';
+        try { privatePreviewAtBoot({ PRIVATE_PREVIEW: v }); } catch (e) { err = (e as Error).message; }
+        assert(err.includes('will not start') && err.includes('PRIVATE_PREVIEW=1') && err.includes('0 (or false, no, off'),
+            `boot: PRIVATE_PREVIEW=${JSON.stringify(v)} stops the boot naming the accepted values (${err.slice(0, 60)})`);
+    }
+    {
+        const logs: string[] = [];
+        const log = console.log, warn = console.warn;
+        console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+        console.warn = (...a: unknown[]) => { logs.push(a.join(' ')); };
+        try { mirrorNodeProfileAtBoot('primary'); } finally { console.log = log; console.warn = warn; }
+        assert(logs.some((l) => l.startsWith('🔒 Private preview: ON')), `boot log: the preview line (${logs.length} lines)`);
+        assert(!logs.some((l) => l.includes('open door is open') || l.includes('Invites are off')), `boot log: no open-door or invites-off line while it is on (${logs.filter((l) => /door|Invites/.test(l)).join(' | ')})`);
+    }
 
     // ── 5. visitors get nothing but the listed routes ──
     for (const path of [

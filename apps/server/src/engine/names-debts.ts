@@ -178,6 +178,17 @@ export function endWorkOff(actor: string, member: string, confirmationId: string
     logFloor(actor, 'exception_restored', member, WORK_OFF_FLOOR, (before.startsWith('frozen') ? 'frozen' : before) + ' (the work-off confirmation was revoked)');
 }
 
+/**
+ * Whether the member's known floor is still the 0 a live work-off wrote: the one its revoke would put back (endWorkOff).
+ * An admin's 0 over it is a change, not the same line again: it takes the floor over, so the revoke keeps it.
+ */
+export function workOffHoldsFloor(member: string): boolean {
+    const now = floorRow(member);
+    if (!now || now.frozen || now.amount !== 0) return false;
+    return !!db.prepare("SELECT 1 FROM names_debts WHERE repaying_pubkey = ? AND status = 'open' AND work_off_floor_before IS NOT NULL AND work_off_floor_set_at = ?")
+        .get(member, now.set_at);
+}
+
 /** The 0 floor, with what it replaced and the set_at it wrote kept on the debt: what its revoke may put back (endWorkOff). */
 function setWorkOffFloor(actor: string, debtId: string, member: string): void {
     const before = floorBefore(floorRow(member));

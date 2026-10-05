@@ -17,6 +17,7 @@ import { CONFIRMATION_DIAL_KEY, KNOWN_FLOOR_KEY, CREDIT_CAP_KEY, confirmationDia
 import { getProfileSwitches } from './node-profile.js';
 import { getMember } from '../state-engine.js';
 import { clearEnterpriseFloorCache } from '@beanpool/engine';
+import { workOffHoldsFloor } from '../engine/names-debts.js';
 
 export class KnownFloorError extends Error {
     constructor(readonly status: number, readonly code: string, message: string) {
@@ -145,6 +146,9 @@ export function knownFloorForMember(pk: string, viewerKey: string | null = null)
  * or `clear` (back to the community's known floor). Only for an active member; an admin can't set their own.
  * A freeze keeps the amount it froze (NULL: the community's known floor) and only sets the flag: their tier reads the kept
  * amount (trust.ts), and `frozen: false` with no amount unfreezes them back to it. `clear` drops both.
+ * A change that changes nothing (the same amount again, a freeze of a frozen line, the default where it already is) writes
+ * nothing and logs nothing, and answers with the line as it is (#1631 review r4179579785: the panel read "from 250 Beans to
+ * 250 Beans"). A live work-off's 0 is not the admin's own 0: setting 0 over it takes it over (workOffHoldsFloor).
  */
 export function setKnownFloorException(actor: string, body: { memberPubkey?: unknown; amount?: unknown; frozen?: unknown; clear?: unknown }) {
     const pk = body.memberPubkey;
@@ -155,7 +159,9 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
     const old = db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(pk) as { amount: number | null; frozen: number } | undefined;
     const describe = (r: { amount: number | null; frozen: number | boolean } | undefined) =>
         !r ? 'default' : (r.frozen ? 'frozen' : String(r.amount));
+    const line = () => ({ memberPubkey: pk, confirmed: isConfirmed(db, pk), exception: knownFloorExceptions().find(e => e.memberPubkey === pk) ?? null });
     if (body.clear === true) {
+        if (!old) return line();
         db.transaction(() => {
             db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(pk);
             log(actor, 'exception_cleared', pk, describe(old), 'default');
@@ -174,6 +180,8 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
             const cap = savedCreditCap(db);
             if (amount > cap) throw new KnownFloorError(400, 'above_cap', `A member's known floor can't be more than the cap (${cap.toLocaleString('en')} Beans).`);
         }
+        // An unfreeze is always a change (the line was frozen); a freeze keeps the amount, so only the flag is compared.
+        if (old && !unfreeze && (frozen ? old.frozen === 1 : old.frozen === 0 && old.amount === amount) && !workOffHoldsFloor(pk)) return line();
         db.transaction(() => {
             if (unfreeze && amount === null) {
                 db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(pk);
@@ -190,5 +198,5 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
         })();
     }
     clearEnterpriseFloorCache(db);
-    return { memberPubkey: pk, confirmed: isConfirmed(db, pk), exception: knownFloorExceptions().find(e => e.memberPubkey === pk) ?? null };
+    return line();
 }

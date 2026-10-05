@@ -519,6 +519,48 @@ async function main(): Promise<void> {
     const nobody = await lineOf(owner, keypair('Nobody'));
     assert(nobody.status === 404 && nobody.body?.code === 'not_member', `someone who isn't a member: 404 (${show(nobody)})`);
 
+    // ── 10. a change that changes nothing writes nothing (#1631 review r4179579785) ───────────────
+    // The panel shows the log, so a second identical set read "Ada set it: from 250 Beans to 250 Beans". The node answers
+    // 200 with the line as it is and writes no line; a real change (a freeze at the same amount, an unfreeze back to the
+    // kept amount, an exception at the community's own known floor) is still written.
+    console.log('── 10. a change that changes nothing ──');
+    const nod = makeMember('Nod');
+    const nodLines = () => db.prepare('SELECT action, old_value, new_value FROM known_floor_log WHERE member_pubkey = ? ORDER BY at, rowid').all(nod.pk) as { action: string; old_value: string; new_value: string }[];
+    const nodRow = () => db.prepare('SELECT amount, frozen, set_by, set_at FROM known_floor_exceptions WHERE member_pubkey = ?').get(nod.pk) as { amount: number | null; frozen: number; set_by: string; set_at: string } | undefined;
+    const set250 = await exception(owner, { memberPubkey: nod.pk, amount: 250 });
+    const rowAt250 = nodRow();
+    const same250 = await exception(adaAdmin, { memberPubkey: nod.pk, amount: 250 });
+    assert(set250.status === 200 && same250.status === 200 && same250.body?.exception?.amount === 250 && same250.body?.exception?.frozen === false
+        && nodLines().length === 1 && JSON.stringify(nodRow()) === JSON.stringify(rowAt250),
+        `the owner sets Nod to 250, then Ada sends the same 250: 200 with the line as it is, one line in the log, the row untouched (${show(same250)}; ${JSON.stringify(nodLines())})`);
+    const frz250 = await exception(adaAdmin, { memberPubkey: nod.pk, frozen: true });
+    assert(frz250.status === 200 && frz250.body?.exception?.frozen === true && nodLines().length === 2 && nodLines()[1]?.action === 'exception_frozen',
+        `a freeze at the same amount is a change: a second line (${show(frz250)}; ${JSON.stringify(nodLines())})`);
+    const rowFrozen = nodRow();
+    const frzAgain = await exception(owner, { memberPubkey: nod.pk, frozen: true });
+    assert(frzAgain.status === 200 && frzAgain.body?.exception?.frozen === true && nodLines().length === 2 && JSON.stringify(nodRow()) === JSON.stringify(rowFrozen) && nodRow()?.amount === 250,
+        `the same freeze again: 200, no line, the kept 250 untouched (${show(frzAgain)}; ${JSON.stringify(nodRow())})`);
+    const unf250 = await exception(adaAdmin, { memberPubkey: nod.pk, frozen: false });
+    assert(unf250.status === 200 && unf250.body?.exception?.amount === 250 && unf250.body?.exception?.frozen === false
+        && nodLines().length === 3 && nodLines()[2]?.action === 'exception_unfrozen' && nodLines()[2]?.new_value === '250',
+        `unfreezing back to the kept 250 is a change: a third line (${show(unf250)}; ${JSON.stringify(nodLines())})`);
+    const clr = await exception(owner, { memberPubkey: nod.pk, clear: true });
+    const clrAgain = await exception(adaAdmin, { memberPubkey: nod.pk, clear: true });
+    assert(clr.status === 200 && clrAgain.status === 200 && clrAgain.body?.exception === null && nodRow() === undefined
+        && nodLines().length === 4 && nodLines()[3]?.action === 'exception_cleared',
+        `restoring the default is one line; restoring it again where it already is: 200, no line (${show(clrAgain)}; ${JSON.stringify(nodLines())})`);
+    const atFloor = (await read()).body?.knownFloor as number;
+    const pin = await exception(adaAdmin, { memberPubkey: nod.pk, amount: atFloor });
+    const pinAgain = await exception(owner, { memberPubkey: nod.pk, amount: atFloor });
+    assert(pin.status === 200 && pinAgain.status === 200 && nodRow()?.amount === atFloor && nodLines().length === 5,
+        `an exception at the community's own known floor (${atFloor}) is a change from the default (it stays when the floor moves): one line, and the same again none (${JSON.stringify(nodLines())})`);
+    const frzFresh = makeMember('Nod fresh');
+    const freshFrz = await exception(adaAdmin, { memberPubkey: frzFresh.pk, frozen: true });
+    const freshFrzAgain = await exception(adaAdmin, { memberPubkey: frzFresh.pk, frozen: true });
+    const freshLines = db.prepare('SELECT action FROM known_floor_log WHERE member_pubkey = ?').all(frzFresh.pk) as { action: string }[];
+    assert(freshFrz.status === 200 && freshFrzAgain.status === 200 && freshLines.length === 1 && freshLines[0]?.action === 'exception_frozen',
+        `freezing a member with no exception is a change, freezing them again isn't (${JSON.stringify(freshLines)})`);
+
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);
 }

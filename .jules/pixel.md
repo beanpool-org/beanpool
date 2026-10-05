@@ -162,3 +162,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-11-08 - Add dynamic accessibilityLabel and hint to AddWordsForm submit button
 **Learning:** Recovery phrase submit buttons whose child text is replaced by an `ActivityIndicator` during verification leave screen readers without explicit accessible labels unless dynamic `accessibilityLabel` and `accessibilityHint` attributes are provided on the parent `Pressable`.
 **Action:** Always supply dynamic `accessibilityLabel` (`busy ? ADD_WORDS_COPY.checking : ADD_WORDS_COPY.submit`) and `accessibilityHint` on recovery phrase submit buttons rendering `ActivityIndicator` when busy.
+
+## 2026-11-15 - Add dynamic accessibilityLabel and hint to GroupInviteLanding join button
+**Learning:** Action buttons whose text child is replaced by an `ActivityIndicator` during async joining operations leave screen readers announcing static action text unless an explicit dynamic `accessibilityLabel` (e.g., `busy ? 'Joining group...' : ...`) and `accessibilityHint` are supplied on the `Pressable`.
+**Action:** Always provide dynamic `accessibilityLabel` and `accessibilityHint` on primary join/action buttons that render `ActivityIndicator` when busy.

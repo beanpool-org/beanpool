@@ -217,7 +217,8 @@ export default function GroupInviteLanding() {
                     onPress={act}
                     disabled={!action?.enabled || busy}
                     accessibilityRole="button"
-                    accessibilityLabel={action ? action.label : 'Loading'}
+                    accessibilityLabel={busy ? 'Joining group...' : action ? action.label : 'Loading group'}
+                    accessibilityHint={busy ? 'Please wait while joining group' : action?.note || undefined}
                     accessibilityState={{ disabled: !action?.enabled || busy, busy: busy || loadingGroup }}
                 >
                     {busy || !action

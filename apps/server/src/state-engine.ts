@@ -1785,7 +1785,7 @@ export function isInvalidatedKey(pubkey: string | null | undefined): boolean {
  */
 export function isClosedAccountKey(pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
-    return !!db.prepare("SELECT 1 FROM members WHERE public_key IN (?, ?) AND status = 'pruned'").get(pubkey, pubkey.toLowerCase());
+    return !!engine.prepared(db, "SELECT 1 FROM members WHERE public_key IN (?, ?) AND status = 'pruned'").get(pubkey, pubkey.toLowerCase());
 }
 
 /**

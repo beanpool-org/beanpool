@@ -8,6 +8,7 @@
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import { avatarRefOf, avatarUrlOf, parseInviteTicketText, signedRequestBytes } from '@beanpool/core';
+import { prepared } from './statements.js';
 
 type Db = Database.Database;
 
@@ -583,7 +584,7 @@ export function getInviteTree(db: Db, rootPubkey?: string): InviteTreeNode[] {
  */
 export function isInvalidatedKey(db: Db, pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
-    return !!db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ?").get(pubkey.toLowerCase());
+    return !!prepared(db, "SELECT 1 FROM invalidated_keys WHERE public_key = ?").get(pubkey.toLowerCase());
 }
 
 /**
@@ -648,7 +649,7 @@ export function alreadyJoined(db: Db, pubkey: string | null | undefined): boolea
  */
 export function isNodeMember(db: Db, pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
-    const row = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
+    const row = prepared(db, "SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
         { status: string | null; is_visitor: number | null } | undefined;
     return !!row && !row.is_visitor && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
 }

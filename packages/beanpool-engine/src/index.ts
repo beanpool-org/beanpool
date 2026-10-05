@@ -10,6 +10,7 @@
 export * from './trust.js';
 export * from './audit.js';
 export * from './members.js';
+export { prepared } from './statements.js';
 export * from './social.js';
 export * from './posts.js';
 export * from './photo-url.js';

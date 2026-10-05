@@ -63,6 +63,11 @@ jobs:
       - name: Install Dependencies
         run: pnpm install
 
+      # The vault custodian tool's terminal test (apps/vault/src/__tests__/cli-terminal.test.ts) drives it on a pty with
+      # expect; on CI the test fails rather than skips when expect is missing.
+      - name: Install expect
+        run: command -v expect || (sudo apt-get update && sudo apt-get install -y expect)
+
       - name: Run test-all checks
         env:
           # On failure test-all.sh copies every check log here; a passing run writes nothing.

@@ -169,11 +169,39 @@ export function totalsRows(t: HealthTotals): Array<{ label: string; value: strin
 }
 
 /**
- * A node from before #1599 has no Community health routes: its answer is a 404 with no code, where every 404 of a current
- * node carries one (the global node's `feature_off`). A retry won't help there; the community's server needs an update.
+ * Why a Community health read failed, the one split every part of the screen uses:
+ * - `unreachable`: no answer at all (the request threw or was let go at its time limit: status 0). Only here is "check
+ *   your connection" true.
+ * - `not_on_this_node`: a node from before #1599 has no Community health routes: its answer is a 404 with no code, where
+ *   every 404 of a current node carries one (the global node's `feature_off`). A retry won't help; the server needs an update.
+ * - `answered_error`: the node answered, with an error (a status of 400 or more, or a 2xx the phone couldn't read). The
+ *   connection is fine (rehearsal 5 Oct b, item 3: an admin was sent to check their Wi-Fi when the node itself failed).
  */
+export type HealthFailure = 'unreachable' | 'not_on_this_node' | 'answered_error';
+
+export function healthFailure(r: { ok: false; status: number; code: string | null }): HealthFailure {
+    if (r.status === 0) return 'unreachable';
+    if (r.status === 404 && !r.code) return 'not_on_this_node';
+    return 'answered_error';
+}
+
 export function notOnThisNode(r: { ok: true } | { ok: false; status: number; code: string | null }): boolean {
-    return !r.ok && r.status === 404 && !r.code;
+    return !r.ok && healthFailure(r) === 'not_on_this_node';
+}
+
+/**
+ * The card shown where the exceptions (PAST A LINE, LEFT WITH A DEBT) would be, or null when they came. Says which part
+ * is missing, so the totals and the logs above and below it still read as what they are.
+ * - no answer: the call's own words (names-list.ts UNREACHABLE: "Couldn't reach your community. Check your connection…").
+ * - a refusal the node worded itself (every one carries a code: not an admin, a standby, the global node): its words.
+ * - any other error answer (a crash, a body that isn't JSON): the node answered, so never "couldn't reach".
+ */
+export function exceptionsFailureText(r: { ok: true } | { ok: false; status: number; code: string | null; message: string }): string | null {
+    if (r.ok) return null;
+    const why = healthFailure(r);
+    if (why === 'unreachable') return r.message;
+    if (why === 'not_on_this_node') return HEALTH_COPY.exceptionsNotOnThisNode;
+    return r.code && r.message.trim() ? r.message : HEALTH_COPY.exceptionsAnswerError;
 }
 
 /** One of the two access-log lists, as the screen shows it. */
@@ -203,6 +231,9 @@ export const HEALTH_COPY = {
     logNotOnThisNode: 'This community’s server doesn’t keep this log yet: it needs an update.',
     /** A node from before #1608 answers no `tradeLog`: it doesn't log these looks, so "nobody" would be untrue. */
     tradesNotLogged: 'This community’s server doesn’t log these looks yet: it needs an update.',
+    /** The node answered the exceptions with an error: the connection is fine, so not "check your connection". */
+    exceptionsAnswerError: 'Your community answered, but couldn’t send who is past a line or left with a debt just now. Try again later, or tell the person who runs your community’s server.',
+    exceptionsNotOnThisNode: 'This community’s server doesn’t show who is past a line or left with a debt yet: it needs an update.',
 } as const;
 
 const isLine = (l: unknown): l is HealthLogLine =>

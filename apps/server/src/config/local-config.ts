@@ -252,12 +252,12 @@ function restoreFromBackup(why: string): LocalConfig {
             + 'files, and a cut-off one can often be mended by hand; mend whichever is less damaged and save it as local-config.json. '
             + 'Do not move them aside on a server that took over from another: its role (nodeRole) and take-over count '
             + '(identityEpoch, the split-brain guard) are kept only in local-config.json, so with NODE_ROLE=backup in .env it would '
-            + 'start as a standby again and copy from BACKUP_PRIMARY_URL, the old main server. If they can\'t be mended: on a main '
+            + 'start as a standby again and copy from BACKUP_PRIMARY_URL. If they can\'t be mended: on a main '
             + 'server, first make sure .env does not say NODE_ROLE=backup (set NODE_ROLE=primary); then move local-config.json and '
             + 'local-config.json.bak aside (rename them and keep them) and restart. This server then starts with no settings: no '
             + 'admin password (ADMIN_PASSWORD in .env is ignored; owners sign in with the BeanPool app, and `beanpool recover` adds '
             + 'an owner); an address request still waiting is forgotten (an address it already holds is kept in the database); '
-            + 'its standbys stop copying until each is paired again; backups are not locked, and are not sent off the server, '
+            + 'its standbys stop copying until each is paired again (a standby paired from Settings stops its own copying too; one set up with BACKUP_PRIMARY_URL in .env carries on); backups are not locked, and are not sent off the server, '
             + 'until an owner makes a new recovery code; the take-over count starts again at 0; and the community\'s name and '
             + 'contact details must be set again. Its community, node key and database are not touched.';
         console.error(`🛑 [Config] ${msg}`);

@@ -14,6 +14,12 @@
  *   4. a node admin (signed), an owner's key session, an admin automation token, the admin password session: never the figure
  *   5. the applicant's known grant lowered below the pledge: the lead keeper sees a no; approving is refused in words
  *      that do not carry the figure, and the applicant still sees their own
+ *   6. a sole keeper approves an applicant whose own debt is using their known floor (#1638 review B1): the row said no,
+ *      and the refusal carries no balance or floor
+ *   7. a two-keeper enterprise, the scheduler refuses the change at the end of its window, on the own-debt lock and on a
+ *      freeze (#1638 review B2): the stored reason is in words, and enterprise_keeper_change_resolved reaches the lead
+ *      keeper and the applicant over a signed /ws, never an unrelated member's socket; "frozen" reaches no one
+ *   8. closed rows carry no canBackPledge (#1638 review NB): no live view of a closed applicant's standing
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -24,7 +30,8 @@ process.env.ADMIN_PASSWORD = 'KeeperPrivacy123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, createPost, createTreasury, adminAssignTreasuryOperator, getAvailableBacking } from './state-engine.js';
+import WebSocket from 'ws';
+import { initStateEngine, seedGenesisMember, createPost, createTreasury, adminAssignTreasuryOperator, getAvailableBacking, getBalance, applyDueKeeperChanges, transfer } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders, ownerTokenHeaders, turnOn2faForTests } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
@@ -110,6 +117,31 @@ function requestRows(r: Res): any[] {
 function rowsCarryNoFigure(r: Res): boolean {
     return requestRows(r).every(row => !('availableToBack' in row));
 }
+
+// ── signed member sockets ───────────────────────────────────────────────────────────────────────
+type Sock = { ws: WebSocket; events: any[] };
+function socket(id: Id): Promise<Sock> {
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
+    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(url, { rejectUnauthorized: false });
+        const s: Sock = { ws, events: [] };
+        ws.on('message', (d) => { try { s.events.push(JSON.parse(d.toString())); } catch { /* */ } });
+        ws.on('open', () => resolve(s));
+        ws.on('error', reject);
+    });
+}
+const settle = () => new Promise(r => setTimeout(r, 400));
+/** Every event on this socket that names this change. */
+const resolvedOn = (s: Sock, changeId: string) => s.events.filter(e => JSON.stringify(e).includes(changeId));
+/** The member buys something: the beans go into a purchase's escrow (a direct send needs a completed trade first). */
+function spend(from: Id, beans: number): boolean {
+    return !!transfer(from.pk, `escrow_${crypto.randomUUID()}`, beans, 'a purchase', 'escrow', true);
+}
+/** Words a refusal someone else reads must never carry: a figure, or what the figure comes from. */
+const leaksStanding = (text: string) => /\d/.test(text) || /frozen|freeze|balance|floor|grant|available/i.test(text);
 
 async function main(): Promise<void> {
     console.log('Keeper join requests: who sees the applicant\'s figure (real HTTPS)\n');
@@ -226,13 +258,96 @@ async function main(): Promise<void> {
     assert(listAfter.body?.requests?.[0]?.canBackPledge === false && rowsCarryNoFigure(listAfter), 'and the same no on the list');
     const approve = await call('POST', lead, `/api/enterprise/${ent}/keepers/requests/${rowAfter?.id}/approve`, {});
     const approveError = String(approve.body?.error ?? '');
-    assert(approve.status >= 400 && /exceeds available earned credit at approval/.test(approveError),
+    assert(approve.status >= 400 && /standing doesn't cover this pledge/.test(approveError),
         `approving is refused (${show(approve)})`);
     assert(!new RegExp(`\\(${lowFigure} available\\)|\\b${lowFigure} available`).test(approveError) && !/\(\d+ available\)/.test(approveError),
         `and the refusal the lead keeper reads does not carry Ana's figure (${approveError})`);
     const anaAfter = await detail(ana);
     assert(anaAfter.body?.myPendingRequest?.availableToBack === lowFigure && anaAfter.body?.myPendingRequest?.canBackPledge === false,
         `Ana still sees her own figure, ${lowFigure}, and the no (${JSON.stringify(anaAfter.body?.myPendingRequest)})`);
+
+    // ── 6. sole keeper, the applicant's own debt is using their known floor ────────────────────────
+    console.log('── 6. sole keeper: the own-debt lock refuses with no figure ──');
+    const solo = createTreasury(`Rope Walk ${lead.pk.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pk }).publicKey;
+    const bea = makeMember('Bea');
+    createPost('offer', 'produce', 'Bea splices rope', 'Rope', 20, 'fixed', bea.pk);
+    confirm(bea, lead);
+    const beaAsk = await call('POST', bea, `/api/enterprise/${solo}/keepers/request`, { pledgedBacking: 400 });
+    assert(beaAsk.status === 200, `Bea asks to keep a one-keeper enterprise with a pledge of 400 (${show(beaAsk)})`);
+    const beaSpent = spend(bea, 700);
+    const beaBalance = getBalance(bea.pk).balance;
+    assert(beaSpent && beaBalance === -700 && getAvailableBacking(bea.pk) >= 400,
+        `precondition: Bea spends 700 (balance ${beaBalance}) and still has room for 400 on paper (${getAvailableBacking(bea.pk)})`);
+    const soloList = await call('GET', lead, `/api/enterprise/${solo}/keepers/requests?status=pending`);
+    const soloRow = soloList.body?.requests?.[0];
+    assert(soloRow?.memberPubkey === bea.pk && soloRow?.canBackPledge === false && rowsCarryNoFigure(soloList),
+        `the lead keeper's row says no, since approving would be refused (${JSON.stringify(soloRow)})`);
+    const soloApprove = await call('POST', lead, `/api/enterprise/${solo}/keepers/requests/${soloRow?.id}/approve`, {});
+    const soloError = String(soloApprove.body?.error ?? '');
+    assert(soloApprove.status === 400 && /standing doesn't cover this pledge/.test(soloError), `the sole keeper's Approve is refused (${show(soloApprove)})`);
+    assert(!leaksStanding(soloError), `and the refusal carries no figure, balance, floor or freeze (${soloError})`);
+    const beaOwn = await call('GET', bea, `/api/enterprise/${solo}`);
+    assert(beaOwn.body?.myPendingRequest?.canBackPledge === false && typeof beaOwn.body?.myPendingRequest?.availableToBack === 'number',
+        `Bea still sees her own request, with her own figure (${JSON.stringify(beaOwn.body?.myPendingRequest)})`);
+
+    // ── 7. two keepers, the scheduler refuses at the end of the window ─────────────────────────────
+    console.log('── 7. two keepers: a failed change tells only the lead keeper and the applicant, in words ──');
+    const pair = createTreasury(`Sail Loft ${lead.pk.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pk }).publicKey;
+    adminAssignTreasuryOperator(pair, otto.pk, 'admin');
+    const cal = makeMember('Cal');
+    createPost('offer', 'produce', 'Cal sews sails', 'Sails', 20, 'fixed', cal.pk);
+    confirm(cal, lead);
+    const dee = makeMember('Dee');
+    createPost('offer', 'produce', 'Dee tars hulls', 'Tar', 20, 'fixed', dee.pk);
+    confirm(dee, lead);
+    const socks = { lead: await socket(lead), cal: await socket(cal), dee: await socket(dee), sid: await socket(sid) };
+
+    const calAsk = await call('POST', cal, `/api/enterprise/${pair}/keepers/request`, { pledgedBacking: 400 });
+    const calApprove = await call('POST', lead, `/api/enterprise/${pair}/keepers/requests/${calAsk.body?.request?.id ?? calAsk.body?.id}/approve`, {});
+    const calChange = calApprove.body?.change?.id;
+    assert(calApprove.status === 200 && calApprove.body?.applied === false && !!calChange,
+        `the lead keeper approves Cal's pledge of 400 and the objection window opens (${show(calApprove)})`);
+    spend(cal, 700);
+    assert(getBalance(cal.pk).balance === -700, `precondition: Cal spends 700 inside the window (${getBalance(cal.pk).balance})`);
+
+    const deeAsk = await call('POST', dee, `/api/enterprise/${pair}/keepers/request`, { pledgedBacking: 5 });
+    const deeApprove = await call('POST', lead, `/api/enterprise/${pair}/keepers/requests/${deeAsk.body?.request?.id ?? deeAsk.body?.id}/approve`, {});
+    const deeChange = deeApprove.body?.change?.id;
+    assert(deeApprove.status === 200 && !!deeChange, `the lead keeper approves Dee's pledge of 5 (${show(deeApprove)})`);
+    db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(dee.pk);
+
+    for (const s of Object.values(socks)) s.events.length = 0;
+    const due = applyDueKeeperChanges(pair, Date.now() + 4 * DAY);
+    assert(due.failed === 2 && due.applied === 0, `the scheduler refuses both changes at the end of the window (${JSON.stringify(due)})`);
+    await settle();
+    const reasonOf = (id: string) => String((db.prepare('SELECT reason FROM enterprise_keeper_changes WHERE id = ?').get(id) as any)?.reason ?? '');
+    for (const [label, id] of [['Cal (own-debt lock)', calChange], ['Dee (frozen)', deeChange]] as const) {
+        const reason = reasonOf(id);
+        assert(reason.length > 0 && !leaksStanding(reason), `${label}: the stored reason is in words, no figure and no freeze (${reason})`);
+        const toSid = [...resolvedOn(socks.sid, id), ...socks.sid.events.filter(e => e?.type === 'enterprise_keeper_change_resolved')];
+        assert(toSid.length === 0, `${label}: an unrelated member's socket hears nothing of it (${JSON.stringify(toSid)})`);
+        const toLead = resolvedOn(socks.lead, id).filter(e => e.changeId === id);
+        assert(toLead.length === 1 && toLead[0].status === 'failed' && !leaksStanding(String(toLead[0].reason ?? '')),
+            `${label}: the lead keeper hears it failed, in words (${JSON.stringify(toLead)})`);
+    }
+    const toCal = resolvedOn(socks.cal, calChange).filter(e => e.changeId === calChange);
+    assert(toCal.length === 1 && resolvedOn(socks.cal, deeChange).length === 0, `Cal hears of his own change and not of Dee's (${JSON.stringify(socks.cal.events)})`);
+    const toDee = resolvedOn(socks.dee, deeChange).filter(e => e.changeId === deeChange);
+    assert(toDee.length === 1 && resolvedOn(socks.dee, calChange).length === 0, `Dee hears of her own change and not of Cal's (${JSON.stringify(socks.dee.events)})`);
+    const everywhere = JSON.stringify(Object.entries(socks).filter(([k]) => k !== 'dee').map(([, s]) => s.events));
+    assert(!/frozen|freeze/i.test(everywhere), 'no socket but Dee\'s carries a word of her freeze');
+    for (const s of Object.values(socks)) s.ws.close();
+
+    // ── 8. closed rows carry no live bit ─────────────────────────────────────────────────────────
+    console.log('── 8. closed rows: no canBackPledge ──');
+    const all = await call('GET', lead, `/api/enterprise/${pair}/keepers/requests`);
+    const closed = (all.body?.requests ?? []).filter((r: any) => r.status !== 'pending');
+    assert(all.status === 200 && closed.length === 2 && closed.every((r: any) => r.canBackPledge === null) && rowsCarryNoFigure(all),
+        `the two cancelled rows carry canBackPledge null (${JSON.stringify(closed.map((r: any) => [r.status, r.canBackPledge]))})`);
+    db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(dee.pk);
+    const allAfter = await call('GET', lead, `/api/enterprise/${pair}/keepers/requests`);
+    assert((allAfter.body?.requests ?? []).filter((r: any) => r.status !== 'pending').every((r: any) => r.canBackPledge === null),
+        'and still null once Dee\'s freeze is lifted: the lead keeper cannot watch it end');
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exitCode = 1;

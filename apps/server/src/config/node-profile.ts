@@ -51,6 +51,7 @@
  * the boot log says why. Both locks only ever keep money on and the door shut, never the reverse.
  */
 import { db } from '../db/db.js';
+import { prepared } from '@beanpool/engine';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 
 export type NodeProfile = 'local' | 'global';
@@ -323,7 +324,7 @@ export function setSwitchOverride(name: ProfileSwitch, on: boolean): void {
 }
 
 function overrideRows(): { key: string; value: string }[] {
-    return db.prepare('SELECT key, value FROM node_config WHERE substr(key, 1, ?) = ? ORDER BY key')
+    return prepared(db, 'SELECT key, value FROM node_config WHERE substr(key, 1, ?) = ? ORDER BY key')
         .all(OVERRIDE_PREFIX.length, OVERRIDE_PREFIX) as { key: string; value: string }[];
 }
 

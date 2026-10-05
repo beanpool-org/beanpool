@@ -5,7 +5,7 @@
 import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { ledger } from './ledger.js';
-import { getMember, getProfile, isNodeMember, isVisitorKey, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
+import { getMember, getProfile, isNodeMember, isVisitorKey, prepared, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptablePhotoValue } from './avatar.js';
@@ -26,7 +26,7 @@ export function recordActivity(publicKey: string): void {
     // they do while suspended is no lead coming back: it neither holds off the 30-day-silence vote nor cancels one. Their
     // first write after the suspension ends is. Without this a suspended lead who kept signing anything at all — the
     // refused convenor calls included, stamped before the route answers — froze their group with nobody able to act.
-    const stamped = db.prepare("UPDATE members SET last_active_at=? WHERE public_key=? AND COALESCE(status, '') NOT IN ('suspended', 'disabled')")
+    const stamped = prepared(db, "UPDATE members SET last_active_at=? WHERE public_key=? AND COALESCE(status, '') NOT IN ('suspended', 'disabled')")
         .run(new Date().toISOString(), publicKey);
     if (stamped.changes === 0) return;
     // A visitor's row is no lead or convenor coming back: it acts for no enterprise and no group (the director's rule,

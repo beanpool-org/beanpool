@@ -54,8 +54,34 @@ function avatarKeySecret(): Buffer {
     return key;
 }
 
+/** How many keys {@link keyFor} remembers per secret: a members list and a board's faces, a few hundred bytes each. */
+export const AVATAR_KEY_MEMO_MAX = 8192;
+
+// The keys already worked out, per secret, most recently used last. A key is a pure function of the secret and
+// `id|version`, so a remembered one is byte for byte the one the HMAC would give: a new photo is a new version and so
+// a new entry, and a new secret (installAvatarKeysAtBoot makes a new KeyObject) starts an empty memo. Every post on the
+// board and every member in the list asks for one on every read: 4 s of 165 s busy in the 10-05 load model.
+const memos = new WeakMap<crypto.KeyObject, Map<string, string>>();
+
 function keyFor(s: crypto.KeyObject, id: string, version: string): string {
-    return crypto.createHmac('sha256', s).update(`${id}|${version}`, 'utf-8').digest('base64url').slice(0, KEY_CHARS);
+    const input = `${id}|${version}`;
+    let memo = memos.get(s);
+    if (!memo) memos.set(s, memo = new Map());
+    const known = memo.get(input);
+    if (known !== undefined) {
+        memo.delete(input);
+        memo.set(input, known);
+        return known;
+    }
+    const key = crypto.createHmac('sha256', s).update(input, 'utf-8').digest('base64url').slice(0, KEY_CHARS);
+    if (memo.size >= AVATAR_KEY_MEMO_MAX) memo.delete(memo.keys().next().value as string);
+    memo.set(input, key);
+    return key;
+}
+
+/** Test seam: how many keys the memo holds for the secret members' faces are keyed with now (0 with none). */
+export function avatarKeyMemoSize(): number {
+    return secret ? memos.get(secret)?.size ?? 0 : 0;
 }
 
 /**

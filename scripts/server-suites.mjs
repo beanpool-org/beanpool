@@ -401,6 +401,8 @@ export const SUITES = [
     'test-clean-stop',
     'test-storage-health',
     'test-image-store',
+    'test-image-store-put-async',
+    'test-avatar-key-memo',
     'test-image-store-s3',
     'test-image-store-s3-http',
     'test-image-evacuation',

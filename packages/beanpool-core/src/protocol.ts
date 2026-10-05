@@ -165,6 +165,19 @@ export function tierIndexForName(name: string | null | undefined): number {
     return TIER_LEVELS.findIndex(t => t.name === name);
 }
 
+/**
+ * One member's level and the trust figure behind it, from the node's balance answer, so every part of a screen
+ * shows the same level. The node's tier name wins; its tierCredit (the line its tier is read from, which a freeze
+ * keeps) is the figure; CREDIT_BASE_FLOOR − floor only for a node that sends no tierCredit.
+ */
+export function memberLevel(answer: { tier?: { name?: string | null } | null; tierCredit?: unknown; floor?: unknown } | null | undefined): { index: number; credit: number } {
+    const floor = typeof answer?.floor === 'number' && Number.isFinite(answer.floor) ? answer.floor : PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR;
+    const raw = typeof answer?.tierCredit === 'number' && Number.isFinite(answer.tierCredit) ? answer.tierCredit : PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - floor;
+    const credit = Math.max(0, raw);
+    const named = tierIndexForName(answer?.tier?.name);
+    return { index: named >= 0 ? named : tierIndexForCredit(credit), credit };
+}
+
 /** The tier for a credit floor (≤ 0). Same answer as tierForCredit(CREDIT_BASE_FLOOR − floor). */
 export function getTier(floor: number): TierInfo {
     const { name, emoji } = tierForCredit(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - floor);

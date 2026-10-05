@@ -2150,8 +2150,8 @@ function roundedBalance(publicKey: string): number {
     return Math.round(ledger.getAccount(publicKey).balance * 100) / 100;
 }
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; liveOffers: number; frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
-    const { floor, tier, earnedCredit, activated, knownGrant, knownFrozen, creditFrozen } = getMemberTrustProfile(publicKey);
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; liveOffers: number; frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; tierCredit: number; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
+    const { floor, tier, tierCredit, earnedCredit, activated, knownGrant, knownFrozen, creditFrozen } = getMemberTrustProfile(publicKey);
     const balance = roundedBalance(publicKey);
     const liveOffers = liveOfferCount(publicKey);
     const isTreasury = !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury;
@@ -2171,6 +2171,9 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         knownFrozen: !isTreasury && knownFrozen,
         creditFrozen: !isTreasury && creditFrozen,
         tier,
+        // tierCredit: the credit `tier` is read from (a freeze keeps the line held unfrozen): the apps' trust figure, so
+        // a frozen member's Levels card reads the same level as its badge (memberLevel in @beanpool/core).
+        tierCredit,
         earnedCredit,
         commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
         // activated: has a credit line at all (earned/vouched/granted) — a brand-new member is false.

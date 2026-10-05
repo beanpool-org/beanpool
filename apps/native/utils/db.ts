@@ -1316,6 +1316,7 @@ export async function refreshBalanceFromServer(pubkey: string) {
             const newTierStr = JSON.stringify({
                 tier: balData.tier || tier,
                 floor: balData.floor ?? floor,
+                tierCredit: typeof balData.tierCredit === 'number' ? balData.tierCredit : null,
                 earnedCredit: balData.earnedCredit ?? 0,
                 grantedCredit: balData.grantedCredit ?? 0,
                 qualifiedValue: balData.qualifiedValue ?? 0,
@@ -1361,6 +1362,7 @@ export async function getBalance(pubkey: string) {
     let tier: { name: string; emoji: string } = { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji };
 
     let floor = 0;     // no baked-in credit until the node reports one
+    let tierCredit: number | null = null; // the credit the node read `tier` from; null from an older node (memberLevel)
     let earnedCredit = 0;
     let grantedCredit = 0;
     let qualifiedValue = 0;
@@ -1392,6 +1394,7 @@ export async function getBalance(pubkey: string) {
             const parsed = JSON.parse(cached);
             tier = parsed.tier || tier;
             floor = parsed.floor ?? floor;
+            tierCredit = typeof parsed.tierCredit === 'number' ? parsed.tierCredit : null;
             earnedCredit = parsed.earnedCredit ?? 0;
             grantedCredit = parsed.grantedCredit ?? 0;
             qualifiedValue = parsed.qualifiedValue ?? 0;
@@ -1419,6 +1422,7 @@ export async function getBalance(pubkey: string) {
         balance: row?.balance || 0,
         floor,
         tier,
+        tierCredit,
         earnedCredit,
         grantedCredit,
         qualifiedValue,

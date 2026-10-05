@@ -151,9 +151,29 @@ function interrupted(): never {
     return stop('Stopped (Ctrl-C). Nothing more was done.', 130);
 }
 
-/** One line typed (or piped) in; null when there is none. Hidden on a terminal when `hidden`: no echo, raw mode until Enter. */
-async function readLine(prompt: string, hidden = false): Promise<string | null> {
-    const secret = Boolean(process.stdin.isTTY) && hidden;
+/**
+ * Drops what was typed or pasted on the terminal before now: what followed a passphrase's Enter, and what waits in the
+ * terminal itself (read out of line mode for a moment, so a line typed without its Enter goes too). A few turns of the
+ * event loop let the terminal deliver what it holds.
+ */
+async function dropTypedAhead(): Promise<void> {
+    const wasRaw = rawMode;
+    setRaw(true);
+    process.stdin.resume();
+    for (let turn = 0; turn < 4; turn++) await new Promise(resolve => setImmediate(resolve));
+    process.stdin.pause();
+    setRaw(wasRaw);
+    stdinBuf = '';
+}
+
+/**
+ * One line typed (or piped) in; null when there is none. Hidden on a terminal when `hidden`: no echo, raw mode until Enter.
+ * `fresh` (a yes question) takes, on a terminal, only what is typed once the question is on screen: an answer typed or
+ * pasted before it never counts. Piped input is all there before any question, so it is read as it comes, as before.
+ */
+async function readLine(prompt: string, hidden = false, fresh = false): Promise<string | null> {
+    const tty = Boolean(process.stdin.isTTY);
+    const secret = tty && hidden;
     if (secret) setRaw(true); // before the prompt, so nothing typed after it is ever echoed
     process.stderr.write(prompt);
     if (!stdinListening) {
@@ -168,6 +188,7 @@ async function readLine(prompt: string, hidden = false): Promise<string | null> 
             stdinWaiter?.();
         });
     }
+    if (tty && fresh) await dropTypedAhead();
     let text = '';
     try {
         for (;;) {
@@ -190,10 +211,11 @@ async function readLine(prompt: string, hidden = false): Promise<string | null> 
                     else text += ch;
                 }
             } else {
-                const nl = stdinBuf.indexOf('\n');
+                // On a terminal a lone CR ends the line too: one typed out of line mode (in a hidden read) stays a CR.
+                const nl = tty ? stdinBuf.search(/[\r\n]/) : stdinBuf.indexOf('\n');
                 if (nl !== -1) {
                     const line = stdinBuf.slice(0, nl).replace(/\r$/, '');
-                    stdinBuf = stdinBuf.slice(nl + 1);
+                    stdinBuf = stdinBuf.slice(stdinBuf.startsWith('\r\n', nl) ? nl + 2 : nl + 1);
                     return line;
                 }
                 if (stdinEnded && stdinBuf) {
@@ -224,7 +246,7 @@ async function passphrase(prompt: string): Promise<string> {
 }
 
 async function confirmYes(question: string): Promise<boolean> {
-    const answer = await readLine(`${question} Type yes to go on: `);
+    const answer = await readLine(`${question} Type yes to go on: `, false, true);
     return answer?.trim().toLowerCase() === 'yes';
 }
 

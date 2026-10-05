@@ -75,7 +75,7 @@ export async function bulkDeleteInBatches(
  * the screen always did); anything else, or a body that is not JSON, is a failure with the server's reason.
  */
 export async function sendBulkDeleteBatch(url: string, headers: Record<string, string>, batch: string[]): Promise<BulkDeleteBatchResult> {
-    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ postIds: batch }) });
+    const res = await fetch(url, { method: 'POST', headers, credentials: 'same-origin', body: JSON.stringify({ postIds: batch }) });
     let data: { deleted?: number; deletedCount?: number; refundShortfalls?: BulkDeleteRefundShortfall[]; error?: string } = {};
     try {
         data = await res.json();

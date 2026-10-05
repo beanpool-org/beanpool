@@ -109,6 +109,7 @@ describe('sendBulkDeleteBatch reads what the route answers', () => {
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toBe('https://n/api/local/admin/posts/bulk-delete');
         expect(init.method).toBe('POST');
+        expect(init.credentials).toBe('same-origin');
         expect(init.headers['X-Admin-Password']).toBe('pw');
         expect(JSON.parse(init.body)).toEqual({ postIds: ['a', 'b'] });
     });

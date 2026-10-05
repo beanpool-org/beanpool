@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Image,
-    DeviceEventEmitter, Alert, ScrollView, Keyboard, Platform } from 'react-native';
+    DeviceEventEmitter, Alert, ScrollView, Keyboard, Platform, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -94,6 +94,19 @@ export default function LedgerScreen() {
     });
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'trust' | 'financials'>('trust');
+    // Where the list is and where the tab bar sits in it. Switching tab from below the tab bar (Send from Levels)
+    // brings the tab bar to the top, so the other tab opens at its start; from above it, the list stays put.
+    const scrollY = useRef(0);
+    const tabBarY = useRef(0);
+    const onListScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+        scrollY.current = e.nativeEvent.contentOffset.y;
+        pageTitle.onScroll(e);
+    };
+    const firstTab = useRef(true);
+    React.useEffect(() => {
+        if (firstTab.current) { firstTab.current = false; return; }
+        if (scrollY.current > tabBarY.current) listRef.current?.scrollToOffset({ offset: tabBarY.current, animated: false });
+    }, [activeTab]);
     const [selectedLevel, setSelectedLevel] = useState<number | null>(null); // Levels shelf: null → follows current tier
     const [escrowTotal, setEscrowTotal] = useState(0);
     const [pledgeHistory, setPledgeHistory] = useState<any[]>([]);
@@ -476,7 +489,7 @@ export default function LedgerScreen() {
         const selCurrent = tierIdx === selLevel;
         const selNeeded = Math.max(0, sel.min - ec);
         return (
-        <ScrollView ref={listRef} onScroll={pageTitle.onScroll} scrollEventThrottle={16} style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+        <View>
 
             {/* ── Standing hero ── */}
             <View style={[styles.tierHero, { backgroundColor: tier.bg, borderColor: tier.border }]}>
@@ -661,7 +674,7 @@ export default function LedgerScreen() {
             </View>
 
             <Text style={styles.formula}>💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.</Text>
-        </ScrollView>
+        </View>
         );
     };
 
@@ -897,16 +910,12 @@ export default function LedgerScreen() {
         );
     };
 
-    return (
-        <View style={styles.root}>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={88}
-                style={{ flex: 1 }}
-            >
-
-            <PageTitle title="Ledger" collapsed={pageTitle.collapsed} testID="page-title-ledger" />
-
+    // ─── Page header: profile + balance, the credit card, the repayment card, the tab bar ───────────────────
+    // The top of the page's one list, in both tabs, so it scrolls away with the page: at 320 dp and 1.3x text the
+    // frozen card or the repayment banner alone can fill the screen, and a fixed header hid the tabs and Pay the
+    // Commons below it. The negative margins undo the list's padding: the header runs edge to edge as before.
+    const renderLedgerHeader = () => (
+        <View style={{ marginHorizontal: -16, marginTop: -16, marginBottom: 16 }}>
             {/* ── Compact profile + balance bar ── */}
             <View style={styles.topBar}>
                 {/* Avatar + name + tier — left side */}
@@ -986,7 +995,7 @@ export default function LedgerScreen() {
             <RepaymentCard />
 
             {/* ── Tab bar ── */}
-            <View style={styles.tabBar}>
+            <View style={styles.tabBar} onLayout={e => { tabBarY.current = e.nativeEvent.layout.y; }}>
                 <Pressable style={[styles.tab, activeTab === 'trust' && [styles.tabActive, { borderBottomColor: tier.color }]]} accessibilityRole="button" accessibilityState={{ selected: activeTab === 'trust' }} onPress={() => setActiveTab('trust')}>
                     <MaterialCommunityIcons name="shield-star-outline" size={15} color={activeTab === 'trust' ? tier.color : colors.text.muted} />
                     <Text style={[styles.tabText, activeTab === 'trust' && { color: tier.color, fontWeight: '800' }]}>Levels</Text>
@@ -996,25 +1005,37 @@ export default function LedgerScreen() {
                     <Text style={[styles.tabText, activeTab === 'financials' && { color: colors.brand.primary, fontWeight: '800' }]}>Wallet</Text>
                 </Pressable>
             </View>
+        </View>
+    );
 
-            {/* ── Content ── */}
-            {activeTab === 'trust' ? renderTrustTab() : (
-                <FlatList
-                    ref={listRef}
-                    onScroll={pageTitle.onScroll}
-                    scrollEventThrottle={16}
-                    data={txns}
-                    // A change of the block list redraws the lines, which read it (renderTxn).
-                    extraData={blocked}
-                    keyExtractor={item => item.id}
-                    renderItem={renderTxn}
-                    ListHeaderComponent={renderActivityHeader()}
-                    keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={{ padding: 16, paddingBottom: keyboardHeight > 0 ? keyboardHeight + 48 : 48 }}
-                    showsVerticalScrollIndicator={false}
-                    ListEmptyComponent={<Text style={{ textAlign: 'center', color: colors.text.muted, paddingTop: 32, fontSize: 14 }}>No transactions yet.</Text>}
-                />
-            )}
+    return (
+        <View style={styles.root}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={88}
+                style={{ flex: 1 }}
+            >
+
+            <PageTitle title="Ledger" collapsed={pageTitle.collapsed} testID="page-title-ledger" />
+
+            {/* ── Content: one list for both tabs. The header stays mounted across a switch (the repayment card
+                 keeps what it read) and the list keeps its place. ── */}
+            <FlatList
+                ref={listRef}
+                onScroll={onListScroll}
+                scrollEventThrottle={16}
+                style={{ flex: 1, backgroundColor: colors.surface.page }}
+                data={activeTab === 'financials' ? txns : []}
+                // A change of the block list redraws the lines, which read it (renderTxn).
+                extraData={blocked}
+                keyExtractor={item => item.id}
+                renderItem={renderTxn}
+                ListHeaderComponent={<View>{renderLedgerHeader()}{activeTab === 'trust' ? renderTrustTab() : renderActivityHeader()}</View>}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ padding: 16, paddingBottom: keyboardHeight > 0 ? keyboardHeight + 48 : 48 }}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={activeTab === 'financials' ? <Text style={{ textAlign: 'center', color: colors.text.muted, paddingTop: 32, fontSize: 14 }}>No transactions yet.</Text> : null}
+            />
 
             </KeyboardAvoidingView>
             <BalanceInfoModal isOpen={showBalanceInfo} onClose={() => setShowBalanceInfo(false)} />

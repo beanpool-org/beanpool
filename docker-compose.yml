@@ -123,6 +123,10 @@ services:
       # nothing of BeanPool's. From .env only: never stored, never in a backup or a standby's copy; a standby gets the
       # same line in its own .env. See apps/server/src/services/vault-ticket-keys.ts.
       - BEANPOOL_VAULT_TICKET_KEYS=${BEANPOOL_VAULT_TICKET_KEYS:-}
+      # Private preview (apps/server/src/config/private-preview.ts): 1/true/yes/on = only invites made by the owner or an
+      # admin join, and visitors see nothing. Empty or 0/false/no/off = off. Any other value stops the node at start, so a
+      # typo never leaves it open.
+      - PRIVATE_PREVIEW=${PRIVATE_PREVIEW:-}
       # Apple `sub` parity probe (temporary — see routes/apple-probe.ts). Empty
       # default = the probe pages are not registered at all, which is what every
       # node except the one being tested should have. APPLE_DOMAIN_ASSOCIATION is

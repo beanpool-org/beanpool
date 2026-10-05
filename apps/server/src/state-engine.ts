@@ -3664,7 +3664,12 @@ export interface KeeperJoinRequest {
     createdAt: string;
     decidedAt?: string | null;
     decidedBy?: string | null;
-    availableToBack?: number;
+    /**
+     * Whether the applicant still has room to back their pledge (pledgedBacking <= getAvailableBacking). Everyone who
+     * may read the request gets this yes or no; the figure itself is private (it carries their known grant, which an
+     * admin may lower, raise or freeze), so it is only ever added to the applicant's own view (myPendingRequest).
+     */
+    canBackPledge: boolean;
     earnedCredit?: number;
     /** Approved by the lead and waiting out the other keepers' 3-day objection window (answer A). */
     pendingChange?: KeeperChangeInfo | null;
@@ -3745,6 +3750,7 @@ export function requestToJoinEnterprise(
         pledgedBacking: parsedAmount,
         status: 'pending',
         createdAt: now,
+        canBackPledge: true, // checked just above
     };
 }
 
@@ -3773,19 +3779,19 @@ export function getKeeperRequests(enterprisePubkey: string, filterStatus?: strin
 
     return (db.prepare(sql).all(...params) as any[]).map(r => {
         const trust = getMemberTrustProfile(r.member_pubkey);
-        const available = getAvailableBacking(r.member_pubkey);
+        const pledged = Number(r.pledged_backing);
         return {
             id: r.id,
             enterprisePubkey: r.enterprise_pubkey,
             memberPubkey: r.member_pubkey,
             callsign: r.callsign,
             avatarUrl: avatarUrlOf(r.member_pubkey, r.avatar_ref),
-            pledgedBacking: Number(r.pledged_backing),
+            pledgedBacking: pledged,
             status: r.status,
             createdAt: r.created_at,
             decidedAt: r.decided_at,
             decidedBy: r.decided_by,
-            availableToBack: available,
+            canBackPledge: pledged <= getAvailableBacking(r.member_pubkey),
             earnedCredit: trust.earnedCredit,
             pendingChange: pendingByRequest.get(r.id) ?? null,
         };
@@ -3850,7 +3856,8 @@ function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: st
     }
     const available = getAvailableBacking(memberPubkey);
     if (pledged > available) {
-        throw new KeeperChangeRefused(`Pledge amount (${pledged}) exceeds available earned credit at approval (${available} available)`);
+        // No figure: the lead keeper and the other keepers read this refusal (and a failed change keeps it as its reason).
+        throw new KeeperChangeRefused(`Pledge amount (${pledged}) exceeds available earned credit at approval: the applicant no longer has enough standing to back it`);
     }
 }
 

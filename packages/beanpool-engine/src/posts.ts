@@ -423,8 +423,9 @@ export function generateSearchKeywords(title: string, description: string, categ
 /**
  * A post row as the reader gets it. `forGuest`: a visitor's read (PostFilter.guest), whose copy guestPost makes with a
  * neutral value for the author's standing and face, so neither is worked out here: they stand as guestPost leaves them.
+ * `tierByAuthor`: the badges already worked out in this read, by author, so an author's is worked out once a read.
  */
-export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, forGuest = false): MarketplacePost {
+export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, forGuest = false, tierByAuthor?: Map<string, number>): MarketplacePost {
     const postPhotos = photosByPost.get(row.id) || [];
     // The author's tier credit, from the same profile their own tier comes from. The earned lane alone
     // left out grants and vouches, so an admin-badged Elder showed as a Newcomer on their cards; the floor
@@ -434,10 +435,16 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
     // only ever turn it into the badge (tierForCredit), which the threshold gives exactly.
     let trustPoints = 0;
     if (!forGuest) {
-        try {
-            trustPoints = tierForCredit(getMemberTrustProfile(db, row.author_pubkey).tierCredit).minCredit;
-        } catch (e) {
-            trustPoints = 0;
+        const known = tierByAuthor?.get(row.author_pubkey);
+        if (known !== undefined) {
+            trustPoints = known;
+        } else {
+            try {
+                trustPoints = tierForCredit(getMemberTrustProfile(db, row.author_pubkey).tierCredit).minCredit;
+            } catch (e) {
+                trustPoints = 0;
+            }
+            tierByAuthor?.set(row.author_pubkey, trustPoints);
         }
     }
 
@@ -1310,8 +1317,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     const nowIso = new Date().toISOString();
     const nowMs = Date.now();
     const out: MarketplacePost[] = [];
+    // The author's trust profile was worked out again for each of their posts on the page (load model 2026-10-05: 6.3% of
+    // the node's CPU, the market and Home's market card). The read runs at one database state, so once an author is the same.
+    const tierByAuthor = new Map<string, number>();
     for (const r of rows) {
-        const post = rowToPost(db, r, photosByPost, !!filter?.guest);
+        const post = rowToPost(db, r, photosByPost, !!filter?.guest, tierByAuthor);
         if (hiddenFromViewer && r.hidden_by_reports_at && r.author_pubkey !== viewer) {
             // Only a sync read gets this far with a hidden post it may not see (the SQL above left it out otherwise).
             // A removal says nothing of where the post was, so it carries no distance either.

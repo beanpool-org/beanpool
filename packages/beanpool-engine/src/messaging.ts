@@ -4,7 +4,7 @@
 
 import type Database from 'better-sqlite3';
 import { avatarUrlOf } from '@beanpool/core';
-import { postPhotoUrl } from './photo-url.js';
+import { authorsOnly, postPhotoUrl, type OffListingPhotoShown } from './photo-url.js';
 
 type Db = Database.Database;
 
@@ -92,7 +92,7 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
     return results;
 }
 
-export function getConversationsByMember(db: Db, pubkey: string): Conversation[] {
+export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: OffListingPhotoShown = authorsOnly(pubkey)): Conversation[] {
     const rows = db.prepare(`
         SELECT c.*,
         CASE WHEN c.post_id IS NOT NULL AND p.id IS NULL THEN '(deleted post)' ELSE p.title END as post_title,
@@ -152,13 +152,14 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
     // A chat about a listing shows the listing's first photo, by the URL its listing's photos carry (photo-url.ts: keyed
     // where they are), and only for a listing this member can see (getPosts' audience rule, hidden by reports included):
     // a chat can outlast their place in a group. It read a `posts.photos` column no schema has, so it threw whenever a
-    // chat had a listing; every chat is written with none today (createConversation), so none has shown one.
+    // chat had a listing; every chat is written with none today (createConversation), so none has shown one. A listing
+    // taken off (`active` not 1) shows none to a member the photo route answers 404 (offPhotoShown, the server's rule).
     const postIds = Array.from(new Set(rows.map(r => r.post_id).filter(id => id != null)));
     const postPhotosById = new Map<string, string | null>();
     for (let i = 0; i < postIds.length; i += 500) {
         const chunk = postIds.slice(i, i + 500);
         const firstPhotos = db.prepare(`
-            SELECT pp.post_id, pp.order_num, pp.updated_at, p.audience_scope
+            SELECT pp.post_id, pp.order_num, pp.updated_at, p.audience_scope, p.author_pubkey, COALESCE(p.active, 0) = 1 AS live
               FROM post_photos pp JOIN posts p ON p.id = pp.post_id
              WHERE pp.post_id IN (${chunk.map(() => '?').join(',')})
                AND pp.order_num = (SELECT MIN(first.order_num) FROM post_photos first WHERE first.post_id = pp.post_id)
@@ -167,8 +168,11 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
                     OR (p.audience_scope = 'group' AND p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))
                     OR (p.audience_scope = 'direct' AND (p.target_pubkey = ? OR p.assigned_to = ?)))
                AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)
-        `).all(...chunk, pubkey, pubkey, pubkey, pubkey, pubkey) as { post_id: string; order_num: number; updated_at: string | null; audience_scope: string | null }[];
-        for (const ph of firstPhotos) postPhotosById.set(ph.post_id, postPhotoUrl(ph.post_id, ph.order_num, ph.updated_at, ph.audience_scope));
+        `).all(...chunk, pubkey, pubkey, pubkey, pubkey, pubkey) as { post_id: string; order_num: number; updated_at: string | null; audience_scope: string | null; author_pubkey: string; live: number }[];
+        for (const ph of firstPhotos) {
+            if (!ph.live && !offPhotoShown(ph.post_id, ph.author_pubkey)) continue;
+            postPhotosById.set(ph.post_id, postPhotoUrl(ph.post_id, ph.order_num, ph.updated_at, ph.audience_scope));
+        }
     }
 
     return rows.map(r => {

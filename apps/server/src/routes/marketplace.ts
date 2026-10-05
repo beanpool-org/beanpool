@@ -15,7 +15,7 @@ import {
     canOperateTreasury,
     closePoll, votePoll, rsvpEvent,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
-    nodeRoleOf, getPostsForPhotoHeal,
+    nodeRoleOf, getPostsForPhotoHeal, offListingPhotoShownTo,
 } from '../state-engine.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
@@ -125,13 +125,14 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // (@beanpool/engine getPosts). Its photos go to whoever may still read it, and its author and the moderators, as a
     // hidden one's do: only when they sign the request; to anyone else, as to an <img> with a key it was handed before,
     // it has none. Never stored by a shared cache. A phone that holds the old URL shows the placeholder it shows for
-    // any photo that does not load. Neither app signs a photo load, so in practice a cancelled event's hosts and the
+    // any photo that does not load; the lists that hand out its URL (trades, chats) hand none to anyone else
+    // (offListingPhotoShownTo). Neither app signs a photo load, so in practice a cancelled event's hosts and the
     // people Going lose its photo too, and a buyer loses the cover of a listing the seller removed after the trade: on
     // purpose, because a moderator's takedown leaves the same row state and must stop loading for everyone.
     const off = !!photo.off;
     if (off) {
         const viewer = ctx.state.actor as string | undefined;
-        if (!viewer || (viewer !== photo.author_pubkey && !nodeRoleOf(viewer) && getPosts({ id, viewerPubkey: viewer }).length === 0)) {
+        if (!offListingPhotoShownTo(viewer)(id, photo.author_pubkey)) {
             ctx.status = 404;
             ctx.body = { error: 'Photo not found' };
             return;

@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
-import { postPhotoUrl } from './photo-url.js';
+import { authorsOnly, postPhotoUrl, type OffListingPhotoShown } from './photo-url.js';
 
 type Db = Database.Database;
 
@@ -43,7 +43,8 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
 
 export function getMarketplaceTransaction(db: Db, transactionId: string): MarketplaceTransaction | null {
     const r = db.prepare(`
-        SELECT mt.*, p.title as postTitle, p.audience_scope as postAudienceScope, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
+        SELECT mt.*, p.title as postTitle, p.audience_scope as postAudienceScope, p.author_pubkey as postAuthor,
+               COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
         FROM marketplace_transactions mt
@@ -54,8 +55,12 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
     `).get(transactionId) as any;
     if (!r) return null;
 
-    const coverImageRow = db.prepare(`SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC LIMIT 1`).get(r.post_id) as any;
-    // Keyed as its listing's photos are, from the listing's audience (photo-url.ts).
+    // Keyed as its listing's photos are, from the listing's audience (photo-url.ts). One trade goes to both its parties
+    // (the escrow broadcasts), and a reader's own list is getMarketplaceTransactions: so a listing taken off, or gone,
+    // has no cover here, as the photo route answers its photo to neither party's app.
+    const coverImageRow = r.postLive
+        ? db.prepare(`SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC LIMIT 1`).get(r.post_id) as any
+        : undefined;
     const coverImage = coverImageRow
         ? postPhotoUrl(r.post_id, coverImageRow.order_num, coverImageRow.updated_at, r.postAudienceScope)
         : null;
@@ -81,9 +86,15 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
     };
 }
 
-export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): MarketplaceTransaction[] {
+/**
+ * A member's trades, newest first. A trade's cover is its listing's first photo, by the URL the photo route serves to this
+ * member: none when the listing was taken off (`active` not 1) and the photo route would answer this member 404
+ * (offPhotoShown, the server's rule; its author's part when none is given), or when the listing is gone.
+ */
+export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: { status?: string }, limit = 50, offset = 0, offPhotoShown: OffListingPhotoShown = authorsOnly(publicKey)): MarketplaceTransaction[] {
     let query = `
-        SELECT mt.*, p.title as postTitle, p.audience_scope as postAudienceScope, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
+        SELECT mt.*, p.title as postTitle, p.audience_scope as postAudienceScope, p.author_pubkey as postAuthor,
+               COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
         FROM marketplace_transactions mt
@@ -110,7 +121,8 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
     }
 
     return rows.map(r => {
-        const postPhotos = photosByPost.get(r.post_id) || [];
+        const photoShown = !!r.postLive || (r.postAuthor != null && offPhotoShown(r.post_id, r.postAuthor));
+        const postPhotos = photoShown ? photosByPost.get(r.post_id) || [] : [];
         const coverImageRow = postPhotos.find(p => p.order_num === 0) || postPhotos[0];
         const coverImage = coverImageRow
             ? postPhotoUrl(r.post_id, coverImageRow.order_num, coverImageRow.updated_at, r.postAudienceScope)

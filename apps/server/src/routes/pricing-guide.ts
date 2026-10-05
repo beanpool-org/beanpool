@@ -34,7 +34,8 @@ const LISTING_PHOTO = /^(?:[a-z][a-z0-9+.-]*:\/\/[^/\s]*)?\/api\/marketplace\/po
  * An item as this reader may have it. The aggregator takes a matching listing's photo as an item's thumbnail, and this
  * list is public, while a listing's photo is only for those who may read the listing (engine/photo-keys.ts). So it stays
  * only for a listing on the board for everyone who reads the board (not a group's or one person's, not hidden by
- * reports), and only for a reader who may read the board here: anyone where the listings are a public read, a member of
+ * reports, not taken off: `active` not 1, whose photo the photo route serves to its author and the moderators only),
+ * and only for a reader who may read the board here: anyone where the listings are a public read, a member of
  * a local community (with its key). Anyone else gets the item without it.
  */
 function withReadersThumbnail<T extends { thumbnailUrl?: string }>(item: T, readerMayReadListings: boolean): T {
@@ -43,11 +44,11 @@ function withReadersThumbnail<T extends { thumbnailUrl?: string }>(item: T, read
     const postId = m[1];
     const orderNum = Number(m[2]);
     const row = db.prepare(`
-        SELECT pp.updated_at, p.audience_scope, p.hidden_by_reports_at
+        SELECT pp.updated_at, p.audience_scope, p.hidden_by_reports_at, COALESCE(p.active, 0) = 1 AS live
         FROM post_photos pp JOIN posts p ON p.id = pp.post_id
         WHERE pp.post_id = ? AND pp.order_num = ?
-    `).get(postId, orderNum) as { updated_at: string | null; audience_scope: string | null; hidden_by_reports_at: string | null } | undefined;
-    const onBoard = !!row && (row.audience_scope === null || row.audience_scope === 'public') && !row.hidden_by_reports_at;
+    `).get(postId, orderNum) as { updated_at: string | null; audience_scope: string | null; hidden_by_reports_at: string | null; live: number } | undefined;
+    const onBoard = !!row && (row.audience_scope === null || row.audience_scope === 'public') && !row.hidden_by_reports_at && !!row.live;
     if (!onBoard || !readerMayReadListings) return { ...item, thumbnailUrl: undefined };
     return { ...item, thumbnailUrl: postPhotoUrl(postId, orderNum, row!.updated_at, row!.audience_scope) };
 }

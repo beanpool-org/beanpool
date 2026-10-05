@@ -257,7 +257,7 @@ function restoreFromBackup(why: string): LocalConfig {
             + 'local-config.json.bak aside (rename them and keep them) and restart. This server then starts with no settings: no '
             + 'admin password (ADMIN_PASSWORD in .env is ignored; owners sign in with the BeanPool app, and `beanpool recover` adds '
             + 'an owner); an address request still waiting is forgotten (an address it already holds is kept in the database); '
-            + 'its standbys stop copying until each is paired again, and on a standby its own copying stops until it is paired again; backups are not locked, and are not sent off the server, '
+            + 'its standbys stop copying until each is paired again (a standby paired from Settings stops its own copying too; one set up with BACKUP_PRIMARY_URL in .env carries on); backups are not locked, and are not sent off the server, '
             + 'until an owner makes a new recovery code; the take-over count starts again at 0; and the community\'s name and '
             + 'contact details must be set again. Its community, node key and database are not touched.';
         console.error(`🛑 [Config] ${msg}`);

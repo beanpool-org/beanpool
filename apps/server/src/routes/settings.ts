@@ -10,8 +10,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'url';
 import {
     getNodeConfig, updateNodeConfig, getDirectoryInfo, exportLedgerAudit,
-    getNodeRole, getMemberStats, type NodeConfig,
+    getNodeRole, getMemberStats, isNodeMember, type NodeConfig,
 } from '../state-engine.js';
+import { isPrivatePreview } from '../config/private-preview.js';
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS, thresholdProblem,
@@ -276,7 +277,15 @@ function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: bool
 
 router.get('/api/node/config', async (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    ctx.body = withKnockSetting(publicNodeConfig(getNodeConfig()));
+    const config = publicNodeConfig(getNodeConfig());
+    // A private preview (config/private-preview.ts): the phone map reads this unsigned for the community's service area
+    // (apps/native map.tsx, which can't change here), so it is open, and a reader who is no member here (as that read
+    // is) gets the area alone: the place the community serves, no member's anything, and none of the other settings.
+    if (isPrivatePreview() && !isNodeMember(ctx.state.actor as string | undefined)) {
+        ctx.body = { serviceRadius: config.serviceRadius ?? null };
+        return;
+    }
+    ctx.body = withKnockSetting(config);
 });
 
 // The known floor (config/known-floor.ts, community modes slice 4): every owner and admin reads the settings, the

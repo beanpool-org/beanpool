@@ -259,8 +259,10 @@ export interface CommunityInfo {
      * `guestListingsOnly`: a visitor gets the listings and their rough area, not the people (G9a), so the web app shows
      * a key-less visitor the lobby (G9b). `beans`: false where there are no Beans (the global profile).
      * `exampleListings`: a nearly empty Market shows a few example cards (lib/example-listings.ts).
+     * `privatePreview`: only the node's members, and people its owner or an admin invites, get in; a visitor reads nothing
+     * (absent when off).
      */
-    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean };
+    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean };
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
     addresses?: string[];
     /**

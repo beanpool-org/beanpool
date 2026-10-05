@@ -559,6 +559,8 @@ export type DoorOutcome =
     | { kind: 'refused'; message: string };
 
 const DOOR_CLOSED = "This community isn't taking new members right now.";
+/** A node in a private preview (apps/server config/private-preview.ts) says this itself; the same words if it says nothing. */
+export const PRIVATE_PREVIEW_MESSAGE = 'This community is in a private preview. Ask its owner for an invite.';
 /**
  * A 401 with no code: the node's signature check refused the request's timestamp (more than 5 minutes off), the one
  * thing a 12-words joiner can fix. The phone says the same (utils/global-join.ts `phoneClock`); never "sign in again" here.
@@ -605,6 +607,7 @@ export function doorOutcome(answer: DoorAnswer, provider: JoinProvider | null): 
         return { kind: 'work', code: body.code, message: body.code === 'work_required' || !said ? WORK_FAILED : said };
     }
     if (status === 403 && body.code === 'sign_in_required') return { kind: 'sign_in_required', message: said ?? SIGN_IN_REQUIRED };
+    if (status === 403 && body.code === 'private_preview') return { kind: 'door_closed', message: said ?? PRIVATE_PREVIEW_MESSAGE };
     if (status === 401 && provider) return { kind: 'expired', message: EXPIRED };
     if (status === 429) {
         const sentence = body.code === 'network_busy' && said ? said : said && !/^Too many attempts/.test(said) ? said : TOO_MANY;
@@ -676,6 +679,7 @@ export function wordsWorkRefusal(answer: DoorAnswer): { kind: 'busy' | 'closed' 
     const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
     if (isWrongClock(answer)) return { kind: 'failed', message: WRONG_CLOCK };
     if (answer.status === 403 && answer.body.code === 'sign_in_required') return { kind: 'closed', message: said ?? SIGN_IN_REQUIRED };
+    if (answer.status === 403 && answer.body.code === 'private_preview') return { kind: 'closed', message: said ?? PRIVATE_PREVIEW_MESSAGE };
     if (answer.status === 429) {
         const sentence = answer.body.code === 'network_busy' && said ? said : TOO_MANY;
         return { kind: 'busy', message: withRetryAfter(sentence, answer.retryAfterSeconds) };

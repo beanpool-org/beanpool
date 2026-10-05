@@ -30,7 +30,8 @@ import { LookAroundGlobal } from '../components/MembersOnlyListings';
 import { WebRestore } from '../components/WebRestore';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { AddSignIn } from '../components/OneWayBack';
-import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
+import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, PRIVATE_PREVIEW_MESSAGE, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
+import { privatePreviewOn } from '../lib/visitor-lobby';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -271,7 +272,7 @@ function BackToListings({ onBack }: { onBack: () => void }) {
 type Door = 'checking' | 'open' | 'invite' | 'unreachable';
 
 function doorOf(info: CommunityInfo | null | undefined): Door {
-    return info?.profile === 'global' && info.features?.openJoin === true ? 'open' : 'invite';
+    return info?.profile === 'global' && info.features?.openJoin === true && !privatePreviewOn(info) ? 'open' : 'invite';
 }
 
 /**
@@ -289,6 +290,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [localCommunity, setLocalCommunity] = useState(() => !!initialInfo && initialInfo.profile !== 'global');
     // The open door also takes 12 words alone, beside the sign-in (two-doors design §2; the node's `features.wordsDoor`).
     const [wordsDoor, setWordsDoor] = useState(() => initialInfo?.features?.wordsDoor === true);
+    // A private preview (the node's `features.privatePreview`): an owner's or admin's invite is the only way in, and the
+    // page says so in the node's words.
+    const [privatePreview, setPrivatePreview] = useState(() => privatePreviewOn(initialInfo));
     const [doorCheck, setDoorCheck] = useState(0);
     useEffect(() => {
         // The lobby read it a moment ago: asked again only on Try again.
@@ -296,7 +300,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         let cancelled = false;
         setDoor('checking');
         getCommunityInfo()
-            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setWordsDoor(info?.features?.wordsDoor === true); } })
+            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setWordsDoor(info?.features?.wordsDoor === true); setPrivatePreview(privatePreviewOn(info)); } })
             .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
         return () => { cancelled = true; };
     }, [doorCheck]);
@@ -2496,6 +2500,15 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
                                 Got an invite code or scanned a QR? Enter it below with your chosen callsign to join.
                             </p>
+                            {privatePreview && (
+                                <p role="note" data-testid="welcome-private-preview" style={{
+                                    color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, margin: '-0.5rem 0 1.25rem',
+                                    padding: '0.75rem', borderRadius: '10px', background: 'rgba(37, 99, 235, 0.08)',
+                                    border: '1px solid rgba(37, 99, 235, 0.25)', overflowWrap: 'anywhere',
+                                }}>
+                                    {PRIVATE_PREVIEW_MESSAGE}
+                                </p>
+                            )}
 
                             <label htmlFor="inviteCode" style={{
                                 display: 'block', textAlign: 'left',

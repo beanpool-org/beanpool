@@ -53,6 +53,7 @@
 import { db } from '../db/db.js';
 import { prepared } from '@beanpool/engine';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
+import { isPrivatePreview, privatePreviewAtBoot } from './private-preview.js';
 
 export type NodeProfile = 'local' | 'global';
 
@@ -250,6 +251,10 @@ export interface NodeFeatures {
     /** The open door takes a join with 12 words alone, beside the sign-in (`openJoin` on, `ssoRequiredForJoin` off). An
      *  app that finds no `wordsDoor` (a server from before it) offers the sign-in only. */
     wordsDoor: boolean;
+    /** Present, and true, only while the node is in a private preview (config/private-preview.ts): only its members
+     *  and the people its owner or an admin invites get in, and a visitor sees nothing. The apps show the preview's
+     *  message instead of the doors. Absent otherwise, so a node not in a preview answers exactly as before. */
+    privatePreview?: true;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -338,7 +343,19 @@ export function getConfiguredSwitches(profile: NodeProfile = getNodeProfile()): 
  * money kept on and the open door shut wherever the ledger has moved.
  */
 export function getProfileSwitches(profile: NodeProfile = getNodeProfile()): ProfileSwitches {
-    return lockKnocksToInvites(lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET }));
+    return lockKnocksToInvites(lockToPrivatePreview(lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET })));
+}
+
+/**
+ * A private preview (config/private-preview.ts) takes invites, an owner's or admin's only (config/door.ts), even where
+ * the profile has none, and no knocks. The open door stays as configured so an existing member can still add a sign-in
+ * (`/api/join/link`); the preview gate refuses every join through it, and the apps are told it is shut (getNodeFeatures).
+ */
+function lockToPrivatePreview(s: ProfileSwitches): ProfileSwitches {
+    if (!isPrivatePreview()) return s;
+    s.invites = true;
+    s.knocks = false;
+    return s;
 }
 
 /** A knock is answered with an invite (engine/knocks.ts approveKnock), so a node that makes none takes no knocks. */
@@ -349,7 +366,7 @@ function lockKnocksToInvites(s: ProfileSwitches): ProfileSwitches {
 
 export function getNodeFeatures(): NodeFeatures {
     const s = getProfileSwitches();
-    return {
+    const features: NodeFeatures = {
         beans: s.beans,
         escrow: s.escrow,
         // One construct under two names in this build: the treasury routes serve both, so it is here only with both on.
@@ -367,6 +384,9 @@ export function getNodeFeatures(): NodeFeatures {
         invites: s.invites,
         wordsDoor: s.openJoin && !s.ssoRequiredForJoin,
     };
+    // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite.
+    if (isPrivatePreview()) return { ...features, openJoin: false, wordsDoor: false, privatePreview: true };
+    return features;
 }
 
 // ── Money is never frozen, and the door never opens onto it ──────────────────────────────
@@ -674,6 +694,14 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
     if (profile === 'global' && Object.keys(NOT_BUILT_YET).length > 0) console.log(pinnedLine(profile));
 
     const configured = { ...getConfiguredSwitches(profile), ...NOT_BUILT_YET };
+    // A private preview (config/private-preview.ts) says so, and the door lines below would be false while it is on: no
+    // open door takes a join and invites are on (an owner's or admin's). A value it doesn't know stops the boot here.
+    const preview = privatePreviewAtBoot();
+    if (preview) {
+        console.log(preview);
+        configured.openJoin = false;
+        configured.invites = true;
+    }
     const off = MONEY_SWITCHES.filter((k) => !configured[k]);
     const history = off.length > 0 || configured.openJoin ? ledgerHistory() : null;
     if (history) historyFound = history;

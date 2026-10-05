@@ -98,6 +98,7 @@ import { configurePhotoKeys, photoUrlKeyed, photoVersionOf, type PhotoKeyScope }
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { getNodeRole } from '../config/node-role.js';
+import { isPrivatePreview } from '../config/private-preview.js';
 
 export const PHOTO_KEY_SECRET_ROW = 'photoKeySecret';
 /**
@@ -172,13 +173,15 @@ function keyFor(s: Buffer, postId: string, orderNum: number, version: number): s
 
 /**
  * At boot: on a node whose listings are not a public read (reads enforced, no visitors' view), every listing-photo URL
- * carries its key from now on and the route asks for it; elsewhere, those of every listing off the public board.
+ * carries its key from now on and the route asks for it; elsewhere, those of every listing off the public board. In a
+ * private preview (config/private-preview.ts) every listing's are keyed: a photo reaches the apps' unsigned `<img>` only
+ * with its key, so no listing's photo is a visitor's. A change of shape heals the phones' saved URLs (noteUrlShape).
  * Returns whether every listing's are keyed.
  */
 export function installPhotoKeysAtBoot(enforceReadAuth: boolean = process.env.ENFORCE_READ_AUTH !== 'false'): boolean {
     const s = photoKeySecret();
     secret = s;
-    keyScope = !enforceReadAuth || getProfileSwitches().guestListingsOnly ? 'offBoard' : 'every';
+    keyScope = !isPrivatePreview() && (!enforceReadAuth || getProfileSwitches().guestListingsOnly) ? 'offBoard' : 'every';
     configurePhotoKeys((postId, orderNum, version) => keyFor(s, postId, orderNum, version), keyScope);
     noteUrlShape(s, keyScope);
     return keyScope === 'every';

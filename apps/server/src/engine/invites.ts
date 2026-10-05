@@ -6,6 +6,8 @@ import { db } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { assertFeatureOn } from '../config/node-profile.js';
 import { assertMayInviteHere, mayInviteHere, ADMINS_ONLY_TICKET_MESSAGE } from '../config/door.js';
+import { isPrivatePreview, PRIVATE_PREVIEW_MESSAGE } from '../config/private-preview.js';
+import { isNodeAdmin } from './node-roles.js';
 import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
@@ -36,6 +38,27 @@ import { assertMayBindInvite, confirmByInvite } from './names-list.js';
  */
 function canInvite(inviterPubkey: string): boolean {
     return mayBringSomeoneIn(db, inviterPubkey);
+}
+
+/** Whether an invite row is an owner's or admin's (a private preview admits no other: redeemInvite). */
+function madeByOwnerOrAdmin(invite: { issued_by?: string | null; created_by: string }): boolean {
+    if (invite.issued_by) return invite.issued_by === 'owner:password' || isNodeAdmin(invite.issued_by);
+    return isNodeAdmin(invite.created_by);
+}
+
+/**
+ * Whether a private preview would redeem this code or offline ticket (checkInvite in state-engine.ts asks, so the check
+ * never vouches for a code redeemInvite refuses): an invite code an owner or admin made (madeByOwnerOrAdmin), or a
+ * ticket whose maker may invite here now (the door is `admins` in a preview: config/door.ts).
+ */
+export function previewAdmitsInvite(codeOrTicket: string): boolean {
+    const raw = codeOrTicket.trim();
+    if (raw.startsWith('BP-')) {
+        const ticket = verifyOfflineTicket(db, raw.substring(3), ticketBinding);
+        return ticket.ok && mayInviteHere(ticket.inviterPubkey);
+    }
+    const invite = db.prepare('SELECT issued_by, created_by FROM invite_codes WHERE code COLLATE NOCASE = ?').get(raw) as { issued_by: string | null; created_by: string } | undefined;
+    return !!invite && madeByOwnerOrAdmin(invite);
 }
 
 const INVITER_GONE = 'The member who made this invite is no longer in this community, so it can’t be used. Ask a member for a fresh one.';
@@ -183,6 +206,15 @@ export function redeemInvite(
     if (Date.now() - createdAtTime > THIRTY_DAYS_MS) {
         recordFunnelEvent('invite_failed', 'expired');
         return { success: false, error: 'This invite code has expired (maximum 30 days validation)' };
+    }
+
+    // A private preview (config/private-preview.ts) admits only an owner's or admin's invite: a seed invite issued
+    // under the node password (`owner:password`, routes/community.ts) or by a key that is an owner or admin here now,
+    // or a code whose maker is one now. A member's code, made before the preview or not, is refused with the preview's
+    // own sentence.
+    if (isPrivatePreview() && !madeByOwnerOrAdmin(invite)) {
+        recordFunnelEvent('invite_failed', 'private_preview');
+        return { success: false, error: PRIVATE_PREVIEW_MESSAGE };
     }
 
     // An invite that answers a request to join (engine/knocks.ts) admits the key that asked and no other, whoever

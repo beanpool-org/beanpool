@@ -291,6 +291,8 @@ export function readDoorAnswer(status: number, body: unknown, retryAfter: number
     if (status === 403 && code === 'key_invalidated') return { kind: 'key_invalidated', message: said(body) ?? DOOR_MESSAGES.keyInvalidated };
     if (status === 403 && code === 'account_closed') return { kind: 'account_closed', message: DOOR_MESSAGES.accountClosed };
     if (status === 403 && code === 'sign_in_required') return { kind: 'sign_in_required', message: DOOR_MESSAGES.signInRequired };
+    // A node in a private preview (server config/private-preview.ts) says why in its own words: shown as-is.
+    if (status === 403 && code === 'private_preview') return { kind: 'door_closed', message: said(body) ?? PRIVATE_PREVIEW_MESSAGE };
     if (status === 403 || status === 404) return { kind: 'door_closed', message: DOOR_MESSAGES.doorClosed };
     if (status === 400 && code && WORK_REFUSAL_CODES.includes(code)) {
         return { kind: 'work_again', code: code as WorkRefusalCode, message: WORK_MESSAGES[code as WorkRefusalCode] };
@@ -302,6 +304,9 @@ export function readDoorAnswer(status: number, body: unknown, retryAfter: number
     if (status === 401) return { kind: 'sign_in_again', message: DOOR_MESSAGES.signInAgain };
     return { kind: 'try_again', message: said(body) ?? DOOR_MESSAGES.tryAgain };
 }
+
+/** The server's sentence for a private preview, for a node that somehow sent none. */
+export const PRIVATE_PREVIEW_MESSAGE = 'This community is in a private preview. Ask its owner for an invite.';
 
 /**
  * {@link readDoorAnswer} for the routes the 12-words way meets (the work route, at either door, and the 12-words join):

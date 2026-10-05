@@ -842,7 +842,7 @@ export function editMessage(
     // neither, so it refuses (docs/events-on-the-map.md §2.2). Someone the event isn't there for (a hidden group's
     // event, or one they were removed from or left) is answered first, as an id nobody has (the #828 rule).
     if (conv.type === 'event_thread') {
-        if (eventChatUnknownTo(row.conversation_id, authorPubkey)) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR);
+        if (eventChatUnknownTo(row.conversation_id, authorPubkey)) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
         throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
     }
 
@@ -854,7 +854,7 @@ export function editMessage(
     if (isGroupChat) {
         const refusal = groupChatRefusal(row.conversation_id, authorPubkey);
         if (refusal) throw refusal.status === 404
-            ? new MessagingError(MESSAGE_NOT_FOUND_ERROR)
+            ? new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404)
             : new MessagingError(refusal.error, refusal.status);
     } else if (!db.prepare("SELECT 1 FROM conversation_participants WHERE conversation_id=? AND public_key=?")
         .get(row.conversation_id, authorPubkey)) {

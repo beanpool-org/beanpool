@@ -334,6 +334,7 @@ import {
 } from './engine/social.js';
 import {
     createPost as createPostEngine,
+    type PrestoredPhotos,
     removePost as removePostEngine,
     updatePost as updatePostEngine,
     pausePost as pausePostEngine,
@@ -4880,6 +4881,8 @@ export function createPost(
         eventPrivateNote?: unknown;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
+        /** Photos the route already wrote (engine/posts.ts prestorePostPhotos). */
+        storedPhotos?: PrestoredPhotos;
     }
 ): MarketplacePost | null {
     // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite

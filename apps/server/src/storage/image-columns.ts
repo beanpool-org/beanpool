@@ -288,6 +288,15 @@ export function storeUploadedPhotoColumns(
     return storePhotoColumns(store, key, stripImageValue(photoData));
 }
 
+/** {@link storeUploadedPhotoColumns} through {@link storePhotoColumnsAsync}: the same strip, the same columns, no fsync on the loop. */
+export function storeUploadedPhotoColumnsAsync(
+    store: ImageStore,
+    key: (s: StorableBytes) => string,
+    photoData: string,
+): Promise<PhotoColumns> {
+    return storePhotoColumnsAsync(store, key, stripImageValue(photoData));
+}
+
 export function inlinePhotoColumns(photoData: string): PhotoColumns {
     return { photo_data: photoData, storage_key: null, sha256: null, bytes: null, mime: null };
 }

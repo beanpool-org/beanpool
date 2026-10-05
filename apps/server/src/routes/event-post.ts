@@ -19,6 +19,7 @@
  */
 
 import { createPost } from '../state-engine.js';
+import type { PrestoredPhotos } from '../engine/posts.js';
 
 /**
  * @param body      the parsed request body
@@ -26,8 +27,9 @@ import { createPost } from '../state-engine.js';
  * @param createdBy the member who really did it, when that is not the author (a keeper acting for an
  *                  enterprise). Recorded as `created_by`, exactly as the enterprise's Offer and Need are.
  * @param beforeWrite the route's own limit on new posts (W-main), which the engine runs once every refusal has passed
+ * @param storedPhotos the event's photos the route already wrote off the event loop (engine/posts.ts prestorePostPhotos)
  */
-export function createEventFromBody(body: any, author: string, createdBy?: string, beforeWrite?: () => void) {
+export function createEventFromBody(body: any, author: string, createdBy?: string, beforeWrite?: () => void, storedPhotos?: PrestoredPhotos) {
     const b = body || {};
     return createPost(
         'event', 'community', b.title, b.description || '',
@@ -47,6 +49,7 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             eventPlaceName: b.eventPlaceName, eventPrivateNote: b.eventPrivateNote,
             createdBy,
             beforeWrite,
+            storedPhotos,
         }
     );
 }

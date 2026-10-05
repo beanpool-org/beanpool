@@ -14,9 +14,9 @@ import { pollVoterNewOrWords } from './probation.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './post-sight.js';
 import { isAcceptablePhotoValue } from './avatar.js';
-import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
+import { getImageStore, isKeySafeId, postPhotoKey, type ImageStore } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
-import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
+import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, storeUploadedPhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import {
     getMember,
     getPosts,
@@ -76,11 +76,69 @@ function forActor(post: MarketplacePost, actorPubkey: string | undefined): Marke
  * the formats the strip knows: a HEIC labelled image/jpeg would otherwise be stored and served with its GPS.
  * Checked before the first put, so a refused edit writes nothing. Both apps send JPEGs.
  */
-function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
+function storedPhotoColumns(postId: string, photos: string[], prestored?: PrestoredPhotos): PhotoColumns[] {
     if (!photos.every(p => isAcceptablePhotoValue(p))) throw new Error(POST_PHOTO_FORMAT_ERROR);
     const store = getImageStore();
-    return photos.map((p, idx) =>
-        storeUploadedPhotoColumns(store, s => postPhotoKey(postId, idx, s.sha256, s.mime), p));
+    return photos.map((p, idx) => {
+        // A photo the route already wrote off the event loop (prestorePostPhotos): the same value, for the same post
+        // and place, into the same store, gives the same columns the write below would. Anything else is written here.
+        const ready = prestored && prestored.postId === postId && prestored.store === store ? prestored.byIndex.get(idx) : undefined;
+        if (ready && ready.value === p) return ready.columns;
+        return storeUploadedPhotoColumns(store, s => postPhotoKey(postId, idx, s.sha256, s.mime), p);
+    });
+}
+
+/** A new post's photos written ahead of {@link createPost}, by place, for the post id they were keyed under. */
+export interface PrestoredPhotos {
+    postId: string;
+    store: ImageStore;
+    byIndex: Map<number, { value: string; columns: PhotoColumns }>;
+}
+
+/**
+ * Write a new post's photos before {@link createPost} runs, through the store's non-blocking write (putAsync: the fsync
+ * on the threadpool, not the event loop), so createPost itself writes none and stays one synchronous run: its checks
+ * and the caller's limits are still made and acted on with nothing in between (two posts at a cap cannot both pass).
+ *
+ * It decides nothing and refuses nothing. A photo createPost would refuse (not an accepted format, a set
+ * validatePostPhotos refuses), a post id the caller sent that createPost would refuse or that names a post already
+ * here, a poll (which keeps no photos), a store that fails: each is left to createPost, which answers or writes it
+ * exactly as it always did. What it does write is keyed as createPost keys it (postPhotoKey), with the metadata
+ * stripped as createPost strips it. The caller hands the result to createPost, then calls
+ * {@link releasePrestoredPhotos} whatever happened, so a refused post leaves no object behind.
+ */
+export async function prestorePostPhotos(type: unknown, id: unknown, photos: unknown): Promise<PrestoredPhotos | undefined> {
+    try {
+        if (type === 'poll' || !Array.isArray(photos) || photos.length === 0) return undefined;
+        const set = photos.slice(0, 5);
+        if (!set.every(p => typeof p === 'string' && isAcceptablePhotoValue(p))) return undefined;
+        validatePostPhotos(photos);
+        let postId: string;
+        if (id === undefined || id === null || id === '') postId = crypto.randomUUID();
+        else if (typeof id === 'string' && !idNamesMoney(id) && isKeySafeId(id) && id === id.toLowerCase()
+            && !db.prepare('SELECT 1 FROM posts WHERE id = ?').get(id)) postId = id;
+        else return undefined;
+        const store = getImageStore();
+        const byIndex = new Map<number, { value: string; columns: PhotoColumns }>();
+        const stored = await Promise.all(set.map((p: string, idx: number) =>
+            storeUploadedPhotoColumnsAsync(store, s => postPhotoKey(postId, idx, s.sha256, s.mime), p)));
+        // Only a photo that is now in the store: one that fell back to the row is left for createPost to try itself.
+        stored.forEach((columns, idx) => { if (columns.storage_key) byIndex.set(idx, { value: set[idx] as string, columns }); });
+        return byIndex.size > 0 ? { postId, store, byIndex } : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * After createPost, whatever it did: delete each object {@link prestorePostPhotos} wrote that no row names (a post
+ * refused, or one whose photos were not the ones written). One that the new post's rows name is kept
+ * (deleteStoredObjects asks storageKeyStillReferenced). Never throws.
+ */
+export function releasePrestoredPhotos(prestored: PrestoredPhotos | undefined): void {
+    if (!prestored) return;
+    const keys = [...prestored.byIndex.values()].map(e => e.columns.storage_key as string);
+    deleteStoredObjects(db, keys, prestored.store);
 }
 
 const POST_PHOTO_FORMAT_ERROR = 'Each photo must be a JPEG, PNG or WebP image';
@@ -338,6 +396,8 @@ export function createPost(
          * with no Offer) and before anything is stored, so a limit never answers for a post that may not be made at all.
          */
         beforeWrite?: () => void;
+        /** The photos the route already wrote (prestorePostPhotos); createPost then writes only what is not among them. */
+        storedPhotos?: PrestoredPhotos;
     },
 ): MarketplacePost | null {
     const now = Date.now();
@@ -495,12 +555,12 @@ export function createPost(
     if (type === 'need' && !hasListedOffer(db, authorPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
     options?.beforeWrite?.();
 
-    const finalId = id || crypto.randomUUID();
+    const finalId = id || options?.storedPhotos?.postId || crypto.randomUUID();
     const createdAt = new Date(now).toISOString();
     const searchKeywords = generateSearchKeywords(title, description, category);
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
     // A poll has had its photos stripped above; `photos` is whatever survived validatePostPhotos.
-    const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5));
+    const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), options?.storedPhotos);
 
     db.transaction(() => {
         if (type === 'poll') {

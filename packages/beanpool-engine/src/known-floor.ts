@@ -117,11 +117,14 @@ export function memberKnownPledged(db: Db, pubkey: string): number {
     }
 }
 
-/** How much of a keeper's known pledges counts today: never above half their grant now (0 with the dial off or unconfirmed). */
-function countedKnownPledged(db: Db, pubkey: string, grant = memberKnownGrant(db, pubkey)): { grant: number; pledged: number; counted: number } {
+/**
+ * How much of a keeper's known pledges counts today: never above half their grant now (0 with the dial off or unconfirmed).
+ * `extraPledged` counts a known pledge not yet written, as if it were (a keeper request's check, without a write).
+ */
+function countedKnownPledged(db: Db, pubkey: string, grant = memberKnownGrant(db, pubkey), extraPledged = 0): { grant: number; pledged: number; counted: number } {
     // No grant (the dial off, or not confirmed): nothing of it counts and no room is left, so the pledges aren't read.
     if (grant === 0) return { grant, pledged: 0, counted: 0 };
-    const pledged = memberKnownPledged(db, pubkey);
+    const pledged = memberKnownPledged(db, pubkey) + extraPledged;
     return { grant, pledged, counted: Math.min(pledged, Math.floor(grant / 2)) };
 }
 
@@ -134,9 +137,10 @@ export function knownPledgeRoom(db: Db, pubkey: string): number {
 /**
  * A member's own known line: their grant less what of it is pledged to enterprises (the bound above). `grant` stands in for
  * their grant now: trust.ts passes the grant they hold unfrozen, so a frozen member's tier is the one their line gives them.
+ * `extraPledged`: a known pledge not yet written, counted as if it were (countedKnownPledged).
  */
-export function memberUsableKnownGrant(db: Db, pubkey: string, grant?: number): number {
-    const { grant: g, counted } = countedKnownPledged(db, pubkey, grant);
+export function memberUsableKnownGrant(db: Db, pubkey: string, grant?: number, extraPledged = 0): number {
+    const { grant: g, counted } = countedKnownPledged(db, pubkey, grant, extraPledged);
     return Math.max(0, g - counted);
 }
 

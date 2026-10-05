@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 111,
-  "hash": "ac422f44a7f922f9f5d8aa9ce1fa275c6fb0ae1700ea3485924c23d4b5abe681",
+  "version": 112,
+  "hash": "1292ff1c8300a5f4a638fd357d37132ba24640a2f87799abb5075ef6e488189c",
   "sections": [
     {
       "id": "about",
@@ -4404,13 +4404,17 @@
           "text": "The lead keeper approves or declines. If the enterprise already has more than one keeper, you become a keeper after 3 days, unless another keeper objects."
         },
         {
+          "type": "p",
+          "text": "Only you see how much trust you have left to back with. The lead keeper sees your pledge and whether your standing still covers it, never the figure. If approving you is refused, or your change is cancelled when its objection window ends, they are told only that your standing doesn't cover the pledge: never your figure, your balance or a freeze."
+        },
+        {
           "type": "h2",
           "text": "For keepers"
         },
         {
           "type": "ul",
           "items": [
-            "**Approve** or **Decline** requests under **Pending keeper requests**.",
+            "**Approve** or **Decline** requests under **Pending keeper requests**. Each request shows the pledge and says whether the person's standing covers it. If it doesn't, approving is refused until it does.",
             "Changes waiting under **Keeper changes waiting** show the objection window. Tap **Object** to stop one. **Object works on the first tap, with no second question.** One objection cancels the change.",
             "The lead can remove a keeper with **Remove** and their name. Other keepers can object in the same way.",
             "**Operator controls** let keepers post the enterprise's Offers and Needs."

@@ -34,6 +34,26 @@ test('the docker image workflow gates its release job on the release environment
     assert.match(workflowProblems(text.replace(/^ {4}environment: release\n/m, '')).join('\n'), /jobs\.release .*environment: release/);
 });
 
+// A GitHub branch/tag filter as a RegExp: `*` any run of characters but `/`, `**` any run, `?` zero or one of the
+// character before, `+` one or more of it, `[...]` a class; everything else literal.
+const filterRegExp = (pattern) => new RegExp(`^${pattern.replace(/\*\*|\*|\[[^\]]*\]|[?+]|[.^$(){}|\\]/g,
+    (t) => t === '**' ? '.*' : t === '*' ? '[^/]*' : t.startsWith('[') || t === '?' || t === '+' ? t : `\\${t}`)}$`);
+
+test('only a node release tag (v1.2.27) starts the docker image release, never vault-v* or native-v*', () => {
+    const file = workflowFiles().find((f) => basename(f) === 'docker-publish.yml');
+    const text = readFileSync(file, 'utf8');
+    const tags = /^ {4}tags:\s*\[(.*)\]\s*$/m.exec(text);
+    assert.ok(tags, 'on.push.tags is a one-line list');
+    const patterns = tags[1].split(',').map((p) => p.trim().replace(/^['"]|['"]$/g, ''));
+    const starts = (tag) => patterns.some((p) => filterRegExp(p).test(tag));
+    for (const tag of ['v1.2.27', 'v1.10.0', 'v2.0.0']) assert.ok(starts(tag), `${tag} starts it (${patterns.join(', ')})`);
+    for (const tag of ['vault-v1.0.0', 'vault-v1.2.27', 'native-v1.2.28', 'version-1', 'v.1']) assert.ok(!starts(tag), `${tag} does not (${patterns.join(', ')})`);
+    // The converter itself: the filter the file had before matched the vault's tag.
+    assert.ok(filterRegExp('v*').test('vault-v1.0.0') && !filterRegExp('v[0-9]*').test('vault-v1.0.0') && !filterRegExp('v*').test('v1/x'));
+    // And the release job refuses any other tag before it builds anything: its first step.
+    assert.match(text, /^ {4}steps:\n {6}#.*\n {6}- name: Only a node release tag\n(?: {8}.*\n)*? {10}if \[\[ ! "\$TAG" =~ \^v\[0-9\]\+/m);
+});
+
 test('a well-formed workflow passes', () => {
     assert.deepEqual(workflowProblems(wf()), []);
     assert.deepEqual(workflowProblems(wf({ uses: './.github/actions/local' })), []);

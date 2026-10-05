@@ -1,6 +1,6 @@
 name: Build and Push Docker Image
 
-# A push to main builds an amd64 image tagged with its commit, which DEPLOY_TAG deploys. A `v*` tag builds the
+# A push to main builds an amd64 image tagged with its commit, which DEPLOY_TAG deploys. A `v1.2.27` tag builds the
 # multi-arch release image, moves :latest and the semver tags (what every self-hoster and DEPLOY_PULL=1 pulls) and makes
 # the GitHub Release. That job names the `release` environment, which waits for Marty's approval ("approve each
 # release", board, 2026-10-01; scratch/reviews/FABLE-sec-infra.md M4), so a pushed tag alone publishes nothing. The
@@ -13,7 +13,11 @@ name: Build and Push Docker Image
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    # Node release tags only: v1.2.27. Not 'v*', which also matches vault-v1.0.0 (the key vault's release tags, made by
+    # `gh release create` or pushed): that would start this release job, and one approval would move the
+    # node image's :latest and rewrite the vault's Release (scratch/vault-golive/BLOCKERS.md, Hazards 1). native-v*
+    # never matched. scripts/check-workflows.test.mjs keeps this.
+    tags: ['v[0-9]*']
 
 env:
   REGISTRY: ghcr.io
@@ -73,8 +77,8 @@ jobs:
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
 
-  # A `v*` tag: the multi-arch release image, :latest, the semver tags and the GitHub Release. The job starts only
-  # once Marty approves it in the `release` environment.
+  # A node release tag (v1.2.27): the multi-arch release image, :latest, the semver tags and the GitHub Release. The
+  # job starts only once Marty approves it in the `release` environment.
   release:
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
@@ -84,6 +88,13 @@ jobs:
       packages: write
 
     steps:
+      # A second lock behind the tags filter above: only a node release tag goes on. Nothing is built or pushed yet.
+      - name: Only a node release tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then echo "::error::$TAG is not a node release tag (v<major>.<minor>.<patch>)"; exit 1; fi
+
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

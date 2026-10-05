@@ -45,6 +45,9 @@ export interface NodeFeatures {
      * doesn't say has no 12-words door: its door looks exactly as before.
      */
     wordsDoor?: boolean;
+    /** The node is in a private preview: only its members and the people its owner or an admin invites get in, and a
+     *  visitor sees nothing. The door offers an invite only. A node that doesn't say is not in one. */
+    privatePreview?: boolean;
     /**
      * Who may invite here (the door, apps/server config/door.ts): `members` (any member, every community until now),
      * `admins` (only its owners and admins, the community's choice) or `open` (the worldwide community: anyone joins with
@@ -59,6 +62,7 @@ const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
+    'privatePreview',
 ];
 
 export interface NodeProfile {
@@ -213,6 +217,11 @@ export const GLOBAL_DOOR_MESSAGES: Record<GlobalDoorRefusal, string> = {
  * Whether the door offers the 12-words way in beside a sign-in. Only a node that says so outright: a node from before
  * the 12-words door says nothing, and its door stays exactly as it was (the sign-in alone).
  */
+/** Whether this node is in a private preview (an invite from its owner or an admin is the only way in). */
+export function privatePreviewOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.privatePreview === true;
+}
+
 export function wordsDoorOn(features: NodeFeatures | null | undefined): boolean {
     return features?.wordsDoor === true;
 }

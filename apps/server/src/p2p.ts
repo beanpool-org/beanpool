@@ -68,11 +68,12 @@ export async function loadOrCreateIdentity(): Promise<ReturnType<typeof privateK
             + 'left as it is. Put back libp2p_key from a backup of this server\'s data dir (a sealed backup restores it too), then restart. '
             + 'With no backup: move libp2p_key aside (rename it, for example to libp2p_key.old, and keep it) and restart. This server then '
             + 'starts with a new node key and a new PeerId. The community (genesis.json, community.key) and its members, beans and '
-            + 'posts (state.db) stay. But everything that knows the server by this key must learn the new one. Its web address '
-            + 'stops reaching this server: the address service holds the name for the old key, sees this server answer with a '
+            + 'posts (state.db) stay. But everything that knows the server by this key must learn the new one. If its web address '
+            + 'is a name an address service holds (a .beanpool.org name, or another registrar\'s), that web address stops reaching '
+            + 'this server: the address service holds the name for the old key, sees this server answer with a '
             + 'valid signature from a different key, counts that as an impostor and pauses the name. The name is not lost (nobody '
             + 'else can claim it), but it comes back only when the address service\'s operator moves it to the new key (for a '
-            + '.beanpool.org name, ask the BeanPool project), so ask before you move the key aside. Its standbys and federated '
+            + '.beanpool.org name, ask the BeanPool project), so ask before you move the key aside. An address on your own domain, or no address, is not affected. Its standbys and federated '
             + 'servers know it by the old PeerId (each standby is set up again, each link with another community made again on both '
             + 'sides), and its notices to members\' apps are signed by a different key.';
         console.error(`🛑 [P2P] ${msg}`);

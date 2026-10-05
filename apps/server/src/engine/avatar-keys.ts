@@ -118,8 +118,9 @@ export function installAvatarKeysAtBoot(): boolean {
     configureGroupPictureKeys((id, version) => keyFor(s, `group-picture|${id}`, version));
     const guestListingsOnly = getProfileSwitches().guestListingsOnly;
     const keyed = guestListingsOnly || isPrivatePreview();
+    shapeOf = () => ({ shape: faceUrlShape(s, keyed), unrecorded: faceUrlShape(s, guestListingsOnly) });
     // Before this record, faces were keyed by guestListingsOnly alone (the preview came later): what a node with none had.
-    noteFaceUrlShape(faceUrlShape(s, keyed), faceUrlShape(s, guestListingsOnly));
+    noteFaceUrlShape(shapeOf().shape, shapeOf().unrecorded);
     if (!keyed) {
         secret = null;
         configureAvatarKeys(null);
@@ -132,6 +133,18 @@ export function installAvatarKeysAtBoot(): boolean {
 
 /** avatarKeysSince in ms, as this boot found or wrote it; null before installAvatarKeysAtBoot. */
 let facesChangedAtMs: number | null = null;
+/** This boot's face-URL shape, worked out again for the role as it is now; null before installAvatarKeysAtBoot. */
+let shapeOf: (() => { shape: string; unrecorded: string }) | null = null;
+
+/**
+ * The shape again, now: for a standby a take-over promotes in this process, or a roll-back makes a standby again
+ * (services/takeover.ts), as engine/photo-keys.ts notePhotoUrlShapeNow. Does nothing before installAvatarKeysAtBoot.
+ */
+export function noteFaceUrlShapeNow(): void {
+    if (!shapeOf) return;
+    const { shape, unrecorded } = shapeOf();
+    noteFaceUrlShape(shape, unrecorded);
+}
 
 /** The shape of the face URLs this server emits (AVATAR_KEYS_SHAPE_ROW). The fingerprint is an HMAC of a fixed text. */
 function faceUrlShape(s: crypto.KeyObject, keyed: boolean): string {

@@ -133,6 +133,7 @@ import {
 } from '../config/community-settings.js';
 import { restartScheduler } from './snapshot-scheduler.js';
 import { notePhotoUrlShapeNow, PHOTO_KEYS_SHAPE_ROW, PHOTO_KEYS_SINCE_ROW } from '../engine/photo-keys.js';
+import { AVATAR_KEYS_SHAPE_ROW, AVATAR_KEYS_SINCE_ROW, noteFaceUrlShapeNow } from '../engine/avatar-keys.js';
 
 export const TAKEOVER_JOURNAL_FILE = 'takeover-journal.json';
 export const TAKEOVER_BUNDLE_FILE = 'takeover-bundle.json';
@@ -1075,6 +1076,8 @@ const UNDO_ROW_KEYS: readonly string[] = [
     // The listing-photo URLs' shape and when it changed (engine/photo-keys.ts): a main server's shape kept would leave
     // photoKeysSince at the start that wrote it, and a take-over tried again would not heal a phone that synced after it.
     PHOTO_KEYS_SHAPE_ROW, PHOTO_KEYS_SINCE_ROW,
+    // The face URLs' shape and when it changed (engine/avatar-keys.ts), for the same reason.
+    AVATAR_KEYS_SHAPE_ROW, AVATAR_KEYS_SINCE_ROW,
     // The members' schema-rules pass (db.ts), never on a standby.
     MEMBERS_SCHEMA_RULES,
     // The recovery seal's clear (a main server's names its own epoch), the epoch its main server last sent, and a clear it
@@ -1262,6 +1265,7 @@ function rollBackTakeover(j: Journal, inProcess: boolean): { ok: true } | { ok: 
         // The photo URLs' shape as this process answers by it, from the rows put back (engine/photo-keys.ts): a standby's,
         // with when it last changed. Does nothing before the state engine's boot.
         notePhotoUrlShapeNow();
+        noteFaceUrlShapeNow();
         if (inProcess) {
             // This process runs on as the standby: what it holds in memory follows the files put back.
             loadConnectors();
@@ -1486,8 +1490,8 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
             // passes, the listing-photo URLs' shape (a main server's now, so a phone that synced from the server it
             // replaced is answered whole at once), and the main server's timers.
             if (configured === 'primary') becomeMainServerInPlace();
-            // Made a standby: the photo URLs' shape is a standby's again.
-            else notePhotoUrlShapeNow();
+            // Made a standby: the photo and face URLs' shapes are a standby's again.
+            else { notePhotoUrlShapeNow(); noteFaceUrlShapeNow(); }
         }
 
         auditRan = runPendingPromotionAudit(j);

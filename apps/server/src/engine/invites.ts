@@ -6,6 +6,8 @@ import { db } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { assertFeatureOn } from '../config/node-profile.js';
 import { assertMayInviteHere, mayInviteHere, ADMINS_ONLY_TICKET_MESSAGE } from '../config/door.js';
+import { isPrivatePreview, PRIVATE_PREVIEW_MESSAGE } from '../config/private-preview.js';
+import { isNodeAdmin } from './node-roles.js';
 import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
@@ -183,6 +185,14 @@ export function redeemInvite(
     if (Date.now() - createdAtTime > THIRTY_DAYS_MS) {
         recordFunnelEvent('invite_failed', 'expired');
         return { success: false, error: 'This invite code has expired (maximum 30 days validation)' };
+    }
+
+    // A private preview (config/private-preview.ts) admits only an owner's or admin's invite: the admin who issued a
+    // seed invite (`issued_by`), else the code's maker, and an owner or admin here now. A member's code, made before
+    // the preview or not, is refused with the preview's own sentence.
+    if (isPrivatePreview() && !isNodeAdmin(String(invite.issued_by ?? invite.created_by))) {
+        recordFunnelEvent('invite_failed', 'private_preview');
+        return { success: false, error: PRIVATE_PREVIEW_MESSAGE };
     }
 
     // An invite that answers a request to join (engine/knocks.ts) admits the key that asked and no other, whoever

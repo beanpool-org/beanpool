@@ -119,6 +119,7 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate.js';
+import { privatePreviewGate, isPrivatePreview } from './config/private-preview.js';
 import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
 import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
@@ -835,10 +836,10 @@ function isNonCanonicalPath(router: Router, requestPath: string): boolean {
 // tracking and heartbeat whichever port the socket arrived on.
 export type UpgradeHandler = (req: IncomingMessage, socket: Duplex, head: Buffer) => void;
 
-const UPGRADE_STATUS_TEXT: Record<number, string> = { 401: 'Unauthorized', 429: 'Too Many Requests', 503: 'Service Unavailable' };
+const UPGRADE_STATUS_TEXT: Record<number, string> = { 401: 'Unauthorized', 403: 'Forbidden', 429: 'Too Many Requests', 503: 'Service Unavailable' };
 
 /** Answer an upgrade with a plain HTTP refusal and close it. */
-function refuseUpgrade(socket: Duplex, status: 401 | 429 | 503, retryAfterSec?: number): void {
+function refuseUpgrade(socket: Duplex, status: 401 | 403 | 429 | 503, retryAfterSec?: number): void {
     const retry = retryAfterSec ? `Retry-After: ${retryAfterSec}\r\n` : '';
     try { socket.write(`HTTP/1.1 ${status} ${UPGRADE_STATUS_TEXT[status]}\r\n${retry}Connection: close\r\n\r\n`); } catch { /* gone already */ }
     socket.destroy();
@@ -936,6 +937,11 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 : WS_AUTH_MODE === 'members' && connect.kind === 'invalid';
             if (refuse) {
                 refuseUpgrade(socket, 401);
+                return;
+            }
+            // A private preview serves no visitor: only a member's socket opens (config/private-preview.ts).
+            if (isPrivatePreview() && (connect.kind !== 'member' || connect.visitor)) {
+                refuseUpgrade(socket, 403);
                 return;
             }
             // A member's (or a visitor's row's) socket is held to its key's cap; any other, which gets only the public
@@ -1719,6 +1725,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         await next();
     });
 
+    // A private preview (config/private-preview.ts): joins other than an owner's or admin's invite, and every read a
+    // non-member makes but the few it lists, answer 403 private_preview. Off (the default), it passes everything.
+    app.use(privatePreviewGate(isNodeMember));
     // The routes a node profile switch has turned off (Beans, escrow, enterprises and treasuries, crowdfunds)
     // answer 404 feature_off before any handler runs (routes/profile-feature-gate.ts).
     app.use(profileFeatureGate);

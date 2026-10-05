@@ -44,6 +44,7 @@
 import { db } from '../db/db.js';
 import { getProfileSwitches } from './node-profile.js';
 import { isNodeAdmin } from '../engine/node-roles.js';
+import { isPrivatePreview } from './private-preview.js';
 
 export type Door = 'open' | 'members' | 'admins';
 /** The doors a community chooses between, and the only values ever stored. */
@@ -73,8 +74,11 @@ export function configuredDoor(): CommunityDoor {
     return DEFAULT_DOOR;
 }
 
-/** The door as it works here now: `open` where the profile opens the door and takes no invites, else the setting. */
+/** The door as it works here now: `admins` in a private preview, `open` where the profile opens the door and takes no
+ *  invites, else the setting. */
 export function getDoor(): Door {
+    // A private preview (config/private-preview.ts): only an owner or admin brings anyone in, whatever the setting.
+    if (isPrivatePreview()) return 'admins';
     const s = getProfileSwitches();
     if (s.openJoin && !s.invites) return 'open';
     return configuredDoor();

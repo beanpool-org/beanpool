@@ -425,6 +425,7 @@ export const SUITES = [
     'test-enterprise-keepers-slice6',
     'test-enterprise-keeper-answers',
     'test-keeper-request-privacy',
+    'test-keeper-check-read-only',
     'test-succession-broadcast-after-commit',
     'test-enterprise-location',
     'test-enterprise-thread',

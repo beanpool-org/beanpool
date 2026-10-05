@@ -122,7 +122,7 @@ export function memberKnownPledged(db: Db, pubkey: string, extraPledged = 0): nu
             ).get(pubkey)) as { total: number } | undefined;
         return Number(row?.total || 0);
     } catch {
-        return 0;
+        return extraPledged;
     }
 }
 

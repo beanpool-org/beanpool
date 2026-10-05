@@ -355,6 +355,7 @@ export const SUITES = [
     'test-ws-http-port',
     'test-ws-auth-default',
     'test-visitor-doorbells',
+    'test-visitor-allowlist',
     'test-ws-feed-parties',
     'test-live-post-payloads',
     'test-moderation-notifications',

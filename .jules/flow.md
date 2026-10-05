@@ -119,3 +119,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-05 - Add loading indicator for AutomationTokensPanel
 **Learning:** `AutomationTokensPanel.tsx` rendered "No tokens yet." when `tokens` was `null` (loading state), misleading node operators before data arrived.
 **Action:** Render an explicit loading indicator and spinner when `tokens === null && !listMessage`.
+
+## 2026-12-06 - Add loading indicator for CommunityHealthPanel
+**Learning:** `CommunityHealthPanel.tsx` returned `null` immediately while community health data was fetching asynchronously (`health` was `null`), leaving operators without visual feedback.
+**Action:** Render an explicit loading indicator with an animated spinner when `loading && !health`.

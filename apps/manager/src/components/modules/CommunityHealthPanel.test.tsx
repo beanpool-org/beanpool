@@ -44,10 +44,24 @@ describe('CommunityHealthPanel', () => {
         expect(readHealth({ error: 'Not found' })).toBeNull();
     });
 
-    it('shows nothing on a node older than the panel', async () => {
+    it('displays loading state indicator while fetching community health data', async () => {
+        let resolveFetch: (v: any) => void = () => {};
+        const fetchPromise = new Promise((res) => { resolveFetch = res; });
+        vi.stubGlobal('fetch', vi.fn().mockReturnValue(fetchPromise));
+
+        render(<CommunityHealthPanel activeNode={NODE} viewer={OWNER_KEY} />);
+        expect(screen.getByTestId('community-health-loading')).toHaveTextContent('Loading community health…');
+
+        resolveFetch({ ok: true, json: () => Promise.resolve(HEALTH) });
+        await waitFor(() => expect(screen.queryByTestId('community-health-loading')).toBeNull());
+        expect(screen.getByTestId('community-health-panel')).toBeInTheDocument();
+    });
+
+    it('shows nothing on a node older than the panel after loading finishes', async () => {
         const f = mockNode({ ok: false, status: 404, body: { error: 'Not found' } });
         const { container } = render(<CommunityHealthPanel activeNode={NODE} viewer={OWNER_KEY} />);
         await waitFor(() => expect(f).toHaveBeenCalled());
+        await waitFor(() => expect(screen.queryByTestId('community-health-loading')).toBeNull());
         expect(container.querySelector('[data-testid="community-health-panel"]')).toBeNull();
     });
 

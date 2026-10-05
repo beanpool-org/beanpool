@@ -72,6 +72,7 @@ const beans = (n: number) => `${Math.round(n).toLocaleString('en')} Beans`;
 
 export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeProfile; viewer: RolesViewer }) {
     const [health, setHealth] = useState<Health | null>(null);
+    const [loading, setLoading] = useState(true);
     const [pct, setPct] = useState('');
     const [days, setDays] = useState('');
     const [saving, setSaving] = useState(false);
@@ -83,20 +84,34 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
     useEffect(() => {
         let mounted = true;
         setHealth(null);
+        setLoading(true);
         setStatus(null);
         (async () => {
-            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-health'), {
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-            }).catch(() => null);
-            if (!res || !res.ok) return;
-            const h = readHealth(await res.json().catch(() => null));
-            if (!mounted || !h) return;
-            setHealth(h);
-            setPct(String(h.settings.debtLinePct));
-            setDays(String(h.settings.quietDays));
+            try {
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-health'), {
+                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                }).catch(() => null);
+                if (!res || !res.ok) return;
+                const h = readHealth(await res.json().catch(() => null));
+                if (!mounted || !h) return;
+                setHealth(h);
+                setPct(String(h.settings.debtLinePct));
+                setDays(String(h.settings.quietDays));
+            } finally {
+                if (mounted) setLoading(false);
+            }
         })();
         return () => { mounted = false; };
     }, [activeNode.url, activeNode.id]);
+
+    if (loading && !health) {
+        return (
+            <div data-testid="community-health-loading" className="bg-nature-900/90 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl flex items-center gap-3 text-xs text-nature-400">
+                <span className="animate-spin text-base">🔄</span>
+                <span>Loading community health…</span>
+            </div>
+        );
+    }
 
     if (!health) return null;
 

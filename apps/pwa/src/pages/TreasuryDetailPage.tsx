@@ -17,7 +17,7 @@ import {
 import { onSyncActivity } from '../lib/sync';
 import {
     timeLeftText, keeperChangeTitle, keeperChangeBody, canObjectToChange, canRemoveKeeper, canStepDown,
-    stepDownConfirmText, removeKeeperConfirmText, approvedApplicantText, successionTallyText,
+    stepDownConfirmText, removeKeeperConfirmText, approvedApplicantText, applicantBackingText, successionTallyText,
     successionDeadlineText, myChoice, successionHeading, successionExplainer,
 } from '../lib/keeper-governance';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -1592,6 +1592,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     <div className="text-[11px] text-nature-500 dark:text-nature-400">
                                                         Backing pledge: <span className="font-bold text-emerald-600 dark:text-emerald-400">{req.pledgedBacking} 🫘</span>
                                                     </div>
+                                                    {applicantBackingText(req.canBackPledge) && (
+                                                        <div className={req.canBackPledge === false
+                                                            ? 'text-[11px] font-semibold text-amber-800 dark:text-amber-300'
+                                                            : 'text-[11px] text-nature-500 dark:text-nature-400'}>
+                                                            {applicantBackingText(req.canBackPledge)}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                             {req.pendingChange ? (

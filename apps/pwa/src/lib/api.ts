@@ -2087,6 +2087,10 @@ export interface KeeperRequestItem {
     decidedBy?: string | null;
     callsign?: string;
     avatarUrl?: string | null;
+    /** Whether the applicant can still back their pledge: all the lead keeper learns of their standing. */
+    canBackPledge?: boolean;
+    /** What the applicant has left to back with: only on their own request (myPendingRequest), never on a keeper's list. */
+    availableToBack?: number;
     /** Approved by the lead and waiting out the other keepers' 3-day objection window. */
     pendingChange?: KeeperChangeItem | null;
 }

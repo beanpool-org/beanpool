@@ -117,6 +117,16 @@ export function approvedApplicantText(appliesAt: string, now = Date.now()): stri
     return `The lead keeper approved you. You become a keeper when the other keepers' 3-day objection window ends (${timeLeftText(appliesAt, now)}).`;
 }
 
+/**
+ * What the lead keeper reads on a join request about the applicant's backing: a yes or a no, never a figure (what an
+ * applicant has left to back with is theirs alone). Null when a node too old to send canBackPledge answers: no line.
+ */
+export function applicantBackingText(canBackPledge: boolean | null | undefined): string | null {
+    if (canBackPledge === true) return 'Their standing covers this pledge.';
+    if (canBackPledge === false) return "Their standing doesn't cover this pledge right now, so it can't be approved yet.";
+    return null;
+}
+
 export function successionTallyText(p: SuccessionLite): string {
     const yes = p.votesCount;
     const no = p.noVotesCount ?? 0;

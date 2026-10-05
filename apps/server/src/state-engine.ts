@@ -3868,6 +3868,9 @@ function applicantCanBackPledge(enterprisePubkey: string, memberPubkey: string, 
     } catch (e) {
         if (e instanceof PledgeDryRun) return e.covered;
         throw e;
+    } finally {
+        // Nothing read inside the savepoint may outlive it: the enterprise's floor counts the pledge just rolled back.
+        clearEnterpriseFloorCache(enterprisePubkey);
     }
     return false;
 }

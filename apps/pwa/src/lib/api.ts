@@ -2087,7 +2087,7 @@ export interface KeeperRequestItem {
     decidedBy?: string | null;
     callsign?: string;
     avatarUrl?: string | null;
-    /** Whether the applicant can still back their pledge: all the lead keeper learns of their standing. */
+    /** On a pending request, whether approving it would go through as far as the applicant's standing goes (null on a closed one): all the lead keeper learns of it. */
     canBackPledge?: boolean | null;
     /** What the applicant has left to back with: only on their own request (myPendingRequest), never on a keeper's list. */
     availableToBack?: number;

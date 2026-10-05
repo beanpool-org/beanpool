@@ -529,6 +529,13 @@ async function main(): Promise<void> {
             if (db.inTransaction) putsInsideTransaction.push(key);
             return realPut(key, bytes, meta);
         };
+        // On disk the import's writes go through the non-blocking put (writeObject → putAsync): watched the same way.
+        const realPutAsync = store.putAsync?.bind(store);
+        if (realPutAsync) (store as any).putAsync = (key: string, bytes: Buffer, meta: any) => {
+            putCount++;
+            if (db.inTransaction) putsInsideTransaction.push(key);
+            return realPutAsync(key, bytes, meta);
+        };
 
         const incomingId = crypto.randomUUID();
         db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
@@ -549,6 +556,7 @@ async function main(): Promise<void> {
         try { await importRemoteState(payload as any); } catch (e) { importErr = e; }
         setNodeRole('primary');
         (store as any).put = realPut;
+        if (realPutAsync) delete (store as any).putAsync;
         try { await p2pNode.stop(); } catch { /* the suite is finishing anyway */ }
 
         assert(importErr === null, `an import carrying photos does not throw${importErr ? ': ' + String(importErr) : ''}`);

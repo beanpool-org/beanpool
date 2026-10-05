@@ -51,7 +51,40 @@ test('only a node release tag (v1.2.27) starts the docker image release, never v
     // The converter itself: the filter the file had before matched the vault's tag.
     assert.ok(filterRegExp('v*').test('vault-v1.0.0') && !filterRegExp('v[0-9]*').test('vault-v1.0.0') && !filterRegExp('v*').test('v1/x'));
     // And the release job refuses any other tag before it builds anything: its first step.
-    assert.match(text, /^ {4}steps:\n {6}#.*\n {6}- name: Only a node release tag\n(?: {8}.*\n)*? {10}if \[\[ ! "\$TAG" =~ \^v\[0-9\]\+/m);
+    assert.ok(releaseGuardFirst(text), 'the first step of jobs.release is the node-release-tag guard');
+});
+
+// The text of one job: its `  <name>:` line and every line under it (indented four or more, or blank).
+const jobText = (text, name) => new RegExp(`^ {2}${name}:\\n(?:(?: {4}.*)?\\n)*`, 'm').exec(text)?.[0] ?? '';
+// The first entry under a job's `steps:`, comments before it skipped.
+const firstStep = (job) => /^ {4}steps:\n(?:\s*\n| {6}#.*\n)*( {6}- .*\n(?: {8}.*\n|\s*\n)*)/m.exec(job)?.[1] ?? '';
+// The node-release-tag guard is the first step of the `release` job, not just somewhere in the file.
+const releaseGuardFirst = (text) => /^ {6}- name: Only a node release tag\n(?: {8}.*\n)*? {10}if \[\[ ! "\$TAG" =~ \^v\[0-9\]\+/m
+    .test(firstStep(jobText(text, 'release')));
+
+test('the node-release-tag guard is checked in the release job itself: moved to another job, or down a step, it fails', () => {
+    const file = workflowFiles().find((f) => basename(f) === 'docker-publish.yml');
+    const text = readFileSync(file, 'utf8');
+    const release = jobText(text, 'release');
+    assert.match(release, /^ {2}release:\n/);
+    assert.match(release, /^ {4}environment: release$/m, 'the slice reaches into the release job');
+    assert.doesNotMatch(release, /^ {2}build-main:/m, 'the slice stops at the job');
+    assert.match(firstStep(release), /^ {6}- name: Only a node release tag\n/);
+
+    // The guard step (with the comment above it), as it sits in the file.
+    const guard = /^ {6}# A second lock.*\n {6}- name: Only a node release tag\n(?: {8}.*\n)*\n/m.exec(text)?.[0];
+    assert.ok(guard, 'found the guard step');
+    // Moved into build-main as its first step: the release job is unguarded and the check says so.
+    const moved = text.replace(guard, '').replace(/^( {2}build-main:\n(?: {4}.*\n|\s*\n)*? {4}steps:\n)/m, `$1${guard}`);
+    assert.notEqual(moved, text);
+    assert.match(firstStep(jobText(moved, 'build-main')), /Only a node release tag/);
+    assert.ok(!releaseGuardFirst(moved), 'guard moved to build-main');
+    // Second step of release instead of first: also caught.
+    const later = text.replace(guard, '').replace(/^( {6}- name: Checkout\n(?: {8}.*\n)*\n)(?= {6}- name: Extract version\n {8}id: version\n {8}run: echo "version=\$\{GITHUB_REF_NAME)/m, `$1${guard}`);
+    assert.notEqual(later, text);
+    assert.ok(!releaseGuardFirst(later), 'guard moved below Checkout');
+    // Gone from the file: caught.
+    assert.ok(!releaseGuardFirst(text.replace(guard, '')), 'guard removed');
 });
 
 test('a well-formed workflow passes', () => {

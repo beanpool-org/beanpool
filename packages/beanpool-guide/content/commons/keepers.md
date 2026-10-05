@@ -21,7 +21,7 @@ The full rules, including what happens when a lead goes quiet, are in "Rules and
 
 The lead keeper approves or declines. If the enterprise already has more than one keeper, you become a keeper after 3 days, unless another keeper objects.
 
-Only you see how much trust you have left to back with. The lead keeper sees your pledge and whether your standing still covers it, never the figure.
+Only you see how much trust you have left to back with. The lead keeper sees your pledge and whether your standing still covers it, never the figure. If approving you is refused, or your change is cancelled when its objection window ends, they are told only that your standing doesn't cover the pledge: never your figure, your balance or a freeze.
 
 ## For keepers
 

@@ -43,7 +43,8 @@ export const AVATAR_KEY_SECRET_ROW = 'avatarKeySecret';
 
 /**
  * What the face URLs this server emits look like (faceUrlShape): `open` (no key), or `keyed:` and a fingerprint of the
- * secret; `@standby` on a standby, whose own secret is not the one its main server's phones hold.
+ * secret; a keyed shape gets `@standby` on a standby, whose own secret is not the one its main server's phones hold (an
+ * open URL carries no key, so it is the same on both, and a take-over of an open node changes no face URL).
  */
 export const AVATAR_KEYS_SHAPE_ROW = 'avatarKeysShape';
 /** When that last changed (ISO 8601): a members delta from before it holds face URLs that may no longer open. */
@@ -149,7 +150,7 @@ export function noteFaceUrlShapeNow(): void {
 /** The shape of the face URLs this server emits (AVATAR_KEYS_SHAPE_ROW). The fingerprint is an HMAC of a fixed text. */
 function faceUrlShape(s: crypto.KeyObject, keyed: boolean): string {
     const shape = keyed ? `keyed:${crypto.createHmac('sha256', s).update('avatar-url-shape', 'utf-8').digest('base64url').slice(0, 16)}` : 'open';
-    return getNodeRole() === 'backup' ? `${shape}@standby` : shape;
+    return keyed && getNodeRole() === 'backup' ? `${shape}@standby` : shape;
 }
 
 /**

@@ -76,6 +76,14 @@ async function child(): Promise<void> {
             return true;
         },
         records: () => ({ shape: row('avatarKeysShape'), since: row('avatarKeysSince') }),
+        // A take-over in this process (services/takeover.ts): the role changes, then the shape is worked out again.
+        asRole: async (a: { role: 'backup' | 'primary' }) => {
+            const { setNodeRole } = await import('./config/node-role.js');
+            const { noteFaceUrlShapeNow } = await import('./engine/avatar-keys.js');
+            setNodeRole(a.role);
+            noteFaceUrlShapeNow();
+            return true;
+        },
         // A node from before this record.
         dropRecords: () => db.prepare("DELETE FROM node_config WHERE key IN ('avatarKeysShape', 'avatarKeysSince')").run().changes,
     };
@@ -366,6 +374,26 @@ async function main(): Promise<void> {
             const d = await delta(node, synced);
             assert(JSON.stringify(pks(d)) === JSON.stringify(everyone) && faces(d).every(keyed), `the phone's delta carries every member, keyed (${pks(d).length})`);
             assert(allOk(await opens(node, faces(d))), 'and each opens unsigned (200)');
+            await stop(node);
+        });
+        await section('7. a take-over of a node with plain faces changes no face URL, so nothing heals; a keyed one does', async () => {
+            node = await boot(LOCAL, 'takeover');
+            await seed(node);
+            const before = await node.send('records');
+            await node.send('asRole', { role: 'backup' });
+            const standby = await node.send('records');
+            assert(standby.shape === 'open' && standby.since === before.since, `plain faces on a standby: the same shape and time (${standby.shape} ${standby.since})`);
+            await node.send('asRole', { role: 'primary' });
+            const promoted = await node.send('records');
+            assert(promoted.shape === 'open' && promoted.since === before.since, `promoted: still the same, so no phone gets the whole directory (${promoted.shape} ${promoted.since})`);
+            await stop(node);
+            node = await boot(LOCAL_PREVIEW, 'takeover-keyed');
+            await seed(node);
+            const keyedBefore = await node.send('records');
+            await node.send('asRole', { role: 'backup' });
+            const keyedStandby = await node.send('records');
+            assert(String(keyedStandby.shape).startsWith('keyed:') && String(keyedStandby.shape).endsWith('@standby') && keyedStandby.shape !== keyedBefore.shape,
+                `keyed faces on a standby: its own shape (${keyedStandby.shape})`);
             await stop(node);
         });
     } finally {

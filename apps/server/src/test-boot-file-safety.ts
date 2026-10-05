@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const ROOT = process.env.BEANPOOL_DATA_DIR!;
@@ -63,6 +64,26 @@ async function bootChild(): Promise<void> {
     process.stdout.write('@@ ' + JSON.stringify({ peerId }) + '\n', () => process.exit(0));
 }
 
+/**
+ * A new install's first start, killed (SIGKILL, by itself) at the rename that puts genesis.json in place: community.key
+ * is written, genesis.json is not. The database is opened first, as index.ts's imports open it before main() runs.
+ */
+async function killAtGenesisChild(): Promise<void> {
+    process.umask(0o022);
+    const dir = process.env.BEANPOOL_DATA_DIR!;
+    await import('./db/db.js');
+    const { secureDataDirAtBoot } = await import('./boot-file-safety.js');
+    secureDataDirAtBoot(dir);
+    const rename = fs.renameSync;
+    (fs as any).renameSync = (from: fs.PathLike, to: fs.PathLike) => {
+        if (String(to).endsWith('genesis.json')) process.kill(process.pid, 'SIGKILL');
+        return rename(from, to);
+    };
+    const { ensureGenesis } = await import('./genesis.js');
+    await ensureGenesis();
+    process.stdout.write('@@ "not killed"\n', () => process.exit(0));
+}
+
 /** A sealed restore into this data dir, with a bundle that would replace every identity file. */
 async function restoreChild(): Promise<void> {
     const { applyBundle } = await import('./services/sealed-backup.js');
@@ -107,19 +128,19 @@ async function bakFailChild(): Promise<void> {
     process.stdout.write('@@ ' + JSON.stringify({ lines }) + '\n');
 }
 
-function run(dir: string, args: string[]): Promise<{ code: number | null; out: string; result: any }> {
+function run(dir: string, args: string[], own = false): Promise<{ code: number | null; signal: NodeJS.Signals | null; out: string; result: any }> {
     return new Promise((resolve) => {
         const env: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dir, NODE_ENV: 'test', DISABLE_UPDATE_CHECK: 'true' };
         for (const k of ['PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO', 'CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'ADMIN_PASSWORD', 'CF_API_TOKEN', 'CF_ZONE_ID', 'LE_DOMAIN', 'DOMAIN']) delete env[k];
-        const p = spawn(process.execPath, [...process.execArgv, SCRIPT, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+        const p = spawn(process.execPath, [...process.execArgv, SCRIPT, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: own });
         let out = '';
         p.stdout.on('data', (d) => { out += d; });
         p.stderr.on('data', (d) => { out += d; });
-        p.on('exit', (code) => {
+        p.on('exit', (code, signal) => {
             const line = out.split('\n').find((l) => l.startsWith('@@ '));
             let result: any = null;
             if (line) { try { result = JSON.parse(line.slice(3)); } catch { result = line.slice(3); } }
-            resolve({ code, out, result });
+            resolve({ code, signal, out, result });
         });
     });
 }
@@ -153,6 +174,8 @@ async function main(): Promise<void> {
         check(r.code !== 0 && r.code !== null && !r.result, `${how}: the node exits non-zero and never runs (exit ${r.code})`);
         check(fs.readFileSync(keyFile).equals(before), `${how}: libp2p_key is unchanged (${fs.readFileSync(keyFile).length} bytes)`);
         check(/libp2p_key/.test(r.out) && /backup/i.test(r.out) && !/ephemeral/i.test(r.out), `${how}: the log names the file and how to put it back, and no ephemeral identity`);
+        check(/With no backup: move libp2p_key aside/.test(r.out) && /new node key and a new PeerId/.test(r.out) && /web address stops reaching this server/.test(r.out) && /counts that as an impostor and pauses the name/.test(r.out) && /address service's operator moves it to the new key/.test(r.out) && /standbys and federated servers know it by the old PeerId/.test(r.out),
+            `${how}: the log gives a way on with no backup: move libp2p_key aside, a new PeerId, what that costs`);
     }
 
     console.log('\n3. community.key with no genesis.json: never a new community over it');
@@ -164,6 +187,61 @@ async function main(): Promise<void> {
     const rg = await run(g, ['--boot']);
     check(rg.code !== 0 && rg.code !== null, `the node exits non-zero (exit ${rg.code})`);
     check(fs.readFileSync(ck).equals(ckBefore) && !fs.existsSync(path.join(g, 'genesis.json')), 'community.key is unchanged and no new genesis.json is written');
+    check(/not a new install \(it has libp2p_key\)/.test(rg.out) && /With no backup: move community\.key aside/.test(rg.out) && /new community key and community ID/.test(rg.out) && /copies of the names list and their key statements are bound to the old community ID/.test(rg.out)
+        && /standby of this community, holds the same file/.test(rg.out), `the log says why it is not a new install and the way on with no backup ${tail(rg.out)}`);
+
+    console.log('\n3b. A new install killed during its first genesis.json write starts again, with one identity');
+    const killed = async (name: string) => {
+        const d = fresh(name);
+        const k = await run(d, ['--kill-at-genesis'], true);
+        check(k.signal === 'SIGKILL' && fs.existsSync(path.join(d, 'community.key')) && !fs.existsSync(path.join(d, 'genesis.json'))
+            && fs.existsSync(path.join(d, 'state.db')), `${name}: killed at the rename: community.key and state.db, no genesis.json (signal ${k.signal})`);
+        return d;
+    };
+    const n = await killed('killed-first-start');
+    const oldKey = fs.readFileSync(path.join(n, 'community.key'));
+    const n1 = await run(n, ['--boot-db']);
+    check(n1.code === 0 && n1.result?.peerId, `the next start succeeds (exit ${n1.code}) ${n1.code ? tail(n1.out) : ''}`);
+    const gen = JSON.parse(fs.readFileSync(path.join(n, 'genesis.json'), 'utf-8'));
+    const newKey = fs.readFileSync(path.join(n, 'community.key'));
+    check(newKey.length === 64 && gen.publicKey === newKey.subarray(32).toString('hex'), 'genesis.json and community.key are one identity (the key\'s public half is genesis.publicKey)');
+    const keptKeys = fs.readdirSync(n).filter((x) => x.startsWith('community.key.unfinished-'));
+    check(keptKeys.length === 1 && fs.readFileSync(path.join(n, keptKeys[0])).equals(oldKey), `the unfinished key is kept, byte for byte (${keptKeys.join(', ')})`);
+    check(/stopped during its first start/.test(n1.out), 'the log says the first start is being made again');
+    const n2 = await run(n, ['--boot-db']);
+    check(n2.code === 0 && n2.result?.peerId === n1.result?.peerId && JSON.parse(fs.readFileSync(path.join(n, 'genesis.json'), 'utf-8')).communityId === gen.communityId
+        && fs.readFileSync(path.join(n, 'community.key')).equals(newKey), 'the start after that has the same PeerId, community ID and community key');
+
+    console.log('\n3c. The same state on a server that is not a new install: still refused, with the way on');
+    const notNew: [string, (d: string) => void, RegExp][] = [
+        ['a member in state.db', (d) => {
+            const sq = new Database(path.join(d, 'state.db'));
+            // The schema is made later in a start than genesis (db.ts opens the file as it is imported); a live node has it.
+            sq.exec('CREATE TABLE IF NOT EXISTS members (public_key TEXT PRIMARY KEY, callsign TEXT, joined_at TEXT, invited_by TEXT, invite_code TEXT)');
+            sq.prepare("INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES ('ab12', 'Alice', '2026-01-01', 'genesis', 'genesis')").run();
+            sq.close();
+        }, /its database has 1 member\)/],
+        ['a take-over journal', (d) => fs.writeFileSync(path.join(d, 'takeover-journal.json'), '{}'), /it has takeover-journal\.json/],
+        ['connectors.json', (d) => fs.writeFileSync(path.join(d, 'connectors.json'), '[]'), /it has connectors\.json/],
+        // A pre-SQLite node: its members only in state.json, which the database imports later in a start than genesis.
+        ['a member only in state.json', (d) => fs.writeFileSync(path.join(d, 'state.json'), JSON.stringify({ members: [{ publicKey: 'ab12', callsign: 'Alice', joinedAt: '2026-01-01', invitedBy: 'genesis', inviteCode: 'genesis' }] })),
+            /it has state\.json/],
+        // Written in steps 2 and 2.1, straight after genesis: a new install stopped at genesis has neither.
+        ['local-config.json', (d) => fs.writeFileSync(path.join(d, 'local-config.json'), '{}'), /it has local-config\.json/],
+        ['shutdown-sentinel.json', (d) => fs.writeFileSync(path.join(d, 'shutdown-sentinel.json'), '{}'), /it has shutdown-sentinel\.json/],
+        ['an unreadable state.db', (d) => { for (const x of ['state.db', 'state.db-wal', 'state.db-shm']) fs.rmSync(path.join(d, x), { force: true }); fs.writeFileSync(path.join(d, 'state.db'), 'not a database at all, cut off'); },
+            /its database can't be read/],
+    ];
+    for (const [i, [label, make, why]] of notNew.entries()) {
+        const d = await killed(`not-new-${i}`);
+        make(d);
+        const key = fs.readFileSync(path.join(d, 'community.key'));
+        const r = await run(d, ['--boot']);
+        check(r.code !== 0 && r.code !== null && !r.result, `${label}: the node exits non-zero and never runs (exit ${r.code})`);
+        check(fs.readFileSync(path.join(d, 'community.key')).equals(key) && !fs.existsSync(path.join(d, 'genesis.json'))
+            && !fs.readdirSync(d).some((x) => x.startsWith('community.key.unfinished-')), `${label}: community.key is unchanged, not moved, and no genesis.json is written`);
+        check(why.test(r.out) && /With no backup: move community\.key aside/.test(r.out), `${label}: the log says why and the way on ${tail(r.out)}`);
+    }
 
     console.log('\n4. An older install\'s 0644 files are 0600 after a start');
     const o = fresh('older-install');
@@ -222,6 +300,12 @@ async function main(): Promise<void> {
     const after = snapshot();
     const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((n) => before[n] !== after[n]);
     check(changed.length === 0, `every file in the data dir is as it was: no identity file written, none added (changed: ${changed.join(', ') || 'none'})`);
+    // A start over the same two broken files stops, and its way on warns about the role first and names its true costs.
+    const rBoot = await run(s, ['--boot']);
+    check(rBoot.code !== 0 && rBoot.code !== null && /will not start as a new install over it/.test(rBoot.out), `a start over them stops (exit ${rBoot.code})`);
+    check(/Do not move them aside on a server that took over from another/.test(rBoot.out) && /start as a standby again and copy from BACKUP_PRIMARY_URL/.test(rBoot.out)
+        && /set NODE_ROLE=primary/.test(rBoot.out) && /`beanpool recover` adds an owner/.test(rBoot.out) && /an address it already holds is kept in the database/.test(rBoot.out),
+        `the log warns about the role first, then gives the way on and its true costs ${tail(rBoot.out)}`);
 
     console.log('\n8. A restore that can\'t put the good copy back runs once per process');
     const r1 = fresh('restore-once');
@@ -261,6 +345,8 @@ async function main(): Promise<void> {
 
 const mode = process.argv[2];
 if (mode === '--boot') await bootChild();
+else if (mode === '--boot-db') { await import('./db/db.js'); await bootChild(); }
+else if (mode === '--kill-at-genesis') await killAtGenesisChild();
 else if (mode === '--boot-files-only') {
     const { secureDataDirAtBoot } = await import('./boot-file-safety.js').catch(() => ({ secureDataDirAtBoot: (_: string) => {} }));
     secureDataDirAtBoot(process.env.BEANPOOL_DATA_DIR!);

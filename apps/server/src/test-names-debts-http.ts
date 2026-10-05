@@ -533,9 +533,17 @@ async function main(): Promise<void> {
     const otDebt = await leftOwing('Ot', 30);
     const ot = makeMember('Ot again');
     const otWork = await workOffAs(otDebt, ot);
+    const otLogWork = floorLog(ot).length;
     const otMid = await setFloor(ot, 0);
+    const otLogMid = floorLog(ot).length;
+    // The same 0 again is a change that changes nothing (#1631 review r4179579785): no line. The first 0 was a change:
+    // it took the floor over from the work-off.
+    const otMidAgain = await setFloor(ot, 0);
+    const otLogAgain = floorLog(ot).length;
     const otRevoke = await revoke(otWork);
     const otLast = floorLog(ot).at(-1);
+    assert(otMid.status === 200 && otLogMid === otLogWork + 1 && otMidAgain.status === 200 && otMidAgain.body?.exception?.amount === 0 && otLogAgain === otLogMid,
+        `the owner's 0 over the work-off's 0 is a line; the same 0 again is none (${otLogWork} → ${otLogMid}; ${JSON.stringify(floorLog(ot).slice(otLogWork))})`);
     assert(otWork.body?.status === 'confirmed' && otMid.status === 200 && otRevoke.status === 200 && floorOf(ot)?.amount === 0
         && otLast?.action === 'exception_kept' && /admin/.test(otLast.new_value),
         `the owner sets Ot's floor to 0 during his work-off: the revoke keeps the owner's 0, not the default he had before, and the log says why (${JSON.stringify(floorOf(ot))}; ${JSON.stringify(otLast)})`);

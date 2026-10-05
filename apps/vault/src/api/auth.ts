@@ -39,7 +39,8 @@ export class NonceStore {
     sweepVisits = 0;
 
     consume(nonce: string, now: number, signedAt: number): boolean {
-        if (this.seen.size > NONCE_SWEEP_ABOVE) this.prune(now);
+        // The heap also gets a sweep once stale pairs (nonces re-spent after expiry) outgrow it, between hourly prunes.
+        if (this.seen.size > NONCE_SWEEP_ABOVE || this.heapExp.length > 2 * NONCE_SWEEP_ABOVE) this.prune(now);
         const exp = this.seen.get(nonce);
         if (exp !== undefined && exp > now) return false;
         const until = Math.max(now, signedAt) + SIGNATURE_FRESHNESS_MS + 1;

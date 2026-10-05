@@ -122,7 +122,8 @@ export class NonceStore {
      * millisecond is held too.
      */
     consume(nonce: string, now: number, signedAt = now): boolean {
-        if (this.seen.size > NONCE_SWEEP_ABOVE) this.forgetExpired(now);
+        // The heap also gets a sweep once stale pairs (nonces re-spent after expiry) outgrow it, for a store nothing prunes.
+        if (this.seen.size > NONCE_SWEEP_ABOVE || this.heapExp.length > 2 * NONCE_SWEEP_ABOVE) this.forgetExpired(now);
         const exp = this.seen.get(nonce);
         if (exp !== undefined && exp > now) return false;
         const until = (Number.isFinite(signedAt) ? Math.max(now, signedAt) : now) + this.windowMs + 1;

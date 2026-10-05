@@ -136,6 +136,21 @@ function main(): void {
         assert(sizeWrong === 0, `after every consume the store holds exactly the fresh nonces (${sizeWrong} wrong)`);
     }
 
+    console.log('\n5. a store nothing prunes (like revocationNonces) keeps its heap bounded when nonces are re-spent after expiry');
+    {
+        const store = new NonceStore(60_000);
+        const heapLen = () => (store as unknown as { heapExp: number[] }).heapExp.length;
+        let t = T0, maxHeap = 0;
+        for (let round = 0; round < 200; round++) {
+            for (let i = 0; i < 5_000; i++) store.consume(`r-${i}`, t, t);
+            t += 60_000 + 2;
+            maxHeap = Math.max(maxHeap, heapLen());
+        }
+        assert(held(store) === 5_000, `the map holds the 5,000 fresh nonces (${held(store)})`);
+        assert(maxHeap <= 2 * 10_000 + 5_000, `the heap stays bounded: at most 25,000 pairs (max ${maxHeap})`);
+        assert(!store.consume('r-0', t - 60_000 - 2, t - 60_000 - 2), 'the last round\'s nonces are still refused');
+    }
+
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);
 }

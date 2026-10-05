@@ -83,6 +83,20 @@ describe('the vault\'s nonce store', () => {
         expect(small.consume('s-50', T0 + 49 + W + 1, T0 + 49 + W + 1)).toBe(false);
     });
 
+    it('keeps its heap bounded between hourly prunes when nonces are re-spent after expiry', () => {
+        const store = new NonceStore();
+        const heapLen = () => (store as unknown as { heapExp: number[] }).heapExp.length;
+        let t = T0, maxHeap = 0;
+        for (let round = 0; round < 40; round++) {
+            for (let i = 0; i < 20_000; i++) store.consume(`r-${i}`, t, t);
+            t += W + 2;
+            maxHeap = Math.max(maxHeap, heapLen());
+        }
+        expect(held(store)).toBe(20_000);
+        expect(maxHeap).toBeLessThanOrEqual(2 * 50_000 + 20_000);
+        expect(store.consume('r-0', t - W - 2, t - W - 2)).toBe(false);
+    });
+
     it('answers as a model does over 20,000 random spends, holding exactly the fresh nonces after each', () => {
         const store = new NonceStore();
         for (let i = 0; i < 50_001; i++) store.consume(`bg-${i}`, T0, T0 + 1e12);

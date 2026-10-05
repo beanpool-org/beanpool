@@ -21,7 +21,7 @@ import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
 import { CreditBar } from '../../components/CreditBar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndexForCredit, tierIndexForName, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, type TierName } from '@beanpool/core';
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
@@ -437,9 +437,11 @@ export default function LedgerScreen() {
 
     // Trust calculations (value-based)
     const earned = balanceState.earnedCredit || 0;   // from the saturating value curve
-    // What backs the floor & tier: vouch + earned + granted = CREDIT_BASE_FLOOR − floor, the same
-    // quantity the node's getTier reads. (earned + granted alone left out the vouch.)
-    const totalCredit = Math.max(0, CREDIT_BASE_FLOOR - (balanceState.floor ?? 0));
+    // The level and the trust figure behind it, from one source (memberLevel, @beanpool/core): the node's tier name and
+    // its tierCredit, the credit that tier is read from (a freeze keeps the line held unfrozen), so the badge above and the
+    // Levels card show one level. CREDIT_BASE_FLOOR − floor only from a node that sends no tierCredit.
+    const level = memberLevel(balanceState);
+    const totalCredit = level.credit;
     const ec = totalCredit;                            // "trust" shown to the user
     const notEarned = Math.max(0, totalCredit - earned); // vouch + grants — fixed, not grown by trading
     const qualifiedValue = balanceState.qualifiedValue || 0;
@@ -449,9 +451,7 @@ export default function LedgerScreen() {
     const ts = balanceState.trustStats;
     const uniquePartners = ts?.uniquePartners || 0;
 
-    // Tier: trust the server's authoritative tier name; fall back to the credit threshold.
-    const serverIdx = tierIndexForName(balanceState.tier?.name);
-    const tierIdx = serverIdx >= 0 ? serverIdx : tierIndexForCredit(totalCredit);
+    const tierIdx = level.index;
     const tier = TIERS[tierIdx];
     const nextTier = TIERS[tierIdx + 1] || null;
     const ELDER_MIN = TIERS[TIERS.length - 1].min;

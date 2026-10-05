@@ -15,7 +15,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { CreditBar } from '../components/CreditBar';
 import { RepaymentCard } from '../components/RepaymentCard';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndexForCredit, tierIndexForName, BLOCKED_BEANS_NOTE, ledgerLineNote, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -259,9 +259,11 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     const frozen = balanceInfo?.frozen ?? false;           // v3: debt below usable floor → spending paused
     const activated = balanceInfo?.activated;   // has a credit line at all (earned/vouched/granted)
     const earned = balanceInfo?.earnedCredit ?? 0;     // from the saturating value curve
-    // What backs the floor & tier: vouch + earned + granted = CREDIT_BASE_FLOOR − floor, the same
-    // quantity the node's getTier reads. (earned + granted alone left out the vouch.)
-    const totalCredit = Math.max(0, CREDIT_BASE_FLOOR - floor);
+    // The level and the trust figure behind it, from one source (memberLevel, @beanpool/core): the node's tier name and
+    // its tierCredit, the credit that tier is read from (a freeze keeps the line held unfrozen), so the badge above and the
+    // Levels card show one level. CREDIT_BASE_FLOOR − floor only from a node that sends no tierCredit.
+    const level = memberLevel(balanceInfo);
+    const totalCredit = level.credit;
     const ec = totalCredit;                            // "trust" shown to the user
     const notEarned = Math.max(0, totalCredit - earned); // vouch + grants — fixed, not grown by trading
     const qualifiedValue = balanceInfo?.qualifiedValue ?? 0;
@@ -271,9 +273,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     const ts = balanceInfo?.trustStats;
     const uniquePartners = ts?.uniquePartners ?? 0;
 
-    // Tier: trust the server's authoritative tier name; fall back to the credit threshold.
-    const serverIdx = tierIndexForName(balanceInfo?.tier?.name);
-    const tierIdx = serverIdx >= 0 ? serverIdx : tierIndexForCredit(totalCredit);
+    const tierIdx = level.index;
     const tier = TIERS[tierIdx];
     const nextTier = TIERS[tierIdx + 1] || null;
     const ELDER_MIN = TIERS[TIERS.length - 1].min;

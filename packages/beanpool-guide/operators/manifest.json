@@ -28,7 +28,7 @@
       "id": "server",
       "title": "Running the server",
       "summary": "Backups, updates and health, the app's floor, your address and peers, and rate limits.",
-      "pages": ["backups-and-replicas", "updates-and-health", "app-floor", "address-and-peers", "rate-limits"]
+      "pages": ["backups-and-replicas", "updates-and-health", "app-floor", "address-and-peers", "rate-limits", "private-preview"]
     },
     {
       "id": "privacy",

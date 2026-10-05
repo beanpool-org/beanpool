@@ -339,6 +339,7 @@ export const SUITES = [
     'test-photo-keys-resync',
     'test-photo-keys-audience',
     'test-photo-off-listing',
+    'test-photo-off-listing-urls',
     'test-photo-key-collision',
     'test-api-headers-and-feed-etag',
     'test-directory-publisher',

@@ -53,3 +53,17 @@ export function postPhotoUrl(postId: string, orderNum: number, updatedAt: string
     const url = `/api/marketplace/posts/${postId}/photos/${orderNum}?v=${version}`;
     return photoKeyer && photoUrlKeyed(audienceScope) ? `${url}&k=${photoKeyer(postId, orderNum, version)}` : url;
 }
+
+/**
+ * Whether a taken-off listing's photo (its row's `active` not 1) still goes to this reader, given the listing and its
+ * author. The photo route answers anyone else 404 (apps/server routes/marketplace.ts), so a list that would hand such
+ * a reader the URL hands out none: the apps show their no-photo state, not a load that fails. The server's rule is its
+ * author, its moderators and anyone the listing's read by id still lets in (offListingPhotoShownTo); a caller with no
+ * rule of its own gets the author's part of it (authorsOnly).
+ */
+export type OffListingPhotoShown = (postId: string, authorPubkey: string) => boolean;
+
+/** The author's part of the photo route's rule for a taken-off listing: its author, and nobody else. */
+export function authorsOnly(viewer: string): OffListingPhotoShown {
+    return (_postId, authorPubkey) => authorPubkey === viewer;
+}

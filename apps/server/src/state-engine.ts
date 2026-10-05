@@ -4909,6 +4909,17 @@ export function getPosts(filter?: PostFilter): MarketplacePost[] {
     return getPostsEngine(db, filter);
 }
 
+/**
+ * The photo route's rule for a listing taken off (`active` not 1, routes/marketplace.ts): its photos still go to a
+ * signed request from its author, a moderator (nodeRoleOf), or anyone the listing's read by id still lets in (a
+ * cancelled event's hosts and the people Going). The lists that hand out a listing's photo URL (a member's trades, their
+ * chats) apply the same rule, so they hand a URL only to a reader the route would serve.
+ */
+export function offListingPhotoShownTo(viewer: string | undefined): engine.OffListingPhotoShown {
+    return (postId, authorPubkey) => !!viewer
+        && (viewer === authorPubkey || !!nodeRoleOf(viewer) || getPosts({ id: postId, viewerPubkey: viewer }).length > 0);
+}
+
 /** One page of the listings in heal order, for a phone whose photo URLs changed shape (engine getPostsForPhotoHeal). */
 export function getPostsForPhotoHeal(filter: PostFilter, heal: PhotoHealRead): MarketplacePost[] {
     return getPostsForPhotoHealEngine(db, filter, heal);
@@ -6125,7 +6136,7 @@ export function getMarketplaceTransaction(transactionId: string): MarketplaceTra
 }
 
 export function getMarketplaceTransactions(publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): MarketplaceTransaction[] {
-    return getMarketplaceTransactionsEngine(db, publicKey, filter, limit, offset);
+    return getMarketplaceTransactionsEngine(db, publicKey, filter, limit, offset, offListingPhotoShownTo(publicKey));
 }
 
 // ===================== COMMUNITY INFO =====================
@@ -6243,7 +6254,7 @@ export function injectSystemMessage(postId: string, type: SystemMessageTypeVal |
 }
 
 export function getConversationsByMember(pubkey: string): Conversation[] {
-    return getConversationsByMemberEngine(db, pubkey);
+    return getConversationsByMemberEngine(db, pubkey, offListingPhotoShownTo(pubkey));
 }
 
 export function getConversationMessages(conversationId: string, limit = 50, offset = 0): Message[] {

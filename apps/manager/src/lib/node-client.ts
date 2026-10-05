@@ -2714,6 +2714,23 @@ export async function fetchNodeDecisionsOn(nodeUrl: string): Promise<boolean> {
     }
 }
 
+/**
+ * Whether the node is in a private preview (`features.privatePreview` in its public `/api/community/info`, from the
+ * server's PRIVATE_PREVIEW setting): only its members, and people its owner or an admin invites, get in. A node that
+ * says nothing is not in one. Null when the node can't be read, so nothing is shown on a guess.
+ */
+export async function fetchNodePrivatePreview(nodeUrl: string): Promise<boolean | null> {
+    try {
+        const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/community/info'));
+        if (!res || !res.ok) return null;
+        const data = await res.json().catch(() => null);
+        if (!data || typeof data !== 'object') return null;
+        return (data as { features?: { privatePreview?: unknown } }).features?.privatePreview === true;
+    } catch {
+        return null;
+    }
+}
+
 /** The admin brake. The written reason (10+ characters) is public on the Decision. */
 export async function haltDecision(nodeUrl: string, decisionId: string, reason: string, adminPassword?: string, tfaToken?: string): Promise<{ success: boolean }> {
     return postAdmin(nodeUrl, `/api/local/admin/decisions/${encodeURIComponent(decisionId)}/halt`, { reason }, adminPassword, tfaToken);

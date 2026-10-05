@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse } from '../../lib/node-client';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, fetchDiagnostics } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, fetchDiagnostics, fetchNodePrivatePreview } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { createAddressLookup, type AddressLookup, type AddressResult } from '@beanpool/core';
 import { nodeCredential } from '../../lib/profiles';
@@ -28,6 +28,14 @@ export function NodeIdentityPanel({
     // The contacts come from the admin route: the public community-info says each only when it is published. Until they
     // load, or if they can't, the two boxes are closed and Save leaves both out, so it never erases what the node holds.
     const [contacts, setContacts] = useState<'loading' | 'loaded' | 'failed'>('loading');
+    // The server's PRIVATE_PREVIEW setting, read-only here (it is set in the server's settings). null: not read.
+    const [privatePreview, setPrivatePreview] = useState<boolean | null>(null);
+    useEffect(() => {
+        let mounted = true;
+        setPrivatePreview(null);
+        fetchNodePrivatePreview(activeNode.url).then((on) => { if (mounted) setPrivatePreview(on); }, () => {});
+        return () => { mounted = false; };
+    }, [activeNode.url]);
 
     // Coordinates & Service radius
     const [lat, setLat] = useState<number | null>(() => (diag as any)?.location?.lat ?? null);
@@ -450,6 +458,14 @@ export function NodeIdentityPanel({
                 <p className="text-xs text-nature-400 m-0 mt-0.5">
                     Update the public identity, geographic location, service boundary, and global directory publishing for this node
                 </p>
+                {privatePreview !== null && (
+                    <p data-testid="private-preview-line" className="text-xs text-nature-200 m-0 mt-2 leading-relaxed break-words">
+                        <strong className="text-white">Private preview: {privatePreview ? 'on' : 'off'}.</strong>
+                        {privatePreview
+                            ? ' Only members, and people the owner or an admin invites, can get in. Set in the server\'s settings.'
+                            : ' Set in the server\'s settings.'}
+                    </p>
+                )}
             </div>
 
             {saveStatus && (

@@ -35,7 +35,7 @@ import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
-import { CONVENOR_PAUSED_CODE, prestorePostPhotos, releasePrestoredPhotos, type PrestoredPhotos } from '../engine/posts.js';
+import { CONVENOR_PAUSED_CODE } from '../engine/posts.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -459,21 +459,11 @@ router.post('/api/marketplace/posts', async (ctx) => {
         ctx.body = { error: 'Post as an enterprise through its own route: POST /api/treasury/:treasury/{offer,need,event}' };
         return;
     }
-    let storedPhotos: PrestoredPhotos | undefined;
     try {
         // G3, global profile: a muted member can't post (403), and a new account has its daily limits (429).
+        assertNotMuted(actor);
         // A poll keeps no photos, and more than a post can hold is the engine's 400, not a limit.
-        const mayPost = () => {
-            assertNotMuted(actor);
-            assertMayPost(authorPublicKey, type !== 'poll' && Array.isArray(photos) ? Math.min(photos.length, 5) : 0);
-        };
-        // Asked once before the photos are written, so a member these refuse writes nothing, and once after: everything
-        // from there to the insert is one synchronous run, so a limit the wait let someone else reach is still kept.
-        mayPost();
-        // The photos' disk writes (an fsync each, 36-43 ms under load) happen here, off the event loop; createPost
-        // then writes only what this did not (engine/posts.ts prestorePostPhotos). It refuses nothing itself.
-        storedPhotos = await prestorePostPhotos(type, id, photos);
-        mayPost();
+        assertMayPost(authorPublicKey, type !== 'poll' && Array.isArray(photos) ? Math.min(photos.length, 5) : 0);
         // Every profile: 100 new posts a day (W-main, engine/writer-bounds.ts), after probation's stricter 3. The engine
         // runs it once every refusal of the post itself has passed (an unfinished profile, a group the author is not in),
         // so a limit never answers for a post that may not be made at all.
@@ -481,7 +471,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // Events go through the shared builder, so this route and the enterprise's own cannot drift on
         // what an event is (routes/event-post.ts).
         const post = type === 'event'
-            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts, storedPhotos)
+            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts)
             : createPost(
             type, category || 'other', title, description || '',
             Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
@@ -494,7 +484,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo, beforeWrite: underDailyPosts, storedPhotos }
+            { reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo, beforeWrite: underDailyPosts }
         );
         if (!post) {
             ctx.status = 400;
@@ -511,9 +501,6 @@ router.post('/api/marketplace/posts', async (ctx) => {
         if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
         ctx.body = { error: memberErrorText(e, 'Failed to create post') };
-    } finally {
-        // A refused post's photos, and any the post did not take, go now; the ones its rows name stay.
-        releasePrestoredPhotos(storedPhotos);
     }
 });
 

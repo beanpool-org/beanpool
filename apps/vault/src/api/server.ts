@@ -29,7 +29,16 @@ import {
 } from '@beanpool/signin';
 import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
-import { restartStatus, type RestartStatus } from '../shared/restart-request.js';
+import {
+    parseRestartRequest,
+    RESTART_CLOCK_MARGIN_MS,
+    RESTART_REQUEST_MAX_AGE_MS,
+    RESTART_THRESHOLD,
+    restartSigners,
+    restartStatus,
+    type RestartStatus,
+    type SignedRestartRequest,
+} from '../shared/restart-request.js';
 import {
     canonicalSettings,
     parseSettings,
@@ -110,6 +119,13 @@ export interface VaultApiOptions {
     trustProxy?: boolean;
     /** What this process is, for `/v1/report`: its API bundle, the release checks, the next restart. */
     about?: () => AboutThisApi;
+    /**
+     * Where a restart request two custodians signed is left for root (RESTART_REQUEST_FILE on the image, the API's own
+     * directory: root's beanpool-vault-restart.path acts on it, after its own checks). Without it, none is taken.
+     */
+    restartRequestFile?: string;
+    /** The release whose new image waits (the updater's `imageWaiting`): a restart request must name it. */
+    imageWaiting?: () => { version: string; imageHash: string; staged: boolean } | null;
     /**
      * `dataDir` is where the data partition is mounted once the vault is open (the image: LUKS2 under K_disk). Until
      * it is, no database is opened (it would land on the partition underneath) and the vault answers as locked. Once
@@ -1192,6 +1208,57 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         // The new channels hear at once what is already raised, rather than at the next minute's check.
         track(checkAlerts());
         return json(200, { state: 'in_force', hash, approvals: file.approvedBy.length, needed: SETTINGS_APPROVALS });
+    });
+
+    // ─── The custodians' restart for a new image (D3, 2026-10-06: nothing restarts the vault on a schedule) ──────────
+
+    /**
+     * Restart requests one custodian signed, waiting for a second to sign the same text (shared/restart-request.ts). In
+     * memory only. This API decides nothing here: it only carries the request and its signatures to root, which checks
+     * them itself from the pinned keys (install.ts). Its own checks only spare a request root would refuse.
+     */
+    const restarts = new Map<string, { signatures: Map<string, { key: string; sig: string }>; at: number }>();
+    route('POST', '/v1/unlock/restart', 'custodian', true, async ctx => {
+        if (!opts.restartRequestFile) throw new HttpError(409, 'no_restart_file', 'This vault takes no restart request (no restartRequestFile in its config).');
+        if (!ctx.status.custodians.includes(ctx.key)) throw new HttpError(403, 'not_custodian', 'A restart is asked for by the vault\'s custodians in force.');
+        for (const [t, p] of restarts) if (ctx.now - p.at > RESTART_REQUEST_MAX_AGE_MS) restarts.delete(t);
+        const waiting = opts.imageWaiting?.() ?? null;
+        const pending = [...restarts].at(-1);
+        // Asked with no request: what waits, for the second custodian to sign the same.
+        if (ctx.body.request === undefined) {
+            return json(200, {
+                imageWaiting: waiting ? { version: waiting.version, imageHash: waiting.imageHash, staged: waiting.staged } : null,
+                pending: pending ? { request: pending[0], signedBy: [...pending[1].signatures.keys()] } : null,
+                needed: RESTART_THRESHOLD,
+            });
+        }
+        const text = ctx.body.request;
+        const r = parseRestartRequest(text);
+        if (typeof r === 'string') throw new HttpError(400, 'bad_request', r);
+        if (!waiting?.staged) throw new HttpError(409, 'no_image_waiting', 'No new image is staged here: there is nothing to restart for.');
+        if (r.version !== waiting.version || r.imageHash !== waiting.imageHash) {
+            throw new HttpError(409, 'not_the_waiting_image', `The request names release ${r.version}; the image staged here is release ${waiting.version}'s.`);
+        }
+        if (ctx.now - r.at > RESTART_REQUEST_MAX_AGE_MS || r.at > ctx.now + RESTART_CLOCK_MARGIN_MS) throw new HttpError(409, 'stale', 'The request was signed more than an hour ago (or ahead of the vault\'s clock): start a new one.');
+        const sig = { key: ctx.key, sig: ctx.body.signature as string };
+        if (restartSigners(text as string, [sig], [ctx.key]).length !== 1) throw new HttpError(400, 'bad_signature', 'The signature is not yours, of this request.');
+        for (const [t, p] of restarts) {
+            if (t === text) continue;
+            p.signatures.delete(ctx.key);
+            if (!p.signatures.size) restarts.delete(t);
+        }
+        const p = restarts.get(text as string) ?? { signatures: new Map(), at: ctx.now };
+        p.signatures.set(ctx.key, sig);
+        restarts.set(text as string, p);
+        const signedBy = [...p.signatures.keys()];
+        if (p.signatures.size < RESTART_THRESHOLD) return json(200, { state: 'waiting', version: r.version, signedBy, needed: RESTART_THRESHOLD });
+        const file: SignedRestartRequest = { v: 1, request: text as string, signatures: [...p.signatures.values()] };
+        const part = `${opts.restartRequestFile}.part`;
+        writeFileSync(part, `${JSON.stringify(file)}\n`, { mode: 0o600 });
+        renameSync(part, opts.restartRequestFile);
+        restarts.clear();
+        console.log(`vault-api: two custodians asked for a restart for release ${r.version}: left for root to check.`);
+        return json(200, { state: 'sent', version: r.version, signedBy, needed: RESTART_THRESHOLD });
     });
 
     /** The backups the vault can see, by name: its own store's and the off-box store's (for the cold path's restore). */

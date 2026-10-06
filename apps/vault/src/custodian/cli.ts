@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { isVaultKeyHex } from '@beanpool/core';
@@ -22,10 +23,12 @@ import {
     type ReleaseImage,
     type ReleaseManifest,
 } from '../shared/release.js';
+import { formatRestartRequest, parseRestartRequest, RESTART_CLOCK_MARGIN_MS, RESTART_PURPOSE, RESTART_REQUEST_MAX_AGE_MS, signRestartRequest } from '../shared/restart-request.js';
 import type { AlertChannels, OperatorSettings } from '../shared/settings.js';
 import { parseSettings, settingsHash } from '../shared/settings.js';
 import { openKeyFile, sealKeyFile } from './keyfile.js';
 import {
+    askRestart,
     cancelPending,
     confirmShare,
     CustodianRefusal,
@@ -60,6 +63,7 @@ import { VaultWatcher } from './watch.js';
  *   vault-custodian settings hash --file <settings.json>
  *   vault-custodian settings send --url <vault> --key <keyfile> --file <settings.json>  [checks]
  *   vault-custodian backups       --url <vault> --key <keyfile>
+ *   vault-custodian restart       --url <vault> --key <keyfile>                       [feed]
  *   vault-custodian watch         --url <vault> --ticket-key <hex> [--alerts <alerts.json>] [--every <seconds>] [--once]
  *   vault-custodian release status                                                  [feed]
  *   vault-custodian release propose --version <x.y.z> (--image <image.json> | --same-image) --api-bundle <file>
@@ -81,6 +85,11 @@ import { VaultWatcher } from './watch.js';
  * take effect when two custodians have sent the same file. `settings hash` prints the hash the vault answers and
  * reports, to check which settings are in force. `backups` lists what the vault's own store and the off-box store hold
  * (the cold path: set the settings on a fresh vault, list, then `restore --backup <name>`, then two unlock).
+ *
+ * `restart` is the custodians' restart for a new image (D3, Marty 2026-10-06: nothing restarts the vault on a
+ * schedule). Each of two custodians runs it when both are ready to unlock straight after: it says what will happen, asks
+ * for yes, and signs a short request naming the waiting release (checked against the releases from the pinned keys).
+ * The vault only carries the two signatures to root, which checks them itself before it stops anything.
  *
  * `watch` runs anywhere but the vault (custodian/watch.ts): every `--every` seconds (60) it looks at the vault and tells
  * the channels in `--alerts` (`{"email": {...}, "webhook": {...}}`, as in the settings) when it is gone or locked for
@@ -108,6 +117,7 @@ const COMMANDS: Record<string, { required: string[]; optional?: string[] }> = {
     'settings hash': { required: ['--file'] },
     'settings send': { required: ['--url', '--key', '--file'], optional: CHECK_FLAGS },
     backups: { required: ['--url', '--key'] },
+    restart: { required: ['--url', '--key'], optional: FEED_FLAGS },
     watch: { required: ['--url', '--ticket-key'], optional: ['--alerts', '--every'] },
     'release status': { required: [], optional: FEED_FLAGS },
     'release propose': { required: ['--version', '--api-bundle', '--out'], optional: [...FEED_FLAGS, '--image', '--custodian-keys', '--host-policy', '--notes'] },
@@ -401,6 +411,58 @@ async function release(sub: string, trust: ReleaseTrust): Promise<void> {
 // ─── Settings and the watcher ────────────────────────────────────────────────────────────────
 
 /** A settings file, checked here before anything is sent (the vault checks it again). */
+// ─── The custodians' restart ─────────────────────────────────────────────────────────────────
+
+async function restart(): Promise<void> {
+    const url = arg('--url') as string;
+    const { chain } = await loadReleases(trustFromFlags());
+    const key = await loadKey(arg('--key') as string);
+    const asked = await askRestart(url, key, {});
+    if (asked.status !== 200) {
+        print(asked);
+        process.exit(1);
+    }
+    const waiting = asked.body.imageWaiting as { version: string; imageHash: string; staged: boolean } | null;
+    if (!waiting) stop('No new image is waiting on the vault: there is nothing to restart for. Nothing was sent.', 1);
+    if (!waiting.staged) stop(`Release ${waiting.version}'s image is not staged on the vault yet (its /v1/report says when). Nothing was sent.`, 1);
+    const release = chain.releases.find(r => r.manifest.version === waiting.version && r.manifest.imageHash === waiting.imageHash);
+    if (!release) stop(`The vault says release ${waiting.version}'s image waits, but no release two custodians signed (from the pinned keys) is that image. Nothing was sent; tell the other custodians.`, 1);
+    const m = release.manifest;
+    const now = Date.now();
+    const pending = asked.body.pending as { request: string; signedBy: string[] } | null;
+    const p = pending ? parseRestartRequest(pending.request) : null;
+    // Join the request a custodian signed already, if it is this release's and has time left; else start one.
+    const join = pending && p && typeof p !== 'string' && p.version === m.version && p.imageHash === m.imageHash && p.ukiSha256 === m.image.ukiSha256
+        && p.roothash === m.image.roothash && now - p.at < RESTART_REQUEST_MAX_AGE_MS - RESTART_CLOCK_MARGIN_MS && !pending.signedBy.includes(key.publicKey) ? pending : null;
+    const text = join ? join.request : formatRestartRequest({
+        v: 1, purpose: RESTART_PURPOSE, version: m.version, imageHash: m.imageHash, ukiSha256: m.image.ukiSha256, roothash: m.image.roothash,
+        at: now, nonce: randomBytes(16).toString('hex'),
+    });
+    console.log([
+        '',
+        `This restarts the vault to install release ${m.version}, a new image (boot file ${m.image.ukiSha256.slice(0, 16)}…, root hash ${m.image.roothash.slice(0, 16)}…).`,
+        'When it comes back, the vault stays LOCKED until two custodians unlock it: have both custodians\' keys and shares ready, and unlock straight after.',
+        join ? `A custodian (${join.signedBy.map(k => `${k.slice(0, 8)}…`).join(', ')}) signed this restart already: yours is the second signature, and the vault restarts once root has checked both.`
+            : 'You sign first: the vault restarts only once a second custodian runs this same command, within the hour.',
+    ].join('\n'));
+    if (!(await confirmYes('Restart the vault?'))) stop('Not signed. Nothing was sent.', 1);
+    const sent = await askRestart(url, key, { request: text, signature: signRestartRequest(text, key.seed, key.publicKey).sig });
+    print(sent);
+    if (sent.status !== 200) process.exit(1);
+    if (sent.body.state === 'waiting') {
+        console.log(`Signed. Waiting for a second custodian, within the hour: vault-custodian restart --url ${url} --key <their key file>`);
+        return;
+    }
+    console.log([
+        'Both signatures are with the vault. Root checks them and the image itself, and restarts the vault within a few minutes.',
+        'Watch for it coming back LOCKED:',
+        `  vault-custodian watch --url ${url} --ticket-key <the ticket key the apps pin> --once`,
+        'Its /v1/report then says what root installed (update.lastInstall), or why it refused (then nothing restarted).',
+        'Then two custodians unlock it, each with their own key and share:',
+        `  vault-custodian unlock --url ${url} --key <key file> --share <share file>`,
+    ].join('\n'));
+}
+
 function readSettings(file: string): OperatorSettings {
     try {
         return parseSettings(JSON.parse(readFileSync(file, 'utf8')));
@@ -476,6 +538,7 @@ async function main(): Promise<void> {
         return;
     }
     if (command === 'watch') return watch();
+    if (command === 'restart') return restart();
 
     // Everything read and checked here, before the first request.
     const url = arg('--url') as string;

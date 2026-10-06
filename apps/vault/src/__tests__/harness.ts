@@ -154,10 +154,13 @@ export async function startVault(opts: {
     hygiene?: MemoryHygiene;
     /** The API waits for its data directory to be a mount point (the image's data partition). */
     requireDataMount?: boolean;
-    /** What the API says of itself in `/v1/report` (its bundle, the release checks, the next restart). */
+    /** What the API says of itself in `/v1/report` (its bundle, the release checks, whether a restart is needed). */
     about?: VaultApiOptions['about'];
     /** TLS options for the mail server (a test CA). */
     smtpTls?: VaultApiOptions['smtpTls'];
+    /** The custodians' restart: where a request goes, and the image waiting. */
+    restartRequestFile?: string;
+    imageWaiting?: VaultApiOptions['imageWaiting'];
 } = {}): Promise<VaultUnderTest> {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
@@ -184,7 +187,7 @@ export async function startVault(opts: {
     const makeApi = async () => {
         const api = createVaultApi({
             dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store, fetch: stub.fetch, clock: clock.now, trustProxy: opts.trustProxy, about: opts.about,
-            settingsFile, smtpTls: opts.smtpTls,
+            settingsFile, smtpTls: opts.smtpTls, restartRequestFile: opts.restartRequestFile, imageWaiting: opts.imageWaiting,
             ...(opts.requireDataMount ? { requireDataMount: true, restoreDir, dataMounted: () => dataMounted, dataPollMs: 50 } : {}),
         });
         const port = await api.listen(0, '127.0.0.1');

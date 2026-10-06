@@ -32,7 +32,9 @@ import { Updater, type LauncherLink, type SwitchRequest } from './updater.js';
  *   None of either is built in or needed: without them backups stay on this machine and no alert goes out.
  * - `feed`: `{"github": "owner/name"}` or `{"directory": "..."}`; without it releases aren't checked.
  * - `stagedDir`: where a new image is staged for the monthly restart (updater.ts); without it, only reported.
- * - `installResultFile`: what root's install step did at the last monthly restart (the image:
+ * - `restartRequestFile`: where a restart request two custodians signed is left for root's check (the image:
+ *   `/var/lib/beanpool-vault/restart/request.json`; shared/restart-request.ts); without it, none is taken.
+ * - `installResultFile`: what root's install step did at the last custodians' restart (the image:
  *   /var/lib/beanpool-vault/install-result.json), shown in /v1/report.
  * - `rootKeys`: for a run from source only (tests). A built bundle pins its keys and ignores these.
  * - `imageIdentityFile`: where root leaves which image booted (the image: `/run/beanpool-vault-image.json`, written by
@@ -59,6 +61,7 @@ interface ApiConfig {
     releasesDir?: string;
     stagedDir?: string;
     installResultFile?: string;
+    restartRequestFile?: string;
     feed?: { github?: string; directory?: string };
     updateCheckSeconds?: number;
     imageHash?: string;
@@ -136,6 +139,8 @@ async function main(): Promise<void> {
         requireDataMount: config.requireDataMount,
         restoreDir: config.restoreDir,
         settingsFile: config.settingsFile,
+        restartRequestFile: config.restartRequestFile,
+        imageWaiting: () => updater?.status.imageWaiting ?? null,
         about: () => ({ api: own ?? 'source', update: updater?.status ?? null, restart: restartStatus(updater?.status.imageWaiting ?? null) }),
     });
     const where = config.socketPath ? await api.listenUnix(config.socketPath) : `${config.host ?? '127.0.0.1'}:${await api.listen(config.port ?? 8443, config.host ?? '127.0.0.1')}`;

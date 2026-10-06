@@ -231,6 +231,14 @@ export async function sendSettings(baseUrl: string, key: CustodianKey, settings:
 }
 
 /** The backups the vault can see by name: its own, and the off-box store's (or why that couldn't be listed). */
+/**
+ * The custodians' restart for a new image (shared/restart-request.ts): `{}` asks what waits (the image, and a request a
+ * custodian signed already); `{request, signature}` adds this custodian's signature. The vault only carries it to root.
+ */
+export async function askRestart(baseUrl: string, key: CustodianKey, body: { request?: string; signature?: string }, opts: CallOptions = {}): Promise<CustodianCall> {
+    return signedPost(baseUrl, '/v1/unlock/restart', body, key, opts);
+}
+
 export async function listBackups(baseUrl: string, key: CustodianKey, opts: CallOptions = {}): Promise<CustodianCall> {
     return signedPost(baseUrl, '/v1/unlock/backups', {}, key, opts);
 }

@@ -16,7 +16,7 @@ import {
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
-import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
+import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
@@ -964,6 +964,7 @@ export function becomeMainServerInPlace(): void {
     step("the community's settings", () => installCommunitySettingsAtBoot('primary'));
     step("the database's main-server passes", () => runMainServerSchemaPasses());
     step("the listing-photo URLs' shape", () => notePhotoUrlShapeNow());
+    step("the face URLs' shape", () => noteFaceUrlShapeNow());
     step('the BeanPool enterprise', () => { seedPulseCurated(); });
     step('stranded pledges', () => { returnStrandedPledges({ transfer, conservingTransaction }); });
     step('the one-time migrations', () => runMainServerMigrations());

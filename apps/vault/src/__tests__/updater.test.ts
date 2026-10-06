@@ -478,7 +478,7 @@ describe('the launcher checks a switch itself', () => {
         const r3 = makeRelease({ version: '1.2.0', previous: r2, custodianKeys: root, signers: root, image: randomImage(), apiBundleHash: sha256Hex(bundleC) });
         const c = path.join(dir, `other-image-${n}.mjs`);
         writeFileSync(c, bundleC);
-        expect(launcher.verify({ bundlePath: c, release: r3, chain: [r1, r2, r3] }, sha256Hex(bundleB))).toEqual({ ok: false, reason: 'release 1.2.0 is for another image: it waits for the monthly restart' });
+        expect(launcher.verify({ bundlePath: c, release: r3, chain: [r1, r2, r3] }, sha256Hex(bundleB))).toEqual({ ok: false, reason: 'release 1.2.0 is for another image: it waits for the custodians\' restart' });
     });
 
     it('the release in service is found by bundle and booted image: two images sharing a bundle, and a chain cut short (#1314 round 3, 4138896586)', async () => {
@@ -514,7 +514,7 @@ describe('the launcher checks a switch itself', () => {
         const r111 = makeRelease({ version: '1.1.1', previous: r110, custodianKeys: root, signers: root.slice(0, 2), image: imageA, apiBundleHash: sha256Hex(b3) });
         const f111 = path.join(dir, `b3-bundle-${n}.mjs`);
         writeFileSync(f111, b3);
-        expect(launcher.verify({ bundlePath: f111, release: r111, chain: [r100, r101, r102, r110, r111] })).toEqual({ ok: false, reason: 'release 1.1.1 is for another image: it waits for the monthly restart' });
+        expect(launcher.verify({ bundlePath: f111, release: r111, chain: [r100, r101, r102, r110, r111] })).toEqual({ ok: false, reason: 'release 1.1.1 is for another image: it waits for the custodians\' restart' });
         // The booted image unknown (root's file missing): nothing is switched to.
         booted.image = null;
         expect(ask([r100, r101, r102, r110])).toEqual({ ok: false, reason: 'the image this machine booted is unknown' });

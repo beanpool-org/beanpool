@@ -211,4 +211,19 @@ describe('root restarts the vault only for a request two custodians signed for t
         await installForRestart(t.opts());
         expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({ at: NOW, installed: true, version: '1.1.0' });
     });
+
+    it('a state partition the API filled: with two custodians\' request root stops the API, clears what it left and checks again; without, it never stops it', async () => {
+        const t = setUp();
+        const names = Object.values(t.stage(t.r2, t.next, [t.r1, t.r2])).sort();
+        // Room only once what the API left (its releases) is gone.
+        const releases = path.join(path.dirname(t.requestFile), '..', 'releases');
+        const free = () => (readdirSync(releases).length ? 0 : 1 << 30);
+        t.send(t.request(t.r2), [t.custodians[0]]);
+        expect(await installForRestart(t.opts({ freeBytes: free }))).toMatchObject({ installed: false, reason: expect.stringContaining('signed by 1 of') });
+        t.keptRunning(names);
+        t.send(t.request(t.r2), t.custodians.slice(0, 2));
+        expect(await installForRestart(t.opts({ freeBytes: free }))).toEqual({ installed: true, version: '1.1.0' });
+        expect(t.calls).toEqual(['stop the API', `sysupdate ${names.filter(x => !x.endsWith('.staged.json')).join(' ')}`]);
+        expect(readdirSync(releases)).toEqual([]);
+    });
 });

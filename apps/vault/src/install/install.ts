@@ -102,6 +102,8 @@ export const INSTALL_SPARE_BYTES = 64 * 1024 * 1024;
 export type InstallResult = { installed: true; version: string } | { installed: false; reason: string };
 
 class Refused extends Error {}
+/** No room for root's copies: what the API's user left may be what fills the state partition. */
+class NoRoom extends Refused {}
 
 function refuse(reason: string): never {
     throw new Refused(reason);
@@ -330,7 +332,7 @@ async function check(opts: InstallOptions, entries: string[], beforeCopies?: (re
         }
     }, 0);
     const free = (opts.freeBytes ?? (d => freeBytes(d, true)))(opts.workDir);
-    if (need + INSTALL_SPARE_BYTES > free) refuse(`no room on the state partition for root's copies of release ${version}: they need ${mib(need)} and ${mib(free)} are free`);
+    if (need + INSTALL_SPARE_BYTES > free) throw new NoRoom(`no room on the state partition for root's copies of release ${version}: they need ${mib(need)} and ${mib(free)} are free`);
     // 4. The boot file.
     const uki = copyOwn(path.join(opts.inbox, names.uki), path.join(opts.workDir, names.uki), UKI_MAX_BYTES);
     if (uki !== release.manifest.image.ukiSha256) refuse(`the boot file is not the one release ${version} names`);
@@ -430,12 +432,27 @@ export async function installForRestart(opts: RestartOptions): Promise<InstallRe
     emptyOwn(opts.transferDir);
     emptyOwn(opts.workDir);
     let checked: Awaited<ReturnType<typeof check>>;
+    let accepted = false;
+    let apiStopped = false;
+    let cleanup: string | null = null;
+    /** The API stopped and what its user left removed (the staged image's regular files stay in the inbox). */
+    const stopAndClear = () => {
+        apiStopped = opts.stopApi ? opts.stopApi() : false;
+        if (apiStopped) {
+            cleanup = opts.apiDirs ? clearApiDirs(opts.apiDirs, log, now) : null;
+            emptyInbox(opts.inbox, log, true, () => true);
+        } else if (opts.stopApi) {
+            cleanup = 'the API could not be stopped: what it left on the state partition stays until the next restart';
+            log(cleanup);
+        }
+    };
     try {
         if (taken.text === null) refuse(`the restart request is not a regular file of at most ${RESTART_REQUEST_MAX_BYTES} bytes`);
         const text = taken.text;
         const entries = names(opts.inbox);
         if (!entries.length) refuse('nothing is staged, so there is nothing to restart for');
-        checked = await check(opts, entries, (release, running) => {
+        try {
+            checked = await check(opts, entries, (release, running) => {
             const used = readUsed(opts.usedFile, now);
             const m = release.manifest;
             const r = checkRestartRequest(text, {
@@ -451,31 +468,32 @@ export async function installForRestart(opts: RestartOptions): Promise<InstallRe
                 refuse(`the restart request could not be recorded, so a replay could not be refused: ${(e as Error).message}`);
             }
             log(`restart request for release ${m.version}, signed by ${r.signers.map(k => `${k.slice(0, 8)}…`).join(' and ')}`);
-        });
+            accepted = true;
+            });
+        } catch (e) {
+            // Two custodians asked, and only room is missing: what the API's user left may fill the state partition
+            // (it can't otherwise be cleared without a restart). Their request lets root stop the API and clear that,
+            // then check again (the request is not checked twice: it is recorded). Without their request, never.
+            if (!accepted || !(e instanceof NoRoom || isNoRoom(e))) throw e;
+            log(`${(e as Error).message}: stopping the API to remove what it left, then checking again`);
+            emptyOwn(opts.workDir);
+            stopAndClear();
+            checked = await check(opts, names(opts.inbox));
+        }
     } catch (e) {
         const reason = e instanceof Refused ? e.message
             : isNoRoom(e) ? `no room on the state partition for root's copies: ${(e as Error).message}`
                 : `the staged files could not be checked: ${(e as Error).message}`;
-        log(`restart refused, nothing stopped or installed: ${reason}`);
+        log(apiStopped || cleanup ? `restart refused, nothing installed (the API was stopped to make room; it starts again): ${reason}` : `restart refused, nothing stopped or installed: ${reason}`);
         emptyOwn(opts.workDir);
         emptyOwn(opts.transferDir);
         const result: InstallResult = { installed: false, reason };
-        record(opts, log, result, null);
+        record(opts, log, result, cleanup);
         return result;
     }
     // Every check passed on root's own copies (in workDir, the API's user can't reach them): now the API stops.
-    const apiStopped = opts.stopApi ? opts.stopApi() : false;
-    let cleanup: string | null = null;
-    if (apiStopped) {
-        cleanup = opts.apiDirs ? clearApiDirs(opts.apiDirs, log, now) : null;
-        emptyInbox(opts.inbox, log, true);
-    } else {
-        if (opts.stopApi) {
-            cleanup = 'the API could not be stopped: what it left on the state partition stays until the next restart';
-            log(cleanup);
-        }
-        emptyInbox(opts.inbox, log, false);
-    }
+    if (!apiStopped && !cleanup) stopAndClear();
+    emptyInbox(opts.inbox, log, apiStopped);
     const version = checked.release.manifest.version;
     let result: InstallResult = { installed: true, version };
     try {

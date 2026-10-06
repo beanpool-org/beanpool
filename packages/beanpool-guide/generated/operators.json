@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 110,
-  "hash": "8f6472e6f137f81722801043068cf55fc27119c122ae837151604aa36383536b",
+  "version": 111,
+  "hash": "082d025e68fdc37f04d1e6d542a58b5473421522b5319c0e0c708b23907fc39e",
   "sections": [
     {
       "id": "setup",
@@ -3703,6 +3703,10 @@
         {
           "type": "p",
           "text": "Set PRIVATE_PREVIEW=1 in the server's environment and restart it. To open the server, remove the setting (or set it to 0) and restart again. It is off unless you set it."
+        },
+        {
+          "type": "p",
+          "text": "Either way, members' faces may change address with the restart. Phones that already hold the community fetch the new addresses at their next sync, so faces don't disappear."
         },
         {
           "type": "p",

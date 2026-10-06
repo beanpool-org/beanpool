@@ -635,3 +635,30 @@ intentional; do not open PRs or issues attempting to alter them:
 - **What happened:** the director merged it without reading this register. It is harmless (same predicate, no behaviour change), but
   like #1504 and #745 it memoises a cheap `find` over a small list, so it brings no measured gain.
 - **Why not to re-file more like it:** Bolt, memoisation of small lists still needs a measured gain (rule 11). #1617 is not a precedent.
+
+### 2026-10-06 — Sentinel: participant check on message edits (#1662) — LANDED, BUT NO HOLE ON MAIN
+- **Category:** NOTE
+- **Claim:** `editMessage` let a non-participant act on a DM line.
+- **Why not to re-file:** it never did. Main already refused every non-author edit (400 "Only the author can edit a message"),
+  measured over HTTPS. #1662 made edit answer as `deleteOwnMessage` already did: 403 "You are not a participant in this
+  conversation" for a DM line or a withheld line the caller isn't in, and 404 "Message not found" for an id nobody has or a line in
+  a chat the caller can't see. The #828 and #1403 rules still hold. Defence in depth, not a vulnerability fix.
+
+### 2026-10-06 — Vault: credentials: 'same-origin' on the bulk post delete (#1658) — CLOSED, THIRD FILING
+- **Category:** CLAIM FALSE (see #1626, and #1294, #1368)
+- **Why not to re-file:** the same no-op as #1626. Vault, this is the third filing: check this register before filing.
+
+### 2026-10-06 — Palette: focus ring and aria-expanded on RepaymentCard (#1663) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (see #1369)
+- **Why not to re-file:** `index.css`'s global `:focus-visible` outline already applies; a missing `focus-visible:` class is a defect
+  only where `outline-none` removes the outline. The `aria-expanded` was a constant on a button that is unmounted while open.
+
+### 2026-10-06 — Bolt: Map lookup in `appAddressesReport` (#1665) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (rule 11)
+- **Why not to re-file:** `signatureUsage` returns a few grouped (kind, address) rows; no loop scales with it. Memoising or
+  indexing a small list needs a measured gain.
+
+### 2026-10-06 — Pixel: dynamic label and hint on the group-join button (#1666) — CLOSED, HINT REPEATS THE TEXT
+- **Category:** DELIBERATE DECISION (see #1036, #1623)
+- **Why not to re-file:** the button already has an explicit label and busy state, and the hint repeated the visible note rendered
+  beneath it.

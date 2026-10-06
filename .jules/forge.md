@@ -144,3 +144,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/local/admin/posts/bulk-delete` in `apps/server/src/routes/admin.ts` called `adminBulkDeletePosts` without enclosing it in a try/catch block.
 **Learning:** Unlike single post deletion (`POST /api/local/admin/posts/:id/delete`), bulk post deletion was exposed to unhandled exceptions (e.g. SQLite locks or state engine failures during multi-post operations), which would produce 500 server crashes instead of formatted JSON error bodies.
 **Pattern:** Ensure all batch/bulk state mutation routes wrap multi-resource engine operations in `try/catch` blocks that log the error and set `ctx.status = 500`.
+
+## 2026-10-05 - [Uncaught DB exception in pruneTombstones]
+**Issue:** `pruneTombstones` in `apps/server/src/connector-manager.ts` executed database tombstone pruning without a `try/catch` block. When run via periodic `setInterval`, database errors (such as SQLite lock/busy states) threw uncaught exceptions in timer callbacks.
+**Learning:** Functions executed in periodic `setInterval` callbacks must handle internal exceptions with a top-level `try/catch` block to prevent uncaught exceptions from destabilizing or crashing the Node process.
+**Pattern:** Ensure all functions passed directly or indirectly to `setInterval` enclose database or external I/O operations inside `try/catch` blocks.

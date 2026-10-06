@@ -428,8 +428,12 @@ export async function handshakeConnectedPeers(): Promise<void> {
  * (test-tombstone-retention.ts): `initConnectorManager`, its caller, needs a libp2p node.
  */
 export function pruneTombstones(): void {
-    const n = pruneExpiredTombstones();
-    if (n > 0) logger.info('P2P', `[Sync] Pruned ${n} tombstone(s) older than ${TOMBSTONE_RETENTION_DAYS} days`);
+    try {
+        const n = pruneExpiredTombstones();
+        if (n > 0) logger.info('P2P', `[Sync] Pruned ${n} tombstone(s) older than ${TOMBSTONE_RETENTION_DAYS} days`);
+    } catch (e: any) {
+        logger.error('P2P', `[Sync] Tombstone pruning failed: ${e?.message || e}`);
+    }
 }
 
 /**

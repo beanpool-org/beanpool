@@ -162,3 +162,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-11-08 - Add dynamic accessibilityLabel and hint to AddWordsForm submit button
 **Learning:** Recovery phrase submit buttons whose child text is replaced by an `ActivityIndicator` during verification leave screen readers without explicit accessible labels unless dynamic `accessibilityLabel` and `accessibilityHint` attributes are provided on the parent `Pressable`.
 **Action:** Always supply dynamic `accessibilityLabel` (`busy ? ADD_WORDS_COPY.checking : ADD_WORDS_COPY.submit`) and `accessibilityHint` on recovery phrase submit buttons rendering `ActivityIndicator` when busy.
+
+## 2026-11-15 - Add accessibilityHint to event submit button in NewEventModal
+**Learning:** Form action buttons that perform distinct actions depending on modal state (create, edit, or copy) benefit from dynamic `accessibilityHint` attributes to clarify the result of activating the button for screen reader users.
+**Action:** Provide explicit dynamic `accessibilityHint` attributes on action buttons that handle multiple modes (`editOf`, `isCopy`, etc.).

@@ -472,6 +472,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             style={[styles.postBtn, submitting && { opacity: 0.5 }]}
                             accessibilityRole="button"
                             accessibilityLabel={editOf ? (submitting ? 'Saving event' : 'Save changes') : (submitting ? 'Creating event' : 'Create event')}
+                            accessibilityHint={editOf ? 'Saves changes to this event' : isCopy ? 'Creates a copy of this event' : 'Publishes your new event to the Market feed'}
                             accessibilityState={{ disabled: submitting, busy: submitting }}
                         >
                             {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.postText} numberOfLines={1}>{editOf ? 'Save' : 'Create'}</Text>}

@@ -102,7 +102,7 @@ describe('the API only carries two custodians\' restart request to root', () => 
 
     it('/v1/report says whether the custodians\' restart is needed, and has no planned restart', async () => {
         const t = await setUp();
-        const report = async () => JSON.parse((await get(t.v, '/v1/report')).body.report.text as string) as Record<string, any>;
+        const report = async () => JSON.parse((await get(t.v, '/v1/report')).body.report.text as string) as Record<string, unknown>;
         // (startVault gives no `about`: the report's own default.)
         expect(await report()).toMatchObject({ restart: { imageWaiting: null, custodianRestartNeeded: false } });
         expect(JSON.stringify(await report())).not.toContain('nextRestart');

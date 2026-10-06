@@ -814,7 +814,10 @@ export function editMessage(
         // heard on their own sockets only. Anyone else's edit of it is refused as a real line's is: only the author may
         // (#1403 re-review: "not found" would tell a second account that the id is a withheld one).
         const own = ownWithheldLine(messageId, authorPubkey);
-        if (!own) throw new MessagingError(withheldLine(messageId) ? 'Only the author can edit a message' : MESSAGE_NOT_FOUND_ERROR);
+        if (!own) {
+            if (withheldLine(messageId)) throw new MessagingError('You are not a participant in this conversation', 403);
+            throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
+        }
         if (own.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
         refuseUnencryptedDm(ciphertext, nonce);
         const sentMs = new Date(own.timestamp).getTime();
@@ -839,7 +842,7 @@ export function editMessage(
     // neither, so it refuses (docs/events-on-the-map.md §2.2). Someone the event isn't there for (a hidden group's
     // event, or one they were removed from or left) is answered first, as an id nobody has (the #828 rule).
     if (conv.type === 'event_thread') {
-        if (eventChatUnknownTo(row.conversation_id, authorPubkey)) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR);
+        if (eventChatUnknownTo(row.conversation_id, authorPubkey)) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
         throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
     }
 
@@ -851,8 +854,11 @@ export function editMessage(
     if (isGroupChat) {
         const refusal = groupChatRefusal(row.conversation_id, authorPubkey);
         if (refusal) throw refusal.status === 404
-            ? new MessagingError(MESSAGE_NOT_FOUND_ERROR)
+            ? new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404)
             : new MessagingError(refusal.error, refusal.status);
+    } else if (!db.prepare("SELECT 1 FROM conversation_participants WHERE conversation_id=? AND public_key=?")
+        .get(row.conversation_id, authorPubkey)) {
+        throw new MessagingError('You are not a participant in this conversation', 403);
     }
     if (row.author_pubkey !== authorPubkey) throw new MessagingError('Only the author can edit a message');
     if (row.type === 'system') throw new MessagingError('System messages cannot be edited');

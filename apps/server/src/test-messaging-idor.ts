@@ -122,6 +122,15 @@ async function main() {
         { messageId: msgId, authorPubkey: C.pubKeyHex, emoji: '👎' });
     assert(reactC.status === 404, `reactions: outsider C is DENIED reacting to message (got ${reactC.status} ${reactC.error ?? ''})`);
 
+    // Edit authorization — participant A can edit own message; outsider C is DENIED (403).
+    const editC = await signedFetch('POST', '/api/messages/edit', C,
+        { messageId: msgId, authorPubkey: C.pubKeyHex, ...lockedDm() });
+    assert(editC.status === 403, `edit: outsider C is DENIED editing DM message (got ${editC.status} ${editC.error ?? ''})`);
+
+    const editA = await signedFetch('POST', '/api/messages/edit', A,
+        { messageId: msgId, authorPubkey: A.pubKeyHex, ...lockedDm() });
+    assert(editA.status === 200, `edit: author A can edit own DM message (got ${editA.status} ${editA.error ?? ''})`);
+
     // Mark-read authorization — participant A can mark read; outsider C is rejected (403).
     const markA = await signedFetch('POST', '/api/messages/mark-read', A,
         { pubkey: A.pubKeyHex, conversationId: conv.id });

@@ -170,3 +170,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `TotpSetupGate` component in `apps/manager/src/components/auth/TotpSetupGate.tsx` was untested.
 **Learning:** Testing `TotpSetupGate` requires matching `resolveNodeApiUrl(nodeUrl, ...)` endpoint path targets (`/proxy/https/.../api/local/admin/2fa/setup` and `/verify`) when mocking `globalThis.fetch` calls.
 **Action:** Identify any remaining untested auth/login components in `apps/manager/src/components/auth/`.
+
+## 2026-10-05 - [manager tests] UnclaimedCard component unit tests
+**Gap:** `UnclaimedCard` component in `apps/manager/src/components/auth/UnclaimedCard.tsx` lacked a dedicated unit test suite.
+**Learning:** Testing `UnclaimedCard` directly required mocking `generateOfflineQrUrl` from `../../lib/qr` to assert QR rendering vs redirect notice display based on matching page origin against primary and listed addresses.
+**Action:** Identify remaining untested common or auth UI components in `apps/manager/src/components/`.

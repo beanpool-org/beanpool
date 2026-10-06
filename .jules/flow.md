@@ -123,3 +123,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-06 - Add loading indicator for CommunityHealthPanel
 **Learning:** `CommunityHealthPanel.tsx` returned `null` immediately while community health data was fetching asynchronously (`health` was `null`), leaving operators without visual feedback.
 **Action:** Render an explicit loading indicator with an animated spinner when `loading && !health`.
+
+## 2026-12-07 - Add loading indicator for DoorSettingPanel
+**Learning:** `DoorSettingPanel.tsx` returned `null` while door configuration data was loading asynchronously (`saved === null`), providing no visual feedback during component mount.
+**Action:** Render an explicit loading indicator with an animated spinner when `loading && saved === null`.

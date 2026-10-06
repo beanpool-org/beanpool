@@ -58,6 +58,7 @@ type Status = { kind: 'saved' | 'error'; text: string };
 export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfile; viewer: RolesViewer }) {
     const [saved, setSaved] = useState<Door | null>(null);
     const [choice, setChoice] = useState<CommunityDoor | null>(null);
+    const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     // null = not known (not loaded, or the node would not say): never warn on a guess.
     const [nobodyCanAct, setNobodyCanAct] = useState<boolean | null>(null);
@@ -73,6 +74,7 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
         let mounted = true;
         setSaved(null);
         setChoice(null);
+        setLoading(true);
         setStatus(null);
         setNobodyCanAct(null);
         (async () => {
@@ -82,16 +84,31 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
             } catch { /* the warning is a courtesy; no answer, no warning */ }
         })();
         (async () => {
-            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/node/config')).catch(() => null);
-            if (!res || !res.ok) return;
-            const cfg = await res.json().catch(() => ({}));
-            const door = readDoor((cfg as { door?: unknown }).door);
-            if (!mounted || !door) return;
-            setSaved(door);
-            setChoice(door === 'open' ? null : door);
+            try {
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/node/config')).catch(() => null);
+                if (!res || !res.ok) return;
+                const cfg = await res.json().catch(() => ({}));
+                const door = readDoor((cfg as { door?: unknown }).door);
+                if (!mounted || !door) return;
+                setSaved(door);
+                setChoice(door === 'open' ? null : door);
+            } finally {
+                if (mounted) setLoading(false);
+            }
         })();
         return () => { mounted = false; };
     }, [activeNode.url, activeNode.id]);
+
+    if (loading && saved === null) {
+        return (
+            <section aria-label="Who may invite" className="bg-nature-900/90 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl">
+                <div className="flex items-center gap-2 text-xs text-nature-400 font-mono">
+                    <span className="animate-spin text-terra-400">⏳</span>
+                    <span>Loading door configuration…</span>
+                </div>
+            </section>
+        );
+    }
 
     if (!saved) return null;
 

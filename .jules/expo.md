@@ -146,3 +146,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `invite.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling and typed search parameters strictly as `{ invite?: string; code?: string; server?: string }`.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` and updated search parameter types and scalar unwrapping to handle optional `string | string[]` parameters safely.
 **Pattern:** Check Expo Router screen components for missing `ErrorBoundary` exports and overly strict search parameter type constraints.
+
+## 2026-11-01 - [Export ErrorBoundary in apple-probe.tsx]
+**Issue:** `apple-probe.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `apple-probe.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.

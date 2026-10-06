@@ -10,7 +10,7 @@ import { restoreFromBackup } from '../custodian/lib.js';
 import { clearApiDirs } from '../install/install.js';
 import { listenDiskKey, type KeyholderServer } from '../keyholder/server.js';
 import { RESTORE_MARKER_NAME } from '../shared/backup-format.js';
-import { MONTHLY_RESTART_ON_CALENDAR, nextMonthlyRestart } from '../shared/schedule.js';
+import { RESTART_REQUEST_DIR, RESTART_REQUEST_FILE } from '../shared/restart-request.js';
 import { deposit, doGenesis, get, newMember, startRestore, startVault, unlockWith, type VaultUnderTest } from './harness.js';
 
 /**
@@ -186,13 +186,26 @@ describe('with requireDataMount, a restore from backup must wait outside the mou
     });
 });
 
-describe('the monthly restart (D3)', () => {
-    it('is the first Sunday of each month at 09:00 UTC, and the image\'s timer says the same', () => {
-        expect(new Date(nextMonthlyRestart(Date.UTC(2026, 9, 1, 12))).toISOString()).toBe('2026-10-04T09:00:00.000Z');
-        expect(new Date(nextMonthlyRestart(Date.UTC(2026, 9, 4, 9))).toISOString()).toBe('2026-10-04T09:00:00.000Z');
-        expect(new Date(nextMonthlyRestart(Date.UTC(2026, 9, 4, 9, 0, 1))).toISOString()).toBe('2026-11-01T09:00:00.000Z');
-        expect(new Date(nextMonthlyRestart(Date.UTC(2026, 11, 7, 10))).toISOString()).toBe('2027-01-03T09:00:00.000Z');
-        const timer = readFileSync(path.join(IMAGE, 'mkosi/mkosi.extra/usr/lib/systemd/system/beanpool-vault-monthly-restart.timer'), 'utf8');
-        expect(timer).toContain(`OnCalendar=${MONTHLY_RESTART_ON_CALENDAR}`);
+describe('no scheduled restart: the custodians restart the vault for a new image (D3, Marty 2026-10-06)', () => {
+    const lib = path.join(IMAGE, 'mkosi/mkosi.extra/usr/lib');
+    it('the image has no timer of its own, and its preset enables none', () => {
+        const units = readdirSync(path.join(lib, 'systemd/system'));
+        expect(units.filter(u => u.endsWith('.timer'))).toEqual([]);
+        const preset = readFileSync(path.join(lib, 'systemd/system-preset/10-beanpool-vault.preset'), 'utf8');
+        expect(preset.split('\n').filter(l => /^enable .*\.timer$/.test(l))).toEqual([]);
+        expect(preset).not.toContain('monthly');
+    });
+    it('only a restart request the API leaves starts root\'s step, on the file root checks', () => {
+        const unit = readFileSync(path.join(lib, 'systemd/system/beanpool-vault-restart.path'), 'utf8');
+        expect(unit).toContain(`PathExists=${RESTART_REQUEST_FILE}`);
+        expect(unit).toContain('Unit=beanpool-vault-restart.service');
+        expect(readFileSync(path.join(lib, 'systemd/system-preset/10-beanpool-vault.preset'), 'utf8')).toMatch(/^enable beanpool-vault-restart\.path$/m);
+        expect(readFileSync(path.join(lib, 'systemd/system/beanpool-vault-restart.service'), 'utf8')).toContain('ExecStart=/usr/lib/beanpool-vault/custodian-restart');
+        const script = readFileSync(path.join(lib, 'beanpool-vault/custodian-restart'), 'utf8');
+        // The reboot only follows root's step saying it installed (exit 0); otherwise the API runs on.
+        expect(script).toMatch(/if \/opt\/node\/bin\/node \/usr\/lib\/beanpool-vault\/vault-install\.mjs --restart-request; then\n[^]*systemctl reboot[^]*else\n[^]*systemctl start beanpool-vault-api\.service\nfi/);
+        // The API's user can write the request's directory (and nothing of root's).
+        expect(readFileSync(path.join(lib, 'tmpfiles.d/beanpool-vault.conf'), 'utf8')).toMatch(new RegExp(`^d ${RESTART_REQUEST_DIR} +0700 vault-api `, 'm'));
+        expect(readFileSync(path.join(lib, 'systemd/system/beanpool-vault-api.service'), 'utf8')).toMatch(new RegExp(`^ReadWritePaths=.* ${RESTART_REQUEST_DIR}( |$)`, 'm'));
     });
 });

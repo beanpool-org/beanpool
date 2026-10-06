@@ -29,6 +29,7 @@ import {
 } from '@beanpool/signin';
 import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
+import { restartStatus, type RestartStatus } from '../shared/restart-request.js';
 import {
     canonicalSettings,
     parseSettings,
@@ -142,8 +143,11 @@ export interface AboutThisApi {
     api: string;
     /** The updater's last check (updater.ts), or null when this API doesn't check releases. */
     update: unknown;
-    /** The next planned restart (ISO time), or null. */
-    nextRestart: string | null;
+    /**
+     * Whether the vault needs the custodians' restart (D3: nothing restarts it on a schedule): a new image is waiting,
+     * staged or not yet. Two custodians run `vault-custodian restart` when both are ready to unlock straight after.
+     */
+    restart: RestartStatus;
 }
 
 export interface VaultApi {
@@ -274,7 +278,7 @@ class Counters {
 
 export function createVaultApi(opts: VaultApiOptions): VaultApi {
     const clock = opts.clock ?? (() => Date.now());
-    const about = opts.about ?? ((): AboutThisApi => ({ api: 'source', update: null, nextRestart: null }));
+    const about = opts.about ?? ((): AboutThisApi => ({ api: 'source', update: null, restart: restartStatus(null) }));
     const startedAt = clock();
     const kh = new KeyholderClient(opts.keyholderSocket);
     const store = opts.store;
@@ -1014,7 +1018,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             // After a genesis or reshare at this boot: how many of the new custodians have shown they hold their share.
             shares: status.switched ? { generation: status.switched.generation, confirmed: status.switched.confirmed.length, of: status.switched.custodians.length } : null,
             release: status.releaseHash, generation: status.generation, platform: status.platform, memory: status.memory,
-            api: about().api, update: about().update, nextRestart: about().nextRestart,
+            api: about().api, update: about().update, restart: about().restart,
             uptimeSeconds: Math.floor((now - startedAt) / 1000),
             // Since when it has been open, as this API saw it (the watcher counts a backup's age from the later of this and the newest).
             openSince: openSince ?? now,

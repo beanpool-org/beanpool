@@ -8,6 +8,7 @@ import { installStaged } from '../install/install.js';
 import { Launcher } from '../launcher/launcher.js';
 import { LocalDirectoryFeed, ROOT_ASSET, UKI_ASSET, VERITY_ASSET, type ReleaseFeed } from '../shared/release-feed.js';
 import { sha256Hex } from '../shared/release.js';
+import { restartStatus } from '../shared/restart-request.js';
 import { doGenesis, get, startVault } from './harness.js';
 import { keys3, makeRelease, publish, randomImage, type MadeRelease } from './release-kit.js';
 
@@ -332,7 +333,7 @@ describe('the API owns its inbox: whatever is in it can\'t stop a check (#1314 r
     it.skipIf(process.getuid?.() === 0)('/v1/report shows it', async () => {
         const t = setUpInbox();
         const u = t.u;
-        const v = await startVault({ about: () => ({ api: 'source', update: u.status, nextRestart: null }) });
+        const v = await startVault({ about: () => ({ api: 'source', update: u.status, restart: restartStatus(u.status.imageWaiting) }) });
         try {
             await doGenesis(v);
             writeFileSync(path.join(t.stagedDir, 'stray'), 'x');
@@ -412,7 +413,7 @@ describe('room on the state partition, and what the monthly restart installed, i
         const t = setUpInbox();
         const resultFile = path.join(t.feedDir, '..', `install-result-${n}.json`);
         const u = t.updater({ stagedDir: t.stagedDir, verifyRoot: async () => true, installResultFile: resultFile });
-        const v = await startVault({ about: () => ({ api: 'source', update: u.status, nextRestart: null }) });
+        const v = await startVault({ about: () => ({ api: 'source', update: u.status, restart: restartStatus(u.status.imageWaiting) }) });
         try {
             await doGenesis(v);
             const lastInstall = async () => {

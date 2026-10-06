@@ -5,7 +5,7 @@ import { identifyImage, imageFromIdentityFile } from '../shared/image-identity.j
 import { BUILT_ROOT_KEYS, rootKeysFor } from '../shared/pinned.js';
 import { GitHubReleaseFeed, LocalDirectoryFeed, type ReleaseFeed } from '../shared/release-feed.js';
 import { sha256Hex } from '../shared/release.js';
-import { nextMonthlyRestart } from '../shared/schedule.js';
+import { restartStatus } from '../shared/restart-request.js';
 import { LocalDirectoryStore } from './backup-store.js';
 import { selfTest } from './self-test.js';
 import { createVaultApi } from './server.js';
@@ -136,7 +136,7 @@ async function main(): Promise<void> {
         requireDataMount: config.requireDataMount,
         restoreDir: config.restoreDir,
         settingsFile: config.settingsFile,
-        about: () => ({ api: own ?? 'source', update: updater?.status ?? null, nextRestart: new Date(nextMonthlyRestart(Date.now())).toISOString() }),
+        about: () => ({ api: own ?? 'source', update: updater?.status ?? null, restart: restartStatus(updater?.status.imageWaiting ?? null) }),
     });
     const where = config.socketPath ? await api.listenUnix(config.socketPath) : `${config.host ?? '127.0.0.1'}:${await api.listen(config.port ?? 8443, config.host ?? '127.0.0.1')}`;
 

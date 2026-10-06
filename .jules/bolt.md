@@ -252,3 +252,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-12 - O(1) Escrow Banner Pending Transaction Lookups in PWA MessagesPage
 **Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, checking for active trust hold / escrow banners executed `userTransactions.find(...)` inside the render block on every render cycle ($O(T)$ complexity).
 **Action:** Memoized `activePendingTransaction` via `useMemo` dependent on `activeConv` and `userTransactions`, eliminating $O(T)$ array scans during active chat renders.
+
+## 2026-10-13 - O(1) Trust Filter and Group Lookups in Native MarketScreen
+**Learning:** In `apps/native/app/(tabs)/market.tsx`, resolving selected trust filter labels and active group names previously invoked `TRUST_FILTERS.find(...)` and `userGroups.find(...)` array scans on every render cycle.
+**Action:** Exported `TRUST_FILTERS_BY_ID` Map in `TrustPickerSheet.tsx` and pre-computed `userGroupsMap` via `useMemo` in `MarketScreen` to convert trust filter and group name resolutions into constant-time $O(1)$ Map retrievals.

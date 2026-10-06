@@ -16,6 +16,9 @@ export const TRUST_FILTERS = [
     { id: 'elder', emoji: ELDER.emoji, label: 'Elders' },
 ] as const;
 
+// ⚡ Bolt: O(1) Map lookup for trust filters by ID
+export const TRUST_FILTERS_BY_ID = new Map<string, typeof TRUST_FILTERS[number]>(TRUST_FILTERS.map(f => [f.id, f]));
+
 // Grid: 3 columns for trust levels
 const ITEM_SIZE = (SCREEN_WIDTH - 48 - 24) / 3;
 

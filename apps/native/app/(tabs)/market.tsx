@@ -14,7 +14,7 @@ import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
 import { MyDealsSheet, usePendingDealsCount } from '../../components/MyDealsSheet';
 import { PostAuthorTrust, isElder } from '../../components/PostAuthorTrust';
-import { TrustPickerSheet, TRUST_FILTERS } from '../../components/TrustPickerSheet';
+import { TrustPickerSheet, TRUST_FILTERS, TRUST_FILTERS_BY_ID } from '../../components/TrustPickerSheet';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { ActivityWaterfall } from '../../components/ActivityWaterfall';
 import { categoryEmoji, categoryLabel } from '../../constants/categories';
@@ -610,6 +610,8 @@ export default function MarketScreen() {
     const panelMaxHeight = screenH && filterRowsBottom ? Math.max(120, screenH - rowsBottom - 6 - MIN_FEED_UNDER_PANEL) : undefined;
     const [groupFilter, setGroupFilter] = useState('all');
     const [userGroups, setUserGroups] = useState<GroupItem[]>([]);
+    // ⚡ Bolt: O(1) Map lookup for user groups by ID
+    const userGroupsMap = React.useMemo(() => new Map(userGroups.map(g => [g.id, g])), [userGroups]);
     const [radiusKm, setRadiusKm] = useState<number | null>(null);
     const [locationCenter, setLocationCenter] = useState<{lat: number, lng: number} | null>(null);
     const [showRadiusPicker, setShowRadiusPicker] = useState(false);
@@ -929,7 +931,8 @@ export default function MarketScreen() {
         return 0;
     });
 
-    const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
+    // ⚡ Bolt: O(1) Map lookup for selected trust filter
+    const selectedTrustFilter = TRUST_FILTERS_BY_ID.get(trustFilter);
     const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0;
 
     // A few example cards while the Market is nearly empty, where the node asks for them (utils/example-listings.ts):
@@ -1163,8 +1166,8 @@ export default function MarketScreen() {
     );
 
     const filterSummary = marketFilterSummary(filterState, searchQuery, {
-        trustLabel: id => TRUST_FILTERS.find(t => t.id === id)?.label,
-        groupName: id => userGroups.find(g => g.id === id)?.name,
+        trustLabel: id => TRUST_FILTERS_BY_ID.get(id)?.label,
+        groupName: id => userGroupsMap.get(id)?.name,
     });
     const clearAllFilters = () => {
         setSearchQuery('');

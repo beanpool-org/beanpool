@@ -255,7 +255,7 @@ export function ProposeDecisionModal({
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                             placeholder="e.g. Grant 200 beans to the Tool Library"
-                            className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
+                            className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             required
                         />
                     </div>
@@ -270,7 +270,7 @@ export function ProposeDecisionModal({
                             onChange={(e) => setDescription(e.target.value)}
                             placeholder="Explain why this decision is needed, the plan, and who will oversee it."
                             rows={3}
-                            className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
+                            className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             required
                         />
                     </div>
@@ -289,7 +289,7 @@ export function ProposeDecisionModal({
                                     aria-checked={effect === eff.id}
                                     onClick={() => !submitting && setEffect(eff.id)}
                                     disabled={submitting}
-                                    className={`w-full text-left p-2.5 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                                    className={`w-full text-left p-2.5 rounded-xl border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                         effect === eff.id
                                             ? 'bg-emerald-500/15 border-emerald-500'
                                             : 'bg-nature-800/40 border-nature-700 hover:border-nature-600'
@@ -335,7 +335,7 @@ export function ProposeDecisionModal({
                                 value={enterprisePubkey}
                                 onChange={(e) => setEnterprisePubkey(e.target.value)}
                                 placeholder="Enter enterprise pubkey..."
-                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
+                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                 required
                             />
                         </div>
@@ -352,7 +352,7 @@ export function ProposeDecisionModal({
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
                                 placeholder={effect === 'remove_lead_keeper' ? 'Enter lead keeper callsign or pubkey...' : 'Enter member callsign or pubkey...'}
-                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
+                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             />
                         </div>
                     )}
@@ -367,7 +367,7 @@ export function ProposeDecisionModal({
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
                                 placeholder="Enter enterprise pubkey..."
-                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
+                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             />
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mt-2 mb-1">
                                 Grant Amount (Beans)
@@ -377,7 +377,7 @@ export function ProposeDecisionModal({
                                 value={grantAmount}
                                 onChange={(e) => setGrantAmount(e.target.value)}
                                 placeholder="e.g. 250"
-                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
+                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             />
                         </div>
                     )}
@@ -392,7 +392,7 @@ export function ProposeDecisionModal({
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
                                 placeholder="Enter recipient pubkey..."
-                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
+                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             />
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mt-2 mb-1">
                                 Hardship Amount (Beans)
@@ -402,7 +402,7 @@ export function ProposeDecisionModal({
                                 value={grantAmount}
                                 onChange={(e) => setGrantAmount(e.target.value)}
                                 placeholder="e.g. 100"
-                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
+                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             />
                         </div>
                     )}

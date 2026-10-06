@@ -225,3 +225,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-04 - KnownConsentCard Focus Ring Styling
 **Learning:** `KnownConsentCard.tsx` action buttons ("I agree", "Withdraw", and "Not now") lacked explicit focus-visible ring indicators, making keyboard focus highlights hard to discern during keyboard navigation.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2` styling to buttons in `KnownConsentCard.tsx` and created `KnownConsentCard.test.tsx`.
+
+## 2026-10-06 - ProposeDecisionModal Input & Radio Option Focus Ring Styling
+**Learning:** `ProposeDecisionModal.tsx` form inputs and effect selection radio buttons used `focus:outline-none` or `focus:ring-2` without `focus-visible:ring-2`, making keyboard focus highlights inconsistent or absent during keyboard navigation.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` across all form inputs, textareas, and effect selection radio buttons in `ProposeDecisionModal.tsx`, and updated unit test coverage in `ProposeDecisionModal.test.tsx`.

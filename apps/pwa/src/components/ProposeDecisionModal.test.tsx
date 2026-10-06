@@ -114,6 +114,27 @@ describe('ProposeDecisionModal Accessibility & UX', () => {
         expect(hiddenEmojis.length).toBeGreaterThan(0);
     });
 
+    it('applies focus-visible ring classes to title input and effect radio options', () => {
+        render(
+            <ProposeDecisionModal
+                isOpen={true}
+                onClose={vi.fn()}
+                onCreated={vi.fn()}
+                identity={mockIdentity}
+                commonsBalance={100}
+            />
+        );
+
+        const titleInput = screen.getByPlaceholderText('e.g. Grant 200 beans to the Tool Library');
+        expect(titleInput.className).toContain('focus-visible:ring-2');
+        expect(titleInput.className).toContain('focus-visible:ring-emerald-500');
+
+        const effectRadios = screen.getAllByRole('radio');
+        expect(effectRadios.length).toBeGreaterThan(0);
+        expect(effectRadios[0].className).toContain('focus-visible:ring-2');
+        expect(effectRadios[0].className).toContain('focus-visible:ring-emerald-500');
+    });
+
     it("shows the node's grant-cap sentence as it comes, and keeps the form open", async () => {
         // The node refuses a grant bigger than the Commons could pay (decisions-engine.ts grantCapRefusal); request()
         // throws its `error` field. The screen is not the rule, so it shows the node's words unchanged.

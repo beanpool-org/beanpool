@@ -7,6 +7,9 @@ Description=BeanPool key vault: a custodians' restart request
 [Path]
 PathExists=/var/lib/beanpool-vault/restart/request.json
 Unit=beanpool-vault-restart.service
+# No trigger limit (systemd 250 and later fail a path unit triggered 200 times in 2 s): with the service's start limit
+# off too, a flood of request files never stops this unit watching (beanpool-vault-restart.service says why).
+TriggerLimitIntervalSec=0
 
 [Install]
 WantedBy=multi-user.target

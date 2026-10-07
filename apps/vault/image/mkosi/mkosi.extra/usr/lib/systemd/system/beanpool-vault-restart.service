@@ -5,6 +5,11 @@
 # locked; two custodians unlock it. Kernel and C library fixes take effect here.
 [Unit]
 Description=BeanPool key vault: install a new image two custodians asked for, and restart
+# No start limit: the default (5 starts in 10 s) would let a flood of request files (a buggy or hostile API rewriting
+# request.json as soon as root removes it) fail this unit, and with it the path unit, which then stops watching until
+# a reboot. It is the only planned restart now. Root's step removes the file each run and refuses cheaply, so running
+# it as often as a file appears costs little (PR #1669 fix round 3).
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot

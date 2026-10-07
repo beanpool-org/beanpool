@@ -201,6 +201,10 @@ describe('no scheduled restart: the custodians restart the vault for a new image
         expect(unit).toContain('Unit=beanpool-vault-restart.service');
         expect(readFileSync(path.join(lib, 'systemd/system-preset/10-beanpool-vault.preset'), 'utf8')).toMatch(/^enable beanpool-vault-restart\.path$/m);
         expect(readFileSync(path.join(lib, 'systemd/system/beanpool-vault-restart.service'), 'utf8')).toContain('ExecStart=/usr/lib/beanpool-vault/custodian-restart');
+        // A flood of request files never fails the service or the path unit, which would stop watching until a reboot.
+        expect(readFileSync(path.join(lib, 'systemd/system/beanpool-vault-restart.service'), 'utf8')).toMatch(/^\[Unit\][^[]*^StartLimitIntervalSec=0$/m);
+        expect(unit).toMatch(/^\[Path\][^[]*^TriggerLimitIntervalSec=0$/m);
+        expect(readFileSync(path.join(lib, 'tmpfiles.d/beanpool-vault.conf'), 'utf8')).not.toContain('monthly');
         const script = readFileSync(path.join(lib, 'beanpool-vault/custodian-restart'), 'utf8');
         // The reboot only follows root's step saying it installed (exit 0); otherwise the API runs on.
         expect(script).toMatch(/if \/opt\/node\/bin\/node \/usr\/lib\/beanpool-vault\/vault-install\.mjs --restart-request; then\n[^]*systemctl reboot[^]*else\n[^]*systemctl start beanpool-vault-api\.service\nfi/);

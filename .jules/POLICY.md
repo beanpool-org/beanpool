@@ -662,3 +662,23 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Category:** DELIBERATE DECISION (see #1036, #1623)
 - **Why not to re-file:** the button already has an explicit label and busy state, and the hint repeated the visible note rendered
   beneath it.
+
+### 2026-10-07 — Vault: credentials: 'same-origin' on the bulk post delete (#1671) — CLOSED, FOURTH FILING
+- **Category:** CLAIM FALSE (see #1294, #1368, #1626, #1658)
+- **Why not to re-file:** same-origin is fetch's default and the call authenticates with the admin headers it is given. Vault: check this
+  register before filing.
+
+### 2026-10-07 — Bolt: Map lookups in native MarketScreen (#1675) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (rule 11)
+- **Why not to re-file:** TRUST_FILTERS has 6 fixed entries and the user's groups list is small; `find` over them costs nothing. Indexing a
+  small list needs a measured gain.
+
+### 2026-10-07 — Palette: focus-visible rings on ProposeDecisionModal inputs (#1676) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (see #1369, #1663)
+- **Why not to re-file:** the global :focus-visible outline in index.css applies and the inputs also change border colour on focus. A
+  missing focus-visible class is a defect only where the outline is removed with no replacement.
+
+### 2026-10-07 — Flow: loading indicator in DoorSettingPanel (#1670) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** CLAIM FALSE (see #1497)
+- **Why not to re-file:** the panel reads one local-node endpoint and a failed load already falls back to the form. The spinner used
+  `text-terra-400`, which the manager doesn't emit. Show a user-visible stall first.

@@ -180,3 +180,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `OwnerPhoneBanner` component in `apps/manager/src/components/auth/OwnerPhoneBanner.tsx` was untested.
 **Learning:** Testing `OwnerPhoneBanner` required dispatching `OWNER_PHONE_EVENT` custom events on `window` inside `act()` to trigger banner display, asserting node settings link formatting, testing dismissal button click, and checking prop change reset logic.
 **Action:** Identify remaining untested auth or layout UI components in `apps/manager/src/components/`.
+
+## 2026-10-07 - [manager tests] useClaimState hook unit tests
+**Gap:** `useClaimState` custom hook in `apps/manager/src/components/auth/useClaimState.ts` was untested directly.
+**Learning:** Testing `useClaimState` with `renderHook` required mocking `fetchClaimState` and `fetchCommunityInfo` from `../../lib/node-claim` to verify initial fetch, merging community addresses for unclaimed nodes, interval polling, tab visibility change events, and AbortController cleanup.
+**Action:** Continue identifying remaining untested auth hooks or components in `apps/manager/src/components/auth/`.

@@ -123,7 +123,3 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-06 - Add loading indicator for CommunityHealthPanel
 **Learning:** `CommunityHealthPanel.tsx` returned `null` immediately while community health data was fetching asynchronously (`health` was `null`), leaving operators without visual feedback.
 **Action:** Render an explicit loading indicator with an animated spinner when `loading && !health`.
-
-## 2026-12-07 - Add loading indicator for PeopleSafetySection reports triage
-**Learning:** `PeopleSafetySection.tsx` rendered "No pending reports..." while `reportsLoading` was `true`, creating a temporary false empty state before reports finished fetching.
-**Action:** Render an explicit loading indicator with an animated spinner when `reportsLoading` is `true`.

@@ -110,8 +110,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
 
     const rows = db.prepare(query).all(...params) as any[];
     const postIds = Array.from(new Set(rows.map(r => r.post_id)));
-    // ORDER BY order_num ASC ensures postPhotos[0] is always the cover photo (order_num = 0 or lowest available)
-    const photos = selectInChunks(db, postIds, ph => `SELECT post_id, order_num, updated_at FROM post_photos WHERE post_id IN (${ph}) ORDER BY order_num ASC`);
+    const photos = selectInChunks(db, postIds, ph => `SELECT post_id, order_num, updated_at FROM post_photos WHERE post_id IN (${ph})`);
 
     const photosByPost = new Map<string, any[]>();
     for (const p of photos as any[]) {
@@ -124,8 +123,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
     return rows.map(r => {
         const photoShown = !!r.postLive || (r.postAuthor != null && offPhotoShown(r.post_id, r.postAuthor));
         const postPhotos = photoShown ? photosByPost.get(r.post_id) || [] : [];
-        // ⚡ Bolt: Photos are ordered by order_num ASC, so postPhotos[0] is the cover photo in O(1) time without .find()
-        const coverImageRow = postPhotos[0];
+        const coverImageRow = postPhotos.find(p => p.order_num === 0) || postPhotos[0];
         const coverImage = coverImageRow
             ? postPhotoUrl(r.post_id, coverImageRow.order_num, coverImageRow.updated_at, r.postAudienceScope)
             : null;

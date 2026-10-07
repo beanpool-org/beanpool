@@ -253,6 +253,5 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 **Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, checking for active trust hold / escrow banners executed `userTransactions.find(...)` inside the render block on every render cycle ($O(T)$ complexity).
 **Action:** Memoized `activePendingTransaction` via `useMemo` dependent on `activeConv` and `userTransactions`, eliminating $O(T)$ array scans during active chat renders.
 
-## 2026-10-13 - O(1) Cover Image Lookup in getMarketplaceTransactions Engine
-**Learning:** In `packages/beanpool-engine/src/escrow.ts`, `getMarketplaceTransactions` fetched post photos and then executed `postPhotos.find(p => p.order_num === 0) || postPhotos[0]` inside a `.map` loop over transaction records.
-**Action:** Added `ORDER BY order_num ASC` to the batch `post_photos` query, ensuring `postPhotos[0]` is always the primary cover photo and eliminating $O(K)$ array scans per transaction record ($O(1)$ constant-time lookup).
+### 2026-10-13 — "O(1) cover image lookup in getMarketplaceTransactions" — CLOSED, NO MEANINGFUL GAIN.
+A `.find()` over a single post's few photos (usually 1-3) is not a hot path / bottleneck (.jules/POLICY.md §11). Do not re-file.

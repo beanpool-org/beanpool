@@ -26,7 +26,9 @@ import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from '
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Clipboard from 'expo-clipboard';
 import * as Crypto from 'expo-crypto';
-import { Stack } from 'expo-router';
+import { Stack, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
 import { SsoSignInError, fetchSsoNonce } from '../utils/sso-signin';

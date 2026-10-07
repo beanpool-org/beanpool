@@ -1,12 +1,14 @@
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { askRestart, custodianKey, type CustodianKey } from '../custodian/lib.js';
-import { checkRestartRequest, formatRestartRequest, RESTART_PURPOSE, signRestartRequest, type SignedRestartRequest } from '../shared/restart-request.js';
+import { checkRestartRequest, formatRestartRequest, parseRestartRequest, RESTART_CLOCK_MARGIN_MS, RESTART_PURPOSE, signRestartRequest, type RestartRequest, type SignedRestartRequest } from '../shared/restart-request.js';
 import { doGenesis, get, startVault, type VaultUnderTest } from './harness.js';
 import { makeRelease, publish, randomImage, type MadeRelease } from './release-kit.js';
 
@@ -165,5 +167,81 @@ describe('vault-custodian restart, piped', () => {
         expect(r.code, r.out).toBe(1);
         expect(r.out).toContain('No new image is waiting on the vault');
         expect(r.out).not.toContain('Type yes');
+    }, 60_000);
+});
+
+describe('vault-custodian restart joins only a pending request it checked itself (PR #1669 fix round 3)', () => {
+    /** A fake vault: what waits is the real staged release, and its pending request is whatever a hostile API offers. */
+    async function fakeVault(waiting: { version: string; imageHash: string }, pending: Record<string, unknown>) {
+        const sent: { request: string; signature: string }[] = [];
+        const server = http.createServer((req, res) => {
+            let body = '';
+            req.on('data', (d: Buffer) => { body += d.toString(); });
+            req.on('end', () => {
+                const b = JSON.parse(body || '{}') as { request?: string; signature?: string };
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                if (b.request === undefined) {
+                    res.end(JSON.stringify({ imageWaiting: { ...waiting, staged: true }, pending, needed: 2 }));
+                    return;
+                }
+                sent.push({ request: b.request, signature: b.signature as string });
+                res.end(JSON.stringify({ state: 'waiting', version: waiting.version, signedBy: ['x'], needed: 2 }));
+            });
+        });
+        await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+        return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, sent, close: () => new Promise<void>(resolve => server.close(() => resolve())) };
+    }
+
+    it('one dated 3 days ahead (a real custodian\'s signature), one signed only by a stranger, one the API merely says a key signed: each refused, a new request started, no signer called a custodian', async () => {
+        const t = await setUp({ now: () => Date.now(), advance: () => undefined });
+        const rootKeys = path.join(dir, `root-${n}.json`);
+        writeFileSync(rootKeys, JSON.stringify({ genesisCustodians: t.v.custodians.map(c => c.publicKey) }));
+        const stranger = custodianKey(crypto.randomBytes(32));
+        const day = 24 * 60 * 60 * 1000;
+        const ahead = t.request({ at: Date.now() + 3 * day });
+        const fresh = t.request({ at: Date.now() - 60 * 1000 });
+        const sig = (text: string, k: CustodianKey) => signRestartRequest(text, k.seed, k.publicKey);
+        const offers = [
+            { text: ahead, pending: { request: ahead, signedBy: [t.v.custodians[2].publicKey], signatures: [sig(ahead, t.v.custodians[2])] }, says: 'dated ahead' },
+            { text: fresh, pending: { request: fresh, signedBy: [stranger.publicKey], signatures: [sig(fresh, stranger)] }, says: 'no custodian' },
+            { text: fresh, pending: { request: fresh, signedBy: ['e'.repeat(64)] }, says: 'no custodian' },
+        ];
+        for (const o of offers) {
+            const fake = await fakeVault({ version: '1.1.0', imageHash: t.r2.manifest.imageHash }, o.pending);
+            try {
+                const before = Date.now();
+                const r = await cli(['restart', '--url', fake.url, '--key', keyFile(`k-${n}-0.json`, t.v.custodians[0]), '--feed-dir', t.v.feedDir, '--root-keys', rootKeys], 'yes\n');
+                expect(r.code, r.out).toBe(0);
+                expect(r.out).not.toContain('yours is the second signature');
+                expect(r.out).not.toMatch(/A custodian \(/);
+                expect(r.out).toContain(o.says);
+                expect(r.out).toContain('You sign first');
+                // What it signed is its own new request, dated now, not the one offered.
+                expect(fake.sent).toHaveLength(1);
+                expect(fake.sent[0].request).not.toBe(o.text);
+                const p = parseRestartRequest(fake.sent[0].request) as RestartRequest;
+                expect(p.at).toBeGreaterThanOrEqual(before);
+                expect(p.at).toBeLessThanOrEqual(Date.now() + RESTART_CLOCK_MARGIN_MS);
+            } finally {
+                await fake.close();
+            }
+        }
+    }, 120_000);
+
+    it('the control: a fresh request a custodian of the pinned releases signed is joined, and that custodian named as checked', async () => {
+        const t = await setUp({ now: () => Date.now(), advance: () => undefined });
+        const rootKeys = path.join(dir, `root-${n}.json`);
+        writeFileSync(rootKeys, JSON.stringify({ genesisCustodians: t.v.custodians.map(c => c.publicKey) }));
+        const fresh = t.request({ at: Date.now() - 60 * 1000 });
+        const k2 = t.v.custodians[2];
+        const fake = await fakeVault({ version: '1.1.0', imageHash: t.r2.manifest.imageHash }, { request: fresh, signedBy: [k2.publicKey], signatures: [signRestartRequest(fresh, k2.seed, k2.publicKey)] });
+        try {
+            const r = await cli(['restart', '--url', fake.url, '--key', keyFile(`k-${n}-0.json`, t.v.custodians[0]), '--feed-dir', t.v.feedDir, '--root-keys', rootKeys], 'yes\n');
+            expect(r.code, r.out).toBe(0);
+            expect(r.out).toContain(`A custodian (${k2.publicKey.slice(0, 8)}…) signed this restart already`);
+            expect(fake.sent.map(x => x.request)).toEqual([fresh]);
+        } finally {
+            await fake.close();
+        }
     }, 60_000);
 });

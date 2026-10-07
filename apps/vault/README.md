@@ -343,7 +343,11 @@ vault-custodian restart --url https://vault.beanpool.org --key my-key.json
 It checks the waiting release against the releases from the pinned keys, says what will happen (the vault restarts
 and stays LOCKED until two custodians unlock it: have both keys and shares ready), asks for yes, and signs a short
 request naming exactly that release and its image, with the time and a random nonce (`src/shared/restart-request.ts`).
-The second custodian signs the same request (the vault hands it over), within the hour. The API only carries it: it
+The second custodian signs the same request (the vault hands it over), within the hour. Their tool joins it only on its
+own checks, never the API's word: the request names the same release and image, is dated within its hour and not
+ahead of the custodian's clock (else a hostile API could collect two signatures now and have root act on them days
+later, when nobody is ready to unlock), and carries a signature that checks against the pinned releases' custodian
+keys (the tool names only that custodian). Otherwise it says why and starts a new request. The API only carries it: it
 writes both signatures to `/var/lib/beanpool-vault/restart/request.json`, and root's `beanpool-vault-restart.path`
 runs the install step on it (`vault-install.mjs --restart-request`). Root reads and removes the request and, from the
 pinned keys, before it stops anything, checks: two signatures from the running release's custodians, signed within
@@ -351,7 +355,10 @@ the hour (and not ahead of its clock), never acted on before (root keeps the one
 staged release's image, and that image passes every check above. Anything else is refused and logged, and the vault
 keeps running; `update.lastInstall` in `/v1/report` says why. A hostile API can forge no custodian signature, so it
 can trigger neither a stop nor an install nor a reboot. Only then: stop the API, remove what its user left, install
-into the other slot, reboot. The vault comes back locked; the tool says how to watch for that and the unlock command.
+into the other slot, reboot. If root's copies find no room, the request lets root stop the API, clear what its user
+left and check again, for the very release the request names and no other (the API runs until the stop ends it, so it
+could swap the inbox meanwhile: that is refused, nothing installed). The path unit has no trigger limit and the
+service no start limit, so a flood of request files never stops the unit watching until a reboot. The vault comes back locked; the tool says how to watch for that and the unlock command.
 
 Between restarts, the state partition is held by the API's own rules: local backups within `backupMaxBytes` (the
 oldest go first), its inbox cleared at every check but the staged image (all of it when no image waits), and only

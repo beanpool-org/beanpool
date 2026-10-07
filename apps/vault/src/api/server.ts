@@ -1228,7 +1228,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         if (ctx.body.request === undefined) {
             return json(200, {
                 imageWaiting: waiting ? { version: waiting.version, imageHash: waiting.imageHash, staged: waiting.staged } : null,
-                pending: pending ? { request: pending[0], signedBy: [...pending[1].signatures.keys()] } : null,
+                // With the signatures, so the second custodian's tool checks who signed rather than taking this API's word.
+                pending: pending ? { request: pending[0], signedBy: [...pending[1].signatures.keys()], signatures: [...pending[1].signatures.values()] } : null,
                 needed: RESTART_THRESHOLD,
             });
         }

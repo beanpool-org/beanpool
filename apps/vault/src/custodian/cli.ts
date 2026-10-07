@@ -22,8 +22,9 @@ import {
     validSigners,
     type ReleaseImage,
     type ReleaseManifest,
+    type ReleaseSignature,
 } from '../shared/release.js';
-import { formatRestartRequest, parseRestartRequest, RESTART_CLOCK_MARGIN_MS, RESTART_PURPOSE, RESTART_REQUEST_MAX_AGE_MS, signRestartRequest } from '../shared/restart-request.js';
+import { formatRestartRequest, parseRestartRequest, RESTART_CLOCK_MARGIN_MS, RESTART_PURPOSE, RESTART_REQUEST_MAX_AGE_MS, restartSigners, signRestartRequest } from '../shared/restart-request.js';
 import type { AlertChannels, OperatorSettings } from '../shared/settings.js';
 import { parseSettings, settingsHash } from '../shared/settings.js';
 import { openKeyFile, sealKeyFile } from './keyfile.js';
@@ -429,11 +430,22 @@ async function restart(): Promise<void> {
     if (!release) stop(`The vault says release ${waiting.version}'s image waits, but no release two custodians signed (from the pinned keys) is that image. Nothing was sent; tell the other custodians.`, 1);
     const m = release.manifest;
     const now = Date.now();
-    const pending = asked.body.pending as { request: string; signedBy: string[] } | null;
+    // What the vault offers as pending is the API's word: the tool joins it only on its own checks (PR #1669 fix round 3).
+    const pending = asked.body.pending as { request: unknown; signatures?: unknown } | null;
     const p = pending ? parseRestartRequest(pending.request) : null;
-    // Join the request a custodian signed already, if it is this release's and has time left; else start one.
-    const join = pending && p && typeof p !== 'string' && p.version === m.version && p.imageHash === m.imageHash && p.ukiSha256 === m.image.ukiSha256
-        && p.roothash === m.image.roothash && now - p.at < RESTART_REQUEST_MAX_AGE_MS - RESTART_CLOCK_MARGIN_MS && !pending.signedBy.includes(key.publicKey) ? pending : null;
+    const forThis = p && typeof p !== 'string' && p.version === m.version && p.imageHash === m.imageHash && p.ukiSha256 === m.image.ukiSha256 && p.roothash === m.image.roothash ? p : null;
+    // Root checks a request against the custodians of the release the vault runs, which is older than the waiting one.
+    const custodians = [...new Set(chain.releases.filter(r => compareVersions(r.manifest.version, m.version) < 0).flatMap(r => r.manifest.custodianKeys))];
+    const signers = forThis && Array.isArray(pending?.signatures) ? restartSigners(pending.request as string, pending.signatures as ReleaseSignature[], custodians) : [];
+    const others = signers.filter(k => k !== key.publicKey);
+    // Join the request another custodian signed (by their signature, checked here), if it is this release's and dated
+    // within its hour by this computer's clock: never one dated ahead, which root would act on whenever that time came.
+    const ahead = !!forThis && forThis.at > now + RESTART_CLOCK_MARGIN_MS;
+    const open = !!forThis && !ahead && now - forThis.at < RESTART_REQUEST_MAX_AGE_MS - RESTART_CLOCK_MARGIN_MS && !signers.includes(key.publicKey);
+    const notJoined = ahead ? `it is dated ahead of this computer's clock (${new Date(forThis?.at ?? 0).toISOString()})`
+        : open && !others.length ? 'no custodian of the pinned releases signed it (by its signatures, whatever the vault says)' : null;
+    const join = open && others.length ? { request: pending?.request as string, at: forThis?.at ?? 0 } : null;
+    if (notJoined) console.log(`The vault offers a pending restart request for release ${m.version}, but ${notJoined}: not joined. You start a new one.`);
     const text = join ? join.request : formatRestartRequest({
         v: 1, purpose: RESTART_PURPOSE, version: m.version, imageHash: m.imageHash, ukiSha256: m.image.ukiSha256, roothash: m.image.roothash,
         at: now, nonce: randomBytes(16).toString('hex'),
@@ -442,7 +454,7 @@ async function restart(): Promise<void> {
         '',
         `This restarts the vault to install release ${m.version}, a new image (boot file ${m.image.ukiSha256.slice(0, 16)}…, root hash ${m.image.roothash.slice(0, 16)}…).`,
         'When it comes back, the vault stays LOCKED until two custodians unlock it: have both custodians\' keys and shares ready, and unlock straight after.',
-        join ? `A custodian (${join.signedBy.map(k => `${k.slice(0, 8)}…`).join(', ')}) signed this restart already: yours is the second signature, and the vault restarts once root has checked both.`
+        join ? `A custodian (${others.map(k => `${k.slice(0, 8)}…`).join(', ')}) signed this restart already, at ${new Date(join.at).toISOString()} (their signature checked here against the pinned releases' custodian keys): yours is the second signature, and the vault restarts once root has checked both.`
             : 'You sign first: the vault restarts only once a second custodian runs this same command, within the hour.',
     ].join('\n'));
     if (!(await confirmYes('Restart the vault?'))) stop('Not signed. Nothing was sent.', 1);

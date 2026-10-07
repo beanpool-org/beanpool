@@ -225,3 +225,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-04 - KnownConsentCard Focus Ring Styling
 **Learning:** `KnownConsentCard.tsx` action buttons ("I agree", "Withdraw", and "Not now") lacked explicit focus-visible ring indicators, making keyboard focus highlights hard to discern during keyboard navigation.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2` styling to buttons in `KnownConsentCard.tsx` and created `KnownConsentCard.test.tsx`.
+
+## 2026-10-05 - ProfileGateModal Touch Target Sizing & Keyboard Focus Ring Styling
+**Learning:** `ProfileGateModal.tsx` action buttons ("Not now" and "Set up profile") suppressed default focus outlines with `focus:outline-none` and lacked `focus-visible:outline-none` while also missing minimum touch target height (< 44px) for mobile users.
+**Action:** Added `min-h-[44px]` touch target sizing and replaced `focus:outline-none` with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500` styling on both modal action buttons, and added unit tests in `ProfileGateModal.test.tsx`.

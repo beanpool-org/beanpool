@@ -478,7 +478,12 @@ export function PeopleSafetySection({
                             </div>
                         )}
 
-                        {reportsToDisplay.length === 0 ? (
+                        {reportsLoading ? (
+                            <div data-testid="reports-loading" className="py-8 text-center text-xs font-semibold text-nature-400 bg-nature-950/40 border border-nature-800 rounded-xl flex items-center justify-center gap-2">
+                                <span className="animate-spin text-sm">🔄</span>
+                                <span>Loading community reports…</span>
+                            </div>
+                        ) : reportsToDisplay.length === 0 ? (
                             <div className="py-8 text-center text-sm font-semibold text-emerald-400 bg-emerald-950/20 border border-emerald-900/40 rounded-xl">
                                 {reportFilter === 'open'
                                     ? '🟢 No pending reports. The community queue is all clear.'

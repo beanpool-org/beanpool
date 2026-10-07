@@ -175,3 +175,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `UnclaimedCard` component in `apps/manager/src/components/auth/UnclaimedCard.tsx` lacked a dedicated unit test suite.
 **Learning:** Testing `UnclaimedCard` directly required mocking `generateOfflineQrUrl` from `../../lib/qr` to assert QR rendering vs redirect notice display based on matching page origin against primary and listed addresses.
 **Action:** Identify remaining untested common or auth UI components in `apps/manager/src/components/`.
+
+## 2026-10-06 - [manager tests] OwnerPhoneBanner component unit tests
+**Gap:** `OwnerPhoneBanner` component in `apps/manager/src/components/auth/OwnerPhoneBanner.tsx` was untested.
+**Learning:** Testing `OwnerPhoneBanner` required dispatching `OWNER_PHONE_EVENT` custom events on `window` inside `act()` to trigger banner display, asserting node settings link formatting, testing dismissal button click, and checking prop change reset logic.
+**Action:** Identify remaining untested auth or layout UI components in `apps/manager/src/components/`.

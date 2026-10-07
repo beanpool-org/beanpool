@@ -149,3 +149,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `pruneTombstones` in `apps/server/src/connector-manager.ts` executed database tombstone pruning without a `try/catch` block. When run via periodic `setInterval`, database errors (such as SQLite lock/busy states) threw uncaught exceptions in timer callbacks.
 **Learning:** Functions executed in periodic `setInterval` callbacks must handle internal exceptions with a top-level `try/catch` block to prevent uncaught exceptions from destabilizing or crashing the Node process.
 **Pattern:** Ensure all functions passed directly or indirectly to `setInterval` enclose database or external I/O operations inside `try/catch` blocks.
+
+## 2026-10-07 - [Missing try/catch in POST /api/local/admin/posts/:id/restore]
+**Issue:** `POST /api/local/admin/posts/:id/restore` in `apps/server/src/routes/admin.ts` invoked `restoreHiddenPost` without enclosing it in a `try/catch` block.
+**Learning:** Route handlers performing database transactions and moderation notifications should enclose domain logic in a `try/catch` block to prevent unhandled database exceptions from producing unformatted server crashes.
+**Pattern:** Ensure all state mutation and moderation routes wrap domain calls in `try/catch` blocks that catch unexpected exceptions, set `ctx.status = 500`, and return clean JSON error responses.

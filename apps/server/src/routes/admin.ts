@@ -1438,20 +1438,25 @@ function refuseModeratorsOwnPost(ctx: any, postId: string | null | undefined, do
 router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (refuseModeratorsOwnPost(ctx, ctx.params.id, 'restore')) return;
-    const result = restoreHiddenPost(ctx.params.id);
-    if (result === 'not_found') {
-        ctx.status = 404;
-        ctx.body = { success: false, error: 'Post not found' };
-        return;
+    try {
+        const result = restoreHiddenPost(ctx.params.id);
+        if (result === 'not_found') {
+            ctx.status = 404;
+            ctx.body = { success: false, error: 'Post not found' };
+            return;
+        }
+        if (result === 'not_hidden') {
+            ctx.status = 409;
+            ctx.body = { success: false, error: 'This post is not hidden, so there is nothing to restore' };
+            return;
+        }
+        const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
+        logger.info('ADMIN', `Restored post ${ctx.params.id}, hidden by reports, by ${by} (${(ctx.state as any)?.adminRole})`);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to restore post' };
     }
-    if (result === 'not_hidden') {
-        ctx.status = 409;
-        ctx.body = { success: false, error: 'This post is not hidden, so there is nothing to restore' };
-        return;
-    }
-    const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
-    logger.info('ADMIN', `Restored post ${ctx.params.id}, hidden by reports, by ${by} (${(ctx.state as any)?.adminRole})`);
-    ctx.body = { success: true };
 });
 
 /**

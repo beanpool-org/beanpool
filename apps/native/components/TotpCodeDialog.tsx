@@ -65,7 +65,8 @@ export function TotpCodeDialog(props: {
                                 onPress={onSubmit}
                                 disabled={busy}
                                 accessibilityRole="button"
-                                accessibilityLabel={submitLabel}
+                                accessibilityLabel={busy ? `Verifying 2FA code for ${communityName}...` : submitLabel}
+                                accessibilityHint={`Submits the 2FA code for ${communityName}`}
                                 accessibilityState={{ busy, disabled: busy }}
                                 style={{ minHeight: 48, paddingHorizontal: 20, justifyContent: 'center', borderRadius: 12, backgroundColor: colors.brand.primary }}
                             >

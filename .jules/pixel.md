@@ -166,3 +166,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-11-15 - Add accessibilityHint to event submit button in NewEventModal
 **Learning:** Form action buttons that perform distinct actions depending on modal state (create, edit, or copy) benefit from dynamic `accessibilityHint` attributes to clarify the result of activating the button for screen reader users.
 **Action:** Provide explicit dynamic `accessibilityHint` attributes on action buttons that handle multiple modes (`editOf`, `isCopy`, etc.).
+
+## 2026-11-22 - Add dynamic accessibilityLabel and hint to TotpCodeDialog submit button
+**Learning:** In 2FA code dialogs, action buttons whose child text is conditionally replaced by an ActivityIndicator during code verification leave screen readers without feedback during loading states unless provided with a dynamic accessibilityLabel and accessibilityHint.
+**Action:** Always provide dynamic `accessibilityLabel` (`busy ? "Verifying..." : submitLabel`) and `accessibilityHint` on 2FA code submit buttons rendering `ActivityIndicator` when busy.

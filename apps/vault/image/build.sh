@@ -138,7 +138,7 @@ if [ -n "${more}" ]; then
 fi
 # A checkout or an --extra tree made under a private umask carries 600/700 files: give the tree git's modes back.
 chmod -R u+rwX,go=rX "${work}"
-unreadable="$(find "${work}" ! -type l \( ! -perm -0004 -o \( -type d ! -perm -0001 \) \) -print | head -n 5)"
+unreadable="$(find "${work}" ! -type l \( ! -perm -0004 -o \( -type d ! -perm -0001 \) \) -print | sed -n '1,5p')"
 if [ -n "${unreadable}" ]; then
     printf 'build.sh: not readable by every user, so the image would not run:\n%s\n' "${unreadable}" >&2
     exit 2

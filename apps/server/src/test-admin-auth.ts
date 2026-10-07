@@ -13,6 +13,7 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 process.env.ADMIN_PASSWORD = 'TestAdmin123!'; // known strong pw (read by initAdminPassword)
+process.env.BEANPOOL_SUITE_ENV_PASSWORD = '1';
 
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';

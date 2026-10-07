@@ -370,17 +370,36 @@ export interface RestartOptions extends InstallOptions {
     usedFile: string;
 }
 
-/** The request file's text, read without following a link (a regular file within the cap; else null), and removed. */
-function takeRequest(file: string): { present: false } | { present: true; text: string | null } {
+/**
+ * The request file's text, read without following a link (a regular file within the cap; else null), and removed.
+ * Whatever is under that name is first moved (one rename, on the same file system) into root's `workDir`, so root
+ * reads it there and never walks into anything in the API's directory while the API runs (a directory under that
+ * name goes whole, but only once it is out of the API's reach by path).
+ */
+function takeRequest(file: string, workDir: string): { present: false } | { present: true; text: string | null } {
     try {
         lstatSync(file);
     } catch {
         return { present: false };
     }
+    emptyOwn(workDir);
+    const taken = path.join(workDir, 'restart-request.taken');
+    try {
+        renameSync(file, taken);
+    } catch {
+        // Gone since (or, off the image, another file system): what is still there goes as it is, a link itself.
+        try {
+            if (!lstatSync(file).isDirectory()) unlinkSync(file);
+            else removeWhole(file);
+        } catch {
+            // Gone.
+        }
+        return { present: true, text: null };
+    }
     let text: string | null = null;
     let fd: number | null = null;
     try {
-        fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+        fd = openSync(taken, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
         const st = fstatSync(fd);
         if (st.isFile() && st.size <= RESTART_REQUEST_MAX_BYTES) {
             const buf = Buffer.alloc(RESTART_REQUEST_MAX_BYTES + 1);
@@ -393,9 +412,26 @@ function takeRequest(file: string): { present: false } | { present: true; text: 
     } finally {
         if (fd !== null) closeSync(fd);
     }
-    // Whatever it was, it goes (a directory under that name with all it holds): the path unit triggers only on a new one.
-    removeWhole(file);
+    // Whatever it was, it goes (a directory with all it holds, now in root's own directory): the path unit triggers
+    // only on a new one.
+    rmSync(taken, { recursive: true, force: true });
     return { present: true, text };
+}
+
+/** What a restart request names of a release: exactly what root installs for it. */
+type StagedRelease = { version: string; imageHash: string; ukiSha256: string; roothash: string };
+
+function stagedRelease(release: TrustedRelease): StagedRelease {
+    const m = release.manifest;
+    return { version: m.version, imageHash: m.imageHash, ukiSha256: m.image.ukiSha256, roothash: m.image.roothash };
+}
+
+/** Refuses unless `release` is exactly the one the accepted request named (version, image, boot file, root hash). */
+function boundTo(release: TrustedRelease, bound: StagedRelease): void {
+    const now = stagedRelease(release);
+    if ((Object.keys(bound) as (keyof StagedRelease)[]).some(k => now[k] !== bound[k])) {
+        refuse(`release ${now.version} is staged now, not release ${bound.version} that the custodians' request names (${now.version === bound.version ? 'another image under its version' : 'the inbox changed'}): nothing installed`);
+    }
 }
 
 /** The ids of requests acted on within the last two windows of freshness (older ones can't be fresh again). */
@@ -426,13 +462,14 @@ function writeUsed(file: string, used: Map<string, number>): void {
  */
 export async function installForRestart(opts: RestartOptions): Promise<InstallResult> {
     const log = opts.log ?? (line => console.log(`vault-install: ${line}`));
-    const taken = takeRequest(opts.requestFile);
+    const taken = takeRequest(opts.requestFile, opts.workDir);
     if (!taken.present) return { installed: false, reason: 'no restart request' };
     const now = (opts.clock ?? Date.now)();
     emptyOwn(opts.transferDir);
     emptyOwn(opts.workDir);
     let checked: Awaited<ReturnType<typeof check>>;
-    let accepted = false;
+    /** The release the accepted request names: every later step is bound to it (set once the request passed). */
+    const accepted: { staged?: StagedRelease } = {};
     let apiStopped = false;
     let cleanup: string | null = null;
     /** The API stopped and what its user left removed (the staged image's regular files stay in the inbox). */
@@ -455,10 +492,8 @@ export async function installForRestart(opts: RestartOptions): Promise<InstallRe
             checked = await check(opts, entries, (release, running) => {
             const used = readUsed(opts.usedFile, now);
             const m = release.manifest;
-            const r = checkRestartRequest(text, {
-                trusted: running.manifest.custodianKeys, now, used: new Set(used.keys()),
-                staged: { version: m.version, imageHash: m.imageHash, ukiSha256: m.image.ukiSha256, roothash: m.image.roothash },
-            });
+            const staged = stagedRelease(release);
+            const r = checkRestartRequest(text, { trusted: running.manifest.custodianKeys, now, used: new Set(used.keys()), staged });
             if (!r.ok) refuse(r.reason);
             // Recorded before anything is copied or stopped: a request is acted on once, whatever comes of it.
             used.set(r.id, now);
@@ -468,18 +503,24 @@ export async function installForRestart(opts: RestartOptions): Promise<InstallRe
                 refuse(`the restart request could not be recorded, so a replay could not be refused: ${(e as Error).message}`);
             }
             log(`restart request for release ${m.version}, signed by ${r.signers.map(k => `${k.slice(0, 8)}…`).join(' and ')}`);
-            accepted = true;
+            accepted.staged = staged;
             });
         } catch (e) {
             // Two custodians asked, and only room is missing: what the API's user left may fill the state partition
             // (it can't otherwise be cleared without a restart). Their request lets root stop the API and clear that,
             // then check again (the request is not checked twice: it is recorded). Without their request, never.
-            if (!accepted || !(e instanceof NoRoom || isNoRoom(e))) throw e;
+            // The API runs until root's stop ends it, so it may have swapped the inbox meanwhile: the second check
+            // goes on only for the very release the request named (PR #1669 fix round 3).
+            const bound = accepted.staged;
+            if (!bound || !(e instanceof NoRoom || isNoRoom(e))) throw e;
             log(`${(e as Error).message}: stopping the API to remove what it left, then checking again`);
             emptyOwn(opts.workDir);
             stopAndClear();
-            checked = await check(opts, names(opts.inbox));
+            checked = await check(opts, names(opts.inbox), release => boundTo(release, bound));
         }
+        // Whichever check passed, what is installed is the release the custodians' request named, and nothing else.
+        if (!accepted.staged) refuse('no restart request was accepted');
+        boundTo(checked.release, accepted.staged);
     } catch (e) {
         const reason = e instanceof Refused ? e.message
             : isNoRoom(e) ? `no room on the state partition for root's copies: ${(e as Error).message}`

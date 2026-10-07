@@ -193,8 +193,13 @@ describe('root restarts the vault only for a request two custodians signed for t
         t.keptRunning(names);
         expect(existsSync(target)).toBe(true);
         mkdirSync(path.join(t.requestFile, 'x'), { recursive: true });
+        // A link inside it to something of root's: root moves the directory into its own install.work, removes it
+        // there, and never what the link points at (PR #1669 fix round 3).
+        symlinkSync(target, path.join(t.requestFile, 'x', 'to-root'));
         expect(await installForRestart(t.opts())).toMatchObject({ installed: false, reason: expect.stringContaining('not a regular file') });
         t.keptRunning(names);
+        expect(existsSync(target)).toBe(true);
+        expect(readdirSync(t.opts().workDir)).toEqual([]);
         writeFileSync(t.requestFile, Buffer.alloc(17 * 1024, 0x20));
         expect(await installForRestart(t.opts())).toMatchObject({ installed: false, reason: expect.stringContaining('not a regular file') });
         t.keptRunning(names);
@@ -253,5 +258,58 @@ describe('the inbox is the API\'s: root removes nothing from it on a refusal, an
         t.send(t.request(forged), [t.custodians[0], t.custodians[1]]);
         expect(await installForRestart(t.opts())).toMatchObject({ installed: false });
         t.keptRunning(Object.values(names).sort());
+    });
+});
+
+describe('the no-room retry stays bound to the release the request names (PR #1669 fix round 3)', () => {
+    /**
+     * The reviewer's swap: the API forces no-room at root's first room check and, before it dies on root's stop, swaps
+     * the inbox for another two-signed release newer than the running one. Root checks again once the API is stopped:
+     * only the release the custodians' request names may be installed.
+     */
+    function swapAtFirstRoomCheck(t: ReturnType<typeof setUp>, to: { release: MadeRelease; img: ReturnType<typeof newImage>; chain: ReleaseFiles[] } | null) {
+        let calls = 0;
+        return () => {
+            if (++calls > 1) return 2 ** 40;
+            if (to) {
+                for (const x of readdirSync(t.inbox)) rmSync(path.join(t.inbox, x), { force: true });
+                t.stage(to.release, to.img, to.chain);
+            }
+            return 0;
+        };
+    }
+
+    it('a request for 1.1.0, swapped to 1.2.0 during the no-room stop: refused, nothing installed', async () => {
+        const t = setUp();
+        const other = newImage();
+        const r3 = makeRelease({ version: '1.2.0', previous: t.r2, custodianKeys: t.custodians, signers: t.custodians.slice(0, 2), image: other.image });
+        t.stage(t.r2, t.next, [t.r1, t.r2]);
+        t.send(t.request(t.r2), t.custodians.slice(0, 2));
+        const r = await installForRestart(t.opts({ freeBytes: swapAtFirstRoomCheck(t, { release: r3, img: other, chain: [t.r1, t.r2, r3] }) }));
+        expect(r).toMatchObject({ installed: false, reason: expect.stringContaining('release 1.2.0 is staged now, not release 1.1.0') });
+        expect(t.calls).toEqual(['stop the API']);
+        expect(readdirSync(t.opts().transferDir)).toEqual([]);
+        expect(readdirSync(t.opts().workDir)).toEqual([]);
+    });
+
+    it('a request for 1.2.0, swapped back to the older 1.1.0 (still newer than the running 1.0.0): refused, nothing installed', async () => {
+        const t = setUp();
+        const other = newImage();
+        const r3 = makeRelease({ version: '1.2.0', previous: t.r2, custodianKeys: t.custodians, signers: t.custodians.slice(0, 2), image: other.image });
+        t.stage(r3, other, [t.r1, t.r2, r3]);
+        t.send(t.request(r3), t.custodians.slice(1));
+        const r = await installForRestart(t.opts({ freeBytes: swapAtFirstRoomCheck(t, { release: t.r2, img: t.next, chain: [t.r1, t.r2] }) }));
+        expect(r).toMatchObject({ installed: false, reason: expect.stringContaining('release 1.1.0 is staged now, not release 1.2.0') });
+        expect(t.calls).toEqual(['stop the API']);
+        expect(readdirSync(t.opts().transferDir)).toEqual([]);
+        expect(readdirSync(t.opts().workDir)).toEqual([]);
+    });
+
+    it('the control: the same no-room stop with no swap installs the release the request names', async () => {
+        const t = setUp();
+        const names = t.stage(t.r2, t.next, [t.r1, t.r2]);
+        t.send(t.request(t.r2), t.custodians.slice(0, 2));
+        expect(await installForRestart(t.opts({ freeBytes: swapAtFirstRoomCheck(t, null) }))).toEqual({ installed: true, version: '1.1.0' });
+        expect(t.calls).toEqual(['stop the API', `sysupdate ${[names.uki, names.root, names.verity].sort().join(' ')}`]);
     });
 });

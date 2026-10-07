@@ -227,3 +227,31 @@ describe('root restarts the vault only for a request two custodians signed for t
         expect(readdirSync(releases)).toEqual([]);
     });
 });
+
+describe('the inbox is the API\'s: root removes nothing from it on a refusal, and the API clearing it as root checks only refuses (PR #1669 fix round 2)', () => {
+    it('the API empties its inbox while root checks the request (a race): refused, the API never stopped, nothing installed or left in root\'s directories', async () => {
+        const t = setUp();
+        const names = t.stage(t.r2, t.next, [t.r1, t.r2]);
+        t.send(t.request(t.r2), [t.custodians[0], t.custodians[1]]);
+        // Root's room check runs after the request passed and before root copies the image: the API clears it then.
+        const free = () => {
+            for (const x of readdirSync(t.inbox)) rmSync(path.join(t.inbox, x), { force: true });
+            return 2 ** 40;
+        };
+        const r = await installForRestart(t.opts({ freeBytes: free }));
+        expect(r).toMatchObject({ installed: false, reason: `${names.uki} can't be opened (missing, or a link)` });
+        expect(t.calls).toEqual([]);
+        expect(readdirSync(t.opts().transferDir)).toEqual([]);
+        expect(readdirSync(t.opts().workDir)).toEqual([]);
+    });
+
+    it('a refused request for files no release names: they stay in the inbox (the API clears them at its next check), and nothing else moves', async () => {
+        const t = setUp();
+        const fake = newImage();
+        const forged = makeRelease({ version: '9.9.9', previous: t.r1, custodianKeys: t.custodians, signers: t.custodians.slice(0, 1), image: fake.image });
+        const names = t.stage(forged, fake, [t.r1, forged]);
+        t.send(t.request(forged), [t.custodians[0], t.custodians[1]]);
+        expect(await installForRestart(t.opts())).toMatchObject({ installed: false });
+        t.keptRunning(Object.values(names).sort());
+    });
+});

@@ -273,7 +273,7 @@ function setUpInbox() {
     const stagedDir = path.join(t.feedDir, '..', `staged-${n}`);
     mkdirSync(stagedDir, { mode: 0o700 });
     const names = Object.values(stagedNames('1.1.0', image.roothash)).sort();
-    return { ...t, stagedDir, names, u: t.updater({ stagedDir, verifyRoot: async () => true }) };
+    return { ...t, stagedDir, names, next: r3, u: t.updater({ stagedDir, verifyRoot: async () => true }) };
 }
 
 describe('the API owns its inbox: whatever is in it can\'t stop a check (#1314 round 2)', () => {
@@ -311,6 +311,63 @@ describe('the API owns its inbox: whatever is in it can\'t stop a check (#1314 r
         expect((await t.u.check()).imageWaiting).toMatchObject({ staged: true });
         expect(readdirSync(t.stagedDir).sort()).toEqual(t.names);
         expect(statSync(path.join(t.stagedDir, uki)).isFile()).toBe(true);
+    });
+
+    // PR #1669 fix round 2 (CI build-twice 37552183061: "FAIL and the API clears its inbox of them"): root's install step
+    // no longer runs on a schedule, and a refused restart request removes nothing, so the API alone clears its inbox.
+    it('no image waiting: everything in the inbox goes at the next check (files no release in the feed names, a directory, links), what a link points at survives', async () => {
+        const t = setUp();
+        const stagedDir = path.join(t.feedDir, '..', `staged-${n}`);
+        mkdirSync(stagedDir, { mode: 0o700 });
+        const outside = path.join(t.feedDir, '..', `outside-${n}`);
+        mkdirSync(outside);
+        writeFileSync(path.join(outside, 'precious'), 'not the inbox\'s');
+        const fake = stagedNames('9.9.9', crypto.randomBytes(32).toString('hex'));
+        for (const x of [fake.uki, fake.root, fake.verity]) writeFileSync(path.join(stagedDir, x), crypto.randomBytes(64));
+        mkdirSync(path.join(stagedDir, 'junk', 'locked'), { recursive: true });
+        chmodSync(path.join(stagedDir, 'junk', 'locked'), 0o500);
+        symlinkSync(outside, path.join(stagedDir, 'out'));
+        const s = await t.updater({ stagedDir, verifyRoot: async () => true }).check();
+        expect(s).toMatchObject({ error: null, running: { version: '1.0.0' }, imageWaiting: null });
+        expect(readdirSync(stagedDir)).toEqual([]);
+        expect(readFileSync(path.join(outside, 'precious'), 'utf8')).toBe('not the inbox\'s');
+    });
+
+    it('an image staged, then booted (the restart installed it): no image waits, and the inbox empties; no inbox yet: none is made', async () => {
+        const t = setUpInbox();
+        expect((await t.u.check()).imageWaiting).toMatchObject({ version: '1.1.0', staged: true });
+        expect(readdirSync(t.stagedDir).sort()).toEqual(t.names);
+        const booted = t.updater({ stagedDir: t.stagedDir, verifyRoot: async () => true, ownBundleHash: t.next.manifest.apiBundleHash, runningImageHash: () => t.next.manifest.imageHash });
+        expect(await booted.check()).toMatchObject({ error: null, running: { version: '1.1.0' }, newest: { version: '1.1.0' }, imageWaiting: null });
+        expect(readdirSync(t.stagedDir)).toEqual([]);
+        const none = path.join(t.feedDir, '..', `never-${n}`);
+        expect((await t.updater({ stagedDir: none, ownBundleHash: t.next.manifest.apiBundleHash, runningImageHash: () => t.next.manifest.imageHash }).check()).error).toBeNull();
+        expect(existsSync(none)).toBe(false);
+    });
+
+    it('a feed that can\'t be read: the inbox, a staged image and all, stays as it is', async () => {
+        const t = setUpInbox();
+        expect((await t.u.check()).imageWaiting).toMatchObject({ staged: true });
+        writeFileSync(path.join(t.stagedDir, 'stray'), 'x');
+        const offline = t.updater({ stagedDir: t.stagedDir, feed: { list: async () => { throw new Error('offline'); }, asset: async () => new Uint8Array(), assetToFile: async () => '' } });
+        expect(await offline.check()).toMatchObject({ error: expect.stringContaining('offline') });
+        expect(readdirSync(t.stagedDir).sort()).toEqual([...t.names, 'stray'].sort());
+    });
+
+    it.skipIf(process.getuid?.() === 0)('no image waiting, and an entry it can\'t remove: said in error; the next check, once it can, empties it', async () => {
+        const t = setUp();
+        const stagedDir = path.join(t.feedDir, '..', `staged-${n}`);
+        mkdirSync(stagedDir, { mode: 0o700 });
+        writeFileSync(path.join(stagedDir, 'stray'), 'x');
+        chmodSync(stagedDir, 0o500);
+        const u = t.updater({ stagedDir });
+        try {
+            expect(await u.check()).toMatchObject({ imageWaiting: null, error: expect.stringMatching(/^the inbox could not be cleared \(stray: EACCES\)/) });
+        } finally {
+            chmodSync(stagedDir, 0o700);
+        }
+        expect(await u.check()).toMatchObject({ imageWaiting: null, error: null });
+        expect(readdirSync(stagedDir)).toEqual([]);
     });
 
     // Root reads and writes past file modes: a file it can't remove can't be made there.

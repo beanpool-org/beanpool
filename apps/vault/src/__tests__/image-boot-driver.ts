@@ -293,7 +293,8 @@ async function main(): Promise<void> {
     check('the API was never stopped: the same process, still open', apiRunning(apiBefore) && still.body.state === 'open', `${apiPid()} (was ${apiBefore}); ${String(still.body.state)}`);
     check('nothing reaches the transfer source or root\'s scratch space', readdirSync(IMAGE_TRANSFER).length === 0 && readdirSync(IMAGE_WORK).length === 0,
         `install ${readdirSync(IMAGE_TRANSFER).join(' ')}; work ${readdirSync(IMAGE_WORK).join(' ')}`);
-    // (The API clears its inbox of what no release it staged names, at its next check.)
+    // Root removes nothing from the inbox on a refusal; the API, at its next check (every 5 s here), finds no image
+    // waiting in its feed and clears the whole inbox (updater.ts, emptyInbox): its own directory, no power over root.
     const cleared = await until(async () => readdirSync(IMAGE_INBOX).length === 0, 60);
     check('and the API clears its inbox of them', !!cleared.value, `inbox ${readdirSync(IMAGE_INBOX).join(' ')}`);
     const list = sh('/usr/lib/systemd/systemd-sysupdate', ['--definitions=/usr/lib/sysupdate.d', 'list']).out;

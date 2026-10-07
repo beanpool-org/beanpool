@@ -35,7 +35,14 @@
 #
 # `--extra <tree>` lays more files over the image's (a TEST image: image/test-image/make.mjs, for the boot test). It
 # changes the image and its hash: a release is built without it.
+#
+# File modes in the image never depend on the caller: a build run under umask 077 (the go-live scripts keep their key
+# files private that way) once made every copied file 600/700, so the keyholder, API and Caddy could not read their own
+# files and networkd could not read 80-wan.network (vault-v1.0.0, 7 Oct). So: umask 022 here, the tree normalised to
+# what git holds (644, 755 for executables and directories) before mkosi reads it, and a refusal if any file is still
+# unreadable. On a normal checkout under umask 022 this changes nothing, so the image hash is the same as before.
 set -euo pipefail
+umask 022
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 vault="$(cd "${here}/.." && pwd)"
@@ -128,6 +135,13 @@ esac || { echo "build.sh: image-settings.mjs write did not write ${wan} for --ne
 if [ -n "${more}" ]; then
     echo "build.sh: adding ${more} (not a release image)" >&2
     cp -R "${more}/." "${extra}/"
+fi
+# A checkout or an --extra tree made under a private umask carries 600/700 files: give the tree git's modes back.
+chmod -R u+rwX,go=rX "${work}"
+unreadable="$(find "${work}" ! -type l \( ! -perm -0004 -o \( -type d ! -perm -0001 \) \) -print | head -n 5)"
+if [ -n "${unreadable}" ]; then
+    printf 'build.sh: not readable by every user, so the image would not run:\n%s\n' "${unreadable}" >&2
+    exit 2
 fi
 mkdir -p "${work}/mkosi.sandbox/etc/apt/sources.list.d" "${work}/mkosi.sandbox/etc/apt/apt.conf.d"
 cat > "${work}/mkosi.sandbox/etc/apt/sources.list.d/mkosi.sources" <<EOF

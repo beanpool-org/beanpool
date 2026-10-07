@@ -1,7 +1,8 @@
 # What runs on the vault, applied when the image is built: these, and nothing else a package would enable (Debian's
 # own preset enables everything). Among what stays off: systemd-sysupdate's timers (a staged image is installed only
-# by the monthly restart), systemd-sysext and -confext (they would lay files from the writable /var over the verified
-# system), systemd-pstore, the TPM pcrlock services, systemd-boot-update, caddy-api, e2scrub.
+# by the custodians' restart, beanpool-vault-restart.path: no timer restarts the vault), systemd-sysext and -confext
+# (they would lay files from the writable /var over the verified system), systemd-pstore, the TPM pcrlock services,
+# systemd-boot-update, caddy-api, e2scrub.
 enable dbus-broker.service
 enable systemd-networkd.service
 enable systemd-networkd.socket
@@ -19,5 +20,5 @@ enable beanpool-vault-keyholder.service
 enable beanpool-vault-api.service
 enable beanpool-vault-data.service
 enable beanpool-vault-hygiene.service
-enable beanpool-vault-monthly-restart.timer
+enable beanpool-vault-restart.path
 disable *

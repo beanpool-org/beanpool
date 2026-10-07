@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
-import { appendFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { confirmShare, custodianKey, genesis, sendSettings, type CallOptions, type CustodianKey } from '../custodian/lib.js';
 import { EGRESS_CONF } from '../egress/egress.js';
@@ -10,6 +10,7 @@ import { API_BUNDLE_ASSET, LocalDirectoryFeed, MANIFEST_ASSET, ROOT_ASSET, SIGNA
 import {
     addSignature, formatManifest, formatSignatures, imageHashOf, manifestHash, sha256Hex, signRelease, type ReleaseImage, type ReleaseManifest, type ReleaseSignatures,
 } from '../shared/release.js';
+import { formatRestartRequest, RESTART_PURPOSE, RESTART_REQUEST_FILE, signRestartRequest, type RestartRequest } from '../shared/restart-request.js';
 import { IMAGE_INBOX, IMAGE_TRANSFER, IMAGE_WORK, INSTALL_RESULT_FILE, stagedNames } from '../shared/staged-image.js';
 import { unixFetch } from './unix-fetch.js';
 
@@ -23,27 +24,30 @@ import { unixFetch } from './unix-fetch.js';
  * What the programs' own tests can't see, because it is the image's units and files that decide it:
  *
  *   - a genesis, and the vault then opens: the data partition is mounted where the API sees it (#1314 BLOCKING 1);
- *   - files the API's user stages that no release signs are not installed by the monthly restart's install step, and
+ *   - files the API's user stages that no release signs are not installed by the custodians' restart's install step:
+ *     with no request it does nothing, and with two custodians' valid request it refuses them before it stops anything;
  *     that user can't write where root installs from (BLOCKING 2);
  *   - the API knows which image booted (from the file root leaves in /run; the ESP is root's alone): /v1/report's
  *     `update.image` is it (BLOCKING 3);
  *   - UDP to the DHCP ports only from networkd's client: the API's user (and nobody) gets EPERM, and a lease
  *     renewal still passes the firewall, counted by its rule (NON-BLOCKING, nftables.conf);
- *   - (round 2) the state partition has room for the monthly restart: two copies of an image, the journal and the
+ *   - (round 2) the state partition has room for the custodians' restart: two copies of an image, the journal and the
  *     local backups;
  *   - (round 2, BLOCKING) a new image's release, then an API-only release after it: the API, reading the test image's
- *     directory feed, stages the image from the release that brought it and keeps it staged; root's install step
- *     installs it (systemd-sysupdate into the other slot and the ESP), and /v1/report says so. The new image is small
+ *     directory feed, stages the image from the release that brought it and keeps it staged; two custodians' request
+ *     reaches root's install step, which installs it (systemd-sysupdate into the other slot and the ESP), and /v1/report says so. The new image is small
  *     (a 16 MiB system partition with a real verity tree, and a UKI never booted): every check root makes is real,
  *     but nothing reboots into it.
  *   - (round 3, BLOCKING) the launcher lives through its API's exits: a two-signed API-only release whose API listens
  *     and then keeps exiting is started again by the launcher, which then steps back to the image's own API, with no
  *     restart of the unit (on the image the launcher used to exit with its child, and systemd started it afresh);
- *   - (round 3) the API's user filling the state partition (fallocate, as the review did) denies staging until the
- *     monthly restart's root step, which stops the API and removes what its user left there; then staging works again.
+ *   - (round 3) the API's user filling the state partition (fallocate, as the review did) denies staging; two
+ *     custodians' request with nothing staged removes nothing. With the image staged and the partition filled again,
+ *     their request has root stop the API and remove what its user left there, then install.
  *     The data partition's mount point underneath is root's, so nothing lands under it before an unlock.
  *
- * Root's install step stops the API (the machine restarts next on the vault); here the driver starts it again after.
+ * Root's install step stops the API once two custodians' request passes every check (the machine restarts next on the
+ * vault); here the driver runs that step itself, root's restart path unit stopped, and starts the API again after.
  */
 
 const SERIAL = '/dev/ttyS0';
@@ -121,6 +125,24 @@ async function restartApi(): Promise<{ active: string; open: boolean; after: num
     sh('systemctl', ['start', 'beanpool-vault-api.service']);
     const up = await until(async () => (await getJson('/v1/health')).body.state === 'open', 180);
     return { active, open: !!up.value, after: up.after };
+}
+
+const INSTALL = '/usr/lib/beanpool-vault/vault-install.mjs';
+const apiPid = () => sh('systemctl', ['show', '-p', 'MainPID', '--value', 'beanpool-vault-api.service']).out;
+/** The API's unit still active, under the same main process as `before` (never stopped). */
+const apiRunning = (before: string) => before !== '0' && apiPid() === before && sh('systemctl', ['is-active', 'beanpool-vault-api.service']).out === 'active';
+
+/**
+ * Two custodians' restart request for `image`, signed now with the test keys, left where the API leaves it (written
+ * by the API's user, as the API would): 'left' once it is there.
+ */
+function leaveRestartRequest(custodians: CustodianKey[], image: Pick<RestartRequest, 'version' | 'imageHash' | 'ukiSha256' | 'roothash'>): string {
+    const request = formatRestartRequest({ v: 1, purpose: RESTART_PURPOSE, ...image, at: Date.now(), nonce: crypto.randomBytes(16).toString('hex') });
+    const file = { v: 1, request, signatures: custodians.slice(0, 2).map(c => signRestartRequest(request, c.seed, c.publicKey)) };
+    return asApi(`const fs = require('fs'), [f, t] = process.argv.slice(1);
+        fs.writeFileSync(f + '.part', t);
+        fs.renameSync(f + '.part', f);
+        console.log('left');`, RESTART_REQUEST_FILE, JSON.stringify(file));
 }
 
 /** `node -e <script> <args>` as the API's user, as a compromised API would run it. */
@@ -235,9 +257,15 @@ async function main(): Promise<void> {
     check('the resolver restarted to read them, and runs', !!dnsAgain.value, `${dnsBefore} -> ${dnsStarted()}; ${sh('systemctl', ['is-active', 'beanpool-vault-dns.service']).out}`);
     check('the firewall has the mail sets', sh('nft', ['list', 'set', 'inet', 'vault', 'smtp4']).status === 0 && sh('nft', ['list', 'set', 'inet', 'vault', 'smtp6']).status === 0);
 
-    // BLOCKING 2: as the API's user, stage a boot file and partitions no release signs (as the review did), then run
-    // the monthly restart's install step (without its reboot). Nothing may be installed.
-    const fake = stagedNames('9.9.9', sha256Hex('not a root hash') + sha256Hex('nor this'));
+    // BLOCKING 2, on the custodians' restart (D3, Marty 2026-10-06): as the API's user, stage a boot file and partitions
+    // no release signs (as the review did). Root's restart path unit is stopped for the driver, which runs the install
+    // step itself, without its reboot. Nothing may be installed, and nothing stopped.
+    const pathUnit = sh('systemctl', ['is-active', 'beanpool-vault-restart.path']).out;
+    sh('systemctl', ['stop', 'beanpool-vault-restart.path']);
+    check('root\'s restart path unit waits for a request', pathUnit === 'active', pathUnit);
+    const fakeUki = Buffer.concat([Buffer.from('NOT-A-SIGNED-RELEASE'), Buffer.alloc(1 << 20)]);
+    const fakeRoothash = sha256Hex('not a root hash') + sha256Hex('nor this');
+    const fake = stagedNames('9.9.9', fakeRoothash);
     const staged = asApi(`const fs = require('fs'), [d, u, r, v] = process.argv.slice(1);
         fs.writeFileSync(d + '/' + u, Buffer.concat([Buffer.from('NOT-A-SIGNED-RELEASE'), Buffer.alloc(1 << 20)]));
         fs.writeFileSync(d + '/' + r, Buffer.alloc(1 << 20));
@@ -248,12 +276,27 @@ async function main(): Promise<void> {
         const wrote = asApi('try { require("fs").writeFileSync(process.argv[1], "x"); console.log("written"); } catch (e) { console.log(e.code); }', `${target}/planted`);
         check(`the API's user can't write ${target}`, wrote !== 'written', wrote);
     }
-    const install = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
-    check('the install step refuses them', install.status === 1 && /nothing installed/.test(install.out), install.out.split('\n').pop());
-    const back = await restartApi();
-    check('the install step stopped the API first; started again, it opens', back.active === 'inactive' && back.open, `${back.active}; after ${back.after} s`);
-    check('and empties the inbox; nothing reaches the transfer source', readdirSync(IMAGE_INBOX).length === 0 && readdirSync(IMAGE_TRANSFER).length === 0,
-        `inbox ${readdirSync(IMAGE_INBOX).join(' ')}; install ${readdirSync(IMAGE_TRANSFER).join(' ')}`);
+    const apiBefore = apiPid();
+    const bare = sh('/opt/node/bin/node', [INSTALL]);
+    check('the install step alone installs nothing: only the custodians\' restart does', bare.status === 2 && /only the custodians' restart/.test(bare.out), bare.out.split('\n').pop());
+    const none = sh('/opt/node/bin/node', [INSTALL, '--restart-request']);
+    check('with no custodians\' request it does nothing: the API keeps running, nothing reaches the transfer source',
+        none.status === 1 && /no restart request/.test(none.out) && apiRunning(apiBefore) && readdirSync(IMAGE_TRANSFER).length === 0,
+        `${none.out.split('\n').pop()}; API ${apiPid()} (was ${apiBefore}); install ${readdirSync(IMAGE_TRANSFER).join(' ')}`);
+    // Two custodians' valid request, naming the files the API's user staged: root refuses them before it stops anything.
+    const left = leaveRestartRequest(custodians, { version: '9.9.9', imageHash: imageHashOf({ ukiSha256: sha256Hex(fakeUki), roothash: fakeRoothash }), ukiSha256: sha256Hex(fakeUki), roothash: fakeRoothash });
+    const install = sh('/opt/node/bin/node', [INSTALL, '--restart-request']);
+    check('with two custodians\' request, the install step refuses them, and says why', left === 'left' && install.status === 1 && /restart refused, nothing stopped or installed/.test(install.out),
+        `${left}; ${install.out.split('\n').slice(-2).join(' | ')}`);
+    check('the request is removed', !existsSync(RESTART_REQUEST_FILE));
+    const still = await getJson('/v1/health');
+    check('the API was never stopped: the same process, still open', apiRunning(apiBefore) && still.body.state === 'open', `${apiPid()} (was ${apiBefore}); ${String(still.body.state)}`);
+    check('nothing reaches the transfer source or root\'s scratch space', readdirSync(IMAGE_TRANSFER).length === 0 && readdirSync(IMAGE_WORK).length === 0,
+        `install ${readdirSync(IMAGE_TRANSFER).join(' ')}; work ${readdirSync(IMAGE_WORK).join(' ')}`);
+    // Root removes nothing from the inbox on a refusal; the API, at its next check (every 5 s here), finds no image
+    // waiting in its feed and clears the whole inbox (updater.ts, emptyInbox): its own directory, no power over root.
+    const cleared = await until(async () => readdirSync(IMAGE_INBOX).length === 0, 60);
+    check('and the API clears its inbox of them', !!cleared.value, `inbox ${readdirSync(IMAGE_INBOX).join(' ')}`);
     const list = sh('/usr/lib/systemd/systemd-sysupdate', ['--definitions=/usr/lib/sysupdate.d', 'list']).out;
     check('systemd-sysupdate lists the running release as current, and no 9.9.9',
         list.split('\n').some(l => l.includes('0.0.1') && l.includes('current')) && !list.includes('9.9.9'), list.replace(/\s+/g, ' '));
@@ -343,9 +386,8 @@ async function main(): Promise<void> {
     const stagedNow = () => readdirSync(IMAGE_INBOX).sort().join(' ');
 
     // Round 3: before 0.0.3 is published, the API's user fills the state partition (fallocate in its releases
-    // directory, as the review did) and leaves junk in its backups and its inbox. Staging 0.0.3 is refused for room.
-    // (0.0.3's files are written first, beside the feed on the same file system, and moved into it after: the state
-    // partition keeps no blocks back for root either.)
+    // directory, as the review did). Staging 0.0.3 is refused for room. (0.0.3's files are written first, beside the
+    // feed on the same file system, and moved into it after: the state partition keeps no blocks back for root either.)
     const pending = '/var/lib/beanpool-vault-test/pending';
     const r3 = publish(pending, custodians, '0.0.3', r2, nextImage, ownBundle, {
         [UKI_ASSET]: uki, [ROOT_ASSET]: readFileSync(path.join(NEXT, 'root.raw')), [VERITY_ASSET]: readFileSync(path.join(NEXT, 'verity.raw')),
@@ -353,6 +395,45 @@ async function main(): Promise<void> {
     const RELEASES = '/var/lib/beanpool-vault/releases';
     const BACKUPS = '/var/lib/beanpool-vault/backups';
     const RESTORE = '/var/lib/beanpool-vault/restore';
+    const fillUp = (file: string) => sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '-l', String(varSpace().avail - (12 << 20)), path.join(RELEASES, file)]);
+    const filled = fillUp('junk');
+    check('the API\'s user fills the state partition', filled.status === 0 && varSpace().avail < (16 << 20), `${filled.out}; ${(varSpace().avail / (1 << 20)).toFixed(1)} MiB free for the vault's users`);
+    renameSync(path.join(pending, 'vault-v0.0.3'), path.join(FEED, 'vault-v0.0.3'));
+    const noRoom = await until(async () => {
+        const u = await readUpdate();
+        return u.newest?.version === '0.0.3' && /no room for the image/.test(u.imageWaiting?.error ?? '') && u;
+    }, 180);
+    check('staging 0.0.3 is refused for room, and /v1/report says so', !!noRoom.value, JSON.stringify((await readUpdate()).imageWaiting ?? null));
+    // D3: root removes what the API's user left only for two custodians' request for a staged image that passes its
+    // checks. With nothing staged, their request stops and removes nothing.
+    const nextRequest = { version: '0.0.3', imageHash: imageHashOf(nextImage), ukiSha256: nextImage.ukiSha256, roothash: nextImage.roothash };
+    const apiFull = apiPid();
+    leaveRestartRequest(custodians, nextRequest);
+    const early = sh('/opt/node/bin/node', [INSTALL, '--restart-request']);
+    check('two custodians\' request with nothing staged is refused: root stops and removes nothing',
+        early.status === 1 && /nothing stopped or installed/.test(early.out) && apiRunning(apiFull) && readdirSync(RELEASES).includes('junk'),
+        `${early.out.split('\n').pop()}; API ${apiPid()} (was ${apiFull}); releases ${readdirSync(RELEASES).join(' ')}`);
+    // The API frees its own directory (as an API release fixing it would): then it stages 0.0.3.
+    asApi('require("fs").rmSync(process.argv[1])', path.join(RELEASES, 'junk'));
+    const nextStaged = await until(async () => {
+        const u = await readUpdate();
+        return u.newest?.version === '0.0.3' && u.imageWaiting?.staged && u;
+    }, 180);
+    check('the API stages 0.0.3 once there is room, a new image', !!nextStaged.value && stagedNow() === Object.values(names).sort().join(' '),
+        `after ${nextStaged.after} s: ${JSON.stringify(await readUpdate()).slice(0, 600)}; inbox ${stagedNow()}`);
+    const whileStaged = varSpace();
+    publish(FEED, custodians, '0.0.4', r3, nextImage, sha256Hex('an API-only release: 0.0.3\'s image, no image files'));
+    const since = Date.now();
+    const kept = await until(async () => {
+        const u = await readUpdate();
+        return u.newest?.version === '0.0.4' && (u.checkedAt ?? 0) > since && u;
+    }, 120);
+    check('then 0.0.4, API-only for that image: 0.0.3 stays staged, from the release that brought it',
+        kept.value?.imageWaiting?.version === '0.0.3' && kept.value.imageWaiting.staged && stagedNow() === Object.values(names).sort().join(' '),
+        `${JSON.stringify(kept.value?.imageWaiting ?? null)}; inbox ${stagedNow()}`);
+
+    // Round 3: with 0.0.3 staged, the API's user leaves junk in its backups, inbox, restore and settings directories,
+    // and fills the state partition again.
     // The keyholder's marker of a pending restore from backup (keyholder.json's stateDir): root plants it here, as a
     // custodians' restore would, to see root's step keep the restore's files while it is there (verify 4, NB-1).
     const MARKER = '/var/lib/beanpool-vault/keyholder/restore-pending.json';
@@ -361,32 +442,33 @@ async function main(): Promise<void> {
     const keepSizeFile = path.join(BACKUPS, 'bv-20260101T000000Z.bin');
     asApi(`require('fs').writeFileSync(process.argv[1], 'x')`, keepSizeFile);
     const keptSize = sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '--keep-size', '-o', '0', '-l', String(1100 << 20), keepSizeFile]);
-    const fill = varSpace().avail - (12 << 20);
-    const filled = sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '-l', String(fill), path.join(RELEASES, 'junk')]);
     asApi(`const fs = require('fs'), [b, s, r, t] = process.argv.slice(1);
         fs.writeFileSync(b + '/junk', 'x');
         fs.writeFileSync(b + '/bv-20260102T000000Z.bin', '');
         fs.truncateSync(b + '/bv-20260102T000000Z.bin', 1073741825);
         for (let i = 1; i <= 1002; i++) fs.writeFileSync(b + '/bv-20260103T000000Z-' + i + '.bin', '');
-        fs.mkdirSync(s + '/beanpool-vault_9.9.9.efi');
-        fs.writeFileSync(s + '/beanpool-vault_9.9.9.efi/x', 'x');
+        fs.mkdirSync(s + '/junk');
+        fs.writeFileSync(s + '/junk/x', 'x');
         fs.mkdirSync(r, { recursive: true });
         for (const f of ['restore-pending.bin', 'restore-pending.bin.part', 'junk']) fs.writeFileSync(r + '/' + f, 'x');
         fs.writeFileSync(t + '/settings.json.4242.part', 'x');
         fs.mkdirSync(t + '/junk');`, BACKUPS, IMAGE_INBOX, RESTORE, path.dirname(SETTINGS_FILE));
     writeFileSync(MARKER, '{}', { mode: 0o600 });
-    check('the API\'s user fills the state partition', filled.status === 0 && varSpace().avail < (16 << 20), `${filled.out}; ${(varSpace().avail / (1 << 20)).toFixed(1)} MiB free for the vault's users`);
-    renameSync(path.join(pending, 'vault-v0.0.3'), path.join(FEED, 'vault-v0.0.3'));
-    const noRoom = await until(async () => {
-        const u = await readUpdate();
-        return u.newest?.version === '0.0.3' && /no room for the image/.test(u.imageWaiting?.error ?? '') && u;
-    }, 180);
-    check('staging 0.0.3 is refused for room, and /v1/report says so', !!noRoom.value, JSON.stringify((await readUpdate()).imageWaiting ?? null));
-    const tidy = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
-    const cleanup = (JSON.parse(readFileSync(INSTALL_RESULT_FILE, 'utf8')) as { cleanup?: string }).cleanup ?? '';
-    check('the monthly restart\'s root step removes what the API\'s user left: its releases, the junk in its backups and inbox',
+    const refilled = fillUp('junk2');
+    check('with 0.0.3 staged, the API\'s user fills the state partition again', refilled.status === 0 && varSpace().avail < (16 << 20),
+        `${refilled.out}; ${(varSpace().avail / (1 << 20)).toFixed(1)} MiB free for the vault's users`);
+
+    // Two custodians' request for the staged 0.0.3 reaches the install step: root checks it all, then stops the API,
+    // removes what its user left, and installs 0.0.3 into the other slot (no reboot here).
+    leaveRestartRequest(custodians, nextRequest);
+    const installed = sh('/opt/node/bin/node', [INSTALL, '--restart-request']);
+    check('two custodians\' request for 0.0.3: root\'s install step installs 0.0.3', installed.status === 0 && installed.out.includes('release 0.0.3 is installed'),
+        installed.out.split('\n').slice(-3).join(' | '));
+    const record = JSON.parse(readFileSync(INSTALL_RESULT_FILE, 'utf8')) as { installed?: boolean; version?: string; cleanup?: string };
+    const cleanup = record.cleanup ?? '';
+    check('root removes what the API\'s user left: its releases, the junk in its backups and inbox',
         readdirSync(RELEASES).length === 0 && !readdirSync(BACKUPS).includes('junk') && readdirSync(IMAGE_INBOX).length === 0 && /in releases/.test(cleanup),
-        `${tidy.out.split('\n').filter(l => /removed|nothing/.test(l)).join(' | ')}; releases ${readdirSync(RELEASES).join(' ')}; inbox ${stagedNow()}`);
+        `${installed.out.split('\n').filter(l => /removed|stopping/.test(l)).join(' | ')}; releases ${readdirSync(RELEASES).join(' ')}; inbox ${stagedNow()}`);
     // A newest "backup" past api.json's backupMaxBytes (1 GiB; sparse here, its size is what counts): the API never
     // writes one, and root removes it (verify 4, the director's hard cap).
     const backupsLeft = readdirSync(BACKUPS);
@@ -400,34 +482,9 @@ async function main(): Promise<void> {
     const settingsKept = readdirSync(path.dirname(SETTINGS_FILE)).sort().join(' ');
     check('root keeps the custodians\' settings file, and nothing else in settings/', settingsKept === 'settings.json' && /in settings that/.test(cleanup), `${settingsKept}; ${cleanup}`);
     rmSync(MARKER);
-    const tidied = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
-    check('with no marker, root empties restore/', readdirSync(RESTORE).length === 0,
-        `${tidied.out.split('\n').filter(l => /removed/.test(l)).join(' | ')}; restore ${readdirSync(RESTORE).join(' ')}`);
     check('and the room is back', varSpace().avail > GIB, `${gib(varSpace().avail)} free for the vault's users`);
-    const again = await restartApi();
-    check('the API, started again, opens', again.open, `after ${again.after} s`);
-
-    // Staging works again: 0.0.3's files, checked, in the inbox.
-    const nextStaged = await until(async () => {
-        const u = await readUpdate();
-        return u.newest?.version === '0.0.3' && u.imageWaiting?.staged && u;
-    }, 180);
-    check('the API stages 0.0.3 again, a new image', !!nextStaged.value && stagedNow() === Object.values(names).sort().join(' '),
-        `after ${nextStaged.after} s: ${JSON.stringify(await readUpdate()).slice(0, 600)}; inbox ${stagedNow()}`);
-    const whileStaged = varSpace();
-    publish(FEED, custodians, '0.0.4', r3, nextImage, sha256Hex('an API-only release: 0.0.3\'s image, no image files'));
-    const since = Date.now();
-    const kept = await until(async () => {
-        const u = await readUpdate();
-        return u.newest?.version === '0.0.4' && (u.checkedAt ?? 0) > since && u;
-    }, 120);
-    check('then 0.0.4, API-only for that image: 0.0.3 stays staged, from the release that brought it',
-        kept.value?.imageWaiting?.version === '0.0.3' && kept.value.imageWaiting.staged && stagedNow() === Object.values(names).sort().join(' '),
-        `${JSON.stringify(kept.value?.imageWaiting ?? null)}; inbox ${stagedNow()}`);
-    const installed = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
-    check('root\'s install step installs 0.0.3', installed.status === 0 && installed.out.includes('release 0.0.3 is installed'), installed.out.split('\n').slice(-3).join(' | '));
     const third = await restartApi();
-    check('the API, started again, opens', third.open, `after ${third.after} s`);
+    check('it stopped the API first; started again, it opens', third.active === 'inactive' && third.open, `${third.active}; after ${third.after} s`);
     const listed = sh('/usr/lib/systemd/systemd-sysupdate', ['--definitions=/usr/lib/sysupdate.d', 'list']).out;
     // It calls the newest installed version current, and keeps the running one (ProtectVersion=%A) to fall back to.
     const line = (v: string) => listed.split('\n').find(l => l.includes(` ${v} `)) ?? '';
@@ -438,7 +495,6 @@ async function main(): Promise<void> {
         partitions.replace(/\s+/g, ' '));
     const esp = readdirSync('/boot/EFI/Linux');
     check('its boot file is on the ESP beside the running one', esp.some(f => f.startsWith('beanpool-vault_0.0.3')) && esp.some(f => f.startsWith('beanpool-vault_0.0.1')), esp.join(' '));
-    const record = JSON.parse(readFileSync(INSTALL_RESULT_FILE, 'utf8')) as { installed?: boolean; version?: string };
     const reported = await until(async () => {
         const u = await readUpdate();
         return u.lastInstall?.installed && u.lastInstall.version === '0.0.3' && u;

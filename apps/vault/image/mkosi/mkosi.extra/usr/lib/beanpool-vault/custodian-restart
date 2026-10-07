@@ -1,0 +1,23 @@
+#!/bin/sh
+# The custodians' restart for a new image (beanpool-vault-restart.path; key vault design D3, Marty 2026-10-06: nothing
+# restarts the vault on a schedule). Two custodians, ready to unlock at once, signed a request naming the staged image;
+# the API only carried it to /var/lib/beanpool-vault/restart/request.json. Root's install step (vault-install.mjs,
+# built with the genesis custodian keys, on the verified system partition) reads and removes that file, and checks
+# from those keys, before it stops anything: two signatures from the running release's custodians, signed within the
+# hour, never acted on before, naming exactly the staged release; then what the API staged: two custodian signatures
+# on the release, newer than the running one, the file names, the UKI's SHA-256 and veritysetup verify against the
+# release's root hash, all on root's own copies. Anything else is refused and logged, and nothing is stopped.
+# Only once all of it passes does it stop the API, remove what that user left on the state partition (the releases it
+# downloaded, anything in backups/ that isn't a backup and the backups past their budget, restore/ unless a restore
+# from backup is pending, the inbox), and have systemd-sysupdate write the image into the other slot
+# (usr/lib/sysupdate.d). Then the machine restarts, and the vault waits locked for two custodians.
+set -u
+if /opt/node/bin/node /usr/lib/beanpool-vault/vault-install.mjs --restart-request; then
+    echo "custodian restart: the new image is installed; restarting now"
+    # (Should the restart not start, the API comes back rather than stay stopped.)
+    systemctl reboot || systemctl start beanpool-vault-api.service
+else
+    # Refused (nothing was stopped), or the install failed once the API was stopped: the vault keeps running.
+    echo "custodian restart: no new image installed; the vault keeps running"
+    systemctl start beanpool-vault-api.service
+fi

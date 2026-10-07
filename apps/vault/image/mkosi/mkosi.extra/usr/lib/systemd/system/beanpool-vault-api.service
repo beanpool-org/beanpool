@@ -21,8 +21,9 @@ RuntimeDirectoryMode=0750
 RuntimeDirectoryPreserve=no
 # The database lives on the data partition (mounted by beanpool-vault-data.service once the vault is open); the
 # releases it downloads, its local backup copies, a restore from backup waiting for the unlock, and its inbox for a
-# new image (root checks it again at the monthly restart) and the custodians' settings on the state partition.
-ReadWritePaths=/var/lib/beanpool-vault/data /var/lib/beanpool-vault/releases /var/lib/beanpool-vault/backups /var/lib/beanpool-vault/restore /var/lib/beanpool-vault/staged /var/lib/beanpool-vault/settings
+# new image (root checks it again at the custodians' restart), the custodians' settings, and a restart request two
+# custodians signed (root checks it), on the state partition.
+ReadWritePaths=/var/lib/beanpool-vault/data /var/lib/beanpool-vault/releases /var/lib/beanpool-vault/backups /var/lib/beanpool-vault/restore /var/lib/beanpool-vault/staged /var/lib/beanpool-vault/settings /var/lib/beanpool-vault/restart
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 NoNewPrivileges=yes
 CapabilityBoundingSet=

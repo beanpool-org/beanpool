@@ -197,6 +197,9 @@ export class Updater {
         s.imageWaiting = brought ? { ...ref(brought), imageHash: brought.manifest.imageHash, ...(await this.stage(brought, files, chain).catch(e => ({
             staged: false, error: `the image could not be staged: ${(e as Error).message}`.slice(0, 300),
         }))) } : null;
+        // No image waits: nothing in the inbox belongs to a release the feed names (root refused it at a custodians'
+        // restart, the image booted, or the feed moved on), and nothing else clears it, so all of it goes.
+        if (!brought) s.error = this.emptyInbox();
         if (!running) {
             s.note = own === null ? 'Run from source: no handover.' : !image
                 ? 'The booted image is unknown: no handover.'
@@ -259,7 +262,8 @@ export class Updater {
      * restart, from its own pinned keys (install/install.ts), since this process is the one they guard against.
      *
      * First, at every check, the inbox is cleared of everything else (clearInbox). What can't be removed is said in
-     * `error`, and staging goes on beside it.
+     * `error`, and staging goes on beside it. At a check where no image waits, the whole inbox goes (emptyInbox): root
+     * never clears it unless two custodians' restart request passes every check (install/install.ts).
      */
     private async stage(release: TrustedRelease, files: FeedRelease[], chain: ReleaseChain): Promise<{ staged: boolean; error?: string }> {
         const dir = this.opts.stagedDir;
@@ -275,6 +279,20 @@ export class Updater {
         const result = await this.fetchImage(dir, release, files, chain);
         const error = [uncleared, result.error].filter(Boolean).join('; ');
         return { staged: result.staged, ...(error ? { error: error.slice(0, 300) } : {}) };
+    }
+
+    /** The whole inbox cleared (clearInbox, nothing kept); none is made. What can't be removed is said, else null. */
+    private emptyInbox(): string | null {
+        const dir = this.opts.stagedDir;
+        if (!dir) return null;
+        let left: string[];
+        try {
+            left = clearInbox(dir, []);
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
+            left = [`the inbox itself: ${errorCode(e)}`];
+        }
+        return left.length ? `the inbox could not be cleared (${left.join('; ')})`.slice(0, 300) : null;
     }
 
     private async fetchImage(dir: string, release: TrustedRelease, files: FeedRelease[], chain: ReleaseChain): Promise<{ staged: boolean; error?: string }> {

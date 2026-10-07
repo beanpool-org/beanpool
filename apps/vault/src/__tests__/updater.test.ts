@@ -8,6 +8,7 @@ import { installStaged } from '../install/install.js';
 import { Launcher } from '../launcher/launcher.js';
 import { LocalDirectoryFeed, ROOT_ASSET, UKI_ASSET, VERITY_ASSET, type ReleaseFeed } from '../shared/release-feed.js';
 import { sha256Hex } from '../shared/release.js';
+import { restartStatus } from '../shared/restart-request.js';
 import { doGenesis, get, startVault } from './harness.js';
 import { keys3, makeRelease, publish, randomImage, type MadeRelease } from './release-kit.js';
 
@@ -272,7 +273,7 @@ function setUpInbox() {
     const stagedDir = path.join(t.feedDir, '..', `staged-${n}`);
     mkdirSync(stagedDir, { mode: 0o700 });
     const names = Object.values(stagedNames('1.1.0', image.roothash)).sort();
-    return { ...t, stagedDir, names, u: t.updater({ stagedDir, verifyRoot: async () => true }) };
+    return { ...t, stagedDir, names, next: r3, u: t.updater({ stagedDir, verifyRoot: async () => true }) };
 }
 
 describe('the API owns its inbox: whatever is in it can\'t stop a check (#1314 round 2)', () => {
@@ -312,6 +313,63 @@ describe('the API owns its inbox: whatever is in it can\'t stop a check (#1314 r
         expect(statSync(path.join(t.stagedDir, uki)).isFile()).toBe(true);
     });
 
+    // PR #1669 fix round 2 (CI build-twice 37552183061: "FAIL and the API clears its inbox of them"): root's install step
+    // no longer runs on a schedule, and a refused restart request removes nothing, so the API alone clears its inbox.
+    it('no image waiting: everything in the inbox goes at the next check (files no release in the feed names, a directory, links), what a link points at survives', async () => {
+        const t = setUp();
+        const stagedDir = path.join(t.feedDir, '..', `staged-${n}`);
+        mkdirSync(stagedDir, { mode: 0o700 });
+        const outside = path.join(t.feedDir, '..', `outside-${n}`);
+        mkdirSync(outside);
+        writeFileSync(path.join(outside, 'precious'), 'not the inbox\'s');
+        const fake = stagedNames('9.9.9', crypto.randomBytes(32).toString('hex'));
+        for (const x of [fake.uki, fake.root, fake.verity]) writeFileSync(path.join(stagedDir, x), crypto.randomBytes(64));
+        mkdirSync(path.join(stagedDir, 'junk', 'locked'), { recursive: true });
+        chmodSync(path.join(stagedDir, 'junk', 'locked'), 0o500);
+        symlinkSync(outside, path.join(stagedDir, 'out'));
+        const s = await t.updater({ stagedDir, verifyRoot: async () => true }).check();
+        expect(s).toMatchObject({ error: null, running: { version: '1.0.0' }, imageWaiting: null });
+        expect(readdirSync(stagedDir)).toEqual([]);
+        expect(readFileSync(path.join(outside, 'precious'), 'utf8')).toBe('not the inbox\'s');
+    });
+
+    it('an image staged, then booted (the restart installed it): no image waits, and the inbox empties; no inbox yet: none is made', async () => {
+        const t = setUpInbox();
+        expect((await t.u.check()).imageWaiting).toMatchObject({ version: '1.1.0', staged: true });
+        expect(readdirSync(t.stagedDir).sort()).toEqual(t.names);
+        const booted = t.updater({ stagedDir: t.stagedDir, verifyRoot: async () => true, ownBundleHash: t.next.manifest.apiBundleHash, runningImageHash: () => t.next.manifest.imageHash });
+        expect(await booted.check()).toMatchObject({ error: null, running: { version: '1.1.0' }, newest: { version: '1.1.0' }, imageWaiting: null });
+        expect(readdirSync(t.stagedDir)).toEqual([]);
+        const none = path.join(t.feedDir, '..', `never-${n}`);
+        expect((await t.updater({ stagedDir: none, ownBundleHash: t.next.manifest.apiBundleHash, runningImageHash: () => t.next.manifest.imageHash }).check()).error).toBeNull();
+        expect(existsSync(none)).toBe(false);
+    });
+
+    it('a feed that can\'t be read: the inbox, a staged image and all, stays as it is', async () => {
+        const t = setUpInbox();
+        expect((await t.u.check()).imageWaiting).toMatchObject({ staged: true });
+        writeFileSync(path.join(t.stagedDir, 'stray'), 'x');
+        const offline = t.updater({ stagedDir: t.stagedDir, feed: { list: async () => { throw new Error('offline'); }, asset: async () => new Uint8Array(), assetToFile: async () => '' } });
+        expect(await offline.check()).toMatchObject({ error: expect.stringContaining('offline') });
+        expect(readdirSync(t.stagedDir).sort()).toEqual([...t.names, 'stray'].sort());
+    });
+
+    it.skipIf(process.getuid?.() === 0)('no image waiting, and an entry it can\'t remove: said in error; the next check, once it can, empties it', async () => {
+        const t = setUp();
+        const stagedDir = path.join(t.feedDir, '..', `staged-${n}`);
+        mkdirSync(stagedDir, { mode: 0o700 });
+        writeFileSync(path.join(stagedDir, 'stray'), 'x');
+        chmodSync(stagedDir, 0o500);
+        const u = t.updater({ stagedDir });
+        try {
+            expect(await u.check()).toMatchObject({ imageWaiting: null, error: expect.stringMatching(/^the inbox could not be cleared \(stray: EACCES\)/) });
+        } finally {
+            chmodSync(stagedDir, 0o700);
+        }
+        expect(await u.check()).toMatchObject({ imageWaiting: null, error: null });
+        expect(readdirSync(stagedDir)).toEqual([]);
+    });
+
     // Root reads and writes past file modes: a file it can't remove can't be made there.
     it.skipIf(process.getuid?.() === 0)('an entry it can\'t remove: said in imageWaiting.error, and the handover still runs; once it can, the next check stages', async () => {
         const t = setUpInbox();
@@ -332,7 +390,7 @@ describe('the API owns its inbox: whatever is in it can\'t stop a check (#1314 r
     it.skipIf(process.getuid?.() === 0)('/v1/report shows it', async () => {
         const t = setUpInbox();
         const u = t.u;
-        const v = await startVault({ about: () => ({ api: 'source', update: u.status, nextRestart: null }) });
+        const v = await startVault({ about: () => ({ api: 'source', update: u.status, restart: restartStatus(u.status.imageWaiting) }) });
         try {
             await doGenesis(v);
             writeFileSync(path.join(t.stagedDir, 'stray'), 'x');
@@ -412,7 +470,7 @@ describe('room on the state partition, and what the monthly restart installed, i
         const t = setUpInbox();
         const resultFile = path.join(t.feedDir, '..', `install-result-${n}.json`);
         const u = t.updater({ stagedDir: t.stagedDir, verifyRoot: async () => true, installResultFile: resultFile });
-        const v = await startVault({ about: () => ({ api: 'source', update: u.status, nextRestart: null }) });
+        const v = await startVault({ about: () => ({ api: 'source', update: u.status, restart: restartStatus(u.status.imageWaiting) }) });
         try {
             await doGenesis(v);
             const lastInstall = async () => {
@@ -477,7 +535,7 @@ describe('the launcher checks a switch itself', () => {
         const r3 = makeRelease({ version: '1.2.0', previous: r2, custodianKeys: root, signers: root, image: randomImage(), apiBundleHash: sha256Hex(bundleC) });
         const c = path.join(dir, `other-image-${n}.mjs`);
         writeFileSync(c, bundleC);
-        expect(launcher.verify({ bundlePath: c, release: r3, chain: [r1, r2, r3] }, sha256Hex(bundleB))).toEqual({ ok: false, reason: 'release 1.2.0 is for another image: it waits for the monthly restart' });
+        expect(launcher.verify({ bundlePath: c, release: r3, chain: [r1, r2, r3] }, sha256Hex(bundleB))).toEqual({ ok: false, reason: 'release 1.2.0 is for another image: it waits for the custodians\' restart' });
     });
 
     it('the release in service is found by bundle and booted image: two images sharing a bundle, and a chain cut short (#1314 round 3, 4138896586)', async () => {
@@ -513,7 +571,7 @@ describe('the launcher checks a switch itself', () => {
         const r111 = makeRelease({ version: '1.1.1', previous: r110, custodianKeys: root, signers: root.slice(0, 2), image: imageA, apiBundleHash: sha256Hex(b3) });
         const f111 = path.join(dir, `b3-bundle-${n}.mjs`);
         writeFileSync(f111, b3);
-        expect(launcher.verify({ bundlePath: f111, release: r111, chain: [r100, r101, r102, r110, r111] })).toEqual({ ok: false, reason: 'release 1.1.1 is for another image: it waits for the monthly restart' });
+        expect(launcher.verify({ bundlePath: f111, release: r111, chain: [r100, r101, r102, r110, r111] })).toEqual({ ok: false, reason: 'release 1.1.1 is for another image: it waits for the custodians\' restart' });
         // The booted image unknown (root's file missing): nothing is switched to.
         booted.image = null;
         expect(ask([r100, r101, r102, r110])).toEqual({ ok: false, reason: 'the image this machine booted is unknown' });

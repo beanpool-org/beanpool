@@ -27,8 +27,8 @@ holds a real member's copy until the reshare is done.
   `/v1/report`, and the hourly release check. It holds no key and never sees a copy in the clear.
 - **`vault-launcher`** (`src/launcher/`) is what systemd starts for the API. It runs the image's API, and hands over
   to a newer release's API without a restart or an unlock (below). It changes only with the image.
-- **`vault-install`** (`src/install/`) is root's step at the monthly restart: it installs a new image the API staged
-  only if its own check from the pinned keys passes (below). It changes only with the image.
+- **`vault-install`** (`src/install/`) is root's step at the custodians' restart: it installs a new image the API
+  staged only if two custodians asked for it and its own checks from the pinned keys pass (below). It changes only with the image.
 
 Any restart of the keyholder leaves the vault locked until two custodians unlock it. While locked, every route but
 `/v1/health` and `/v1/unlock/*` answers 503 `{locked: true}`.
@@ -137,7 +137,7 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   it switched to. An API that keeps exiting after a switch (three times in ten minutes) gives way to the one in
   service before the switch, or the image's own if that one keeps exiting too. That step back is the launcher's, not a
   release chosen: the release it fell back from may be taken again after a back-off (an hour, doubling each time it
-  fails again, never past the next monthly restart), and nothing else at or below the newest release it switched to.
+  fails again, up to 35 days: nothing restarts the vault on a schedule), and nothing else at or below the newest release it switched to.
   All of that is the launcher process's memory, so it stays up while its API is down (only systemd's stop ends it);
   `launcher-program.test.ts` runs the built program to check it. A release's bundle sits where the API's user writes,
   so the launcher keeps the SHA-256 it checked and hashes the file again before every start (the switch, a restart, a
@@ -149,14 +149,14 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   carries no image files, and the image's files are named for the version it was built as), if that release is newer
   than the one running (so an API that can't find itself in the feed stages nothing either), into its inbox
   (`/var/lib/beanpool-vault/staged`), with the chain of releases up to it, and `/v1/report` says `imageWaiting`. That
-  decides nothing: the API is what this guards against. At the monthly restart root's install step
+  decides nothing: the API is what this guards against. At the custodians' restart (below) root's install step
   (`vault-install.mjs`, built with the genesis keys like the launcher, on the verified system partition;
   `src/install/install.ts`) walks the chain from those keys itself and checks, on its own copies: two custodian
   signatures, a release newer than the running one, file names carrying its version (and the partitions' names its
   root hash), the UKI's SHA-256 and `veritysetup verify` against its `roothash`. Only then does it move the files into
   `/var/lib/beanpool-vault/install` (root's alone; the API's user can write neither it nor anything root runs), where
   systemd-sysupdate installs them into the other system slot; systemd-boot boots the new one and falls back to the old
-  one if it fails to boot three times. Anything else is refused, logged and removed. Root's step first stops the API
+  one if it fails to boot three times. Anything else is refused and logged, and nothing is stopped. Once every check passes, root's step stops the API
   (the machine restarts next anyway) and, once no process of the API's user runs, removes what that user left on the
   state partition: the releases it downloaded (the image's own API starts after the restart and downloads a release's
   bundle again), anything in `backups/` that is not a backup, anything in `settings/` but the custodians' settings file
@@ -175,12 +175,15 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   because the unlock finishes the restore from either and the vault can't open without it. Only a restore that a fresh
   keyholder accepts makes that marker, and the API's user can't write there. `lastInstall.cleanup` in
   `/v1/report` says what went. So an API that fills the state partition, with bytes, preallocated blocks or empty
-  files, denies updates only until the next monthly restart (`/v1/report` says so meanwhile). The exception is a
+  files, denies updates only until the custodians' restart (`/v1/report` says so meanwhile): with their request, a
+  refusal for want of room makes root stop the API, remove what it left, and check again (never without it). The exception is a
   real pending restore: from the restore ceremony until the unlock finishes it, root keeps its two files whatever
   they hold. The data partition's mount point is root's, so nothing is hidden under
   the mount. Between restarts the API itself clears everything in its
-  inbox but the image it stages, at every check (a directory with all it holds; a link, never what it points at); what
-  it can't remove, `/v1/report` says (`imageWaiting.error`), and the check goes on (a handover included).
+  inbox but the image it stages, at every check (a directory with all it holds; a link, never what it points at), and
+  the whole inbox at a check where no image waits (files root refused at a custodians' restart included: root removes
+  nothing from the inbox on a refusal); what it can't remove, `/v1/report` says (`imageWaiting.error`, or `error` when
+  no image waits), and the check goes on (a handover included).
   Then two custodians unlock. The test image
   installs a signed next image this way (a small one that is never booted: the API stages it, root makes every check,
   and systemd-sysupdate writes it into the other slot and the ESP) and checks the refusals; `install.test.ts` checks
@@ -188,7 +191,7 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   with its own builds).
 - **Debian's security fixes** come as a new image built from a newer snapshot: the system partition is read-only
   under dm-verity, so nothing installs itself on the running vault (this replaces design §3's "install themselves";
-  the imageHash would mean nothing otherwise). An urgent one gets an extra planned restart.
+  the imageHash would mean nothing otherwise). An urgent one is a new image like any other: the custodians restart for it when both can unlock.
 
 ## The image (`image/`; host design §5.1 items 5 and 6)
 
@@ -202,11 +205,11 @@ pinned container (`--network`: below):
   partition, made at the first boot with the second system slot and the data partition (`usr/lib/repart.d`).
 - The disk: the ESP (512 MiB), two system slots (1 GiB and a 64 MiB verity tree each), the state partition (6 GiB) and
   the data partition (the rest, at least 1 GiB): 9.63 GiB and the partition table, so a 10 GiB disk or more (1984's
-  smallest VPS has 25 GB; the boot test uses 12 GiB). The state partition is sized for the monthly restart's worst
+  smallest VPS has 25 GB; the boot test uses 12 GiB). The state partition is sized for the custodians' restart's worst
   moment, measured on a build: a new image is 1.11 GiB (system partition 1 GiB, verity tree 64 MiB, UKI 49.5 MiB) and
   is there twice while root checks it (the API's inbox and root's copies, 2.22 GiB), beside the journal (at most
   200 MiB), the local backups (at most 1 GiB, `backupMaxBytes`: the oldest go first, a backup past it is never
-  written, and at the monthly restart root applies the same rule; each is also copied off the box, below) and a
+  written, and at the custodians' restart root applies the same rule; each is also copied off the box, below) and a
   few MiB of releases, certificates and state: about 3.7 GiB. On the booted test image the file system is 5.82 GiB,
   5.79 GiB of it free after a genesis: 2.1 GiB to spare. Root's install step checks the room for its copies before it
   makes them, and a staging or install that fails for room says so in `/v1/report` (`imageWaiting.error`,
@@ -324,12 +327,52 @@ vault-custodian unlock --url https://vault.beanpool.org --key my-key.json --shar
 vault-custodian fetch-share --url https://vault.beanpool.org --key my-key.json --out shares/   # after a genesis or reshare
 ```
 
-## The monthly restart (D3)
+## The custodians' restart for a new image (D3)
 
-The first Sunday of each month at 09:00 UTC (`beanpool-vault-monthly-restart.timer`; `/v1/report` says when the next
-one is). It installs a new image the API staged, only if root's check from the pinned keys passes (above), and
-restarts. The vault comes back locked: two custodians unlock it, within the 24-hour target. After a restart nobody
-planned, the rule stands: reinstall from the signed image first, then unlock.
+D3 changed (Marty, 2026-10-06): no scheduled restart. A monthly timer would restart the vault when nobody can be
+there to unlock it, so the vault restarts for a new image only when two custodians ask, ready to unlock at once.
+API-only releases still hand over live, with no restart (the launcher, above); only a new image needs one.
+
+When `/v1/report` says `restart.custodianRestartNeeded` (a release's new image is staged: `restart.imageWaiting`),
+each of two custodians runs:
+
+```
+vault-custodian restart --url https://vault.beanpool.org --key my-key.json
+```
+
+It checks the waiting release against the releases from the pinned keys, says what will happen (the vault restarts
+and stays LOCKED until two custodians unlock it: have both keys and shares ready), asks for yes, and signs a short
+request naming exactly that release and its image, with the time and a random nonce (`src/shared/restart-request.ts`).
+The second custodian signs the same request (the vault hands it over), within the hour. Their tool joins it only on its
+own checks, never the API's word: the request names the same release and image, is dated within its hour and not
+ahead of the custodian's clock (else a hostile API could collect two signatures now and have root act on them days
+later, when nobody is ready to unlock), and carries a signature that checks against the pinned releases' custodian
+keys (the tool names only that custodian). Otherwise it says why and starts a new request. The API only carries it: it
+writes both signatures to `/var/lib/beanpool-vault/restart/request.json`, and root's `beanpool-vault-restart.path`
+runs the install step on it (`vault-install.mjs --restart-request`). Root reads and removes the request and, from the
+pinned keys, before it stops anything, checks: two signatures from the running release's custodians, signed within
+the hour (and not ahead of its clock), never acted on before (root keeps the ones it acted on), naming exactly the
+staged release's image, and that image passes every check above. Anything else is refused and logged, and the vault
+keeps running; `update.lastInstall` in `/v1/report` says why. A hostile API can forge no custodian signature, so it
+can trigger neither a stop nor an install nor a reboot. Only then: stop the API, remove what its user left, install
+into the other slot, reboot. If root's copies find no room, the request lets root stop the API, clear what its user
+left and check again, for the very release the request names and no other (the API runs until the stop ends it, so it
+could swap the inbox meanwhile: that is refused, nothing installed). The path unit has no trigger limit and the
+service no start limit, so a flood of request files never stops the unit watching until a reboot. The vault comes back locked; the tool says how to watch for that and the unlock command.
+
+Between restarts, the state partition is held by the API's own rules: local backups within `backupMaxBytes` (the
+oldest go first), its inbox cleared at every check but the staged image (all of it when no image waits), and only
+two-signed releases downloaded (one API bundle each, at most 32 MiB; the only thing that grows between restarts,
+measured below). After a restart nobody planned, the rule stands: reinstall from the signed image first, then unlock.
+
+An API that fills the state partition before any image is staged (PR #1669, fix round 2: chosen, not missed): staging
+is refused for room and `/v1/report` says so, and root clears nothing, because a restart request names a staged image
+and there is none (`nothing is staged, so there is nothing to restart for`). Two custodians' signatures have one
+effect on root, a restart into a new image that passes its checks, and no other. The way out: an API-only release
+that clears its own directories (they are its user's; the handover needs room for one bundle), or, if even that can't
+land, the rule for a restart nobody planned: reinstall from the signed image, then unlock. A stop-and-clear request
+with no image would not help against a hostile API anyway (it can withhold any request it is given to relay), only
+against a buggy one, and it would hand two signatures a second thing to make root do.
 
 ## Monitoring (design §3)
 
@@ -344,8 +387,9 @@ planned, the rule stands: reinstall from the signed image first, then unlock.
   which kinds of channel are set: never an address, a host, a bucket or a key), pushes, memory hygiene, how many new
   custodians confirmed their share, and `api` (the running bundle's hash), `update` (the image this API knows it
   booted, the release it runs, the newest, a waiting image and whether it is staged or why not, anything refused and
-  why, the last handover, and `lastInstall`: what root's install step did at the last monthly restart, installed or
-  why not, from the file it leaves in `/var/lib/beanpool-vault/install-result.json`), `nextRestart`.
+  why, the last handover, and `lastInstall`: what root's install step did at the last custodians' restart, installed or
+  why not, from the file it leaves in `/var/lib/beanpool-vault/install-result.json`), and `restart`: `imageWaiting`
+  (the release whose new image waits, and whether it is staged) and `custodianRestartNeeded`. No restart is planned.
 
 ## Operator settings: where backups go, and where alerts go
 

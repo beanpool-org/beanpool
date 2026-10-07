@@ -2,7 +2,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { SwitchRequest } from '../api/updater.js';
 import { compareVersions, resolveChain, sha256Hex, type ReleaseManifest } from '../shared/release.js';
-import { nextMonthlyRestart } from '../shared/schedule.js';
 
 /**
  * vault-launcher (key vault design §3, "starts the new API beside itself and hands over traffic"): the process systemd
@@ -30,7 +29,7 @@ import { nextMonthlyRestart } from '../shared/schedule.js';
  * One that keeps dying (three times in ten minutes) after a switch gives way to the API that was in service before
  * that switch, and if that one keeps dying too (or there was none), to the image's own bundle. That step back is the
  * launcher's own, not a release chosen: the release it fell back from may be switched to again after a back-off (an
- * hour, doubling each time it fails again, never past the next monthly restart, which starts the launcher afresh),
+ * hour, doubling each time it fails again, up to 35 days; a custodians' restart for a new image starts it afresh),
  * and nothing else at or below the newest release it has switched to is ever taken.
  *
  * Messages over the child's IPC channel: `{type: 'ready'}` and `{type: 'switch', id, request}` from a child;
@@ -232,12 +231,13 @@ export class Launcher {
 
     /**
      * After falling back from `version` (the floor): when it may be switched to again. An hour the first time, twice the
-     * last back-off each time it fails again, and never past the next monthly restart (the launcher starts afresh then).
+     * last back-off each time it fails again, up to RETRY_BACKOFF_MAX_MS (a restart for a new image starts the launcher
+     * afresh, but nothing restarts the vault on a schedule: D3, Marty 2026-10-06).
      */
     private backOff(version: string, now: number): number {
         const first = this.opts.retryBackoffMs ?? RETRY_BACKOFF_MS;
         const backoffMs = this.retry?.version === version ? Math.min(this.retry.backoffMs * 2, RETRY_BACKOFF_MAX_MS) : first;
-        this.retry = { version, backoffMs, notBefore: Math.min(now + backoffMs, nextMonthlyRestart(now)) };
+        this.retry = { version, backoffMs, notBefore: now + backoffMs };
         return this.retry.notBefore;
     }
 
@@ -271,7 +271,7 @@ export class Launcher {
                 return { ok: false, reason: `release ${version} kept failing after the switch: it may be taken again from ${new Date(this.retry.notBefore).toISOString()}` };
             }
         }
-        if (release.manifest.imageHash !== image) return { ok: false, reason: `release ${version} is for another image: it waits for the monthly restart` };
+        if (release.manifest.imageHash !== image) return { ok: false, reason: `release ${version} is for another image: it waits for the custodians' restart` };
         let bytes: Buffer;
         try {
             bytes = readFileSync(req.bundlePath);

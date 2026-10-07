@@ -4,14 +4,13 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { Launcher } from '../launcher/launcher.js';
 import { sha256Hex, type ReleaseFiles } from '../shared/release.js';
-import { nextMonthlyRestart } from '../shared/schedule.js';
 import { keys3, makeRelease, randomImage, type MadeRelease } from './release-kit.js';
 
 /**
  * The launcher's own step back (#1314 round 2, 4135477703), with real processes: this launcher, and API bundles that
  * pass their self-test, say they listen, and ask for a switch when the test tells them to (a file named for their
  * release). A release that keeps exiting after a switch gives way to the API in service before it, not the image's;
- * it may be taken again after a back-off (an hour, doubling, never past the monthly restart); nothing older than what
+ * it may be taken again after a back-off (an hour, doubling, up to 35 days: nothing restarts the vault on a schedule); nothing older than what
  * it fell back to is ever taken, and nothing else at or below the newest release switched to.
  */
 
@@ -169,9 +168,11 @@ describe('the launcher steps back from a release that keeps failing, and takes i
         expect(t.launcher.currentBundle).toContain('api-1.0.2.mjs');
     }, 60_000);
 
-    it('the back-off never runs past the next monthly restart (which starts the launcher afresh)', async () => {
-        const restart = nextMonthlyRestart(Date.UTC(2026, 9, 5, 12));
-        const t = setUp(restart - 20 * 60 * 1000);
+    it('the back-off is an hour even just before the first Sunday of a month: nothing restarts the vault on a schedule (D3, 2026-10-06)', async () => {
+        // 20 minutes before what was the monthly restart (2026-11-01 09:00 UTC): the back-off is no longer cut short there.
+        const start = Date.UTC(2026, 10, 1, 9) - 20 * 60 * 1000;
+        const restart = start + HOUR;
+        const t = setUp(start);
         await t.launcher.start();
         t.crash('1.0.1', true);
         expect(await t.ask('1.0.0', '1.0.1')).toEqual({ ok: true });

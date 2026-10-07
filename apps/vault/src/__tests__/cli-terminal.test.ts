@@ -8,8 +8,8 @@ import { custodianKey } from '../custodian/lib.js';
 import { openKeyFile, sealKeyFile } from '../custodian/keyfile.js';
 import { NO_HARDWARE_PROOF } from '../custodian/checker.js';
 import { SIGNATURES_ASSET } from '../shared/release-feed.js';
-import { get, startVault, type VaultUnderTest } from './harness.js';
-import { makeRelease, publish } from './release-kit.js';
+import { doGenesis, get, startVault, type VaultUnderTest } from './harness.js';
+import { makeRelease, publish, randomImage, type MadeRelease } from './release-kit.js';
 // @ts-expect-error: a plain .mjs build script, no types
 import { bundleVault } from '../../scripts/bundle.mjs';
 
@@ -229,4 +229,36 @@ describe.skipIf(!hasExpect)('vault-custodian on a real terminal', () => {
         expect(made.terminalRestored, made.out).toBe(true);
         expect(openKeyFile(readFileSync(file, 'utf8'), PASS).protectedByPassphrase).toBe(true);
     });
+
+    it('restart (D3, 2026-10-06): passphrase then "no" signs nothing; Ctrl-C restores the terminal; two custodians\' yes leave the request for root', async () => {
+        const requestFile = path.join(dir, 'restart', 'request.json');
+        mkdirSync(path.dirname(requestFile), { recursive: true });
+        let waiting: { version: string; imageHash: string; staged: boolean } | null = null;
+        v = await startVault({ custodians, clock: { now: () => Date.now(), advance: () => undefined }, restartRequestFile: requestFile, imageWaiting: () => waiting });
+        await doGenesis(v);
+        const r2 = makeRelease({ version: '1.1.0', previous: v.release as MadeRelease, custodianKeys: custodians, signers: custodians.slice(0, 2), image: randomImage() });
+        publish(v.feedDir, r2);
+        waiting = { version: '1.1.0', imageHash: r2.manifest.imageHash, staged: true };
+        const restart = (i: number) => ['restart', '--url', (v as VaultUnderTest).baseUrl, '--key', keys[i], '--feed-dir', (v as VaultUnderTest).feedDir];
+
+        const no = await onTerminal('no', restart(0));
+        expect(no.code, no.out).toBe(1);
+        expect(no.out).toContain('the vault stays LOCKED until two custodians unlock it');
+        expect(no.out).toContain('Not signed. Nothing was sent.');
+        expect(no.out).not.toContain(PASS);
+
+        const stopped = await onTerminal('ctrlc', restart(0));
+        expect(stopped.code, stopped.out).toBe(130);
+        expect(stopped.terminalRestored, stopped.out).toBe(true);
+
+        const first = await onTerminal('yes', restart(0));
+        expect(first.code, first.out).toBe(0);
+        expect(first.out).toContain('Signed. Waiting for a second custodian');
+        expect(existsSync(requestFile)).toBe(false);
+        const second = await onTerminal('yes', restart(1));
+        expect(second.code, second.out).toBe(0);
+        expect(second.out).toContain('Watch for it coming back LOCKED');
+        expect(second.terminalRestored, second.out).toBe(true);
+        expect((JSON.parse(readFileSync(requestFile, 'utf8')) as { signatures: unknown[] }).signatures).toHaveLength(2);
+    }, 120_000);
 });

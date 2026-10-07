@@ -374,6 +374,7 @@ export const SUITES = [
     'test-doors-key-case',
     'test-events',
     'test-enterprise-event-http',
+    'test-enterprise-text',
     'test-event-chat',
     'test-event-notify',
     'test-event-reminders',

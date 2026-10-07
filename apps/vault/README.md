@@ -180,8 +180,10 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   real pending restore: from the restore ceremony until the unlock finishes it, root keeps its two files whatever
   they hold. The data partition's mount point is root's, so nothing is hidden under
   the mount. Between restarts the API itself clears everything in its
-  inbox but the image it stages, at every check (a directory with all it holds; a link, never what it points at); what
-  it can't remove, `/v1/report` says (`imageWaiting.error`), and the check goes on (a handover included).
+  inbox but the image it stages, at every check (a directory with all it holds; a link, never what it points at), and
+  the whole inbox at a check where no image waits (files root refused at a custodians' restart included: root removes
+  nothing from the inbox on a refusal); what it can't remove, `/v1/report` says (`imageWaiting.error`, or `error` when
+  no image waits), and the check goes on (a handover included).
   Then two custodians unlock. The test image
   installs a signed next image this way (a small one that is never booted: the API stages it, root makes every check,
   and systemd-sysupdate writes it into the other slot and the ESP) and checks the refusals; `install.test.ts` checks
@@ -352,9 +354,18 @@ can trigger neither a stop nor an install nor a reboot. Only then: stop the API,
 into the other slot, reboot. The vault comes back locked; the tool says how to watch for that and the unlock command.
 
 Between restarts, the state partition is held by the API's own rules: local backups within `backupMaxBytes` (the
-oldest go first), its inbox cleared at every check but the staged image, and only two-signed releases downloaded
-(one API bundle each, at most 32 MiB; the only thing that grows between restarts, measured below). After a restart
-nobody planned, the rule stands: reinstall from the signed image first, then unlock.
+oldest go first), its inbox cleared at every check but the staged image (all of it when no image waits), and only
+two-signed releases downloaded (one API bundle each, at most 32 MiB; the only thing that grows between restarts,
+measured below). After a restart nobody planned, the rule stands: reinstall from the signed image first, then unlock.
+
+An API that fills the state partition before any image is staged (PR #1669, fix round 2: chosen, not missed): staging
+is refused for room and `/v1/report` says so, and root clears nothing, because a restart request names a staged image
+and there is none (`nothing is staged, so there is nothing to restart for`). Two custodians' signatures have one
+effect on root, a restart into a new image that passes its checks, and no other. The way out: an API-only release
+that clears its own directories (they are its user's; the handover needs room for one bundle), or, if even that can't
+land, the rule for a restart nobody planned: reinstall from the signed image, then unlock. A stop-and-clear request
+with no image would not help against a hostile API anyway (it can withhold any request it is given to relay), only
+against a buggy one, and it would hand two signatures a second thing to make root do.
 
 ## Monitoring (design §3)
 

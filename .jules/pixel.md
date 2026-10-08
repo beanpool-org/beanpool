@@ -166,3 +166,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-11-15 - Add accessibilityHint to event submit button in NewEventModal
 **Learning:** Form action buttons that perform distinct actions depending on modal state (create, edit, or copy) benefit from dynamic `accessibilityHint` attributes to clarify the result of activating the button for screen reader users.
 **Action:** Provide explicit dynamic `accessibilityHint` attributes on action buttons that handle multiple modes (`editOf`, `isCopy`, etc.).
+
+## 2026-11-22 - Add accessibilityHint to group invite landing action button
+**Learning:** In group invite landing screens, primary action buttons whose function changes based on viewer join status (joining or opening chat) benefit from dynamic `accessibilityHint` attributes so screen reader users know the exact outcome of tapping the button.
+**Action:** Supply dynamic `accessibilityHint` attributes on group invite primary action buttons.

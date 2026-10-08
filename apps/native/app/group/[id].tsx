@@ -218,6 +218,7 @@ export default function GroupInviteLanding() {
                     disabled={!action?.enabled || busy}
                     accessibilityRole="button"
                     accessibilityLabel={action ? action.label : 'Loading'}
+                    accessibilityHint={action?.note || (viewerStatus === 'active' ? 'Opens the group chat' : 'Joins the group and opens its chat')}
                     accessibilityState={{ disabled: !action?.enabled || busy, busy: busy || loadingGroup }}
                 >
                     {busy || !action

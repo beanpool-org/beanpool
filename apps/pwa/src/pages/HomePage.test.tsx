@@ -1214,7 +1214,7 @@ describe('the card frame (F3)', () => {
         await waitFor(() => expect(cardIds()).not.toContain('pulse'));
         fireEvent.click(screen.getByTestId('home-edit-open'));
         expect(screen.getByTestId('home-edit-not-on-account')).toBeInTheDocument();
-        fireEvent.click(screen.getByTestId('home-edit-dialog-done'));
+        fireEvent.click(screen.getByTestId('home-edit-done'));
         // More reads on this landing send nothing.
         await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));

@@ -295,7 +295,7 @@ async function render() {
 const cards = () => Array.from(document.querySelectorAll('[data-testid^="home-card-"]'))
     .map(e => e.getAttribute('data-testid')!.replace('home-card-', ''))
     .filter(id => !id.endsWith('-menu'));
-const byLabel = (label: string) => document.querySelector(`[aria-label="${label}"]`) as HTMLElement | null;
+const byLabel = (label: string) => document.querySelector(`[aria-label="${label.replace(/"/g, '\\"')}"]`) as HTMLElement | null;
 const homeReads = () => node.requests.filter(r => new URL(r.url).pathname === '/api/home');
 const marketOrder = () => Array.from(document.querySelectorAll('[data-testid^="home-market-p"]')).map(e => e.getAttribute('data-testid')!.replace('home-market-', ''));
 
@@ -1408,6 +1408,64 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
     });
 });
 
+describe('two saved searches: each is named by its words, never in its caption, and its line promises no rows (review of #1699, finding 4)', () => {
+    it('their "…", the menu, Edit home and the removed line each say the words, bounded; the caption stays the type\'s', async () => {
+        const long = 'second hand children\'s bicycles near the school';
+        const mine = { v: 2, cards: [
+            { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } },
+            { id: 'search-m4p9', type: 'search', settings: { q: long, kind: 'any' } },
+            { id: 'pulse', type: 'pulse' },
+        ], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        node.answer = { ...localMember(), layout: mine as never };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
+        await render();
+        expect(cards().slice(0, 2)).toEqual(['search-k2x7', 'search-m4p9']);
+        const bounded = '"second hand children\'s b…"';
+        for (const id of ['search-k2x7', 'search-m4p9']) {
+            const card = document.querySelector(`[data-testid="home-card-${id}"]`)!;
+            // The caption is the type's name; the words are the body's (and the labels').
+            expect(card.querySelector('[role="heading"]')!.textContent).toBe('A saved search');
+            expect(card.querySelector('[role="heading"]')!.getAttribute('aria-label')).toBe('A saved search');
+            expect(card.querySelector('[data-testid="home-search-waiting"]')!.textContent).toBe('Its listings show in a coming app update.');
+            expect(card.textContent).not.toContain('Shows when your community answers');
+        }
+        expect(byLabel('Card options for "eggs"')).not.toBeNull();
+        expect(byLabel(`Card options for ${bounded}`)).not.toBeNull();
+        expect(byLabel('Card options for A saved search')).toBeNull();
+        await act(async () => { byLabel('Card options for "eggs"')!.click(); });
+        expect(byLabel('Move "eggs" down')).not.toBeNull();
+        expect(byLabel('Settings for "eggs"')).not.toBeNull();
+        // The menu's title is the card's name, drawn; only its labels carry the words.
+        expect(document.querySelector('[role="heading"][aria-label=\'Card options for "eggs"\']')!.textContent).toBe('A saved search');
+        await act(async () => { byLabel('Remove "eggs" from Home')!.click(); });
+        await settle();
+        expect(vi.mocked(AccessibilityInfo.announceForAccessibility)).toHaveBeenCalledWith('"eggs" removed. Add a card brings it back.');
+        expect(cards()).not.toContain('search-k2x7');
+        // Edit home: the row shows the type's name; its arrows and "…" say the words.
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        const row = document.querySelector('[data-testid="edit-home-search-m4p9"]')!;
+        expect(row.textContent).toContain('A saved search');
+        expect(row.textContent).not.toContain('bicycles');
+        expect(byLabel(`Move ${bounded} down`)).not.toBeNull();
+        expect(byLabel(`Card options for ${bounded}`)).not.toBeNull();
+    });
+
+    it('a new saved search is announced by its words', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add A saved search to Home')!.click(); });
+        await settle(2);
+        const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLInputElement;
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'duck eggs');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await act(async () => { (document.querySelector('[data-testid="card-settings-done"]') as HTMLElement).click(); });
+        await settle();
+        expect(vi.mocked(AccessibilityInfo.announceForAccessibility)).toHaveBeenCalledWith('"duck eggs" added to Home');
+    });
+});
+
 describe('the global node is never asked for a card it doesn\'t show (review of #1699, finding 5)', () => {
     it('a member for 60 days with a version-1 list: no read asks Beans, deals, enterprise or Decide', async () => {
         const base = globalMember(60);
@@ -1861,9 +1919,10 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
         await act(async () => { byLabel('Card options for Coming up')!.click(); });
         expect(document.querySelector('[data-testid="home-menu-settings"]')).toBeNull();
         await act(async () => { byLabel('Cancel')!.click(); });
-        await act(async () => { byLabel('Card options for A saved search')!.click(); });
-        expect(byLabel('Settings for A saved search')).not.toBeNull();
-        await act(async () => { byLabel('Settings for A saved search')!.click(); });
+        // Named by its words (review of #1699, finding 4).
+        await act(async () => { byLabel('Card options for "eggs"')!.click(); });
+        expect(byLabel('Settings for "eggs"')).not.toBeNull();
+        await act(async () => { byLabel('Settings for "eggs"')!.click(); });
         await settle(2);
         expect(document.querySelector('[data-testid="card-settings-sheet"]')).not.toBeNull();
         const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLInputElement;

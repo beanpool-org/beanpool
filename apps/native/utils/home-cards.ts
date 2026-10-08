@@ -23,7 +23,7 @@
 
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
-    homeCardType, readHomeLayout as frameReadHomeLayout, removeCard as frameRemoveCard,
+    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
 } from '@beanpool/core';
 import {
@@ -63,6 +63,23 @@ export function cardName(type: HomeCardId, profile?: string): string {
     const t = homeCardType(type);
     if (!t) return type;
     return profile === 'global' && t.globalName ? t.globalName : t.name;
+}
+
+/** The most of a saved search's words its screen-reader name carries; longer ones end in "…". */
+export const CARD_WORDS_MAX = 24;
+
+/**
+ * One card's name for the screen reader: its "…" and Edit home's labels, and the "added" and "removed" lines. A saved
+ * search is named by its words, in quotes and bounded (`"eggs"`), so two of them never sound alike (CARD-FRAME §1.3;
+ * review of #1699, finding 4); every other card by its type's name. Never the caption: a caption is fixed words, never a
+ * member's.
+ */
+export function cardLabelName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
+    if (c.type === 'search') {
+        const q = readSearchSettings(c.settings).q.trim().replace(/\s+/g, ' ');
+        if (q) return `"${q.length > CARD_WORDS_MAX ? `${q.slice(0, CARD_WORDS_MAX).trimEnd()}…` : q}"`;
+    }
+    return cardName(c.type, profile);
 }
 
 // ── The answer, as GET /api/home sends it (apps/server routes/home-answer.ts HomeAnswer) ────────────────────────────
@@ -336,8 +353,11 @@ export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | n
 export const FEWER_CARDS_LINE = 'Home now starts with fewer cards. Add a card brings the rest back.';
 /** The one-time hint (§1.3). */
 export const HOME_HINT_LINE = 'This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.';
-/** A saved search's card before the node builds its rows (slice F4): it fills in from the node (CARD-FRAME §2.4). */
-export const SEARCH_WAITING_LINE = 'Shows when your community answers.';
+/**
+ * A saved search's card in this build: an updated node already builds its listings, and this app draws them from its
+ * next update (slice F4), so the line promises nothing this build can't draw (review of #1699, finding 4).
+ */
+export const SEARCH_WAITING_LINE = 'Its listings show in a coming app update.';
 /** Edit home's line while a node before the frame can't keep the member's cards (§2.3). */
 export const NOT_ON_ACCOUNT_LINE = "Your community's server needs an update before your cards follow you to other devices.";
 
@@ -622,7 +642,7 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             case 'invite': return !global && canInvite && !!answer.me?.firstOffer;
             case 'market': return !!c.market && (c.market.items.length > 0 || !!c.market.examples);
             case 'decide': return !!c.decide && decideLines(c.decide, answer.features, 0).length > 0;
-            // A settings card is drawn with no body yet ("Shows when your community answers", §2.4): the add took.
+            // A settings card is drawn with no body yet (SEARCH_WAITING_LINE until slice F4 draws its listings): the add took.
             case 'search': return true;
             case 'community': return true;
             default: return c[id] !== undefined;

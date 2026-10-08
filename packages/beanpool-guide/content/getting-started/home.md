@@ -22,7 +22,7 @@ On the phone, your Home is a list of cards you choose. A new member starts with 
 
 - **Add a card**, on your community's card at the bottom of Home, opens a list of every card your community can show, in three groups: **For you**, **Around you** and **Getting started**. Tap **Add** beside a card to put it on Home. It goes to the top, just under **Needs you**, and Home scrolls up to show it.
 - A card that is already on Home says **On Home** instead of **Add**. Some cards can be added more than once, such as **A saved search**: they say how many you have, such as "2 of 5 on Home".
-- **A saved search** asks for the words to look for before it is added. Its listings will show once your community's server can build them. Until then it says "Shows when your community answers."
+- **A saved search** asks for the words to look for before it is added. Its listings show in a coming app update; until then the card says so.
 - A Home holds at most 24 cards. When it is full, the list says so, and you remove a card to add another.
 - Your cards are kept on your account, so they follow you to your other phones. If your community's server has not been updated yet, they stay on this phone, and **Edit home** says "Your community's server needs an update before your cards follow you to other devices." They are sent again each time you open Home.
 - If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you start with the five, and Home tells you once: "Home now starts with fewer cards. Add a card brings the rest back."

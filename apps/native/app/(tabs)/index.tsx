@@ -29,7 +29,7 @@ import {
     MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
-    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, askPinned, canMoveCard, canRemoveCard,
+    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, askPinned, canMoveCard, canRemoveCard, cardLabelName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
     effectiveInterests, fewerCardsNews, firstSteps, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     pickLayout, pickerGroups, pinnedCards, removeCard, removedLine, safetyWord, starredFirst,
@@ -508,7 +508,7 @@ export default function HomeScreen() {
         if (type === 'tips') onTipsOn();
         changeLayout(added.layout, { reread: true });
         scrollRef.current?.scrollTo({ y: 0, animated: true });
-        AccessibilityInfo.announceForAccessibility(addedLine(cardName(type, ans?.profile)));
+        AccessibilityInfo.announceForAccessibility(addedLine(cardLabelName({ type, settings }, ans?.profile)));
     }, [changeLayout, onTipsOn]);
     const onPick = useCallback((row: PickerRow) => {
         if (!row.hasSettings) { addNow(row.type); return; }
@@ -519,7 +519,7 @@ export default function HomeScreen() {
         if (c.type === 'tips') { onTipsDontShow(); return; }
         setHint(false);
         changeLayout(removeCard(layoutRef.current, c.id, Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
-        AccessibilityInfo.announceForAccessibility(removedLine(cardName(c.type, storedRef.current?.answer.profile)));
+        AccessibilityInfo.announceForAccessibility(removedLine(cardLabelName(c, storedRef.current?.answer.profile)));
     }, [changeLayout, onTipsDontShow]);
     const openSettings = useCallback((c: HomeCardInstance) => {
         afterModal(() => setSettingsFor({ type: c.type, mode: 'save', id: c.id, settings: c.settings }));
@@ -617,7 +617,7 @@ export default function HomeScreen() {
         const caption = type === 'tips' && tipsView ? tipsCaption(tipsView) : cardCaption(type, answer);
         const menu = tailor && canRemoveCard(type, pins) ? () => setMenuFor(inst) : undefined;
         const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean }) => (
-            <HomeCard id={id} caption={caption} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
+            <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
                 {body}
             </HomeCard>
         );
@@ -819,6 +819,7 @@ export default function HomeScreen() {
                 <HomeCardMenu
                     visible={!!menuCard}
                     name={menuName}
+                    label={menuCard && answer ? cardLabelName(menuCard, answer.profile) : undefined}
                     colors={colors}
                     canRemove={!!menuCard && canRemoveCard(menuCard.type, pins)}
                     canUp={!!menuCard && canMoveCard(menuCard.type, pins) && menuAt > 0 && canMoveCard(drawn[menuAt - 1].type, pins)}

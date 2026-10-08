@@ -13,7 +13,7 @@ vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(), setItemAsync: vi.fn
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Array(n)) }));
 
 import {
-    HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
+    HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardLabelName, cardName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
     invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
@@ -258,6 +258,16 @@ describe('the layout (§4)', () => {
         expect(draw(answer({ cards: { steps: done, community: { name: 'L', members: 9 } } }), EVERY, ctx({ interests: ['food'] }))).not.toContain('steps');
         const global = answer({ profile: 'global', cards: { steps: steps(), community: { name: 'G', members: 9 } } });
         expect(draw(global, EVERY, ctx({ interests: ['food'] }))).toContain('steps');
+    });
+
+    it('a card\'s name for the screen reader: a saved search by its words, quoted and bounded at 24 characters; any other by its type (review of #1699, finding 4)', () => {
+        expect(cardLabelName({ type: 'search', settings: { q: '  duck   eggs ', kind: 'any' } })).toBe('"duck eggs"');
+        expect(cardLabelName({ type: 'search', settings: { q: 'x'.repeat(24), kind: 'any' } })).toBe(`"${'x'.repeat(24)}"`);
+        expect(cardLabelName({ type: 'search', settings: { q: 'x'.repeat(25), kind: 'any' } })).toBe(`"${'x'.repeat(24)}…"`);
+        expect(cardLabelName({ type: 'search', settings: { q: '', kind: 'any' } })).toBe('A saved search');
+        expect(cardLabelName({ type: 'search' })).toBe('A saved search');
+        expect(cardLabelName({ type: 'market' }, 'global')).toBe('Near you');
+        expect(cardLabelName({ type: 'pulse' })).toBe('The Pulse');
     });
 
     it('with an answer in hand, cards= leaves out a type this node doesn\'t show: the global node builds no Beans, deals, enterprise or Decide (review of #1699, finding 5)', () => {

@@ -5,7 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AppColors } from '../../constants/colors';
 import {
-    NOT_ON_ACCOUNT_LINE, canMoveCard, canRemoveCard, cardName, cardOnNode, cardOrder, moveCard, resetLayout,
+    NOT_ON_ACCOUNT_LINE, canMoveCard, canRemoveCard, cardLabelName, cardName, cardOnNode, cardOrder, moveCard, resetLayout,
     type HomeAnswer, type HomeCardId, type HomeCardInstance, type HomeLayout, type HomeRole,
 } from '../../utils/home-cards';
 import { homeCardType } from '@beanpool/core';
@@ -58,6 +58,8 @@ export function EditHomeSheet({
     const listed = cardOrder(layout, pinned).filter(c => canMoveCard(c.type, pinned) && cardOnNode(c.type, node, role));
     const findPinnedHere = pinned.includes('find') && cardOnNode('find', node, role);
     const name = (c: HomeCardInstance) => cardName(c.type, node.profile);
+    // Labels name the card as the screen reader should hear it: a saved search by its words (cardLabelName).
+    const said = (c: HomeCardInstance) => cardLabelName(c, node.profile);
     const apply = (next: HomeLayout | null) => { if (next) onChange(next); };
     const move = (c: HomeCardInstance, dir: 'up' | 'down') => apply(moveCard(layout, c.id, dir, listed, Date.now(), pinned));
 
@@ -76,7 +78,7 @@ export function EditHomeSheet({
                     onPress={() => move(c, 'up')}
                     style={editHomeStyles.arrow}
                     accessibilityRole="button"
-                    accessibilityLabel={`Move ${name(c)} up`}
+                    accessibilityLabel={`Move ${said(c)} up`}
                     accessibilityState={{ disabled: !canUp }}
                     testID={`edit-home-${c.id}-up`}
                 >
@@ -87,7 +89,7 @@ export function EditHomeSheet({
                     onPress={() => move(c, 'down')}
                     style={editHomeStyles.arrow}
                     accessibilityRole="button"
-                    accessibilityLabel={`Move ${name(c)} down`}
+                    accessibilityLabel={`Move ${said(c)} down`}
                     accessibilityState={{ disabled: !canDown }}
                     testID={`edit-home-${c.id}-down`}
                 >
@@ -97,7 +99,7 @@ export function EditHomeSheet({
                     onPress={() => setMenuFor(c)}
                     style={editHomeStyles.arrow}
                     accessibilityRole="button"
-                    accessibilityLabel={`Card options for ${name(c)}`}
+                    accessibilityLabel={`Card options for ${said(c)}`}
                     testID={`edit-home-${c.id}-menu`}
                 >
                     <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.text.body} />
@@ -150,6 +152,7 @@ export function EditHomeSheet({
                 <HomeCardMenu
                     visible={!!menuFor}
                     name={menuFor ? name(menuFor) : ''}
+                    label={menuFor ? said(menuFor) : undefined}
                     colors={colors}
                     canRemove={!!menuFor && canRemoveCard(menuFor.type, pinned)}
                     canUp={menuAt > 0}

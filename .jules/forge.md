@@ -149,3 +149,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `pruneTombstones` in `apps/server/src/connector-manager.ts` executed database tombstone pruning without a `try/catch` block. When run via periodic `setInterval`, database errors (such as SQLite lock/busy states) threw uncaught exceptions in timer callbacks.
 **Learning:** Functions executed in periodic `setInterval` callbacks must handle internal exceptions with a top-level `try/catch` block to prevent uncaught exceptions from destabilizing or crashing the Node process.
 **Pattern:** Ensure all functions passed directly or indirectly to `setInterval` enclose database or external I/O operations inside `try/catch` blocks.
+
+## 2026-10-08 - [Uncaught exception in expireSnapshots interval callback]
+**Issue:** `initSnapshotScheduler` in `apps/server/src/services/snapshot-scheduler.ts` ran `expireSnapshots` inside a `setInterval` callback without a `try/catch` block.
+**Learning:** Unhandled exceptions inside periodic timer callbacks can destabilize or crash Node.js process state.
+**Pattern:** Ensure all async or filesystem/DB callbacks passed to `setInterval` or `setTimeout` are enclosed in a top-level `try/catch` block.

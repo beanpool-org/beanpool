@@ -463,7 +463,10 @@ export function initSnapshotScheduler(): void {
     arm();
     expireSnapshots();
     if (expiryTimer) clearInterval(expiryTimer);
-    expiryTimer = setInterval(() => { expireSnapshots(); }, EXPIRE_EVERY_MS);
+    expiryTimer = setInterval(() => {
+        try { expireSnapshots(); }
+        catch (e) { logger.warn('SYS', `[Snapshots] Expire snapshots failed: ${(e as any)?.message || e}`); }
+    }, EXPIRE_EVERY_MS);
     expiryTimer.unref?.();
 }
 

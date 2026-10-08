@@ -169,6 +169,9 @@ export default function HomeScreen() {
     identityRef.current = identity;
     const storedRef = useRef<StoredHome | null>(null);
     const phoneLayout = useRef<HomeLayout | null>(null);
+    // The account and community (`key|url`) whose node refused the phone's list as a shape it doesn't know yet (a node from
+    // before the frame): the list is sent again once per landing, never at a poll, a bell, a pull or an add's own read.
+    const refusedShape = useRef<string | null>(null);
     const layoutRef = useRef<HomeLayout | null>(null);
     layoutRef.current = layout;
     const focused = useRef(false);
@@ -254,6 +257,7 @@ export default function HomeScreen() {
         if (saved === SAVE_SHAPE_REFUSED && (!answered?.layout || answered.layoutV1)) {
             // A node from before the frame (its Home answer is version 1): the cards stay on the phone and are sent again at
             // each landing, never thrown away (CARD-FRAME §2.3).
+            refusedShape.current = `${id.publicKey}|${u}`;
             setNotOnAccount(true);
             return;
         }
@@ -265,7 +269,10 @@ export default function HomeScreen() {
             await yieldPhoneLayout(id.publicKey, u, account, whose);
             return;
         }
-        if (saved) setNotOnAccount(false);
+        if (saved) {
+            refusedShape.current = null;
+            setNotOnAccount(false);
+        }
         // The node keeps the newer layout (another phone's, the web app's): that one, then.
         if (saved?.layout && (saved.layout.updatedAt ?? '') > (next.updatedAt ?? '')) {
             phoneLayout.current = saved.layout;
@@ -346,12 +353,16 @@ export default function HomeScreen() {
             const pick = member ? pickLayout(answered.layout, phoneLayout.current, answered.layoutV1) : { layout: null, push: false };
             setLayout(pick.layout);
             if (member && fewerCardsNews(answered.layout, phoneLayout.current, answered.me, Date.now())) void maybeFewer(whose);
+            // The phone's newer list is sent, but one the node refused as a shape it doesn't know yet only at a landing
+            // (CARD-FRAME §2.3: "sent again each time you open Home").
+            const resend = why === 'focus' || refusedShape.current !== `${id.publicKey}|${u}`;
+            const saving = pick.push && pick.layout && resend ? pushLayout(pick.layout, whose) : null;
             // The account's list asks for cards this read didn't (a first landing on this phone, or another device's edit):
-            // one more read for them, never more (a `layout` read doesn't ask again).
+            // one more read for them, never more (a `layout` read doesn't ask again). It follows the save's answer, so it
+            // never sends the list a second time while the first is out.
             const wanted = cardsToAsk(pick.layout, askPinned(answered, Date.now()));
-            if (member && why !== 'layout' && wanted.some(c => !asked.includes(c))) void refreshRef.current('layout');
-            if (pick.push && pick.layout) void pushLayout(pick.layout, whose);
-            else if (pick.layout && !answered.layoutV1) {
+            if (member && why !== 'layout' && wanted.some(c => !asked.includes(c))) void (saving ?? Promise.resolve()).then(() => refreshRef.current('layout'));
+            if (!pick.push && pick.layout && !answered.layoutV1) {
                 // A version-1 copy is drawn and never kept as the phone's: it is not written until the member edits (§2.6),
                 // and it must never stand in for the phone's own version 2 (review of #1697, note b).
                 phoneLayout.current = pick.layout;

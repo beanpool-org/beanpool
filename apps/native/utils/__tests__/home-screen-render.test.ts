@@ -945,6 +945,55 @@ describe('a layout save the node refuses is not sent again at every read', () =>
         expect(posts()).toBe(2);
         expect(cards().slice(0, 2)).toEqual(['search-k7mq', 'beans']);
     });
+
+    // Review of #1699, finding 1: a POST at every read (each 2-minute poll, each doorbell) while Home was in front.
+    it('the refused list goes again once per landing: never at a poll, a doorbell or an add\'s own read', async () => {
+        const spy = vi.spyOn(globalThis, 'setInterval');
+        try {
+            node.answer = { ...localMember(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
+            node.refuse = 400;
+            const key = homeLayoutStoreKey(who.identity.publicKey, NODE);
+            mem.store.set(key, JSON.stringify({ v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: new Date().toISOString() }));
+            const posts = () => node.requests.filter(r => r.method === 'POST' && new URL(r.url).pathname === '/api/members/preferences').length;
+            await render();
+            expect(posts()).toBe(1);
+            const poll = spy.mock.calls.filter(c => c[1] === HOME_SAFETY_POLL_MS).at(-1)![0] as () => void;
+            for (let i = 0; i < 3; i++) {
+                await act(async () => { poll(); });
+                await settle();
+            }
+            const ws = vi.mocked(DeviceEventEmitter.addListener).mock.calls.filter(c => c[0] === 'ws_activity').at(-1)![1] as (d: unknown) => void;
+            await act(async () => { ws({ type: 'new_post' }); });
+            await act(async () => { await new Promise(r => setTimeout(r, 3_300)); });
+            await settle();
+            expect(homeReads()).toHaveLength(5);
+            expect(posts()).toBe(1);
+            // An add: its own save, then its read, and that read sends nothing.
+            const before = node.requests.length;
+            await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+            await act(async () => { byLabel('Add The Pulse to Home')!.click(); });
+            await settle(20);
+            expect(node.requests.slice(before).map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
+            expect(cards()[0]).toBe('pulse');
+            // The next landing sends it once more.
+            await act(async () => { nav.focus?.(); });
+            await settle();
+            expect(posts()).toBe(3);
+        } finally { spy.mockRestore(); }
+    });
+
+    it('a member who never edited adds a card on a node from before the frame: one save, then one read', async () => {
+        node.answer = { ...localMember(), me: { ...localMember().me!, joinedAt: iso(Date.now() - 30 * 24 * H) }, layout: null };
+        node.refuse = 400;
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        await render();
+        const before = node.requests.length;
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add The Pulse to Home')!.click(); });
+        await settle(20);
+        expect(node.requests.slice(before).map(r => `${r.method} ${r.status}`)).toEqual(['POST 400', 'GET 200']);
+        expect(cards()[0]).toBe('pulse');
+    });
 });
 
 // ── Edit home offers only what this node can show (PR #1483 review 4165384151) ─────────────────────────────────────────

@@ -170,6 +170,9 @@ export function HomeLink({ id, text, a11y, onPress, colors, testID }: {
     );
 }
 
+/** The community card's two links (CARD-FRAME §1.1): one row where they fit, each wrapping whole to its own row where they don't. */
+export const communityLinksStyle = { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: 20 } as const;
+
 /** A card's button: wraps to a second row rather than shrinking its words (§9 "buttons flexShrink: 0"). */
 export function HomeButton({ text, a11y, onPress, colors, primary, testID }: {
     text: string;

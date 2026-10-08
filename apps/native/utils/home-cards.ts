@@ -336,6 +336,8 @@ export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | n
 export const FEWER_CARDS_LINE = 'Home now starts with fewer cards. Add a card brings the rest back.';
 /** The one-time hint (§1.3). */
 export const HOME_HINT_LINE = 'This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.';
+/** A saved search's card before the node builds its rows (slice F4): it fills in from the node (CARD-FRAME §2.4). */
+export const SEARCH_WAITING_LINE = 'Shows when your community answers.';
 /** Edit home's line while a node before the frame can't keep the member's cards (§2.3). */
 export const NOT_ON_ACCOUNT_LINE = "Your community's server needs an update before your cards follow you to other devices.";
 

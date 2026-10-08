@@ -10,13 +10,14 @@ import { resolvePulseThumbnailUrl } from '../../utils/pulse';
 import { formatDistance } from '../../utils/events';
 import type { NeedsYouEntry } from '../../utils/needs-you';
 import {
+    SEARCH_WAITING_LINE,
     RSVP_WORDS, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventDay, eventLine, formatBeans,
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type StepLine,
 } from '../../utils/home-cards';
 import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, readSearchSettings, tipsNextLabel, type TipsView } from '@beanpool/core';
 import { getBundledGuide } from '../../utils/guide';
-import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, homeStyles } from './HomeParts';
+import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
 
 /**
  * What each Home card says (design §3.1, §9), from the answer the screen holds. Every line is one target into a screen
@@ -354,9 +355,6 @@ export function CommunityBody({ card, profile, invitesOn, colors, onAdd, onEdit 
     );
 }
 
-/** The community card's two links: one row where they fit, each wrapping whole to its own row where they don't. */
-export const communityLinksStyle = { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: 20 } as const;
-
 /**
  * Tips (scratch/home/TIPS-DESIGN-fable.md §1, §5): one tip, its whole text; Next (Done on the last) and Read more when the
  * tip names a guide page, in a band the floating button steps aside for; then "Don't show tips again", full width,
@@ -395,9 +393,6 @@ export function TipsBody({ view, colors, onNext, onReadMore, onDontShow }: {
         </>
     );
 }
-
-/** A saved search's card before the node builds its rows (slice F4): its words, and that it fills in from the node (CARD-FRAME §2.4). */
-export const SEARCH_WAITING_LINE = 'Shows when your community answers.';
 
 /**
  * A saved search (CARD-FRAME §4): its caption is fixed (A saved search) and its words stand in a bounded row, never the

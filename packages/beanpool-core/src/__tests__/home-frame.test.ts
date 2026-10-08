@@ -72,6 +72,28 @@ describe('home frame: checkHomeLayout (the node takes a write by shape and bound
     });
 });
 
+describe('home frame: the size bound is on what is kept (review of #1697, finding 1)', () => {
+    it('a body under 8 KB as sent whose kept dates grow it past 8 KB is refused, so nothing kept refuses its own read-back', () => {
+        // Short dates ('1' parses) on 24 dismissals and no updatedAt: each is kept as a 24-character ISO string, and the caller
+        // stamps updatedAt. Pad settings until the body as sent sits just under the bound.
+        const build = (pad: number) => ({
+            v: 2,
+            cards: Array.from({ length: 24 }, (_, i) => ({ id: `t-${String(i).padStart(2, '0')}`, type: 't', settings: { q: 'x'.repeat(pad) } })),
+            dismissed: Object.fromEntries(Array.from({ length: 24 }, (_, i) => [`d-${i}`, '1'])),
+        });
+        let pad = 0;
+        while (new TextEncoder().encode(JSON.stringify(build(pad + 1))).length <= HOME_FRAME_LIMITS.layoutBytes) pad++;
+        const sent = build(pad);
+        expect(new TextEncoder().encode(JSON.stringify(sent)).length).toBeLessThanOrEqual(HOME_FRAME_LIMITS.layoutBytes);
+        expect(checkHomeLayout(sent)).toEqual({ ok: false, problem: 'layoutSize' });
+        // And whatever is taken re-checks: a kept layout, stamped, is never refused when sent back unchanged.
+        const fits = { ...sent, dismissed: {} };
+        const kept = checkHomeLayout(fits);
+        expect(kept.ok).toBe(true);
+        if (kept.ok) expect(checkHomeLayout({ ...kept.layout, updatedAt: AT }).ok).toBe(true);
+    });
+});
+
 describe('home frame §5.2 (2): addCard, removeCard, moveCard', () => {
     const base = layout([one('steps'), one('tips')]);
 

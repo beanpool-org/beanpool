@@ -612,7 +612,7 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
     const s = readSearchSettings(settings);
     const near = c.point && s.km ? { ...c.point, radiusKm: s.km } : undefined;
     const pool = postsFor(c, {
-        types: s.kind === 'any' ? ['offer', 'need'] : [s.kind], category: s.category, query: s.q || undefined, limit: SEARCH_ITEMS + 1,
+        types: s.kind === 'any' ? ['offer', 'need'] : [s.kind], status: 'active', category: s.category, query: s.q || undefined, limit: SEARCH_ITEMS + 1,
         near, sortByDistance: !!near, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,
     }).filter(p => p.status === 'active' && p.active !== false && !!bounded(p.id, ID_CHARS));
     const items = pool.slice(0, SEARCH_ITEMS).map((p): MarketItem => ({
@@ -752,6 +752,10 @@ function mayHave(c: Ctx, id: string): boolean {
  * (never `needs` or `community`, nor `find` in a member's first 30 days), so a first landing with no copy of the layout
  * on the phone still skips a hidden card's work.
  */
+/** A card type's id is built as that type whichever way it is asked (a stored instance with another type under it gets none of
+ *  its settings): one stored layout, one body per key, with or without `cards=` (review of #1697, finding 3). */
+const asBuilt = (id: string, card: HomeCardInstance | undefined): HomeCardInstance => card && card.type === id ? card : { id, type: id };
+
 function cardsToBuild(c: Ctx, asked: string[] | undefined, layout: HomeLayout | null, joinedAt: string | null): HomeCardInstance[] {
     const frame = layout?.v === 2 ? layout : null;
     const stored = (id: string) => frame?.cards.find(card => card.id === id);
@@ -763,7 +767,7 @@ function cardsToBuild(c: Ctx, asked: string[] | undefined, layout: HomeLayout | 
             const card = stored(id);
             // A card type's id is built as today's apps ask it (with the member's settings for it, if their layout has them);
             // any other id only when it names an instance in the member's stored layout: the settings are the node's to read.
-            if (isHomeCardId(id)) out.push(card && card.type === id ? card : { id, type: id });
+            if (isHomeCardId(id)) out.push(asBuilt(id, card));
             else if (card) out.push(card);
         }
         return out.sort(compareForAsk);
@@ -774,7 +778,7 @@ function cardsToBuild(c: Ctx, asked: string[] | undefined, layout: HomeLayout | 
         // Version 2: the list is the Home. A card not in it is not built; the two always drawn and a pinned find are.
         const out: HomeCardInstance[] = [...UNHIDEABLE].map(id => ({ id, type: id }));
         if (findPinned) out.push({ id: 'find', type: 'find' });
-        for (const card of frame.cards) if (!out.some(o => o.id === card.id)) out.push(card);
+        for (const card of frame.cards) if (!out.some(o => o.id === card.id)) out.push(isHomeCardId(card.id) ? asBuilt(card.id, card) : card);
         return out.sort(compareForAsk);
     }
     const hidden = new Set<string>(layout?.v === 1 ? layout.hidden : []);

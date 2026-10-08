@@ -267,6 +267,9 @@ const keptInstance = (raw: Record<string, unknown>): HomeCardInstance => raw as 
  * A version-2 layout checked strictly, as the node takes a member's write: shape and bounds, never the type. Every bound
  * refuses the whole value with its problem. `updatedAt` is left as sent (null when absent); the caller stamps it.
  */
+/** As long as any date the node keeps (an ISO string): the size of a stamp still to come. */
+const KEPT_DATE_STAND_IN = new Date(0).toISOString();
+
 export function checkHomeLayout(value: unknown): { ok: true; layout: HomeLayoutV2 } | { ok: false; problem: HomeFrameProblem } {
     if (!isPlainObject(value) || value.v !== 2 || !Array.isArray(value.cards)) return { ok: false, problem: 'shape' };
     let size: number;
@@ -304,7 +307,13 @@ export function checkHomeLayout(value: unknown): { ok: true; layout: HomeLayoutV
         updatedAt = homeLayoutDate(value.updatedAt);
         if (updatedAt === null) return { ok: false, problem: 'date' };
     }
-    return { ok: true, layout: { v: 2, cards, dismissed, updatedAt } };
+    const layout: HomeLayoutV2 = { v: 2, cards, dismissed, updatedAt };
+    // The bound is on what is KEPT: dates come back as 24-character ISO strings and the caller stamps a missing updatedAt, so a
+    // body just under the bound as sent could be stored over it and refuse its own read-back (review of #1697, finding 1).
+    if (utf8Bytes(JSON.stringify({ ...layout, updatedAt: updatedAt ?? KEPT_DATE_STAND_IN })) > HOME_FRAME_LIMITS.layoutBytes) {
+        return { ok: false, problem: 'layoutSize' };
+    }
+    return { ok: true, layout };
 }
 
 /**

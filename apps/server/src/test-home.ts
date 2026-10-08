@@ -509,6 +509,23 @@ async function main(): Promise<void> {
         assert(JSON.stringify(placed.body?.cards?.community?.place) === JSON.stringify({ lat: -28.56, lng: 153.5 }),
             `and the node's location to two decimals once it has one (${JSON.stringify(placed.body?.cards?.community?.place)})`);
         updateLocalConfig({ location: null });
+        // Review of #1697, finding 2: a pending listing never takes a saved search's row. Four live matches and the two newest
+        // pending: the card shows the four (main's read let the pending two take two of its five slots and showed three).
+        for (let i = 0; i < 4; i++) post(bob, 'offer', 'garden', `HomeZebrafish live ${i}`);
+        for (let i = 0; i < 2; i++) { const at = new Date(Date.now() + 60_000 + i * 1000).toISOString(); db.prepare("UPDATE posts SET status = 'pending', created_at = ?, updated_at = ? WHERE id = ?").run(at, at, post(bob, 'offer', 'garden', `HomeZebrafish pending ${i}`).id); }
+        const zebra = { v: 2, cards: [{ id: 'search-zbra', type: 'search', settings: { q: 'HomeZebrafish', kind: 'any' } }], dismissed: {}, updatedAt: new Date(Date.now() - 20_000).toISOString() };
+        const savedZebra = await postJson('/api/members/preferences', erin, { publicKey: erin.pk, preferences: { 'home.layout': zebra } });
+        const zebraCard = (await get('/api/home?cards=needs,search-zbra', erin)).body?.cards?.['search-zbra'];
+        assert(savedZebra.status === 200 && zebraCard?.items?.length === 4 && zebraCard.items.every((i: { title: string }) => /live/.test(i.title)) && zebraCard.more === false,
+            `a saved search shows the four live matches and no pending one (${JSON.stringify(zebraCard?.items?.map((i: { title: string }) => i.title))}, more ${zebraCard?.more})`);
+        // Review of #1697, finding 3: an instance stored under a card type's id with another type is built as that card type, with
+        // or without cards=: one stored layout, one body per key.
+        const odd = { v: 2, cards: [{ id: 'beans', type: 'search', settings: { q: 'loaf', kind: 'any' } }], dismissed: {}, updatedAt: new Date(Date.now() - 10_000).toISOString() };
+        const savedOdd = await postJson('/api/members/preferences', erin, { publicKey: erin.pk, preferences: { 'home.layout': odd } });
+        const listed = (await get('/api/home', erin)).body?.cards?.beans;
+        const askedBeans = (await get('/api/home?cards=needs,beans', erin)).body?.cards?.beans;
+        assert(savedOdd.status === 200 && !!listed && JSON.stringify(listed) === JSON.stringify(askedBeans) && !('q' in listed),
+            `a 'beans' id stored with another type is the Beans card both ways (${JSON.stringify(listed)?.slice(0, 120)} / ${JSON.stringify(askedBeans)?.slice(0, 120)})`);
     }
 
     // ── 6. the size ─────────────────────────────────────────────────────────────────────────────────────────────

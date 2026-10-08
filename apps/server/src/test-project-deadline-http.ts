@@ -230,7 +230,7 @@ async function main(): Promise<void> {
         id: projectId, title: 'Edited Shed, renamed', description: 'A shed', goalAmount: 100,
     }, owner);
     rows = storedDeadlines(projectId);
-    const title = (db.prepare('SELECT title FROM projects WHERE id = ?').get(projectId) as any)?.title;
+    const title = (db.prepare('SELECT title FROM projects WHERE id = ?').get(projectId) as { title: string } | undefined)?.title;
     assert(expiredEdit.status === 200 && title === 'Edited Shed, renamed' && rows.project === twoDaysAgo && rows.member === twoDaysAgo,
         `an expired project can be edited without sending a deadline, which stays as it was (got ${expiredEdit.status} ${expiredEdit.error ?? ''}, ${show(title)}, ${show(rows.project)} / ${show(rows.member)})`);
     const resent = await update({ deadlineAt: twoDaysAgo });

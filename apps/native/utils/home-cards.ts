@@ -433,11 +433,19 @@ export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): bo
  * The instance ids to ask the node for (`cards=`), core's rule: catalogue order then id, so a move never changes the
  * address and a repeat read can be a 304; the fixed two, every instance in the list the node builds, and a pinned card
  * whatever the list says. A type this build doesn't know is never asked. `pinned`: {@link askPinned}.
+ *
+ * `answer`: the node's answer in hand, if any. With one, a type this node doesn't show ({@link cardOnNode}: Beans, deals,
+ * enterprise or Decide on the global node, a feature switched off) is never asked, so the node builds nothing nobody
+ * draws (review of #1699, finding 5). With none yet, every type in the list is asked, and the answer says which stay.
+ * Find your community is asked as before (by its pin, and wherever the list names it): the node builds it only where
+ * its directory is, and keeping it keeps a local member's address what their first read's was, so a return is a 304.
  */
-export function cardsToAsk(layout: HomeLayout | null, pinned: readonly HomeCardId[] = []): string[] {
+export function cardsToAsk(
+    layout: HomeLayout | null, pinned: readonly HomeCardId[] = [], answer?: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards } | null,
+): string[] {
     return frameCardsToAsk(layout ?? defaultHomeLayout(), pinned).filter(id => {
-        const c = listOf(layout).find(l => l.id === id);
-        return HOME_DRAWN.has(c?.type ?? id);
+        const type = listOf(layout).find(l => l.id === id)?.type ?? id;
+        return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));
     });
 }
 

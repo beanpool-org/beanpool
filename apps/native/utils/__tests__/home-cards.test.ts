@@ -250,6 +250,7 @@ describe('the layout (§4)', () => {
     it('cards= never depends on what the last answer said of the node: a community that changed still gets First steps', () => {
         // Measured on the emulator: built from a cached global answer, the list left out `steps`, and the community's
         // First steps never came. The list is the layout's (and a pin's) alone; whether a card is drawn is cardsToDraw's.
+        // (Since review of #1699 finding 5 an answer in hand leaves out only a type the node doesn't show: the next test.)
         expect(cardsToAsk.length).toBe(1);
         expect(cardsToAsk(null)).toContain('steps');
         // A local answer that names a First steps card with every line done draws none; the global one draws its own lines.
@@ -257,6 +258,26 @@ describe('the layout (§4)', () => {
         expect(draw(answer({ cards: { steps: done, community: { name: 'L', members: 9 } } }), EVERY, ctx({ interests: ['food'] }))).not.toContain('steps');
         const global = answer({ profile: 'global', cards: { steps: steps(), community: { name: 'G', members: 9 } } });
         expect(draw(global, EVERY, ctx({ interests: ['food'] }))).toContain('steps');
+    });
+
+    it('with an answer in hand, cards= leaves out a type this node doesn\'t show: the global node builds no Beans, deals, enterprise or Decide (review of #1699, finding 5)', () => {
+        const global = answer({ profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, wordsDoor: true } });
+        const asked = cardsToAsk(EVERY, ['find'], global);
+        for (const off of ['beans', 'deals', 'enterprise', 'decide']) expect(asked).not.toContain(off);
+        expect(asked).toEqual(['needs', 'safety', 'find', 'steps', 'events', 'market', 'groups', 'joined', 'pulse', 'notices', 'community']);
+        // A local community with a feature switched off: that one alone.
+        expect(cardsToAsk(EVERY, [], answer({ features: { beans: true, escrow: false, invites: true, exampleListings: false, decisions: true } }))).toEqual(
+            cardsToAsk(EVERY).filter(id => id !== 'deals'));
+        // Every type the list names on a local community that has them all on, as with no answer: the same address, so a
+        // return is a 304 (Find your community is asked as before; the node builds it only where its directory is).
+        expect(cardsToAsk(EVERY, [], answer())).toEqual(cardsToAsk(EVERY));
+        // A saved search is asked by its id wherever it's on.
+        const withSearch = { ...EVERY, cards: [{ id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }, ...EVERY.cards] };
+        expect(cardsToAsk(withSearch, [], global)).toContain('search-k2x7');
+        // The 12-words door shut: "Your way back in" only when the node sent one.
+        const shut = { ...global, features: { ...global.features, wordsDoor: false } };
+        expect(cardsToAsk(EVERY, [], shut)).not.toContain('safety');
+        expect(cardsToAsk(EVERY, [], { ...shut, cards: { safety: { words: true, signInLinked: false } } })).toContain('safety');
     });
 
     it('remove, add back, and the date moves on each edit', () => {

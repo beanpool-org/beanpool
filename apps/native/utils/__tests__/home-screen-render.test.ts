@@ -1383,6 +1383,24 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
     });
 });
 
+describe('the global node is never asked for a card it doesn\'t show (review of #1699, finding 5)', () => {
+    it('a member for 60 days with a version-1 list: no read asks Beans, deals, enterprise or Decide', async () => {
+        const base = globalMember(60);
+        node.answer = { ...base, layout: { v: 1, order: ['pulse'], hidden: [], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        await render();
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(homeReads().length).toBeGreaterThan(1);
+        for (const asked of homeCards()) {
+            for (const off of ['beans', 'deals', 'enterprise', 'decide']) expect(asked).not.toContain(off);
+        }
+        // The member's list is asked for what the node shows: The Pulse, Who joined.
+        expect(homeCards().at(-1)).toEqual(expect.arrayContaining(['pulse', 'joined', 'groups']));
+        expect(cards()).not.toContain('decide');
+    });
+});
+
 describe('a local community\'s Home is H2\'s, whatever the answer or the phone holds (H4 changes nothing there)', () => {
     it('no Find your community, names and faces in Who joined, what\'s new first, no limits sentence, and no place sent', async () => {
         const a = localMember();

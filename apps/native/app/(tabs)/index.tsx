@@ -333,7 +333,7 @@ export default function HomeScreen() {
         // (the first landing), from what this read brings, at its end.
         const tipsLandNow = why === 'focus' && !!cached?.answer.me;
         if (tipsLandNow) void landTips(whose);
-        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current, cached?.answer.layoutV1).layout, askPinned(cached?.answer, Date.now()));
+        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current, cached?.answer.layoutV1).layout, askPinned(cached?.answer, Date.now()), cached?.answer);
         // The global node only: "near you" from where the phone is (where location is already allowed).
         const global = await readsGlobal(u, cached);
         const point = global ? await lastKnownPlace() : null;
@@ -360,7 +360,7 @@ export default function HomeScreen() {
             // The account's list asks for cards this read didn't (a first landing on this phone, or another device's edit):
             // one more read for them, never more (a `layout` read doesn't ask again). It follows the save's answer, so it
             // never sends the list a second time while the first is out.
-            const wanted = cardsToAsk(pick.layout, askPinned(answered, Date.now()));
+            const wanted = cardsToAsk(pick.layout, askPinned(answered, Date.now()), answered);
             if (member && why !== 'layout' && wanted.some(c => !asked.includes(c))) void (saving ?? Promise.resolve()).then(() => refreshRef.current('layout'));
             if (!pick.push && pick.layout && !answered.layoutV1) {
                 // A version-1 copy is drawn and never kept as the phone's: it is not written until the member edits (§2.6),
@@ -475,8 +475,9 @@ export default function HomeScreen() {
         setLayout(next);
         void writePhoneLayout(id.publicKey, url, next, whose);
         const saving = pushLayout(next, whose);
-        const pins = askPinned(storedRef.current?.answer, Date.now());
-        const asksMore = cardsToAsk(next, pins).some(c => !cardsToAsk(before, pins).includes(c));
+        const answered = storedRef.current?.answer;
+        const pins = askPinned(answered, Date.now());
+        const asksMore = cardsToAsk(next, pins, answered).some(c => !cardsToAsk(before, pins, answered).includes(c));
         if (asksMore || opts.reread) void saving.then(() => refreshRef.current('layout'));
     }, [url, pushLayout]);
     // "Don't show tips again", and Remove on Tips: the record says so and the card leaves the list, so the member's other

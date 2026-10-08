@@ -5,7 +5,9 @@ import {
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
-import { normalizeCategory } from '@beanpool/core';
+import {
+    dismissTips, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, type TipsRecord,
+} from '@beanpool/core';
 import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
@@ -21,7 +23,7 @@ import { EditHomeSheet } from '../../components/home/EditHomeSheet';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
-    MarketBody, NeedsBody, NoticesBody, PulseBody, StepsBody,
+    MarketBody, NeedsBody, NoticesBody, PulseBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
     HOME_DOORBELL_SETTLE_MS, HOME_SAFETY_POLL_MS, askPinned, canHideCard, canMoveCard, canTailor, cardCaption, cardOrder, cardsToAsk,
@@ -31,7 +33,7 @@ import {
 } from '../../utils/home-cards';
 import {
     SAVE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
-    saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, yieldPhoneLayout, type HomePoint, type StoredHome,
+    readTips, saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
 } from '../../utils/home-store';
 import { readGlobalHome } from '../../utils/community-directory';
 import { rememberedKnocks, type RememberedKnock } from '../../utils/knock';
@@ -138,6 +140,11 @@ export default function HomeScreen() {
     /** On the global node: the place the last read was measured from (the phone's, where allowed), and this phone's knocks. */
     const [place, setPlace] = useState<HomePoint | null>(null);
     const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
+    /** The Tips card's record for this account (@beanpool/core home-tips.ts); null: not read yet, so no card. */
+    const [tips, setTips] = useState<TipsRecord | null>(null);
+    const tipsRef = useRef<TipsRecord | null>(null);
+    /** A landing happened and the Tips card has not had its once-a-day advance for it yet. */
+    const tipsToLand = useRef(false);
 
     const identityRef = useRef(identity);
     identityRef.current = identity;
@@ -236,6 +243,7 @@ export default function HomeScreen() {
     const refresh = useCallback(async (why: 'focus' | 'pull' | 'bell' | 'poll' | 'layout') => {
         const id = identityRef.current;
         if (!id) return;
+        if (why === 'focus') tipsToLand.current = true;
         const whose = homeAccount(id.publicKey);
         const raw = await anchorUrl().catch(() => null);
         if (!raw) { setStatus('no_community'); return; }
@@ -355,6 +363,36 @@ export default function HomeScreen() {
         try { await refresh('pull'); } finally { setRefreshing(false); }
     }, [refresh]);
 
+    // ── Tips (scratch/home/TIPS-DESIGN-fable.md): the record is the phone's, per account ──
+    const keepTips = useCallback((whose: HomeAccount, next: TipsRecord) => {
+        if (!stillOnPhone(whose)) return;
+        tipsRef.current = next;
+        setTips(next);
+        void writeTips(whose, next);
+    }, []);
+    // Once per landing, with an answer in hand (the stored one counts: tips work with no connection): a tip first shown on
+    // an earlier day is marked seen and the next one drawn. Never while Home is in front.
+    const tipsAnswer = stored?.answer?.me ? stored.answer : null;
+    useEffect(() => {
+        const id = identityRef.current;
+        if (!tipsAnswer || !id || !tipsToLand.current) return;
+        tipsToLand.current = false;
+        const whose = homeAccount(id.publicKey);
+        void readTips(id.publicKey).then(record => {
+            if (!stillOnPhone(whose) || identityRef.current?.publicKey !== id.publicKey) return;
+            const step = tipOnLanding(record, tipsFor(tipsAnswer, role), localDay());
+            if (step.record === record) { tipsRef.current = record; setTips(record); } else keepTips(whose, step.record);
+        });
+    }, [tipsAnswer, role, keepTips]);
+    const onTipNext = useCallback(() => {
+        const id = identityRef.current;
+        const ans = storedRef.current?.answer;
+        if (!id || !ans || !tipsRef.current) return;
+        const step = nextTip(tipsRef.current, tipsFor(ans, role), localDay());
+        keepTips(homeAccount(id.publicKey), step.record);
+        AccessibilityInfo.announceForAccessibility(step.view ? step.view.tip.text : 'That was the last tip. Edit home brings them back.');
+    }, [role, keepTips]);
+
     // ── The member's edits ──
     const changeLayout = useCallback((next: HomeLayout | null) => {
         const id = identityRef.current;
@@ -370,6 +408,20 @@ export default function HomeScreen() {
         const shownAgain = cardsToAsk(next, pins).some(c => !cardsToAsk(before, pins).includes(c));
         if (shownAgain) void refreshRef.current('layout');
     }, [url, pushLayout]);
+    // "Don't show tips again", and the card's own Hide: the record says so (it holds on a node that doesn't know `tips` yet)
+    // and the layout hides it, so the member's other devices follow.
+    const onTipsDontShow = useCallback(() => {
+        const id = identityRef.current;
+        if (!id) return;
+        keepTips(homeAccount(id.publicKey), dismissTips(tipsRef.current ?? restartTips(), new Date().toISOString()));
+        setHint(false);
+        changeLayout(hideCard(layoutRef.current, 'tips', Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
+        AccessibilityInfo.announceForAccessibility('Tips is hidden. Edit home brings it back.');
+    }, [keepTips, changeLayout]);
+    const onTipsOn = useCallback(() => {
+        const id = identityRef.current;
+        if (id) keepTips(homeAccount(id.publicKey), restartTips());
+    }, [keepTips]);
 
     const interestsRef = useRef(interests);
     interestsRef.current = interests;
@@ -428,7 +480,10 @@ export default function HomeScreen() {
     const now = Date.now();
     const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now, answer.features) : [];
     const knocked = knocks.length > 0;
-    const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now }) : [];
+    // Tips: the node's list, from the answer in hand; the card only once the record is read, and never advanced here.
+    const tipsList = answer ? tipsFor(answer, role) : [];
+    const tipsView = tips && answer?.me ? tipNow(tips, tipsList, localDay()).view : null;
+    const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now, tipsUp: !!tipsView }) : [];
     // Find your community's pin (the global node, a member's first 30 days): no "…", no move, at the top.
     const pins = pinnedCards(answer, now);
     const interestsUp = drawn.includes('interests');
@@ -446,7 +501,7 @@ export default function HomeScreen() {
     const card = (id: HomeCardId): React.ReactNode => {
         if (!answer) return null;
         const c = answer.cards;
-        const caption = cardCaption(id, answer);
+        const caption = id === 'tips' && tipsView ? tipsCaption(tipsView) : cardCaption(id, answer);
         const menu = tailor && canHideCard(id, pins) ? () => setMenuFor(id) : undefined;
         const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean }) => (
             <HomeCard id={id} caption={caption} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
@@ -481,6 +536,15 @@ export default function HomeScreen() {
                 return frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
             }
             case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} />);
+            case 'tips': return tipsView ? frame(
+                <TipsBody
+                    view={tipsView}
+                    colors={colors}
+                    onNext={onTipNext}
+                    onReadMore={slug => router.push({ pathname: '/guide/[slug]', params: { slug } })}
+                    onDontShow={onTipsDontShow}
+                />,
+            ) : null;
             case 'deals': return c.deals ? frame(<DealsBody card={c.deals} colors={colors} />) : null;
             case 'enterprise': return c.enterprise ? frame(<EnterpriseBody card={c.enterprise} colors={colors} />) : null;
             case 'events': return c.events ? frame(<EventsBody card={c.events} colors={colors} />) : null;
@@ -628,7 +692,10 @@ export default function HomeScreen() {
                     canHide={!!menuCard && canHideCard(menuCard, pins)}
                     canUp={!!menuCard && canMoveCard(menuCard, pins) && menuAt > 0 && canMoveCard(drawn[menuAt - 1], pins)}
                     canDown={!!menuCard && canMoveCard(menuCard, pins) && menuAt >= 0 && menuAt < drawn.length - 1 && canMoveCard(drawn[menuAt + 1], pins)}
-                    onHide={() => { if (menuCard) { setHint(false); changeLayout(hideCard(layoutRef.current, menuCard, Date.now(), pins)); } }}
+                    onHide={() => {
+                        if (menuCard === 'tips') { onTipsDontShow(); return; }
+                        if (menuCard) { setHint(false); changeLayout(hideCard(layoutRef.current, menuCard, Date.now(), pins)); }
+                    }}
                     onUp={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard, 'up', drawn, Date.now(), pins)); }}
                     onDown={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard, 'down', drawn, Date.now(), pins)); }}
                     onClose={() => setMenuFor(null)}
@@ -644,6 +711,8 @@ export default function HomeScreen() {
                     colors={colors}
                     onChange={changeLayout}
                     onClose={() => setEditOpen(false)}
+                    tipsAllSeen={!!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList)}
+                    onTipsOn={onTipsOn}
                 />
                 <NewPostTypeSheet
                     visible={postPicker}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { TIPS_ALL_SEEN } from '@beanpool/core';
 import { View, Text, Pressable, Modal, ScrollView, Switch, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,7 +18,7 @@ import { HOME_TARGET_DP } from './HomeParts';
  * your community where only the community's admins invite and the member is not one. A pinned card (Find your community,
  * a member's first 30 days on the global node) is not in the list either: the note says it stays at the top for now.
  */
-export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnNow, colors, onChange, onClose }: {
+export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnNow, colors, onChange, onClose, tipsAllSeen, onTipsOn }: {
     visible: boolean;
     layout: HomeLayout | null;
     /** The node's profile and switches, from its answer (with its cards: a "Your way back in" it sent is offered). */
@@ -31,6 +32,10 @@ export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnN
     colors: AppColors;
     onChange: (layout: HomeLayout) => void;
     onClose: () => void;
+    /** Every tip this node shows is seen (the card went by itself): its line says so rather than "Nothing to show now". */
+    tipsAllSeen?: boolean;
+    /** Tips switched on: the tips start over from the first one. */
+    onTipsOn?: () => void;
 }) {
     const insets = useSafeAreaInsets();
     const listed = cardOrder(layout, pinned).filter(id => canMoveCard(id, pinned) && cardOnNode(id, node, role));
@@ -49,7 +54,7 @@ export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnN
             <View key={id} style={[editHomeStyles.row, { borderBottomColor: colors.border.default }]} testID={`edit-home-${id}`}>
                 <View style={editHomeStyles.rowText}>
                     <Text style={[editHomeStyles.name, { color: on ? colors.text.heading : colors.text.muted }]} numberOfLines={2}>{name(id)}</Text>
-                    {idle && <Text style={[editHomeStyles.sub, { color: colors.text.secondary }]}>Nothing to show now</Text>}
+                    {idle && <Text style={[editHomeStyles.sub, { color: colors.text.secondary }]}>{id === 'tips' && tipsAllSeen ? TIPS_ALL_SEEN : 'Nothing to show now'}</Text>}
                 </View>
                 {on && (
                     <>
@@ -79,7 +84,10 @@ export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnN
                 )}
                 <Switch
                     value={on}
-                    onValueChange={v => apply(v ? showCard(layout, id, Date.now()) : hideCard(layout, id, Date.now(), pinned))}
+                    onValueChange={v => {
+                        if (v && id === 'tips') onTipsOn?.();
+                        apply(v ? showCard(layout, id, Date.now()) : hideCard(layout, id, Date.now(), pinned));
+                    }}
                     accessibilityLabel={`Show ${name(id)} on Home`}
                     accessibilityState={{ checked: on }}
                     testID={`edit-home-${id}-switch`}

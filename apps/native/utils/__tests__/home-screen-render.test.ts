@@ -136,6 +136,7 @@ import { commonsSectionFor } from '../commons-sections';
 import { marketFilterFromLink } from '../market-filters';
 import { boundSignatureValid } from './server-signature-check';
 import { paramsRead, resolves, tabOf } from './route-resolve';
+import { getBundledGuide } from '../guide';
 
 const NODE = 'https://mullum.beanpool.org';
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -285,7 +286,7 @@ describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
     it('one request for the whole screen, and the cards in the design\'s order', async () => {
         await render();
         expect(node.requests.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['GET /api/home']);
-        expect(cards()).toEqual(['steps', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
     });
 
     it('each card\'s caption is a heading, and each "…" says which card it is for; Needs you and the community card have none', async () => {
@@ -348,7 +349,7 @@ describe('tailoring: the "…" menu, Edit home, interests', () => {
         await act(async () => { byLabel('Card options for Coming up')!.click(); });
         await act(async () => { byLabel('Move Coming up down')!.click(); });
         await settle();
-        expect(cards()).toEqual(['steps', 'interests', 'market', 'events', 'joined', 'pulse', 'beans', 'community']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'joined', 'pulse', 'beans', 'community']);
     });
 
     it('the first movable card can\'t move up; the last can\'t move down past the community card', async () => {
@@ -374,7 +375,7 @@ describe('tailoring: the "…" menu, Edit home, interests', () => {
         expect(cards()).toContain('pulse');
         await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
         await settle();
-        expect(cards()).toEqual(['steps', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
     });
 
     it('a tap on an interest reorders the Market card in place, before the save lands, and saves to both copies', async () => {
@@ -403,7 +404,7 @@ describe('the cached answer, the 304, and states that never block', () => {
         }));
         node.hang = true;
         await render();
-        expect(cards()).toEqual(['steps', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
     });
 
     it('returning to Home revalidates with the kept tag: a 304, no body, the same cards', async () => {
@@ -412,7 +413,7 @@ describe('the cached answer, the 304, and states that never block', () => {
         await settle();
         expect(homeReads().map(r => r.status)).toEqual([200, 304]);
         expect(homeReads()[1].headers['If-None-Match']).toMatch(/^W\/"home-/);
-        expect(cards()).toEqual(['steps', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
     });
 
     it('no answer and none kept: a plain sentence and Try again, the Market one tap away (never a gate)', async () => {
@@ -630,6 +631,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-needs-group → /chat/[id] id=g1&group=1',
             'home-step-photo → /(tabs)/settings section=profile',
             'home-step-invite → /(tabs)/people view=invites',
+            'home-tip-read-more → /guide/[slug] slug=posting',
             'home-deals-line → /post/[id] id=p1&txId=t1',
             'home-enterprise-line → /treasury-detail publicKey=ent1&name=Tool Library',
             'home-event-e1 → /post/[id] id=e1',
@@ -655,6 +657,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-step-offer → /map newPost=offer',
             'home-step-photo → /(tabs)/settings section=profile',
             'home-step-post-offer → /map newPost=offer',
+            'home-tip-read-more → /guide/[slug] slug=posting',
             'home-deals-line → /(tabs)/market tab=deals',
             'home-enterprise-line → /treasury-detail publicKey=ent1&name=Tool Library',
             'home-event-e1 → /post/[id] id=e1',
@@ -684,6 +687,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-find-near → /find-community',
             'home-find-start → /start-community',
             'home-find-watch → /find-community',
+            'home-tip-read-more → /guide/[slug] slug=posting',
             'home-event-e1 → /post/[id] id=e1',
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
@@ -704,6 +708,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-find-watch → /find-community',
             'home-step-post → /map newPost=offer',
             'home-step-ask → /find-community',
+            'home-tip-read-more → /guide/[slug] slug=posting',
             'home-event-e1 → /post/[id] id=e1',
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
@@ -719,7 +724,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
 };
 
 /** Controls that act on Home itself rather than open a screen. */
-const IN_PLACE = /^(home-card-[a-z]+-menu|home-edit|home-market-tune|home-notice-line|home-needs-admin|home-step-interests|home-interest-[a-z]+)$/;
+const IN_PLACE = /^(home-card-[a-z]+-menu|home-edit|home-market-tune|home-notice-line|home-needs-admin|home-step-interests|home-interest-[a-z]+|home-tip-next|home-tips-dont-show)$/;
 
 /** Ids a link passes as they are; every other param's value must be one its screen names. */
 const FREE_PARAMS = new Set(['id', 'txId', 'publicKey', 'name']);
@@ -739,6 +744,11 @@ function wrongOn(features: HomeAnswer['features'], l: Link): string | null {
     if (tab === 'market' && params.filter && marketFilterFromLink(params.filter) !== params.filter) return `the Market's ${params.filter}, which it doesn't take`;
     const text = (fs.readFileSync(file, 'utf-8'));
     for (const [k, v] of Object.entries(params)) {
+        // A guide page (the Tips card's Read more) is named by the bundled guide, not by its screen: it must be one of its pages.
+        if (k === 'slug') {
+            if (!getBundledGuide().guides.some(g => g.slug === v)) return `slug=${v}, which the bundled guide has no page for`;
+            continue;
+        }
         if (FREE_PARAMS.has(k) || v === '1' || (tab === 'projects' && k === 'section') || (tab === 'market' && k === 'filter')) continue;
         if (!text.includes(`'${v}'`)) return `${k}=${v}, which its screen never names`;
     }
@@ -874,7 +884,7 @@ describe('Edit home offers only the cards this node can show', () => {
         node.answer = everyCard('global', 1);
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(editRows()).toEqual(['safety', 'steps', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
+        expect(editRows()).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
         expect(document.body.textContent).not.toMatch(/Your deals|Your enterprise|Your Beans|Grow your community/);
         expect(document.querySelector('[data-modal]')?.textContent).toContain('Find your community stays near the top for your first 30 days.');
     });
@@ -884,7 +894,7 @@ describe('Edit home offers only the cards this node can show', () => {
         node.answer = { ...a, me: { ...a.me!, joinedAt: iso(Date.now() - 31 * 24 * H) } };
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(editRows()).toEqual(['safety', 'find', 'steps', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
+        expect(editRows()).toEqual(['safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
         expect(document.querySelector('[data-testid="edit-home-find-switch"]')?.getAttribute('aria-checked')).toBe('true');
         expect(document.querySelector('[data-modal]')?.textContent).not.toContain('first 30 days');
     });
@@ -893,7 +903,7 @@ describe('Edit home offers only the cards this node can show', () => {
         node.answer = everyCard('local', 1);
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(editRows()).toEqual(['steps', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'invite']);
+        expect(editRows()).toEqual(['steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'invite']);
         expect(document.body.textContent).not.toContain('Your way back in');
     });
 
@@ -1116,7 +1126,7 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         node.answer = globalMember(3);
         await render();
         expect(node.requests.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['GET /api/home']);
-        expect(cards()).toEqual(['find', 'steps', 'interests', 'events', 'market', 'joined', 'community']);
+        expect(cards()).toEqual(['find', 'steps', 'tips', 'interests', 'events', 'market', 'joined', 'community']);
         expect(byLabel('Card options for Find your community')).toBeNull();
         expect(byLabel('Card options for First steps')).not.toBeNull();
         const card = document.querySelector('[data-testid="home-card-find"]')!;
@@ -1254,7 +1264,7 @@ describe('a local community\'s Home is H2\'s, whatever the answer or the phone h
         loc.status = 'granted';
         loc.last = { coords: { latitude: -28.643_21, longitude: 153.612_34 } };
         await render();
-        expect(cards()).toEqual(['steps', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
         expect(document.querySelector('[data-testid="home-card-find"]')).toBeNull();
         expect(document.querySelector('[data-testid="home-joined-line"]')?.getAttribute('aria-label')).toBe('Ana, Kofi and 3 more joined this week. Opens People.');
         expect(Array.from(document.querySelectorAll('[data-avatar]')).map(e => e.getAttribute('data-avatar'))).toEqual(['Ana', 'Kofi']);

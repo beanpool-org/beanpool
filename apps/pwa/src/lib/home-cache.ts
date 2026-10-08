@@ -15,7 +15,7 @@
 import { getNodeApiUrl } from './api';
 import { accountEpoch, accountEpochHolds, endAccountEpoch, type AccountEpochEnd } from './account-epoch';
 import { type HomeAnswer } from './home-cards';
-import { readLayout, type HomeLayoutV2 } from './home-layout';
+import { layoutV1Of, readLayout, type HomeLayoutV2 } from './home-layout';
 
 const DB_NAME = 'beanpool-home';
 const STORE = 'answers';
@@ -91,11 +91,15 @@ export async function readCachedHome(key: string): Promise<CachedHome | null> {
             req.onsuccess = () => {
                 const v = req.result as Partial<CachedHome> | undefined;
                 if (!v || !v.answer || typeof v.answer !== 'object' || !v.answer.cards) return resolve(null);
+                // The web app before the frame kept an empty version-1 list after a Reset or a dismissal: it says nothing
+                // of the member's cards, so it is no copy, and Home treats the account's list as unknown, as the phone
+                // does (review of #1701, finding 4).
+                const emptyV1 = !!layoutV1Of(v.layout)?.empty;
                 resolve({
                     answer: v.answer as HomeAnswer,
                     etag: typeof v.etag === 'string' && v.etag.length <= 200 ? v.etag : null,
-                    layout: readLayout(v.layout),
-                    layoutUnsaved: v.layoutUnsaved === true,
+                    layout: emptyV1 ? null : readLayout(v.layout),
+                    layoutUnsaved: !emptyV1 && v.layoutUnsaved === true,
                     ...(typeof v.localOnlyOver === 'string' && v.localOnlyOver.length <= 40 ? { localOnlyOver: v.localOnlyOver } : {}),
                     asked: Array.isArray(v.asked) ? [...new Set(v.asked.filter((x): x is string => typeof x === 'string' && x.length <= 64))].slice(0, 64) : null,
                     savedAt: Number(v.savedAt) || 0,

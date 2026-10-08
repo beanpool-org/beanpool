@@ -1367,3 +1367,41 @@ describe('an empty version-1 account list, no copy here: every edit stands once 
         expect(node.account().cards.map(c => c.type)).toEqual(expect.arrayContaining(['beans', 'pulse', 'groups']));
     });
 });
+
+describe('what a never-edited member asks, and the old web app\'s empty copy (review of #1701, findings 6 and 4)', () => {
+    it('R3: no row and no copy: the first read has no cards=, every read after it asks the newcomer\'s cards', async () => {
+        const node = nodeKeeping(answer(), null);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        await pause();
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await pause();
+        expect(node.log[0]).toBe('GET');
+        const later = node.log.slice(1).filter(l => l.startsWith('GET'));
+        expect(later.length).toBeGreaterThanOrEqual(1);
+        for (const l of later) {
+            const asked = l.slice(4).split(',');
+            expect(asked).toEqual(expect.arrayContaining(['needs', 'market', 'events', 'community']));
+            expect(asked).not.toContain('pulse');
+            expect(asked).not.toContain('beans');
+        }
+        expect(node.log).not.toContain('POST');
+    });
+
+    it('R5: the old web app\'s Reset (an empty version-1 list on the account and in this browser\'s copy) is unknown: the newcomer\'s list, the fewer line, the newcomer\'s ask', async () => {
+        const empty = { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: AT };
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout: empty as never }), layout: empty as never, layoutUnsaved: false, savedAt: 1 });
+        const node = nodeKeeping(answer(), empty);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        await pause();
+        expect(cardIds()).not.toContain('pulse');
+        expect(cardIds()).not.toContain('beans');
+        expect(screen.getByTestId('home-fewer')).toBeInTheDocument();
+        const asked = node.log.find(l => l.startsWith('GET'))!.slice(4).split(',');
+        expect(asked).not.toContain('pulse');
+        expect(asked).not.toContain('beans');
+        expect(node.log).not.toContain('POST');
+    });
+});

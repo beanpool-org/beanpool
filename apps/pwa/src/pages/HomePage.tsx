@@ -317,9 +317,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         lastStart.current = Date.now();
         try {
             const p = pointRef.current;
-            // `cards=` from the list drawn (lib/home-layout.ts cardsToAsk); none on a first landing in this browser, so the node
-            // draws the account's own list (review of #1697, note a).
-            const sent = drawnRef.current ? cardsToAsk(drawnRef.current, askPinned(answerRef.current, Date.now()), answerRef.current ? frameOf(answerRef.current) : null) : undefined;
+            // `cards=` from the list drawn (lib/home-layout.ts cardsToAsk), the newcomer's for a member with none; none only on
+            // a first read with no answer in hand, so the node draws the account's own list (review of #1697, note a). Never
+            // left off after that: the node would build its whole old catalogue every read (review of #1701, finding 6).
+            const held = answerRef.current;
+            const sent = drawnRef.current || (held?.me && !held.welcome)
+                ? cardsToAsk(drawnRef.current, askPinned(held, Date.now()), held ? frameOf(held) : null) : undefined;
             const read = await getHome({ cards: sent, ...(p ? { lat: p.lat, lng: p.lng } : {}) },
                 answerRef.current ? etagRef.current : null);
             // The page has gone, or a sign-out or a clear came while the read was out: what it brought is not this

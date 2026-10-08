@@ -203,7 +203,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const layoutSeq = useRef(0);
     // Layout saves still on their way: a read meanwhile doesn't send the same layout again.
     const savingLayout = useRef(0);
-    // The data cards the answer drawn was built for (lib/home-cards.ts cardsBuiltFor); null: not known.
+    // The cards the answer drawn was built for (the `cards=` it was read with, or the node's own choice: builtFor); null: not known.
     const builtForRef = useRef<string[] | null>(null);
     const inFlight = useRef(false);
     const again = useRef(false);

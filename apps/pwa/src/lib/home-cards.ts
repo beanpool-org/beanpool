@@ -6,10 +6,8 @@
  * The node answers the whole screen in one read, `GET /api/home` (apps/server/src/routes/home-answer.ts): a card with
  * nothing to say is not in the answer at all. What is left to the app is what only the member's own layout decides:
  *
- *   - **the order** (§3.1 "Default order", §4.2): the member's own order first, every card they didn't name after it
- *     in the default order, and `community` always last (it carries Edit home);
- *   - **hiding** (§4.1): any card but `needs`, `safety` (it has its own schedule, components/OneWayBack.tsx),
- *     `community`, and `find` in a member's first 30 days on the global node;
+ *   - **the order and which cards** are the member's version-2 list (lib/home-layout.ts, the card frame): `shownFrame`
+ *     draws it, `needs` first and `community` last (it carries Add a card and Edit home);
  *   - **the two cards with no data of their own** (§3.1): `interests` while no interest is set (or opened from the
  *     Market card's Tune), and `invite` where invites are on, after the member's first Offer;
  *   - **interests reorder, they never filter** (§4.3): starred categories first, the rest after;
@@ -38,19 +36,7 @@ export const NOTICES_SEEN_EVENT = 'beanpool:notices-seen';
 /** The cards a visitor's Home is made of (§5.3), besides the Join card. */
 export const VISITOR_CARDS: readonly HomeCardId[] = ['find', 'market', 'events', 'community'];
 
-/** Cards with no "…": `needs` (missing it costs something), `safety` (its own ✕ and schedule), `community` (Edit home). */
-const FIXED: ReadonlySet<HomeCardId> = new Set(['needs', 'safety', 'community']);
-/** `find` is pinned for a member's first 30 days on the global node, then it can be hidden (§4.1, §7). */
-export const FIND_PINNED_DAYS = 30;
 const DAY_MS = 86_400_000;
-/** The node refuses a layout list longer than this (H1); the catalogue is 17, so this is only a guard. */
-const MAX_LAYOUT_IDS = 32;
-
-/**
- * Cards the node computes data for: the rest (`interests`, `invite`) are drawn from `me` and `features`, and `tips` from the
- * list bundled in @beanpool/core (home-tips.ts). Never in `cards=`, so the address and its tag stay as they were.
- */
-const DATA_CARDS: ReadonlySet<HomeCardId> = new Set(HOME_CARD_IDS.filter(id => id !== 'interests' && id !== 'invite' && id !== 'tips'));
 
 // ── the answer, as GET /api/home sends it ─────────────────────────────────────────────────────────────────────────────
 
@@ -64,6 +50,10 @@ export type NeedsTarget =
     | { to: 'your-groups' };
 export interface NeedsItem { kind: 'admin' | 'deal' | 'vote' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
+/**
+ * A version-1 layout, as the web app before the card frame kept it (on the account and in this browser): read only
+ * through lib/home-layout.ts `readLayout` (core's translateV1) and `layoutV1Of`; this app never writes one.
+ */
 export interface HomeLayout {
     v: 1;
     order: HomeCardId[];
@@ -144,156 +134,6 @@ export interface HomeAnswer {
     cards: HomeCards;
 }
 
-// ── the layout ────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-function knownIds(list: unknown): HomeCardId[] {
-    if (!Array.isArray(list)) return [];
-    return [...new Set(list.filter(isHomeCardId))].slice(0, MAX_LAYOUT_IDS);
-}
-
-const isIso = (v: unknown): v is string => typeof v === 'string' && v.length <= 40 && Number.isFinite(Date.parse(v));
-
-/**
- * A layout from anywhere (the node's answer, this browser's copy, a phone's save), made one this app can use: unknown
- * and repeated ids dropped, `needs` and `community` never hidden, a date that isn't one taken as none. Null for anything
- * that isn't a version-1 layout.
- */
-export function normalizeLayout(raw: unknown): HomeLayout | null {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-    const r = raw as Record<string, unknown>;
-    if (r.v !== undefined && r.v !== 1) return null;
-    const dismissed: Partial<Record<HomeCardId, string>> = {};
-    if (r.dismissed && typeof r.dismissed === 'object' && !Array.isArray(r.dismissed)) {
-        for (const [id, at] of Object.entries(r.dismissed as Record<string, unknown>)) {
-            if (isHomeCardId(id) && id !== 'needs' && id !== 'community' && isIso(at)) dismissed[id] = at;
-        }
-    }
-    return {
-        v: 1,
-        order: knownIds(r.order),
-        hidden: knownIds(r.hidden).filter(id => id !== 'needs' && id !== 'community'),
-        dismissed,
-        updatedAt: isIso(r.updatedAt) ? r.updatedAt : null,
-    };
-}
-
-/** The layout that wins: the later `updatedAt` (§4.2 "last write wins"); a dated one over an undated one; ties to `a`. */
-export function newerLayout(a: HomeLayout | null, b: HomeLayout | null): HomeLayout | null {
-    if (!a) return b;
-    if (!b) return a;
-    const at = a.updatedAt ? Date.parse(a.updatedAt) : -Infinity;
-    const bt = b.updatedAt ? Date.parse(b.updatedAt) : -Infinity;
-    return bt > at ? b : a;
-}
-
-/** Every card in the member's order: theirs first, the rest in the default order, `community` last whatever was stored. */
-export function effectiveOrder(layout: HomeLayout | null): HomeCardId[] {
-    const order = [...new Set([...(layout?.order ?? []), ...HOME_CARD_IDS])].filter(id => id !== 'community');
-    return [...order, 'community'];
-}
-
-/** Whether `find` is pinned for this member: on the global node, in their first 30 days (or when their join date is unknown). */
-export function findPinned(answer: Pick<HomeAnswer, 'profile' | 'me'>, now: number = Date.now()): boolean {
-    if (answer.profile !== 'global') return false;
-    const joined = answer.me?.joinedAt ? Date.parse(answer.me.joinedAt) : NaN;
-    return !Number.isFinite(joined) || now - joined < FIND_PINNED_DAYS * DAY_MS;
-}
-
-/** Whether a member can hide or move this card (has a "…"). */
-export function canTailor(id: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'me'>, now: number = Date.now()): boolean {
-    if (FIXED.has(id)) return false;
-    if (id === 'find' && findPinned(answer, now)) return false;
-    return true;
-}
-
-/** The ids hidden by this layout that the member may hide now (a pinned `find` shows whatever the layout says). */
-export function hiddenNow(layout: HomeLayout | null, answer: Pick<HomeAnswer, 'profile' | 'me'>, now: number = Date.now()): Set<HomeCardId> {
-    return new Set((layout?.hidden ?? []).filter(id => canTailor(id, answer, now)));
-}
-
-/**
- * `cards=` for the request: the data cards this layout doesn't hide, or undefined with no layout copy in hand, so the
- * node applies the account's own (a first landing in a new browser still skips a hidden card's work). A `cards=` list is
- * taken as it is (the node re-adds nothing), so a pinned `find` is always asked for, and so is a hidden one while the
- * app has no answer yet to tell whether it is pinned (on a local node it costs nothing: the node has no such card).
- */
-export function askedCards(layout: HomeLayout | null, answer: Pick<HomeAnswer, 'profile' | 'me'> | null, now: number = Date.now()): HomeCardId[] | undefined {
-    if (!layout) return undefined;
-    const hidden = hiddenNow(layout, answer ?? { profile: 'global', me: null }, now);
-    return HOME_CARD_IDS.filter(id => DATA_CARDS.has(id) && !hidden.has(id));
-}
-
-/**
- * The data cards an answer was built for: the `cards=` it was read with, or, read with none, the node's own choice from
- * the account's layout (which the answer carries).
- */
-export function cardsBuiltFor(asked: HomeCardId[] | undefined, answer: HomeAnswer, now: number = Date.now()): HomeCardId[] {
-    return asked ?? askedCards(normalizeLayout(answer.layout) ?? emptyLayout(), answer, now) ?? [];
-}
-
-/**
- * Whether drawing `next` needs Home read again (Show in Edit home, Reset to defaults): it asks for a data card the answer
- * in hand wasn't built for, so the answer can't say whether that card has something to say. Nothing else does: a Hide,
- * a move, or showing a card the answer was built with is drawn from the answer in hand. With `builtFor` not known (a
- * copy kept by an older build), a card that `next` shows and `prev` didn't, and that the answer doesn't hold, counts.
- */
-export function layoutNeedsRead(prev: HomeLayout | null, next: HomeLayout, answer: HomeAnswer, builtFor: readonly HomeCardId[] | null, now: number = Date.now()): boolean {
-    const want = askedCards(next, answer, now) ?? [];
-    if (builtFor) return want.some(id => !builtFor.includes(id));
-    const before = new Set(askedCards(prev ?? emptyLayout(), answer, now) ?? []);
-    return want.some(id => !before.has(id) && !answer.cards[id as keyof HomeCards]);
-}
-
-/** Where a layout keeps nothing yet: the default, stamped `now` once changed. */
-export function emptyLayout(): HomeLayout {
-    return { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: null };
-}
-
-/**
- * An edit's date: this device's clock, but always after the layout it was made from. A device whose clock runs slow
- * would otherwise stamp an edit before its own base (saved by a device that runs ahead), and the node, which keeps the
- * later one, would keep the base and send it back: the card would come back right after the tap. The node holds a date
- * in its future to its own now, and an equal date replaces, so the edit is kept either way.
- */
-const stamp = (base: HomeLayout | null, next: HomeLayout, now: number): HomeLayout => {
-    const after = base?.updatedAt ? Date.parse(base.updatedAt) + 1 : -Infinity;
-    return { ...next, updatedAt: new Date(Math.max(now, after)).toISOString() };
-};
-
-export function hideCard(layout: HomeLayout | null, id: HomeCardId, now: number = Date.now()): HomeLayout {
-    const l = layout ?? emptyLayout();
-    if (id === 'needs' || id === 'community') return l;
-    return stamp(l, { ...l, hidden: l.hidden.includes(id) ? l.hidden : [...l.hidden, id] }, now);
-}
-
-export function showCard(layout: HomeLayout | null, id: HomeCardId, now: number = Date.now()): HomeLayout {
-    const l = layout ?? emptyLayout();
-    return stamp(l, { ...l, hidden: l.hidden.filter(h => h !== id) }, now);
-}
-
-/** Reset to defaults (§4.1): the default order, nothing hidden; a dismissal stays (it is a schedule, not a choice of cards). */
-export function resetLayout(layout: HomeLayout | null, now: number = Date.now()): HomeLayout {
-    return stamp(layout, { v: 1, order: [], hidden: [], dismissed: layout?.dismissed ?? {}, updatedAt: null }, now);
-}
-
-/**
- * Move a card one place up or down among `among` (the cards that can be moved, in the order shown): it swaps with its
- * neighbour there, so it never crosses `needs`, `safety`, a pinned `find` or `community`. The whole order is written,
- * so the move means the same on every app that reads it.
- */
-export function moveCard(layout: HomeLayout | null, id: HomeCardId, direction: 'up' | 'down', among: HomeCardId[], now: number = Date.now()): HomeLayout {
-    const l = layout ?? emptyLayout();
-    const i = among.indexOf(id);
-    const j = direction === 'up' ? i - 1 : i + 1;
-    if (i < 0 || j < 0 || j >= among.length) return l;
-    const other = among[j];
-    const order = effectiveOrder(l);
-    const a = order.indexOf(id);
-    const b = order.indexOf(other);
-    [order[a], order[b]] = [order[b], order[a]];
-    return stamp(l, { ...l, order: order.filter(x => x !== 'community') }, now);
-}
-
 // ── what is shown ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface ShownOptions {
@@ -304,38 +144,6 @@ export interface ShownOptions {
     interests?: string[];
     /** The Tips card has a tip to show (@beanpool/core home-tips.ts, from the browser's record); absent: none. */
     tipsUp?: boolean;
-}
-
-/**
- * The cards to draw, top to bottom (§3.1 "shown when", §3.2): the ones the answer holds, plus `interests` and `invite`
- * from `me` and `features`, in the member's order, without the ones they hid. A visitor (`welcome`) gets only the
- * visitors' cards. A card the answer leaves out takes no space.
- */
-export function shownCards(answer: HomeAnswer, layout: HomeLayout | null, opts: ShownOptions = {}): HomeCardId[] {
-    const now = opts.now ?? Date.now();
-    const hidden = hiddenNow(layout, answer, now);
-    const has = (id: HomeCardId): boolean => {
-        if (answer.welcome || !answer.me) return VISITOR_CARDS.includes(id) && !!answer.cards[id as keyof HomeCards];
-        switch (id) {
-            case 'interests': {
-                // A suspended member can't post, so nothing to tune; anyone else while none is set, or on Tune.
-                if (answer.me.standing !== 'member') return false;
-                const set = opts.interests ?? answer.me.interests;
-                return !!opts.interestsOpen || set.length === 0;
-            }
-            case 'invite':
-                // §3.1 "after the first Offer", where invites are on (a node that says nothing takes them).
-                return answer.me.standing === 'member' && answer.features.invites !== false && answer.me.firstOffer;
-            case 'steps':
-                return !!answer.cards.steps && stepsSaySomething(answer, opts.interests ?? answer.me.interests, now);
-            // A member's only (the visitor branch above leaves it out); a suspended member still learns the app.
-            case 'tips':
-                return !!opts.tipsUp;
-            default:
-                return !!answer.cards[id as keyof HomeCards];
-        }
-    };
-    return effectiveOrder(layout).filter(id => has(id) && (!hidden.has(id) || (id === 'interests' && !!opts.interestsOpen)));
 }
 
 /**
@@ -435,26 +243,6 @@ export function stepsSaySomething(answer: HomeAnswer, interests: readonly string
     if (Number.isFinite(joined) && now - joined < STEPS_NEW_DAYS * DAY_MS) return true;
     if (stepLines(answer, interests).some(l => !l.done && !l.untracked)) return true;
     return probationSentence(answer.me?.probation) !== null;
-}
-
-/** The cards Edit home lists (§4.1): those that can be tailored and could appear on this node, shown and hidden apart. */
-export function editableCards(answer: HomeAnswer, layout: HomeLayout | null, now: number = Date.now()): { shown: HomeCardId[]; hidden: HomeCardId[] } {
-    const f = answer.features;
-    const global = answer.profile === 'global';
-    const possible = (id: HomeCardId): boolean => {
-        switch (id) {
-            case 'find': return global;
-            case 'deals': return f.escrow !== false;
-            case 'enterprise': return f.enterprises === true;
-            case 'beans': return f.beans !== false;
-            case 'invite': return f.invites !== false;
-            case 'decide': return true;
-            default: return true;
-        }
-    };
-    const hidden = hiddenNow(layout, answer, now);
-    const ids = effectiveOrder(layout).filter(id => canTailor(id, answer, now) && possible(id));
-    return { shown: ids.filter(id => !hidden.has(id)), hidden: ids.filter(id => hidden.has(id)) };
 }
 
 // ── interests ─────────────────────────────────────────────────────────────────────────────────────────────────────────

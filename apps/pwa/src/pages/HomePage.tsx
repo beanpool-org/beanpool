@@ -195,8 +195,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const refusedLanding = useRef(false);
     // The one extra read a landing makes for cards the answer wasn't built for (review of #1697, note a: bounded).
     const extraRead = useRef(false);
-    // After an add: the new card, whose "…" takes focus once it is drawn.
-    const focusAfterAdd = useRef<string | null>(null);
+    // After an add: the new card, whose "…" takes focus once it is drawn; `read`: the add's read of Home has answered, so a
+    // card still not drawn has nothing to show, and focus stays on Add a card (review of #1701, finding 3).
+    const focusAfterAdd = useRef<{ id: string; read: boolean } | null>(null);
+    const [addRead, setAddRead] = useState(0);
     const unsavedRef = useRef(false);
     const layoutSeq = useRef(0);
     // Layout saves still on their way: a read meanwhile doesn't send the same layout again.
@@ -595,7 +597,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
      * holds: a sign-out or a clear this call was the first to hear of (landedEpoch). The change goes with what the page
      * held, drawn, kept and sent nowhere, and the page lands again.
      */
-    function changeLayout(make: (current: HomeLayoutV2 | null) => HomeLayoutV2 | null, opts: { reread?: boolean } = {}): boolean {
+    function changeLayout(make: (current: HomeLayoutV2 | null) => HomeLayoutV2 | null, opts: { reread?: boolean; afterRead?: () => void } = {}): boolean {
         const epoch = landedEpoch();
         const answered = answerRef.current;
         if (epoch === null || !answered?.me || answered.welcome) return false;
@@ -613,7 +615,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         if (overRef.current !== undefined) {
             // Never sent by itself, as the account's real list may be back (the primary after a standby): a read decides,
             // and sends the edit only if it still stands (review of #1699 confirmation, finding 1).
-            void fetchHomeRef.current('layout');
+            void fetchHomeRef.current('layout').then(opts.afterRead);
             return true;
         }
         // Refused on this landing as a shape the node doesn't know yet: kept here, sent at the next landing.
@@ -622,18 +624,25 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         // answered (the node builds an instance from the settings it keeps). A move or a remove reads nothing.
         const pins = askPinned(answered, Date.now());
         const had = builtForRef.current ?? cardsToAsk(before, pins, frameOf(answered));
-        if (opts.reread || cardsToAsk(next, pins, frameOf(answered)).some(id => !had.includes(id))) void saving.then(() => fetchHomeRef.current('layout'));
+        if (opts.reread || cardsToAsk(next, pins, frameOf(answered)).some(id => !had.includes(id))) void saving.then(() => fetchHomeRef.current('layout')).then(opts.afterRead);
+        else opts.afterRead?.();
         return true;
     }
 
     // After a Remove, focus goes to the nearest card left (its "…", else its heading; Edit home on the community card),
-    // never to the page's <body>. After an add, to the new card's "…".
+    // never to the page's <body>. After an add, to the new card's "…" once it is drawn; until then, and for good once the
+    // add's read finds nothing to show, to the community card's Add a card (review of #1701, finding 3). Focus the member
+    // moved on themselves meanwhile stays where they put it.
     useEffect(() => {
         const added = focusAfterAdd.current;
         if (added) {
-            const card = pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${added}"]`);
+            const card = pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${added.id}"]`);
             const target = card?.querySelector<HTMLElement>('[data-testid="home-card-menu"]') ?? card?.querySelector<HTMLElement>('h2');
-            if (target) { focusAfterAdd.current = null; target.focus(); }
+            const waiting = pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]');
+            const active = document.activeElement;
+            const free = !active || active === document.body || !active.isConnected || active === waiting;
+            if (target || added.read) focusAfterAdd.current = null;
+            if (free) (target ?? waiting)?.focus();
         }
         const order = focusAfterHide.current;
         if (!order) return;
@@ -646,7 +655,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 ?? card.querySelector<HTMLElement>('h2');
             if (target) { target.focus(); return; }
         }
-    }, [layout, tips]);
+    }, [layout, tips, answer, addRead]);
 
     // On the account and in this browser's Market (lib/home-interests.ts); a save that fails is marked in this browser
     // and sent again after the next read, whichever page made it. Never from a Home the page no longer holds (a chip on
@@ -759,11 +768,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         setPickerOpen(false);
         const r = addCard(drawnRef.current, type, Date.now(), { settings, pinned: pins });
         if (!r.ok) return;
-        if (!changeLayout(() => r.layout, { reread: true })) return;
+        const mark = { id: r.id, read: false };
+        if (!changeLayout(() => r.layout, { reread: true, afterRead: () => { mark.read = true; if (mounted.current) setAddRead(n => n + 1); } })) return;
         // Tips put back after "Don't show tips again" start over from the first tip.
         if (type === 'tips' && tipsRef.current?.dismissedAt) keepTips(restartTips(tipsList, localDay()));
         if (type === 'interests') setInterestsOpen(true);
-        focusAfterAdd.current = r.id;
+        focusAfterAdd.current = mark;
         pageRef.current?.scrollIntoView?.({ block: 'start' });
         setLive(addedLine(cardLabelName(r.layout.cards.find(c => c.id === r.id) ?? { type }, profile)));
     }
@@ -1239,10 +1249,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                         if (changeLayout((l) => resetLayout(l, Date.now()), { reread: true }) && tipsOff) keepTips(restartTips(tipsList, localDay()));
                     }}
                     onClose={() => setEditOpen(false)}
+                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-edit-open"]')}
                 />
             )}
             {picker && (
-                <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} />
+                <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)}
+                    // Opened from Edit home, which has closed: the community card's Add a card.
+                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')} />
             )}
             {settingsFor && (
                 <CardSettingsDialog
@@ -1256,6 +1269,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                         changeLayout((l) => changeCardSettings(l, id, next, Date.now()), { reread: true });
                     }}
                     onClose={() => setSettingsFor(null)}
+                    // Its opener was a menu's Settings…, gone with the menu: Edit home's row "…" while Edit home is open, else
+                    // the card's "…".
+                    returnFocus={() => {
+                        const id = settingsFor.id;
+                        return pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-edit-menu-${id}"]`)
+                            ?? pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"] [data-testid="home-card-menu"]`)
+                            ?? pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]');
+                    }}
                 />
             )}
         </div>

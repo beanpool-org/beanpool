@@ -9,54 +9,13 @@
  * "Add to Home". The same settings open from a card's "…" → Settings…, with Save.
  *
  * A real dialog, as Edit home's: `role="dialog"`, labelled by its heading, focus moved in and kept there, Escape closes
- * it, focus goes back to what opened it (or where the page sends it after an add). Every control is at least 44 px.
+ * it, focus goes back to what opened it (or where the page sends it after an add; components/dialog-focus.ts). Every
+ * control is at least 44 px.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { HOME_SEARCH_MAX_CHARS, readSearchSettings } from '@beanpool/core';
 import { SEARCH_WAITING_LINE, type PickerGroup, type PickerRow } from '../lib/home-layout';
-
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-/** Focus into the dialog's heading, Tab kept inside, Escape closes; focus back to the opener on close unless `keepFocus`. */
-function useDialogFocus(dialog: React.RefObject<HTMLDivElement | null>, onClose: () => void, keepFocus?: React.RefObject<boolean>) {
-    const opener = useRef<Element | null>(typeof document !== 'undefined' ? document.activeElement : null);
-    const closeRef = useRef(onClose);
-    closeRef.current = onClose;
-    useEffect(() => {
-        const back = opener.current as HTMLElement | null;
-        dialog.current?.querySelector<HTMLElement>('h2')?.focus();
-        const onKeyDown = (e: KeyboardEvent) => {
-            // Not drawn (the picker while a card's settings are open over it): the dialog in front has the keys.
-            if (!dialog.current) return;
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                closeRef.current();
-                return;
-            }
-            if (e.key !== 'Tab' || !dialog.current) return;
-            const items = Array.from(dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-            if (!items.length) return;
-            const first = items[0];
-            const last = items[items.length - 1];
-            const active = document.activeElement;
-            if (!dialog.current.contains(active)) {
-                e.preventDefault();
-                (e.shiftKey ? last : first).focus();
-            } else if (e.shiftKey && active === first) {
-                e.preventDefault();
-                last.focus();
-            } else if (!e.shiftKey && active === last) {
-                e.preventDefault();
-                first.focus();
-            }
-        };
-        document.addEventListener('keydown', onKeyDown);
-        return () => {
-            document.removeEventListener('keydown', onKeyDown);
-            if (!keepFocus?.current) back?.focus?.();
-        };
-    }, [dialog, keepFocus]);
-}
+import { useDialogFocus } from './dialog-focus';
 
 const primary = 'min-w-[44px] min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
 const plain = 'min-w-[44px] min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-800 dark:text-nature-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
@@ -89,14 +48,16 @@ interface PickerProps {
     /** Add this type (with its settings, for a type that has them). The page closes the picker and moves focus. */
     onAdd: (type: string, settings?: Record<string, unknown>) => void;
     onClose: () => void;
+    /** Where focus goes on close when what opened the picker has gone (Edit home's ＋ Add a card). */
+    returnFocus?: () => HTMLElement | null | undefined;
 }
 
-export function AddCardDialog({ groups, full, onAdd, onClose }: PickerProps) {
+export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus }: PickerProps) {
     const dialog = useRef<HTMLDivElement | null>(null);
     // An add sends focus to the new card's "…" (the page does it): closing then doesn't pull it back to the opener.
     const added = useRef(false);
     const [settingsFor, setSettingsFor] = useState<PickerRow | null>(null);
-    useDialogFocus(dialog, onClose, added);
+    useDialogFocus(dialog, onClose, { keepFocus: added, fallback: returnFocus });
 
     const add = (type: string, settings?: Record<string, unknown>) => {
         added.current = true;
@@ -105,8 +66,10 @@ export function AddCardDialog({ groups, full, onAdd, onClose }: PickerProps) {
 
     if (settingsFor) {
         return (
-            <CardSettingsDialog type={settingsFor.type} name={settingsFor.name} mode="add"
-                onSubmit={(s) => add(settingsFor.type, s)} onClose={() => setSettingsFor(null)} />
+            <CardSettingsDialog type={settingsFor.type} name={settingsFor.name} mode="add" keepFocus={added}
+                onSubmit={(s) => add(settingsFor.type, s)} onClose={() => setSettingsFor(null)}
+                // Back in the picker: its row's Add, else its heading.
+                returnFocus={() => dialog.current?.querySelector<HTMLElement>(`[data-testid="home-add-${settingsFor.type}"]`) ?? dialog.current?.querySelector<HTMLElement>('h2')} />
         );
     }
 
@@ -132,7 +95,10 @@ export function AddCardDialog({ groups, full, onAdd, onClose }: PickerProps) {
                                         Add
                                     </button>
                                 ) : r.state === 'on-home' ? (
-                                    <span data-testid={`home-add-on-${r.type}`} aria-label={`${r.name} is already on Home`} className="shrink-0 text-xs font-semibold text-nature-600 dark:text-nature-300">On Home</span>
+                                    // Words, not an aria-label: a plain span's label isn't reliably read (review of #1701, 7a).
+                                    <span data-testid={`home-add-on-${r.type}`} className="shrink-0 text-xs font-semibold text-nature-600 dark:text-nature-300">
+                                        <span aria-hidden="true">On Home</span><span className="sr-only">{r.name} is already on Home</span>
+                                    </span>
                                 ) : null}
                             </li>
                         ))}
@@ -153,15 +119,18 @@ interface SettingsProps {
     initial?: unknown;
     onSubmit: (settings: Record<string, unknown>) => void;
     onClose: () => void;
+    keepFocus?: React.RefObject<boolean>;
+    /** Where focus goes on close when what opened the settings has gone (a menu's Settings… item). */
+    returnFocus?: () => HTMLElement | null | undefined;
 }
 
 /**
  * A card's settings. Today only the saved search has any, and only its words here: its kind, category and distance,
  * and its listings on the card, come with slice F4 ({@link SEARCH_WAITING_LINE}).
  */
-export function CardSettingsDialog({ type, name, mode, initial, onSubmit, onClose }: SettingsProps) {
+export function CardSettingsDialog({ type, name, mode, initial, onSubmit, onClose, keepFocus, returnFocus }: SettingsProps) {
     const dialog = useRef<HTMLDivElement | null>(null);
-    useDialogFocus(dialog, onClose);
+    useDialogFocus(dialog, onClose, { keepFocus, fallback: returnFocus });
     const [q, setQ] = useState(() => readSearchSettings(initial).q);
     const words = q.trim();
     if (type !== 'search') return null;

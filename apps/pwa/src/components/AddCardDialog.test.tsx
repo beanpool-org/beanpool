@@ -23,7 +23,10 @@ describe('AddCardDialog', () => {
         const dialog = screen.getByRole('dialog', { name: 'Add a card' });
         expect(within(dialog).getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['For you', 'Around you', 'Getting started']);
         expect(screen.getByTestId('home-add-on-market')).toHaveTextContent('On Home');
-        expect(screen.getByTestId('home-add-on-market')).toHaveAttribute('aria-label', 'New in the Market is already on Home');
+        // Read as words, not a span's aria-label (review of #1701, 7a): "On Home" is for the eye, the sentence for the ear.
+        expect(screen.getByTestId('home-add-on-market')).not.toHaveAttribute('aria-label');
+        expect(screen.getByText('New in the Market is already on Home')).toHaveClass('sr-only');
+        expect(within(screen.getByTestId('home-add-on-market')).getByText('On Home')).toHaveAttribute('aria-hidden', 'true');
         expect(screen.getByTestId('home-add-count-search')).toHaveTextContent('2 of 5 on Home');
         expect(screen.getByRole('button', { name: 'Add Your Beans to Home' })).toBeInTheDocument();
         expect(screen.queryByTestId('home-add-row-community')).toBeNull();

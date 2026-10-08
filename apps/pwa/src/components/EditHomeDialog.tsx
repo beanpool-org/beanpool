@@ -6,11 +6,13 @@
 
  *
  * A real dialog: `role="dialog"`, labelled by its heading, focus moved in and kept there (Tab and Shift+Tab go round),
- * Escape closes it, and focus goes back to what opened it. Every control is a button at least 44 px tall whose label
+ * Escape closes it (only while no dialog is in front of it: a row's Settings…), and focus goes back to what opened it
+ * (components/dialog-focus.ts). Every control is a button at least 44 px tall whose label
  * names the card by its screen-reader name (lib/home-layout.ts `cardLabelName`: a saved search by its words).
  */
 import { useEffect, useRef, useState } from 'react';
 import { NOT_ON_ACCOUNT_LINE } from '../lib/home-layout';
+import { useDialogFocus } from './dialog-focus';
 
 export interface EditHomeRow {
     /** The instance id. */
@@ -34,54 +36,19 @@ interface Props {
     onRemove: (id: string) => void;
     onReset: () => void;
     onClose: () => void;
+    /** Where focus goes on close when what opened Edit home has gone. */
+    returnFocus?: () => HTMLElement | null | undefined;
 }
-
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export const EDIT_HOME_NOTE = "Needs you stays at the top, and your community's card at the bottom.";
 
-export function EditHomeDialog({ rows, notOnAccount, onAdd, onMove, onSettings, onRemove, onReset, onClose }: Props) {
+export function EditHomeDialog({ rows, notOnAccount, onAdd, onMove, onSettings, onRemove, onReset, onClose, returnFocus }: Props) {
     const dialog = useRef<HTMLDivElement | null>(null);
-    const opener = useRef<Element | null>(typeof document !== 'undefined' ? document.activeElement : null);
     const [menuFor, setMenuFor] = useState<string | null>(null);
     // After a move the row is drawn in its new place: focus follows its arrow there. After a Remove: the nearest row left.
     const [refocus, setRefocus] = useState<string | null>(null);
-    const closeRef = useRef(onClose);
-    closeRef.current = onClose;
 
-    useEffect(() => {
-        const back = opener.current as HTMLElement | null;
-        dialog.current?.querySelector<HTMLElement>('h2')?.focus();
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (!dialog.current) return;
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                closeRef.current();
-                return;
-            }
-            if (e.key !== 'Tab') return;
-            const items = Array.from(dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-            if (!items.length) return;
-            const first = items[0];
-            const last = items[items.length - 1];
-            const active = document.activeElement;
-            if (!dialog.current.contains(active)) {
-                e.preventDefault();
-                (e.shiftKey ? last : first).focus();
-            } else if (e.shiftKey && active === first) {
-                e.preventDefault();
-                last.focus();
-            } else if (!e.shiftKey && active === last) {
-                e.preventDefault();
-                first.focus();
-            }
-        };
-        document.addEventListener('keydown', onKeyDown);
-        return () => {
-            document.removeEventListener('keydown', onKeyDown);
-            back?.focus?.();
-        };
-    }, []);
+    useDialogFocus(dialog, onClose, { fallback: returnFocus });
 
     useEffect(() => {
         if (!refocus) return;

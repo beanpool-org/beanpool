@@ -1116,7 +1116,6 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
 
 describe('Home tips: Reset keeps a member part-way through on their tip (PR #1694 confirmation 1)', () => {
     const LOCAL = tipsFor({ profile: 'local', features: answer().features }, null);
-    const record = () => JSON.parse(localStorage.getItem(tipsKey(ME.publicKey)) ?? 'null');
     it('Reset to defaults while Tips is on, part-way (tip 4): the same tip stays', async () => {
         localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: LOCAL.slice(0, 3).map(t => t.id), current: LOCAL[3].id, currentShownOn: localDay(), dismissedAt: null }));
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
@@ -1349,7 +1348,7 @@ describe('an empty version-1 account list, no copy here: every edit stands once 
         await pause(100);
         expect(posts(node.log)).toBe(2);
         expect(cardIds().some(id => id.startsWith('search-'))).toBe(true);
-        expect(node.account().cards.find(c => c.type === 'search')?.settings).toMatchObject({ q: 'eggs' });
+        expect((node.account().cards.find(c => c.type === 'search') as { settings?: unknown } | undefined)?.settings).toMatchObject({ q: 'eggs' });
     });
 
     it('R1c: the fewer-cards line shows; Your Beans, The Pulse and Your groups added one after another all stay', async () => {
@@ -1403,5 +1402,96 @@ describe('what a never-edited member asks, and the old web app\'s empty copy (re
         expect(asked).not.toContain('pulse');
         expect(asked).not.toContain('beans');
         expect(node.log).not.toContain('POST');
+    });
+});
+
+describe('Home\'s dialogs: only the one in front has the keys, and focus never drops to the page (review of #1701, findings 2 and 3)', () => {
+    const withSearch = () => v2(['market', 'events'], AT, [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }]);
+    const focused = () => document.activeElement?.getAttribute('data-testid') ?? document.activeElement?.tagName;
+    const openSearchSettingsFromEditHome = async () => {
+        nodeKeeping(answer(), withSearch());
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-search-k7mq');
+        // As a keyboard user does: each control has focus as it is pressed (a click in jsdom moves none).
+        const press = (id: string) => { const el = screen.getByTestId(id); el.focus(); fireEvent.click(el); };
+        press('home-edit-open');
+        press('home-edit-menu-search-k7mq');
+        press('home-edit-settings-search-k7mq');
+        return screen.getByTestId('home-settings-dialog');
+    };
+
+    it('D1: Escape in a saved search\'s Settings… opened from Edit home closes only the settings; focus to the row\'s "…"', async () => {
+        await openSearchSettingsFromEditHome();
+        fireEvent.keyDown(document, { key: 'Escape' });
+        await pause();
+        expect(screen.queryByTestId('home-settings-dialog')).toBeNull();
+        expect(screen.getByTestId('home-edit-dialog')).toBeInTheDocument();
+        expect(focused()).toBe('home-edit-menu-search-k7mq');
+    });
+
+    it('D2: Tab in that sheet goes round its own controls: Edit home underneath leaves the key alone', async () => {
+        const sheet = await openSearchSettingsFromEditHome();
+        const tab = (from: HTMLElement) => {
+            from.focus();
+            const ev = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+            document.dispatchEvent(ev);
+            return ev.defaultPrevented;
+        };
+        // Neither is the sheet's last control: the browser moves on to the next one.
+        expect(tab(within(sheet).getByTestId('home-settings-q'))).toBe(false);
+        expect(tab(within(sheet).getByTestId('home-settings-dialog-done'))).toBe(false);
+        // From its last control, round to its first (never out to Edit home's).
+        const submit = within(sheet).getByTestId('home-settings-submit');
+        submit.focus();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        expect(sheet.contains(document.activeElement)).toBe(true);
+    });
+
+    it('D3: a card\'s "…" → Settings… → Save: focus to that card\'s "…"', async () => {
+        nodeKeeping(answer(), withSearch());
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-search-k7mq');
+        fireEvent.click(within(card).getByTestId('home-card-menu'));
+        fireEvent.click(within(card).getByTestId('home-menu-settings'));
+        fireEvent.change(screen.getByTestId('home-settings-q'), { target: { value: 'duck eggs' } });
+        fireEvent.click(screen.getByTestId('home-settings-submit'));
+        await pause(60);
+        expect(document.activeElement).toBe(within(screen.getByTestId('home-card-search-k7mq')).getByTestId('home-card-menu'));
+    });
+
+    it('D4: the picker opened from Edit home, closed with Done: focus to the community card\'s Add a card', async () => {
+        nodeKeeping(answer(), withSearch());
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-search-k7mq');
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        fireEvent.click(screen.getByTestId('home-edit-add'));
+        await pause();
+        fireEvent.click(screen.getByTestId('home-add-dialog-done'));
+        await pause();
+        expect(focused()).toBe('home-add-open');
+    });
+
+    it('D5: a card added with nothing to show yet: focus to Add a card, and it stays there once the add\'s read is in', async () => {
+        nodeKeeping(answer(), v2(['market', 'events']));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        fireEvent.click(screen.getByTestId('home-add-open'));
+        fireEvent.click(screen.getByTestId('home-add-joined'));
+        await pause(80);
+        expect(screen.getByTestId('home-live').textContent).toBe('Who joined added to Home');
+        expect(focused()).toBe('home-add-open');
+    });
+
+    it('D6: the picker\'s saved-search sheet, Escape: back in the picker, focus on that row\'s Add', async () => {
+        nodeKeeping(answer(), v2(['market', 'events']));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        fireEvent.click(screen.getByTestId('home-add-open'));
+        fireEvent.click(screen.getByTestId('home-add-search'));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        await pause();
+        const picker = screen.getByTestId('home-add-dialog');
+        expect(picker.contains(document.activeElement)).toBe(true);
+        expect(focused()).toBe('home-add-search');
     });
 });

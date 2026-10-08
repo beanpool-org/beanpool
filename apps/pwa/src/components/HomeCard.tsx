@@ -1,6 +1,8 @@
 /**
  * One card on Home (DESIGN-home-dashboard-fable.md §9, §10): a region with its own heading, so a screen reader jumps card
- * to card, and a small "…" with three items, Hide · Move up · Move down (§4.1). No dragging.
+ * to card, and a small "…" with three items, Hide · Move up · Move down (§4.1). No dragging. On the card frame
+ * (CARD-FRAME-DESIGN-fable.md §1.3, slice F3) the items are Settings… (a type that has them) · Move up · Move down ·
+ * Remove, named by the card's screen-reader name (a saved search by its words), given `onRemove` in place of `onHide`.
  *
  * The menu is a labelled button ("Card options for Coming up") that opens a short list of buttons under it: the first
  * item takes focus, the arrow keys move between them, Escape or a tap elsewhere closes it, and focus goes back to the
@@ -11,13 +13,21 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 interface MenuProps {
     title: string;
+    /** The card's screen-reader name for the menu's labels (lib/home-layout.ts `cardLabelName`); absent: its title. */
+    label?: string;
     canMoveUp: boolean;
     canMoveDown: boolean;
-    onHide: () => void;
+    /** Version 1's Hide. */
+    onHide?: () => void;
+    /** The card frame's Remove: the card goes, with its settings (Add a card brings it back). */
+    onRemove?: () => void;
+    /** Settings…, on a type that has them. */
+    onSettings?: () => void;
     onMove: (direction: 'up' | 'down') => void;
 }
 
-function CardMenu({ title, canMoveUp, canMoveDown, onHide, onMove }: MenuProps) {
+function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemove, onSettings, onMove }: MenuProps) {
+    const said = label ?? title;
     const [open, setOpen] = useState(false);
     const button = useRef<HTMLButtonElement | null>(null);
     const list = useRef<HTMLDivElement | null>(null);
@@ -67,19 +77,21 @@ function CardMenu({ title, canMoveUp, canMoveDown, onHide, onMove }: MenuProps) 
 
     return (
         <div className="relative shrink-0">
-            <button ref={button} type="button" aria-label={`Card options for ${title}`} aria-haspopup="true" aria-expanded={open}
+            <button ref={button} type="button" aria-label={`Card options for ${said}`} aria-haspopup="true" aria-expanded={open}
                 aria-controls={open ? menuId : undefined} data-testid="home-card-menu"
                 onClick={() => setOpen(o => !o)}
                 className="min-w-[44px] min-h-[44px] -mr-2 -mt-2 flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 hover:text-nature-800 dark:hover:text-white text-lg font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 <span aria-hidden="true">…</span>
             </button>
             {open && (
-                <div ref={list} id={menuId} role="group" aria-label={`Options for ${title}`} onKeyDown={onKeyDown}
+                <div ref={list} id={menuId} role="group" aria-label={`Options for ${said}`} onKeyDown={onKeyDown}
                     className="absolute right-0 top-full z-30 w-48 max-w-[calc(100vw-2rem)] py-1 rounded-xl shadow-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700">
                     {/* The card goes with its "…": the page gives focus to the nearest card left (pages/HomePage.tsx). */}
-                    <button type="button" className={item} onClick={() => { close(false); onHide(); }}>Hide</button>
+                    {onSettings && <button type="button" className={item} data-testid="home-menu-settings" onClick={() => { close(false); onSettings(); }}>Settings…</button>}
+                    {onHide && !onRemove && <button type="button" className={item} onClick={() => { close(false); onHide(); }}>Hide</button>}
                     <button type="button" className={item} disabled={!canMoveUp} onClick={() => { close(true); onMove('up'); }}>Move up</button>
                     <button type="button" className={item} disabled={!canMoveDown} onClick={() => { close(true); onMove('down'); }}>Move down</button>
+                    {onRemove && <button type="button" className={item} data-testid="home-menu-remove" aria-label={`Remove ${said} from Home`} onClick={() => { close(false); onRemove(); }}>Remove</button>}
                 </div>
             )}
         </div>

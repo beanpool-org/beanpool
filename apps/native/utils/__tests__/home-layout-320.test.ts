@@ -22,11 +22,15 @@ vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ t
 import { lightColors } from '../../constants/colors';
 import { POST_CATEGORIES } from '../../constants/categories';
 import { MAX_FONT_SCALE } from '../../constants/responsive';
-import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, homeStyles } from '../../components/home/HomeParts';
-import { editHomeStyles } from '../../components/home/EditHomeSheet';
-import { HOME_CARD_NAMES } from '../home-cards';
-import { HOME_TIPS, TIPS_DONT_SHOW, tipsCaption } from '@beanpool/core';
+import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
+import { EDIT_HOME_NOTE, editHomeStyles } from '../../components/home/EditHomeSheet';
+import { ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
+import { FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_WAITING_LINE, pickerGroups } from '../home-cards';
+import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_TIPS, TIPS_ALL_SEEN, TIPS_DONT_SHOW, tipsCaption } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
+
+/** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
+const CARD_NAMES = HOME_CARD_TYPES.flatMap(t => (t.globalName ? [t.name, t.globalName] : [t.name]));
 
 const SCREEN = 320;
 const FONT_SCALE = 1.3;
@@ -57,7 +61,7 @@ describe('a card at 320dp × 1.3', () => {
         const menu = num(s.menuButton.width) + num(s.menuButton.marginRight);
         const tune = HOME_TARGET_DP;
         const room = CARD_INNER - menu - tune;
-        for (const name of [...Object.values(HOME_CARD_NAMES), 'Near you', 'The worldwide community', tipsCaption({ position: 15, total: 15 })]) {
+        for (const name of [...CARD_NAMES, 'The worldwide community', tipsCaption({ position: 15, total: 15 })]) {
             const w = longestWord(name.toUpperCase(), num(s.caption.fontSize), { scale: CAPTION_MAX_SCALE, caps: true, letterSpacing: num(s.caption.letterSpacing) });
             expect(w, name).toBeLessThan(room);
         }
@@ -161,25 +165,100 @@ describe('a card at 320dp × 1.3', () => {
     });
 });
 
-describe('Edit home at 320dp × 1.3', () => {
+describe('Edit home at 320dp × 1.3 (CARD-FRAME §1.3)', () => {
     const e = editHomeStyles as unknown as Record<string, Record<string, unknown>>;
-    it('a card\'s name keeps its longest word beside the two arrows and the switch', () => {
-        const SWITCH = 52;
-        const room = SCREEN - 2 * num(e.list.paddingHorizontal) - 2 * num(e.arrow.width) - SWITCH - 3 * num(e.row.gap);
-        for (const name of [...Object.values(HOME_CARD_NAMES), 'Near you']) {
+    it('a card\'s name keeps its longest word beside ↑, ↓ and "…" (about 140dp of the sheet\'s 288)', () => {
+        const room = SCREEN - 2 * num(e.list.paddingHorizontal) - 3 * num(e.arrow.width) - 3 * num(e.row.gap);
+        expect(room).toBeGreaterThanOrEqual(130);
+        for (const name of CARD_NAMES) {
             expect(longestWord(name, num(e.name.fontSize)), name).toBeLessThan(room);
         }
+        for (const sub of ['Nothing to show now', TIPS_ALL_SEEN]) expect(longestWord(sub, num(e.sub.fontSize)), sub).toBeLessThan(room);
         expect(e.rowText).toMatchObject({ flex: 1, minWidth: 0 });
         expect(e.arrow.flexShrink).toBe(0);
         expect(num(e.arrow.height)).toBeGreaterThanOrEqual(48);
         expect(num(e.reset.minHeight)).toBeGreaterThanOrEqual(48);
         expect(num(e.done.minHeight)).toBeGreaterThanOrEqual(48);
+        expect(num(e.addRow.minHeight)).toBeGreaterThanOrEqual(48);
     });
 
-    it('each up and down arrow is a 48dp target both ways, not only in height (PR #1483 review 4165384018)', () => {
+    it('each arrow and "…" is a 48dp target both ways, not only in height (PR #1483 review 4165384018); no switch is left', () => {
         expect(num(e.arrow.width)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
         expect(num(e.arrow.height)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
         expect(HOME_TARGET_DP).toBeGreaterThanOrEqual(48);
+        const sheet = read('components/home/EditHomeSheet.tsx');
+        expect(sheet).not.toMatch(/<Switch/);
+        expect(sheet).not.toMatch(/>Hidden</);
+        expect(sheet).toMatch(/testID=\{`edit-home-\$\{c\.id\}-menu`\}/);
+    });
+
+    it('its fixed words fit: the note, ＋ Add a card, Reset to defaults, and the "not on your account yet" line', () => {
+        const inner = SCREEN - 2 * num(e.list.paddingHorizontal);
+        for (const t of [EDIT_HOME_NOTE, NOT_ON_ACCOUNT_LINE, ' Find your community stays near the top for your first 30 days.']) {
+            expect(longestWord(t, num(e.note.fontSize)), t).toBeLessThan(inner);
+        }
+        expect(textWidth('＋ Add a card', num(e.addText.fontSize))).toBeLessThan(inner);
+        expect(textWidth('Reset to defaults', num(e.resetText.fontSize))).toBeLessThan(inner);
+    });
+});
+
+describe('the picker at 320dp × 1.3 (CARD-FRAME §1.2, §1.4)', () => {
+    const e = editHomeStyles as unknown as Record<string, Record<string, unknown>>;
+    const a = addCardStyles as unknown as Record<string, Record<string, unknown>>;
+    const ADD = Math.max(num(a.add.minWidth), textWidth('Add', num(a.addText.fontSize)) + 2 * num(a.add.paddingHorizontal));
+    const ON_HOME = textWidth('On Home', num(a.onHome.fontSize));
+    const room = SCREEN - 2 * num(e.list.paddingHorizontal) - 2 * num(a.group.borderWidth) - 2 * num(a.group.paddingHorizontal) - num(a.row.gap) - Math.max(ADD, ON_HOME);
+    const everyRow = () => {
+        const local = pickerGroups({ profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true } }, null, 'admin');
+        const global = pickerGroups({ profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false } }, null, null);
+        return [...local.groups, ...global.groups].flatMap(g => g.rows);
+    };
+
+    it('every row\'s name and line keep their longest word beside a 48dp Add (or "On Home")', () => {
+        expect(num(a.add.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(num(a.add.minWidth)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(a.add.flexShrink).toBe(0);
+        expect(a.rowText).toMatchObject({ flex: 1, minWidth: 0 });
+        const rows = everyRow();
+        expect(rows.length).toBeGreaterThan(10);
+        for (const r of rows) {
+            expect(longestWord(r.name, num(a.name.fontSize)), r.name).toBeLessThan(room);
+            expect(longestWord(r.line, num(a.line.fontSize)), r.line).toBeLessThan(room);
+        }
+        for (const t of ['5 of 5 on Home', '3 of 3 on Home', TIPS_ALL_SEEN]) expect(longestWord(t, num(a.line.fontSize)), t).toBeLessThan(room);
+    });
+
+    it('every type in the registry is measured, whatever node lists it; the group headings and the notes fit', () => {
+        for (const t of HOME_CARD_TYPES) expect(longestWord(t.line, num(a.line.fontSize)), t.id).toBeLessThan(room);
+        const inner = SCREEN - 2 * num(e.list.paddingHorizontal);
+        for (const g of HOME_CARD_GROUPS) {
+            expect(textWidth(g.name.toUpperCase(), num(e.section.fontSize), { caps: true, letterSpacing: num(e.section.letterSpacing) }), g.name).toBeLessThan(inner);
+        }
+        for (const t of [ADD_CARD_NOTE, ADD_CARD_FULL_NOTE]) expect(longestWord(t, num(e.note.fontSize)), t).toBeLessThan(inner);
+    });
+});
+
+describe('the frame\'s words on Home at 320dp × 1.3', () => {
+    it('"Add a card ›" and "Edit home ›" each fit a row whole, wrap rather than clip, and each is its own 48dp target the floating button steps aside for', () => {
+        const add = textWidth('Add a card ›', num(s.linkText.fontSize));
+        const edit = textWidth('Edit home ›', num(s.linkText.fontSize));
+        expect(add).toBeLessThan(CARD_INNER);
+        expect(edit).toBeLessThan(CARD_INNER);
+        // Together they don't fit at the floor: the row wraps (CARD-FRAME §1.1).
+        expect(add + edit + num(communityLinksStyle.columnGap)).toBeGreaterThan(CARD_INNER);
+        expect(communityLinksStyle.flexWrap).toBe('wrap');
+        expect(num(s.link.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        const body = read('components/home/HomeCardBodies.tsx');
+        expect(body).toMatch(/<HomeLink id="community:add"/);
+        expect(body).toMatch(/<HomeLink id="community:edit"/);
+    });
+
+    it('the hint, the fewer-cards line and a saved search\'s waiting line keep their longest word beside the ✕', () => {
+        const home = read('app/(tabs)/index.tsx');
+        const hintText = Number(/hintText: \{ flex: 1, fontSize: (\d+)/.exec(home)?.[1]);
+        const room = SCREEN - 2 * 16 - 12 - HOME_TARGET_DP;
+        for (const t of [HOME_HINT_LINE, FEWER_CARDS_LINE]) expect(longestWord(t, hintText), t).toBeLessThan(room);
+        expect(longestWord(SEARCH_WAITING_LINE, num(s.note.fontSize))).toBeLessThan(CARD_INNER);
     });
 });
 

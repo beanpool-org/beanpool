@@ -10,13 +10,14 @@ import { resolvePulseThumbnailUrl } from '../../utils/pulse';
 import { formatDistance } from '../../utils/events';
 import type { NeedsYouEntry } from '../../utils/needs-you';
 import {
+    SEARCH_WAITING_LINE,
     RSVP_WORDS, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventDay, eventLine, formatBeans,
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type StepLine,
 } from '../../utils/home-cards';
-import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, tipsNextLabel, type TipsView } from '@beanpool/core';
+import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, readSearchSettings, tipsNextLabel, type TipsView } from '@beanpool/core';
 import { getBundledGuide } from '../../utils/guide';
-import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, homeStyles } from './HomeParts';
+import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
 
 /**
  * What each Home card says (design §3.1, §9), from the answer the screen holds. Every line is one target into a screen
@@ -327,19 +328,29 @@ export function InviteBody({ colors }: { colors: AppColors }) {
     );
 }
 
-export function CommunityBody({ card, profile, invitesOn, colors, onEdit }: {
+/**
+ * The community's card, last on Home, with the frame's two ways in (CARD-FRAME §1.1): "Add a card ›" and "Edit home ›",
+ * each its own 48 dp target in a row that wraps (at 320 dp with text at 1.3× they stand on two rows, right-aligned).
+ */
+export function CommunityBody({ card, profile, invitesOn, colors, onAdd, onEdit }: {
     card: HomeCards['community'] | undefined;
     profile: string;
     invitesOn: boolean;
     colors: AppColors;
     /** Absent for a visitor, who tailors nothing here (utils/home-cards.ts `canTailor`). */
+    onAdd?: () => void;
     onEdit?: () => void;
 }) {
     const { line } = communityLines(card, profile, invitesOn);
     return (
         <>
             {!!line && <HomeRow colors={colors} text={line} a11y={line} lines={3} testID="home-community-line" />}
-            {onEdit && <HomeLink id="community:edit" colors={colors} text="Edit home" a11y="Edit home: hide, show or move cards" onPress={onEdit} testID="home-edit" />}
+            {(onAdd || onEdit) && (
+                <View style={communityLinksStyle}>
+                    {onAdd && <HomeLink id="community:add" colors={colors} text="Add a card" a11y="Add a card to Home" onPress={onAdd} testID="home-add-card" />}
+                    {onEdit && <HomeLink id="community:edit" colors={colors} text="Edit home" a11y="Edit home: move or remove cards" onPress={onEdit} testID="home-edit" />}
+                </View>
+            )}
         </>
     );
 }
@@ -379,6 +390,22 @@ export function TipsBody({ view, colors, onNext, onReadMore, onDontShow }: {
                     <Text style={s.linkText}>{TIPS_DONT_SHOW}</Text>
                 </Pressable>
             </FabAware>
+        </>
+    );
+}
+
+/**
+ * A saved search (CARD-FRAME §4): its caption is fixed (A saved search) and its words stand in a bounded row, never the
+ * caption (member text clips there). Its rows are the node's to build (slice F4); until then it says it fills in when the
+ * community answers, so a member on 2G knows the add took.
+ */
+export function SearchBody({ settings, colors }: { settings: unknown; colors: AppColors }) {
+    const s = homeStyles(colors);
+    const { q } = readSearchSettings(settings);
+    return (
+        <>
+            {!!q && <HomeRow colors={colors} text={q} a11y={`Looks for ${q}.`} strong testID="home-search-words" />}
+            <Text style={s.note} testID="home-search-waiting">{SEARCH_WAITING_LINE}</Text>
         </>
     );
 }

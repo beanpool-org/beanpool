@@ -56,10 +56,12 @@ export function FabAware({ id, children, style }: { id: string; children: React.
 
 // ── The card ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function HomeCard({ id, caption, colors, onMenu, menuRef, right, children, testID, accent }: {
+export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, right, children, testID, accent }: {
     /** For the floating button's band: the caption's own targets (the "…", "Tune") report where they rest. */
     id: string;
     caption: string;
+    /** The card as its "…" says it (utils/home-cards.ts cardLabelName: a saved search by its words); the caption if absent. */
+    menuLabel?: string;
     colors: AppColors;
     /** The card's "…" (Hide, Move up, Move down); absent on the cards that can't be hidden or moved. */
     onMenu?: () => void;
@@ -90,7 +92,7 @@ export function HomeCard({ id, caption, colors, onMenu, menuRef, right, children
                                 onPress={onMenu}
                                 style={({ pressed }) => [s.menuButton, pressed && s.pressed]}
                                 accessibilityRole="button"
-                                accessibilityLabel={`Card options for ${caption}`}
+                                accessibilityLabel={`Card options for ${menuLabel ?? caption}`}
                                 testID={testID ? `${testID}-menu` : undefined}
                             >
                                 <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.text.secondary} />
@@ -169,6 +171,9 @@ export function HomeLink({ id, text, a11y, onPress, colors, testID }: {
         </FabAware>
     );
 }
+
+/** The community card's two links (CARD-FRAME §1.1): one row where they fit, each wrapping whole to its own row where they don't. */
+export const communityLinksStyle = { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: 20 } as const;
 
 /** A card's button: wraps to a second row rather than shrinking its words (§9 "buttons flexShrink: 0"). */
 export function HomeButton({ text, a11y, onPress, colors, primary, testID }: {

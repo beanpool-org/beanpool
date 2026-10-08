@@ -144,7 +144,8 @@ describe('one signed read for the whole screen, and the 304', () => {
         expect(read.kind).toBe('answer');
         expect(homeReads()).toHaveLength(1);
         const [r] = homeReads();
-        expect(r.url).toBe(`${NODE}/api/home?cards=needs,safety,find,steps,deals,enterprise,events,market,decide,groups,joined,pulse,beans,notices,community`);
+        // A newcomer's Home (CARD-FRAME §3): the fixed two and the five's node-built cards, in catalogue order.
+        expect(r.url).toBe(`${NODE}/api/home?cards=needs,safety,steps,events,market,notices,community`);
         expect(r.headers['If-None-Match']).toBeUndefined();
         expect(boundSignatureValid(r, me.publicKey)).toBe(true);
         const kept = await readStoredHome(me.publicKey, NODE);
@@ -200,9 +201,9 @@ describe('one signed read for the whole screen, and the 304', () => {
     it('a copy for another list of cards is no copy: no tag sent', async () => {
         const first = await readHomeFromNode(NODE, me, asked, null);
         if (first.kind !== 'answer') throw new Error('no answer');
-        await readHomeFromNode(NODE, me, asked.filter(c => c !== 'pulse'), first.stored);
+        await readHomeFromNode(NODE, me, asked.filter(c => c !== 'events'), first.stored);
         expect(homeReads()[1].headers['If-None-Match']).toBeUndefined();
-        expect(homeReads()[1].url).not.toContain('pulse');
+        expect(homeReads()[1].url).not.toContain('events');
     });
 
     it('another account\'s or community\'s copy is never read back', async () => {
@@ -289,7 +290,12 @@ describe('one read at a time, and the header', () => {
 });
 
 describe('the layout and the interests are the account\'s, with a copy on the phone', () => {
-    const layout: HomeLayout = { v: 1, order: ['beans', 'market'], hidden: ['pulse'], dismissed: { safety: '2026-10-02T08:00:00.000Z' }, updatedAt: '2026-10-02T09:00:00.000Z' };
+    // A newer app's card (`zzz-future`) travels with the rest, settings and all (CARD-FRAME §2.3).
+    const layout: HomeLayout = {
+        v: 2,
+        cards: [{ id: 'beans', type: 'beans' }, { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'zzz-1', type: 'zzz-future', settings: { a: 1 } }],
+        dismissed: { safety: '2026-10-02T08:00:00.000Z' }, updatedAt: '2026-10-02T09:00:00.000Z',
+    };
 
     it('a layout is saved signed, in the shape the node takes (home-preferences.ts), and what it kept comes back', async () => {
         const saved = await saveHomePreferences(NODE, me, { layout });
@@ -297,7 +303,7 @@ describe('the layout and the interests are the account\'s, with a copy on the ph
         expect(new URL(post.url).pathname).toBe('/api/members/preferences');
         expect(boundSignatureValid(post, me.publicKey)).toBe(true);
         expect(JSON.parse(post.body)).toEqual({ publicKey: me.publicKey, preferences: { 'home.layout': layout } });
-        expect(saved !== 'refused' && saved?.layout).toEqual(layout);
+        expect(saved !== 'refused' && saved !== 'shape-refused' && saved?.layout).toEqual(layout);
         // No date: the node stamps it.
         await saveHomePreferences(NODE, me, { layout: { ...layout, updatedAt: null } });
         expect(JSON.parse(node.requests.at(-1)!.body).preferences['home.layout']).not.toHaveProperty('updatedAt');
@@ -399,6 +405,14 @@ describe('a save the node refuses is not sent again and again (PR #1483 review 4
         node.refuse = 0;
         node.down = true;
         expect(await saveHomePreferences(NODE, me, { interests: ['food'] })).toBeNull();
+    });
+
+    it('a 400 to a layout is the shape refused (a node from before the frame), told apart from members only (CARD-FRAME §2.3)', async () => {
+        const layout: HomeLayout = { v: 2, cards: [{ id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: '2026-10-02T09:00:00.000Z' };
+        node.refuse = 400;
+        expect(await saveHomePreferences(NODE, me, { layout })).toBe('shape-refused');
+        node.refuse = 403;
+        expect(await saveHomePreferences(NODE, me, { layout })).toBe('refused');
     });
 
     it('a refused star stays on the phone and is sent at most once more, never at every landing', async () => {

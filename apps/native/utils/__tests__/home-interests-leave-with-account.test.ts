@@ -119,7 +119,7 @@ async function zaraUsesHome() {
     await importIdentity(zara);
     mem.async.set('beanpool_anchor_url', NODE);
     await readHomeFromNode(NODE, zara, cardsToAsk(null), null);
-    await writePhoneLayout(zara.publicKey, NODE, { v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: '2026-10-02T09:00:00.000Z' });
+    await writePhoneLayout(zara.publicKey, NODE, { v: 2, cards: [{ id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: '2026-10-02T09:00:00.000Z' });
     expect(await saveInterests(NODE, zara, ['food'])).toBe(true);
     expect(await reconcileInterests(NODE, zara, ['food'])).toEqual(['food']);
     mem.async.set(homeRevealStoreKey(zara.publicKey), '1');
@@ -292,7 +292,7 @@ describe('a Home read or save still out when the account leaves writes nothing b
     it('a layout written for an account that has left (a save landing late, the node\'s copy taken back) is dropped', async () => {
         await zaraUsesHome();
         await signOut(zara);
-        const layout = { v: 1 as const, order: ['beans' as const], hidden: [], dismissed: {}, updatedAt: '2026-10-02T10:00:00.000Z' };
+        const layout = { v: 2 as const, cards: [{ id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: '2026-10-02T10:00:00.000Z' };
         await writePhoneLayout(zara.publicKey, NODE, layout);
         await yieldPhoneLayout(zara.publicKey, NODE, layout);
         expect(homeKeys()).toEqual([]);

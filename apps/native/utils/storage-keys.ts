@@ -167,6 +167,15 @@ export function homeLayoutStoreKey(publicKey: string, url: string): string {
     return `${HOME_STORE_PREFIX}layout:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
 }
 
+/**
+ * The phone's list was made while the account's was unknown (an empty version-1 list, as a standby from before the frame
+ * answers): the date of that list, so the account's real list, once it answers, wins over it (utils/home-cards.ts
+ * pickLayout).
+ */
+export function homeLayoutPhoneOnlyStoreKey(publicKey: string, url: string): string {
+    return `${HOME_STORE_PREFIX}layout-phone-only:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
+}
+
 export function homeInterestsOwedStoreKey(publicKey: string, url: string): string {
     return `${HOME_STORE_PREFIX}interests-owed:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
 }
@@ -190,6 +199,11 @@ export function homeRevealStoreKey(publicKey: string): string {
 
 export function homeHintStoreKey(publicKey: string): string {
     return `${HOME_STORE_PREFIX}hint:${publicKey.toLowerCase()}`;
+}
+
+/** The one-time line "Home now starts with fewer cards" (CARD-FRAME §2.6), per account, like the hint. */
+export function homeFewerStoreKey(publicKey: string): string {
+    return `${HOME_STORE_PREFIX}fewer:${publicKey.toLowerCase()}`;
 }
 
 /**

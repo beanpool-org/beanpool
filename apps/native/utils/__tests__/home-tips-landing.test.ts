@@ -68,6 +68,7 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
+vi.mock('react-native-keyboard-controller', () => ({ useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }) }));
 vi.mock('expo-secure-store', () => ({
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined), deleteItemAsync: vi.fn(async () => undefined),
 }));
@@ -368,20 +369,24 @@ describe('Home tips: when a return to Home lands the tip (PR #1694 confirmation 
         expect(idOf(tipText())).toBe(mid);
     });
 
-    it('F. Edit home: switch Tips off then on again in one sheet starts over from tip 1; the layout shows it', async () => {
+    it('F. Edit home: Remove Tips, then ＋ Add a card brings it back from tip 1; the layout shows it', async () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-tip-next"]') as HTMLElement).click(); });
         await settle();
+        const label = (l: string) => document.querySelector(`[aria-label="${l}"]`) as HTMLElement;
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        const sw = () => document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement;
-        await act(async () => { sw().click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-menu"]') as HTMLElement).click(); });
+        await act(async () => { label('Remove Tips from Home').click(); });
         await settle();
         expect(tipsRecord().dismissedAt).toEqual(expect.any(String));
         expect(cards()).not.toContain('tips');
-        await act(async () => { sw().click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-add"]') as HTMLElement).click(); });
+        await settle(2);
+        await act(async () => { label('Add Tips to Home').click(); });
         await settle();
         expect(tipsRecord()).toMatchObject({ seen: [], current: 'what-this-is', currentShownOn: localDay(), dismissedAt: null });
         expect(cards()).toContain('tips');
-        expect(JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!).hidden).toEqual([]);
+        const ids = JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!).cards.map((c: { id: string }) => c.id);
+        expect(ids).toContain('tips');
     });
 });

@@ -5,18 +5,24 @@ import type { AppColors } from '../../constants/colors';
 import { HOME_TARGET_DP } from './HomeParts';
 
 /**
- * A Home card's "…" menu (design §4.1, §10): Hide, Move up, Move down. A small sheet with three items big enough for a
- * thumb and for TalkBack. The system Back button (and Escape on a keyboard) closes it, as Cancel does; a modal keeps the
+ * A Home card's "…" menu (CARD-FRAME §1.3, design §10): Settings… (only on a type that has them), Move up, Move down,
+ * Remove. A small sheet with items big enough for a thumb and for TalkBack. Remove asks nothing: a card is one tap to put
+ * back from Add a card. The system Back button (and Escape on a keyboard) closes it, as Cancel does; a modal keeps the
  * screen reader inside it while open, and when it closes focus goes back to the "…" that opened it.
  */
-export function HomeCardMenu({ visible, name, colors, canHide, canUp, canDown, onHide, onUp, onDown, onClose, returnTo }: {
+export function HomeCardMenu({ visible, name, label, colors, canRemove, canUp, canDown, onSettings, onRemove, onUp, onDown, onClose, returnTo }: {
     visible: boolean;
+    /** The menu's title: the card's name, drawn. */
     name: string;
+    /** The card as its labels say it (utils/home-cards.ts cardLabelName: a saved search by its words); `name` if absent. */
+    label?: string;
     colors: AppColors;
-    canHide: boolean;
+    canRemove: boolean;
     canUp: boolean;
     canDown: boolean;
-    onHide: () => void;
+    /** Absent: the card's type has no settings, and the menu has no Settings… item. */
+    onSettings?: () => void;
+    onRemove: () => void;
     onUp: () => void;
     onDown: () => void;
     onClose: () => void;
@@ -24,6 +30,7 @@ export function HomeCardMenu({ visible, name, colors, canHide, canUp, canDown, o
     returnTo?: React.RefObject<View | null>;
 }) {
     const insets = useSafeAreaInsets();
+    const said = label ?? name;
     const wasVisible = useRef(visible);
     useEffect(() => {
         if (wasVisible.current && !visible && returnTo?.current) {
@@ -53,10 +60,11 @@ export function HomeCardMenu({ visible, name, colors, canHide, canUp, canDown, o
         <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
             <Pressable style={s.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close card options">
                 <Pressable style={[s.sheet, { backgroundColor: colors.surface.card, paddingBottom: 16 + insets.bottom }]} onPress={() => {}} accessible={false}>
-                    <Text style={[s.title, { color: colors.text.secondary }]} accessibilityRole="header" accessibilityLabel={`Card options for ${name}`} numberOfLines={2}>{name}</Text>
-                    {item('Hide', `Hide ${name}`, canHide, onHide, 'home-menu-hide')}
-                    {item('Move up', `Move ${name} up`, canUp, onUp, 'home-menu-up')}
-                    {item('Move down', `Move ${name} down`, canDown, onDown, 'home-menu-down')}
+                    <Text style={[s.title, { color: colors.text.secondary }]} accessibilityRole="header" accessibilityLabel={`Card options for ${said}`} numberOfLines={2}>{name}</Text>
+                    {onSettings && item('Settings…', `Settings for ${said}`, true, onSettings, 'home-menu-settings')}
+                    {item('Move up', `Move ${said} up`, canUp, onUp, 'home-menu-up')}
+                    {item('Move down', `Move ${said} down`, canDown, onDown, 'home-menu-down')}
+                    {item('Remove', `Remove ${said} from Home`, canRemove, onRemove, 'home-menu-remove')}
                     {item('Cancel', 'Cancel', true, () => {}, 'home-menu-cancel')}
                 </Pressable>
             </Pressable>

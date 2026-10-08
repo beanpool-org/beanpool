@@ -21,10 +21,11 @@ import * as path from 'node:path';
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', summary: 'region' };
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityLabel, accessibilityRole, testID, numberOfLines, accessibilityState, disabled, value, onValueChange, accessible } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, testID, numberOfLines, accessibilityState, disabled, value, onValueChange, onChangeText, accessible } = props;
         const attrs: Record<string, unknown> = {};
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (onValueChange) attrs.onClick = () => onValueChange(!value);
+        if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (testID) attrs['data-testid'] = testID;
@@ -33,12 +34,13 @@ vi.mock('react-native', () => {
         if (accessibilityState?.disabled || disabled) attrs['aria-disabled'] = 'true';
         if (value !== undefined && onValueChange) attrs['aria-checked'] = String(!!value);
         if (accessible) attrs['data-accessible'] = 'true';
+        if (testID === 'card-settings-sheet') attrs['data-style'] = JSON.stringify(Object.assign({}, ...[props.style].flat(3).filter(Boolean)));
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
     class Value { constructor(public v: number) {} setValue(v: number) { this.v = v; } interpolate() { return 0; } }
     return {
         Platform: { OS: 'android' },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), Switch: el('button'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), Switch: el('button'), TextInput: el('input'),
         ActivityIndicator: () => createElement('span', null, '…'),
         RefreshControl: () => null,
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
@@ -68,6 +70,9 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
+// The keyboard as the root provider reports it (components/useModalKeyboardLift.ts reads it): down unless a test raises it.
+const keyboard = vi.hoisted(() => ({ height: 0, isVisible: false }));
+vi.mock('react-native-keyboard-controller', () => ({ useKeyboardState: (pick: (s: typeof keyboard) => unknown) => pick(keyboard) }));
 vi.mock('expo-secure-store', () => ({
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined), deleteItemAsync: vi.fn(async () => undefined),
 }));
@@ -129,10 +134,10 @@ import { draftIdentity, wipeIdentityScopedStorage } from '../identity';
 import { rememberKnock } from '../knock';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
-import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
-import { HOME_TIPS, localDay } from '@beanpool/core';
+import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
+import { HOME_TIPS, localDay, translateV1 } from '@beanpool/core';
 import { AccessibilityInfo, AppState, DeviceEventEmitter } from 'react-native';
-import { HOME_SAFETY_POLL_MS, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
+import { FEWER_CARDS_LINE, HOME_SAFETY_POLL_MS, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
 import { commonsSectionFor } from '../commons-sections';
 import { marketFilterFromLink } from '../market-filters';
@@ -144,13 +149,19 @@ const NODE = 'https://mullum.beanpool.org';
 const iso = (ms: number) => new Date(ms).toISOString();
 const H = 3600_000;
 
+/**
+ * A member who has every card of version 1 on their list (as one who edited with an older app and hid nothing), so each
+ * card's own rules are seen; a newcomer's Home (`layout: null`, CARD-FRAME §3) is its own case below.
+ */
+const everyV1Card = (now: number) => ({ ...translateV1({ order: [], hidden: [] }), updatedAt: iso(now - 72 * H) });
+
 function localMember(): HomeAnswer {
     const now = Date.now();
     return {
         generatedAt: iso(now), profile: 'local',
         features: { beans: true, escrow: true, invites: true, exampleListings: false, decisions: true },
         me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member' },
-        layout: null,
+        layout: everyV1Card(now),
         cards: {
             steps: { joinedAt: iso(now - 3 * 24 * H), firstOffer: false, firstPost: false, photo: false, interests: false, invited: false, area: false, knocked: null },
             events: { items: [
@@ -194,6 +205,8 @@ beforeEach(async () => {
     resetHomeStoreForTests();
     nav.params = {};
     Object.values(nav.router).forEach(f => f.mockClear());
+    keyboard.height = 0;
+    keyboard.isVisible = false;
     node.answer = localMember();
     node.status = 200;
     node.down = false;
@@ -213,6 +226,8 @@ beforeEach(async () => {
     vi.mocked(db.getUnreadByConversation).mockImplementation(async () => []);
     who.identity = await draftIdentity();
     mem.store.set('beanpool_anchor_url', NODE);
+    // The phone already holds the member's list (it landed here before): a landing is one read.
+    mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(node.answer.layout));
     globalThis.fetch = vi.fn(async (input: any, init: any = {}) => {
         const url = String(input);
         const headers = { ...(init.headers ?? {}) } as Record<string, string>;
@@ -280,9 +295,25 @@ async function render() {
 const cards = () => Array.from(document.querySelectorAll('[data-testid^="home-card-"]'))
     .map(e => e.getAttribute('data-testid')!.replace('home-card-', ''))
     .filter(id => !id.endsWith('-menu'));
-const byLabel = (label: string) => document.querySelector(`[aria-label="${label}"]`) as HTMLElement | null;
+const byLabel = (label: string) => document.querySelector(`[aria-label="${label.replace(/"/g, '\\"')}"]`) as HTMLElement | null;
 const homeReads = () => node.requests.filter(r => new URL(r.url).pathname === '/api/home');
 const marketOrder = () => Array.from(document.querySelectorAll('[data-testid^="home-market-p"]')).map(e => e.getAttribute('data-testid')!.replace('home-market-', ''));
+// What the phone sent since a point, the cards a layout save named, the phone-only mark (index.tsx `phoneOver`), a Remove
+// through a card's "…" menu, and whether Edit home says the cards aren't on the account yet (review of #1699, confirmation).
+const trace = (from = 0) => node.requests.slice(from).map(r => `${r.method} ${new URL(r.url).pathname} ${r.status}`);
+const sentIds = (r: { body: string }) => (JSON.parse(r.body).preferences['home.layout'].cards as { id: string }[]).map(c => c.id);
+const markKey = () => homeLayoutPhoneOnlyStoreKey(who.identity.publicKey, NODE);
+async function removeVia(id: string) {
+    await act(async () => { (document.querySelector(`[data-testid="home-card-${id}-menu"]`) as HTMLElement).click(); });
+    await act(async () => { (document.querySelector('[data-testid="home-menu-remove"]') as HTMLElement).click(); });
+    await settle();
+}
+async function notOnAccountShown() {
+    await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+    const shown = !!document.querySelector('[data-testid="edit-home-not-on-account"]');
+    await act(async () => { (document.querySelector('[data-testid="edit-home-done"]') as HTMLElement).click(); });
+    return shown;
+}
 
 describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
     it('one request for the whole screen, and the cards in the design\'s order', async () => {
@@ -330,20 +361,26 @@ describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
 });
 
 describe('tailoring: the "…" menu, Edit home, interests', () => {
-    it('Hide: the card goes at once, the layout is kept on the phone and saved to the account', async () => {
+    it('Remove: the card goes at once, the instance leaves the list on the phone and the account, and it is said (CARD-FRAME §1.3)', async () => {
         await render();
         await act(async () => { byLabel('Card options for Coming up')!.click(); });
-        expect(document.querySelector('[data-modal]')?.textContent).toContain('Hide');
+        expect(document.querySelector('[data-modal]')?.textContent).toContain('Remove');
+        expect(document.querySelector('[data-modal]')?.textContent).not.toContain('Hide');
+        expect(document.querySelector('[data-modal]')?.textContent).not.toContain('Settings');
         expect(byLabel('Move Coming up up')).not.toBeNull();
         expect(byLabel('Move Coming up down')).not.toBeNull();
-        await act(async () => { byLabel('Hide Coming up')!.click(); });
+        await act(async () => { byLabel('Remove Coming up from Home')!.click(); });
         await settle();
         expect(cards()).not.toContain('events');
         const phone = JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!);
-        expect(phone.hidden).toEqual(['events']);
+        expect(phone.v).toBe(2);
+        expect(phone.cards.map((c: { id: string }) => c.id)).not.toContain('events');
         const post = node.requests.find(r => r.method === 'POST')!;
-        expect(JSON.parse(post.body).preferences['home.layout'].hidden).toEqual(['events']);
+        expect(JSON.parse(post.body).preferences['home.layout'].cards.map((c: { id: string }) => c.id)).not.toContain('events');
         expect(boundSignatureValid(post, who.identity.publicKey)).toBe(true);
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Coming up removed. Add a card brings it back.');
+        // A remove reads nothing.
+        expect(homeReads()).toHaveLength(1);
     });
 
     it('Move down: the card swaps with the one below it on screen', async () => {
@@ -363,21 +400,69 @@ describe('tailoring: the "…" menu, Edit home, interests', () => {
         expect(byLabel('Move Your Beans down')!.getAttribute('aria-disabled')).toBe('true');
     });
 
-    it('Edit home: a hidden card comes back from its switch, and Reset puts the default back', async () => {
+    it('Add a card: only this node\'s types, "On Home" for one already there; Add puts it first, says so, and reads Home only after the save is answered', async () => {
         await render();
         await act(async () => { byLabel('Card options for The Pulse')!.click(); });
-        await act(async () => { byLabel('Hide The Pulse')!.click(); });
+        await act(async () => { byLabel('Remove The Pulse from Home')!.click(); });
         await settle();
         expect(cards()).not.toContain('pulse');
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        const sw = document.querySelector('[data-testid="edit-home-pulse-switch"]') as HTMLElement;
-        expect(sw.getAttribute('aria-checked')).toBe('false');
-        await act(async () => { sw.click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="add-card-sheet"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="add-card-beans-on-home"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="add-card-find"]')).toBeNull();
+        expect(byLabel('Your Beans is already on Home')).not.toBeNull();
+        const before = node.requests.length;
+        await act(async () => { byLabel('Add The Pulse to Home')!.click(); });
         await settle();
-        expect(cards()).toContain('pulse');
+        expect(document.querySelector('[data-testid="add-card-sheet"]')).toBeNull();
+        expect(cards()[0]).toBe('pulse');
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('The Pulse added to Home');
+        const after = node.requests.slice(before).map(r => `${r.method} ${new URL(r.url).pathname}`);
+        // The save first, and the read only once it is answered (§2.4), with the card in it. (This test node doesn't keep
+        // layouts, so its next answer is older than the phone's and the phone sends its list again after: not counted.)
+        expect(after.slice(0, 2)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
+        expect(JSON.parse(node.requests[before].body).preferences['home.layout'].cards[0]).toEqual({ id: 'pulse', type: 'pulse' });
+        expect(homeReads().at(-1)!.url).toContain('pulse');
+    });
+
+    it('Edit home: ＋ Add a card first, ↑ ↓ … per card, no switches, and Reset gives the newcomer\'s list', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="edit-home-add"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="edit-home-pulse-switch"]')).toBeNull();
+        expect(document.querySelector('[data-testid="edit-home-pulse-menu"]')).not.toBeNull();
         await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
         await settle();
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+    });
+
+    it('a saved search: Add opens its settings sheet, Add to Home puts it first with its words, and it says it fills in from the node', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add A saved search to Home')!.click(); });
+        await settle(2);
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).not.toBeNull();
+        const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLElement;
+        expect(input).not.toBeNull();
+    });
+
+    it('the settings sheet stands above the keyboard: lifted by its height and fitted above it, as Create a Group is (review of #1699, finding 3)', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add A saved search to Home')!.click(); });
+        await settle(2);
+        const style = () => JSON.parse(document.querySelector('[data-testid="card-settings-sheet"]')!.getAttribute('data-style')!);
+        expect(style()).toMatchObject({ marginBottom: 0, maxHeight: 569 * 0.9 });
+        // The keyboard comes up (283 dp of 569, measured on the emulator at the floor) as the member types.
+        keyboard.height = 283;
+        keyboard.isVisible = true;
+        const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLInputElement;
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'eggs');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        // Insets top 24 + 8: the sheet sits on the keyboard and fits between it and the status bar.
+        expect(style()).toMatchObject({ marginBottom: 283, maxHeight: 569 - 283 - 32 });
     });
 
     it('a tap on an interest reorders the Market card in place, before the save lands, and saves to both copies', async () => {
@@ -496,11 +581,16 @@ describe('links into Home, and the "one way back" card', () => {
     });
 
     it('the card gets the community\'s word from Home\'s own answer, and the account\'s dismissal', async () => {
-        node.answer = { ...localMember(), cards: { ...localMember().cards, safety: { words: true, signInLinked: false } }, layout: { v: 1, order: [], hidden: [], dismissed: { safety: '2026-10-01T00:00:00.000Z' }, updatedAt: '2026-10-01T00:00:00.000Z' } };
+        // The account's copy as a node before the frame answers it (version 1), and none on the phone.
+        node.answer = { ...localMember(), cards: { ...localMember().cards, safety: { words: true, signInLinked: false } }, layout: { v: 1, order: [], hidden: [], dismissed: { safety: '2026-10-01T00:00:00.000Z' }, updatedAt: '2026-10-01T00:00:00.000Z' } as never };
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
         await render();
         expect(safety.props.homeWord).toEqual({ url: NODE, standing: { words: true, joinedAt: Date.parse(node.answer.me!.joinedAt!) } });
         expect(safety.props.accountDismissedAt).toBe('2026-10-01T00:00:00.000Z');
+        // No copy of the member's list on this phone, and the account's names nothing: unknown, so the newcomer's list is
+        // drawn and its one read is enough (review of #1699, finding 2: an empty version-1 list is not "every card").
         expect(node.requests.map(r => new URL(r.url).pathname)).toEqual(['/api/home']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
     });
 
     it('"+ ADD POST" opens the same chooser as the Market\'s', async () => {
@@ -545,7 +635,7 @@ function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
         generatedAt: iso(now), profile,
         features: local ? LOCAL_FEATURES : GLOBAL_FEATURES,
         me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: true, probation: null, interests: ['food'], area: null, firstOffer: variant === 1, standing: 'member' },
-        layout: null,
+        layout: everyV1Card(now),
         cards: {
             needs: { items: needs },
             // Sent to both: a local community draws none (only the global node has the directory).
@@ -694,7 +784,6 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
             'home-market-all → /(tabs)/market',
-            'home-decide-polls → /(tabs)/market filter=polls',
             'home-group-g1 → /chat/[id] id=g1&group=1',
             'home-group-ent1 → /chat/[id] id=ent1&enterprise=1',
             'home-group-ev1 → /chat/[id] id=ev1&event=1',
@@ -726,7 +815,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
 };
 
 /** Controls that act on Home itself rather than open a screen. */
-const IN_PLACE = /^(home-card-[a-z]+-menu|home-edit|home-market-tune|home-notice-line|home-needs-admin|home-step-interests|home-interest-[a-z]+|home-tip-next|home-tips-dont-show)$/;
+const IN_PLACE = /^(home-card-[a-z]+-menu|home-edit|home-add-card|home-market-tune|home-notice-line|home-needs-admin|home-step-interests|home-interest-[a-z]+|home-tip-next|home-tips-dont-show)$/;
 
 /** Ids a link passes as they are; every other param's value must be one its screen names. */
 const FREE_PARAMS = new Set(['id', 'txId', 'publicKey', 'name']);
@@ -771,7 +860,10 @@ describe('every line on Home opens a screen this node shows, with what the line 
 
     it('a poll on the global node: the line says where it goes, and goes there; never to Commons, which global hides', async () => {
         await linksOn('global', 1);
-        expect(byLabel('2 polls open. Opens the polls, in the Market.')).not.toBeNull();
+        // Core's one rule (CARD-FRAME §1.2): no Decide card on the worldwide community, whatever its answer holds; its polls
+        // are the Market's Polls pill.
+        expect(byLabel('2 polls open. Opens the polls, in the Market.')).toBeNull();
+        expect(document.querySelector('[data-testid="home-card-decide"]')).toBeNull();
         expect(document.querySelector('[data-testid="home-decide-decisions"]')).toBeNull();
         expect((hiddenTabsFor(GLOBAL_FEATURES) as string[])).toContain('projects');
         expect(marketFilterFromLink('polls')).toBe('polls');
@@ -844,7 +936,8 @@ describe('a visitor on the global node: its public cards, nothing to tailor, not
         node.refuse = 400; // as the node refuses a Home save from a key that is no member there
         mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify({ v: 1, order: [], hidden: ['events'], dismissed: {}, updatedAt: new Date().toISOString() }));
         await render();
-        expect(cards()).toEqual(['events', 'market', 'community']);
+        // A visitor's Home is the newcomer's (CARD-FRAME §3): New in the Market before Coming up.
+        expect(cards()).toEqual(['market', 'events', 'community']);
         expect(document.querySelectorAll('[aria-label^="Card options for"]')).toHaveLength(0);
         expect(document.querySelector('[data-testid="home-edit"]')).toBeNull();
         expect(document.querySelector('[data-testid="home-hint"]')).toBeNull();
@@ -861,8 +954,9 @@ describe('a visitor on the global node: its public cards, nothing to tailor, not
 
 describe('a layout save the node refuses is not sent again at every read', () => {
     it('the account\'s copy stands: drawn, kept on the phone, and the next reads send nothing', async () => {
-        node.refuse = 400;
-        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify({ v: 1, order: [], hidden: ['pulse'], dismissed: {}, updatedAt: new Date().toISOString() }));
+        node.refuse = 403;
+        const key = homeLayoutStoreKey(who.identity.publicKey, NODE);
+        mem.store.set(key, JSON.stringify({ v: 2, cards: [{ id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: new Date().toISOString() }));
         await render();
         expect(node.requests.filter(r => r.method === 'POST')).toHaveLength(1);
         for (let i = 0; i < 3; i++) {
@@ -871,7 +965,93 @@ describe('a layout save the node refuses is not sent again at every read', () =>
         }
         expect(node.requests.filter(r => r.method === 'POST')).toHaveLength(1);
         expect(cards()).toContain('pulse');
-        expect(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))).toBeUndefined();
+        expect(JSON.parse(mem.store.get(key)!).cards.map((c: { id: string }) => c.id)).toContain('pulse');
+    });
+
+    it('a node from before the frame refuses the new shape: the cards stay on the phone, Edit home says so, and each landing sends them again (CARD-FRAME §2.3)', async () => {
+        node.answer = { ...localMember(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
+        node.refuse = 400;
+        const key = homeLayoutStoreKey(who.identity.publicKey, NODE);
+        const mine = { v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: new Date().toISOString() };
+        mem.store.set(key, JSON.stringify(mine));
+        await render();
+        expect(cards().slice(0, 2)).toEqual(['search-k7mq', 'beans']);
+        expect(JSON.parse(mem.store.get(key)!)).toEqual(mine);
+        const posts = () => node.requests.filter(r => r.method === 'POST').length;
+        expect(posts()).toBe(1);
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="edit-home-not-on-account"]')?.textContent).toBe("Your community's server needs an update before your cards follow you to other devices.");
+        await act(async () => { (document.querySelector('[data-testid="edit-home-done"]') as HTMLElement).click(); });
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(posts()).toBe(2);
+        expect(cards().slice(0, 2)).toEqual(['search-k7mq', 'beans']);
+    });
+
+    // Review of #1699, finding 1: a POST at every read (each 2-minute poll, each doorbell) while Home was in front.
+    it('the refused list goes again once per landing: never at a poll, a doorbell or an add\'s own read', async () => {
+        const spy = vi.spyOn(globalThis, 'setInterval');
+        try {
+            node.answer = { ...localMember(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
+            node.refuse = 400;
+            const key = homeLayoutStoreKey(who.identity.publicKey, NODE);
+            mem.store.set(key, JSON.stringify({ v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: new Date().toISOString() }));
+            const posts = () => node.requests.filter(r => r.method === 'POST' && new URL(r.url).pathname === '/api/members/preferences').length;
+            await render();
+            expect(posts()).toBe(1);
+            const poll = spy.mock.calls.filter(c => c[1] === HOME_SAFETY_POLL_MS).at(-1)![0] as () => void;
+            for (let i = 0; i < 3; i++) {
+                await act(async () => { poll(); });
+                await settle();
+            }
+            const ws = vi.mocked(DeviceEventEmitter.addListener).mock.calls.filter(c => c[0] === 'ws_activity').at(-1)![1] as (d: unknown) => void;
+            await act(async () => { ws({ type: 'new_post' }); });
+            await act(async () => { await new Promise(r => setTimeout(r, 3_300)); });
+            await settle();
+            expect(homeReads()).toHaveLength(5);
+            expect(posts()).toBe(1);
+            // An add: its own save, then its read, and that read sends nothing.
+            const before = node.requests.length;
+            await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+            await act(async () => { byLabel('Add The Pulse to Home')!.click(); });
+            await settle(20);
+            expect(node.requests.slice(before).map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
+            expect(cards()[0]).toBe('pulse');
+            // The next landing sends it once more.
+            await act(async () => { nav.focus?.(); });
+            await settle();
+            expect(posts()).toBe(3);
+        } finally { spy.mockRestore(); }
+    });
+
+    // Review of #1699 (confirmation), note 1: the line stayed until an edit or a restart.
+    it('P6: the node is updated and another device saved a newer list: that list stands, nothing is sent, and Edit home no longer says the server needs an update', async () => {
+        node.answer = { ...localMember(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
+        node.refuse = 400;
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify({ v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: iso(Date.now() - H) }));
+        await render();
+        expect(await notOnAccountShown()).toBe(true);
+        node.refuse = 0;
+        node.answer = { ...localMember(), layout: { v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: new Date().toISOString() } as never };
+        const before = node.requests.length;
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(trace(before).filter(t => t.startsWith('POST'))).toEqual([]);
+        expect(cards().slice(0, 2)).toEqual(['pulse', 'beans']);
+        expect(await notOnAccountShown()).toBe(false);
+    });
+
+    it('a member who never edited adds a card on a node from before the frame: one save, then one read', async () => {
+        node.answer = { ...localMember(), me: { ...localMember().me!, joinedAt: iso(Date.now() - 30 * 24 * H) }, layout: null };
+        node.refuse = 400;
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        await render();
+        const before = node.requests.length;
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add The Pulse to Home')!.click(); });
+        await settle(20);
+        expect(node.requests.slice(before).map(r => `${r.method} ${r.status}`)).toEqual(['POST 400', 'GET 200']);
+        expect(cards()[0]).toBe('pulse');
     });
 });
 
@@ -879,25 +1059,36 @@ describe('a layout save the node refuses is not sent again at every read', () =>
 
 const editRows = () => Array.from(document.querySelectorAll('[data-testid^="edit-home-"]'))
     .map(e => e.getAttribute('data-testid')!.replace('edit-home-', ''))
-    .filter(id => !/-(up|down|switch)$/.test(id) && id !== 'done' && id !== 'reset');
+    .filter(id => !/-(up|down|menu)$/.test(id) && !['done', 'reset', 'add', 'not-on-account'].includes(id));
+const pickerRows = () => Array.from(document.querySelectorAll('[data-testid^="add-card-"]'))
+    .map(e => e.getAttribute('data-testid')!.replace('add-card-', ''))
+    .filter(id => !/-(add|on-home|count|status)$/.test(id) && !/^(sheet|done|note|group-.*)$/.test(id));
 
 describe('Edit home offers only the cards this node can show', () => {
     it('the global node: no Your deals, Your enterprise, Your Beans or Grow your community; First steps since H4; Find your community not while pinned', async () => {
         node.answer = everyCard('global', 1);
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(editRows()).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
+        // Core's one rule (CARD-FRAME §1.2): no Decide on the worldwide community either.
+        expect(editRows()).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'market', 'groups', 'joined', 'pulse', 'notices']);
         expect(document.body.textContent).not.toMatch(/Your deals|Your enterprise|Your Beans|Grow your community/);
         expect(document.querySelector('[data-modal]')?.textContent).toContain('Find your community stays near the top for your first 30 days.');
+        // The picker lists the same: no money cards, no Decide, no invites, and no Find your community while it is pinned.
+        await act(async () => { (document.querySelector('[data-testid="edit-home-add"]') as HTMLElement).click(); });
+        await settle(2);
+        const rows = pickerRows();
+        expect(rows.length).toBeGreaterThan(5);
+        for (const t of ['beans', 'deals', 'enterprise', 'decide', 'invite', 'find']) expect(rows, t).not.toContain(t);
+        expect(document.body.textContent).toContain('Near you');
     });
 
-    it('the global node after a member\'s first 30 days: Find your community is offered, in its place, with its switch', async () => {
+    it('the global node after a member\'s first 30 days: Find your community is listed in its place, with its arrows and "…"', async () => {
         const a = everyCard('global', 1);
         node.answer = { ...a, me: { ...a.me!, joinedAt: iso(Date.now() - 31 * 24 * H) } };
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(editRows()).toEqual(['safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
-        expect(document.querySelector('[data-testid="edit-home-find-switch"]')?.getAttribute('aria-checked')).toBe('true');
+        expect(editRows()).toEqual(['safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'groups', 'joined', 'pulse', 'notices']);
+        expect(document.querySelector('[data-testid="edit-home-find-menu"]')).not.toBeNull();
         expect(document.querySelector('[data-modal]')?.textContent).not.toContain('first 30 days');
     });
 
@@ -931,6 +1122,8 @@ describe('the account leaves the phone while Home\'s read is out: the screen wri
         node.answer = { ...localMember(), me: { ...localMember().me!, interests: ['food'] } };
         let release!: () => void;
         node.homeGate = new Promise<void>(r => { release = r; });
+        // A first landing: nothing of Home on the phone yet.
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
         await render();
         expect(homeKeys()).toEqual([]);
         return release;
@@ -1102,7 +1295,7 @@ function globalMember(days = 3): HomeAnswer {
             joinedAt, isKeeper: false, interests: [], area: null, firstOffer: false, standing: 'member',
             probation: { onProbation: true, rules: 'words', limits: { posts: { limit: 2 }, photos: { limit: 4 }, new_dm_recipients: { limit: 3 } }, endsWhen: { hours: 168, keptPosts: 3 } },
         },
-        layout: null,
+        layout: everyV1Card(now),
         cards: {
             find: findBody(),
             steps: { joinedAt, firstOffer: false, firstPost: false, photo: false, interests: false, invited: null, area: false, knocked: null },
@@ -1141,7 +1334,7 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
     });
 
     it('a layout that hides it or moves it down (another phone, the web app) is overruled while it is pinned: drawn first, asked for, nothing to hide it with', async () => {
-        node.answer = { ...globalMember(3), layout: { v: 1, order: ['market', 'events', 'find'], hidden: ['find'], dismissed: {}, updatedAt: new Date().toISOString() } };
+        node.answer = { ...globalMember(3), layout: { v: 1, order: ['market', 'events', 'find'], hidden: ['find'], dismissed: {}, updatedAt: new Date().toISOString() } as never };
         await render();
         expect(cards()[0]).toBe('find');
         expect(cards().slice(0, 4)).toEqual(['find', 'market', 'events', 'steps']);
@@ -1151,17 +1344,17 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         expect(byLabel('Move Near you up')!.getAttribute('aria-disabled')).toBe('true');
     });
 
-    it('after 30 days: its "…" hides it, the layout is saved, and the next read no longer asks for it', async () => {
+    it('after 30 days: its "…" removes it, the layout is saved, and the next read no longer asks for it', async () => {
         node.answer = globalMember(31);
         mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
         await render();
         expect(cards()[0]).toBe('find');
         await act(async () => { byLabel('Card options for Find your community')!.click(); });
-        await act(async () => { byLabel('Hide Find your community')!.click(); });
+        await act(async () => { byLabel('Remove Find your community from Home')!.click(); });
         await settle();
         expect(cards()).not.toContain('find');
         const post = node.requests.find(r => r.method === 'POST')!;
-        expect(JSON.parse(post.body).preferences['home.layout'].hidden).toEqual(['find']);
+        expect(JSON.parse(post.body).preferences['home.layout'].cards.map((c: { id: string }) => c.id)).not.toContain('find');
         await act(async () => { nav.focus?.(); });
         await settle();
         expect(homeCards().at(-1)).not.toContain('find');
@@ -1249,6 +1442,224 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
     });
 });
 
+describe('a standby from before the frame and a phone with no copy (review of #1699, finding 2)', () => {
+    const at = () => iso(Date.now() - 2 * H);
+    const real = (when: string) => ({ v: 2, cards: [
+        { id: 'pulse', type: 'pulse' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'market', type: 'market' },
+    ], dismissed: {}, updatedAt: when });
+    const posts = () => node.requests.filter(r => r.method === 'POST' && new URL(r.url).pathname === '/api/members/preferences');
+    const phoneIds = () => JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE)) ?? 'null')?.cards?.map((c: { id: string }) => c.id);
+
+    async function onTheStandby(when: string) {
+        // The standby answers the member's version-2 row as an empty version-1 list with the same date, and refuses a save.
+        node.answer = { ...localMember(), layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: when } as never };
+        node.refuse = 400;
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        await render();
+        // Not every version-1 card: the newcomer's list.
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        await act(async () => { byLabel('Card options for Coming up')!.click(); });
+        await act(async () => { byLabel('Remove Coming up from Home')!.click(); });
+        await settle();
+        expect(cards()).not.toContain('events');
+        expect(posts().map(p => p.status)).toEqual([400]);
+    }
+
+    async function primaryBack(when: string) {
+        node.refuse = 0;
+        node.answer = { ...localMember(), layout: real(when) as never };
+        const before = node.requests.length;
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        return before;
+    }
+
+    it('R5: the newcomer\'s list is drawn, an edit stays on the phone, and once the primary is back its list wins: nothing of the edit is sent', async () => {
+        const when = at();
+        await onTheStandby(when);
+        const before = await primaryBack(when);
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+        expect(phoneIds()).toEqual(['pulse', 'search-k2x7', 'market']);
+        // And it stays so: the next landing sends nothing either.
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="edit-home-not-on-account"]')).toBeNull();
+    });
+
+    it('the mark outlives the app: closed and opened again on the standby, then the primary back with a later list, the account\'s still wins', async () => {
+        const when = at();
+        await onTheStandby(when);
+        act(() => root?.unmount());
+        host?.remove();
+        resetHomeStoreForTests();
+        await render();
+        expect(cards()).not.toContain('events');
+        const before = await primaryBack(iso(Date.now() - H));
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+    });
+
+    // Review of #1699 (confirmation), finding 1: an edit made while the phone's list is the phone's only sent it at once, so
+    // the newcomer's placeholder list overwrote the member's real one when the primary was back before the phone read.
+    function asOnTheStandby(when: string) {
+        node.answer = { ...localMember(), layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: when } as never };
+        node.refuse = 400;
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+    }
+
+    it('P1b: the primary is back and the first edit comes before the phone reads: the read decides, the account\'s list wins, and the newcomer\'s list is never sent', async () => {
+        const when = at();
+        asOnTheStandby(when);
+        await render();
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        node.refuse = 0;
+        node.answer = { ...localMember(), layout: real(when) as never };
+        const before = node.requests.length;
+        await removeVia('events');
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        // The edit's own read, then one more for the cards the account's list names that the edit's didn't.
+        expect(trace(before)).toEqual(['GET /api/home 200', 'GET /api/home 200']);
+        expect(new URL(homeReads().at(-1)!.url).searchParams.get('cards')!.split(',')).toEqual(expect.arrayContaining(['pulse', 'search-k2x7', 'market']));
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+        expect(phoneIds()).toEqual(['pulse', 'search-k2x7', 'market']);
+        expect(mem.store.has(markKey())).toBe(false);
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+    });
+
+    it('P1: an edit on the standby, then the primary is back and the member edits again before the phone reads: the account\'s list still wins', async () => {
+        const when = at();
+        await onTheStandby(when);
+        node.refuse = 0;
+        node.answer = { ...localMember(), layout: real(when) as never };
+        const before = node.requests.length;
+        await removeVia('market');
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+        expect(phoneIds()).toEqual(['pulse', 'search-k2x7', 'market']);
+        expect(mem.store.has(markKey())).toBe(false);
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+    });
+
+    it('on the standby an edit reads first, then goes once and is refused; a second edit sends nothing; the next landing sends it once more', async () => {
+        const when = at();
+        asOnTheStandby(when);
+        await render();
+        let before = node.requests.length;
+        await removeVia('events');
+        // Each read asks the edited list, so it carries no tag (another list): a 200.
+        expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 400']);
+        // The newcomer's list less Coming up (Your way back in and Notices are on it, drawn when they have something).
+        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'notices']);
+        expect(mem.store.get(markKey())).toBe(when);
+        before = node.requests.length;
+        await removeVia('market');
+        expect(trace(before)).toEqual(['GET /api/home 200']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'community']);
+        before = node.requests.length;
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(trace(before)).toEqual(['GET /api/home 304', 'POST /api/members/preferences 400']);
+        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'notices']);
+    });
+
+    it('an updated node that holds a real empty version-1 list gets the edit right after the read, and the mark is gone', async () => {
+        const when = at();
+        asOnTheStandby(when);
+        node.refuse = 0;
+        await render();
+        const before = node.requests.length;
+        await removeVia('events');
+        expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
+        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'notices']);
+        expect(mem.store.has(markKey())).toBe(false);
+        expect(phoneIds()).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'notices']);
+    });
+});
+
+describe('two saved searches: each is named by its words, never in its caption, and its line promises no rows (review of #1699, finding 4)', () => {
+    it('their "…", the menu, Edit home and the removed line each say the words, bounded; the caption stays the type\'s', async () => {
+        const long = 'second hand children\'s bicycles near the school';
+        const mine = { v: 2, cards: [
+            { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } },
+            { id: 'search-m4p9', type: 'search', settings: { q: long, kind: 'any' } },
+            { id: 'pulse', type: 'pulse' },
+        ], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        node.answer = { ...localMember(), layout: mine as never };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
+        await render();
+        expect(cards().slice(0, 2)).toEqual(['search-k2x7', 'search-m4p9']);
+        const bounded = '"second hand children\'s b…"';
+        for (const id of ['search-k2x7', 'search-m4p9']) {
+            const card = document.querySelector(`[data-testid="home-card-${id}"]`)!;
+            // The caption is the type's name; the words are the body's (and the labels').
+            expect(card.querySelector('[role="heading"]')!.textContent).toBe('A saved search');
+            expect(card.querySelector('[role="heading"]')!.getAttribute('aria-label')).toBe('A saved search');
+            expect(card.querySelector('[data-testid="home-search-waiting"]')!.textContent).toBe('Its listings show in a coming app update.');
+            expect(card.textContent).not.toContain('Shows when your community answers');
+        }
+        expect(byLabel('Card options for "eggs"')).not.toBeNull();
+        expect(byLabel(`Card options for ${bounded}`)).not.toBeNull();
+        expect(byLabel('Card options for A saved search')).toBeNull();
+        await act(async () => { byLabel('Card options for "eggs"')!.click(); });
+        expect(byLabel('Move "eggs" down')).not.toBeNull();
+        expect(byLabel('Settings for "eggs"')).not.toBeNull();
+        // The menu's title is the card's name, drawn; only its labels carry the words.
+        expect(document.querySelector('[role="heading"][aria-label=\'Card options for "eggs"\']')!.textContent).toBe('A saved search');
+        await act(async () => { byLabel('Remove "eggs" from Home')!.click(); });
+        await settle();
+        expect(vi.mocked(AccessibilityInfo.announceForAccessibility)).toHaveBeenCalledWith('"eggs" removed. Add a card brings it back.');
+        expect(cards()).not.toContain('search-k2x7');
+        // Edit home: the row shows the type's name; its arrows and "…" say the words.
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        const row = document.querySelector('[data-testid="edit-home-search-m4p9"]')!;
+        expect(row.textContent).toContain('A saved search');
+        expect(row.textContent).not.toContain('bicycles');
+        expect(byLabel(`Move ${bounded} down`)).not.toBeNull();
+        expect(byLabel(`Card options for ${bounded}`)).not.toBeNull();
+    });
+
+    it('a new saved search is announced by its words', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add A saved search to Home')!.click(); });
+        await settle(2);
+        const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLInputElement;
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'duck eggs');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await act(async () => { (document.querySelector('[data-testid="card-settings-done"]') as HTMLElement).click(); });
+        await settle();
+        expect(vi.mocked(AccessibilityInfo.announceForAccessibility)).toHaveBeenCalledWith('"duck eggs" added to Home');
+    });
+});
+
+describe('the global node is never asked for a card it doesn\'t show (review of #1699, finding 5)', () => {
+    it('a member for 60 days with a version-1 list: no read asks Beans, deals, enterprise or Decide', async () => {
+        const base = globalMember(60);
+        node.answer = { ...base, layout: { v: 1, order: ['pulse'], hidden: [], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        await render();
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(homeReads().length).toBeGreaterThan(1);
+        for (const asked of homeCards()) {
+            for (const off of ['beans', 'deals', 'enterprise', 'decide']) expect(asked).not.toContain(off);
+        }
+        // The member's list is asked for what the node shows: The Pulse, Who joined.
+        expect(homeCards().at(-1)).toEqual(expect.arrayContaining(['pulse', 'joined', 'groups']));
+        expect(cards()).not.toContain('decide');
+    });
+});
+
 describe('a local community\'s Home is H2\'s, whatever the answer or the phone holds (H4 changes nothing there)', () => {
     it('no Find your community, names and faces in Who joined, what\'s new first, no limits sentence, and no place sent', async () => {
         const a = localMember();
@@ -1331,7 +1742,7 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         expect(tipsRecord().seen).toEqual(['what-this-is']);
     });
 
-    it('Done on the last tip: the card goes, and Edit home says "All tips seen"; off and on again starts over', async () => {
+    it('Done on the last tip: the card goes, and Edit home says "All tips seen"; Remove and Add a card again starts over', async () => {
         mem.store.set(homeTipsStoreKey(who.identity.publicKey), JSON.stringify({ v: 1, seen: LOCAL_IDS.filter(id => id !== 'guide'), current: 'guide', currentShownOn: localDay(), dismissedAt: null }));
         await render();
         const done = document.querySelector('[data-testid="home-tip-next"]') as HTMLElement;
@@ -1343,17 +1754,18 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         expect(cards()).not.toContain('tips');
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
         expect(document.querySelector('[data-testid="edit-home-tips"]')?.textContent).toContain('All tips seen');
-        const sw = () => document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement;
-        expect(sw().getAttribute('aria-checked')).toBe('true');
-        await act(async () => { sw().click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-menu"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Remove Tips from Home')!.click(); });
         await settle();
-        await act(async () => { sw().click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-add"]') as HTMLElement).click(); });
+        await settle(2);
+        await act(async () => { byLabel('Add Tips to Home')!.click(); });
         await settle();
         expect(cards()).toContain('tips');
         expect(tipText()).toBe(text('what-this-is'));
     });
 
-    it('Don\'t show tips again: the card goes, the record and the layout say so, the next landing has none; Edit home brings it back from tip 1', async () => {
+    it('Don\'t show tips again: the card goes, the record and the layout say so, the next landing has none; Add a card brings it back from tip 1', async () => {
         await render();
         const dont = document.querySelector('[data-testid="home-tips-dont-show"]') as HTMLElement;
         expect(dont.textContent).toBe("Don't show tips again");
@@ -1362,16 +1774,15 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         await settle();
         expect(cards()).not.toContain('tips');
         expect(tipsRecord().dismissedAt).toEqual(expect.any(String));
-        expect(JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!).hidden).toEqual(['tips']);
+        const ids = (l: { cards: { id: string }[] }) => l.cards.map(c => c.id);
+        expect(ids(JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!))).not.toContain('tips');
         const post = node.requests.find(r => r.method === 'POST')!;
-        expect(JSON.parse(post.body).preferences['home.layout'].hidden).toEqual(['tips']);
-        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Tips is hidden. Edit home brings it back.');
+        expect(ids(JSON.parse(post.body).preferences['home.layout'])).not.toContain('tips');
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Tips removed. Add a card brings it back.');
         await again();
         expect(cards()).not.toContain('tips');
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        const sw = document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement;
-        expect(sw.getAttribute('aria-checked')).toBe('false');
-        await act(async () => { sw.click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add Tips to Home')!.click(); });
         await settle();
         expect(cards()).toContain('tips');
         expect(tipText()).toBe(text('what-this-is'));
@@ -1463,12 +1874,12 @@ describe('the Tips card: one tip at a time, and it ends', () => {
     }, 20_000);
 
     // Finding 6: the tip a restart draws is the record's, from that day, so it moves on the next day's landing.
-    it('Tips switched on again records tip 1 as shown today, so the next day\'s landing moves on from it', async () => {
+    it('Tips added again records tip 1 as shown today, so the next day\'s landing moves on from it', async () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-tips-dont-show"]') as HTMLElement).click(); });
         await settle();
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add Tips to Home')!.click(); });
         await settle();
         expect(tipText()).toBe(text('what-this-is'));
         expect(tipsRecord()).toMatchObject({ seen: [], current: 'what-this-is', currentShownOn: localDay(), dismissedAt: null });
@@ -1478,18 +1889,20 @@ describe('the Tips card: one tip at a time, and it ends', () => {
     });
 
     // Finding 2: a node older than `tips` keeps the layout without it, so the switch-off must hold through the record.
-    it('Edit home\'s switch off holds on the next landing, on a node that drops the unknown id', async () => {
+    it('Remove on Tips from Edit home is "Don\'t show tips again": it holds on the next landing', async () => {
         await render();
         expect(cards()).toContain('tips');
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-menu"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Remove Tips from Home')!.click(); });
         await settle();
         expect(cards()).not.toContain('tips');
         expect(tipsRecord().dismissedAt).toEqual(expect.any(String));
-        // What an old node keeps of the layout it was sent: `tips` dropped, the rest and the phone's own stamp as sent.
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Tips removed. Add a card brings it back.');
+        // The node keeps the list as sent.
         const sent = JSON.parse(node.requests.filter(r => r.method === 'POST').at(-1)!.body).preferences['home.layout'];
-        const strip = (l: string[]) => l.filter(id => id !== 'tips');
-        node.answer = { ...node.answer, layout: { ...sent, order: strip(sent.order ?? []), hidden: strip(sent.hidden ?? []) } };
+        expect(sent.cards.map((c: { id: string }) => c.id)).not.toContain('tips');
+        node.answer = { ...node.answer, layout: sent };
         await again();
         expect(cards()).not.toContain('tips');
     });
@@ -1504,7 +1917,7 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
         await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
         await settle();
-        expect(document.querySelector('[data-testid="edit-home-tips-switch"]')?.getAttribute('aria-checked')).toBe('true');
+        expect(document.querySelector('[data-testid="edit-home-tips"]')).not.toBeNull();
         expect(document.querySelector('[data-testid="edit-home-tips"]')?.textContent).not.toContain('Nothing to show now');
         expect(cards()).toContain('tips');
         expect(tipText()).toBe(text('what-this-is'));
@@ -1524,5 +1937,206 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         node.answer = { ...localMember(), me: { ...localMember().me!, standing: 'suspended' } };
         await again();
         expect(cards()).toContain('tips');
+    });
+});
+
+describe('the frame on screen: the fewer-cards line, the standby tie, a newer app\'s card, Settings… (CARD-FRAME §1.3, §2.6; review of #1697)', () => {
+    const DAY = 24 * H;
+    const phoneKey = () => homeLayoutStoreKey(who.identity.publicKey, NODE);
+    const fewerLines = () => Array.from(document.querySelectorAll('[data-testid="home-fewer"]'));
+    const posts = () => node.requests.filter(r => r.method === 'POST' && new URL(r.url).pathname === '/api/members/preferences');
+    const sentList = (r: { body: string }) => JSON.parse(r.body).preferences['home.layout'].cards as { id: string; type: string; settings?: unknown }[];
+    const again = async () => {
+        act(() => root?.unmount());
+        host?.remove();
+        await render();
+    };
+    /** A member here a month, before the frame: the node keeps no list for them (they never edited). */
+    const longStanding = (layout: unknown): HomeAnswer => ({ ...localMember(), me: { ...localMember().me!, joinedAt: iso(Date.now() - 30 * DAY) }, layout: layout as never });
+
+    it('a member who never edited: "Home now starts with fewer cards" shows once, under the first card, and never on a later landing', async () => {
+        node.answer = longStanding(null);
+        mem.store.delete(phoneKey());
+        await render();
+        expect(fewerLines()).toHaveLength(1);
+        expect(fewerLines()[0].textContent).toContain(FEWER_CARDS_LINE);
+        // Drawn with the newcomer's list (§3), under the first card (where the one-time hint goes).
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        const first = document.querySelector('[data-testid="home-card-steps"]')!;
+        expect(first.compareDocumentPosition(fewerLines()[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(document.querySelector('[data-testid="home-card-tips"]')!.compareDocumentPosition(fewerLines()[0]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+        // Nothing is written for them: they still never edited.
+        expect(mem.store.has(phoneKey())).toBe(false);
+        expect(posts()).toHaveLength(0);
+        await again();
+        expect(fewerLines()).toHaveLength(0);
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(fewerLines()).toHaveLength(0);
+    });
+
+    // Review of #1699 (confirmation), finding 2: an empty version-1 list (a way-back dismissal on an older app, the web's
+    // Reset) is unknown, so the newcomer's list is drawn; such a member never moved or hid a card, so the line is theirs.
+    it('P2: a member whose account list is an empty version 1 (only a way-back dismissal) and who has no copy here sees the line once', async () => {
+        node.answer = longStanding({ v: 1, order: [], hidden: [], dismissed: { safety: iso(Date.now() - 20 * DAY) }, updatedAt: iso(Date.now() - 20 * DAY) });
+        mem.store.delete(phoneKey());
+        await render();
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        expect(fewerLines()).toHaveLength(1);
+        expect(fewerLines()[0].textContent).toContain(FEWER_CARDS_LINE);
+        expect(posts()).toHaveLength(0);
+        await again();
+        expect(fewerLines()).toHaveLength(0);
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(fewerLines()).toHaveLength(0);
+    });
+
+    it('never for a member who edited: a version-1 list from an older app, a version-2 list, or an edit kept only on this phone', async () => {
+        node.answer = longStanding({ v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) });
+        mem.store.delete(phoneKey());
+        await render();
+        expect(cards()[0]).toBe('beans');
+        expect(fewerLines()).toHaveLength(0);
+
+        act(() => root?.unmount());
+        host?.remove();
+        mem.store.clear();
+        resetHomeStoreForTests();
+        mem.store.set('beanpool_anchor_url', NODE);
+        node.answer = longStanding(everyV1Card(Date.now()));
+        await render();
+        expect(fewerLines()).toHaveLength(0);
+
+        act(() => root?.unmount());
+        host?.remove();
+        mem.store.clear();
+        resetHomeStoreForTests();
+        mem.store.set('beanpool_anchor_url', NODE);
+        node.answer = longStanding(null);
+        mem.store.set(phoneKey(), JSON.stringify({ v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: iso(Date.now() - H) }));
+        await render();
+        expect(cards()).toEqual(['pulse', 'market', 'community']);
+        expect(fewerLines()).toHaveLength(0);
+    });
+
+    it('the standby tie (note b): an empty version-1 list from the account dated exactly like the phone\'s version-2 copy never replaces it, and nothing is sent', async () => {
+        const at = iso(Date.now() - 2 * H);
+        const mine = {
+            v: 2,
+            cards: [{ id: 'pulse', type: 'pulse' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'market', type: 'market' }],
+            dismissed: {},
+            updatedAt: at,
+        };
+        mem.store.set(phoneKey(), JSON.stringify(mine));
+        // What a standby from before the frame answers for that member's version-2 row: no order, nothing hidden, the same date.
+        node.answer = { ...localMember(), layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: at } as never };
+        await render();
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+        expect(document.querySelector('[data-testid="home-search-words"]')?.textContent).toContain('eggs');
+        expect(JSON.parse(mem.store.get(phoneKey())!)).toEqual(mine);
+        expect(posts()).toHaveLength(0);
+        // The next landing, the same answer read again, holds it too.
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(homeReads()).toHaveLength(2);
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+        expect(JSON.parse(mem.store.get(phoneKey())!)).toEqual(mine);
+        expect(posts()).toHaveLength(0);
+    });
+
+    it.each([
+        ['an empty version-1 list dated after the phone\'s copy (another device\'s newer edit, as the standby answers it)', { order: [], hidden: [] }, H],
+        ['a version-1 list that names cards, dated exactly like the phone\'s copy', { order: ['beans'], hidden: ['pulse'] }, 0],
+    ])('the account\'s version-1 copy never wins over the phone\'s version 2 on these: %s', async (_what, v1, later) => {
+        const at = Date.now() - 2 * H;
+        const mine = { v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: iso(at) };
+        mem.store.set(phoneKey(), JSON.stringify(mine));
+        node.answer = { ...localMember(), layout: { v: 1, ...v1, dismissed: {}, updatedAt: iso(at + later) } as never };
+        await render();
+        expect(cards()).toEqual(['pulse', 'market', 'community']);
+        expect(JSON.parse(mem.store.get(phoneKey())!)).toEqual(mine);
+        expect(posts()).toHaveLength(0);
+    });
+
+    it('a card of a type this app doesn\'t know (a newer app\'s) is not drawn, and every save made here sends it byte for byte, Reset included', async () => {
+        const garden = { id: 'garden-k2x7', type: 'garden', settings: { plot: 7, crops: ['kale', 'Beans'], note: 'ñ “quoted” 🌱', nested: { a: [1, 2.5, null, true] } } };
+        const theirs = { v: 2, cards: [{ id: 'events', type: 'events' }, garden, { id: 'market', type: 'market' }, { id: 'pulse', type: 'pulse' }], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        node.answer = { ...localMember(), layout: theirs as never };
+        mem.store.set(phoneKey(), JSON.stringify(theirs));
+        await render();
+        expect(cards()).toEqual(['events', 'market', 'pulse', 'community']);
+        const exact = JSON.stringify(garden);
+
+        // Remove, from the card's "…".
+        await act(async () => { byLabel('Card options for The Pulse')!.click(); });
+        await act(async () => { byLabel('Remove The Pulse from Home')!.click(); });
+        await settle();
+        expect(posts()).toHaveLength(1);
+        expect(posts()[0].body).toContain(exact);
+        expect(sentList(posts()[0]).map(c => c.id)).toEqual(['events', 'garden-k2x7', 'market']);
+
+        // Move down, from the card's "…": Coming up passes the Market on screen; the unseen card keeps its place.
+        await act(async () => { byLabel('Card options for Coming up')!.click(); });
+        await act(async () => { byLabel('Move Coming up down')!.click(); });
+        await settle();
+        const moved = posts().at(-1)!;
+        expect(moved.body).toContain(exact);
+        expect(sentList(moved).map(c => c.id)).toEqual(['market', 'garden-k2x7', 'events']);
+
+        // Reset to defaults, from Edit home: the newcomer's list, and the unseen card kept at its end.
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
+        await settle();
+        const reset = posts().at(-1)!;
+        expect(reset.body).toContain(exact);
+        expect(sentList(reset).at(-1)).toEqual(garden);
+        expect(cards()).not.toContain('garden-k2x7');
+        // Every save sent it, and the phone's copy keeps it.
+        for (const p of posts()) expect(p.body).toContain(exact);
+        expect(mem.store.get(phoneKey())!).toContain(exact);
+    });
+
+    it('Settings… from a card\'s "…" opens its sheet with the words it has; Save changes them in place and says nothing is moved', async () => {
+        const mine = {
+            v: 2,
+            cards: [{ id: 'events', type: 'events' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'market', type: 'market' }],
+            dismissed: {},
+            updatedAt: iso(Date.now() - 72 * H),
+        };
+        node.answer = { ...localMember(), layout: mine as never };
+        mem.store.set(phoneKey(), JSON.stringify(mine));
+        await render();
+        expect(cards()).toEqual(['events', 'search-k2x7', 'market', 'community']);
+        // A type with no settings has no Settings…; the saved search's has.
+        await act(async () => { byLabel('Card options for Coming up')!.click(); });
+        expect(document.querySelector('[data-testid="home-menu-settings"]')).toBeNull();
+        await act(async () => { byLabel('Cancel')!.click(); });
+        // Named by its words (review of #1699, finding 4).
+        await act(async () => { byLabel('Card options for "eggs"')!.click(); });
+        expect(byLabel('Settings for "eggs"')).not.toBeNull();
+        await act(async () => { byLabel('Settings for "eggs"')!.click(); });
+        await settle(2);
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).not.toBeNull();
+        const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLInputElement;
+        expect(input.value).toBe('eggs');
+        expect(byLabel('Save A saved search')).not.toBeNull();
+        expect(byLabel('Add A saved search to Home')).toBeNull();
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'duck eggs');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        const before = node.requests.length;
+        await act(async () => { byLabel('Save A saved search')!.click(); });
+        await settle();
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).toBeNull();
+        // In place: the same id, the same spot, the new words; on screen and on the account.
+        expect(cards()).toEqual(['events', 'search-k2x7', 'market', 'community']);
+        expect(document.querySelector('[data-testid="home-search-words"]')?.textContent).toContain('duck eggs');
+        const save = node.requests.slice(before).find(r => r.method === 'POST')!;
+        expect(sentList(save)).toEqual([
+            { id: 'events', type: 'events' }, { id: 'search-k2x7', type: 'search', settings: { q: 'duck eggs', kind: 'any' } }, { id: 'market', type: 'market' },
+        ]);
+        expect(boundSignatureValid(save, who.identity.publicKey)).toBe(true);
     });
 });

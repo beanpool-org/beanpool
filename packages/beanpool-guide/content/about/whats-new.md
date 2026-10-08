@@ -7,7 +7,7 @@ related: home, the-bean, how-it-works, rules, faq
 
 ## Home
 
-- **A new Home tab.** The app now opens on Home: a dashboard answering what needs you, what is new around you, and what you could do next. The Market is now its own tab, and the Pulse is a card on Home. You can customize which cards appear and their order with **Edit home**.
+- **A new Home tab.** The app now opens on Home: a dashboard answering what needs you, what is new around you, and what you could do next. The Market is now its own tab, and the Pulse is a card on Home. You choose your cards: on the phone, **Add a card** puts one on Home and each card's **…** moves or removes it; in the web app, **Edit home** shows, hides and orders them.
 
 ## Privacy by default
 

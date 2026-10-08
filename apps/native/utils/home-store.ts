@@ -33,7 +33,7 @@ import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import { homeAccount, homeGeneration, onHomeAccountChange, resetHomeAccountForTests, stillOnPhone, type HomeAccount } from './home-account';
 import {
-    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeTipsStoreKey, homeInterestsOwedStoreKey, homeLayoutStoreKey, homeRevealStoreKey,
+    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeFewerStoreKey, homeHintStoreKey, homeTipsStoreKey, homeInterestsOwedStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeRevealStoreKey,
 } from './storage-keys';
 import {
     HOME_FRESH_FOR_HEADER_MS, readHomeAnswer, readHomeLayout,
@@ -276,6 +276,29 @@ export async function writePhoneLayout(publicKey: string, url: string, layout: H
 }
 
 /**
+ * The mark on a phone's list made while the account's was unknown: the date of the empty version-1 list it was made over
+ * ('' when that list had none), or null for none (utils/home-cards.ts pickLayout `phoneOnlyOver`).
+ */
+export async function readPhoneOnlyMark(publicKey: string, url: string): Promise<string | null> {
+    try {
+        return await AsyncStorage.getItem(homeLayoutPhoneOnlyStoreKey(publicKey, url));
+    } catch {
+        return null;
+    }
+}
+
+/** Sets (a date, or '') or clears (null) that mark, while `whose` is still on the phone. */
+export async function writePhoneOnlyMark(publicKey: string, url: string, over: string | null, whose: HomeAccount = homeAccount(publicKey)): Promise<void> {
+    if (whose.publicKey !== publicKey || !stillOnPhone(whose)) return;
+    try {
+        if (over === null) await AsyncStorage.removeItem(homeLayoutPhoneOnlyStoreKey(publicKey, url));
+        else await AsyncStorage.setItem(homeLayoutPhoneOnlyStoreKey(publicKey, url), over);
+    } catch {
+        // Not kept: the phone's list then wins by its date, as any other.
+    }
+}
+
+/**
  * The phone's copy of the layout made the account's again (null: none): after the node refused the phone's, so the
  * phone's is no longer newer and is never sent again by itself. Only while `whose` is still on the phone.
  */
@@ -300,18 +323,24 @@ export interface SavedPreferences { layout?: HomeLayout | null; interests?: stri
  * server error) is null instead, and is sent again later.
  */
 export const SAVE_REFUSED = 'refused' as const;
+/**
+ * The node refused the layout's shape (a 400 to a save that named one): a node from before the frame takes only version
+ * 1 (CARD-FRAME §2.3). The screen tells it apart from a members-only refusal: the member's cards stay on the phone, "not
+ * on your account yet", and are sent again at each landing.
+ */
+export const SAVE_SHAPE_REFUSED = 'shape-refused' as const;
 
 const refusal = (status: number) => status >= 400 && status < 500 && status !== 408 && status !== 429;
 
 /**
  * Save the layout and/or the interests to the account (`POST /api/members/preferences`, signed, own write only). The
- * node drops unknown ids and keeps the newer layout; its answer says what it kept. {@link SAVE_REFUSED} when it won't
+ * node keeps the list as sent (shape and bounds only) and the newer layout; its answer says what it kept. {@link SAVE_REFUSED} when it won't
  * take it, null when the save didn't land.
  */
 export async function saveHomePreferences(
     url: string, identity: BeanPoolIdentity, prefs: { layout?: HomeLayout; interests?: readonly string[] },
     options: { timeoutMs?: number } = {},
-): Promise<SavedPreferences | typeof SAVE_REFUSED | null> {
+): Promise<SavedPreferences | typeof SAVE_REFUSED | typeof SAVE_SHAPE_REFUSED | null> {
     const preferences: Record<string, unknown> = {};
     if (prefs.layout) {
         const { updatedAt, ...rest } = prefs.layout;
@@ -323,6 +352,7 @@ export async function saveHomePreferences(
     const timer = setTimeout(() => stop.abort(), options.timeoutMs ?? HOME_SAVE_TIMEOUT_MS);
     try {
         const res = await signedPost(url, '/api/members/preferences', { publicKey: identity.publicKey, preferences }, identity, stop.signal);
+        if (res.status === 400 && prefs.layout) return SAVE_SHAPE_REFUSED;
         if (refusal(res.status)) return SAVE_REFUSED;
         if (!res.ok) return null;
         const body = await res.json().catch(() => null) as Record<string, unknown> | null;
@@ -339,8 +369,10 @@ export async function saveHomePreferences(
 
 // ── The one-time reveal and its hint (§6.2) ───────────────────────────────────────────────────────────────────────
 
-export type HomeOnce = 'reveal' | 'hint';
-const onceKey = (which: HomeOnce, publicKey: string) => (which === 'reveal' ? homeRevealStoreKey(publicKey) : homeHintStoreKey(publicKey));
+export type HomeOnce = 'reveal' | 'hint' | 'fewer';
+const onceKey = (which: HomeOnce, publicKey: string) => (
+    which === 'reveal' ? homeRevealStoreKey(publicKey) : which === 'fewer' ? homeFewerStoreKey(publicKey) : homeHintStoreKey(publicKey)
+);
 
 /** Whether the account has seen the reveal or the hint here. A phone that can't say counts as seen: never shown twice. */
 export async function seenOnce(publicKey: string, which: HomeOnce): Promise<boolean> {

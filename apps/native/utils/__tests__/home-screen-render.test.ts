@@ -21,10 +21,11 @@ import * as path from 'node:path';
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', summary: 'region' };
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityLabel, accessibilityRole, testID, numberOfLines, accessibilityState, disabled, value, onValueChange, accessible } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, testID, numberOfLines, accessibilityState, disabled, value, onValueChange, onChangeText, accessible } = props;
         const attrs: Record<string, unknown> = {};
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (onValueChange) attrs.onClick = () => onValueChange(!value);
+        if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (testID) attrs['data-testid'] = testID;
@@ -132,7 +133,7 @@ import { resetHomeStoreForTests } from '../home-store';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, translateV1 } from '@beanpool/core';
 import { AccessibilityInfo, AppState, DeviceEventEmitter } from 'react-native';
-import { HOME_SAFETY_POLL_MS, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
+import { FEWER_CARDS_LINE, HOME_SAFETY_POLL_MS, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
 import { commonsSectionFor } from '../commons-sections';
 import { marketFilterFromLink } from '../market-filters';
@@ -1610,5 +1611,174 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         node.answer = { ...localMember(), me: { ...localMember().me!, standing: 'suspended' } };
         await again();
         expect(cards()).toContain('tips');
+    });
+});
+
+describe('the frame on screen: the fewer-cards line, the standby tie, a newer app\'s card, Settings… (CARD-FRAME §1.3, §2.6; review of #1697)', () => {
+    const DAY = 24 * H;
+    const phoneKey = () => homeLayoutStoreKey(who.identity.publicKey, NODE);
+    const fewerLines = () => Array.from(document.querySelectorAll('[data-testid="home-fewer"]'));
+    const posts = () => node.requests.filter(r => r.method === 'POST' && new URL(r.url).pathname === '/api/members/preferences');
+    const sentList = (r: { body: string }) => JSON.parse(r.body).preferences['home.layout'].cards as { id: string; type: string; settings?: unknown }[];
+    const again = async () => {
+        act(() => root?.unmount());
+        host?.remove();
+        await render();
+    };
+    /** A member here a month, before the frame: the node keeps no list for them (they never edited). */
+    const longStanding = (layout: unknown): HomeAnswer => ({ ...localMember(), me: { ...localMember().me!, joinedAt: iso(Date.now() - 30 * DAY) }, layout: layout as never });
+
+    it('a member who never edited: "Home now starts with fewer cards" shows once, under the first card, and never on a later landing', async () => {
+        node.answer = longStanding(null);
+        mem.store.delete(phoneKey());
+        await render();
+        expect(fewerLines()).toHaveLength(1);
+        expect(fewerLines()[0].textContent).toContain(FEWER_CARDS_LINE);
+        // Drawn with the newcomer's list (§3), under the first card (where the one-time hint goes).
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        const first = document.querySelector('[data-testid="home-card-steps"]')!;
+        expect(first.compareDocumentPosition(fewerLines()[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(document.querySelector('[data-testid="home-card-tips"]')!.compareDocumentPosition(fewerLines()[0]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+        // Nothing is written for them: they still never edited.
+        expect(mem.store.has(phoneKey())).toBe(false);
+        expect(posts()).toHaveLength(0);
+        await again();
+        expect(fewerLines()).toHaveLength(0);
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(fewerLines()).toHaveLength(0);
+    });
+
+    it('never for a member who edited: a version-1 list from an older app, a version-2 list, or an edit kept only on this phone', async () => {
+        node.answer = longStanding({ v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) });
+        mem.store.delete(phoneKey());
+        await render();
+        expect(cards()[0]).toBe('beans');
+        expect(fewerLines()).toHaveLength(0);
+
+        act(() => root?.unmount());
+        host?.remove();
+        mem.store.clear();
+        resetHomeStoreForTests();
+        mem.store.set('beanpool_anchor_url', NODE);
+        node.answer = longStanding(everyV1Card(Date.now()));
+        await render();
+        expect(fewerLines()).toHaveLength(0);
+
+        act(() => root?.unmount());
+        host?.remove();
+        mem.store.clear();
+        resetHomeStoreForTests();
+        mem.store.set('beanpool_anchor_url', NODE);
+        node.answer = longStanding(null);
+        mem.store.set(phoneKey(), JSON.stringify({ v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: iso(Date.now() - H) }));
+        await render();
+        expect(cards()).toEqual(['pulse', 'market', 'community']);
+        expect(fewerLines()).toHaveLength(0);
+    });
+
+    it('the standby tie (note b): an empty version-1 list from the account dated exactly like the phone\'s version-2 copy never replaces it, and nothing is sent', async () => {
+        const at = iso(Date.now() - 2 * H);
+        const mine = {
+            v: 2,
+            cards: [{ id: 'pulse', type: 'pulse' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'market', type: 'market' }],
+            dismissed: {},
+            updatedAt: at,
+        };
+        mem.store.set(phoneKey(), JSON.stringify(mine));
+        // What a standby from before the frame answers for that member's version-2 row: no order, nothing hidden, the same date.
+        node.answer = { ...localMember(), layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: at } as never };
+        await render();
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+        expect(document.querySelector('[data-testid="home-search-words"]')?.textContent).toContain('eggs');
+        expect(JSON.parse(mem.store.get(phoneKey())!)).toEqual(mine);
+        expect(posts()).toHaveLength(0);
+        // The next landing, the same answer read again, holds it too.
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(homeReads()).toHaveLength(2);
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+        expect(JSON.parse(mem.store.get(phoneKey())!)).toEqual(mine);
+        expect(posts()).toHaveLength(0);
+    });
+
+    it('a card of a type this app doesn\'t know (a newer app\'s) is not drawn, and every save made here sends it byte for byte, Reset included', async () => {
+        const garden = { id: 'garden-k2x7', type: 'garden', settings: { plot: 7, crops: ['kale', 'Beans'], note: 'ñ “quoted” 🌱', nested: { a: [1, 2.5, null, true] } } };
+        const theirs = { v: 2, cards: [{ id: 'events', type: 'events' }, garden, { id: 'market', type: 'market' }, { id: 'pulse', type: 'pulse' }], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        node.answer = { ...localMember(), layout: theirs as never };
+        mem.store.set(phoneKey(), JSON.stringify(theirs));
+        await render();
+        expect(cards()).toEqual(['events', 'market', 'pulse', 'community']);
+        const exact = JSON.stringify(garden);
+
+        // Remove, from the card's "…".
+        await act(async () => { byLabel('Card options for The Pulse')!.click(); });
+        await act(async () => { byLabel('Remove The Pulse from Home')!.click(); });
+        await settle();
+        expect(posts()).toHaveLength(1);
+        expect(posts()[0].body).toContain(exact);
+        expect(sentList(posts()[0]).map(c => c.id)).toEqual(['events', 'garden-k2x7', 'market']);
+
+        // Move down, from the card's "…": Coming up passes the Market on screen; the unseen card keeps its place.
+        await act(async () => { byLabel('Card options for Coming up')!.click(); });
+        await act(async () => { byLabel('Move Coming up down')!.click(); });
+        await settle();
+        const moved = posts().at(-1)!;
+        expect(moved.body).toContain(exact);
+        expect(sentList(moved).map(c => c.id)).toEqual(['market', 'garden-k2x7', 'events']);
+
+        // Reset to defaults, from Edit home: the newcomer's list, and the unseen card kept at its end.
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
+        await settle();
+        const reset = posts().at(-1)!;
+        expect(reset.body).toContain(exact);
+        expect(sentList(reset).at(-1)).toEqual(garden);
+        expect(cards()).not.toContain('garden-k2x7');
+        // Every save sent it, and the phone's copy keeps it.
+        for (const p of posts()) expect(p.body).toContain(exact);
+        expect(mem.store.get(phoneKey())!).toContain(exact);
+    });
+
+    it('Settings… from a card\'s "…" opens its sheet with the words it has; Save changes them in place and says nothing is moved', async () => {
+        const mine = {
+            v: 2,
+            cards: [{ id: 'events', type: 'events' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'market', type: 'market' }],
+            dismissed: {},
+            updatedAt: iso(Date.now() - 72 * H),
+        };
+        node.answer = { ...localMember(), layout: mine as never };
+        mem.store.set(phoneKey(), JSON.stringify(mine));
+        await render();
+        expect(cards()).toEqual(['events', 'search-k2x7', 'market', 'community']);
+        // A type with no settings has no Settings…; the saved search's has.
+        await act(async () => { byLabel('Card options for Coming up')!.click(); });
+        expect(document.querySelector('[data-testid="home-menu-settings"]')).toBeNull();
+        await act(async () => { byLabel('Cancel')!.click(); });
+        await act(async () => { byLabel('Card options for A saved search')!.click(); });
+        expect(byLabel('Settings for A saved search')).not.toBeNull();
+        await act(async () => { byLabel('Settings for A saved search')!.click(); });
+        await settle(2);
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).not.toBeNull();
+        const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLInputElement;
+        expect(input.value).toBe('eggs');
+        expect(byLabel('Save A saved search')).not.toBeNull();
+        expect(byLabel('Add A saved search to Home')).toBeNull();
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'duck eggs');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        const before = node.requests.length;
+        await act(async () => { byLabel('Save A saved search')!.click(); });
+        await settle();
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).toBeNull();
+        // In place: the same id, the same spot, the new words; on screen and on the account.
+        expect(cards()).toEqual(['events', 'search-k2x7', 'market', 'community']);
+        expect(document.querySelector('[data-testid="home-search-words"]')?.textContent).toContain('duck eggs');
+        const save = node.requests.slice(before).find(r => r.method === 'POST')!;
+        expect(sentList(save)).toEqual([
+            { id: 'events', type: 'events' }, { id: 'search-k2x7', type: 'search', settings: { q: 'duck eggs', kind: 'any' } }, { id: 'market', type: 'market' },
+        ]);
+        expect(boundSignatureValid(save, who.identity.publicKey)).toBe(true);
     });
 });

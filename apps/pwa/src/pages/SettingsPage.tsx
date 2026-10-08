@@ -50,7 +50,9 @@ interface Props {
     onBack: () => void;
     themePreference: ThemePreference;
     onThemePreferenceChange: (preference: ThemePreference) => void;
-    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest';
+    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide';
+    /** With initialMode 'guide': the guide page to open at (Home's Tips card, Read more); absent: its front page. */
+    initialGuidePage?: string | null;
     onReRunSetup?: () => void;
     /** Version reported by the connected node, when its health check has answered. */
     nodeVersion?: string;
@@ -101,7 +103,7 @@ function ToggleSwitch({
     );
 }
 
-export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, onReRunSetup, nodeVersion, openOwnerWordsCheck, linkResult }: Props) {
+export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, initialGuidePage, onReRunSetup, nodeVersion, openOwnerWordsCheck, linkResult }: Props) {
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide'>(initialMode || 'menu');
 
     useEffect(() => {
@@ -559,7 +561,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
     if (mode === 'guide') {
         // The members' sheet and manual, full screen. Its Suggest a change opens the same form as the Settings row.
-        return <MemberGuide onBack={() => setMode('menu')} onSuggest={() => setMode('suggest')} />;
+        // From Home's Tips card it opens at the tip's page; Back from there walks to the guide's front page, then Settings.
+        return <MemberGuide onBack={() => setMode('menu')} onSuggest={() => setMode('suggest')} initialPage={initialGuidePage ?? undefined} />;
     }
 
     return (

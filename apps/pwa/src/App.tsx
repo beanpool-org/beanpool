@@ -147,7 +147,9 @@ export function App() {
     const [activeTab, setActiveTab] = useState<Tab>('home');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
-    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed'>('menu');
+    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide'>('menu');
+    // The guide page Settings opens at (Home's Tips card, Read more); null: the guide's front page.
+    const [settingsGuidePage, setSettingsGuidePage] = useState<string | null>(null);
     // A sign-in added to an account made with 12 words (lib/link-signin.ts): what came of it, said in Settings.
     const [linkResult, setLinkResult] = useState<LinkResult | null>(null);
     // "Check now" on the owners' 12-words prompt opens Settings with that card open; closing Settings resets it.
@@ -155,7 +157,7 @@ export function App() {
     useEffect(() => { if (!showSettings) setOwnerWordsOpen(false); }, [showSettings]);
     // Where Settings opens is for that one open ("See my 12 words" → the words, Edit profile → the profile): closing
     // Settings, by any way, sets it back, so the next open from the header is the menu, never the 12 words on screen.
-    useEffect(() => { if (!showSettings) setSettingsInitialMode('menu'); }, [showSettings]);
+    useEffect(() => { if (!showSettings) { setSettingsInitialMode('menu'); setSettingsGuidePage(null); } }, [showSettings]);
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     const [openNewPost, setOpenNewPost] = useState(false);
@@ -299,6 +301,13 @@ export function App() {
         }
         if (tab === 'settings-profile') {
             setSettingsInitialMode('profile');
+            setShowSettings(true);
+            return;
+        }
+        // The Tips card's Read more: the members' guide in Settings, open at that page (Back walks to its front page).
+        if (tab === 'guide') {
+            setSettingsGuidePage(contextId ?? null);
+            setSettingsInitialMode('guide');
             setShowSettings(true);
             return;
         }
@@ -854,6 +863,7 @@ export function App() {
                                 themePreference={themePreference}
                                 onThemePreferenceChange={setThemePreference}
                                 initialMode={settingsInitialMode}
+                                initialGuidePage={settingsGuidePage}
                                 linkResult={linkResult}
                                 openOwnerWordsCheck={ownerWordsOpen}
                                 onReRunSetup={() => { setShowSettings(false); setShowProfileSetup(true); }}

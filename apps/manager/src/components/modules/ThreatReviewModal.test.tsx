@@ -261,4 +261,83 @@ describe('ThreatReviewModal', () => {
         });
         vi.useRealTimers();
     });
+
+    it('parses insularity and cohort metrics from threat description', () => {
+        const insularThreat: ThreatItem = {
+            description: 'Detected 0.72 insularity with 35% new members in component of 8 members',
+        };
+        const cohortThreat: ThreatItem = {
+            description: 'Detected 3 cohort anomaly in current evaluation window',
+        };
+
+        const { rerender } = render(
+            <ThreatReviewModal threat={insularThreat} onClose={vi.fn()} />
+        );
+
+        expect(screen.getByText('Cluster Insularity')).toBeInTheDocument();
+        expect(screen.getByText('0.72')).toBeInTheDocument();
+        expect(screen.getByText('New Accounts')).toBeInTheDocument();
+        expect(screen.getByText('35%')).toBeInTheDocument();
+        expect(screen.getByText('Ring Size')).toBeInTheDocument();
+        expect(screen.getByText('8 Nodes')).toBeInTheDocument();
+
+        rerender(<ThreatReviewModal threat={cohortThreat} onClose={vi.fn()} />);
+
+        expect(screen.getByText('Affected Cohorts')).toBeInTheDocument();
+        expect(screen.getByText('3')).toBeInTheDocument();
+        expect(screen.getByText('Evaluation Window')).toBeInTheDocument();
+    });
+
+    it('handles report dismissal via onDismissReport and displays error when report dismissal fails', async () => {
+        vi.useFakeTimers();
+        const handleDismissReport = vi.fn().mockResolvedValue(undefined);
+        const handleDismiss = vi.fn();
+        const reportThreat: ThreatItem = {
+            id: 'report-123',
+            isReport: true,
+            targetPubkey: 'wash1-1784649014864123',
+            reason: 'Inappropriate content',
+        };
+
+        try {
+            const { rerender } = render(
+                <ThreatReviewModal
+                    threat={reportThreat}
+                    onClose={vi.fn()}
+                    onDismiss={handleDismiss}
+                    onDismissReport={handleDismissReport}
+                />
+            );
+
+            await act(async () => {
+                fireEvent.click(screen.getByText('Dismiss Flag'));
+            });
+
+            expect(handleDismissReport).toHaveBeenCalledWith(reportThreat);
+
+            act(() => {
+                vi.advanceTimersByTime(1200);
+            });
+            expect(handleDismiss).toHaveBeenCalledWith(reportThreat);
+
+            // Error handling case
+            const failingDismissReport = vi.fn().mockRejectedValue(new Error('Network error dismissing report'));
+            rerender(
+                <ThreatReviewModal
+                    threat={reportThreat}
+                    onClose={vi.fn()}
+                    onDismiss={handleDismiss}
+                    onDismissReport={failingDismissReport}
+                />
+            );
+
+            await act(async () => {
+                fireEvent.click(screen.getByText('Dismiss Flag'));
+            });
+
+            expect(screen.getByRole('alert')).toHaveTextContent('Network error dismissing report');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

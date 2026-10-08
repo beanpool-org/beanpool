@@ -510,7 +510,9 @@ describe('links into Home, and the "one way back" card', () => {
         await render();
         expect(safety.props.homeWord).toEqual({ url: NODE, standing: { words: true, joinedAt: Date.parse(node.answer.me!.joinedAt!) } });
         expect(safety.props.accountDismissedAt).toBe('2026-10-01T00:00:00.000Z');
-        expect(node.requests.map(r => new URL(r.url).pathname)).toEqual(['/api/home']);
+        // No copy of the member's list on this phone: the first read asked for the newcomer's cards, and the account's list
+        // (every card) is read for once more, never again.
+        expect(node.requests.map(r => new URL(r.url).pathname)).toEqual(['/api/home', '/api/home']);
     });
 
     it('"+ ADD POST" opens the same chooser as the Market\'s', async () => {

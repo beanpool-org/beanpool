@@ -39,14 +39,14 @@ export function ProfileGateModal({ message, onSetup, onClose }: Props) {
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex-1 py-3 rounded-xl border border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-200 font-semibold cursor-pointer bg-transparent hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                        className="flex-1 min-h-[44px] py-3 rounded-xl border border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-200 font-semibold cursor-pointer bg-transparent hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                     >
                         Not now
                     </button>
                     <button
                         type="button"
                         onClick={onSetup}
-                        className="flex-1 py-3 rounded-xl bg-nature-900 dark:bg-white text-white dark:text-nature-900 font-bold cursor-pointer border-none hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                        className="flex-1 min-h-[44px] py-3 rounded-xl bg-nature-900 dark:bg-white text-white dark:text-nature-900 font-bold cursor-pointer border-none hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                     >
                         Set up profile
                     </button>

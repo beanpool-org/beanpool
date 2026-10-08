@@ -102,6 +102,18 @@ describe('MemberGuide (Settings → BeanPool → Help & how it works)', () => {
         expect(onBack).toHaveBeenCalledTimes(1);
     });
 
+    it("opens at a page by slug (Home's Tips card, Read more), the front page behind it", () => {
+        const onBack = vi.fn();
+        const { page } = SAMPLE;
+        render(<MemberGuide onBack={onBack} feedbackLive={false} initialPage={page.slug} />);
+        expect(screen.getByRole('heading', { level: 1, name: page.title })).toBeInTheDocument();
+        fireEvent.click(back());
+        expect(screen.getByRole('searchbox', { name: 'Search the guide' })).toBeInTheDocument();
+        expect(onBack).not.toHaveBeenCalled();
+        fireEvent.click(back());
+        expect(onBack).toHaveBeenCalledTimes(1);
+    });
+
     it('searches the bundled text offline', () => {
         render(<MemberGuide onBack={() => {}} feedbackLive={false} />);
         fireEvent.change(screen.getByLabelText('Search the guide'), { target: { value: SAMPLE.page.title } });

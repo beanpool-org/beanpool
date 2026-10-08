@@ -195,9 +195,12 @@ export function dismissTips(record: TipsRecord, at: string): TipsRecord {
     return { ...record, dismissedAt: at };
 }
 
-/** Edit home switched Tips on: the tips start over from the first one. */
-export function restartTips(): TipsRecord {
-    return emptyTipsRecord();
+/**
+ * Edit home switched Tips on (or Reset to defaults): the tips start over from the first one, kept as the tip on the card
+ * from today, so the next day's landing moves on from it (PR #1694 review 6: an empty record left tip 1 up two days).
+ */
+export function restartTips(list: readonly HomeTip[], today: string): TipsRecord {
+    return draw(emptyTipsRecord(), list, today).record;
 }
 
 /** The caption: "Tips · 3 of 15" (drawn in capitals as every caption; a screen reader says "Tips, 3 of 15"). */

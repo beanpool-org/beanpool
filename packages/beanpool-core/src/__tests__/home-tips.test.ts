@@ -165,7 +165,7 @@ describe('home tips: rotation and stopping (design §1)', () => {
         expect(tipOnLanding(r, list, D2).view).toBeNull();
         expect(nextTip(r, list, D2).view).toBeNull();
         expect(allTipsSeen(r, list)).toBe(false);
-        const again = tipOnLanding(restartTips(), list, D2);
+        const again = tipOnLanding(restartTips(list, D2), list, D2);
         expect(again.view!.tip.id).toBe('what-this-is');
         expect(again.view!.position).toBe(1);
     });
@@ -173,7 +173,16 @@ describe('home tips: rotation and stopping (design §1)', () => {
     it('starts over after a Show: all seen, then switched on in Edit home', () => {
         const allSeen: TipsRecord = { ...emptyTipsRecord(), seen: list.map(t => t.id) };
         expect(tipOnLanding(allSeen, list, D1).view).toBeNull();
-        expect(tipOnLanding(restartTips(), list, D1).view!.tip.id).toBe('what-this-is');
+        expect(tipOnLanding(restartTips(list, D1), list, D1).view!.tip.id).toBe('what-this-is');
+    });
+
+    it('a restart keeps tip 1 as the one on the card from that day: the next day moves on from it (PR #1694 review 6)', () => {
+        const r = restartTips(list, D1);
+        expect(r).toEqual({ v: 1, seen: [], current: 'what-this-is', currentShownOn: D1, dismissedAt: null });
+        expect(tipOnLanding(r, list, D1).record).toBe(r);
+        expect(tipOnLanding(r, list, D2).view!.tip.id).toBe('offer');
+        // A list with nothing in it (no answer in hand): an empty record, no card.
+        expect(restartTips([], D1)).toEqual(emptyTipsRecord());
     });
 
     it('ignores a seen id the current list no longer has, and moves a member on from global to local without repeats', () => {

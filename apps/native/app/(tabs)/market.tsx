@@ -1164,7 +1164,7 @@ export default function MarketScreen() {
     );
 
     // ⚡ Bolt: O(1) Map lookups for trust levels and user groups in filter summary
-    const userGroupsMap = React.useMemo(() => new Map(userGroups.map(g => [g.id, g])), [userGroups]);
+    const userGroupsMap = React.useMemo(() => new Map(userGroups.map(g => [g.id, g] as const)), [userGroups]);
     const filterSummary = marketFilterSummary(filterState, searchQuery, {
         trustLabel: id => TRUST_FILTERS_BY_ID.get(id)?.label,
         groupName: id => userGroupsMap.get(id)?.name,

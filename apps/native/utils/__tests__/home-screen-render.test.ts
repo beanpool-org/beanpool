@@ -130,7 +130,7 @@ import { rememberKnock } from '../knock';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
-import { HOME_TIPS, localDay } from '@beanpool/core';
+import { HOME_TIPS, localDay, translateV1 } from '@beanpool/core';
 import { AccessibilityInfo, AppState, DeviceEventEmitter } from 'react-native';
 import { HOME_SAFETY_POLL_MS, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
@@ -144,13 +144,19 @@ const NODE = 'https://mullum.beanpool.org';
 const iso = (ms: number) => new Date(ms).toISOString();
 const H = 3600_000;
 
+/**
+ * A member who has every card of version 1 on their list (as one who edited with an older app and hid nothing), so each
+ * card's own rules are seen; a newcomer's Home (`layout: null`, CARD-FRAME §3) is its own case below.
+ */
+const everyV1Card = (now: number) => ({ ...translateV1({ order: [], hidden: [] }), updatedAt: iso(now - 72 * H) });
+
 function localMember(): HomeAnswer {
     const now = Date.now();
     return {
         generatedAt: iso(now), profile: 'local',
         features: { beans: true, escrow: true, invites: true, exampleListings: false, decisions: true },
         me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member' },
-        layout: null,
+        layout: everyV1Card(now),
         cards: {
             steps: { joinedAt: iso(now - 3 * 24 * H), firstOffer: false, firstPost: false, photo: false, interests: false, invited: false, area: false, knocked: null },
             events: { items: [
@@ -213,6 +219,8 @@ beforeEach(async () => {
     vi.mocked(db.getUnreadByConversation).mockImplementation(async () => []);
     who.identity = await draftIdentity();
     mem.store.set('beanpool_anchor_url', NODE);
+    // The phone already holds the member's list (it landed here before): a landing is one read.
+    mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(node.answer.layout));
     globalThis.fetch = vi.fn(async (input: any, init: any = {}) => {
         const url = String(input);
         const headers = { ...(init.headers ?? {}) } as Record<string, string>;
@@ -545,7 +553,7 @@ function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
         generatedAt: iso(now), profile,
         features: local ? LOCAL_FEATURES : GLOBAL_FEATURES,
         me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: true, probation: null, interests: ['food'], area: null, firstOffer: variant === 1, standing: 'member' },
-        layout: null,
+        layout: everyV1Card(now),
         cards: {
             needs: { items: needs },
             // Sent to both: a local community draws none (only the global node has the directory).
@@ -726,7 +734,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
 };
 
 /** Controls that act on Home itself rather than open a screen. */
-const IN_PLACE = /^(home-card-[a-z]+-menu|home-edit|home-market-tune|home-notice-line|home-needs-admin|home-step-interests|home-interest-[a-z]+|home-tip-next|home-tips-dont-show)$/;
+const IN_PLACE = /^(home-card-[a-z]+-menu|home-edit|home-add-card|home-market-tune|home-notice-line|home-needs-admin|home-step-interests|home-interest-[a-z]+|home-tip-next|home-tips-dont-show)$/;
 
 /** Ids a link passes as they are; every other param's value must be one its screen names. */
 const FREE_PARAMS = new Set(['id', 'txId', 'publicKey', 'name']);
@@ -1102,7 +1110,7 @@ function globalMember(days = 3): HomeAnswer {
             joinedAt, isKeeper: false, interests: [], area: null, firstOffer: false, standing: 'member',
             probation: { onProbation: true, rules: 'words', limits: { posts: { limit: 2 }, photos: { limit: 4 }, new_dm_recipients: { limit: 3 } }, endsWhen: { hours: 168, keptPosts: 3 } },
         },
-        layout: null,
+        layout: everyV1Card(now),
         cards: {
             find: findBody(),
             steps: { joinedAt, firstOffer: false, firstPost: false, photo: false, interests: false, invited: null, area: false, knocked: null },

@@ -36,12 +36,15 @@ import { clearInAnotherTab, signOutInAnotherTab, signOutOnChannelOnly } from '..
 const ME: BeanPoolIdentity = { publicKey: 'a'.repeat(64), privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as BeanPoolIdentity;
 const NOW = new Date().toISOString();
 
+const EVERY_CARD = { v: 2, cards: ['safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'invite'].map(t => ({ id: t, type: t })), dismissed: {}, updatedAt: null };
+
 function answer(over: Partial<HomeAnswer> = {}, cards: HomeAnswer['cards'] = {}): HomeAnswer {
     return {
         generatedAt: NOW, profile: 'local',
         features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, guestListingsOnly: false },
         me: { joinedAt: '2026-01-01T00:00:00.000Z', isKeeper: false, probation: null, interests: ['arts'], area: null, firstOffer: false, standing: 'member' },
-        layout: null,
+        // A member whose account list holds every card (what version 1 drew by default); the frame's own cases set theirs.
+        layout: EVERY_CARD,
         cards: {
             events: { items: [{ id: 'e1', title: 'Seed swap', startsAt: new Date(Date.now() + 86_400_000).toISOString(), endsAt: null, place: 'Town Hall', rsvp: 'going' }], radiusKm: null },
             market: {

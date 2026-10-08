@@ -1958,6 +1958,23 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
         expect(fewerLines()).toHaveLength(0);
     });
 
+    // Review of #1699 (confirmation), finding 2: an empty version-1 list (a way-back dismissal on an older app, the web's
+    // Reset) is unknown, so the newcomer's list is drawn; such a member never moved or hid a card, so the line is theirs.
+    it('P2: a member whose account list is an empty version 1 (only a way-back dismissal) and who has no copy here sees the line once', async () => {
+        node.answer = longStanding({ v: 1, order: [], hidden: [], dismissed: { safety: iso(Date.now() - 20 * DAY) }, updatedAt: iso(Date.now() - 20 * DAY) });
+        mem.store.delete(phoneKey());
+        await render();
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        expect(fewerLines()).toHaveLength(1);
+        expect(fewerLines()[0].textContent).toContain(FEWER_CARDS_LINE);
+        expect(posts()).toHaveLength(0);
+        await again();
+        expect(fewerLines()).toHaveLength(0);
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(fewerLines()).toHaveLength(0);
+    });
+
     it('never for a member who edited: a version-1 list from an older app, a version-2 list, or an edit kept only on this phone', async () => {
         node.answer = longStanding({ v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) });
         mem.store.delete(phoneKey());

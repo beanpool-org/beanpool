@@ -181,6 +181,11 @@ export default function HomeScreen() {
     const refusedShape = useRef<string | null>(null);
     // The phone's list was made while the account's was unknown (an empty version-1 list, as a standby from before the
     // frame answers): that list's date, so the account's real list wins over it once it answers (pickLayout).
+    // Accepted (review of #1699 confirmation, finding 2, P2c): a member whose real list is an empty version 1 (a way-back
+    // dismissal or a Reset on an older app) and who edits offline is marked too, so another device's version-2 list saved
+    // after that empty list wins over this phone's later edit. The phone can't tell a standby's empty list from a real
+    // one, it is rare (no copy here, an offline first edit, another device's save meanwhile), and one edit is lost either
+    // way: the other device's, were this phone's sent instead.
     const phoneOver = useRef<string | null>(null);
     const layoutRef = useRef<HomeLayout | null>(null);
     layoutRef.current = layout;
@@ -375,7 +380,11 @@ export default function HomeScreen() {
                 setNotOnAccount(false);
             }
             setLayout(pick.layout);
-            if (member && fewerCardsNews(answered.layout, phoneLayout.current, answered.me, Date.now())) void maybeFewer(whose);
+            // An empty version-1 list with no copy here moved or hid nothing (a way-back dismissal or a Reset on an older app):
+            // the newcomer's list is drawn, so the line is theirs as for one who never edited (review of #1699 confirmation,
+            // finding 2). On a standby it can't be told from a real list; the line is still true of what is drawn.
+            const fewerFrom = answered.layoutV1?.empty && !phoneLayout.current ? null : answered.layout;
+            if (member && fewerCardsNews(fewerFrom, phoneLayout.current, answered.me, Date.now())) void maybeFewer(whose);
             // The phone's newer list is sent, but one the node refused as a shape it doesn't know yet only at a landing
             // (CARD-FRAME §2.3: "sent again each time you open Home").
             const resend = why === 'focus' || refusedShape.current !== `${id.publicKey}|${u}`;

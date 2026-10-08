@@ -47,3 +47,4 @@ export * from './blocked-beans-note.js';
 export * from './dm-crypto.js';
 export * from './poll-vote-origins.js';
 export * from './recovery-kit.js';
+export * from './home-tips.js';

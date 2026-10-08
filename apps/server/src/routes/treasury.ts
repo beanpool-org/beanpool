@@ -45,6 +45,8 @@ import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlOf, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { readProjectDeadline } from './project-deadline.js';
+import { getThresholds } from '../config/local-config.js';
 import { answerPotPaused } from '../engine/audit.js';
 
 /**
@@ -595,9 +597,16 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: e.message };
             return;
         }
-        const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || deadlineAt) ? 'bounded' : 'ongoing';
+        // A bounded enterprise is a crowdfund project: its deadline is held to the same check (project-deadline.ts).
+        const deadline = readProjectDeadline(deadlineAt, getThresholds().maxProjectExpiryDays);
+        if ('error' in deadline) {
+            ctx.status = 400;
+            ctx.body = { error: deadline.error };
+            return;
+        }
+        const parsedDeadline = deadline.deadline;
+        const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || parsedDeadline) ? 'bounded' : 'ongoing';
         const parsedGoal = goalAmount != null ? Number(goalAmount) : null;
-        const parsedDeadline = deadlineAt ? String(deadlineAt) : null;
         const parsedLat = lat != null && lat !== '' ? Number(lat) : null;
         const parsedLng = lng != null && lng !== '' ? Number(lng) : null;
         // Every profile that has enterprises: 3 started a day and 20 still running per member (W-main). After the checks

@@ -35,6 +35,7 @@ import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { readProjectDeadline } from './project-deadline.js';
 import { answerPotPaused } from '../engine/audit.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
@@ -344,20 +345,13 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         return;
     }
 
-    if (deadlineAt) {
-        const maxDays = getThresholds().maxProjectExpiryDays;
-        const deadlineMs = new Date(deadlineAt).getTime();
-        if (Number.isNaN(deadlineMs)) {
-            ctx.status = 400;
-            ctx.body = { error: 'Invalid deadlineAt date format' };
-            return;
-        }
-        const diffDays = (deadlineMs - Date.now()) / (1000 * 60 * 60 * 24);
-        if (diffDays > maxDays) {
-            ctx.status = 400;
-            ctx.body = { error: `Project deadline cannot exceed ${maxDays} days` };
-            return;
-        }
+    // The one deadline check every project route shares (project-deadline.ts): a string in ISO 8601 form, not in the
+    // past and at most maxProjectExpiryDays ahead, stored as toISOString().
+    const deadline = readProjectDeadline(deadlineAt, getThresholds().maxProjectExpiryDays);
+    if ('error' in deadline) {
+        ctx.status = 400;
+        ctx.body = { error: deadline.error };
+        return;
     }
 
     if (photos !== undefined && photos !== null) {
@@ -404,7 +398,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         ctx.body = { error: e.message };
         return;
     }
-    createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt || null);
+    createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadline.deadline);
     const project = getCrowdfundProject(projectId);
     deps.broadcast?.({ type: 'project_created', project });
     
@@ -425,20 +419,13 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
         return;
     }
 
-    if (deadlineAt) {
-        const maxDays = getThresholds().maxProjectExpiryDays;
-        const deadlineMs = new Date(deadlineAt).getTime();
-        if (Number.isNaN(deadlineMs)) {
-            ctx.status = 400;
-            ctx.body = { error: 'Invalid deadlineAt date format' };
-            return;
-        }
-        const diffDays = (deadlineMs - Date.now()) / (1000 * 60 * 60 * 24);
-        if (diffDays > maxDays) {
-            ctx.status = 400;
-            ctx.body = { error: `Project deadline cannot exceed ${maxDays} days` };
-            return;
-        }
+    // As on a create (project-deadline.ts), and null or '' clears it as a create stores none. Left out, it is left as it
+    // is (updateCrowdfundProject writes the deadline only when one is given).
+    const deadline = deadlineAt === undefined ? undefined : readProjectDeadline(deadlineAt, getThresholds().maxProjectExpiryDays);
+    if (deadline && 'error' in deadline) {
+        ctx.status = 400;
+        ctx.body = { error: deadline.error };
+        return;
     }
 
     if (photos !== undefined && photos !== null) {
@@ -464,7 +451,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
 
     if (respondIfMuted(ctx, actor)) return;
     try {
-        updateCrowdfundProject(id, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt);
+        updateCrowdfundProject(id, actor, title, description || '', photos || [], Number(goalAmount), deadline?.deadline);
         const project = getCrowdfundProject(id);
         deps.broadcast?.({ type: 'project_updated', project });
         ctx.body = { success: true, project };

@@ -17,6 +17,7 @@ import { initStateEngine, getBalance, reconcileLedgerFromDb } from './state-engi
 import { createCrowdfundProject, pledgeToProject, db } from './db/db.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import type { RouteDeps } from './routes/types.js';
+import { PROJECT_DEADLINE_FORMAT_ERROR } from './routes/project-deadline.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -106,7 +107,7 @@ async function run() {
         },
     });
     assert(invalidProjectRes.status === 400, 'POST /api/crowdfund/projects with invalid deadlineAt returns 400');
-    assert(invalidProjectRes.body?.error === 'Invalid deadlineAt date format', 'Error message is "Invalid deadlineAt date format"');
+    assert(invalidProjectRes.body?.error === PROJECT_DEADLINE_FORMAT_ERROR, 'Error message is the plain deadline-format sentence');
 
     const validDeadline = new Date(Date.now() + 86400000).toISOString();
     const validProjectRes = await callRouter(commonsRouter, 'POST', '/api/crowdfund/projects', {
@@ -133,7 +134,7 @@ async function run() {
         },
     });
     assert(invalidUpdateRes.status === 400, 'POST /api/crowdfund/projects/update with invalid deadlineAt returns 400');
-    assert(invalidUpdateRes.body?.error === 'Invalid deadlineAt date format', 'Update error message is "Invalid deadlineAt date format"');
+    assert(invalidUpdateRes.body?.error === PROJECT_DEADLINE_FORMAT_ERROR, 'Update error message is the plain deadline-format sentence');
 
     console.log(`\n${testsPassed}/${testsRun} checks passed.`);
     if (testsPassed !== testsRun) throw new Error(`${testsRun - testsPassed} check(s) failed`);

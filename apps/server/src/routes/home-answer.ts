@@ -72,10 +72,12 @@ import { landingCardFor, type LandingCard } from './global-directory.js';
 
 /** The catalogue (§3.1), in the default order (§3.1 "Default order"). */
 export const HOME_CARD_IDS = [
-    'needs', 'safety', 'find', 'steps', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined',
-    'pulse', 'beans', 'notices', 'invite', 'community',
+    'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups',
+    'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
 ] as const;
 export type HomeCardId = typeof HOME_CARD_IDS[number];
+// `tips` (the Tips card, scratch/home/TIPS-DESIGN-fable.md) is drawn by the apps from their own bundled list and is never
+// assembled here (no builder): it is in the catalogue so a layout that hides or moves it is kept.
 const CARD_IDS: ReadonlySet<string> = new Set(HOME_CARD_IDS);
 export const isHomeCardId = (id: unknown): id is HomeCardId => typeof id === 'string' && CARD_IDS.has(id);
 

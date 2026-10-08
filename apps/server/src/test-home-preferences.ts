@@ -48,8 +48,8 @@ function assert(cond: boolean, msg: string): void {
 }
 
 /** The design's catalogue (§3.1) and the 17 categories (@beanpool/core PRICING_CATEGORIES), as the apps send them. */
-const CARDS = ['needs', 'safety', 'find', 'steps', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups',
-    'joined', 'pulse', 'beans', 'notices', 'invite', 'community'];
+const CARDS = ['needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide',
+    'groups', 'joined', 'pulse', 'beans', 'notices', 'invite', 'community'];
 const CATEGORIES = ['food', 'services', 'labour', 'tools', 'goods', 'garden', 'housing', 'transport', 'education', 'arts',
     'health', 'care', 'animals', 'tech', 'energy', 'mindset', 'general'];
 
@@ -133,6 +133,12 @@ async function main(): Promise<void> {
     assert(JSON.stringify(kept?.hidden) === '["pulse"]', `needs and community can't be hidden, and an unknown hidden card is dropped (${JSON.stringify(kept?.hidden)})`);
     assert(JSON.stringify(Object.keys(kept?.dismissed ?? {})) === '["safety"]', `a dismissal of something that isn't a card, or of a card that can't be hidden, is dropped (${JSON.stringify(kept?.dismissed)})`);
     assert(JSON.stringify(newer.body?.interests) === '["food","tools"]', `an unknown category and a repeat are dropped from the interests (${JSON.stringify(newer.body?.interests)})`);
+    // The Tips card's "Don't show tips again" is a hide through the layout: the node keeps it, so the member's other devices follow.
+    const tipsLayout = { v: 1, order: ['market', 'tips'], hidden: ['pulse', 'tips'], dismissed: {}, updatedAt: iso(-25_000) };
+    const tipsSaved = await save(ann, { 'home.layout': tipsLayout });
+    const tipsRead = (await read(ann)).body?.['home.layout'];
+    assert(tipsSaved.status === 200 && JSON.stringify(tipsSaved.body?.['home.layout']) === JSON.stringify(tipsLayout) && JSON.stringify(tipsRead) === JSON.stringify(tipsLayout),
+        `a layout that hides and moves the Tips card is kept as sent, on the save and on a read (${JSON.stringify(tipsRead)})`);
     const allUnknown = await save(cy, { 'home.layout': { v: 1, order: ['weather'], hidden: [], dismissed: {} }, interests: ['knitting'] });
     assert(allUnknown.status === 200 && JSON.stringify(allUnknown.body?.['home.layout']?.order) === '[]' && JSON.stringify(allUnknown.body?.interests) === '[]',
         `a body of nothing but unknown ids saves, as empty lists (${show(allUnknown)})`);
@@ -186,7 +192,7 @@ async function main(): Promise<void> {
     const unknownKey = (await save(ann, { made_up: true })).body?.error ?? '';
     assert(unknownKey.includes('home.layout') && unknownKey.includes('interests'), `a made-up key's refusal names the Home keys among those saved here (${unknownKey})`);
     const allCards = await save(ann, { 'home.layout': { v: 1, order: [...CARDS].reverse(), updatedAt: iso(-20_000) }, interests: [...CATEGORIES] });
-    assert(allCards.status === 200 && allCards.body?.['home.layout']?.order?.length === 17 && allCards.body?.interests?.length === 17,
+    assert(allCards.status === 200 && allCards.body?.['home.layout']?.order?.length === 18 && allCards.body?.interests?.length === 17,
         `every card in the order and all 17 interests are fine (${allCards.status}, ${allCards.body?.['home.layout']?.order?.length} cards, ${allCards.body?.interests?.length} interests)`);
     const clear = await save(ann, { interests: [] });
     assert(clear.status === 200 && JSON.stringify(clear.body?.interests) === '[]' && JSON.stringify((await read(ann)).body?.interests) === '[]',

@@ -437,6 +437,10 @@ async function main(): Promise<void> {
         after = builds();
         assert((after.pulse ?? 0) === (before.pulse ?? 0) && def.body?.cards?.pulse === undefined, 'with no cards=, her hidden Pulse runs no Pulse query');
         assert((after.needs ?? 0) === (before.needs ?? 0) + 1, 'but needs, which can\'t be hidden, is assembled');
+        // The Tips card is the apps' own (no data): asked for or not, the node assembles nothing for it and answers none.
+        const tips = await get('/api/home?cards=tips', alice);
+        assert(tips.status === 200 && cardsOf(tips).length === 0 && def.body?.cards?.tips === undefined && homeCardBuilds.tips === undefined,
+            `tips is never a card of the answer, nor assembled (${cardsOf(tips).join(',')})`);
         const none = await get('/api/home?cards=', alice);
         assert(none.status === 200 && cardsOf(none).length === 0 && none.body?.me, '`cards=` empty: no cards, still her me and layout');
     }

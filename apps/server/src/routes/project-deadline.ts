@@ -6,18 +6,33 @@
  *
  * Nothing, null or '' is no deadline. Anything else must be an ISO 8601 string, a date (2026-12-31) or a date-time with
  * Z or an offset (2026-12-31T17:00:00.000Z, 2026-12-31T17:00+10:00), that names a real day and time and is at most
- * maxProjectExpiryDays ahead. It is stored as toISOString(), so what both apps send (Date.toISOString()) is stored as
- * sent. V8's `new Date(x)` is not the test: it reads 'garbage 1' as 2001, and a number or a boolean is no date.
- * There is no lower bound: a deadline in the past is still taken (a product question, not this check).
+ * maxProjectExpiryDays ahead, and not in the past. It is stored as toISOString(), so what both apps send
+ * (Date.toISOString()) is stored as sent. V8's `new Date(x)` is not the test: it reads 'garbage 1' as 2001, and a
+ * number or a boolean is no date.
+ *
+ * Not in the past (Marty, 9 Oct: "Refuse it"): a new or edited project must end today or later. Only a deadline that
+ * is sent is held to this, so an edit that leaves deadlineAt out keeps a deadline that has since passed.
  */
 
 export const PROJECT_DEADLINE_FORMAT_ERROR =
     "A project's deadline must be a date, like 2026-12-31 or 2026-12-31T17:00:00Z.";
 export const projectDeadlineTooFarError = (maxDays: number) =>
     `A project's deadline can be at most ${maxDays} days away.`;
+export const PROJECT_DEADLINE_PAST_ERROR = "A project's deadline can't be in the past.";
 
 const ISO_DEADLINE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:\d{2}))?$/;
 const DAY_MS = 1000 * 60 * 60 * 24;
+
+/**
+ * How far before now a deadline may be and still be today for the member who sent it, in whatever time zone they are.
+ * The server cannot know it, so "today" is today anywhere on Earth. The PWA's date field sends the chosen day as UTC
+ * midnight (new Date('2026-10-09') is 2026-10-09T00:00:00.000Z), and so does a date alone; that day is still today at
+ * UTC-12, the last place it ends, until 12:00 UTC the next day: 36 hours after that midnight. A date-time inside the
+ * member's own day (the native picker) is never more than 25 hours old (a day with a clock change). So anything no
+ * earlier than 36 hours before now is taken, and anything earlier is yesterday or before in every time zone. 24 hours
+ * would not do: at 21:00 in New York (UTC-4) the PWA's "today" is already 25 hours old.
+ */
+const TODAY_ANYWHERE_MS = 36 * 60 * 60 * 1000;
 
 function daysInMonth(year: number, month: number): number {
     if (month === 2) return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
@@ -54,6 +69,7 @@ export function readProjectDeadline(raw: unknown, maxDays: number, now: number =
     if (typeof raw !== 'string') return { error: PROJECT_DEADLINE_FORMAT_ERROR };
     const ms = isoDeadlineMs(raw);
     if (ms === null || Number.isNaN(ms)) return { error: PROJECT_DEADLINE_FORMAT_ERROR };
+    if (ms < now - TODAY_ANYWHERE_MS) return { error: PROJECT_DEADLINE_PAST_ERROR };
     if ((ms - now) / DAY_MS > maxDays) return { error: projectDeadlineTooFarError(maxDays) };
     return { deadline: new Date(ms).toISOString() };
 }

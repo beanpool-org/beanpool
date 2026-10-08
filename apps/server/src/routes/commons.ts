@@ -345,8 +345,8 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         return;
     }
 
-    // The one deadline check every project route shares (project-deadline.ts): a string in ISO 8601 form, at most
-    // maxProjectExpiryDays ahead, stored as toISOString().
+    // The one deadline check every project route shares (project-deadline.ts): a string in ISO 8601 form, not in the
+    // past and at most maxProjectExpiryDays ahead, stored as toISOString().
     const deadline = readProjectDeadline(deadlineAt, getThresholds().maxProjectExpiryDays);
     if ('error' in deadline) {
         ctx.status = 400;

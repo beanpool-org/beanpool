@@ -8,12 +8,16 @@
  *
  * Verifies, on each route:
  *  1. Refused with a 400 and a plain sentence, never a 500, and nothing stored: an unparseable string, 'garbage 1'
- *     and '1' (V8 reads both as 2001), 'December 1, 2026', '2027-02-30' (V8 reads it as 2 March), {}, true, 0, and
- *     '9999-12-31' (past maxProjectExpiryDays).
+ *     and '1' (V8 reads both as 2001), 'December 1, 2026', '2027-02-30' (V8 reads it as 2 March), {}, true, 0,
+ *     '9999-12-31' (past maxProjectExpiryDays), and a deadline in the past: two days ago, as a date-time and as a date
+ *     alone (Marty, 9 Oct: "Refuse it" — a new or edited project must end today or later).
  *  2. Accepted: '' (no deadline, stored as null), the ISO date-time both apps send (stored exactly as sent), a date
- *     alone and a date-time with an offset (each stored as the same instant in toISOString() form).
+ *     alone and a date-time with an offset (each stored as the same instant in toISOString() form), today's date
+ *     alone, and an hour from now.
  *  3. On /update: a refused value leaves the stored deadline as it was; a valid one still updates it; '' clears it;
- *     leaving deadlineAt out leaves it as it is.
+ *     leaving deadlineAt out leaves it as it is, and an expired project can still be edited without sending one.
+ *  4. "Today" in every time zone, against a fixed clock: the PWA's date field sends the member's day as UTC midnight,
+ *     which is still today at UTC-12 until 36 hours after it, so it is taken until then and refused after.
  *
  * Run: node scripts/run-server-suites.mjs with SERVER_SUITES_ONLY=test-project-deadline-http
  */
@@ -29,11 +33,14 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { getThresholds } from './config/local-config.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { PROJECT_DEADLINE_FORMAT_ERROR, projectDeadlineTooFarError } from './routes/project-deadline.js';
+import { PROJECT_DEADLINE_FORMAT_ERROR, projectDeadlineTooFarError, readProjectDeadline } from './routes/project-deadline.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+// The sentence Marty's decision asks for (9 Oct), pinned here word for word.
+const PAST = "A project's deadline can't be in the past.";
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -99,6 +106,10 @@ async function main(): Promise<void> {
     const dateOnly = new Date(now + 10 * DAY).toISOString().slice(0, 10);
     const offsetInstant = Math.floor((now + 5 * DAY) / 1000) * 1000;
     const withOffset = new Date(offsetInstant + 10 * 60 * 60 * 1000).toISOString().slice(0, 19) + '+10:00';
+    const twoDaysAgo = new Date(now - 2 * DAY).toISOString();
+    const twoDaysAgoDate = twoDaysAgo.slice(0, 10);
+    const todayDate = new Date(now).toISOString().slice(0, 10);
+    const inAnHour = new Date(now + HOUR).toISOString();
 
     const refused: { value: unknown; error: string }[] = [
         { value: 'not-a-valid-date-string', error: PROJECT_DEADLINE_FORMAT_ERROR },
@@ -110,12 +121,16 @@ async function main(): Promise<void> {
         { value: true, error: PROJECT_DEADLINE_FORMAT_ERROR },
         { value: 0, error: PROJECT_DEADLINE_FORMAT_ERROR },
         { value: '9999-12-31', error: TOO_FAR },
+        { value: twoDaysAgo, error: PAST },
+        { value: twoDaysAgoDate, error: PAST },
     ];
     const accepted: { value: unknown; stored: string | null; label: string }[] = [
         { value: '', stored: null, label: "'' (no deadline)" },
         { value: inSeven, stored: inSeven, label: 'the ISO date-time the apps send' },
         { value: dateOnly, stored: `${dateOnly}T00:00:00.000Z`, label: 'a date alone' },
         { value: withOffset, stored: new Date(offsetInstant).toISOString(), label: 'a date-time with +10:00' },
+        { value: todayDate, stored: `${todayDate}T00:00:00.000Z`, label: "today's date alone" },
+        { value: inAnHour, stored: inAnHour, label: 'an hour from now' },
     ];
 
     // ── 1. POST /api/enterprise (and /api/treasury): what both apps use ─────────────────────────────────
@@ -206,6 +221,48 @@ async function main(): Promise<void> {
     rows = storedDeadlines(projectId);
     assert(cleared.status === 200 && rows.project === null && rows.member === null,
         `an update with '' clears the deadline to null, as a create stores none (got ${cleared.status}, ${show(rows.project)} / ${show(rows.member)})`);
+
+    // A project whose deadline has passed: an edit that does not send one leaves it alone and still succeeds; one that
+    // sends the passed date again is refused, as any other sent deadline in the past.
+    db.prepare('UPDATE projects SET deadline_at = ? WHERE id = ?').run(twoDaysAgo, projectId);
+    db.prepare('UPDATE members SET deadline_at = ? WHERE public_key = ?').run(twoDaysAgo, projectId);
+    const expiredEdit = await signedPost('/api/crowdfund/projects/update', {
+        id: projectId, title: 'Edited Shed, renamed', description: 'A shed', goalAmount: 100,
+    }, owner);
+    rows = storedDeadlines(projectId);
+    const title = (db.prepare('SELECT title FROM projects WHERE id = ?').get(projectId) as any)?.title;
+    assert(expiredEdit.status === 200 && title === 'Edited Shed, renamed' && rows.project === twoDaysAgo && rows.member === twoDaysAgo,
+        `an expired project can be edited without sending a deadline, which stays as it was (got ${expiredEdit.status} ${expiredEdit.error ?? ''}, ${show(title)}, ${show(rows.project)} / ${show(rows.member)})`);
+    const resent = await update({ deadlineAt: twoDaysAgo });
+    rows = storedDeadlines(projectId);
+    assert(resent.status === 400 && resent.error === PAST && rows.project === twoDaysAgo,
+        `...but sending its passed deadline again is refused (got ${resent.status} ${resent.error ?? ''}, ${show(rows.project)})`);
+
+    // ── 4. "Today" in every time zone ─────────────────────────────────────────────────────────────────
+    // Against a fixed clock, so the time zones can be named: the server's own clock cannot be moved over HTTP.
+    console.log('── 4. "Today" in every time zone ──');
+    const at = (iso: string) => Date.parse(iso);
+    const read = (value: string, clock: string) => readProjectDeadline(value, maxDays, at(clock));
+    // 21:00 on 9 Oct in New York (UTC-4): the PWA's date field sends the member's 9 Oct as UTC midnight, 25 hours ago.
+    const newYork = read('2026-10-09T00:00:00.000Z', '2026-10-10T01:00:00Z');
+    assert('deadline' in newYork && newYork.deadline === '2026-10-09T00:00:00.000Z',
+        `today at 21:00 in New York, as the PWA sends it (UTC midnight, 25 h ago), is taken (got ${show(newYork)})`);
+    // 23:59 on 9 Oct at UTC-12, the last place 9 Oct is still today: its UTC midnight is 35 h 59 min ago.
+    const lastPlace = read('2026-10-09', '2026-10-10T11:59:00Z');
+    assert('deadline' in lastPlace && lastPlace.deadline === '2026-10-09T00:00:00.000Z',
+        `9 Oct is taken at 23:59 on 9 Oct at UTC-12, where it is still today (got ${show(lastPlace)})`);
+    // At that moment it is 10 Oct or 11 Oct everywhere else, so 8 Oct is yesterday everywhere.
+    const yesterdayEverywhere = read('2026-10-08', '2026-10-10T11:59:00Z');
+    assert('error' in yesterdayEverywhere && yesterdayEverywhere.error === PAST,
+        `8 Oct is refused then: it is yesterday in every time zone (got ${show(yesterdayEverywhere)})`);
+    // 9 Oct ends everywhere at 12:00 UTC on 10 Oct, 36 hours after its UTC midnight.
+    const justOver = read('2026-10-09', '2026-10-10T12:00:01Z');
+    assert('error' in justOver && justOver.error === PAST,
+        `9 Oct is refused once it has ended everywhere, 36 h after its UTC midnight (got ${show(justOver)})`);
+    // 09:00 on 10 Oct in Sydney (UTC+11): a deadline at the start of the member's day, sent with its offset, is taken.
+    const sydney = read('2026-10-10T00:00:00+11:00', '2026-10-09T22:00:00Z');
+    assert('deadline' in sydney && sydney.deadline === '2026-10-09T13:00:00.000Z',
+        `today from midnight in Sydney, sent with +11:00, is taken (got ${show(sydney)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -15,6 +15,12 @@
  *      other members pay each other; two members' tags differ
  *   5. `cards=` skips work: a card not asked for is never assembled (counted: a hidden Pulse runs no Pulse query), unknown
  *      ids are dropped, and with no `cards=` the member's own layout's hidden cards are skipped, but never `needs`
+ *  5b. the card frame (scratch/home/CARD-FRAME-DESIGN-fable.md §5.2 item 6, slice F1): a member's version-2 layout holds
+ *      a saved search and a card of a type no node knows; `cards=needs,search-k7mq` builds the search from its stored
+ *      settings (counted), keyed by its instance id; an instance id the layout doesn't hold is dropped from the ask, the
+ *      unknown type is kept in the answer's layout and never built; with no `cards=` a card not in the list is not built;
+ *      the same ask in another order is the same tag; a settings change moves the tag and a 304 still answers an unchanged
+ *      Home; `community.place` is the node's location to two decimals, absent when unset
  *   6. the size: under 6 KB gzipped with fixture data, titles of thousands of characters included (each text is cut), and
  *      what a cold landing and a 304 cost (requests, bytes, server time), printed
  *   7. H0b on a local node: the Beans card is each signer's own balance as the ledger holds it, and Beans and escrow stay
@@ -443,6 +449,66 @@ async function main(): Promise<void> {
             `tips is never a card of the answer, nor assembled (${cardsOf(tips).join(',')})`);
         const none = await get('/api/home?cards=', alice);
         assert(none.status === 200 && cardsOf(none).length === 0 && none.body?.me, '`cards=` empty: no cards, still her me and layout');
+    }
+
+    // ── 5b. the card frame ──────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n── 5b. the card frame: card instances, keyed by instance id ──');
+    {
+        const { updateLocalConfig } = await import('./config/local-config.js');
+        const builds = () => ({ ...homeCardBuilds });
+        const erin = member('HomeFrameErin', { area: BYRON });
+        const future = { id: 'zzz-future-1', type: 'zzz-future', settings: { any: ['thing', 1, null], nested: { ü: true } } };
+        const frame = (q: string, agoMs: number) => ({
+            v: 2,
+            cards: [{ id: 'steps', type: 'steps' }, { id: 'search-k7mq', type: 'search', settings: { q, kind: 'offer', km: 25 } }, future, { id: 'market', type: 'market' }],
+            dismissed: {},
+            updatedAt: new Date(Date.now() - agoMs).toISOString(),
+        });
+        const savedFrame = await postJson('/api/members/preferences', erin, { publicKey: erin.pk, preferences: { 'home.layout': frame('loaf', 60_000) } });
+        assert(savedFrame.status === 200, `setup: Erin saves a version-2 layout with a saved search and a zzz-future card (${savedFrame.status} ${savedFrame.text.slice(0, 120)})`);
+        let before = builds();
+        const asked = await get('/api/home?cards=needs,search-k7mq', erin);
+        let after = builds();
+        const search = asked.body?.cards?.['search-k7mq'];
+        assert(asked.status === 200 && JSON.stringify(cardsOf(asked)) === '["needs","search-k7mq"]' && (after.search ?? 0) === (before.search ?? 0) + 1,
+            `the saved search is built once, keyed by its instance id (${cardsOf(asked).join(',')}; builds ${before.search ?? 0} → ${after.search ?? 0})`);
+        assert(search?.q === 'loaf' && search?.kind === 'offer' && search?.km === 25 && search?.items?.length >= 1
+            && search.items.every((i: { title: string; type: string }) => /loaf/.test(i.title) && i.type === 'offer'),
+            `from the settings stored on her account: offers matching "loaf" within 25 km (${JSON.stringify(search)?.slice(0, 200)})`);
+        assert(JSON.stringify(asked.body?.layout?.cards?.[2]) === JSON.stringify(future),
+            `the answer's layout keeps the zzz-future card byte for byte (${JSON.stringify(asked.body?.layout?.cards?.[2])})`);
+        before = builds();
+        const stray = await get('/api/home?cards=needs,search-zzzz,zzz-future-1', erin);
+        after = builds();
+        assert(stray.status === 200 && JSON.stringify(cardsOf(stray)) === '["needs"]' && (after.search ?? 0) === (before.search ?? 0),
+            `an instance id her layout doesn't hold is dropped from the ask, and the unknown type is never built (${cardsOf(stray).join(',')})`);
+        before = builds();
+        const plain = await get('/api/home', erin);
+        after = builds();
+        assert(plain.status === 200 && ['needs', 'steps', 'market', 'search-k7mq', 'community'].every(id => cardsOf(plain).includes(id) || id === 'steps' || id === 'market'),
+            `with no cards=, her list is her Home (${cardsOf(plain).join(',')})`);
+        assert((after.events ?? 0) === (before.events ?? 0) && (after.pulse ?? 0) === (before.pulse ?? 0) && (after.joined ?? 0) === (before.joined ?? 0)
+            && (after.search ?? 0) === (before.search ?? 0) + 1 && (after.steps ?? 0) === (before.steps ?? 0) + 1 && (after.community ?? 0) === (before.community ?? 0) + 1,
+            `and a card not in her list (Coming up, the Pulse, Who joined) is never assembled: events ${before.events ?? 0} → ${after.events ?? 0}`);
+        const reordered = await get('/api/home?cards=search-k7mq,needs', erin);
+        assert(!!asked.etag && reordered.etag === asked.etag, `the same ask in another order is the same tag (${asked.etag} / ${reordered.etag})`);
+        const unchanged = await get('/api/home?cards=needs,search-k7mq', erin, { 'If-None-Match': asked.etag! });
+        assert(unchanged.status === 304, `an unchanged Home is still a 304 (${unchanged.status})`);
+        const resaved = await postJson('/api/members/preferences', erin, { publicKey: erin.pk, preferences: { 'home.layout': frame('rye', 30_000) } });
+        const moved = await get('/api/home?cards=needs,search-k7mq', erin, { 'If-None-Match': asked.etag! });
+        assert(resaved.status === 200 && moved.status === 200 && moved.etag !== asked.etag && moved.body?.cards?.['search-k7mq']?.q === 'rye'
+            && moved.body.cards['search-k7mq'].items.some((i: { title: string }) => /rye/.test(i.title)),
+            `a settings change moves the rows, and the tag with them (${moved.status}, ${JSON.stringify(moved.body?.cards?.['search-k7mq'])?.slice(0, 160)})`);
+        const again = await get('/api/home?cards=needs,search-k7mq', erin, { 'If-None-Match': moved.etag! });
+        assert(again.status === 304, `and the new tag is a 304 again (${again.status})`);
+        const noPlace = await get('/api/home?cards=community', erin);
+        assert(noPlace.status === 200 && !!noPlace.body?.cards?.community && !('place' in noPlace.body.cards.community),
+            `community.place is absent while the node has no location (${JSON.stringify(noPlace.body?.cards?.community)})`);
+        updateLocalConfig({ location: { lat: -28.55555, lng: 153.49999 } });
+        const placed = await get('/api/home?cards=community', erin);
+        assert(JSON.stringify(placed.body?.cards?.community?.place) === JSON.stringify({ lat: -28.56, lng: 153.5 }),
+            `and the node's location to two decimals once it has one (${JSON.stringify(placed.body?.cards?.community?.place)})`);
+        updateLocalConfig({ location: null });
     }
 
     // ── 6. the size ─────────────────────────────────────────────────────────────────────────────────────────────

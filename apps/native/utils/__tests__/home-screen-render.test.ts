@@ -1415,7 +1415,7 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         expect(tipsRecord().seen).toEqual(['what-this-is']);
     });
 
-    it('Done on the last tip: the card goes, and Edit home says "All tips seen"; off and on again starts over', async () => {
+    it('Done on the last tip: the card goes, and Edit home says "All tips seen"; Remove and Add a card again starts over', async () => {
         mem.store.set(homeTipsStoreKey(who.identity.publicKey), JSON.stringify({ v: 1, seen: LOCAL_IDS.filter(id => id !== 'guide'), current: 'guide', currentShownOn: localDay(), dismissedAt: null }));
         await render();
         const done = document.querySelector('[data-testid="home-tip-next"]') as HTMLElement;
@@ -1427,11 +1427,12 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         expect(cards()).not.toContain('tips');
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
         expect(document.querySelector('[data-testid="edit-home-tips"]')?.textContent).toContain('All tips seen');
-        const sw = () => document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement;
-        expect(sw().getAttribute('aria-checked')).toBe('true');
-        await act(async () => { sw().click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-menu"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Remove Tips from Home')!.click(); });
         await settle();
-        await act(async () => { sw().click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-add"]') as HTMLElement).click(); });
+        await settle(2);
+        await act(async () => { byLabel('Add Tips to Home')!.click(); });
         await settle();
         expect(cards()).toContain('tips');
         expect(tipText()).toBe(text('what-this-is'));
@@ -1449,7 +1450,7 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         expect(JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!).hidden).toEqual(['tips']);
         const post = node.requests.find(r => r.method === 'POST')!;
         expect(JSON.parse(post.body).preferences['home.layout'].hidden).toEqual(['tips']);
-        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Tips is hidden. Edit home brings it back.');
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Tips removed. Add a card brings it back.');
         await again();
         expect(cards()).not.toContain('tips');
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
@@ -1547,12 +1548,12 @@ describe('the Tips card: one tip at a time, and it ends', () => {
     }, 20_000);
 
     // Finding 6: the tip a restart draws is the record's, from that day, so it moves on the next day's landing.
-    it('Tips switched on again records tip 1 as shown today, so the next day\'s landing moves on from it', async () => {
+    it('Tips added again records tip 1 as shown today, so the next day\'s landing moves on from it', async () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-tips-dont-show"]') as HTMLElement).click(); });
         await settle();
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add Tips to Home')!.click(); });
         await settle();
         expect(tipText()).toBe(text('what-this-is'));
         expect(tipsRecord()).toMatchObject({ seen: [], current: 'what-this-is', currentShownOn: localDay(), dismissedAt: null });
@@ -1562,18 +1563,20 @@ describe('the Tips card: one tip at a time, and it ends', () => {
     });
 
     // Finding 2: a node older than `tips` keeps the layout without it, so the switch-off must hold through the record.
-    it('Edit home\'s switch off holds on the next landing, on a node that drops the unknown id', async () => {
+    it('Remove on Tips from Edit home is "Don\'t show tips again": it holds on the next landing', async () => {
         await render();
         expect(cards()).toContain('tips');
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-menu"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Remove Tips from Home')!.click(); });
         await settle();
         expect(cards()).not.toContain('tips');
         expect(tipsRecord().dismissedAt).toEqual(expect.any(String));
-        // What an old node keeps of the layout it was sent: `tips` dropped, the rest and the phone's own stamp as sent.
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Tips removed. Add a card brings it back.');
+        // The node keeps the list as sent.
         const sent = JSON.parse(node.requests.filter(r => r.method === 'POST').at(-1)!.body).preferences['home.layout'];
-        const strip = (l: string[]) => l.filter(id => id !== 'tips');
-        node.answer = { ...node.answer, layout: { ...sent, order: strip(sent.order ?? []), hidden: strip(sent.hidden ?? []) } };
+        expect(sent.cards.map((c: { id: string }) => c.id)).not.toContain('tips');
+        node.answer = { ...node.answer, layout: sent };
         await again();
         expect(cards()).not.toContain('tips');
     });
@@ -1588,7 +1591,7 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
         await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
         await settle();
-        expect(document.querySelector('[data-testid="edit-home-tips-switch"]')?.getAttribute('aria-checked')).toBe('true');
+        expect(document.querySelector('[data-testid="edit-home-tips"]')).not.toBeNull();
         expect(document.querySelector('[data-testid="edit-home-tips"]')?.textContent).not.toContain('Nothing to show now');
         expect(cards()).toContain('tips');
         expect(tipText()).toBe(text('what-this-is'));

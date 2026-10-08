@@ -921,7 +921,8 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         expect(within(card).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
         expect(within(card).getByTestId('home-tip-text')).toHaveTextContent(LOCAL[0].text);
         // Shown on landing is kept, with the local day it was first shown.
-        expect(record()).toMatchObject({ v: 1, seen: [], current: LOCAL[0].id, dismissedAt: null });
+        // Written just after the first draw: wait for it (a busy CI runner once read it before the write, #1696).
+        await waitFor(() => expect(record()).toMatchObject({ v: 1, seen: [], current: LOCAL[0].id, dismissedAt: null }));
         const next = within(card).getByRole('button', { name: 'Next tip' });
         next.focus();
         fireEvent.click(next);

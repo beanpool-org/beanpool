@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 112,
-  "hash": "1292ff1c8300a5f4a638fd357d37132ba24640a2f87799abb5075ef6e488189c",
+  "version": 113,
+  "hash": "f4559f85711f8a8414bb9fcd3f0bea8071066a4aaf88df79f76f42d21c808194",
   "sections": [
     {
       "id": "about",
@@ -919,6 +919,7 @@
             "**Find your community:** on the global community only. It shows the communities nearest you and lets you ask to join them (see \"Finding a community near you\"). On the phone it has **Communities near you**, **Start a community** and **Tell me when one starts here**. In the web app, each community is a link to its own page, and **Share my area** helps if it does not know where you are. For your first 30 days on the global community it stays at the top, and it cannot be hidden or moved. After that it is a card like any other.",
             "**First steps:** a short checklist. On a local community: post your first Offer, add a profile photo, pick a few things you like, and, once you have posted an Offer, where invites are on and you may invite, invite someone. On the phone the card goes when every line is done. In the web app it also stays for your first 14 days.",
             "**First steps on the global community:** post something free or for swap, and, if a community near you is listed, a suggestion to ask it to let you in (that line never keeps the card open). It can also say the limits on a new account, such as how many posts and new chats you can make a day at first. On the phone it goes when the post is done and the limits are over. In the web app it stays for your first 14 days.",
+            "**Tips:** one short tip at a time about how BeanPool works, for members. Tap **Next** for the next one, or **Read more** to open the page of this guide it comes from. A new tip also shows on your first visit of a new day. The card goes by itself once you have seen every tip, or at once when you tap **Don't show tips again**. Turning it back on in **Edit home** starts the tips again from the first one.",
             "**What are you into?:** lets you star categories you like. Members only. It shows when you have no categories starred yet, or when you tap **Tune** on the Market card, and it stays on screen while you pick.",
             "**Your deals:** shows your open deals and deals waiting on you. Not on the global community.",
             "**Your enterprise:** shows requests waiting to be approved for enterprises you keep. Not on the global community.",

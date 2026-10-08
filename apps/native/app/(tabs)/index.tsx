@@ -349,7 +349,7 @@ export default function HomeScreen() {
             // The account's list asks for cards this read didn't (a first landing on this phone, or another device's edit):
             // one more read for them, never more (a `layout` read doesn't ask again).
             const wanted = cardsToAsk(pick.layout, askPinned(answered, Date.now()));
-            if (why !== 'layout' && wanted.some(c => !asked.includes(c))) void refreshRef.current('layout');
+            if (member && why !== 'layout' && wanted.some(c => !asked.includes(c))) void refreshRef.current('layout');
             if (pick.push && pick.layout) void pushLayout(pick.layout, whose);
             else if (pick.layout && !answered.layoutV1) {
                 // A version-1 copy is drawn and never kept as the phone's: it is not written until the member edits (§2.6),

@@ -1153,6 +1153,31 @@ function nodeV2(full: HomeAnswer, start: ReturnType<typeof v2> | null) {
     });
     return { account: () => account };
 }
+/**
+ * A node that keeps what a real one keeps (review of #1701): the newer version-2 list, or any row it starts with (an
+ * empty version-1 one), answered raw; it builds the cards asked for, or with no `cards=` every card it has. Its log is
+ * the requests in order.
+ */
+function nodeKeeping(full: HomeAnswer, start: unknown) {
+    let account: unknown = start;
+    const log: string[] = [];
+    const at = (x: unknown) => (x && typeof x === 'object' && typeof (x as { updatedAt?: unknown }).updatedAt === 'string' ? Date.parse((x as { updatedAt: string }).updatedAt) : -Infinity);
+    vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
+        const l = prefs['home.layout'] as unknown as ReturnType<typeof v2> | undefined;
+        log.push('POST');
+        if (l && at(l) >= at(account)) account = l;
+        return { success: true, 'home.layout': account } as never;
+    });
+    vi.mocked(api.getHome).mockImplementation(async (params = {}) => {
+        log.push(params.cards ? `GET ${params.cards.join(',')}` : 'GET');
+        const asked = params.cards ? [...params.cards] : Object.keys(full.cards);
+        return fresh({ ...full, layout: account as never, cards: Object.fromEntries(Object.entries(full.cards).filter(([id]) => asked.includes(id))) });
+    });
+    return { log, account: () => account as ReturnType<typeof v2> };
+}
+const pause = async (ms = 50) => { await act(async () => { await new Promise(r => setTimeout(r, ms)); }); };
+/** An empty version-1 row: "Your way back in" put away on the web app before the frame, or its Reset. */
+const EMPTY_V1 = { v: 1, order: [], hidden: [], dismissed: { safety: '2026-09-01T00:00:00.000Z' }, updatedAt: '2026-09-01T00:00:00.000Z' };
 const newcomerTypes = () => defaultCards('local').map(c => c.type);
 const savedLayouts = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c => c[1]['home.layout'] as unknown as ReturnType<typeof v2>).filter(Boolean);
 const lastCall = (m: { mock: { invocationCallOrder: number[] } }) => m.mock.invocationCallOrder.at(-1) ?? 0;
@@ -1285,5 +1310,60 @@ describe('the card frame (F3)', () => {
         expect(asked).not.toContain('beans');
         expect(asked).not.toContain('deals');
         expect(cardIds()).not.toContain('beans');
+    });
+});
+
+describe('an empty version-1 account list, no copy here: every edit stands once the first is saved (review of #1701, finding 1)', () => {
+    const posts = (log: string[]) => log.filter(l => l === 'POST').length;
+
+    it('R1: Add Your Beans, then Remove Coming up: the second edit is sent and stays', async () => {
+        const node = nodeKeeping(answer(), EMPTY_V1);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-events');
+        fireEvent.click(screen.getByTestId('home-add-open'));
+        fireEvent.click(screen.getByTestId('home-add-beans'));
+        await waitFor(() => expect(posts(node.log)).toBe(1));
+        await pause();
+        await waitFor(() => expect(cardIds()).toContain('beans'));
+        fireEvent.click(within(screen.getByTestId('home-card-events')).getByTestId('home-card-menu'));
+        fireEvent.click(screen.getByTestId('home-menu-remove'));
+        await pause(100);
+        expect(posts(node.log)).toBe(2);
+        expect(cardIds()).not.toContain('events');
+        expect(node.account().cards.map(c => c.id)).not.toContain('events');
+        expect(node.account().cards.map(c => c.id)).toContain('beans');
+    });
+
+    it('R1b: Remove Coming up, then add a saved search: the search and its words stay', async () => {
+        const node = nodeKeeping(answer(), EMPTY_V1);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-events');
+        fireEvent.click(within(screen.getByTestId('home-card-events')).getByTestId('home-card-menu'));
+        fireEvent.click(screen.getByTestId('home-menu-remove'));
+        await waitFor(() => expect(posts(node.log)).toBe(1));
+        await pause();
+        fireEvent.click(screen.getByTestId('home-add-open'));
+        fireEvent.click(screen.getByTestId('home-add-search'));
+        fireEvent.change(screen.getByTestId('home-settings-q'), { target: { value: 'eggs' } });
+        fireEvent.click(screen.getByTestId('home-settings-submit'));
+        await pause(100);
+        expect(posts(node.log)).toBe(2);
+        expect(cardIds().some(id => id.startsWith('search-'))).toBe(true);
+        expect(node.account().cards.find(c => c.type === 'search')?.settings).toMatchObject({ q: 'eggs' });
+    });
+
+    it('R1c: the fewer-cards line shows; Your Beans, The Pulse and Your groups added one after another all stay', async () => {
+        const node = nodeKeeping(answer({}, { groups: { items: [{ id: 'g1', name: 'Garden', unread: 1, muted: false }] } } as never), EMPTY_V1);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-events');
+        expect(screen.getByTestId('home-fewer')).toBeInTheDocument();
+        for (const t of ['beans', 'pulse', 'groups']) {
+            fireEvent.click(screen.getByTestId('home-add-open'));
+            fireEvent.click(screen.getByTestId(`home-add-${t}`));
+            await pause(80);
+        }
+        for (const t of ['beans', 'pulse', 'groups']) expect(cardIds()).toContain(t);
+        expect(posts(node.log)).toBe(3);
+        expect(node.account().cards.map(c => c.type)).toEqual(expect.arrayContaining(['beans', 'pulse', 'groups']));
     });
 });

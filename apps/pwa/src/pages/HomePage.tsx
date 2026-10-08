@@ -273,6 +273,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 if (!mounted.current || seq !== layoutSeq.current || !holds(epoch)) return;
                 unsavedRef.current = false;
                 refusedLanding.current = false;
+                // On the account now: the list is the member's, no longer an edit on an unknown one (the phone's
+                // clearPhoneOnly; review of #1701, finding 1: the next edit was otherwise thrown away unsent).
+                overRef.current = undefined;
                 setNotOnAccount(false);
                 // What the node kept: this layout, or a newer one saved from another device (a phone's, another tab's).
                 const kept = readLayout(r['home.layout']);

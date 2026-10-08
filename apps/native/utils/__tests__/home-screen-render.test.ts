@@ -1438,7 +1438,7 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         expect(tipText()).toBe(text('what-this-is'));
     });
 
-    it('Don\'t show tips again: the card goes, the record and the layout say so, the next landing has none; Edit home brings it back from tip 1', async () => {
+    it('Don\'t show tips again: the card goes, the record and the layout say so, the next landing has none; Add a card brings it back from tip 1', async () => {
         await render();
         const dont = document.querySelector('[data-testid="home-tips-dont-show"]') as HTMLElement;
         expect(dont.textContent).toBe("Don't show tips again");
@@ -1447,16 +1447,15 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         await settle();
         expect(cards()).not.toContain('tips');
         expect(tipsRecord().dismissedAt).toEqual(expect.any(String));
-        expect(JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!).hidden).toEqual(['tips']);
+        const ids = (l: { cards: { id: string }[] }) => l.cards.map(c => c.id);
+        expect(ids(JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!))).not.toContain('tips');
         const post = node.requests.find(r => r.method === 'POST')!;
-        expect(JSON.parse(post.body).preferences['home.layout'].hidden).toEqual(['tips']);
+        expect(ids(JSON.parse(post.body).preferences['home.layout'])).not.toContain('tips');
         expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Tips removed. Add a card brings it back.');
         await again();
         expect(cards()).not.toContain('tips');
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        const sw = document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement;
-        expect(sw.getAttribute('aria-checked')).toBe('false');
-        await act(async () => { sw.click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add Tips to Home')!.click(); });
         await settle();
         expect(cards()).toContain('tips');
         expect(tipText()).toBe(text('what-this-is'));

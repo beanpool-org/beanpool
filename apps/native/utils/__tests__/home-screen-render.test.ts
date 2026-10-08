@@ -129,7 +129,9 @@ import { draftIdentity, wipeIdentityScopedStorage } from '../identity';
 import { rememberKnock } from '../knock';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
-import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey } from '../storage-keys';
+import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
+import { HOME_TIPS, localDay } from '@beanpool/core';
+import { AccessibilityInfo } from 'react-native';
 import { decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
 import { commonsSectionFor } from '../commons-sections';
@@ -1277,5 +1279,117 @@ describe('a local community\'s Home is H2\'s, whatever the answer or the phone h
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
         expect(editRows()).not.toContain('find');
         expect(document.querySelector('[data-modal]')?.textContent).not.toContain('first 30 days');
+    });
+});
+
+// ── Tips (scratch/home/TIPS-DESIGN-fable.md §1, §6 item 3) ──────────────────────────────────────────────────────────
+
+describe('the Tips card: one tip at a time, and it ends', () => {
+    const tipText = () => document.querySelector('[data-testid="home-tip-text"]')?.textContent ?? null;
+    const tipsRecord = () => JSON.parse(mem.store.get(homeTipsStoreKey(who.identity.publicKey)) ?? 'null');
+    const text = (id: string) => HOME_TIPS.find(t => t.id === id)!.text;
+    const LOCAL_IDS = ['what-this-is', 'offer', 'beans', 'price', 'words', 'map', 'messages', 'deal', 'credit', 'levels', 'invites', 'groups', 'votes', 'private', 'guide'];
+    const again = async () => {
+        act(() => root?.unmount());
+        host?.remove();
+        await render();
+    };
+
+    it('a new member lands on the first tip, 1 of 15; Next draws the next one in place, announces it, and keeps focus on the same button', async () => {
+        await render();
+        expect(cards().slice(0, 3)).toEqual(['steps', 'tips', 'interests']);
+        expect(document.querySelector('[data-testid="home-card-tips"]')?.textContent).toContain('Tips · 1 of 15');
+        expect(tipText()).toBe(text('what-this-is'));
+        const next = document.querySelector('[data-testid="home-tip-next"]') as HTMLElement;
+        expect(next.getAttribute('aria-label')).toBe('Next tip');
+        const page = getBundledGuide().guides.find(g => g.slug === 'how-it-works')!.title;
+        expect(document.querySelector('[data-testid="home-tip-read-more"]')?.getAttribute('aria-label')).toBe(`Read more in the guide: ${page}`);
+        await act(async () => { next.click(); });
+        await settle();
+        expect(tipText()).toBe(text('offer'));
+        expect(document.querySelector('[data-testid="home-card-tips"]')?.textContent).toContain('Tips · 2 of 15');
+        expect(document.querySelector('[data-testid="home-tip-next"]')).toBe(next);
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(text('offer'));
+        expect(tipsRecord()).toMatchObject({ seen: ['what-this-is'], current: 'offer', currentShownOn: localDay(), dismissedAt: null });
+        // Never asked of the node: the address, and so its tag, is what it was.
+        for (const r of homeReads()) expect(new URL(r.url).searchParams.get('cards') ?? '').not.toMatch(/\btips\b/);
+    });
+
+    it('Read more opens the tip\'s guide page', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-tip-read-more"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/guide/[slug]', params: { slug: 'how-it-works' } });
+    });
+
+    it('a landing on a later day advances once; the same day does not', async () => {
+        mem.store.set(homeTipsStoreKey(who.identity.publicKey), JSON.stringify({ v: 1, seen: [], current: 'what-this-is', currentShownOn: '2020-01-01', dismissedAt: null }));
+        await render();
+        expect(tipText()).toBe(text('offer'));
+        expect(tipsRecord()).toMatchObject({ seen: ['what-this-is'], current: 'offer', currentShownOn: localDay() });
+        await again();
+        expect(tipText()).toBe(text('offer'));
+        expect(tipsRecord().seen).toEqual(['what-this-is']);
+    });
+
+    it('Done on the last tip: the card goes, and Edit home says "All tips seen"; off and on again starts over', async () => {
+        mem.store.set(homeTipsStoreKey(who.identity.publicKey), JSON.stringify({ v: 1, seen: LOCAL_IDS.filter(id => id !== 'guide'), current: 'guide', currentShownOn: localDay(), dismissedAt: null }));
+        await render();
+        const done = document.querySelector('[data-testid="home-tip-next"]') as HTMLElement;
+        expect(done.textContent).toBe('Done');
+        expect(done.getAttribute('aria-label')).toBe('Done with tips. The card goes.');
+        expect(document.querySelector('[data-testid="home-card-tips"]')?.textContent).toContain('Tips · 15 of 15');
+        await act(async () => { done.click(); });
+        await settle();
+        expect(cards()).not.toContain('tips');
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="edit-home-tips"]')?.textContent).toContain('All tips seen');
+        const sw = () => document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement;
+        expect(sw().getAttribute('aria-checked')).toBe('true');
+        await act(async () => { sw().click(); });
+        await settle();
+        await act(async () => { sw().click(); });
+        await settle();
+        expect(cards()).toContain('tips');
+        expect(tipText()).toBe(text('what-this-is'));
+    });
+
+    it('Don\'t show tips again: the card goes, the record and the layout say so, the next landing has none; Edit home brings it back from tip 1', async () => {
+        await render();
+        const dont = document.querySelector('[data-testid="home-tips-dont-show"]') as HTMLElement;
+        expect(dont.textContent).toBe("Don't show tips again");
+        expect(dont.getAttribute('aria-label')).toBe("Don't show tips again. Edit home brings them back.");
+        await act(async () => { dont.click(); });
+        await settle();
+        expect(cards()).not.toContain('tips');
+        expect(tipsRecord().dismissedAt).toEqual(expect.any(String));
+        expect(JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!).hidden).toEqual(['tips']);
+        const post = node.requests.find(r => r.method === 'POST')!;
+        expect(JSON.parse(post.body).preferences['home.layout'].hidden).toEqual(['tips']);
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Tips is hidden. Edit home brings it back.');
+        await again();
+        expect(cards()).not.toContain('tips');
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        const sw = document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement;
+        expect(sw.getAttribute('aria-checked')).toBe('false');
+        await act(async () => { sw.click(); });
+        await settle();
+        expect(cards()).toContain('tips');
+        expect(tipText()).toBe(text('what-this-is'));
+        expect(tipsRecord()).toMatchObject({ seen: [], dismissedAt: null });
+    });
+
+    it('the record holds on a node that drops the unknown id: a dismissed record keeps the card away though the layout shows it', async () => {
+        mem.store.set(homeTipsStoreKey(who.identity.publicKey), JSON.stringify({ v: 1, seen: [], current: null, currentShownOn: null, dismissedAt: '2026-10-08T00:00:00.000Z' }));
+        await render();
+        expect(cards()).not.toContain('tips');
+    });
+
+    it('a visitor on the global node gets no tips; a suspended member still does', async () => {
+        node.answer = visitorAnswer();
+        await render();
+        expect(cards()).not.toContain('tips');
+        node.answer = { ...localMember(), me: { ...localMember().me!, standing: 'suspended' } };
+        await again();
+        expect(cards()).toContain('tips');
     });
 });

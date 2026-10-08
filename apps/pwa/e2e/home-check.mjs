@@ -3,28 +3,32 @@
  * text, against REAL nodes on this machine (e2e/home-node-harness.ts: the server's own GET /api/home, preferences route,
  * signature middleware and socket). The web app is built exactly as it ships and served by that node.
  *
- *   1. a member of a local community lands on Home: one GET /api/home, the cards the node says, no sideways scroll, every
- *      control at least 44 px tall, axe clean (light and dark); a tap on an interest reorders the Market card in place
- *      and saves on the account; "…" Hide gives focus to the next card and survives a reload (the account's layout);
- *      Edit home is a real dialog (axe clean, Escape gives focus back), and its Show brings a card hidden on an earlier
- *      visit back at once; with the node unreachable the kept answer is drawn and the page says so; Sign Out (Device
+ *   1. a member of a local community who never edited lands on Home (the card frame, scratch/home/CARD-FRAME-DESIGN-
+ *      fable.md): one GET /api/home, the newcomer's cards, no sideways scroll, every control at least 44 px tall, axe
+ *      clean (light and dark); a tap on an interest reorders the Market card in place and saves on the account; Add a
+ *      card is a real dialog (axe clean in both themes, and a saved search's settings sheet too), and Your Beans added
+ *      from it by keyboard goes first, under Needs you, read at once, kept on the account (another browser, a reload);
+ *      "…" Remove takes a card away with one save and gives focus to the nearest card left; Edit home is a real dialog
+ *      with no switches (axe clean, Escape gives focus back), and its Reset to defaults gives back the newcomer's list;
+ *      with the node unreachable the kept answer is drawn and the page says so; Sign Out (Device
  *      Only) leaves no cached Home in the browser; the Tips card after First steps on tip 1, Next by keyboard draws the
  *      next one in place, says it and keeps focus, and the tip's text grows with the reader's text size;
  *   2. the cost (§5.4): the landing's requests against what the Market reads when it is opened, and an idle Home tab's
  *      traffic over a window with one doorbell (a new listing) in it, by Chromium's own byte counts;
  *   3. a visitor in the global lobby: Home first, the Join card, then the public cards from one unsigned read, axe clean;
  *      "Share my area" reads Home again from a rough point; the Market one tap away;
- *   4. a new member of the global node: Find your community first and pinned, no money cards, who joined as a count;
+ *   4. a new member of the global node: Find your community first and pinned, no money cards on Home or in the picker,
+ *      who joined as a count;
  *      the Tips card after First steps, from the worldwide community's own list;
- *   5. two tabs of one browser (PR #1479's second review): a card shown in another browser is drawn at this one's next
+ *   5. two tabs of one browser (PR #1479's second review): a card added in another browser is drawn at this one's next
  *      landing, and in a tab left open at its next read, with one more read at once. With her Home open in other tabs,
  *      Sign Out (Device Only), the delete at the last community and Force Clear & Re-Sync in one: a tab that hears it
  *      drops her Home at once (axe clean); one that hears nothing finds out at its first write. Nothing of hers is put
- *      back on disk by a Hide (1), a read in flight (2), or, on global, the next read, which would have gone out
+ *      back on disk by a Remove (1), a read in flight (2), or, on global, the next read, which would have gone out
  *      unsigned (3); after Force Clear a read from before it is never kept, and the other tab reads afresh with no tag.
- *      The third review: after Force Clear a Hide in a deaf tab puts back nothing it read before; and a restore with 12
+ *      The third review: after Force Clear a Remove in a deaf tab puts back nothing it read before; and a restore with 12
  *      words in a welcome page that heard another tab's sign-out lands on that account's Home, its Market star saved;
- *   6. the delete at a community the web app was pointed at (two nodes, P and X): a Hide and a doorbell in tabs that
+ *   6. the delete at a community the web app was pointed at (two nodes, P and X): a Remove and a doorbell in tabs that
  *      heard nothing put nothing of her Home at X back under X, and file nothing of P's under X; both read P afresh.
  *
  * Fails on any sideways scroll, a control under 44 px, an axe violation, a document-policy violation, or a request to
@@ -33,7 +37,8 @@
  * Run: pnpm --filter @beanpool/pwa home-check   (HOME_IDLE_S sets the idle window, 150 by default)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global Buffer, URL, URLSearchParams, console, process, setTimeout, document, window, indexedDB, localStorage, axe, Event -- Node, and the page's side of evaluate() */
+/* global URL, URLSearchParams, console, process, setTimeout, document, window, indexedDB, localStorage, axe, Event, getComputedStyle -- Node, and the page's side of evaluate() */
+import { defaultHomeLayout } from '@beanpool/core';
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -421,14 +426,13 @@ async function localMember(browser, root) {
         check(homeReads.every((r) => r.signed), 'the read is signed by the member');
         printRequests('landing on Home', landing.filter((r) => r.path.startsWith('/api/')));
 
+        // She never edited: the newcomer's list (core's defaultCards), Needs you first and her community's card last.
         const ids = await cardIds(page);
-        check(JSON.stringify(ids) === JSON.stringify(['needs', 'steps', 'tips', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'community']),
-            `the cards, top down: ${ids.join(' · ')}`);
+        check(JSON.stringify(ids) === JSON.stringify(['needs', 'steps', 'tips', 'interests', 'market', 'events', 'community']),
+            `the newcomer's cards, top down: ${ids.join(' · ')}`);
         await tipsCardChecks(page, 'a member\'s Home');
         const needs = await page.getByTestId('home-card-needs').innerText();
         check(/Unread message from Kofi/.test(needs) && /Vote closes (tonight|today|tomorrow).*compost bay/i.test(needs), `Needs you says what waits, in words (${needs.replace(/\s+/g, ' ').slice(0, 120)})`);
-        check(/0 Beans · nothing to repay/.test(await page.getByTestId('home-card-beans').innerText()), 'Your Beans: her own, nothing to repay, how credit opens');
-        check(/Kofi|Mere/.test(await page.getByTestId('home-card-joined').innerText()), 'Who joined: faces and names (a local community)');
         await noSideScroll(page, 'a member\'s Home');
         await tabLabelsWhole(page, 'mobile-bottom-nav', 'the seven tabs');
         await touchTargets(page, '[data-testid="home-page"]', 'a member\'s Home');
@@ -444,39 +448,95 @@ async function localMember(browser, root) {
         await saved;
         check(true, 'the interests are saved on the account (POST /api/members/preferences)');
 
-        // "…" Hide, kept on the account: a reload in a browser with no copy still hides it.
-        await page.getByTestId('home-card-pulse').getByRole('button', { name: 'Card options for The Pulse' }).click();
-        await shot(page, '2-member-card-menu', { window: true });
-        const layoutSaved = page.waitForResponse((r) => r.url().endsWith('/api/members/preferences') && r.request().method() === 'POST' && /home\.layout/.test(r.request().postData() || ''));
-        await page.getByTestId('home-card-pulse').getByRole('button', { name: 'Hide' }).click();
-        await layoutSaved;
-        check(!(await page.getByTestId('home-card-pulse').count()), 'Hide takes the Pulse card away');
-        await wait(300);
-        const focusAfter = await page.evaluate(() => {
-            const el = document.activeElement;
-            return el === document.body || !el ? 'BODY' : `${el.closest('section[data-testid^="home-card-"]')?.getAttribute('data-testid')} ${el.getAttribute('aria-label') || el.textContent}`;
-        });
-        check(focusAfter === 'home-card-beans Card options for Your Beans', `focus goes to the next card's "…", never <body> (${focusAfter})`);
-        check(/The Pulse is hidden\. Edit home brings it back\./.test(await page.getByTestId('home-live').innerText()), 'and the page says, politely, where the card went');
+        // Add a card, by keyboard (CARD-FRAME §1.2, §5.2 item 17): the picker is a real dialog; Your Beans goes first,
+        // under Needs you; it is said, focus goes to its "…", and Home is read again at once with it in cards=.
+        const layoutPost = () => page.waitForResponse((r) => r.url().endsWith('/api/members/preferences') && r.request().method() === 'POST' && /home\.layout/.test(r.request().postData() || ''));
+        const addOpen = page.getByTestId('home-add-open');
+        await addOpen.scrollIntoViewIfNeeded();
+        await addOpen.focus();
+        await page.keyboard.press('Enter');
+        const picker = page.getByRole('dialog', { name: 'Add a card' });
+        await picker.waitFor();
+        check(await page.evaluate(() => !!document.activeElement?.closest('[data-testid="home-add-dialog"]')), 'Add a card opens a dialog with focus inside it');
+        await noSideScroll(page, 'Add a card');
+        await touchTargets(page, '[data-testid="home-add-dialog"]', 'Add a card');
+        await axeClean(page, '[data-testid="home-add-dialog"]', 'Add a card (light)');
+        await shot(page, '2-member-add-a-card', { window: true });
+        const listed = await picker.locator('[data-testid^="home-add-row-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('home-add-row-', '')));
+        check(['beans', 'pulse', 'decide', 'groups', 'joined', 'search'].every((t) => listed.includes(t)) && !listed.includes('find') && !(await picker.getByText(/locked/i).count()),
+            `the picker lists this node's cards, none locked (${listed.join(' · ')})`);
+        check(!!(await picker.getByTestId('home-add-on-market').count()), 'a card already on Home says "On Home", with no Add');
+        // A saved search's settings sheet (Add → its words → Add to Home), axe clean; Escape goes back to the picker.
+        await picker.getByTestId('home-add-search').click();
+        const sheet = page.getByRole('dialog', { name: 'A saved search' });
+        await sheet.waitFor();
+        await noSideScroll(page, 'a saved search\'s settings');
+        await touchTargets(page, '[data-testid="home-settings-dialog"]', 'a saved search\'s settings');
+        await axeClean(page, '[data-testid="home-settings-dialog"]', 'a saved search\'s settings (light)');
+        await shot(page, '2-member-search-settings', { window: true });
+        await page.keyboard.press('Escape');
+        await picker.waitFor();
+        const addBeans = picker.getByRole('button', { name: 'Add Your Beans to Home' });
+        await addBeans.focus();
+        const addAt = net.mark();
+        const added = layoutPost();
+        await page.keyboard.press('Enter');
+        await added;
+        await picker.waitFor({ state: 'detached' });
+        await page.getByTestId('home-card-beans').waitFor({ timeout: 8_000 }).catch(() => {});
+        await wait(1_000);
+        const afterAdd = await cardIds(page);
+        check(afterAdd[0] === 'needs' && afterAdd[1] === 'beans', `Your Beans goes first, under Needs you (${afterAdd.join(' · ')})`);
+        const addReads = net.since(addAt).filter((r) => r.path === '/api/home');
+        check(addReads.length === 1 && !!new URLSearchParams(addReads[0].search).get('cards')?.split(',').includes('beans'),
+            `and Home is read again at once, with it in cards= (${addReads.map((r) => `${r.status} ${Math.round((r.at - addAt) / 100) / 10} s`).join(', ') || 'no read'})`);
+        check(/0 Beans · nothing to repay/.test(await page.getByTestId('home-card-beans').innerText()), 'Your Beans: her own, nothing to repay, how credit opens');
+        check(await page.evaluate(() => document.activeElement?.closest('[data-testid="home-card-beans"]') && document.activeElement.getAttribute('aria-label') === 'Card options for Your Beans'),
+            'focus goes to the new card\'s "…"');
+        check((await page.getByTestId('home-live').innerText()).trim() === 'Your Beans added to Home', 'and the page says, politely, that it was added');
+        await noSideScroll(page, 'a member\'s Home with Your Beans');
+        await shot(page, '2-member-home-beans-added');
+
+        // Kept on the account: another browser of hers draws it in the same place.
         const fresh = await openContext(browser, node.origin, { identity: ana });
         await land(fresh.page, node.origin);
         await fresh.page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
-        check(!(await fresh.page.getByTestId('home-card-pulse').count()), 'another browser of hers: the Pulse stays hidden (the layout is on her account)');
+        check((await cardIds(fresh.page))[1] === 'beans', 'another browser of hers: Your Beans first there too (the layout is on her account)');
         check(!(await fresh.page.getByTestId('home-card-interests').count()), 'and her interests are set there, so the chips are not asked again');
         const freshRows = await marketRows(fresh.page);
         check(/Sourdough/.test(freshRows[0] ?? ''), 'and the node orders the Market card by them (food first)');
         await fresh.context.close();
 
-        // Leave and come back (a reload): the landing leaves the hidden Pulse out of `cards=`, so the node leaves it out.
+        // Leave and come back (a reload): Your Beans still first, read with it in cards=.
         const tr = net.mark();
         await page.reload({ waitUntil: 'load' });
         await scaleText(page);
         await page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
         await wait(1_000);
-        const back = net.since(tr).filter((r) => r.path === '/api/home').at(-1);
-        check(!!back && !new URLSearchParams(back.search).get('cards')?.split(',').includes('pulse'), `coming back, Home is read without the hidden Pulse (cards=${new URLSearchParams(back?.search ?? '').get('cards')})`);
+        const back = net.since(tr).filter((r) => r.path === '/api/home');
+        check(back.length === 1 && !!new URLSearchParams(back[0].search).get('cards')?.split(',').includes('beans') && (await cardIds(page))[1] === 'beans',
+            `coming back, Your Beans is still first, read in one request with it in cards= (${back.map((r) => new URLSearchParams(r.search).get('cards')).join('; ') || 'no read'})`);
 
-        // Edit home: a real dialog.
+        // "…" Remove: the card goes with one save and no read; focus goes to the nearest card left, never <body>.
+        const removeAt = net.mark();
+        const removed = layoutPost();
+        await page.getByTestId('home-card-events').getByRole('button', { name: 'Card options for Coming up' }).click();
+        await shot(page, '2-member-card-menu', { window: true });
+        check(!(await page.getByTestId('home-card-events').getByRole('button', { name: 'Hide' }).count()), 'the "…" has no Hide: Remove');
+        await page.getByTestId('home-card-events').getByRole('button', { name: 'Remove Coming up from Home' }).click();
+        await removed;
+        await wait(1_000);
+        check(!(await page.getByTestId('home-card-events').count()), 'Remove takes Coming up away');
+        const removeReads = net.since(removeAt).filter((r) => r.path === '/api/home');
+        check(removeReads.length === 0, `with one save and no read (${removeReads.length} × GET /api/home)`);
+        const focusAfter = await page.evaluate(() => {
+            const el = document.activeElement;
+            return el === document.body || !el ? 'BODY' : `${el.closest('section[data-testid^="home-card-"]')?.getAttribute('data-testid')} ${el.getAttribute('data-testid')}`;
+        });
+        check(focusAfter === 'home-card-community home-edit-open', `focus goes to the nearest card left (the community card's Edit home), never <body> (${focusAfter})`);
+        check((await page.getByTestId('home-live').innerText()).trim() === 'Coming up removed. Add a card brings it back.', 'and the page says, politely, where the card went');
+
+        // Edit home: a real dialog, the cards on Home in her order, no switches and no Hidden list.
         const edit = page.getByTestId('home-edit-open');
         await edit.scrollIntoViewIfNeeded();
         await edit.focus();
@@ -495,19 +555,33 @@ async function localMember(browser, root) {
         await touchTargets(page, '[data-testid="home-edit-dialog"]', 'Edit home');
         await axeClean(page, '[data-testid="home-edit-dialog"]', 'Edit home (light)');
         await shot(page, '3-member-edit-home', { window: true });
+        const editRows = () => dialog.locator('[data-testid^="home-edit-row-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('home-edit-row-', '')));
+        const rows = await editRows();
+        check(rows[0] === 'beans' && !rows.includes('events') && !rows.includes('needs') && !rows.includes('community')
+            && !(await dialog.getByRole('switch').count()) && !(await dialog.getByText(/^Hidden$/).count()),
+            `Edit home lists the cards on Home in her order, Your Beans first, no switches, no Hidden list (${rows.join(' · ')})`);
         for (let i = 0; i < 40; i++) await page.keyboard.press('Tab');
         check(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]')), 'Tab keeps focus inside the dialog');
-        const shownAt = net.mark();
-        await dialog.getByRole('switch', { name: 'Show The Pulse' }).click();
+        // Reset to defaults: the newcomer's list again (core's defaultCards), saved, and Home read again with it.
+        const resetAt = net.mark();
+        const reset = layoutPost();
+        await dialog.getByTestId('home-edit-reset').click();
+        await reset;
+        await wait(1_500);
+        const newcomer = defaultHomeLayout().cards.map((c) => c.id);
+        const resetRows = await editRows();
+        check(JSON.stringify(resetRows) === JSON.stringify(newcomer.filter((id) => resetRows.includes(id))) && resetRows.length >= newcomer.length - 2
+            && ['steps', 'tips', 'market', 'events'].every((id) => resetRows.includes(id)) && !resetRows.includes('beans'),
+            `Reset to defaults: the newcomer's list (${resetRows.join(' · ')}; core: ${newcomer.join(' · ')})`);
+        const resetReads = net.since(resetAt).filter((r) => r.path === '/api/home');
+        check(resetReads.length === 1, `and Home is read again once (${resetReads.map((r) => `${r.status} cards=${new URLSearchParams(r.search).get('cards')}`).join('; ') || 'no read'})`);
         await page.keyboard.press('Escape');
         await dialog.waitFor({ state: 'detached' });
         check(await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'home-edit-open'), 'Escape closes it and gives focus back to Edit home');
-        // Shown on a visit whose answer was built without it: Home is read again with it, at once (not at the 120 s poll).
-        await page.getByTestId('home-card-pulse').waitFor({ timeout: 8_000 }).catch(() => {});
-        const showRead = net.since(shownAt).filter((r) => r.path === '/api/home');
-        const pulseBack = !!(await page.getByTestId('home-card-pulse').count());
-        check(pulseBack && showRead.length === 1 && new URLSearchParams(showRead[0].search).get('cards')?.split(',').includes('pulse'),
-            `Show brings the Pulse back at once: one read with it in cards= (${showRead.map((r) => `${r.status} ${Math.round((r.at - shownAt) / 100) / 10} s`).join(', ') || 'no read'}), the card ${pulseBack ? 'drawn' : 'missing'}`);
+        await page.getByTestId('home-card-events').waitFor({ timeout: 8_000 }).catch(() => {});
+        const resetIds = await cardIds(page);
+        check(JSON.stringify(resetIds.filter((id) => id !== 'interests')) === JSON.stringify(ids.filter((id) => id !== 'interests')),
+            `and Home draws the newcomer's cards she landed on (${resetIds.join(' · ')})`);
 
         // The Market's own reads when it is opened: what a Market landing makes beyond the shell's.
         const tm = net.mark();
@@ -590,7 +664,17 @@ async function localMember(browser, root) {
         await darkCtx.page.getByTestId('home-edit-open').click();
         await axeClean(darkCtx.page, '[data-testid="home-edit-dialog"]', 'Edit home (dark)');
         await shot(darkCtx.page, '5-member-edit-home-dark', { window: true });
+        // Edit home's ＋ Add a card opens the picker in its place; a saved search's settings from there.
+        await darkCtx.page.getByTestId('home-edit-add').click();
+        await darkCtx.page.getByTestId('home-add-dialog').waitFor();
+        await axeClean(darkCtx.page, '[data-testid="home-add-dialog"]', 'Add a card (dark)');
+        await shot(darkCtx.page, '5-member-add-a-card-dark', { window: true });
+        await darkCtx.page.getByTestId('home-add-search').click();
+        await darkCtx.page.getByTestId('home-settings-dialog').waitFor();
+        await axeClean(darkCtx.page, '[data-testid="home-settings-dialog"]', 'a saved search\'s settings (dark)');
         await darkCtx.page.keyboard.press('Escape');
+        await darkCtx.page.keyboard.press('Escape');
+        await darkCtx.page.getByTestId('home-add-dialog').waitFor({ state: 'detached' });
         await shot(darkCtx.page, '5-member-home-dark');
         await darkCtx.context.close();
     } finally {
@@ -604,7 +688,7 @@ async function localMember(browser, root) {
 
 /**
  * PR #1479's second review: a tab still on Home put the member's Home back on disk after Sign Out in another tab, by a
- * Hide there (1), a read in flight (2), and on global its next unsigned read (3, in globalNode). Every tab here is a page
+ * Remove there (1), a read in flight (2), and on global its next unsigned read (3, in globalNode). Every tab here is a page
  * of one browser, sharing its storage. A tab that hears drops her Home at once; a deaf one finds out before it writes.
  */
 async function twoTabs(browser, root) {
@@ -623,47 +707,47 @@ async function twoTabs(browser, root) {
     };
     try {
         // ── A card shown on another device: this browser's next landing draws it at once, and so does an open tab ──
-        console.log('  Ana hides the Pulse in this browser, shows it again in another, and comes back here:');
+        console.log('  Ana removes the Market card in this browser, adds it again in another, and comes back here:');
         await node.ask({ op: 'resetLimits' });
         const x = await openContext(browser, node.origin, { identity: ana, installDismissed: true });
         contexts.push(x);
         const x2 = await openTab(x.context, node.origin);
         for (const t of [x, x2]) await land(t.page, node.origin);
-        for (const t of [x, x2]) await t.page.getByTestId('home-card-pulse').waitFor({ timeout: 30_000 });
+        for (const t of [x, x2]) await t.page.getByTestId('home-card-market').waitFor({ timeout: 30_000 });
         const layoutPost = (page) => page.waitForResponse((r) => r.url().endsWith('/api/members/preferences') && r.request().method() === 'POST' && /home\.layout/.test(r.request().postData() || ''));
-        const hid = layoutPost(x.page);
-        await x.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Card options for The Pulse' }).click();
-        await x.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Hide' }).click();
-        await hid;
+        const marketGone = layoutPost(x.page);
+        await x.page.getByTestId('home-card-market').getByTestId('home-card-menu').click();
+        await x.page.getByTestId('home-card-market').getByTestId('home-menu-remove').click();
+        await marketGone;
         await ringHome(x2.page);
-        await x2.page.getByTestId('home-card-pulse').waitFor({ state: 'detached', timeout: 8_000 });
+        await x2.page.getByTestId('home-card-market').waitFor({ state: 'detached', timeout: 8_000 });
         const y = await openContext(browser, node.origin, { identity: ana, installDismissed: true });
         contexts.push(y);
         await land(y.page, node.origin);
         await y.page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
-        await y.page.getByTestId('home-edit-open').click();
+        await y.page.getByTestId('home-add-open').click();
         const shown = layoutPost(y.page);
-        await y.page.getByRole('dialog', { name: 'Edit home' }).getByRole('switch', { name: 'Show The Pulse' }).click();
+        await y.page.getByRole('dialog', { name: 'Add a card' }).getByTestId('home-add-market').click();
         await shown;
         await y.context.close();
-        const withPulse = (r) => !!new URLSearchParams(r.search).get('cards')?.split(',').includes('pulse');
-        const says = (reads, t) => reads.map((r) => `${r.status}${withPulse(r) ? ' with' : ' without'} pulse +${((r.at - t) / 1000).toFixed(1)} s`).join('; ') || 'no read';
-        // This browser lands again: its kept layout hides the Pulse, the account's newer one shows it.
+        const withMarket = (r) => !!new URLSearchParams(r.search).get('cards')?.split(',').includes('market');
+        const says = (reads, t) => reads.map((r) => `${r.status}${withMarket(r) ? ' with' : ' without'} market +${((r.at - t) / 1000).toFixed(1)} s`).join('; ') || 'no read';
+        // This browser lands again: its kept layout has no Market card, the account's newer one has it.
         const back = x.net.mark();
         await x.page.reload({ waitUntil: 'load' });
         await scaleText(x.page);
-        const drawn = await x.page.getByTestId('home-card-pulse').waitFor({ timeout: 10_000 }).then(() => Date.now() - back, () => null);
+        const drawn = await x.page.getByTestId('home-card-market').waitFor({ timeout: 10_000 }).then(() => Date.now() - back, () => null);
         await wait(1_000);
         const reads = x.net.since(back).filter((r) => r.path === '/api/home');
-        check(drawn !== null && reads.length === 2 && !withPulse(reads[0]) && withPulse(reads[1]),
-            `the next landing draws the Pulse shown in the other browser at once (${drawn === null ? 'not drawn in 10 s' : `drawn ${(drawn / 1000).toFixed(1)} s in`}; ${says(reads, back)})`);
+        check(drawn !== null && reads.length === 2 && !withMarket(reads[0]) && withMarket(reads[1]),
+            `the next landing draws the Market card added in the other browser at once (${drawn === null ? 'not drawn in 10 s' : `drawn ${(drawn / 1000).toFixed(1)} s in`}; ${says(reads, back)})`);
         // The other tab, still open: its next read brings the account's layout, and it reads again at once.
         const rung = Date.now();
         await ringHome(x2.page);
-        const drawn2 = await x2.page.getByTestId('home-card-pulse').waitFor({ timeout: 8_000 }).then(() => Date.now() - rung, () => null);
+        const drawn2 = await x2.page.getByTestId('home-card-market').waitFor({ timeout: 8_000 }).then(() => Date.now() - rung, () => null);
         await wait(1_000);
         const reads2 = x2.net.since(rung).filter((r) => r.path === '/api/home');
-        check(drawn2 !== null && reads2.length === 2 && withPulse(reads2[1]),
+        check(drawn2 !== null && reads2.length === 2 && withMarket(reads2[1]),
             `and a tab left open draws it on its next read, not two reads later (${drawn2 === null ? 'not drawn' : `drawn ${(drawn2 / 1000).toFixed(1)} s in`}; ${says(reads2, rung)})`);
         await x.context.close();
 
@@ -674,10 +758,10 @@ async function twoTabs(browser, root) {
         const a = await openContext(browser, node.origin, { identity: ana, installDismissed: true });
         contexts.push(a);
         const hears = await openTab(a.context, node.origin);
-        const deafHide = await openTab(a.context, node.origin, { deaf: true });
+        const deafRemove = await openTab(a.context, node.origin, { deaf: true });
         const deafRead = await openTab(a.context, node.origin, { deaf: true });
         const deafChip = await openTab(a.context, node.origin, { deaf: true });
-        const tabs = [a, hears, deafHide, deafRead, deafChip];
+        const tabs = [a, hears, deafRemove, deafRead, deafChip];
         for (const t of tabs) await land(t.page, node.origin);
         for (const t of tabs) await t.page.getByText('Unread message from Kofi').waitFor({ timeout: 30_000 });
         await wait(1_500);
@@ -699,18 +783,18 @@ async function twoTabs(browser, root) {
         await axeClean(hears.page, '[data-testid="home-page"]', 'the signed-out notice');
         await shot(hears.page, '9-signed-out-in-another-tab');
 
-        // (1) A tab that heard nothing still draws her Home: "…" → Hide there, as the reviewer did.
-        const stillDrawn = !!(await deafHide.page.getByText('Unread message from Kofi').count());
-        await deafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Card options for The Pulse' }).click();
-        await deafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Hide' }).click();
+        // (1) A tab that heard nothing still draws her Home: "…" → Remove there (the reviewer's Hide, before the card frame).
+        const stillDrawn = !!(await deafRemove.page.getByText('Unread message from Kofi').count());
+        await deafRemove.page.getByTestId('home-card-market').getByTestId('home-card-menu').click();
+        await deafRemove.page.getByTestId('home-card-market').getByTestId('home-menu-remove').click();
         // And a chip tap in another (her favourites and the unsaved mark, before).
         await deafChip.page.getByTestId('home-interest-food').click();
-        const found = await Promise.all([deafHide, deafChip].map((t) => t.page.getByTestId('home-signed-out').waitFor({ timeout: 3_000 }).then(() => true, () => false)));
-        check(stillDrawn && found.every(Boolean), `a tab that heard nothing finds out at its first write, a Hide or a chip tap, and drops her Home there too (${stillDrawn ? 'drawn until then' : 'not drawn'}; ${found.map((f) => (f ? 'dropped' : 'still drawn')).join(', ')})`);
+        const found = await Promise.all([deafRemove, deafChip].map((t) => t.page.getByTestId('home-signed-out').waitFor({ timeout: 3_000 }).then(() => true, () => false)));
+        check(stillDrawn && found.every(Boolean), `a tab that heard nothing finds out at its first write, a Remove or a chip tap, and drops her Home there too (${stillDrawn ? 'drawn until then' : 'not drawn'}; ${found.map((f) => (f ? 'dropped' : 'still drawn')).join(', ')})`);
         // Read from a tab that stays (the one she signed out in reloads), once anything the taps wrote has landed.
         await wait(1_500);
         const afterTaps = await leftOf(hears.page, ana.publicKey);
-        check(afterTaps.length === 0, `(1) that Hide and that chip tap put nothing of hers back (${afterTaps.join(', ') || 'nothing kept'})`);
+        check(afterTaps.length === 0, `(1) that Remove and that chip tap put nothing of hers back (${afterTaps.join(', ') || 'nothing kept'})`);
 
         // (2) The two reads held across the sign-out land now.
         const released = Date.now();
@@ -724,13 +808,13 @@ async function twoTabs(browser, root) {
         check(heldKept.length === 0, `(2) and nothing of those reads is kept (${heldKept.join(', ') || 'nothing kept'})`);
 
         // Nothing more is read as her, however Home is asked.
-        for (const t of [hears, deafHide, deafRead, deafChip]) {
+        for (const t of [hears, deafRemove, deafRead, deafChip]) {
             await ringHome(t.page);
             await t.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
         }
         await out.reloaded;
         await wait(4_000);
-        const readsAfter = [hears, deafHide, deafRead, deafChip].flatMap((t) => t.net.since(out.at).filter((r) => r.path === '/api/home'));
+        const readsAfter = [hears, deafRemove, deafRead, deafChip].flatMap((t) => t.net.since(out.at).filter((r) => r.path === '/api/home'));
         check(readsAfter.length === 0, `no tab reads Home as her after the sign-out (${readsAfter.length} × GET /api/home${readsAfter.length ? `, ${readsAfter.map((r) => (r.signed ? 'signed' : 'unsigned')).join(',')}` : ''})`);
         const left = await leftOf(a.page, ana.publicKey);
         check(left.length === 0, `Sign Out (Device Only) with her Home open in other tabs: nothing of hers is put back, ${((Date.now() - released) / 1000).toFixed(0)} s on (${left.join(', ') || 'nothing kept'})`);
@@ -746,7 +830,7 @@ async function twoTabs(browser, root) {
         const fDeaf = await openTab(f.context, node.origin, { deaf: true });
         // (PR #1479's third review) A deaf tab whose answers before the clear are marked, and always whole (asked without
         // the tag), so a copy of one kept after the clear can be told from a fresh read.
-        const fDeafHide = await openTab(f.context, node.origin, { deaf: true });
+        const fDeafRemove = await openTab(f.context, node.origin, { deaf: true });
         const markBefore = async (route) => {
             if (route.request().method() !== 'GET') return route.continue();
             const headers = { ...route.request().headers() };
@@ -755,11 +839,11 @@ async function twoTabs(browser, root) {
             if (response.status() !== 200) return route.fulfill({ response });
             return route.fulfill({ response, body: JSON.stringify({ ...(await response.json()), readBeforeTheClear: true }) });
         };
-        await fDeafHide.page.route('**/api/home*', markBefore);
-        // Its socket quiet too, so no doorbell finds the clear for it before its Hide does.
-        await fDeafHide.page.routeWebSocket(/\/ws/, () => { /* open, and silent */ });
-        for (const t of [f, fHears, fDeaf, fDeafHide]) await land(t.page, node.origin);
-        for (const t of [f, fHears, fDeaf, fDeafHide]) await t.page.getByText('Unread message from Kofi').waitFor({ timeout: 30_000 });
+        await fDeafRemove.page.route('**/api/home*', markBefore);
+        // Its socket quiet too, so no doorbell finds the clear for it before its Remove does.
+        await fDeafRemove.page.routeWebSocket(/\/ws/, () => { /* open, and silent */ });
+        for (const t of [f, fHears, fDeaf, fDeafRemove]) await land(t.page, node.origin);
+        for (const t of [f, fHears, fDeaf, fDeafRemove]) await t.page.getByText('Unread message from Kofi').waitFor({ timeout: 30_000 });
         await wait(1_500);
         const fHeld = await holdNextHomeRead(fDeaf.page);
         await ringHome(fDeaf.page);
@@ -783,25 +867,25 @@ async function twoTabs(browser, root) {
         const fKept = (await homeEntries(f.page)).filter((e) => e.key.endsWith(`|${ana.publicKey}`));
         check(fKept.length <= 1 && fKept.every((e) => !e.text.includes('heldFromBefore')),
             `a read from before the clear, landing after it, is never kept (${fKept.length} kept${fKept.some((e) => e.text.includes('heldFromBefore')) ? ', the held one among them' : ', each read afresh'})`);
-        // (1 of the third review) A deaf tab, still drawing the answer it read before the clear, is tapped: "…" → Hide. It
+        // (1 of the third review) A deaf tab, still drawing the answer it read before the clear, is tapped: "…" → Remove. It
         // learns of the clear inside that call, and nothing of what it held is kept or sent. Its read afresh is held, so
-        // a copy kept by the Hide can't be overwritten before it is looked for.
-        await fDeafHide.page.unroute('**/api/home*', markBefore);
-        const stillBefore = !!(await fDeafHide.page.getByText('Unread message from Kofi').count());
-        const fAfresh = await holdNextHomeRead(fDeafHide.page);
+        // a copy kept by the Remove can't be overwritten before it is looked for.
+        await fDeafRemove.page.unroute('**/api/home*', markBefore);
+        const stillBefore = !!(await fDeafRemove.page.getByText('Unread message from Kofi').count());
+        const fAfresh = await holdNextHomeRead(fDeafRemove.page);
         const tapped = Date.now();
-        await fDeafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Card options for The Pulse' }).click();
-        await fDeafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Hide' }).click();
+        await fDeafRemove.page.getByTestId('home-card-market').getByTestId('home-card-menu').click();
+        await fDeafRemove.page.getByTestId('home-card-market').getByTestId('home-menu-remove').click();
         const fAfreshStatus = await Promise.race([fAfresh.fetched, wait(5_000).then(() => null)]);
         await wait(1_500);
         const putBack = (await homeEntries(f.page)).filter((e) => e.text.includes('readBeforeTheClear')).map((e) => e.key.replace(/^.*\|/, '…|').slice(0, 14));
-        const fSaves = fDeafHide.net.since(tapped).filter((r) => r.path === '/api/members/preferences' && r.method === 'POST');
+        const fSaves = fDeafRemove.net.since(tapped).filter((r) => r.path === '/api/members/preferences' && r.method === 'POST');
         check(stillBefore && putBack.length === 0 && fSaves.length === 0,
-            `Force Clear, then a Hide in a tab that heard nothing: the answer it read before the clear is not put back, and its layout is not sent (${stillBefore ? 'drawn until the tap' : 'not drawn'}; ${putBack.length ? `put back under ${putBack.join(', ')}` : 'nothing put back'}; ${fSaves.length} layout save(s))`);
+            `Force Clear, then a Remove in a tab that heard nothing: the answer it read before the clear is not put back, and its layout is not sent (${stillBefore ? 'drawn until the tap' : 'not drawn'}; ${putBack.length ? `put back under ${putBack.join(', ')}` : 'nothing put back'}; ${fSaves.length} layout save(s))`);
         fAfresh.release();
-        await fDeafHide.page.getByTestId('home-card-community').waitFor({ timeout: 8_000 }).catch(() => {});
+        await fDeafRemove.page.getByTestId('home-card-community').waitFor({ timeout: 8_000 }).catch(() => {});
         await wait(1_500);
-        const fAfreshRead = fDeafHide.net.since(tapped).filter((r) => r.path === '/api/home');
+        const fAfreshRead = fDeafRemove.net.since(tapped).filter((r) => r.path === '/api/home');
         const fNow = (await homeEntries(f.page)).filter((e) => e.key.endsWith(`|${ana.publicKey}`));
         check(fAfreshStatus === 200 && fAfreshRead.length === 1 && fAfreshRead[0].signed && fNow.every((e) => !e.text.includes('readBeforeTheClear')),
             `and that tab reads her Home afresh, once, signed, and keeps only that (${fAfreshRead.map((r) => `${r.status} ${r.signed ? 'signed' : 'unsigned'}`).join('; ') || 'no read'})`);
@@ -897,7 +981,7 @@ async function twoTabs(browser, root) {
 /**
  * PR #1479's third review: the web app on community P's address, pointed at community X (Settings → Sovereign Node
  * Connection), her Home from X open in two tabs that hear nothing. She deletes her account at X in a third: the web app
- * goes back to P, and Home's kept answers go (lib/delete-here.ts leaveThisCommunity). Then a Hide in one deaf tab (2) and
+ * goes back to P, and Home's kept answers go (lib/delete-here.ts leaveThisCommunity). Then a Remove in one deaf tab (2) and
  * a doorbell in the other (3). Neither may put her Home at X back on disk under X, nor file P's answer under X's key;
  * both read her Home at P afresh. Two real nodes on this machine; X lets P's address call it (CORS), as an operator sets.
  */
@@ -914,12 +998,12 @@ async function pointedAtAnother(browser, root) {
         const keyAt = (node) => `${node.origin}|${ana.publicKey}`;
         ctx = await openContext(browser, p.origin, { identity: ana, installDismissed: true });
         await ctx.page.evaluate((url) => localStorage.setItem('bp_node_url', url), x.origin);
-        const deafHide = await openTab(ctx.context, p.origin, { deaf: true });
+        const deafRemove = await openTab(ctx.context, p.origin, { deaf: true });
         const deafBell = await openTab(ctx.context, p.origin, { deaf: true });
         // Their sockets are quiet too (a phone's asleep, a 2G line): no doorbell finds the delete for them first, so the
-        // Hide (2) and the read asked here (3) are each the first call to hear of it.
-        for (const t of [deafHide, deafBell]) await t.page.routeWebSocket(/\/ws/, () => { /* open, and silent */ });
-        const tabs = [ctx, deafHide, deafBell];
+        // Remove (2) and the read asked here (3) are each the first call to hear of it.
+        for (const t of [deafRemove, deafBell]) await t.page.routeWebSocket(/\/ws/, () => { /* open, and silent */ });
+        const tabs = [ctx, deafRemove, deafBell];
         for (const t of tabs) await land(t.page, p.origin);
         for (const t of tabs) await t.page.getByText('Kept only at X').first().waitFor({ timeout: 30_000 });
         await wait(1_500);
@@ -947,21 +1031,21 @@ async function pointedAtAnother(browser, root) {
         const describe = (entries) => entries.map((e) => (e.text.includes('Kept only at X') ? 'her Home at X' : "P's answer")).join(', ') || 'nothing';
         check((await leftAtX()).length === 0, `the delete takes her Home at X out of this browser (under X: ${describe(await leftAtX())})`);
 
-        // (2) A deaf tab, still drawing her Home at X: "…" → Hide.
-        const stillX = !!(await deafHide.page.getByText('Kept only at X').count());
+        // (2) A deaf tab, still drawing her Home at X: "…" → Remove.
+        const stillX = !!(await deafRemove.page.getByText('Kept only at X').count());
         const tapped = Date.now();
-        await deafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Card options for The Pulse' }).click();
-        await deafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Hide' }).click();
+        await deafRemove.page.getByTestId('home-card-market').getByTestId('home-card-menu').click();
+        await deafRemove.page.getByTestId('home-card-market').getByTestId('home-menu-remove').click();
         await wait(3_000);
-        const afterHide = await leftAtX();
-        const hideSaves = [p, x].flatMap((n) => deafHide.net.since(tapped, n.origin).filter((r) => r.path === '/api/members/preferences' && r.method === 'POST'));
-        check(stillX && afterHide.length === 0 && hideSaves.length === 0,
-            `(2) a Hide in a tab that heard nothing puts nothing back under X, and sends X's layout nowhere (${stillX ? 'her Home at X drawn until the tap' : 'not drawn'}; under X: ${describe(afterHide)}; ${hideSaves.length} layout save(s))`);
-        const hideReads = deafHide.net.since(tapped, p.origin).filter((r) => r.path === '/api/home' && r.method === 'GET');
-        const hideDrawsP = await deafHide.page.getByTestId('home-card-community').waitFor({ timeout: 8_000 }).then(() => true, () => false);
-        check(hideDrawsP && !(await deafHide.page.getByText('Kept only at X').count()) && hideReads.length === 1 && hideReads[0].signed && hideReads[0].tag === null
-            && deafHide.net.since(tapped, x.origin).length === 0,
-            `and that tab reads her Home at P afresh, once, signed, and asks X nothing (${hideReads.map((r) => `${r.status} ${r.signed ? 'signed' : 'unsigned'} ${r.tag ? 'tagged' : 'no tag'}`).join('; ') || 'no read at P'}; ${deafHide.net.since(tapped, x.origin).length} request(s) to X)`);
+        const afterRemove = await leftAtX();
+        const removeSaves = [p, x].flatMap((n) => deafRemove.net.since(tapped, n.origin).filter((r) => r.path === '/api/members/preferences' && r.method === 'POST'));
+        check(stillX && afterRemove.length === 0 && removeSaves.length === 0,
+            `(2) a Remove in a tab that heard nothing puts nothing back under X, and sends X's layout nowhere (${stillX ? 'her Home at X drawn until the tap' : 'not drawn'}; under X: ${describe(afterRemove)}; ${removeSaves.length} layout save(s))`);
+        const removeReads = deafRemove.net.since(tapped, p.origin).filter((r) => r.path === '/api/home' && r.method === 'GET');
+        const removeDrawsP = await deafRemove.page.getByTestId('home-card-community').waitFor({ timeout: 8_000 }).then(() => true, () => false);
+        check(removeDrawsP && !(await deafRemove.page.getByText('Kept only at X').count()) && removeReads.length === 1 && removeReads[0].signed && removeReads[0].tag === null
+            && deafRemove.net.since(tapped, x.origin).length === 0,
+            `and that tab reads her Home at P afresh, once, signed, and asks X nothing (${removeReads.map((r) => `${r.status} ${r.signed ? 'signed' : 'unsigned'} ${r.tag ? 'tagged' : 'no tag'}`).join('; ') || 'no read at P'}; ${deafRemove.net.since(tapped, x.origin).length} request(s) to X)`);
         // Whatever (2) left, (3) starts from nothing under X.
         await ctx.page.evaluate((k) => new Promise((resolve) => {
             const open = indexedDB.open('beanpool-home');
@@ -1026,7 +1110,8 @@ async function globalNode(browser, root) {
         const market = await page.getByTestId('home-card-market').innerText();
         check(/What people post/i.test(market) && /Free, a swap, or ask/.test(market) && !/Beans/.test(market), 'What people post: the terms with no Beans');
         check(/Place shown after you join/.test(await page.getByTestId('home-card-events').innerText()), 'an event\'s place held back until joining');
-        check(!(await page.getByTestId('home-card-menu').count()) && !(await page.getByTestId('home-edit-open').count()), 'nothing to tailor, nothing of a member\'s');
+        check(!(await page.getByTestId('home-card-menu').count()) && !(await page.getByTestId('home-edit-open').count()) && !(await page.getByTestId('home-add-open').count()),
+            'nothing to tailor (no "…", no Add a card, no Edit home), nothing of a member\'s');
         await noSideScroll(page, 'the visitors\' Home');
         await tabLabelsWhole(page, 'lobby-bottom-nav', 'the lobby\'s three tabs');
         await touchTargets(page, '[data-testid="home-page"]', 'the visitors\' Home');
@@ -1063,6 +1148,15 @@ async function globalNode(browser, root) {
         if (await joined.count()) check(!/Kofi|Mere/.test(await joined.innerText()), `Who joined is a count, no names (${(await joined.innerText()).replace(/\s+/g, ' ')})`);
         const steps = await m.page.getByTestId('home-card-steps').innerText();
         check(/Post something free or for swap/.test(steps) && /For your first \d+ days?: \d+ posts? and \d+ new chats? a day\./.test(steps), `First steps: the global lines and the limits said first (${steps.replace(/\s+/g, ' ').slice(0, 140)})`);
+        // The picker lists only what the worldwide community shows: no money cards, never one shown as locked, and not the pinned Find.
+        await m.page.getByTestId('home-add-open').click();
+        await m.page.getByTestId('home-add-dialog').waitFor();
+        const offered = await m.page.locator('[data-testid^="home-add-row-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('home-add-row-', '')));
+        check(offered.length > 0 && !offered.some((id) => ['beans', 'deals', 'enterprise', 'decide', 'invite', 'find'].includes(id)) && !(await m.page.getByTestId('home-add-dialog').getByText(/locked/i).count()),
+            `Add a card on global: no money cards, nothing locked, Find (pinned) not offered (${offered.join(' · ')})`);
+        await axeClean(m.page, '[data-testid="home-add-dialog"]', 'Add a card on global');
+        await m.page.keyboard.press('Escape');
+        await m.page.getByTestId('home-add-dialog').waitFor({ state: 'detached' });
         await noSideScroll(m.page, 'a global member\'s Home');
         await touchTargets(m.page, '[data-testid="home-page"]', 'a global member\'s Home');
         await axeClean(m.page, '[data-testid="home-page"]', 'a global member\'s Home');

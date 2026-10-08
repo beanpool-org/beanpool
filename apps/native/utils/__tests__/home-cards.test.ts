@@ -13,7 +13,7 @@ vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(), setItemAsync: vi.fn
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Array(n)) }));
 
 import {
-    HOME_CARD_IDS, HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canHideCard, cardOrder, cardsToAsk, cardsToDraw, communityLines,
+    HOME_CARD_IDS, HOME_CARD_NAMES, HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canHideCard, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
     invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
@@ -61,10 +61,10 @@ const find = (over: Partial<NonNullable<HomeCards['find']>> = {}): NonNullable<H
 });
 
 describe('the catalogue and the default order (§3.1)', () => {
-    it('17 cards in the design\'s order, the node\'s own list (apps/server engine/home-preferences.ts)', () => {
+    it('18 cards in the design\'s order (the 17 and Tips after First steps), the node\'s own list (apps/server engine/home-preferences.ts)', () => {
         expect(HOME_CARD_IDS).toEqual([
-            'needs', 'safety', 'find', 'steps', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined',
-            'pulse', 'beans', 'notices', 'invite', 'community',
+            'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups',
+            'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
         ]);
         expect(cardOrder(null)).toEqual([...HOME_CARD_IDS]);
     });
@@ -82,6 +82,18 @@ describe('the catalogue and the default order (§3.1)', () => {
 });
 
 describe('what each person sees, top down (§3.2)', () => {
+    it('Tips (TIPS-DESIGN §1): right after First steps for a new member with a tip to show; never a visitor, never asked of the node', () => {
+        const a = answer({ cards: { steps: steps(), events, community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 } } });
+        expect(cardsToDraw(a, null, ctx({ tipsUp: true }))).toEqual(['steps', 'tips', 'interests', 'events', 'community']);
+        expect(cardsToDraw(a, null, ctx({ tipsUp: false }))).toEqual(['steps', 'interests', 'events', 'community']);
+        expect(cardsToDraw({ ...a, me: null }, null, ctx({ tipsUp: true }))).not.toContain('tips');
+        expect(cardsToDraw({ ...a, me: { ...a.me!, standing: 'suspended' } }, null, ctx({ tipsUp: true }))).toContain('tips');
+        expect(cardsToDraw(a, layout({ hidden: ['tips'] }), ctx({ tipsUp: true }))).not.toContain('tips');
+        expect(cardsToAsk(null)).not.toContain('tips');
+        expect(cardsToAsk(layout({ hidden: ['tips'] }))).toEqual(cardsToAsk(null));
+        expect(HOME_CARD_NAMES.tips).toBe('Tips');
+    });
+
     it('(b) a new local member: steps · interests · events · market · joined · pulse · beans · community', () => {
         const a = answer({
             cards: {
@@ -533,7 +545,7 @@ describe('what a node can show, and where the Decide card leads (PR #1483 review
     it('the money cards and the invite card only where the node has them; Find your community only on the global node, First steps on both', () => {
         const on = (n: typeof LOCAL) => HOME_CARD_IDS.filter(id => cardOnNode(id, n));
         expect(on(LOCAL)).toEqual(HOME_CARD_IDS.filter(id => id !== 'find'));
-        expect(on(GLOBAL)).toEqual(['needs', 'safety', 'find', 'steps', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices', 'community']);
+        expect(on(GLOBAL)).toEqual(['needs', 'safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices', 'community']);
         // A node that says nothing has everything, as every node before the switches.
         expect(on({ profile: 'local', features: { invites: true } } as typeof LOCAL)).toEqual(on(LOCAL));
     });

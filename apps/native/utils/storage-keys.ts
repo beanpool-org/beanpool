@@ -191,3 +191,11 @@ export function homeRevealStoreKey(publicKey: string): string {
 export function homeHintStoreKey(publicKey: string): string {
     return `${HOME_STORE_PREFIX}hint:${publicKey.toLowerCase()}`;
 }
+
+/**
+ * The Tips card's record, per account (@beanpool/core home-tips.ts `TipsRecord`: the tips seen, the one on the card and
+ * the day it was first shown, the dismissal). Per account and phone, not per community, and it leaves with the account.
+ */
+export function homeTipsStoreKey(publicKey: string): string {
+    return `${HOME_STORE_PREFIX}tips:${publicKey.toLowerCase()}`;
+}

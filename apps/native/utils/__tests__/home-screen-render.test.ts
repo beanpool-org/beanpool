@@ -134,7 +134,7 @@ import { draftIdentity, wipeIdentityScopedStorage } from '../identity';
 import { rememberKnock } from '../knock';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
-import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
+import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, translateV1 } from '@beanpool/core';
 import { AccessibilityInfo, AppState, DeviceEventEmitter } from 'react-native';
 import { FEWER_CARDS_LINE, HOME_SAFETY_POLL_MS, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
@@ -298,6 +298,22 @@ const cards = () => Array.from(document.querySelectorAll('[data-testid^="home-ca
 const byLabel = (label: string) => document.querySelector(`[aria-label="${label.replace(/"/g, '\\"')}"]`) as HTMLElement | null;
 const homeReads = () => node.requests.filter(r => new URL(r.url).pathname === '/api/home');
 const marketOrder = () => Array.from(document.querySelectorAll('[data-testid^="home-market-p"]')).map(e => e.getAttribute('data-testid')!.replace('home-market-', ''));
+// What the phone sent since a point, the cards a layout save named, the phone-only mark (index.tsx `phoneOver`), a Remove
+// through a card's "…" menu, and whether Edit home says the cards aren't on the account yet (review of #1699, confirmation).
+const trace = (from = 0) => node.requests.slice(from).map(r => `${r.method} ${new URL(r.url).pathname} ${r.status}`);
+const sentIds = (r: { body: string }) => (JSON.parse(r.body).preferences['home.layout'].cards as { id: string }[]).map(c => c.id);
+const markKey = () => homeLayoutPhoneOnlyStoreKey(who.identity.publicKey, NODE);
+async function removeVia(id: string) {
+    await act(async () => { (document.querySelector(`[data-testid="home-card-${id}-menu"]`) as HTMLElement).click(); });
+    await act(async () => { (document.querySelector('[data-testid="home-menu-remove"]') as HTMLElement).click(); });
+    await settle();
+}
+async function notOnAccountShown() {
+    await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+    const shown = !!document.querySelector('[data-testid="edit-home-not-on-account"]');
+    await act(async () => { (document.querySelector('[data-testid="edit-home-done"]') as HTMLElement).click(); });
+    return shown;
+}
 
 describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
     it('one request for the whole screen, and the cards in the design\'s order', async () => {
@@ -1467,6 +1483,87 @@ describe('a standby from before the frame and a phone with no copy (review of #1
         const before = await primaryBack(iso(Date.now() - H));
         expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
         expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+    });
+
+    // Review of #1699 (confirmation), finding 1: an edit made while the phone's list is the phone's only sent it at once, so
+    // the newcomer's placeholder list overwrote the member's real one when the primary was back before the phone read.
+    function asOnTheStandby(when: string) {
+        node.answer = { ...localMember(), layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: when } as never };
+        node.refuse = 400;
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+    }
+
+    it('P1b: the primary is back and the first edit comes before the phone reads: the read decides, the account\'s list wins, and the newcomer\'s list is never sent', async () => {
+        const when = at();
+        asOnTheStandby(when);
+        await render();
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        node.refuse = 0;
+        node.answer = { ...localMember(), layout: real(when) as never };
+        const before = node.requests.length;
+        await removeVia('events');
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        // The edit's own read, then one more for the cards the account's list names that the edit's didn't.
+        expect(trace(before)).toEqual(['GET /api/home 200', 'GET /api/home 200']);
+        expect(new URL(homeReads().at(-1)!.url).searchParams.get('cards')!.split(',')).toEqual(expect.arrayContaining(['pulse', 'search-k2x7', 'market']));
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+        expect(phoneIds()).toEqual(['pulse', 'search-k2x7', 'market']);
+        expect(mem.store.has(markKey())).toBe(false);
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+    });
+
+    it('P1: an edit on the standby, then the primary is back and the member edits again before the phone reads: the account\'s list still wins', async () => {
+        const when = at();
+        await onTheStandby(when);
+        node.refuse = 0;
+        node.answer = { ...localMember(), layout: real(when) as never };
+        const before = node.requests.length;
+        await removeVia('market');
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+        expect(phoneIds()).toEqual(['pulse', 'search-k2x7', 'market']);
+        expect(mem.store.has(markKey())).toBe(false);
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+    });
+
+    it('on the standby an edit reads first, then goes once and is refused; a second edit sends nothing; the next landing sends it once more', async () => {
+        const when = at();
+        asOnTheStandby(when);
+        await render();
+        let before = node.requests.length;
+        await removeVia('events');
+        // Each read asks the edited list, so it carries no tag (another list): a 200.
+        expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 400']);
+        // The newcomer's list less Coming up (Your way back in and Notices are on it, drawn when they have something).
+        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'notices']);
+        expect(mem.store.get(markKey())).toBe(when);
+        before = node.requests.length;
+        await removeVia('market');
+        expect(trace(before)).toEqual(['GET /api/home 200']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'community']);
+        before = node.requests.length;
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(trace(before)).toEqual(['GET /api/home 304', 'POST /api/members/preferences 400']);
+        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'notices']);
+    });
+
+    it('an updated node that holds a real empty version-1 list gets the edit right after the read, and the mark is gone', async () => {
+        const when = at();
+        asOnTheStandby(when);
+        node.refuse = 0;
+        await render();
+        const before = node.requests.length;
+        await removeVia('events');
+        expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
+        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'notices']);
+        expect(mem.store.has(markKey())).toBe(false);
+        expect(phoneIds()).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'notices']);
     });
 });
 

@@ -313,7 +313,8 @@ export default function HomeScreen() {
 
     // ── Reading Home ──
     // `focus` is a return to Home (the tab, the app coming back, another account): the only read that moves the Tips card.
-    // `again` is a read while Home stays in front after the member's own step there (a notice opened, a poll or event made).
+    // `again` is a read while Home stays in front after the member's own step there (a notice opened, a poll or event made,
+    // an edit made while the phone's list is the phone's only).
     const refresh = useCallback(async (why: 'focus' | 'pull' | 'bell' | 'poll' | 'layout' | 'again') => {
         const id = identityRef.current;
         if (!id) return;
@@ -503,6 +504,13 @@ export default function HomeScreen() {
         layoutRef.current = next;
         setLayout(next);
         void writePhoneLayout(id.publicKey, url, next, whose);
+        if (phoneOver.current !== null) {
+            // The phone's only: never sent by itself, as the account's real list may be back (the primary after a standby).
+            // A read decides: it reads first, then sends the edit only if it still stands (review of #1699 confirmation,
+            // finding 1). An `again` read, so the account's list, if it wins, gets one more read for the cards it names.
+            void refreshRef.current('again');
+            return;
+        }
         const saving = pushLayout(next, whose);
         const pins = askPinned(answered, Date.now());
         const asksMore = cardsToAsk(next, pins, answered).some(c => !cardsToAsk(before, pins, answered).includes(c));

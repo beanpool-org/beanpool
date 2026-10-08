@@ -15,9 +15,10 @@
  *   them and writes nothing back; a clear that keeps the account (Force Clear, leaving a community) is read afresh. A
  *   tab that missed the news finds it at the start of its next read or write, and that call stops there: what the page
  *   held went with the news, so nothing of it is kept or sent (PR #1479's review, round 3).
- * - **Tailoring** (§4): "…" on a card (Hide · Move up · Move down) and Edit home (components/HomeEditDialog.tsx); the
- *   layout is saved on the account (`home.layout`, H1) with this browser's copy, last write wins. The rules are
- *   lib/home-cards.ts.
+ * - **The card frame** (CARD-FRAME §1–§2): "…" on a card (Settings… · Move up · Move down · Remove), Add a card
+ *   (components/AddCardDialog.tsx) and Edit home (components/EditHomeDialog.tsx) on the community card; the version-2
+ *   list is saved on the account (`home.layout`) with this browser's copy. Which copy stands, what is asked and every edit
+ *   are lib/home-layout.ts, the phone's rules (apps/native/utils/home-cards.ts).
  * - **Interests** (§4.3): the chips save on the account and in this browser's Market (`bp_fav_categories`); a tap reorders
  *   the Market card in place, the same second.
  * - **No dark patterns** (§6.3): real numbers or nothing, amber (never red) only for what waits on the member, nothing

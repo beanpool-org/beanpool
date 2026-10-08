@@ -3,8 +3,7 @@
  * cards on Home in the member's order, each `name (+ "Nothing to show now" / "All tips seen") ↑ ↓ …`, then Reset to
  * defaults. No switches and no Hidden list: the switch model is version 1's, and it cannot say "a second saved search".
  * A row's "…" has Settings… (a type that has them) and Remove. Nothing dragged, nothing typed.
- *
- * Replaces components/HomeEditDialog.tsx once pages/HomePage.tsx draws Home from the version-2 layout.
+
  *
  * A real dialog: `role="dialog"`, labelled by its heading, focus moved in and kept there (Tab and Shift+Tab go round),
  * Escape closes it, and focus goes back to what opened it. Every control is a button at least 44 px tall whose label

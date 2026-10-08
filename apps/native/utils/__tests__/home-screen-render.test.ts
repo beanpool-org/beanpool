@@ -1702,6 +1702,20 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
         expect(posts()).toHaveLength(0);
     });
 
+    it.each([
+        ['an empty version-1 list dated after the phone\'s copy (another device\'s newer edit, as the standby answers it)', { order: [], hidden: [] }, H],
+        ['a version-1 list that names cards, dated exactly like the phone\'s copy', { order: ['beans'], hidden: ['pulse'] }, 0],
+    ])('the account\'s version-1 copy never wins over the phone\'s version 2 on these: %s', async (_what, v1, later) => {
+        const at = Date.now() - 2 * H;
+        const mine = { v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: iso(at) };
+        mem.store.set(phoneKey(), JSON.stringify(mine));
+        node.answer = { ...localMember(), layout: { v: 1, ...v1, dismissed: {}, updatedAt: iso(at + later) } as never };
+        await render();
+        expect(cards()).toEqual(['pulse', 'market', 'community']);
+        expect(JSON.parse(mem.store.get(phoneKey())!)).toEqual(mine);
+        expect(posts()).toHaveLength(0);
+    });
+
     it('a card of a type this app doesn\'t know (a newer app\'s) is not drawn, and every save made here sends it byte for byte, Reset included', async () => {
         const garden = { id: 'garden-k2x7', type: 'garden', settings: { plot: 7, crops: ['kale', 'Beans'], note: 'ñ “quoted” 🌱', nested: { a: [1, 2.5, null, true] } } };
         const theirs = { v: 2, cards: [{ id: 'events', type: 'events' }, garden, { id: 'market', type: 'market' }, { id: 'pulse', type: 'pulse' }], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };

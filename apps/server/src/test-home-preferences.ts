@@ -24,6 +24,11 @@
  *     read: set when the list changes, left alone by a save of the same list, always later than the one before it (a
  *     clock behind a kept stamp included); interests kept before the stamp read as 1970; none kept, none served; never
  *     served to another reader; and an app can't send it.
+ *  9. The card frame's version 2 (scratch/home/CARD-FRAME-DESIGN-fable.md §2.3, §5.2 item 5): a layout with a saved search
+ *     and a card of a type no app knows yet (`zzz-future`) round-trips unchanged, settings byte for byte; 25 cards, a
+ *     600-byte `settings`, a 9 KB body, a repeated id and a bad date are refused whole with their sentence; a version-1
+ *     body is still kept after it, and last write still wins by `updatedAt` across the two versions; a stored version-2
+ *     value is read through core's tolerant reader (a malformed instance dropped, the rest kept).
  *
  * Run (read auth on, the default; the opt-out is a second registered run):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-home-preferences.ts
@@ -340,6 +345,70 @@ async function main(): Promise<void> {
         const bobReadsFay = await read(fay, bob);
         assert(bobReadsFay.status === 200 && !('interestsUpdatedAt' in bobReadsFay.body), `another member's read never carries it (${Object.keys(bobReadsFay.body ?? {}).sort().join(',')})`);
     }
+
+    // ── 9. The card frame: version 2, kept opaque ──
+    console.log('\n— 9. version 2 is kept by shape and bounds, never by type —');
+    const hal = makeMember('Hal');
+    const frame = {
+        v: 2,
+        cards: [
+            { id: 'steps', type: 'steps' },
+            { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any', km: 5 } },
+            { id: 'zzz-future-1', type: 'zzz-future', settings: { nested: { list: [1, 'two', null], ünï: 'cödé' }, on: true }, since: 'a field of its own' },
+            { id: 'market', type: 'market' },
+        ],
+        dismissed: { safety: '2026-10-02T15:40:00.000Z' },
+        updatedAt: iso(-50_000),
+    };
+    const frameSaved = await save(hal, { 'home.layout': frame });
+    assert(frameSaved.status === 200 && JSON.stringify(frameSaved.body?.['home.layout']) === JSON.stringify(frame),
+        `a version-2 layout with a saved search and an unknown type is kept unchanged, and the answer says so (${show(frameSaved)})`);
+    const frameRead = await read(hal);
+    assert(JSON.stringify(frameRead.body?.['home.layout']) === JSON.stringify(frame) && stored(hal.pk, 'home.layout') === JSON.stringify(frame),
+        `her own read and the stored row are the same bytes she sent (${JSON.stringify(frameRead.body?.['home.layout'])?.slice(0, 160)})`);
+    const cardsOf = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `t-${i}`, type: 't' }));
+    const frameRefusals: [string, unknown, RegExp][] = [
+        ['25 cards', { v: 2, cards: cardsOf(25) }, /24 cards/],
+        ['a settings of 600 bytes', { v: 2, cards: [{ id: 's', type: 'search', settings: { q: 'x'.repeat(600) } }] }, /512 bytes/],
+        ['a 9 KB layout', { v: 2, cards: cardsOf(20).map((c) => ({ ...c, settings: { q: 'x'.repeat(450) } })) }, /8 KB/],
+        ['a repeated id', { v: 2, cards: [{ id: 'steps', type: 'steps' }, { id: 'steps', type: 'steps' }] }, /own id/],
+        ['a bad date', { v: 2, cards: [], updatedAt: 'yesterday' }, /date/],
+        ['a dismissal that is no date', { v: 2, cards: [], dismissed: { safety: true } }, /date/],
+        ['an id of 33 characters', { v: 2, cards: [{ id: 'x'.repeat(33), type: 'x' }] }, /32 characters/],
+        ['settings that are a list', { v: 2, cards: [{ id: 's', type: 's', settings: ['eggs'] }] }, /v: 2/],
+        ['cards that are not a list', { v: 2, cards: { steps: true } }, /v: 2/],
+    ];
+    for (const [what, layout, words] of frameRefusals) {
+        const before = rowsOf(hal.pk);
+        const r = await save(hal, { 'home.layout': layout });
+        assert(r.status === 400 && words.test(r.body?.error ?? '') && rowsOf(hal.pk) === before,
+            `version 2, ${what}: refused whole with its sentence, nothing written (${show(r)})`);
+    }
+    const full24 = { v: 2, cards: cardsOf(24), updatedAt: iso(-45_000) };
+    const fits = await save(hal, { 'home.layout': full24 });
+    assert(fits.status === 200 && fits.body?.['home.layout']?.cards?.length === 24, `24 cards are fine (${fits.status}, ${fits.body?.['home.layout']?.cards?.length})`);
+    const olderFrame = await save(hal, { 'home.layout': { ...frame, updatedAt: iso(-100_000) } });
+    assert(olderFrame.status === 200 && olderFrame.body?.['home.layout']?.cards?.length === 24, `an older version-2 layout leaves the newer one kept (${olderFrame.body?.['home.layout']?.cards?.length} cards)`);
+    const v1After = { v: 1, order: ['beans', 'market'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(-40_000) };
+    const v1Saved = await save(hal, { 'home.layout': v1After });
+    assert(v1Saved.status === 200 && JSON.stringify(v1Saved.body?.['home.layout']) === JSON.stringify(v1After),
+        `a newer version-1 body is still kept after a version-2 one (${show(v1Saved)})`);
+    const olderV2 = await save(hal, { 'home.layout': { ...frame, updatedAt: iso(-90_000) } });
+    assert(JSON.stringify(olderV2.body?.['home.layout']) === JSON.stringify(v1After), 'and an older version-2 one leaves it: last write wins across versions');
+    const frameUnstamped = await save(hal, { 'home.layout': { v: 2, cards: [{ id: 'tips', type: 'tips' }] } });
+    const stampedAt = Date.parse(frameUnstamped.body?.['home.layout']?.updatedAt);
+    assert(frameUnstamped.status === 200 && Math.abs(stampedAt - Date.now()) < 5_000 && JSON.stringify(frameUnstamped.body?.['home.layout']?.dismissed) === '{}',
+        `a version-2 layout sent without a date is stamped now (${frameUnstamped.body?.['home.layout']?.updatedAt})`);
+    const frameAhead = await save(hal, { 'home.layout': { v: 2, cards: [], updatedAt: iso(3_600_000) } });
+    assert(Date.parse(frameAhead.body?.['home.layout']?.updatedAt) <= Date.now(), `and one dated in the future is held to the node's now (${frameAhead.body?.['home.layout']?.updatedAt})`);
+    const ida = makeMember('Ida');
+    db.prepare('INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)').run(ida.pk, 'home.layout', JSON.stringify({
+        v: 2, cards: [{ id: 'steps', type: 'steps' }, { id: 7 }, { id: 'zzz-1', type: 'zzz', settings: { a: 1 } }, { id: 'steps', type: 'steps' }],
+        updatedAt: '2026-10-01T00:00:00.000Z', extra: 'dropped',
+    }));
+    assert(JSON.stringify((await read(ida)).body?.['home.layout']) === JSON.stringify({
+        v: 2, cards: [{ id: 'steps', type: 'steps' }, { id: 'zzz-1', type: 'zzz', settings: { a: 1 } }], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z',
+    }), `a stored version-2 value is read tolerantly: the malformed and repeated instances dropped, the unknown type kept (${JSON.stringify((await read(ida)).body?.['home.layout'])})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

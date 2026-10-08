@@ -20,6 +20,7 @@
  */
 
 /** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
+import { cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 export const HOME_CARD_IDS = [
     'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups',
     'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
@@ -138,7 +139,8 @@ export interface HomeAnswer {
     features: HomeFeatures;
     welcome?: true;
     me: HomeMe | null;
-    layout: HomeLayout | null;
+    /** The account's layout as the node keeps it: version 2, or version 1 from a node before the card frame (lib/home-layout.ts). */
+    layout?: unknown;
     cards: HomeCards;
 }
 
@@ -334,6 +336,52 @@ export function shownCards(answer: HomeAnswer, layout: HomeLayout | null, opts: 
         }
     };
     return effectiveOrder(layout).filter(id => has(id) && (!hidden.has(id) || (id === 'interests' && !!opts.interestsOpen)));
+}
+
+/**
+ * The cards to draw on the card frame, top to bottom (CARD-FRAME §1): the member's list in their order
+ * (lib/home-layout.ts cardOrder: `needs` first, `community` last, a pinned `find` under `needs`), each only where this
+ * node shows it (`cardOnNode`) and when it has something to say (§3.1 "shown when"); a saved search always (its listings
+ * come with slice F4). A visitor (`welcome`) gets only the visitors' cards, in the catalogue's order. The interests card
+ * opened from the Market card's Tune shows under the Market card even when it isn't on the list. A card left out takes
+ * no space.
+ */
+/** An answer as lib/home-layout.ts reads it (profile, features, cards). */
+export const frameOf = (a: HomeAnswer) => ({
+    profile: String(a.profile), features: a.features as unknown as { [k: string]: unknown }, cards: a.cards as unknown as { [k: string]: unknown }, me: a.me,
+});
+
+export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts: ShownOptions = {}): HomeCardInstance[] {
+    const now = opts.now ?? Date.now();
+    if (answer.welcome || !answer.me) {
+        return HOME_CARD_IDS.filter(id => VISITOR_CARDS.includes(id) && !!answer.cards[id as keyof HomeCards]).map(id => ({ id, type: id }));
+    }
+    const me = answer.me;
+    const has = (type: string): boolean => {
+        switch (type) {
+            case 'interests': {
+                if (me.standing !== 'member') return false;
+                const set = opts.interests ?? me.interests;
+                return !!opts.interestsOpen || set.length === 0;
+            }
+            case 'invite':
+                return me.standing === 'member' && answer.features.invites !== false && me.firstOffer;
+            case 'steps':
+                return !!answer.cards.steps && stepsSaySomething(answer, opts.interests ?? me.interests, now);
+            case 'tips':
+                return !!opts.tipsUp;
+            case 'search':
+                return true;
+            default:
+                return !!answer.cards[type as keyof HomeCards];
+        }
+    };
+    const shown = cardOrder(layout, pinnedCards(answer, now)).filter(c => cardOnNode(c.type, frameOf(answer)) && has(c.type));
+    if (opts.interestsOpen && me.standing === 'member' && !shown.some(c => c.type === 'interests')) {
+        const market = shown.findIndex(c => c.type === 'market');
+        shown.splice(market >= 0 ? market + 1 : shown.length - 1, 0, { id: 'interests', type: 'interests' });
+    }
+    return shown;
 }
 
 // ── First steps ───────────────────────────────────────────────────────────────────────────────────────────────────────

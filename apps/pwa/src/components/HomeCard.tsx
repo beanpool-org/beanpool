@@ -26,7 +26,7 @@ interface MenuProps {
     onMove: (direction: 'up' | 'down') => void;
 }
 
-function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemove, onSettings, onMove }: MenuProps) {
+export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemove, onSettings, onMove }: MenuProps) {
     const said = label ?? title;
     const [open, setOpen] = useState(false);
     const button = useRef<HTMLButtonElement | null>(null);

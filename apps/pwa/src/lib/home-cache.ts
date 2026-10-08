@@ -14,7 +14,8 @@
  */
 import { getNodeApiUrl } from './api';
 import { accountEpoch, accountEpochHolds, endAccountEpoch, type AccountEpochEnd } from './account-epoch';
-import { isHomeCardId, normalizeLayout, type HomeAnswer, type HomeCardId, type HomeLayout } from './home-cards';
+import { type HomeAnswer } from './home-cards';
+import { readLayout, type HomeLayoutV2 } from './home-layout';
 
 const DB_NAME = 'beanpool-home';
 const STORE = 'answers';
@@ -25,13 +26,19 @@ export interface CachedHome {
      * The cards `answer` was built for (the `cards=` it was read with, or the node's own choice from the account's
      * layout): a card left out of it may have something to say, so showing it again needs a new read. Null: not known.
      */
-    asked?: HomeCardId[] | null;
+    asked?: string[] | null;
     /** The node's tag for `answer`: sent with the next read, which is a 304 while it is still the answer. */
     etag: string | null;
     /** The layout as this browser last had it: the node's, or a newer one of the member's not yet saved there. */
-    layout: HomeLayout | null;
+    layout: HomeLayoutV2 | null;
     /** Whether `layout` still has to be saved on the account. */
     layoutUnsaved: boolean;
+    /**
+     * Set while `layout` is an edit made on the newcomer's list drawn for an unknown (empty version-1) account list: this
+     * browser's only, never sent by itself, until a version-2 answer dated at or after this says what the account holds
+     * (lib/home-layout.ts pickLayout). Undefined: not marked.
+     */
+    localOnlyOver?: string;
     savedAt: number;
 }
 
@@ -87,9 +94,10 @@ export async function readCachedHome(key: string): Promise<CachedHome | null> {
                 resolve({
                     answer: v.answer as HomeAnswer,
                     etag: typeof v.etag === 'string' && v.etag.length <= 200 ? v.etag : null,
-                    layout: normalizeLayout(v.layout),
+                    layout: readLayout(v.layout),
                     layoutUnsaved: v.layoutUnsaved === true,
-                    asked: Array.isArray(v.asked) ? [...new Set(v.asked.filter(isHomeCardId))] : null,
+                    ...(typeof v.localOnlyOver === 'string' && v.localOnlyOver.length <= 40 ? { localOnlyOver: v.localOnlyOver } : {}),
+                    asked: Array.isArray(v.asked) ? [...new Set(v.asked.filter((x): x is string => typeof x === 'string' && x.length <= 64))].slice(0, 64) : null,
                     savedAt: Number(v.savedAt) || 0,
                 });
             };

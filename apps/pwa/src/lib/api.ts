@@ -18,7 +18,8 @@ import {
     type ChannelCategory,
 } from '@beanpool/core';
 import type { OwnDecisionVote } from './decision-own-vote';
-import { NOTICES_SEEN_EVENT, type HomeAnswer, type HomeLayout } from './home-cards';
+import { NOTICES_SEEN_EVENT, type HomeAnswer } from './home-cards';
+import type { HomeLayoutV2 } from './home-layout';
 import type { MyEvent } from './event-extras';
 export type { MyEvent };
 import type { GroupSuccessionData, GroupSuccessionProposal } from './group-succession';
@@ -2420,10 +2421,14 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
  * What the node kept of the Home keys a save named (H1): the layout that won, the interests it knew, and when those last
  * changed there (lib/home-interests.ts compares it with the stamp an unsaved change was made on).
  */
-export interface SavedHomePreferences { success: boolean; 'home.layout'?: HomeLayout; interests?: string[]; interestsUpdatedAt?: string }
+export interface SavedHomePreferences { success: boolean; 'home.layout'?: unknown; interests?: string[]; interestsUpdatedAt?: string }
 
-/** Save the member's Home layout and/or interests on their account (H1's two preference keys). */
-export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayout; interests?: string[] }): Promise<SavedHomePreferences> {
+/**
+ * Save the member's Home layout and/or interests on their account (H1's two preference keys). A node from before the
+ * card frame refuses a version-2 layout with a 400 (the error carries `status`): pages/HomePage.tsx keeps the cards in
+ * this browser then, and sends them again at the next landing.
+ */
+export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[] }): Promise<SavedHomePreferences> {
     return request<SavedHomePreferences>('POST', '/api/members/preferences', { publicKey, preferences });
 }
 

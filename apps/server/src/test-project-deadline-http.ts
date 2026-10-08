@@ -120,19 +120,20 @@ async function main(): Promise<void> {
 
     // ── 1. POST /api/enterprise (and /api/treasury): what both apps use ─────────────────────────────────
     console.log('── 1. POST /api/enterprise ──');
-    const someone = makeMember();
-    for (const { value, error } of refused) {
+    // Each attempt has its own name and member, so a value that slips through cannot hide the next one behind
+    // "That name is already taken" or the 3-a-day limit.
+    for (const [i, { value, error }] of refused.entries()) {
         const before = projectCount();
         const res = await signedPost('/api/enterprise', {
-            name: 'Bounded Garden', purpose: 'Raise a shed', lifecycle: 'bounded', goalAmount: 100, deadlineAt: value,
-        }, someone);
+            name: `Refused Garden ${i + 1}`, purpose: 'Raise a shed', lifecycle: 'bounded', goalAmount: 100, deadlineAt: value,
+        }, makeMember());
         assert(res.status === 400 && res.error === error,
             `/api/enterprise refuses deadlineAt ${show(value)} with a 400 and a plain sentence (got ${res.status} ${res.error ?? ''})`);
         assert(projectCount() === before, `...and stores no project for ${show(value)}`);
     }
     const viaTreasury = await signedPost('/api/treasury', {
-        name: 'Bounded Garden', lifecycle: 'bounded', goalAmount: 100, deadlineAt: 'garbage 1',
-    }, someone);
+        name: 'Treasury Garden', lifecycle: 'bounded', goalAmount: 100, deadlineAt: 'garbage 1',
+    }, makeMember());
     assert(viaTreasury.status === 400 && viaTreasury.error === PROJECT_DEADLINE_FORMAT_ERROR,
         `/api/treasury, the same handler, refuses it too (got ${viaTreasury.status} ${viaTreasury.error ?? ''})`);
     for (const [i, { value, stored, label }] of accepted.entries()) {
@@ -150,6 +151,7 @@ async function main(): Promise<void> {
 
     // ── 2. POST /api/crowdfund/projects ──────────────────────────────────────────────────────────────
     console.log('── 2. POST /api/crowdfund/projects ──');
+    const someone = makeMember();
     for (const { value, error } of refused) {
         const before = projectCount();
         const res = await signedPost('/api/crowdfund/projects', {

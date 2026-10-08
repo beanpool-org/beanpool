@@ -1225,7 +1225,7 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
     });
 
     it('a layout that hides it or moves it down (another phone, the web app) is overruled while it is pinned: drawn first, asked for, nothing to hide it with', async () => {
-        node.answer = { ...globalMember(3), layout: { v: 1, order: ['market', 'events', 'find'], hidden: ['find'], dismissed: {}, updatedAt: new Date().toISOString() } };
+        node.answer = { ...globalMember(3), layout: { v: 1, order: ['market', 'events', 'find'], hidden: ['find'], dismissed: {}, updatedAt: new Date().toISOString() } as never };
         await render();
         expect(cards()[0]).toBe('find');
         expect(cards().slice(0, 4)).toEqual(['find', 'market', 'events', 'steps']);

@@ -682,3 +682,32 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Category:** CLAIM FALSE (see #1497)
 - **Why not to re-file:** the panel reads one local-node endpoint and a failed load already falls back to the form. The spinner used
   `text-terra-400`, which the manager doesn't emit. Show a user-visible stall first.
+
+### 2026-10-08 — Bolt: ORDER BY + first row for the escrow cover photo (#1682) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (rule 11; see #745, #1617, #1665)
+- **Why not to re-file:** the cover is the same whenever an `order_num` 0 photo exists, and the `.find()` runs once per row over a
+  post's few photos. It also added a SQL sort. The #1655 off-listing rule was left intact. Measure a gain first.
+
+### 2026-10-08 — Palette: min-height and focus-visible on ProfileGateModal (#1684) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (see #1369, #1663, #1676)
+- **Why not to re-file:** `py-3` plus the 24 px line height already gives a 48 px button, and the ring classes were already there. The
+  global :focus-visible outline applies.
+
+### 2026-10-08 — Forge: try/catch on the post restore route (#1685) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (see #1502)
+- **Why not to re-file:** Koa already turns a throw into a 500. The catch put the raw `e.message` in the response with no server-side
+  log, against the generic-error convention. Show a reproduced failure first.
+
+### 2026-10-08 — Flow: loading spinner in PeopleSafetySection (#1686) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** CLAIM FALSE (see #1497, #1670)
+- **Why not to re-file:** the spinner replaced the whole list on every reload, including after a moderation action, so the list
+  flickered. A loading indicator belongs only where the user can't tell something is happening.
+
+### 2026-10-08 — Pixel: dynamic label and hint on the 2FA submit button (#1687) — CLOSED, HINT REPEATS THE TEXT
+- **Category:** DELIBERATE DECISION (see #1036, #1623, #1666)
+- **Why not to re-file:** the button keeps its label while busy and `accessibilityState` busy is already set; the hint restated the label.
+
+### 2026-10-08 — Watchman: BEANPOOL_SUITE_ENV_PASSWORD in test-admin-auth.ts (#1690) — CLOSED, NOT A REGRESSION
+- **Category:** CLAIM FALSE (rule 1 step 4; rule 11)
+- **Why not to re-file:** `scripts/server-suites.mjs` DEFAULT_ENV already sets it for every suite, and test-admin-auth is listed there.
+  The line only changed running the file raw, which is not how suites run.

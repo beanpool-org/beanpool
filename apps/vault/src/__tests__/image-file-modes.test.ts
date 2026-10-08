@@ -73,8 +73,11 @@ function stage(name: string, opts: { isPrivate: boolean; edit?: (sh: string) => 
     const file = opts.isPrivate ? 0o600 : 0o644;
     const pkg = `node-v${NODE_VERSION}-linux-x64`;
     mkdirSync(path.join(root, 'node', pkg, 'bin'), { recursive: true });
-    writeFileSync(path.join(root, 'node', pkg, 'bin', 'node'), '#!/bin/sh\n', { mode: program });
-    writeFileSync(path.join(root, 'node', pkg, 'LICENSE'), 'stand-in\n', { mode: file });
+    writeFileSync(path.join(root, 'node', pkg, 'bin', 'node'), '#!/bin/sh\n');
+    writeFileSync(path.join(root, 'node', pkg, 'LICENSE'), 'stand-in\n');
+    // Explicit: a write's mode is masked by this process's own umask (a suite run from a 077 shell).
+    chmodSync(path.join(root, 'node', pkg, 'bin', 'node'), program);
+    chmodSync(path.join(root, 'node', pkg, 'LICENSE'), file);
     const cache = path.join(root, 'cache');
     mkdirSync(path.join(cache, 'packages'), { recursive: true });
     const txz = path.join(cache, `${pkg}.tar.xz`);
@@ -102,7 +105,9 @@ function stage(name: string, opts: { isPrivate: boolean; edit?: (sh: string) => 
     if (opts.unreadable) {
         writeFileSync(path.join(extra, 'etc', 'left-private.conf'), 'x\n', { mode: 0o600 });
         mkdirSync(path.join(extra, 'srv', 'not-searchable'), { recursive: true });
-        writeFileSync(path.join(extra, 'srv', 'not-searchable', 'readable'), 'x\n', { mode: 0o644 });
+        writeFileSync(path.join(extra, 'srv', 'not-searchable', 'readable'), 'x\n');
+        chmodSync(path.join(extra, 'srv'), 0o755);
+        chmodSync(path.join(extra, 'srv', 'not-searchable', 'readable'), 0o644);
         chmodSync(path.join(extra, 'srv', 'not-searchable'), 0o744);
     }
 

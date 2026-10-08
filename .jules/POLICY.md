@@ -711,3 +711,30 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Category:** CLAIM FALSE (rule 1 step 4; rule 11)
 - **Why not to re-file:** `scripts/server-suites.mjs` DEFAULT_ENV already sets it for every suite, and test-admin-auth is listed there.
   The line only changed running the file raw, which is not how suites run.
+
+### 2026-10-09 — Bolt: Map lookups for TRUST_FILTERS and userGroups in the native Market (#1703) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (rule 11; see #745, #1682)
+- **Why not to re-file:** `TRUST_FILTERS` has about six entries and `userGroups` is a member's own few groups; `.find()` on them
+  costs nothing a member could notice. Re-file only with a measured hot loop or a list of hundreds.
+
+### 2026-10-09 — Expo: ErrorBoundary exports in the four auth callback screens (#1704) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (rule 11)
+- **Why not to re-file:** `apps/native/app/_layout.tsx` already exports `ErrorBoundary`, which covers every child route, including
+  `app/auth/*`. #801 (treasury detail) was one screen's case, not a pattern to repeat on every screen.
+
+### 2026-10-09 — Vault: drop x-admin-secret from the manager's registrar helpers (#1709) — CLOSED, WOULD BREAK THE REGISTRAR PANEL
+- **Category:** DELIBERATE DECISION
+- **Why not to re-file:** `getRegistrarPending`, `approveRegistrarClaim` and `revokeRegistrarClaim` call routes the registrar Worker
+  serves, and its `checkAdmin` (`apps/registrar/src/index.js:1087`) reads only `x-admin-secret`, never `X-Admin-Password`. Removing
+  the header makes the claims panel 401. The #834/#875 cleanups were for node routes. Check which server answers a route before
+  dropping a header from it.
+
+### 2026-10-09 — Forge: try/catch around the snapshot expiry interval (#1710) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (rule 11)
+- **Why not to re-file:** `expireSnapshots()` already wraps its prune in try/catch and returns 0
+  (`apps/server/src/services/snapshot-scheduler.ts:356-364`), so the interval callback cannot throw.
+
+### 2026-10-09 — Palette: min-h-[44px] on ProfileGateModal's buttons (#1711) — CLOSED, CLAIM FALSE (SECOND TIME)
+- **Category:** CLAIM FALSE (rule 11; the same modal as #1684 the day before)
+- **Why not to re-file:** `py-3` plus the 24 px line height already renders each button at about 48 px. Measure the rendered height
+  before filing a touch-target fix.

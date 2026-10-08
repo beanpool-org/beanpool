@@ -15,9 +15,43 @@
 import crypto from 'node:crypto';
 import { initStateEngine, getBalance, reconcileLedgerFromDb } from './state-engine.js';
 import { createCrowdfundProject, pledgeToProject, db } from './db/db.js';
+import { createCommonsRoutes } from './routes/commons.js';
+import type { RouteDeps } from './routes/types.js';
 
 let testsRun = 0;
 let testsPassed = 0;
+
+const deps: RouteDeps = {
+    checkAdminAuth: async () => false,
+    rateLimit: () => true,
+    clampLimit: (_v: unknown, def = 20) => def,
+    clampOffset: () => 0,
+    activeConnections: new Map(),
+    calculateAnalytics: () => ({}),
+    enforceReadAuth: false,
+};
+
+async function callRouter(
+    router: any,
+    method: string,
+    path: string,
+    opts: { actor?: string; body?: Record<string, unknown> } = {}
+): Promise<{ status: number; body: any }> {
+    const layer = (router as any).stack.find((l: any) =>
+        (l.path === path || l.regexp.test(path)) && l.methods.includes(method.toUpperCase())
+    );
+    if (!layer) throw new Error(`${method} ${path} is not mounted in router`);
+
+    const ctx: any = {
+        state: opts.actor ? { actor: opts.actor } : {},
+        requestBody: opts.body ?? {},
+        params: {},
+        status: 200,
+        body: undefined,
+    };
+    await layer.stack[layer.stack.length - 1](ctx, async () => {});
+    return { status: ctx.status, body: ctx.body };
+}
 function assert(cond: boolean, msg: string): void {
     testsRun++;
     if (cond) { testsPassed++; console.log(`✓ ${msg}`); }
@@ -58,6 +92,48 @@ async function run() {
 
     // Pledge only MOVES value (A −30 → escrow +30): the system-wide sum is unchanged.
     assert(Math.abs(sumBalances() - sumBefore) < 1e-9, 'total balance sum unchanged by the pledge (no value minted)');
+
+    console.log('\nTesting invalid deadlineAt handling on crowdfund project routes...');
+    const commonsRouter = createCommonsRoutes(deps);
+
+    const invalidProjectRes = await callRouter(commonsRouter, 'POST', '/api/crowdfund/projects', {
+        actor: A,
+        body: {
+            creatorPubkey: A,
+            title: 'Invalid Deadline Project',
+            goalAmount: 100,
+            deadlineAt: 'not-a-valid-date-string',
+        },
+    });
+    assert(invalidProjectRes.status === 400, 'POST /api/crowdfund/projects with invalid deadlineAt returns 400');
+    assert(invalidProjectRes.body?.error === 'Invalid deadlineAt date format', 'Error message is "Invalid deadlineAt date format"');
+
+    const validDeadline = new Date(Date.now() + 86400000).toISOString();
+    const validProjectRes = await callRouter(commonsRouter, 'POST', '/api/crowdfund/projects', {
+        actor: A,
+        body: {
+            creatorPubkey: A,
+            title: 'Valid Deadline Project',
+            goalAmount: 100,
+            deadlineAt: validDeadline,
+        },
+    });
+    assert(validProjectRes.status === 200, 'POST /api/crowdfund/projects with valid deadlineAt returns 200');
+    assert(validProjectRes.body?.success === true, 'Valid project created successfully');
+    const createdProjectId = validProjectRes.body?.project?.id;
+
+    const invalidUpdateRes = await callRouter(commonsRouter, 'POST', '/api/crowdfund/projects/update', {
+        actor: A,
+        body: {
+            id: createdProjectId,
+            creatorPubkey: A,
+            title: 'Valid Deadline Project Updated',
+            goalAmount: 100,
+            deadlineAt: 'bogus-date',
+        },
+    });
+    assert(invalidUpdateRes.status === 400, 'POST /api/crowdfund/projects/update with invalid deadlineAt returns 400');
+    assert(invalidUpdateRes.body?.error === 'Invalid deadlineAt date format', 'Update error message is "Invalid deadlineAt date format"');
 
     console.log(`\n${testsPassed}/${testsRun} checks passed.`);
     if (testsPassed !== testsRun) throw new Error(`${testsRun - testsPassed} check(s) failed`);

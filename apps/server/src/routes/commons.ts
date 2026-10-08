@@ -346,7 +346,13 @@ router.post('/api/crowdfund/projects', async (ctx) => {
 
     if (deadlineAt) {
         const maxDays = getThresholds().maxProjectExpiryDays;
-        const diffDays = (new Date(deadlineAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+        const deadlineMs = new Date(deadlineAt).getTime();
+        if (Number.isNaN(deadlineMs)) {
+            ctx.status = 400;
+            ctx.body = { error: 'Invalid deadlineAt date format' };
+            return;
+        }
+        const diffDays = (deadlineMs - Date.now()) / (1000 * 60 * 60 * 24);
         if (diffDays > maxDays) {
             ctx.status = 400;
             ctx.body = { error: `Project deadline cannot exceed ${maxDays} days` };
@@ -421,7 +427,13 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
 
     if (deadlineAt) {
         const maxDays = getThresholds().maxProjectExpiryDays;
-        const diffDays = (new Date(deadlineAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+        const deadlineMs = new Date(deadlineAt).getTime();
+        if (Number.isNaN(deadlineMs)) {
+            ctx.status = 400;
+            ctx.body = { error: 'Invalid deadlineAt date format' };
+            return;
+        }
+        const diffDays = (deadlineMs - Date.now()) / (1000 * 60 * 60 * 24);
         if (diffDays > maxDays) {
             ctx.status = 400;
             ctx.body = { error: `Project deadline cannot exceed ${maxDays} days` };

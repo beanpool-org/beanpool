@@ -14,6 +14,7 @@ import { HomePage } from './HomePage';
 import * as api from '../lib/api';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 import { clearHomeCache, homeCacheKey, readCachedHome, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
+import { readLayout } from '../lib/home-layout';
 import { clearAccountStorage } from '../lib/device-prefs';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
 import { epochEndsInAnotherTab, signOutInAnotherTab } from '../lib/another-tab';
@@ -63,7 +64,7 @@ let idb: MemoryIndexedDB;
 /** Kim's Home kept in this browser, for the community the web app talks to now (and, pointed elsewhere, for that one). */
 async function keepKimsHome(): Promise<string> {
     const key = homeCacheKey(identity.publicKey);
-    await writeCachedHome(key, { answer: KIMS_HOME, asked: null, etag: 'W/"home-kim"', layout: KIMS_HOME.layout, layoutUnsaved: false, savedAt: Date.now() });
+    await writeCachedHome(key, { answer: KIMS_HOME, asked: null, etag: 'W/"home-kim"', layout: readLayout(KIMS_HOME.layout), layoutUnsaved: false, savedAt: Date.now() });
     expect(await readCachedHome(key)).not.toBeNull();
     return key;
 }
@@ -258,7 +259,7 @@ describe('every write of a member\'s Home checks the account\'s epoch (round 2)'
     it('after Sign Out in another tab, a write of her Home from this one is dropped', async () => {
         const key = await keepKimsHome();
         await signOutInAnotherTab();
-        await writeCachedHome(key, { answer: KIMS_HOME, asked: null, etag: 'W/"home-kim"', layout: KIMS_HOME.layout, layoutUnsaved: false, savedAt: Date.now() });
+        await writeCachedHome(key, { answer: KIMS_HOME, asked: null, etag: 'W/"home-kim"', layout: readLayout(KIMS_HOME.layout), layoutUnsaved: false, savedAt: Date.now() });
         expect(idb.peek('beanpool-home', 'answers', key)).toBeUndefined();
     });
 
@@ -296,7 +297,7 @@ describe('every write of a member\'s Home checks the account\'s epoch (round 2)'
             });
             return req;
         }) as typeof idb.open;
-        await writeCachedHome(key, { answer: KIMS_HOME, asked: null, etag: 'W/"home-kim"', layout: KIMS_HOME.layout, layoutUnsaved: false, savedAt: Date.now() });
+        await writeCachedHome(key, { answer: KIMS_HOME, asked: null, etag: 'W/"home-kim"', layout: readLayout(KIMS_HOME.layout), layoutUnsaved: false, savedAt: Date.now() });
         expect(armed).toBe(false);
         expect(idb.peek('beanpool-home', 'answers', key)).toBeUndefined();
     });

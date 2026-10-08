@@ -15,9 +15,10 @@
  *   them and writes nothing back; a clear that keeps the account (Force Clear, leaving a community) is read afresh. A
  *   tab that missed the news finds it at the start of its next read or write, and that call stops there: what the page
  *   held went with the news, so nothing of it is kept or sent (PR #1479's review, round 3).
- * - **Tailoring** (§4): "…" on a card (Hide · Move up · Move down) and Edit home (components/HomeEditDialog.tsx); the
- *   layout is saved on the account (`home.layout`, H1) with this browser's copy, last write wins. The rules are
- *   lib/home-cards.ts.
+ * - **The card frame** (CARD-FRAME §1–§2): "…" on a card (Settings… · Move up · Move down · Remove), Add a card
+ *   (components/AddCardDialog.tsx) and Edit home (components/EditHomeDialog.tsx) on the community card; the version-2
+ *   list is saved on the account (`home.layout`) with this browser's copy. Which copy stands, what is asked and every edit
+ *   are lib/home-layout.ts, the phone's rules (apps/native/utils/home-cards.ts).
  * - **Interests** (§4.3): the chips save on the account and in this browser's Market (`bp_fav_categories`); a tap reorders
  *   the Market card in place, the same second.
  * - **No dark patterns** (§6.3): real numbers or nothing, amber (never red) only for what waits on the member, nothing
@@ -28,16 +29,22 @@ import {
     TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
+    homeCardType,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
 import {
-    NOTICES_SEEN_EVENT, askedCards, beansLines, canTailor, cardTitle, cardsBuiltFor, closesWords, communityFacts, communityLine,
-    communityName, dayLabel, dealsLine, decideLine, distanceText, editableCards, findBody, hideCard, joinedLine, layoutNeedsRead,
-    moveCard, nearbyLine, newerLayout, normalizeLayout, probationSentence, resetLayout, shownCards, showCard, starredFirst,
+    NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, dayLabel, dealsLine,
+    decideLine, distanceText, findBody, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, starredFirst,
     stepLines, toggleInterest,
-    type HomeAnswer, type HomeCardId, type HomeLayout, type NeedsItem, type StepLine,
+    type HomeAnswer, type HomeCardId, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
+import {
+    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_HINT_LINE, SEARCH_WAITING_LINE, addCard, addedLine, askPinned, canMoveCard,
+    canRemoveCard, cardLabelName, cardName, cardOnNode, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
+    listOf, moveCard, pickLayout, pickerGroups, pinnedCards, readLayout, removeCard, removedLine, resetLayout,
+    type HomeCardInstance, type HomeLayoutV2,
+} from '../lib/home-layout';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { settleInterests, shareInterests } from '../lib/home-interests';
 import { accountEpoch, accountEpochHolds, onAccountEpochEnd } from '../lib/account-epoch';
@@ -51,8 +58,9 @@ import { getBundledGuide } from '../lib/guide';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
 import { EXAMPLE_BADGE, EXAMPLE_LISTINGS, EXAMPLES_HEADING, EXAMPLES_NOTE, exampleLabel } from '../lib/example-listings';
 import { NO_BEANS_TERMS_TEXT, PLACE_AFTER_JOIN, VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
-import { HomeCard, HomeLine, HomeMore } from '../components/HomeCard';
-import { HomeEditDialog } from '../components/HomeEditDialog';
+import { CardMenu, HomeCard, HomeLine, HomeMore } from '../components/HomeCard';
+import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
+import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { OneWayBackCard } from '../components/OneWayBack';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
@@ -64,7 +72,7 @@ const HOME_RETURN_STALE_MS = 30_000;
 /** The socket's first sync, right after it opens, is not a change when Home was read this recently. */
 const SOCKET_OPEN_QUIET_MS = 10_000;
 
-export const HOME_HINT = 'This is your Home. Tap … on any card to move or hide it.';
+export const HOME_HINT = HOME_HINT_LINE;
 export const HOME_OFFLINE = "Couldn't reach your community; showing what we had.";
 export const HOME_FAILED = "Couldn't reach your community. Your other tabs still work.";
 /** The member signed out in another tab: this page shows and keeps nothing of theirs any more. */
@@ -72,12 +80,17 @@ export const HOME_SIGNED_OUT = 'You signed out of this browser in another tab. R
 /** A community's server older than Home (a web app pointed at another server in Settings): the tabs work as before. */
 export const HOME_NOT_ON_NODE = "This community's server doesn't have Home yet. The Market and the other tabs work as before.";
 /** Said politely once a card is hidden: where it went, and how it comes back. */
-export const hiddenWords = (title: string) => `${title} is hidden. Edit home brings it back.`;
 /** Said politely when Done on the last tip takes the Tips card away. */
-export const TIPS_DONE_WORDS = 'That was the last tip. Edit home brings them back.';
+export const TIPS_DONE_WORDS = 'That was the last tip. Add a card brings them back.';
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
+const fewerKey = (pk: string) => `beanpool_home_fewer_seen_${pk}`;
+/** A raw account layout's date (an empty version-1 one's too): the mark an edit made on the newcomer's list carries. */
+const rawDate = (raw: unknown): string => {
+    const at = raw && typeof raw === 'object' ? (raw as { updatedAt?: unknown }).updatedAt : undefined;
+    return typeof at === 'string' && at.length <= 40 ? at : '';
+};
 /** The Tips card's record (@beanpool/core home-tips.ts), per account in this browser, never on the account. */
 export const tipsKey = (pk: string) => `beanpool_home_tips_${pk}`;
 
@@ -142,7 +155,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const cacheKey = useMemo(() => homeCacheKey(publicKey), [publicKey, landing]);
 
     const [answer, setAnswer] = useState<HomeAnswer | null>(null);
-    const [layout, setLayout] = useState<HomeLayout | null>(null);
+    // The layout drawn: this browser's copy, or the newcomer's list drawn for an unknown (empty version-1) account list.
+    const [layout, setLayout] = useState<HomeLayoutV2 | null>(null);
     const [status, setStatus] = useState<'loading' | 'ready' | 'offline' | 'failed' | 'signed-out'>('loading');
     const [failure, setFailure] = useState<string | null>(null);
     const [live, setLive] = useState('');
@@ -151,6 +165,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     // Once shown or opened from Tune, the interests card stays for this visit: a first tap must not take it away.
     const [interestsOpen, setInterestsOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
+    const [pickerOpen, setPickerOpen] = useState(false);
+    // A card's Settings… (from its "…" or Edit home).
+    const [settingsFor, setSettingsFor] = useState<HomeCardInstance | null>(null);
+    // The node refused the version-2 layout (a node from before the frame): Edit home says the cards stay here (§2.3).
+    const [notOnAccount, setNotOnAccount] = useState(false);
+    const [fewerOpen, setFewerOpen] = useState(false);
     const [point, setPoint] = useState<{ lat: number; lng: number } | null>(() => marketPoint());
     const [pointProblem, setPointProblem] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
@@ -165,13 +185,26 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const answerRef = useRef<HomeAnswer | null>(null);
     // The node's tag for the answer drawn: the next read sends it, and is a 304 while nothing changed.
     const etagRef = useRef<string | null>(null);
-    const layoutRef = useRef<HomeLayout | null>(null);
+    // This browser's own copy of the layout (the account's once read, or the member's edit); null while it has none.
+    const layoutRef = useRef<HomeLayoutV2 | null>(null);
+    const drawnRef = useRef<HomeLayoutV2 | null>(null);
+    // Set while this browser's copy is an edit made on the newcomer's list drawn for an unknown account list: that list's
+    // date (lib/home-layout.ts pickLayout). Such an edit is never sent by itself: a read decides (review of #1699, finding 2).
+    const overRef = useRef<string | undefined>(undefined);
+    // The node refused this browser's version-2 layout on this landing: it is sent again at the next landing, never in a loop.
+    const refusedLanding = useRef(false);
+    // The one extra read a landing makes for cards the answer wasn't built for (review of #1697, note a: bounded).
+    const extraRead = useRef(false);
+    // After an add: the new card, whose "…" takes focus once it is drawn; `read`: the add's read of Home has answered, so a
+    // card still not drawn has nothing to show, and focus stays on Add a card (review of #1701, finding 3).
+    const focusAfterAdd = useRef<{ id: string; read: boolean } | null>(null);
+    const [addRead, setAddRead] = useState(0);
     const unsavedRef = useRef(false);
     const layoutSeq = useRef(0);
     // Layout saves still on their way: a read meanwhile doesn't send the same layout again.
     const savingLayout = useRef(0);
-    // The data cards the answer drawn was built for (lib/home-cards.ts cardsBuiltFor); null: not known.
-    const builtForRef = useRef<HomeCardId[] | null>(null);
+    // The cards the answer drawn was built for (the `cards=` it was read with, or the node's own choice: builtFor); null: not known.
+    const builtForRef = useRef<string[] | null>(null);
     const inFlight = useRef(false);
     const again = useRef(false);
     const lastStart = useRef(0);
@@ -181,7 +214,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const interestsCardRef = useRef<HTMLDivElement | null>(null);
     const pageRef = useRef<HTMLDivElement | null>(null);
     // After a Hide: the cards to give focus to, nearest first (the card itself is gone, and so is its "…").
-    const focusAfterHide = useRef<HomeCardId[] | null>(null);
+    const focusAfterHide = useRef<string[] | null>(null);
     // The next landing comes after a clear: the kept copy is gone (or going), so the node is asked afresh.
     const skipCopy = useRef(false);
     // The epoch this page last landed under (lib/account-epoch.ts accountEpoch); null until it lands, and from the news of
@@ -215,31 +248,66 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
 
     // Kept only while it may be (writeCachedHome checks the epoch, `epoch` being the one the answer was read under, from
     // landedEpoch: never one taken after the answer was).
-    const keep = useCallback((a: HomeAnswer, l: HomeLayout | null, epoch: number) => {
-        void writeCachedHome(cacheKey, { answer: a, asked: builtForRef.current, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current, savedAt: Date.now() }, epoch);
+    const keep = useCallback((a: HomeAnswer, l: HomeLayoutV2 | null, epoch: number) => {
+        void writeCachedHome(cacheKey, {
+            answer: a, asked: builtForRef.current, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current,
+            ...(overRef.current !== undefined ? { localOnlyOver: overRef.current } : {}), savedAt: Date.now(),
+        }, epoch);
     }, [cacheKey]);
 
-    const saveLayout = useCallback((next: HomeLayout) => {
+    const draw = (l: HomeLayoutV2 | null) => { drawnRef.current = l; setLayout(l); };
+
+    /*
+     * Save the layout on the account, as the phone does (apps/native/app/(tabs)/index.tsx pushLayout). A 400 from a node
+     * whose Home answer is version 1 (or has none) is a node from before the card frame: the cards stay in this browser,
+     * Edit home says so, and they are sent again at the next landing, never in a loop (CARD-FRAME §2.3). Any other refusal:
+     * the account's copy stands and this one is never sent again by itself. A success clears both.
+     */
+    const saveLayout = useCallback((next: HomeLayoutV2): Promise<void> => {
         // Signed out or cleared, here or in another tab: nothing more is sent as that account.
         const epoch = landedEpoch();
-        if (!publicKey || epoch === null) return;
+        if (!publicKey || epoch === null) return Promise.resolve();
         const seq = ++layoutSeq.current;
         savingLayout.current += 1;
-        saveHomePreferences(publicKey, { 'home.layout': next })
+        return saveHomePreferences(publicKey, { 'home.layout': next })
             .finally(() => { savingLayout.current -= 1; })
             .then((r) => {
                 if (!mounted.current || seq !== layoutSeq.current || !holds(epoch)) return;
                 unsavedRef.current = false;
-                // What the node kept: this layout with its stamp, or a newer one saved from another device.
-                const kept = normalizeLayout(r['home.layout']);
-                if (kept) {
+                refusedLanding.current = false;
+                // On the account now: the list is the member's, no longer an edit on an unknown one (the phone's
+                // clearPhoneOnly; review of #1701, finding 1: the next edit was otherwise thrown away unsent).
+                overRef.current = undefined;
+                setNotOnAccount(false);
+                // What the node kept: this layout, or a newer one saved from another device (a phone's, another tab's).
+                const kept = readLayout(r['home.layout']);
+                if (kept && (kept.updatedAt ?? '') > (next.updatedAt ?? '')) {
                     layoutRef.current = kept;
-                    setLayout(kept);
+                    draw(kept);
                 }
                 if (answerRef.current) keep(answerRef.current, layoutRef.current, epoch);
-            })
-            .catch(() => { /* kept in this browser, sent again after the next read */ });
+            }, (e: unknown) => {
+                if (!mounted.current || seq !== layoutSeq.current || !holds(epoch)) return;
+                const code = (e as { status?: number } | null)?.status;
+                // Not a refusal (no connection, a timeout, too many): kept in this browser, sent again after the next read.
+                if (typeof code !== 'number' || code < 400 || code >= 500 || code === 408 || code === 429) return;
+                const answered = answerRef.current?.layout;
+                if (code === 400 && (!answered || layoutV1Of(answered))) {
+                    refusedLanding.current = true;
+                    setNotOnAccount(true);
+                    return;
+                }
+                unsavedRef.current = false;
+                overRef.current = undefined;
+                const account = readLayout(answered);
+                layoutRef.current = account;
+                draw(account);
+                if (answerRef.current) keep(answerRef.current, account, epoch);
+            });
     }, [publicKey, keep, holds, landedEpoch]);
+
+    // The cards an answer read with no `cards=` was built for: the node's own choice from the account's list.
+    const builtFor = (a: HomeAnswer): string[] => cardsToAsk(readLayout(a.layout), askPinned(a, Date.now()), frameOf(a));
 
     const fetchHome = useCallback(async (why: 'landing' | 'doorbell' | 'poll' | 'return' | 'retry' | 'point' | 'layout') => {
         // Signed out, here or in another tab: nothing more is read as that account. Cleared since the page landed: it
@@ -251,7 +319,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         lastStart.current = Date.now();
         try {
             const p = pointRef.current;
-            const sent = askedCards(layoutRef.current, answerRef.current);
+            // `cards=` from the list drawn (lib/home-layout.ts cardsToAsk), the newcomer's for a member with none; none only on
+            // a first read with no answer in hand, so the node draws the account's own list (review of #1697, note a). Never
+            // left off after that: the node would build its whole old catalogue every read (review of #1701, finding 6).
+            const held = answerRef.current;
+            const sent = drawnRef.current || (held?.me && !held.welcome)
+                ? cardsToAsk(drawnRef.current, askPinned(held, Date.now()), held ? frameOf(held) : null) : undefined;
             const read = await getHome({ cards: sent, ...(p ? { lat: p.lat, lng: p.lng } : {}) },
                 answerRef.current ? etagRef.current : null);
             // The page has gone, or a sign-out or a clear came while the read was out: what it brought is not this
@@ -260,8 +333,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             // 304: the copy drawn is still the answer, layout and all (its tag covers the cards asked). Anything not sent
             // since is sent again.
             if (read?.notModified && answerRef.current) {
-                builtForRef.current = cardsBuiltFor(sent, answerRef.current);
-                if (unsavedRef.current && layoutRef.current && savingLayout.current === 0) saveLayout(layoutRef.current);
+                builtForRef.current = sent ?? builtFor(answerRef.current);
+                if (unsavedRef.current && layoutRef.current && savingLayout.current === 0 && !refusedLanding.current) void saveLayout(layoutRef.current);
                 // The account's interests are the ones in the copy drawn: a change made here that never reached them is
                 // sent again while they are unchanged since (lib/home-interests.ts).
                 const me = answerRef.current.me;
@@ -278,31 +351,56 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             // Only an answer shaped as Home is drawn (a proxy's page or an odd reply is a failed read, never a crash).
             if (!a || typeof a !== 'object' || !a.cards || typeof a.cards !== 'object' || Array.isArray(a.cards)) throw new Error('not a Home answer');
             etagRef.current = read && !read.notModified ? read.etag : null;
-            const fromNode = normalizeLayout(a.layout);
+            // Which list stands (lib/home-layout.ts pickLayout): the account's or this browser's, by date, with the standby tie
+            // and the empty version-1 "unknown" rule. A visitor keeps no layout.
+            const account = readLayout(a.layout);
+            const v1 = layoutV1Of(a.layout);
             const local = layoutRef.current;
-            const merged = newerLayout(fromNode, local);
-            // This browser's newer layout, not on the account yet, is sent again (unless its save is still on its way).
-            if (merged && merged === local && unsavedRef.current) { if (savingLayout.current === 0) saveLayout(merged); }
-            else if (merged === fromNode) unsavedRef.current = false;
+            const member = !!a.me && !a.welcome;
+            const pick = member ? pickLayout(account, local, v1, overRef.current) : { layout: null, push: false };
+            if (member && account && !v1) {
+                // A version-2 answer: this node keeps the new shape, so nothing waits on it any more.
+                refusedLanding.current = false;
+                setNotOnAccount(false);
+                // The account's real list is back: it stands, and the edit made on the unknown one goes, unsent.
+                if (overRef.current !== undefined && !pick.push) overRef.current = undefined;
+            }
+            // The newcomer's list drawn for an unknown account list is not this browser's copy: nothing of it is sent.
+            const unknown = member && !local && !!v1?.empty;
+            unsavedRef.current = !!pick.layout && pick.layout === local && (pick.push || unsavedRef.current);
+            layoutRef.current = unknown ? null : pick.layout;
+            const fewerFrom = v1?.empty && !local ? null : account;
+            if (member && publicKey && fewerCardsNews(fewerFrom, local, a.me, Date.now()) && !readFlag(fewerKey(publicKey))) {
+                writeFlag(fewerKey(publicKey));
+                setFewerOpen(true);
+            }
             if (publicKey && a.me) {
                 // The account's interests are this browser's Market favourites too; a change made here that never reached
                 // the account (while it is unchanged since), and ones an older build kept only here, are sent up instead.
                 const settled = settleInterests(publicKey, a.me.interests, a.me.interestsUpdatedAt);
                 setInterests(settled.movedUp ? settled.interests : null);
             }
-            builtForRef.current = cardsBuiltFor(sent, a);
+            builtForRef.current = sent ?? builtFor(a);
             answerRef.current = a;
-            layoutRef.current = merged;
             setAnswer(a);
-            setLayout(merged);
+            draw(pick.layout);
             if (statusRef.current === 'offline' || why === 'retry') setLive('Home updated.');
             statusRef.current = 'ready';
             setStatus('ready');
             setFailure(null);
-            keep(a, merged, epoch);
-            // The account's layout, newer than this browser's (saved on another device or tab), shows a card this answer
-            // wasn't built for: read again at once with it in `cards=`, not at the next poll or doorbell.
-            if (merged && layoutNeedsRead(null, merged, a, builtForRef.current)) again.current = true;
+            keep(a, layoutRef.current, epoch);
+            // This browser's list, newer than the account's (an edit made offline, or one whose save failed), is sent; one the
+            // node refused as a shape it doesn't know yet only at the next landing.
+            const saving = unsavedRef.current && layoutRef.current && !refusedLanding.current && savingLayout.current === 0
+                ? saveLayout(layoutRef.current) : null;
+            // The list drawn asks for cards this answer wasn't built for (a first landing here, or another device's edit):
+            // one more read for them, once a landing, after the save's answer.
+            const built = builtForRef.current ?? [];
+            if (member && !extraRead.current && cardsToAsk(pick.layout, askPinned(a, Date.now()), frameOf(a)).some(id => !built.includes(id))) {
+                extraRead.current = true;
+                if (saving) void saving.then(() => fetchHomeRef.current?.('layout'));
+                else again.current = true;
+            }
         } catch (e) {
             if (!mounted.current || !holds(epoch)) return;
             if (answerRef.current) {
@@ -334,6 +432,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         answerRef.current = null;
         etagRef.current = null;
         layoutRef.current = null;
+        drawnRef.current = null;
+        overRef.current = undefined;
+        refusedLanding.current = false;
+        extraRead.current = false;
         builtForRef.current = null;
         setAnswer(null);
         // What this landing's reads and writes are under: news after this is a reason to land again (landedEpoch). News
@@ -362,9 +464,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 builtForRef.current = cached.asked ?? null;
                 etagRef.current = cached.etag;
                 layoutRef.current = cached.layout;
+                overRef.current = cached.localOnlyOver;
                 unsavedRef.current = cached.layoutUnsaved;
                 setAnswer(cached.answer);
-                setLayout(cached.layout);
+                const ans = cached.answer;
+                draw(ans.me && !ans.welcome ? pickLayout(readLayout(ans.layout), cached.layout, layoutV1Of(ans.layout), cached.localOnlyOver).layout : null);
             }
         }).finally(() => {
             if (!cancelled) void fetchHomeRef.current('landing');
@@ -381,12 +485,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         answerRef.current = null;
         etagRef.current = null;
         layoutRef.current = null;
+        drawnRef.current = null;
+        overRef.current = undefined;
         builtForRef.current = null;
         unsavedRef.current = false;
         setAnswer(null);
         setLayout(null);
         setInterests(null);
         setEditOpen(false);
+        setPickerOpen(false);
+        setSettingsFor(null);
+        setNotOnAccount(false);
         // Said in the same render as her Home goes, never a moment of "Loading" between.
         if (end === 'signed-out' && publicKey) {
             statusRef.current = 'signed-out';
@@ -476,37 +585,65 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
 
     const now = Date.now();
     const myInterests = interests ?? answer?.me?.interests ?? [];
-    const shown = answer ? shownCards(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView }) : [];
+    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView }) : [];
+    const interestsShown = shown.some(c => c.type === 'interests');
     // A card shown as Home opened stays open for the visit (a first tap must not take it away).
     useEffect(() => {
-        if (shown.includes('interests') && !interestsOpen) setInterestsOpen(true);
-    }, [shown.includes('interests')]);
+        if (interestsShown && !interestsOpen) setInterestsOpen(true);
+    }, [interestsShown]);
 
     /**
      * A layout change made here (a card's "…", Edit home). Returns false when it was made on a Home this page no longer
      * holds: a sign-out or a clear this call was the first to hear of (landedEpoch). The change goes with what the page
      * held, drawn, kept and sent nowhere, and the page lands again.
      */
-    function changeLayout(make: (current: HomeLayout | null) => HomeLayout): boolean {
+    function changeLayout(make: (current: HomeLayoutV2 | null) => HomeLayoutV2 | null, opts: { reread?: boolean; afterRead?: () => void } = {}): boolean {
         const epoch = landedEpoch();
-        if (epoch === null) return false;
-        const prev = layoutRef.current;
-        const next = make(prev);
+        const answered = answerRef.current;
+        if (epoch === null || !answered?.me || answered.welcome) return false;
+        const before = drawnRef.current;
+        const next = make(before);
+        if (!next) return false;
+        if (overRef.current === undefined && !layoutRef.current && layoutV1Of(answered.layout)?.empty) {
+            // Made while the account's list is unknown: this browser's only, until the account's real list answers.
+            overRef.current = rawDate(answered.layout);
+        }
         unsavedRef.current = true;
         layoutRef.current = next;
-        setLayout(next);
-        if (answerRef.current) keep(answerRef.current, next, epoch);
-        saveLayout(next);
-        // Show, or Reset to defaults, brought back a card the answer in hand wasn't built for (a hidden card is left out
-        // of `cards=`, and the node builds only what it is asked for): read Home again with the new `cards=`, now.
-        // Nothing else needs a read: a Hide or a move is drawn from the answer in hand.
-        if (answerRef.current && layoutNeedsRead(prev, next, answerRef.current, builtForRef.current)) void fetchHomeRef.current('layout');
+        draw(next);
+        keep(answered, next, epoch);
+        if (overRef.current !== undefined) {
+            // Never sent by itself, as the account's real list may be back (the primary after a standby): a read decides,
+            // and sends the edit only if it still stands (review of #1699 confirmation, finding 1).
+            void fetchHomeRef.current('layout').then(opts.afterRead);
+            return true;
+        }
+        // Refused on this landing as a shape the node doesn't know yet: kept here, sent at the next landing.
+        const saving = refusedLanding.current ? Promise.resolve() : saveLayout(next);
+        // An add, a card's settings, Reset, or a card the answer wasn't built for: read Home again once the save is
+        // answered (the node builds an instance from the settings it keeps). A move or a remove reads nothing.
+        const pins = askPinned(answered, Date.now());
+        const had = builtForRef.current ?? cardsToAsk(before, pins, frameOf(answered));
+        if (opts.reread || cardsToAsk(next, pins, frameOf(answered)).some(id => !had.includes(id))) void saving.then(() => fetchHomeRef.current('layout')).then(opts.afterRead);
+        else opts.afterRead?.();
         return true;
     }
 
-    // After a Hide, focus goes to the nearest card left (its "…", else its heading; Edit home on the community card),
-    // never to the page's <body>.
+    // After a Remove, focus goes to the nearest card left (its "…", else its heading; Edit home on the community card),
+    // never to the page's <body>. After an add, to the new card's "…" once it is drawn; until then, and for good once the
+    // add's read finds nothing to show, to the community card's Add a card (review of #1701, finding 3). Focus the member
+    // moved on themselves meanwhile stays where they put it.
     useEffect(() => {
+        const added = focusAfterAdd.current;
+        if (added) {
+            const card = pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${added.id}"]`);
+            const target = card?.querySelector<HTMLElement>('[data-testid="home-card-menu"]') ?? card?.querySelector<HTMLElement>('h2');
+            const waiting = pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]');
+            const active = document.activeElement;
+            const free = !active || active === document.body || !active.isConnected || active === waiting;
+            if (target || added.read) focusAfterAdd.current = null;
+            if (free) (target ?? waiting)?.focus();
+        }
         const order = focusAfterHide.current;
         if (!order) return;
         focusAfterHide.current = null;
@@ -518,7 +655,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 ?? card.querySelector<HTMLElement>('h2');
             if (target) { target.focus(); return; }
         }
-    }, [layout, tips]);
+    }, [layout, tips, answer, addRead]);
 
     // On the account and in this browser's Market (lib/home-interests.ts); a save that fails is marked in this browser
     // and sent again after the next read, whichever page made it. Never from a Home the page no longer holds (a chip on
@@ -583,32 +720,62 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const profile = String(a.profile);
     const isVisitor = !!a.welcome || !a.me;
     const beansOn = visitor ? visitor.beans : a.features.beans !== false;
-    const movable = shown.filter(id => canTailor(id, a, now));
+    const pins = pinnedCards(a, now);
+    const movable = shown.filter(c => canMoveCard(c.type, pins));
+    const nameOf = (c: Pick<HomeCardInstance, 'type'>) => (isHomeCardId(c.type) ? cardTitle(c.type, a) : cardName(c.type, profile));
 
-    function menuFor(id: HomeCardId) {
-        if (isVisitor || !canTailor(id, a, now)) return undefined;
-        const i = movable.indexOf(id);
+    function menuFor(card: HomeCardInstance) {
+        if (isVisitor || !canRemoveCard(card.type, pins)) return undefined;
+        const i = movable.findIndex(c => c.id === card.id);
         return {
+            // A saved search is named by its words; any other card by its heading, as before.
+            ...(card.type === 'search' ? { label: cardLabelName(card, profile) } : {}),
             canMoveUp: i > 0,
             canMoveDown: i >= 0 && i < movable.length - 1,
-            onHide: () => {
-                // Hide on Tips does what "Don't show tips again" does: the record holds it on a node that drops `tips`.
-                if (id === 'tips') { tipsDontShow(); return; }
-                const at = shown.indexOf(id);
-                if (!changeLayout((l) => hideCard(l, id))) return;
-                // Read once the layout has been drawn (the effect below), so set in the same turn as the change.
-                focusAfterHide.current = [...shown.slice(at + 1), ...shown.slice(0, Math.max(at, 0)).reverse()];
-                setLive(hiddenWords(cardTitle(id, a)));
-                if (id === 'interests') setInterestsOpen(false);
-            },
-            onMove: (d: 'up' | 'down') => { changeLayout((l) => moveCard(l, id, d, movable)); },
+            onRemove: () => removeFromHome(card.id),
+            ...(homeCardType(card.type)?.readSettings ? { onSettings: () => setSettingsFor(card) } : {}),
+            onMove: (d: 'up' | 'down') => { changeLayout((l) => moveCard(l, card.id, d, movable, Date.now(), pins)); },
         };
     }
 
+    /**
+     * Remove (§1.3): the instance leaves the list, said politely by the card's words, and focus goes to the nearest card
+     * left. Remove on Tips does what "Don't show tips again" does: the record holds it too.
+     */
+    function removeFromHome(id: string, inDialog = false) {
+        const card = shown.find(c => c.id === id) ?? listOf(drawnRef.current).find(c => c.id === id);
+        if (!card) return;
+        if (card.type === 'tips') { tipsDontShow(inDialog); return; }
+        const name = cardLabelName(card, profile);
+        const onList = listOf(drawnRef.current).some(c => c.id === id);
+        // The interests card opened from Tune without being on the list just closes.
+        if (onList && !changeLayout((l) => removeCard(l, id, Date.now(), pins))) return;
+        // From Edit home, the dialog keeps focus on its nearest row: the page behind a modal never takes it.
+        if (!inDialog) focusAround(id);
+        setLive(removedLine(name));
+        if (card.type === 'interests') setInterestsOpen(false);
+    }
+
     /** Focus to the nearest card left once `id` has gone (read after the next draw, the effect above). */
-    function focusAround(id: HomeCardId) {
-        const at = shown.indexOf(id);
-        focusAfterHide.current = [...shown.slice(at + 1), ...shown.slice(0, Math.max(at, 0)).reverse()];
+    function focusAround(id: string) {
+        const ids = shown.map(c => c.id);
+        const at = shown.findIndex(c => c.id === id || c.type === id);
+        focusAfterHide.current = [...ids.slice(at + 1), ...ids.slice(0, Math.max(at, 0)).reverse()];
+    }
+
+    /** Add (§1.3): first, under Needs you; the picker closes, the page goes to the top, it is said, and focus goes to its "…". */
+    function addToHome(type: string, settings?: Record<string, unknown>) {
+        setPickerOpen(false);
+        const r = addCard(drawnRef.current, type, Date.now(), { settings, pinned: pins });
+        if (!r.ok) return;
+        const mark = { id: r.id, read: false };
+        if (!changeLayout(() => r.layout, { reread: true, afterRead: () => { mark.read = true; if (mounted.current) setAddRead(n => n + 1); } })) return;
+        // Tips put back after "Don't show tips again" start over from the first tip.
+        if (type === 'tips' && tipsRef.current?.dismissedAt) keepTips(restartTips(tipsList, localDay()));
+        if (type === 'interests') setInterestsOpen(true);
+        focusAfterAdd.current = mark;
+        pageRef.current?.scrollIntoView?.({ block: 'start' });
+        setLive(addedLine(cardLabelName(r.layout.cards.find(c => c.id === r.id) ?? { type }, profile)));
     }
 
     // Next (Done on the last): the tip is seen and the next one drawn in place, said politely; Done takes the card away.
@@ -621,12 +788,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     }
 
     // "Don't show tips again" (and the card's Hide): the record says so, and the layout hides it for the other devices.
-    function tipsDontShow() {
+    function tipsDontShow(inDialog = false) {
         if (!publicKey || landedEpoch() === null) return;
-        focusAround('tips');
+        if (!inDialog) focusAround('tips');
         keepTips(dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
-        changeLayout((l) => hideCard(l, 'tips'));
-        setLive(hiddenWords(cardTitle('tips', a)));
+        const tipsCard = listOf(drawnRef.current).find(c => c.type === 'tips');
+        if (tipsCard) changeLayout((l) => removeCard(l, tipsCard.id, Date.now(), pins));
+        setLive(removedLine(cardTitle('tips', a)));
     }
 
     const cardStyle = (index: number): React.CSSProperties | undefined => reveal
@@ -662,11 +830,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         return <HomeLine key={i} onClick={go} label={item.accent ? `${words}. Waiting on you.` : words} testId={`home-needs-${item.kind}`}>{body}</HomeLine>;
     }
 
-    function renderCard(id: HomeCardId, index: number): ReactNode {
+    function renderCard(card: HomeCardInstance, index: number): ReactNode {
+        const id = card.type as HomeCardId;
         const c = a.cards;
-        const title = cardTitle(id, a);
-        const common = { id, title, menu: menuFor(id), style: cardStyle(index) };
-        switch (id) {
+        const title = nameOf(card);
+        const common = { id: card.id, title, menu: menuFor(card), style: cardStyle(index) };
+        switch (card.type) {
             case 'needs':
                 return c.needs && (
                     <HomeCard key={id} {...common} accent={c.needs.items.some(i => i.accent)}>
@@ -675,8 +844,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 );
             case 'safety':
                 // The two-doors card, with its own ✕ and schedule kept in this browser (components/OneWayBack.tsx).
+                // Its "…" (Move up · Move down · Remove) sits over the card's own ✕.
                 return identity && (
-                    <div key={id} style={cardStyle(index)}>
+                    <div key={id} style={cardStyle(index)} data-testid={`home-card-${card.id}`}>
+                        {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
                         <OneWayBackCard identity={identity} placement="landing" onSeeWords={onSeeWords} />
                     </div>
                 );
@@ -760,7 +931,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                                 </button>
                             )}
                         </div>
-                        <button type="button" onClick={tipsDontShow} aria-label={TIPS_DONT_SHOW_LABEL} data-testid="home-tips-dont-show"
+                        <button type="button" onClick={() => tipsDontShow()} aria-label={TIPS_DONT_SHOW_LABEL} data-testid="home-tips-dont-show"
                             className="w-full min-h-[44px] mt-1 px-2 bg-transparent border-0 rounded-lg text-sm font-bold text-nature-700 dark:text-nature-200 whitespace-normal break-words cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                             {TIPS_DONT_SHOW}
                         </button>
@@ -993,17 +1164,39 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                             {cm.members === 1 && !isVisitor ? "1 member. You're first. Invite someone." : `${communityLine(cm, profile)}.`}
                         </p>
                         {!isVisitor && (
-                            <HomeMore onClick={() => setEditOpen(true)} testId="home-edit-open" label="Edit home: choose which cards show, and their order">Edit home ›</HomeMore>
+                            <div className="flex flex-wrap justify-end gap-x-4">
+                                <HomeMore onClick={() => setPickerOpen(true)} testId="home-add-open" label="Add a card to Home">Add a card ›</HomeMore>
+                                <HomeMore onClick={() => setEditOpen(true)} testId="home-edit-open" label="Edit home: the cards on Home and their order">Edit home ›</HomeMore>
+                            </div>
                         )}
                     </HomeCard>
                 );
             }
+            case 'search':
+                // A saved search: its words name it to a screen reader, never on the card; its listings come with slice F4.
+                return (
+                    <HomeCard key={card.id} {...common}>
+                        <p className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{SEARCH_WAITING_LINE}</p>
+                    </HomeCard>
+                );
             default:
                 return null;
         }
     }
 
-    const editable = editOpen ? editableCards(a, layout, now) : null;
+    const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
+    // Edit home's rows (§1.3): the cards on Home in order, without the fixed two and a pinned card.
+    const editCards = editOpen && !isVisitor
+        ? cardOrder(layout, pins).filter(c => c.type !== FIXED_FIRST && c.type !== FIXED_LAST && !pins.includes(c.type) && cardOnNode(c.type, frameOf(a)))
+        : [];
+    const editRows: EditHomeRow[] = editCards.map(c => ({
+                id: c.id,
+                name: nameOf(c),
+                label: cardLabelName(c, profile),
+                note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? 'All tips seen' : 'Nothing to show now',
+                hasSettings: !!homeCardType(c.type)?.readSettings,
+            }));
+    const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), layout, null, pins, tipsAllSeen ? { tips: 'All tips seen' } : {}) : null;
 
     return (
         <div ref={pageRef} className="max-w-xl mx-auto px-4 pt-2 pb-6 min-w-0" data-testid="home-page">
@@ -1018,9 +1211,18 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.
                 </p>
             )}
-            {shown.map((id, i) => (
-                <div key={id}>
-                    {renderCard(id, i)}
+            {shown.map((card, i) => (
+                <div key={card.id}>
+                    {renderCard(card, i)}
+                    {i === 0 && fewerOpen && !isVisitor && (
+                        <p data-testid="home-fewer" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
+                            <span className="min-w-0 flex-1 break-words">{FEWER_CARDS_LINE}</span>
+                            <button type="button" aria-label="Close this note" onClick={() => setFewerOpen(false)}
+                                className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                ✕
+                            </button>
+                        </p>
+                    )}
                     {i === 0 && hintOpen && !isVisitor && (
                         <p data-testid="home-hint" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
                             <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
@@ -1032,25 +1234,49 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     )}
                 </div>
             ))}
-            {editable && (
-                <HomeEditDialog
-                    answer={a}
-                    shown={editable.shown}
-                    hidden={editable.hidden}
-                    tipsAllSeen={!!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList)}
-                    onToggle={(id, show) => {
-                        if (!changeLayout((l) => (show ? showCard(l, id) : hideCard(l, id)))) return;
-                        // Tips switched on starts over from the first tip; off holds as "Don't show tips again" does.
-                        if (id === 'tips') keepTips(show ? restartTips(tipsList, localDay()) : dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
-                    }}
-                    onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editable.shown)); }}
-                    // Reset shows Tips again when it was off, so then the tips start over as a switch-on does (PR #1694
-                    // review 3); a member part-way through keeps their place (confirmation 1, finding 2).
+            {editOpen && !isVisitor && (
+                <EditHomeDialog
+                    rows={editRows}
+                    notOnAccount={notOnAccount}
+                    onAdd={() => { setEditOpen(false); setPickerOpen(true); }}
+                    onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editCards, Date.now(), pins)); }}
+                    onSettings={(id) => { const card = listOf(drawnRef.current).find(c => c.id === id); if (card) setSettingsFor(card); }}
+                    onRemove={(id) => removeFromHome(id, true)}
+                    // Reset brings Tips back when they were off, so then the tips start over (PR #1694 review 3); a member
+                    // part-way through keeps their place (confirmation 1, finding 2).
                     onReset={() => {
-                        const tipsOff = !!tipsRef.current?.dismissedAt || !!layoutRef.current?.hidden.includes('tips');
-                        if (changeLayout(resetLayout) && tipsOff) keepTips(restartTips(tipsList, localDay()));
+                        const tipsOff = !!tipsRef.current?.dismissedAt || !listOf(drawnRef.current).some(c => c.type === 'tips');
+                        if (changeLayout((l) => resetLayout(l, Date.now()), { reread: true }) && tipsOff) keepTips(restartTips(tipsList, localDay()));
                     }}
                     onClose={() => setEditOpen(false)}
+                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-edit-open"]')}
+                />
+            )}
+            {picker && (
+                <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)}
+                    // Opened from Edit home, which has closed: the community card's Add a card.
+                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')} />
+            )}
+            {settingsFor && (
+                <CardSettingsDialog
+                    type={settingsFor.type}
+                    name={cardName(settingsFor.type, profile)}
+                    mode="save"
+                    initial={settingsFor.settings}
+                    onSubmit={(next) => {
+                        const id = settingsFor.id;
+                        setSettingsFor(null);
+                        changeLayout((l) => changeCardSettings(l, id, next, Date.now()), { reread: true });
+                    }}
+                    onClose={() => setSettingsFor(null)}
+                    // Its opener was a menu's Settings…, gone with the menu: Edit home's row "…" while Edit home is open, else
+                    // the card's "…".
+                    returnFocus={() => {
+                        const id = settingsFor.id;
+                        return pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-edit-menu-${id}"]`)
+                            ?? pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"] [data-testid="home-card-menu"]`)
+                            ?? pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]');
+                    }}
                 />
             )}
         </div>

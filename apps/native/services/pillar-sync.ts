@@ -800,14 +800,15 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         // Step 3: Success — save timestamp
         const kCheckpoint = await getSyncCursorKey(StorageKeysConfig.SYNC_CHECKPOINT);
-        if (!postsUnwritten) await AsyncStorage.setItem(kLastSync, String(Date.now()));
         // The members delta's cursor (kMembersHeld above): held where a delta that did not land asked from, let go once a
-        // members read lands. A cycle that never gets here moves neither cursor.
+        // members read lands. A cycle that never gets here moves neither cursor. Written before kLastSync, so a phone killed
+        // between the two writes never has kLastSync moved past a hold it didn't store.
         if (membersHoldAt) {
             if (membersHoldAt !== membersHeld) await AsyncStorage.setItem(kMembersHeld, membersHoldAt);
         } else if (membersLanded && membersHeld !== null) {
             await AsyncStorage.removeItem(kMembersHeld);
         }
+        if (!postsUnwritten) await AsyncStorage.setItem(kLastSync, String(Date.now()));
         await AsyncStorage.removeItem(kCheckpoint);
         // The epoch this phone now holds the node as: the first one it sees, or the new one once the whole sync after
         // a take-over has replaced the cache. Until then the next cycle sees the change again and does it again.

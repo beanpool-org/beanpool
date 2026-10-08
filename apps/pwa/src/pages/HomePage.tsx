@@ -155,10 +155,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const [pointProblem, setPointProblem] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
-    // The Tips card's record for this account; null: not read yet (or a visitor), so no card.
-    const [tips, setTips] = useState<TipsRecord | null>(null);
+    // The Tips card's record as changed on this landing (Next, Don't show, Edit home); another landing's is not this one's.
+    const [tipsChanged, setTipsChanged] = useState<{ landing: string; record: TipsRecord } | null>(null);
     const tipsRef = useRef<TipsRecord | null>(null);
-    // The landing the Tips card had its once-a-day advance for: once per landing, never while Home is in front.
+    // The landing whose once-a-day advance has been written: once per landing, never while Home is in front.
     const tipsLandedFor = useRef<string | null>(null);
 
     const statusRef = useRef(status);
@@ -452,22 +452,26 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     // ── Tips (scratch/home/TIPS-DESIGN-fable.md): the node's list from the answer in hand, the record this browser's ──
     // The web holds no role on the node, so a community whose door is admins-only leaves the invites tip out for all.
     const tipsList = answer?.me && !visitor ? tipsFor({ profile: String(answer.profile), features: answer.features }, null) : [];
+    const tipsLanding = publicKey && answer?.me && !visitor ? `${publicKey}:${landing}` : null;
+    // Once per landing, with an answer in hand (the kept copy counts: tips work with no connection), read in the same
+    // render as the cards so the card is there from the first draw: a tip first shown on an earlier local day is marked
+    // seen and the next one drawn.
+    const tipsLanded = useMemo(() => (publicKey && tipsLanding ? tipOnLanding(readTips(publicKey), tipsList, localDay()).record : null),
+        [tipsLanding]);
+    const tips = tipsChanged && tipsChanged.landing === tipsLanding ? tipsChanged.record : tipsLanded;
+    tipsRef.current = tips;
     const keepTips = useCallback((next: TipsRecord) => {
+        if (!tipsLanding) return;
         tipsRef.current = next;
-        setTips(next);
+        setTipsChanged({ landing: tipsLanding, record: next });
         if (publicKey) writeTips(publicKey, next);
-    }, [publicKey]);
-    // Once per landing, with an answer in hand (the kept copy counts: tips work with no connection): a tip first shown on
-    // an earlier local day is marked seen and the next one drawn.
+    }, [publicKey, tipsLanding]);
+    // The landing's advance is kept, once.
     useEffect(() => {
-        if (!publicKey || !answer?.me || visitor || landedEpoch() === null) return;
-        const landingId = `${publicKey}:${landing}`;
-        if (tipsLandedFor.current === landingId) return;
-        tipsLandedFor.current = landingId;
-        const record = readTips(publicKey);
-        const step = tipOnLanding(record, tipsList, localDay());
-        if (step.record === record) { tipsRef.current = record; setTips(record); } else keepTips(step.record);
-    }, [publicKey, !!answer?.me, landing]);
+        if (!publicKey || !tipsLanding || !tipsLanded || tipsLandedFor.current === tipsLanding || landedEpoch() === null) return;
+        tipsLandedFor.current = tipsLanding;
+        writeTips(publicKey, tipsLanded);
+    }, [tipsLanding, tipsLanded]);
     const tipsView = tips && answer?.me && !visitor ? tipNow(tips, tipsList, localDay()).view : null;
 
     const now = Date.now();

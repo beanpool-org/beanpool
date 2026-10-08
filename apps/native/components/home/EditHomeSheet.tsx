@@ -18,7 +18,7 @@ import { HOME_TARGET_DP } from './HomeParts';
  * your community where only the community's admins invite and the member is not one. A pinned card (Find your community,
  * a member's first 30 days on the global node) is not in the list either: the note says it stays at the top for now.
  */
-export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnNow, colors, onChange, onClose, tipsAllSeen, onTipsOn }: {
+export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnNow, colors, onChange, onClose, tipsAllSeen, onTipsOn, onTipsOff }: {
     visible: boolean;
     layout: HomeLayout | null;
     /** The node's profile and switches, from its answer (with its cards: a "Your way back in" it sent is offered). */
@@ -34,8 +34,10 @@ export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnN
     onClose: () => void;
     /** Every tip this node shows is seen (the card went by itself): its line says so rather than "Nothing to show now". */
     tipsAllSeen?: boolean;
-    /** Tips switched on: the tips start over from the first one. */
+    /** Tips switched on, or Reset to defaults: the tips start over from the first one. */
     onTipsOn?: () => void;
+    /** Tips switched off: kept as "Don't show tips again" (a node older than `tips` drops it from the layout). */
+    onTipsOff?: () => void;
 }) {
     const insets = useSafeAreaInsets();
     const listed = cardOrder(layout, pinned).filter(id => canMoveCard(id, pinned) && cardOnNode(id, node, role));
@@ -85,7 +87,7 @@ export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnN
                 <Switch
                     value={on}
                     onValueChange={v => {
-                        if (v && id === 'tips') onTipsOn?.();
+                        if (id === 'tips') (v ? onTipsOn : onTipsOff)?.();
                         apply(v ? showCard(layout, id, Date.now()) : hideCard(layout, id, Date.now(), pinned));
                     }}
                     accessibilityLabel={`Show ${name(id)} on Home`}
@@ -117,7 +119,7 @@ export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnN
                         )}
                         {hidden.map(id => row(id, false))}
                         <Pressable
-                            onPress={() => onChange(resetLayout(layout, Date.now()))}
+                            onPress={() => { onTipsOn?.(); onChange(resetLayout(layout, Date.now())); }}
                             style={[editHomeStyles.reset, { borderColor: colors.border.strong }]}
                             accessibilityRole="button"
                             accessibilityLabel="Reset Home to its default cards and order"

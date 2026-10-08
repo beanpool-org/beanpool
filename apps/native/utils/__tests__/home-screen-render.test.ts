@@ -131,8 +131,8 @@ import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay } from '@beanpool/core';
-import { AccessibilityInfo } from 'react-native';
-import { decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
+import { AccessibilityInfo, AppState, DeviceEventEmitter } from 'react-native';
+import { HOME_SAFETY_POLL_MS, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
 import { commonsSectionFor } from '../commons-sections';
 import { marketFilterFromLink } from '../market-filters';
@@ -1376,6 +1376,139 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         expect(cards()).toContain('tips');
         expect(tipText()).toBe(text('what-this-is'));
         expect(tipsRecord()).toMatchObject({ seen: [], dismissedAt: null });
+    });
+
+    // PR #1694 review finding 1: the day advance belongs to the return to Home, whatever the read brings, and nothing
+    // moves while Home is in front.
+    /** The phone's date moves on a day: the tip on the card was first shown "yesterday". */
+    const yesterday = () => {
+        const r = tipsRecord();
+        mem.store.set(homeTipsStoreKey(who.identity.publicKey), JSON.stringify({ ...r, currentShownOn: '2020-01-01' }));
+    };
+    /** Something on the node changes while Home stays in front (a 200 with a new answer). */
+    const nodeChanges = () => {
+        node.answer = { ...node.answer, cards: { ...node.answer.cards, community: { name: 'Mullumbimby', members: 82, tradesThisMonth: 23 } } };
+    };
+    /** A doorbell that matters to Home, and the read it brings after the settle (3 s). */
+    const bell = async () => {
+        const ws = vi.mocked(DeviceEventEmitter.addListener).mock.calls.filter(c => c[0] === 'ws_activity').at(-1)![1] as (d: unknown) => void;
+        await act(async () => { ws({ type: 'new_post' }); });
+        await act(async () => { await new Promise(r => setTimeout(r, 3_300)); });
+        await settle();
+    };
+    /** The two-minute safety read while Home is in front (the interval's own callback, not two minutes of waiting). */
+    const polls = () => {
+        const spy = vi.spyOn(globalThis, 'setInterval');
+        return {
+            run: async () => {
+                const tick = spy.mock.calls.filter(c => c[1] === HOME_SAFETY_POLL_MS).at(-1)![0] as () => void;
+                await act(async () => { tick(); });
+                await settle();
+            },
+            restore: () => spy.mockRestore(),
+        };
+    };
+
+    it('a return to Home on a later day that the node answers 304 advances the tip once; a doorbell and the poll after it leave it', async () => {
+        const poll = polls();
+        try {
+            await render();
+            expect(tipText()).toBe(text('what-this-is'));
+            yesterday();
+            await act(async () => { nav.focus?.(); });
+            await settle();
+            expect(homeReads().map(r => r.status)).toEqual([200, 304]);
+            expect(tipText()).toBe(text('offer'));
+            expect(tipsRecord()).toMatchObject({ seen: ['what-this-is'], current: 'offer', currentShownOn: localDay() });
+            // Home stays in front: a doorbell brings a changed answer, then the poll. The tip stays where it is.
+            yesterday();
+            nodeChanges();
+            await bell();
+            expect(homeReads().map(r => r.status)).toEqual([200, 304, 200]);
+            expect(tipText()).toBe(text('offer'));
+            node.answer = { ...node.answer, cards: { ...node.answer.cards, community: { name: 'Mullumbimby', members: 83, tradesThisMonth: 23 } } };
+            await poll.run();
+            expect(homeReads().map(r => r.status)).toEqual([200, 304, 200, 200]);
+            expect(tipText()).toBe(text('offer'));
+            expect(tipsRecord().seen).toEqual(['what-this-is']);
+        } finally { poll.restore(); }
+    }, 20_000);
+
+    it('the app coming back on a later day with the community out of reach advances the tip once; a doorbell and the poll once it answers leave it', async () => {
+        const poll = polls();
+        try {
+            await render();
+            yesterday();
+            node.down = true;
+            // The app comes back while Home is in front (AppState 'active'): a return to Home.
+            const resume = vi.mocked(AppState.addEventListener).mock.calls.filter(c => c[0] === 'change').at(-1)![1] as (s: string) => void;
+            await act(async () => { resume('active'); });
+            await settle();
+            expect(homeReads().map(r => r.status)).toEqual([200, 0]);
+            expect(document.querySelector('[data-testid="home-offline-note"]')).not.toBeNull();
+            expect(tipText()).toBe(text('offer'));
+            // The community answers again while Home stays in front: nothing moves the tip.
+            yesterday();
+            node.down = false;
+            nodeChanges();
+            await bell();
+            expect(homeReads().map(r => r.status)).toEqual([200, 0, 200]);
+            expect(tipText()).toBe(text('offer'));
+            node.answer = { ...node.answer, cards: { ...node.answer.cards, community: { name: 'Mullumbimby', members: 83, tradesThisMonth: 23 } } };
+            await poll.run();
+            expect(homeReads().map(r => r.status)).toEqual([200, 0, 200, 200]);
+            expect(tipText()).toBe(text('offer'));
+            expect(tipsRecord().seen).toEqual(['what-this-is']);
+        } finally { poll.restore(); }
+    }, 20_000);
+
+    // Finding 6: the tip a restart draws is the record's, from that day, so it moves on the next day's landing.
+    it('Tips switched on again records tip 1 as shown today, so the next day\'s landing moves on from it', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-tips-dont-show"]') as HTMLElement).click(); });
+        await settle();
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement).click(); });
+        await settle();
+        expect(tipText()).toBe(text('what-this-is'));
+        expect(tipsRecord()).toMatchObject({ seen: [], current: 'what-this-is', currentShownOn: localDay(), dismissedAt: null });
+        yesterday();
+        await again();
+        expect(tipText()).toBe(text('offer'));
+    });
+
+    // Finding 2: a node older than `tips` keeps the layout without it, so the switch-off must hold through the record.
+    it('Edit home\'s switch off holds on the next landing, on a node that drops the unknown id', async () => {
+        await render();
+        expect(cards()).toContain('tips');
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement).click(); });
+        await settle();
+        expect(cards()).not.toContain('tips');
+        expect(tipsRecord().dismissedAt).toEqual(expect.any(String));
+        // What an old node keeps of the layout it was sent: `tips` dropped, the rest and the phone's own stamp as sent.
+        const sent = JSON.parse(node.requests.filter(r => r.method === 'POST').at(-1)!.body).preferences['home.layout'];
+        const strip = (l: string[]) => l.filter(id => id !== 'tips');
+        node.answer = { ...node.answer, layout: { ...sent, order: strip(sent.order ?? []), hidden: strip(sent.hidden ?? []) } };
+        await again();
+        expect(cards()).not.toContain('tips');
+    });
+
+    // Finding 3: Reset to defaults shows Tips again, so it starts the tips over (as switching it on does).
+    it('Reset to defaults after "Don\'t show tips again" draws the card again, from tip 1', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-tip-next"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-tips-dont-show"]') as HTMLElement).click(); });
+        await settle();
+        expect(cards()).not.toContain('tips');
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
+        await settle();
+        expect(document.querySelector('[data-testid="edit-home-tips-switch"]')?.getAttribute('aria-checked')).toBe('true');
+        expect(document.querySelector('[data-testid="edit-home-tips"]')?.textContent).not.toContain('Nothing to show now');
+        expect(cards()).toContain('tips');
+        expect(tipText()).toBe(text('what-this-is'));
+        expect(tipsRecord()).toMatchObject({ seen: [], current: 'what-this-is', currentShownOn: localDay(), dismissedAt: null });
     });
 
     it('the record holds on a node that drops the unknown id: a dismissed record keeps the card away though the layout shows it', async () => {

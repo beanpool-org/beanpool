@@ -6,7 +6,8 @@ import {
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import {
-    dismissTips, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, type TipsRecord,
+    dismissTips, emptyTipsRecord, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor,
+    type TipsRecord,
 } from '@beanpool/core';
 import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
@@ -143,8 +144,8 @@ export default function HomeScreen() {
     /** The Tips card's record for this account (@beanpool/core home-tips.ts); null: not read yet, so no card. */
     const [tips, setTips] = useState<TipsRecord | null>(null);
     const tipsRef = useRef<TipsRecord | null>(null);
-    /** A landing happened and the Tips card has not had its once-a-day advance for it yet. */
-    const tipsToLand = useRef(false);
+    const roleRef = useRef<HomeRole>(undefined);
+    roleRef.current = role;
 
     const identityRef = useRef(identity);
     identityRef.current = identity;
@@ -239,11 +240,30 @@ export default function HomeScreen() {
         }
     }, [url]);
 
+    // ── Tips (scratch/home/TIPS-DESIGN-fable.md): the record is the phone's, per account ──
+    const keepTips = useCallback((whose: HomeAccount, next: TipsRecord) => {
+        if (!stillOnPhone(whose)) return;
+        tipsRef.current = next;
+        setTips(next);
+        void writeTips(whose, next);
+    }, []);
+    // A return to Home's once-a-day advance, from the answer in hand (the kept one counts: tips work with no connection): a
+    // tip first shown on an earlier day is marked seen and the next one drawn. With no answer in hand, the record as it is,
+    // so the card can be drawn when one comes; it moves on the next return. Only a return lands (PR #1694 review 1).
+    const landTips = useCallback(async (whose: HomeAccount) => {
+        const record = await readTips(whose.publicKey);
+        if (!stillOnPhone(whose) || identityRef.current?.publicKey !== whose.publicKey) return;
+        const ans = storedRef.current?.answer;
+        const next = ans?.me ? tipOnLanding(record, tipsFor(ans, roleRef.current), localDay()).record : record;
+        if (next === record) { tipsRef.current = record; setTips(record); } else keepTips(whose, next);
+    }, [keepTips]);
+
     // ── Reading Home ──
-    const refresh = useCallback(async (why: 'focus' | 'pull' | 'bell' | 'poll' | 'layout') => {
+    // `focus` is a return to Home (the tab, the app coming back, another account): the only read that moves the Tips card.
+    // `again` is a read while Home stays in front after the member's own step there (a notice opened, a poll or event made).
+    const refresh = useCallback(async (why: 'focus' | 'pull' | 'bell' | 'poll' | 'layout' | 'again') => {
         const id = identityRef.current;
         if (!id) return;
-        if (why === 'focus') tipsToLand.current = true;
         const whose = homeAccount(id.publicKey);
         const raw = await anchorUrl().catch(() => null);
         if (!raw) { setStatus('no_community'); return; }
@@ -265,6 +285,11 @@ export default function HomeScreen() {
             setInterests(effectiveInterests(copy?.answer.me?.interests, phoneStars));
             setStatus(copy ? 'ok' : 'loading');
         }
+        // The Tips card lands on this return from the answer in hand, before the network is asked: never on what a read
+        // brings later (a 304 or no answer changes nothing, and nothing moves while Home is in front). With none in hand
+        // (the first landing), from what this read brings, at its end.
+        const tipsLandNow = why === 'focus' && !!cached?.answer.me;
+        if (tipsLandNow) void landTips(whose);
         const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current).layout, askPinned(cached?.answer, Date.now()));
         // The global node only: "near you" from where the phone is (where location is already allowed).
         const global = await readsGlobal(u, cached);
@@ -318,7 +343,8 @@ export default function HomeScreen() {
             setOfflineNote(!!storedRef.current);
             if (why === 'pull') AccessibilityInfo.announceForAccessibility("Couldn't reach your community; showing what we had");
         }
-    }, [readLocal, pushLayout, maybeReveal]);
+        if (why === 'focus' && !tipsLandNow) await landTips(whose);
+    }, [readLocal, pushLayout, maybeReveal, landTips]);
 
     const refreshRef = useRef(refresh);
     refreshRef.current = refresh;
@@ -354,6 +380,8 @@ export default function HomeScreen() {
         setRole(undefined);
         setPlace(null);
         setKnocks([]);
+        tipsRef.current = null;
+        setTips(null);
         setStatus('loading');
         if (focused.current) void refreshRef.current('focus');
     }, [identity?.publicKey]);
@@ -363,27 +391,7 @@ export default function HomeScreen() {
         try { await refresh('pull'); } finally { setRefreshing(false); }
     }, [refresh]);
 
-    // ── Tips (scratch/home/TIPS-DESIGN-fable.md): the record is the phone's, per account ──
-    const keepTips = useCallback((whose: HomeAccount, next: TipsRecord) => {
-        if (!stillOnPhone(whose)) return;
-        tipsRef.current = next;
-        setTips(next);
-        void writeTips(whose, next);
-    }, []);
-    // Once per landing, with an answer in hand (the stored one counts: tips work with no connection): a tip first shown on
-    // an earlier day is marked seen and the next one drawn. Never while Home is in front.
-    const tipsAnswer = stored?.answer?.me ? stored.answer : null;
-    useEffect(() => {
-        const id = identityRef.current;
-        if (!tipsAnswer || !id || !tipsToLand.current) return;
-        tipsToLand.current = false;
-        const whose = homeAccount(id.publicKey);
-        void readTips(id.publicKey).then(record => {
-            if (!stillOnPhone(whose) || identityRef.current?.publicKey !== id.publicKey) return;
-            const step = tipOnLanding(record, tipsFor(tipsAnswer, role), localDay());
-            if (step.record === record) { tipsRef.current = record; setTips(record); } else keepTips(whose, step.record);
-        });
-    }, [tipsAnswer, role, keepTips]);
+    // ── Tips: Next, Don't show, and Edit home's switch ──
     const onTipNext = useCallback(() => {
         const id = identityRef.current;
         const ans = storedRef.current?.answer;
@@ -413,14 +421,22 @@ export default function HomeScreen() {
     const onTipsDontShow = useCallback(() => {
         const id = identityRef.current;
         if (!id) return;
-        keepTips(homeAccount(id.publicKey), dismissTips(tipsRef.current ?? restartTips(), new Date().toISOString()));
+        keepTips(homeAccount(id.publicKey), dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
         setHint(false);
         changeLayout(hideCard(layoutRef.current, 'tips', Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
         AccessibilityInfo.announceForAccessibility('Tips is hidden. Edit home brings it back.');
     }, [keepTips, changeLayout]);
+    // Tips switched on in Edit home, or Reset to defaults: the tips start over from the first one, kept as shown today.
     const onTipsOn = useCallback(() => {
         const id = identityRef.current;
-        if (id) keepTips(homeAccount(id.publicKey), restartTips());
+        const ans = storedRef.current?.answer;
+        if (id) keepTips(homeAccount(id.publicKey), restartTips(ans ? tipsFor(ans, roleRef.current) : [], localDay()));
+    }, [keepTips]);
+    // Tips switched off in Edit home holds as "Don't show tips again" does: on a node that doesn't know `tips` yet, the
+    // layout comes back without it, and only the record keeps the card away (PR #1694 review 2).
+    const onTipsOff = useCallback(() => {
+        const id = identityRef.current;
+        if (id) keepTips(homeAccount(id.publicKey), dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
     }, [keepTips]);
 
     const interestsRef = useRef(interests);
@@ -472,7 +488,7 @@ export default function HomeScreen() {
         } catch { /* the card's own words */ }
         Alert.alert(title, body);
         try { await signedPost(url, '/api/notices/seen', { ids: [noticeId] }, id); } catch { /* seen next time */ }
-        void refreshRef.current('focus');
+        void refreshRef.current('again');
     }, [url]);
 
     // ── What to draw ──
@@ -713,6 +729,7 @@ export default function HomeScreen() {
                     onClose={() => setEditOpen(false)}
                     tipsAllSeen={!!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList)}
                     onTipsOn={onTipsOn}
+                    onTipsOff={onTipsOff}
                 />
                 <NewPostTypeSheet
                     visible={postPicker}
@@ -725,8 +742,8 @@ export default function HomeScreen() {
                         router.push({ pathname: '/map', params: { newPost: type } });
                     }}
                 />
-                <NewPollModal visible={pollModal} onClose={() => setPollModal(false)} onSuccess={() => void refresh('focus')} />
-                <NewEventModal visible={eventModal} onClose={() => setEventModal(false)} onSuccess={() => void refresh('focus')} />
+                <NewPollModal visible={pollModal} onClose={() => setPollModal(false)} onSuccess={() => void refresh('again')} />
+                <NewEventModal visible={eventModal} onClose={() => setEventModal(false)} onSuccess={() => void refresh('again')} />
                 {manage.dialog}
             </View>
         </FabBandContext.Provider>

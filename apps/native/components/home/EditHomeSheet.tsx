@@ -18,7 +18,7 @@ import { HOME_TARGET_DP } from './HomeParts';
  * your community where only the community's admins invite and the member is not one. A pinned card (Find your community,
  * a member's first 30 days on the global node) is not in the list either: the note says it stays at the top for now.
  */
-export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnNow, colors, onChange, onClose, tipsAllSeen, onTipsOn, onTipsOff }: {
+export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnNow, colors, onChange, onClose, tipsAllSeen, tipsOff, onTipsOn, onTipsOff }: {
     visible: boolean;
     layout: HomeLayout | null;
     /** The node's profile and switches, from its answer (with its cards: a "Your way back in" it sent is offered). */
@@ -34,7 +34,9 @@ export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnN
     onClose: () => void;
     /** Every tip this node shows is seen (the card went by itself): its line says so rather than "Nothing to show now". */
     tipsAllSeen?: boolean;
-    /** Tips switched on, or Reset to defaults: the tips start over from the first one. */
+    /** Tips are off on this phone ("Don't show tips again", or switched off): Reset brings them back from the first. */
+    tipsOff?: boolean;
+    /** Tips switched on, or Reset to defaults while they were off: the tips start over from the first one. */
     onTipsOn?: () => void;
     /** Tips switched off: kept as "Don't show tips again" (a node older than `tips` drops it from the layout). */
     onTipsOff?: () => void;
@@ -119,7 +121,11 @@ export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnN
                         )}
                         {hidden.map(id => row(id, false))}
                         <Pressable
-                            onPress={() => { onTipsOn?.(); onChange(resetLayout(layout, Date.now())); }}
+                            onPress={() => {
+                                // Tips start over only when Reset brings them back; part-way through keeps the place.
+                                if (tipsOff || layout?.hidden.includes('tips')) onTipsOn?.();
+                                onChange(resetLayout(layout, Date.now()));
+                            }}
                             style={[editHomeStyles.reset, { borderColor: colors.border.strong }]}
                             accessibilityRole="button"
                             accessibilityLabel="Reset Home to its default cards and order"

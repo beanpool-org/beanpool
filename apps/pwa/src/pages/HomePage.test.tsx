@@ -1087,3 +1087,21 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         for (const [q] of vi.mocked(api.getHome).mock.calls) expect((q as { cards?: string[] }).cards ?? []).not.toContain('tips');
     });
 });
+
+describe('Home tips: Reset keeps a member part-way through on their tip (PR #1694 confirmation 1)', () => {
+    const LOCAL = tipsFor({ profile: 'local', features: answer().features }, null);
+    const record = () => JSON.parse(localStorage.getItem(tipsKey(ME.publicKey)) ?? 'null');
+    it('Reset to defaults while Tips is on, part-way (tip 4): the same tip stays', async () => {
+        localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: LOCAL.slice(0, 3).map(t => t.id), current: LOCAL[3].id, currentShownOn: localDay(), dismissedAt: null }));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-tips');
+        const before = within(card).getByTestId('home-tip-text').textContent;
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
+        fireEvent.click(within(dialog).getByTestId('home-edit-reset'));
+        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        const after = within(await screen.findByTestId('home-card-tips')).getByTestId('home-tip-text').textContent;
+        expect(after).toBe(before);
+    });
+});

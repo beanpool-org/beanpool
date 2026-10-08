@@ -313,6 +313,8 @@ export default function HomeScreen() {
                 phoneLayout.current = pick.layout;
                 void writePhoneLayout(id.publicKey, u, pick.layout, whose);
             }
+            // Tips land with the other cards, not after the interests save below (up to 15 s on a first landing).
+            if (why === 'focus' && !tipsLandNow) void landTips(whose);
             if (read.stored.answer.me) {
                 // A star tapped while the node answered is newer than the answer's interests. Judged by when the read was
                 // sent, not by this landing: one that joined a read already out gets that read's mark (home-store.ts).
@@ -343,7 +345,8 @@ export default function HomeScreen() {
             setOfflineNote(!!storedRef.current);
             if (why === 'pull') AccessibilityInfo.announceForAccessibility("Couldn't reach your community; showing what we had");
         }
-        if (why === 'focus' && !tipsLandNow) await landTips(whose);
+        // No answer this time (offline, members only, needs an update): land from what the phone holds.
+        if (why === 'focus' && !tipsLandNow && read.kind !== 'answer') await landTips(whose);
     }, [readLocal, pushLayout, maybeReveal, landTips]);
 
     const refreshRef = useRef(refresh);
@@ -728,6 +731,7 @@ export default function HomeScreen() {
                     onChange={changeLayout}
                     onClose={() => setEditOpen(false)}
                     tipsAllSeen={!!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList)}
+                    tipsOff={!!tips?.dismissedAt}
                     onTipsOn={onTipsOn}
                     onTipsOff={onTipsOff}
                 />

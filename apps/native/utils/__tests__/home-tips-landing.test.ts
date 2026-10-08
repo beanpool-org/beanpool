@@ -368,20 +368,24 @@ describe('Home tips: when a return to Home lands the tip (PR #1694 confirmation 
         expect(idOf(tipText())).toBe(mid);
     });
 
-    it('F. Edit home: switch Tips off then on again in one sheet starts over from tip 1; the layout shows it', async () => {
+    it('F. Edit home: Remove Tips, then ＋ Add a card brings it back from tip 1; the layout shows it', async () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-tip-next"]') as HTMLElement).click(); });
         await settle();
+        const label = (l: string) => document.querySelector(`[aria-label="${l}"]`) as HTMLElement;
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        const sw = () => document.querySelector('[data-testid="edit-home-tips-switch"]') as HTMLElement;
-        await act(async () => { sw().click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-menu"]') as HTMLElement).click(); });
+        await act(async () => { label('Remove Tips from Home').click(); });
         await settle();
         expect(tipsRecord().dismissedAt).toEqual(expect.any(String));
         expect(cards()).not.toContain('tips');
-        await act(async () => { sw().click(); });
+        await act(async () => { (document.querySelector('[data-testid="edit-home-add"]') as HTMLElement).click(); });
+        await settle(2);
+        await act(async () => { label('Add Tips to Home').click(); });
         await settle();
         expect(tipsRecord()).toMatchObject({ seen: [], current: 'what-this-is', currentShownOn: localDay(), dismissedAt: null });
         expect(cards()).toContain('tips');
-        expect(JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!).hidden).toEqual([]);
+        const ids = JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!).cards.map((c: { id: string }) => c.id);
+        expect(ids).toContain('tips');
     });
 });

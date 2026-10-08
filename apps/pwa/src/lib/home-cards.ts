@@ -19,10 +19,10 @@
  * browser (lib/home-cache.ts); the last write wins by `updatedAt`.
  */
 
-/** The catalogue (§3.1), in the default order. The same 17 ids as the node's. */
+/** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
 export const HOME_CARD_IDS = [
-    'needs', 'safety', 'find', 'steps', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined',
-    'pulse', 'beans', 'notices', 'invite', 'community',
+    'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups',
+    'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
 ] as const;
 export type HomeCardId = typeof HOME_CARD_IDS[number];
 const CARD_IDS: ReadonlySet<string> = new Set(HOME_CARD_IDS);
@@ -45,8 +45,11 @@ const DAY_MS = 86_400_000;
 /** The node refuses a layout list longer than this (H1); the catalogue is 17, so this is only a guard. */
 const MAX_LAYOUT_IDS = 32;
 
-/** Cards the node computes data for: the rest (`interests`, `invite`) are drawn from `me` and `features`. */
-const DATA_CARDS: ReadonlySet<HomeCardId> = new Set(HOME_CARD_IDS.filter(id => id !== 'interests' && id !== 'invite'));
+/**
+ * Cards the node computes data for: the rest (`interests`, `invite`) are drawn from `me` and `features`, and `tips` from the
+ * list bundled in @beanpool/core (home-tips.ts). Never in `cards=`, so the address and its tag stay as they were.
+ */
+const DATA_CARDS: ReadonlySet<HomeCardId> = new Set(HOME_CARD_IDS.filter(id => id !== 'interests' && id !== 'invite' && id !== 'tips'));
 
 // ── the answer, as GET /api/home sends it ─────────────────────────────────────────────────────────────────────────────
 
@@ -297,6 +300,8 @@ export interface ShownOptions {
     interestsOpen?: boolean;
     /** The interests the page holds now (a tap saves in the background; the card follows the tap, not the answer). */
     interests?: string[];
+    /** The Tips card has a tip to show (@beanpool/core home-tips.ts, from the browser's record); absent: none. */
+    tipsUp?: boolean;
 }
 
 /**
@@ -321,6 +326,9 @@ export function shownCards(answer: HomeAnswer, layout: HomeLayout | null, opts: 
                 return answer.me.standing === 'member' && answer.features.invites !== false && answer.me.firstOffer;
             case 'steps':
                 return !!answer.cards.steps && stepsSaySomething(answer, opts.interests ?? answer.me.interests, now);
+            // A member's only (the visitor branch above leaves it out); a suspended member still learns the app.
+            case 'tips':
+                return !!opts.tipsUp;
             default:
                 return !!answer.cards[id as keyof HomeCards];
         }
@@ -423,6 +431,7 @@ export const CARD_TITLES: Record<HomeCardId, string> = {
     safety: 'Your way back in',
     find: 'Find your community',
     steps: 'First steps',
+    tips: 'Tips',
     interests: 'What are you into?',
     deals: 'Your deals',
     enterprise: 'Your enterprise',

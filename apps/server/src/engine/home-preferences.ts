@@ -1,6 +1,6 @@
 /**
- * A member's Home, kept on their account: which cards they moved, hid or dismissed (`home.layout`) and the categories they
- * starred (`interests`). Two keys of member_preferences (design: scratch/global-node/DESIGN-home-dashboard-fable.md §4.2,
+ * A member's Home, kept on their account: which cards are on it (`home.layout`) and the categories they starred
+ * (`interests`). Two keys of member_preferences (design: scratch/global-node/DESIGN-home-dashboard-fable.md §4.2,
  * §4.3; slice H1), saved through setMemberPreferences and served by getMemberPreferences to their owner alone.
  *
  * - **Unknown ids are dropped, never refused.** A phone newer than the node knows cards and categories the node doesn't, and
@@ -21,10 +21,16 @@
  *   kept in one browser never overwrites a newer one set on another device (PR #1479's review). A save of the same list
  *   leaves it; interests stored before the stamp read as stamped at 1970-01-01.
  *
+ * - **Version 2 is kept opaque** (scratch/home/CARD-FRAME-DESIGN-fable.md §2.3, slice F1): `{ v: 2, cards: [{ id, type,
+ *   settings? }], dismissed, updatedAt }` is checked by shape and bounds alone (@beanpool/core home-frame.ts
+ *   `checkHomeLayout`: 24 cards, ids ≤ 32, types ≤ 24, settings ≤ 512 bytes each, the whole ≤ 8 KB, ids unique, real
+ *   dates), never by type or id, so a card type an app invents after this node is kept byte for byte. Version 1 is taken
+ *   and served as it always was (above), for today's apps; last write wins by `updatedAt` across both.
+ *
  * Privacy: a layout says what someone cares about. It is never on the members list, a profile, or any read but its owner's.
  * The rows travel to a standby inside the member's row, as every preference does (replication-manifest.ts).
  */
-import { PRICING_CATEGORIES } from '@beanpool/core';
+import { HOME_FRAME_MESSAGES, PRICING_CATEGORIES, checkHomeLayout, readHomeLayout, type HomeLayoutV2 } from '@beanpool/core';
 import { db } from '../db/db.js';
 
 export const HOME_LAYOUT_PREF_KEY = 'home.layout';
@@ -52,8 +58,8 @@ export const MAX_LAYOUT_IDS = 32;
 /** The most interests a member may send, counted before anything is dropped: one of each category. */
 export const MAX_INTERESTS = INTEREST_IDS.length;
 
-/** A member's Home layout as it is stored and served. */
-export interface HomeLayout {
+/** A member's version-1 Home layout as it is stored and served (today's apps). */
+export interface HomeLayoutV1 {
     v: 1;
     /** Cards in the member's order; a card not named keeps its place in the default order after these. */
     order: HomeCardId[];
@@ -62,6 +68,12 @@ export interface HomeLayout {
     dismissed: Partial<Record<HomeCardId, string>>;
     updatedAt: string;
 }
+
+/** A member's version-2 Home layout as it is stored and served: their card instances, opaque to the node, always dated. */
+export type HomeLayoutV2Kept = HomeLayoutV2 & { updatedAt: string };
+
+/** A member's Home layout as it is stored and served: version 1 (today's apps) or version 2 (the card frame). */
+export type HomeLayout = HomeLayoutV1 | HomeLayoutV2Kept;
 
 export const HOME_LAYOUT_SHAPE_MESSAGE =
     'A Home layout is { v: 1, order: [card ids], hidden: [card ids], dismissed: { card id: date }, updatedAt: date }.';
@@ -116,6 +128,7 @@ function layoutOf(value: unknown, strict: boolean, now: Date): HomeLayout | null
         return null;
     };
     if (!isPlainObject(value)) return refuse(HOME_LAYOUT_SHAPE_MESSAGE);
+    if (value.v === 2) return frameLayoutOf(value, strict, now);
     if (value.v !== undefined && value.v !== 1) return refuse(HOME_LAYOUT_SHAPE_MESSAGE);
     const lists = strict ? { shape: HOME_LAYOUT_SHAPE_MESSAGE, max: MAX_LAYOUT_IDS, tooMany: HOME_LAYOUT_TOO_MANY_MESSAGE } : null;
     const order = knownIds(value.order, CARDS, lists) as HomeCardId[];
@@ -149,6 +162,27 @@ function layoutOf(value: unknown, strict: boolean, now: Date): HomeLayout | null
     // A clock ahead of the node's is held to the node's now: its layout would otherwise win over every later one.
     if (strict && Date.parse(updatedAt) > now.getTime()) updatedAt = now.toISOString();
     return { v: 1, order, hidden, dismissed, updatedAt };
+}
+
+/**
+ * A version-2 layout (the card frame): shape and bounds only, never a type or an id filter. `strict` (a member's write)
+ * refuses one over any bound whole, with its sentence; a stored value keeps what core's tolerant reader keeps. Dated as
+ * version 1 is: none sent is now, a future date is held to now, none stored is 1970.
+ */
+function frameLayoutOf(value: Record<string, unknown>, strict: boolean, now: Date): HomeLayoutV2Kept | null {
+    let layout: HomeLayoutV2;
+    if (strict) {
+        const checked = checkHomeLayout(value);
+        if (!checked.ok) throw new Error(HOME_FRAME_MESSAGES[checked.problem]);
+        layout = checked.layout;
+    } else {
+        const read = readHomeLayout(value);
+        if (!read) return null;
+        layout = read;
+    }
+    let updatedAt = layout.updatedAt ?? (strict ? now.toISOString() : new Date(0).toISOString());
+    if (strict && Date.parse(updatedAt) > now.getTime()) updatedAt = now.toISOString();
+    return { ...layout, updatedAt };
 }
 
 /** A member's layout, as they sent it, made what is kept. THROWS a sentence for the member on a body it refuses. */

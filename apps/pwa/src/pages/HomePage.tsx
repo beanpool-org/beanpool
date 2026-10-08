@@ -80,9 +80,8 @@ export const HOME_SIGNED_OUT = 'You signed out of this browser in another tab. R
 /** A community's server older than Home (a web app pointed at another server in Settings): the tabs work as before. */
 export const HOME_NOT_ON_NODE = "This community's server doesn't have Home yet. The Market and the other tabs work as before.";
 /** Said politely once a card is hidden: where it went, and how it comes back. */
-export const hiddenWords = (title: string) => `${title} is hidden. Edit home brings it back.`;
 /** Said politely when Done on the last tip takes the Tips card away. */
-export const TIPS_DONE_WORDS = 'That was the last tip. Edit home brings them back.';
+export const TIPS_DONE_WORDS = 'That was the last tip. Add a card brings them back.';
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
@@ -728,15 +727,16 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
      * Remove (§1.3): the instance leaves the list, said politely by the card's words, and focus goes to the nearest card
      * left. Remove on Tips does what "Don't show tips again" does: the record holds it too.
      */
-    function removeFromHome(id: string) {
+    function removeFromHome(id: string, inDialog = false) {
         const card = shown.find(c => c.id === id) ?? listOf(drawnRef.current).find(c => c.id === id);
         if (!card) return;
-        if (card.type === 'tips') { tipsDontShow(); return; }
+        if (card.type === 'tips') { tipsDontShow(inDialog); return; }
         const name = cardLabelName(card, profile);
         const onList = listOf(drawnRef.current).some(c => c.id === id);
         // The interests card opened from Tune without being on the list just closes.
         if (onList && !changeLayout((l) => removeCard(l, id, Date.now(), pins))) return;
-        focusAround(id);
+        // From Edit home, the dialog keeps focus on its nearest row: the page behind a modal never takes it.
+        if (!inDialog) focusAround(id);
         setLive(removedLine(name));
         if (card.type === 'interests') setInterestsOpen(false);
     }
@@ -772,9 +772,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     }
 
     // "Don't show tips again" (and the card's Hide): the record says so, and the layout hides it for the other devices.
-    function tipsDontShow() {
+    function tipsDontShow(inDialog = false) {
         if (!publicKey || landedEpoch() === null) return;
-        focusAround('tips');
+        if (!inDialog) focusAround('tips');
         keepTips(dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
         const tipsCard = listOf(drawnRef.current).find(c => c.type === 'tips');
         if (tipsCard) changeLayout((l) => removeCard(l, tipsCard.id, Date.now(), pins));
@@ -915,7 +915,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                                 </button>
                             )}
                         </div>
-                        <button type="button" onClick={tipsDontShow} aria-label={TIPS_DONT_SHOW_LABEL} data-testid="home-tips-dont-show"
+                        <button type="button" onClick={() => tipsDontShow()} aria-label={TIPS_DONT_SHOW_LABEL} data-testid="home-tips-dont-show"
                             className="w-full min-h-[44px] mt-1 px-2 bg-transparent border-0 rounded-lg text-sm font-bold text-nature-700 dark:text-nature-200 whitespace-normal break-words cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                             {TIPS_DONT_SHOW}
                         </button>
@@ -1225,7 +1225,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     onAdd={() => { setEditOpen(false); setPickerOpen(true); }}
                     onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editCards, Date.now(), pins)); }}
                     onSettings={(id) => { const card = listOf(drawnRef.current).find(c => c.id === id); if (card) setSettingsFor(card); }}
-                    onRemove={(id) => removeFromHome(id)}
+                    onRemove={(id) => removeFromHome(id, true)}
                     // Reset brings Tips back when they were off, so then the tips start over (PR #1694 review 3); a member
                     // part-way through keeps their place (confirmation 1, finding 2).
                     onReset={() => {

@@ -31,6 +31,16 @@ describe('OffboxBackupsPanel', () => {
     beforeEach(() => { vi.restoreAllMocks(); });
     afterEach(() => { vi.unstubAllGlobals(); });
 
+    it('shows a loading state indicator while status request is pending', async () => {
+        let resolveFetch!: (val: any) => void;
+        const pendingPromise = new Promise((resolve) => { resolveFetch = resolve; });
+        vi.stubGlobal('fetch', vi.fn(() => pendingPromise));
+        render(<OffboxBackupsPanel activeNode={node} />);
+        expect(screen.getByTestId('offbox-loading')).toHaveTextContent('Loading backup settings…');
+        resolveFetch(json(status({})));
+        await waitFor(() => expect(screen.queryByTestId('offbox-loading')).toBeNull());
+    });
+
     it('says in words why nothing goes off the box without a recovery code, and offers no "send now"', async () => {
         const words = 'Nothing goes off the box: this server has no recovery code, so its backups are not locked, and only a locked backup may leave the server.';
         vi.stubGlobal('fetch', vi.fn(async () => json(status({ state: 'not-locked', message: words, destinations: [dest({ health: 'waiting', lastSuccessAt: null })] }))));

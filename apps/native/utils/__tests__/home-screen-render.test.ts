@@ -1024,6 +1024,23 @@ describe('a layout save the node refuses is not sent again at every read', () =>
         } finally { spy.mockRestore(); }
     });
 
+    // Review of #1699 (confirmation), note 1: the line stayed until an edit or a restart.
+    it('P6: the node is updated and another device saved a newer list: that list stands, nothing is sent, and Edit home no longer says the server needs an update', async () => {
+        node.answer = { ...localMember(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
+        node.refuse = 400;
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify({ v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: iso(Date.now() - H) }));
+        await render();
+        expect(await notOnAccountShown()).toBe(true);
+        node.refuse = 0;
+        node.answer = { ...localMember(), layout: { v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: new Date().toISOString() } as never };
+        const before = node.requests.length;
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(trace(before).filter(t => t.startsWith('POST'))).toEqual([]);
+        expect(cards().slice(0, 2)).toEqual(['pulse', 'beans']);
+        expect(await notOnAccountShown()).toBe(false);
+    });
+
     it('a member who never edited adds a card on a node from before the frame: one save, then one read', async () => {
         node.answer = { ...localMember(), me: { ...localMember().me!, joinedAt: iso(Date.now() - 30 * 24 * H) }, layout: null };
         node.refuse = 400;

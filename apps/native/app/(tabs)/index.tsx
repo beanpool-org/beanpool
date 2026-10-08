@@ -372,12 +372,17 @@ export default function HomeScreen() {
             const member = canTailor(read.stored.answer);
             const answered = read.stored.answer;
             const pick = member ? pickLayout(answered.layout, phoneLayout.current, answered.layoutV1, phoneOver.current) : { layout: null, push: false };
+            if (member && answered.layout && !answered.layoutV1) {
+                // A version-2 answer: this node keeps the new shape now (it was updated), so nothing waits on it: the list
+                // goes by its date at any read again, and Edit home stops saying the server needs an update, even when
+                // another device's newer list wins and nothing is sent (review of #1699 confirmation, note 1).
+                refusedShape.current = null;
+                setNotOnAccount(false);
+            }
             if (member && !pick.push && !answered.layoutV1 && phoneOver.current !== null) {
                 // The account's real list is back (a version-2 answer at or after the unknown one): it stands, and the
                 // phone's list made meanwhile goes (its copy is replaced below). Nothing of it is sent.
                 clearPhoneOnly(phoneOver, id.publicKey, u, whose);
-                refusedShape.current = null;
-                setNotOnAccount(false);
             }
             setLayout(pick.layout);
             // An empty version-1 list with no copy here moved or hid nothing (a way-back dismissal or a Reset on an older app):

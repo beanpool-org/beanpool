@@ -1337,6 +1337,7 @@ export default function SettingsScreen() {
                                 keysToRemove.push(`pillar_sync_${filename}_last-sync`);
                                 keysToRemove.push(`pillar_sync_${filename}_checkpoint`);
                                 keysToRemove.push(`pillar_sync_${filename}_members_last_sync`);
+                                keysToRemove.push(`pillar_sync_${filename}_members_held_since`);
                             }
                             await AsyncStorage.multiRemove(keysToRemove);
                             const { clearDB, initDB } = await import('../../utils/db');

@@ -319,7 +319,19 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         const kLastMembersSync = await getSyncCursorKey('members_last_sync');
         const lastMembersSync = await AsyncStorage.getItem(kLastMembersSync);
-        
+        // The members delta's own cursor, set only while it trails kLastSync: a members delta that did not land (the node
+        // busy, a network error, an answer this phone did not apply) leaves it where that read asked from, and the next
+        // sync asks again from there. A delta from before the node's avatarKeysSince is answered with the whole directory
+        // (the faces heal, engine/avatar-keys.ts on the server) under the heavy-read cap, which may answer 503
+        // heavy_read_busy: moving on past it got the phone a plain delta, and its faces stayed broken until the hourly
+        // whole read (review of PR #1656). Only the members delta waits: kLastSync is the posts cursor too, and a photo
+        // heal's next page (engine/photo-keys.ts) comes only to a newer one. Unset, a sync asks what it always did.
+        const kMembersHeld = await getSyncCursorKey('members_held_since');
+        let membersHeld = await AsyncStorage.getItem(kMembersHeld);
+        // Set below by this cycle's members reads: the cursor of a delta that did not land, or that one landed.
+        let membersHoldAt = '';
+        let membersLanded = false;
+
         let localMembersCount = 0;
         try {
             const database = await getDb();
@@ -385,6 +397,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 console.warn(`[Pillar Sync] ${anchorUrl} answers identity epoch ${epochNow}, not ${epochHeld}: another server took over. Syncing it whole.`);
                 await AsyncStorage.removeItem(kLastSync);
                 await AsyncStorage.removeItem(kLastMembersSync);
+                await AsyncStorage.removeItem(kMembersHeld);
+                membersHeld = null;
                 forgetFingerprintsOf(anchorUrl);
                 lastSyncParam = '';
                 incrementalSinceIso = '';
@@ -541,6 +555,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     }
                     // An unchanged directory still counts as a completed hourly check.
                     await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
+                    // Every member as they are now: no held delta needs to ask again.
+                    if (dirData === undefined || Array.isArray(dirData)) membersLanded = true;
                 }
             } catch (e) {
                 console.warn('[Pillar Sync] Members fetch failed:', e);
@@ -551,8 +567,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // already triggers a sync on member_joined/profile_updated). This is a PARTIAL list,
             // so we must NOT set membersComplete — otherwise applyDelta would garbage-collect
             // every local member absent from this small delta.
+            const membersSinceIso = membersHeld && membersHeld < incrementalSinceIso ? membersHeld : incrementalSinceIso;
             try {
-                const deltaRes = await fetch(`${anchorUrl}/api/members?updatedAfter=${encodeURIComponent(incrementalSinceIso)}`, {
+                const deltaRes = await fetch(`${anchorUrl}/api/members?updatedAfter=${encodeURIComponent(membersSinceIso)}`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: timeouts.signal(30000)
@@ -566,9 +583,17 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                         delta.members = deltaData;
                         // membersComplete intentionally left unset (partial list → no GC).
                     }
+                    // The same answer as the last one applied (undefined), or a list.
+                    membersLanded = deltaData === undefined || Array.isArray(deltaData);
                 }
             } catch (e) {
                 console.warn('[Pillar Sync] Incremental members fetch failed:', e);
+            }
+            if (!membersLanded) {
+                // Asked again from this cursor at the next sync, whose answer is read afresh: a body read here and not
+                // applied (no list in it) must not pass for applied when it comes again.
+                membersHoldAt = membersSinceIso;
+                forgetCycleFingerprints(anchorUrl, ['membersDelta']);
             }
         }
 
@@ -775,6 +800,14 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         // Step 3: Success — save timestamp
         const kCheckpoint = await getSyncCursorKey(StorageKeysConfig.SYNC_CHECKPOINT);
+        // The members delta's cursor (kMembersHeld above): held where a delta that did not land asked from, let go once a
+        // members read lands. A cycle that never gets here moves neither cursor. Written before kLastSync, so a phone killed
+        // between the two writes never has kLastSync moved past a hold it didn't store.
+        if (membersHoldAt) {
+            if (membersHoldAt !== membersHeld) await AsyncStorage.setItem(kMembersHeld, membersHoldAt);
+        } else if (membersLanded && membersHeld !== null) {
+            await AsyncStorage.removeItem(kMembersHeld);
+        }
         if (!postsUnwritten) await AsyncStorage.setItem(kLastSync, String(Date.now()));
         await AsyncStorage.removeItem(kCheckpoint);
         // The epoch this phone now holds the node as: the first one it sees, or the new one once the whole sync after

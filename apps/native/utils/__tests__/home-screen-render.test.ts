@@ -1235,17 +1235,17 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         expect(byLabel('Move Near you up')!.getAttribute('aria-disabled')).toBe('true');
     });
 
-    it('after 30 days: its "…" hides it, the layout is saved, and the next read no longer asks for it', async () => {
+    it('after 30 days: its "…" removes it, the layout is saved, and the next read no longer asks for it', async () => {
         node.answer = globalMember(31);
         mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
         await render();
         expect(cards()[0]).toBe('find');
         await act(async () => { byLabel('Card options for Find your community')!.click(); });
-        await act(async () => { byLabel('Hide Find your community')!.click(); });
+        await act(async () => { byLabel('Remove Find your community from Home')!.click(); });
         await settle();
         expect(cards()).not.toContain('find');
         const post = node.requests.find(r => r.method === 'POST')!;
-        expect(JSON.parse(post.body).preferences['home.layout'].hidden).toEqual(['find']);
+        expect(JSON.parse(post.body).preferences['home.layout'].cards.map((c: { id: string }) => c.id)).not.toContain('find');
         await act(async () => { nav.focus?.(); });
         await settle();
         expect(homeCards().at(-1)).not.toContain('find');

@@ -7,7 +7,7 @@ related: home, learn, your-channels, reporting, the-bean
 
 ## What it is
 
-Open the Pulse from the **The Pulse** card on **Home**: tap a post, or tap **See all**. If you have hidden the card, bring it back with **Edit home**. On the phone you can also open it from **Settings**, under **The Pulse**.
+Open the Pulse from the **The Pulse** card on **Home**: tap a post, or tap **See all**. If it is not on your Home, bring it back with **Add a card** on the phone, or **Edit home** in the web app. On the phone you can also open it from **Settings**, under **The Pulse**.
 
 The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do.
 

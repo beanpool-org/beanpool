@@ -107,7 +107,7 @@ describe('one request, the cached answer first (§5)', () => {
 
     it('draws the copy this browser kept before the node answers, and asks for the cards its layout shows', async () => {
         const layout: HomeLayout = { v: 1, order: [], hidden: ['pulse'], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z' };
-        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout }, { community: { name: 'Cached town', members: 5 } }), layout, layoutUnsaved: false, savedAt: 1 });
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout }, { community: { name: 'Cached town', members: 5 } }), layout: layout as never /* an older web app's cached copy (v1): read through the tolerant reader */, layoutUnsaved: false, savedAt: 1 });
         let answerNode!: (r: HomeRead) => void;
         vi.mocked(api.getHome).mockReturnValue(new Promise(r => { answerNode = r; }));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -298,7 +298,7 @@ describe('tailoring (§4)', () => {
     it('a newer layout from another device wins over this browser\'s older copy', async () => {
         const older: HomeLayout = { v: 1, order: [], hidden: ['beans'], dismissed: {}, updatedAt: '2026-09-01T00:00:00.000Z' };
         const newer: HomeLayout = { v: 1, order: [], hidden: ['pulse'], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z' };
-        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout: older }), layout: older, layoutUnsaved: false, savedAt: 1 });
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout: older }), layout: older as never /* an older web app's cached copy (v1) */, layoutUnsaved: false, savedAt: 1 });
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: newer })));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByText('Mullumbimby');

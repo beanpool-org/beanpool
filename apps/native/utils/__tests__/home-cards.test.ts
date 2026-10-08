@@ -22,7 +22,7 @@ import {
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
-import { HOME_V1_CARD_IDS, defaultCards, homeCardType, normalizeCategory, translateV1 } from '@beanpool/core';
+import { HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, translateV1 } from '@beanpool/core';
 import { mayInviteHere } from '../invite-entries';
 
 const ME = 'a'.repeat(64);
@@ -447,6 +447,30 @@ describe('the frame: the picker, adding, and the members who were here before (C
         // On a tie it doesn't.
         const tie = readHomeAnswer({ ...answer(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], updatedAt: iso(NOW) } })!;
         expect(pickLayout(tie.layout, phone, tie.layoutV1)).toEqual({ layout: phone, push: false });
+    });
+
+    it('no copy on the phone and an empty version-1 account list: unknown, so the newcomer\'s list; an edit made then loses to the account\'s real list dated at or after it (review of #1699, finding 2)', () => {
+        const at = iso(NOW - 2 * H);
+        const standby = readHomeAnswer({ ...answer(), layout: { v: 1, order: [], hidden: [], dismissed: { safety: at }, updatedAt: at } })!;
+        // Not every version-1 card: the newcomer's list, with the account's dismissal; nothing sent.
+        expect(pickLayout(standby.layout, null, standby.layoutV1)).toEqual({ layout: { ...defaultHomeLayout(), dismissed: { safety: at } }, push: false });
+        // The member edits there: the phone's list, marked as made over that list (its date). It is sent, and the standby
+        // refuses it (once per landing), so it stays the phone's.
+        const edit = { v: 2 as const, cards: defaultCards().filter(c => c.type !== 'events'), dismissed: {}, updatedAt: iso(NOW) };
+        expect(pickLayout(standby.layout, edit, standby.layoutV1, at)).toEqual({ layout: edit, push: true });
+        // The primary is back with the real list, dated like the empty one or later: it wins, and nothing is sent.
+        const real = { v: 2 as const, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: at };
+        expect(pickLayout(real, edit, undefined, at)).toEqual({ layout: real, push: false });
+        expect(pickLayout({ ...real, updatedAt: iso(NOW - H) }, edit, undefined, at).layout!.updatedAt).toBe(iso(NOW - H));
+        // Never the reverse: without the mark the phone's newer edit would win and be sent.
+        expect(pickLayout(real, edit)).toEqual({ layout: edit, push: true });
+        // A version-2 list older than the empty one isn't the account's list it stood for: the phone's newer edit wins.
+        expect(pickLayout({ ...real, updatedAt: iso(NOW - 3 * H) }, edit, undefined, at)).toEqual({ layout: edit, push: true });
+        // The empty list had no date: any version-2 answer is the account's.
+        expect(pickLayout(real, edit, undefined, '')).toEqual({ layout: real, push: false });
+        // A version-1 list that names cards is the member's, as before.
+        const v1 = readHomeAnswer({ ...answer(), layout: { v: 1, order: ['beans'], hidden: [], updatedAt: at } })!;
+        expect(pickLayout(v1.layout, null, v1.layoutV1)).toEqual({ layout: v1.layout, push: false });
     });
 
     it('a stored list with 24 `market` or 7 `search` instances draws one Market and five searches, and never crashes (review of #1697, note c)', () => {

@@ -36,8 +36,8 @@ import {
     type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
-    SAVE_REFUSED, SAVE_SHAPE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
-    readTips, saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
+    SAVE_REFUSED, SAVE_SHAPE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readPhoneOnlyMark, readStoredHome,
+    reconcileInterests, readTips, saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, writePhoneOnlyMark, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
 } from '../../utils/home-store';
 import { readGlobalHome } from '../../utils/community-directory';
 import { rememberedKnocks, type RememberedKnock } from '../../utils/knock';
@@ -84,6 +84,13 @@ import type { NeedsYouEntry } from '../../utils/needs-you';
 type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community' | 'needs_update';
 
 const REVEAL_MS = 300;
+
+/** The account's list is known again: the phone's list is no longer marked as made while it wasn't (pickLayout). */
+function clearPhoneOnly(mark: { current: string | null }, publicKey: string, url: string, whose: HomeAccount): void {
+    if (mark.current === null) return;
+    mark.current = null;
+    void writePhoneOnlyMark(publicKey, url, null, whose);
+}
 
 /** A sheet opened as another closes: iOS can't present one modal while the last is still going (Android can). */
 const afterModal = (fn: () => void) => (Platform.OS === 'ios' ? void setTimeout(fn, 350) : fn());
@@ -172,6 +179,9 @@ export default function HomeScreen() {
     // The account and community (`key|url`) whose node refused the phone's list as a shape it doesn't know yet (a node from
     // before the frame): the list is sent again once per landing, never at a poll, a bell, a pull or an add's own read.
     const refusedShape = useRef<string | null>(null);
+    // The phone's list was made while the account's was unknown (an empty version-1 list, as a standby from before the
+    // frame answers): that list's date, so the account's real list wins over it once it answers (pickLayout).
+    const phoneOver = useRef<string | null>(null);
     const layoutRef = useRef<HomeLayout | null>(null);
     layoutRef.current = layout;
     const focused = useRef(false);
@@ -266,11 +276,13 @@ export default function HomeScreen() {
             const account = storedRef.current?.answer.layout ?? null;
             phoneLayout.current = account;
             setLayout(account);
+            clearPhoneOnly(phoneOver, id.publicKey, u, whose);
             await yieldPhoneLayout(id.publicKey, u, account, whose);
             return;
         }
         if (saved) {
             refusedShape.current = null;
+            clearPhoneOnly(phoneOver, id.publicKey, u, whose);
             setNotOnAccount(false);
         }
         // The node keeps the newer layout (another phone's, the web app's): that one, then.
@@ -313,16 +325,19 @@ export default function HomeScreen() {
         let cached = storedRef.current;
         if (!cached || cached.url !== u || cached.publicKey !== id.publicKey) {
             // Another community or account than the one drawn: its own copies, drawn before the network answers.
-            const [copy, mine, phoneStars] = await Promise.all([readStoredHome(id.publicKey, u), readPhoneLayout(id.publicKey, u), readPhoneInterests()]);
+            const [copy, mine, over, phoneStars] = await Promise.all([
+                readStoredHome(id.publicKey, u), readPhoneLayout(id.publicKey, u), readPhoneOnlyMark(id.publicKey, u), readPhoneInterests(),
+            ]);
             cached = copy;
             storedRef.current = copy;
             phoneLayout.current = mine;
+            phoneOver.current = mine ? over : null;
             setUrl(u);
             setRole(undefined);
             setPlace(null);
             setKnocks([]);
             setStored(copy);
-            setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine, copy!.answer.layoutV1).layout : null);
+            setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine, copy!.answer.layoutV1, phoneOver.current).layout : null);
             setNotOnAccount(false);
             setFewer(false);
             setInterests(effectiveInterests(copy?.answer.me?.interests, phoneStars));
@@ -333,7 +348,7 @@ export default function HomeScreen() {
         // (the first landing), from what this read brings, at its end.
         const tipsLandNow = why === 'focus' && !!cached?.answer.me;
         if (tipsLandNow) void landTips(whose);
-        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current, cached?.answer.layoutV1).layout, askPinned(cached?.answer, Date.now()), cached?.answer);
+        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current, cached?.answer.layoutV1, phoneOver.current).layout, askPinned(cached?.answer, Date.now()), cached?.answer);
         // The global node only: "near you" from where the phone is (where location is already allowed).
         const global = await readsGlobal(u, cached);
         const point = global ? await lastKnownPlace() : null;
@@ -350,7 +365,14 @@ export default function HomeScreen() {
             // A visitor keeps no Home here: drawn in the default order, and nothing is sent.
             const member = canTailor(read.stored.answer);
             const answered = read.stored.answer;
-            const pick = member ? pickLayout(answered.layout, phoneLayout.current, answered.layoutV1) : { layout: null, push: false };
+            const pick = member ? pickLayout(answered.layout, phoneLayout.current, answered.layoutV1, phoneOver.current) : { layout: null, push: false };
+            if (member && !pick.push && !answered.layoutV1 && phoneOver.current !== null) {
+                // The account's real list is back (a version-2 answer at or after the unknown one): it stands, and the
+                // phone's list made meanwhile goes (its copy is replaced below). Nothing of it is sent.
+                clearPhoneOnly(phoneOver, id.publicKey, u, whose);
+                refusedShape.current = null;
+                setNotOnAccount(false);
+            }
             setLayout(pick.layout);
             if (member && fewerCardsNews(answered.layout, phoneLayout.current, answered.me, Date.now())) void maybeFewer(whose);
             // The phone's newer list is sent, but one the node refused as a shape it doesn't know yet only at a landing
@@ -433,6 +455,7 @@ export default function HomeScreen() {
         shownFor.current = identity?.publicKey;
         storedRef.current = null;
         phoneLayout.current = null;
+        phoneOver.current = null;
         setStored(null);
         setLayout(null);
         setNotOnAccount(false);
@@ -470,12 +493,17 @@ export default function HomeScreen() {
         if (!next || !id || !url || !canTailor(storedRef.current?.answer)) return;
         const before = layoutRef.current;
         const whose = homeAccount(id.publicKey);
+        const answered = storedRef.current?.answer;
+        if (phoneOver.current === null && !phoneLayout.current && answered?.layoutV1?.empty) {
+            // Made while the account's list is unknown: the phone's only, until the account's real list answers.
+            phoneOver.current = answered.layout?.updatedAt ?? '';
+            void writePhoneOnlyMark(id.publicKey, url, phoneOver.current, whose);
+        }
         phoneLayout.current = next;
         layoutRef.current = next;
         setLayout(next);
         void writePhoneLayout(id.publicKey, url, next, whose);
         const saving = pushLayout(next, whose);
-        const answered = storedRef.current?.answer;
         const pins = askPinned(answered, Date.now());
         const asksMore = cardsToAsk(next, pins, answered).some(c => !cardsToAsk(before, pins, answered).includes(c));
         if (asksMore || opts.reread) void saving.then(() => refreshRef.current('layout'));

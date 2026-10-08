@@ -33,7 +33,7 @@ import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import { homeAccount, homeGeneration, onHomeAccountChange, resetHomeAccountForTests, stillOnPhone, type HomeAccount } from './home-account';
 import {
-    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeFewerStoreKey, homeHintStoreKey, homeTipsStoreKey, homeInterestsOwedStoreKey, homeLayoutStoreKey, homeRevealStoreKey,
+    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeFewerStoreKey, homeHintStoreKey, homeTipsStoreKey, homeInterestsOwedStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeRevealStoreKey,
 } from './storage-keys';
 import {
     HOME_FRESH_FOR_HEADER_MS, readHomeAnswer, readHomeLayout,
@@ -272,6 +272,29 @@ export async function writePhoneLayout(publicKey: string, url: string, layout: H
         await AsyncStorage.setItem(homeLayoutStoreKey(publicKey, url), JSON.stringify(layout));
     } catch {
         // Not kept on the phone: the account's copy still has it once the save lands.
+    }
+}
+
+/**
+ * The mark on a phone's list made while the account's was unknown: the date of the empty version-1 list it was made over
+ * ('' when that list had none), or null for none (utils/home-cards.ts pickLayout `phoneOnlyOver`).
+ */
+export async function readPhoneOnlyMark(publicKey: string, url: string): Promise<string | null> {
+    try {
+        return await AsyncStorage.getItem(homeLayoutPhoneOnlyStoreKey(publicKey, url));
+    } catch {
+        return null;
+    }
+}
+
+/** Sets (a date, or '') or clears (null) that mark, while `whose` is still on the phone. */
+export async function writePhoneOnlyMark(publicKey: string, url: string, over: string | null, whose: HomeAccount = homeAccount(publicKey)): Promise<void> {
+    if (whose.publicKey !== publicKey || !stillOnPhone(whose)) return;
+    try {
+        if (over === null) await AsyncStorage.removeItem(homeLayoutPhoneOnlyStoreKey(publicKey, url));
+        else await AsyncStorage.setItem(homeLayoutPhoneOnlyStoreKey(publicKey, url), over);
+    } catch {
+        // Not kept: the phone's list then wins by its date, as any other.
     }
 }
 

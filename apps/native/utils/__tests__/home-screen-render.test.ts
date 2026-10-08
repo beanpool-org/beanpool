@@ -571,9 +571,10 @@ describe('links into Home, and the "one way back" card', () => {
         await render();
         expect(safety.props.homeWord).toEqual({ url: NODE, standing: { words: true, joinedAt: Date.parse(node.answer.me!.joinedAt!) } });
         expect(safety.props.accountDismissedAt).toBe('2026-10-01T00:00:00.000Z');
-        // No copy of the member's list on this phone: the first read asked for the newcomer's cards, and the account's list
-        // (every card) is read for once more, never again.
-        expect(node.requests.map(r => new URL(r.url).pathname)).toEqual(['/api/home', '/api/home']);
+        // No copy of the member's list on this phone, and the account's names nothing: unknown, so the newcomer's list is
+        // drawn and its one read is enough (review of #1699, finding 2: an empty version-1 list is not "every card").
+        expect(node.requests.map(r => new URL(r.url).pathname)).toEqual(['/api/home']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
     });
 
     it('"+ ADD POST" opens the same chooser as the Market\'s', async () => {
@@ -1405,6 +1406,67 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         await settle();
         expect(new URL(homeReads()[1].url).searchParams.get('lat')).toBe('-28.64');
         expect(loc.asked).toBe(0);
+    });
+});
+
+describe('a standby from before the frame and a phone with no copy (review of #1699, finding 2)', () => {
+    const at = () => iso(Date.now() - 2 * H);
+    const real = (when: string) => ({ v: 2, cards: [
+        { id: 'pulse', type: 'pulse' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'market', type: 'market' },
+    ], dismissed: {}, updatedAt: when });
+    const posts = () => node.requests.filter(r => r.method === 'POST' && new URL(r.url).pathname === '/api/members/preferences');
+    const phoneIds = () => JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE)) ?? 'null')?.cards?.map((c: { id: string }) => c.id);
+
+    async function onTheStandby(when: string) {
+        // The standby answers the member's version-2 row as an empty version-1 list with the same date, and refuses a save.
+        node.answer = { ...localMember(), layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: when } as never };
+        node.refuse = 400;
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        await render();
+        // Not every version-1 card: the newcomer's list.
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        await act(async () => { byLabel('Card options for Coming up')!.click(); });
+        await act(async () => { byLabel('Remove Coming up from Home')!.click(); });
+        await settle();
+        expect(cards()).not.toContain('events');
+        expect(posts().map(p => p.status)).toEqual([400]);
+    }
+
+    async function primaryBack(when: string) {
+        node.refuse = 0;
+        node.answer = { ...localMember(), layout: real(when) as never };
+        const before = node.requests.length;
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        return before;
+    }
+
+    it('R5: the newcomer\'s list is drawn, an edit stays on the phone, and once the primary is back its list wins: nothing of the edit is sent', async () => {
+        const when = at();
+        await onTheStandby(when);
+        const before = await primaryBack(when);
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
+        expect(phoneIds()).toEqual(['pulse', 'search-k2x7', 'market']);
+        // And it stays so: the next landing sends nothing either.
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="edit-home-not-on-account"]')).toBeNull();
+    });
+
+    it('the mark outlives the app: closed and opened again on the standby, then the primary back with a later list, the account\'s still wins', async () => {
+        const when = at();
+        await onTheStandby(when);
+        act(() => root?.unmount());
+        host?.remove();
+        resetHomeStoreForTests();
+        await render();
+        expect(cards()).not.toContain('events');
+        const before = await primaryBack(iso(Date.now() - H));
+        expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
+        expect(cards()).toEqual(['pulse', 'search-k2x7', 'market', 'community']);
     });
 });
 

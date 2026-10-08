@@ -213,12 +213,23 @@ const stamp = (l: HomeLayout | null) => (l?.updatedAt ? Date.parse(l.updatedAt) 
  * not-yet-updated standby answers a version-2 row as an empty version-1 layout dated exactly like it (review of #1697,
  * note b), and adopting it would throw away every card the member added. The phone's is drawn and not sent (the node
  * already has it, or can't keep it yet).
+ *
+ * With no copy on the phone, an empty version-1 account copy is unknown, not "every version-1 card": the newcomer's list
+ * is drawn (with the account's dismissal), and an edit made on it is the phone's only. `phoneOnlyOver` marks such a
+ * phone list with that empty list's date: a version-2 answer dated at or after it is the account's real list (the
+ * primary back from a standby) and wins over the edit, never the reverse (review of #1699, finding 2).
  */
 export function pickLayout(
-    account: HomeLayout | null, phone: HomeLayout | null, accountV1?: { empty: boolean },
+    account: HomeLayout | null, phone: HomeLayout | null, accountV1?: { empty: boolean }, phoneOnlyOver?: string | null,
 ): { layout: HomeLayout | null; push: boolean } {
-    if (!phone) return { layout: account, push: false };
+    if (!phone) {
+        if (accountV1?.empty) return { layout: { ...defaultHomeLayout(), dismissed: account?.dismissed ?? {} }, push: false };
+        return { layout: account, push: false };
+    }
     if (!account) return { layout: phone, push: true };
+    if (phoneOnlyOver != null && !accountV1 && stamp(account) >= (phoneOnlyOver ? Date.parse(phoneOnlyOver) : -Infinity)) {
+        return { layout: account, push: false };
+    }
     if (stamp(phone) > stamp(account)) return { layout: phone, push: true };
     if (accountV1 && (accountV1.empty || stamp(phone) === stamp(account))) return { layout: phone, push: false };
     return { layout: account, push: false };

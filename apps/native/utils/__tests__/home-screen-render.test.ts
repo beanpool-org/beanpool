@@ -950,25 +950,36 @@ describe('a layout save the node refuses is not sent again at every read', () =>
 
 const editRows = () => Array.from(document.querySelectorAll('[data-testid^="edit-home-"]'))
     .map(e => e.getAttribute('data-testid')!.replace('edit-home-', ''))
-    .filter(id => !/-(up|down|switch)$/.test(id) && id !== 'done' && id !== 'reset');
+    .filter(id => !/-(up|down|menu)$/.test(id) && !['done', 'reset', 'add', 'not-on-account'].includes(id));
+const pickerRows = () => Array.from(document.querySelectorAll('[data-testid^="add-card-"]'))
+    .map(e => e.getAttribute('data-testid')!.replace('add-card-', ''))
+    .filter(id => !/-(add|on-home|count|status)$/.test(id) && !/^(sheet|done|note|group-.*)$/.test(id));
 
 describe('Edit home offers only the cards this node can show', () => {
     it('the global node: no Your deals, Your enterprise, Your Beans or Grow your community; First steps since H4; Find your community not while pinned', async () => {
         node.answer = everyCard('global', 1);
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(editRows()).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
+        // Core's one rule (CARD-FRAME §1.2): no Decide on the worldwide community either.
+        expect(editRows()).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'market', 'groups', 'joined', 'pulse', 'notices']);
         expect(document.body.textContent).not.toMatch(/Your deals|Your enterprise|Your Beans|Grow your community/);
         expect(document.querySelector('[data-modal]')?.textContent).toContain('Find your community stays near the top for your first 30 days.');
+        // The picker lists the same: no money cards, no Decide, no invites, and no Find your community while it is pinned.
+        await act(async () => { (document.querySelector('[data-testid="edit-home-add"]') as HTMLElement).click(); });
+        await settle(2);
+        const rows = pickerRows();
+        expect(rows.length).toBeGreaterThan(5);
+        for (const t of ['beans', 'deals', 'enterprise', 'decide', 'invite', 'find']) expect(rows, t).not.toContain(t);
+        expect(document.body.textContent).toContain('Near you');
     });
 
-    it('the global node after a member\'s first 30 days: Find your community is offered, in its place, with its switch', async () => {
+    it('the global node after a member\'s first 30 days: Find your community is listed in its place, with its arrows and "…"', async () => {
         const a = everyCard('global', 1);
         node.answer = { ...a, me: { ...a.me!, joinedAt: iso(Date.now() - 31 * 24 * H) } };
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(editRows()).toEqual(['safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
-        expect(document.querySelector('[data-testid="edit-home-find-switch"]')?.getAttribute('aria-checked')).toBe('true');
+        expect(editRows()).toEqual(['safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'groups', 'joined', 'pulse', 'notices']);
+        expect(document.querySelector('[data-testid="edit-home-find-menu"]')).not.toBeNull();
         expect(document.querySelector('[data-modal]')?.textContent).not.toContain('first 30 days');
     });
 

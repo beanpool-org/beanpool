@@ -741,7 +741,6 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
             'home-market-all → /(tabs)/market',
-            'home-decide-polls → /(tabs)/market filter=polls',
             'home-group-g1 → /chat/[id] id=g1&group=1',
             'home-group-ent1 → /chat/[id] id=ent1&enterprise=1',
             'home-group-ev1 → /chat/[id] id=ev1&event=1',
@@ -818,7 +817,10 @@ describe('every line on Home opens a screen this node shows, with what the line 
 
     it('a poll on the global node: the line says where it goes, and goes there; never to Commons, which global hides', async () => {
         await linksOn('global', 1);
-        expect(byLabel('2 polls open. Opens the polls, in the Market.')).not.toBeNull();
+        // Core's one rule (CARD-FRAME §1.2): no Decide card on the worldwide community, whatever its answer holds; its polls
+        // are the Market's Polls pill.
+        expect(byLabel('2 polls open. Opens the polls, in the Market.')).toBeNull();
+        expect(document.querySelector('[data-testid="home-card-decide"]')).toBeNull();
         expect(document.querySelector('[data-testid="home-decide-decisions"]')).toBeNull();
         expect((hiddenTabsFor(GLOBAL_FEATURES) as string[])).toContain('projects');
         expect(marketFilterFromLink('polls')).toBe('polls');

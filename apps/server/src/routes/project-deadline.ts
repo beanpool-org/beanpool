@@ -34,6 +34,14 @@ const DAY_MS = 1000 * 60 * 60 * 24;
  */
 const TODAY_ANYWHERE_MS = 36 * 60 * 60 * 1000;
 
+/**
+ * The same allowance at the far end (review of #1713, finding 1): a date sent alone is the member's local day, read as UTC
+ * midnight, so "a year from today" measured from now is over the limit east of UTC for part of the day (Sydney before
+ * 10:00, both live communities). The native picker's last day can also be an hour over across a clock change. One day of
+ * slack keeps every member's last allowed day; at most a day more is taken, and nothing acts on a deadline.
+ */
+const LAST_DAY_SLACK_MS = 24 * 60 * 60 * 1000;
+
 function daysInMonth(year: number, month: number): number {
     if (month === 2) return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
     return [4, 6, 9, 11].includes(month) ? 30 : 31;
@@ -70,6 +78,6 @@ export function readProjectDeadline(raw: unknown, maxDays: number, now: number =
     const ms = isoDeadlineMs(raw);
     if (ms === null || Number.isNaN(ms)) return { error: PROJECT_DEADLINE_FORMAT_ERROR };
     if (ms < now - TODAY_ANYWHERE_MS) return { error: PROJECT_DEADLINE_PAST_ERROR };
-    if ((ms - now) / DAY_MS > maxDays) return { error: projectDeadlineTooFarError(maxDays) };
+    if (ms - now > maxDays * DAY_MS + LAST_DAY_SLACK_MS) return { error: projectDeadlineTooFarError(maxDays) };
     return { deadline: new Date(ms).toISOString() };
 }

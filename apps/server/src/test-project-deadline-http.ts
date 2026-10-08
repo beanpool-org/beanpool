@@ -264,6 +264,14 @@ async function main(): Promise<void> {
     assert('deadline' in sydney && sydney.deadline === '2026-10-09T13:00:00.000Z',
         `today from midnight in Sydney, sent with +11:00, is taken (got ${show(sydney)})`);
 
+    // The far end (review of #1713, finding 1): at 09:00 on 9 Oct in Sydney (22:00 UTC on 8 Oct) the PWA's "a year from
+    // today" is the member's 9 Oct next year, sent as its UTC midnight: more than maxDays from now, and still taken.
+    const dayAfter = (days: number) => new Date(Date.UTC(2026, 9, 9) + days * 86_400_000).toISOString().slice(0, 10);
+    const yearOn = read(dayAfter(maxDays), '2026-10-08T22:00:00Z');
+    assert('deadline' in yearOn, `the PWA's last allowed day, picked at 09:00 in Sydney, is taken (got ${show(yearOn)})`);
+    const pastIt = read(dayAfter(maxDays + 2), '2026-10-08T22:00:00Z');
+    assert('error' in pastIt && pastIt.error === TOO_FAR, `two days past the limit is still refused (got ${show(pastIt)})`);
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Project deadline over HTTP PASSED.');

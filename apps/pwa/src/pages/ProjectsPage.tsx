@@ -34,6 +34,12 @@ interface Props {
 /** Shown when the browser cannot read or decode the picked photo (resizePhotoFile rejected). */
 const PHOTO_READ_ERROR = 'That photo could not be read. Please choose another one.';
 
+/** Today in the member's own calendar, as a date field reads it (YYYY-MM-DD): a project can't end before it. */
+const localToday = (): string => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate, isMember }: Props) {
     const canLoadBalance = !!identity?.publicKey && isMember !== false && isMember !== null;
     const [treasuries, setTreasuries] = useState<Treasury[]>([]);
@@ -856,6 +862,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         </label>
                                         <input
                                             type="date"
+                                            min={localToday()}
                                             value={newDeadline}
                                             onChange={(e) => setNewDeadline(e.target.value)}
                                             className="w-full bg-nature-800 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"

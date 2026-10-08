@@ -909,8 +909,9 @@ describe('a visitor on the global node: its public cards, nothing to tailor, not
 
 describe('a layout save the node refuses is not sent again at every read', () => {
     it('the account\'s copy stands: drawn, kept on the phone, and the next reads send nothing', async () => {
-        node.refuse = 400;
-        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify({ v: 1, order: [], hidden: ['pulse'], dismissed: {}, updatedAt: new Date().toISOString() }));
+        node.refuse = 403;
+        const key = homeLayoutStoreKey(who.identity.publicKey, NODE);
+        mem.store.set(key, JSON.stringify({ v: 2, cards: [{ id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: new Date().toISOString() }));
         await render();
         expect(node.requests.filter(r => r.method === 'POST')).toHaveLength(1);
         for (let i = 0; i < 3; i++) {
@@ -919,7 +920,27 @@ describe('a layout save the node refuses is not sent again at every read', () =>
         }
         expect(node.requests.filter(r => r.method === 'POST')).toHaveLength(1);
         expect(cards()).toContain('pulse');
-        expect(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))).toBeUndefined();
+        expect(JSON.parse(mem.store.get(key)!).cards.map((c: { id: string }) => c.id)).toContain('pulse');
+    });
+
+    it('a node from before the frame refuses the new shape: the cards stay on the phone, Edit home says so, and each landing sends them again (CARD-FRAME §2.3)', async () => {
+        node.answer = { ...localMember(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
+        node.refuse = 400;
+        const key = homeLayoutStoreKey(who.identity.publicKey, NODE);
+        const mine = { v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: new Date().toISOString() };
+        mem.store.set(key, JSON.stringify(mine));
+        await render();
+        expect(cards().slice(0, 2)).toEqual(['search-k7mq', 'beans']);
+        expect(JSON.parse(mem.store.get(key)!)).toEqual(mine);
+        const posts = () => node.requests.filter(r => r.method === 'POST').length;
+        expect(posts()).toBe(1);
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="edit-home-not-on-account"]')?.textContent).toBe("Your community's server needs an update before your cards follow you to other devices.");
+        await act(async () => { (document.querySelector('[data-testid="edit-home-done"]') as HTMLElement).click(); });
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(posts()).toBe(2);
+        expect(cards().slice(0, 2)).toEqual(['search-k7mq', 'beans']);
     });
 });
 

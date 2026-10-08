@@ -34,6 +34,7 @@ vi.mock('react-native', () => {
         if (accessibilityState?.disabled || disabled) attrs['aria-disabled'] = 'true';
         if (value !== undefined && onValueChange) attrs['aria-checked'] = String(!!value);
         if (accessible) attrs['data-accessible'] = 'true';
+        if (testID === 'card-settings-sheet') attrs['data-style'] = JSON.stringify(Object.assign({}, ...[props.style].flat(3).filter(Boolean)));
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
     class Value { constructor(public v: number) {} setValue(v: number) { this.v = v; } interpolate() { return 0; } }
@@ -69,6 +70,9 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
+// The keyboard as the root provider reports it (components/useModalKeyboardLift.ts reads it): down unless a test raises it.
+const keyboard = vi.hoisted(() => ({ height: 0, isVisible: false }));
+vi.mock('react-native-keyboard-controller', () => ({ useKeyboardState: (pick: (s: typeof keyboard) => unknown) => pick(keyboard) }));
 vi.mock('expo-secure-store', () => ({
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined), deleteItemAsync: vi.fn(async () => undefined),
 }));
@@ -201,6 +205,8 @@ beforeEach(async () => {
     resetHomeStoreForTests();
     nav.params = {};
     Object.values(nav.router).forEach(f => f.mockClear());
+    keyboard.height = 0;
+    keyboard.isVisible = false;
     node.answer = localMember();
     node.status = 200;
     node.down = false;
@@ -422,6 +428,25 @@ describe('tailoring: the "…" menu, Edit home, interests', () => {
         expect(document.querySelector('[data-testid="card-settings-sheet"]')).not.toBeNull();
         const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLElement;
         expect(input).not.toBeNull();
+    });
+
+    it('the settings sheet stands above the keyboard: lifted by its height and fitted above it, as Create a Group is (review of #1699, finding 3)', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add A saved search to Home')!.click(); });
+        await settle(2);
+        const style = () => JSON.parse(document.querySelector('[data-testid="card-settings-sheet"]')!.getAttribute('data-style')!);
+        expect(style()).toMatchObject({ marginBottom: 0, maxHeight: 569 * 0.9 });
+        // The keyboard comes up (283 dp of 569, measured on the emulator at the floor) as the member types.
+        keyboard.height = 283;
+        keyboard.isVisible = true;
+        const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLInputElement;
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'eggs');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        // Insets top 24 + 8: the sheet sits on the keyboard and fits between it and the status bar.
+        expect(style()).toMatchObject({ marginBottom: 283, maxHeight: 569 - 283 - 32 });
     });
 
     it('a tap on an interest reorders the Market card in place, before the save lands, and saves to both copies', async () => {

@@ -6,11 +6,16 @@ import type { AppColors } from '../../constants/colors';
 import { cardName } from '../../utils/home-cards';
 import { HOME_TARGET_DP } from './HomeParts';
 import { editHomeStyles } from './EditHomeSheet';
+import { useModalKeyboardLift } from '../useModalKeyboardLift';
 
 /**
  * A card's settings sheet (CARD-FRAME §1.2, §1.3): the picker opens it on Add for a type with settings (its last button
  * is Add to Home), and the card's "…" → Settings… opens it again with Save, keeping the card where it is. Today only the
  * saved search has settings, and only its words are asked here: the kind, category and distance chips are slice F4's.
+ *
+ * Keyboard: lifted by useModalKeyboardLift from the root provider's state, as Create a Group and Invite people are (the
+ * Modal's window doesn't shrink for the keyboard, which at 320 dp covered this whole sheet: review of #1699, finding 3).
+ * Never a nested KeyboardProvider inside the Modal.
  */
 export function CardSettingsSheet({ visible, type, settings, mode, colors, onDone, onClose }: {
     visible: boolean;
@@ -24,6 +29,7 @@ export function CardSettingsSheet({ visible, type, settings, mode, colors, onDon
     onClose: () => void;
 }) {
     const insets = useSafeAreaInsets();
+    const lift = useModalKeyboardLift(insets.top + 8);
     const [q, setQ] = useState('');
     useEffect(() => {
         if (visible) setQ(readSearchSettings(settings).q);
@@ -36,7 +42,7 @@ export function CardSettingsSheet({ visible, type, settings, mode, colors, onDon
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
             <View style={editHomeStyles.backdrop}>
-                <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24 }]} testID="card-settings-sheet">
+                <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="card-settings-sheet">
                     <View style={editHomeStyles.head}>
                         <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header">{name}</Text>
                         <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel="Cancel" testID="card-settings-cancel">

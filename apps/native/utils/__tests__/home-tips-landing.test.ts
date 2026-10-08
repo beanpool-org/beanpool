@@ -68,6 +68,7 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
+vi.mock('react-native-keyboard-controller', () => ({ useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }) }));
 vi.mock('expo-secure-store', () => ({
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined), deleteItemAsync: vi.fn(async () => undefined),
 }));

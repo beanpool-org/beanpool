@@ -504,7 +504,9 @@ describe('links into Home, and the "one way back" card', () => {
     });
 
     it('the card gets the community\'s word from Home\'s own answer, and the account\'s dismissal', async () => {
-        node.answer = { ...localMember(), cards: { ...localMember().cards, safety: { words: true, signInLinked: false } }, layout: { v: 1, order: [], hidden: [], dismissed: { safety: '2026-10-01T00:00:00.000Z' }, updatedAt: '2026-10-01T00:00:00.000Z' } };
+        // The account's copy as a node before the frame answers it (version 1), and none on the phone.
+        node.answer = { ...localMember(), cards: { ...localMember().cards, safety: { words: true, signInLinked: false } }, layout: { v: 1, order: [], hidden: [], dismissed: { safety: '2026-10-01T00:00:00.000Z' }, updatedAt: '2026-10-01T00:00:00.000Z' } as never };
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
         await render();
         expect(safety.props.homeWord).toEqual({ url: NODE, standing: { words: true, joinedAt: Date.parse(node.answer.me!.joinedAt!) } });
         expect(safety.props.accountDismissedAt).toBe('2026-10-01T00:00:00.000Z');
@@ -852,7 +854,8 @@ describe('a visitor on the global node: its public cards, nothing to tailor, not
         node.refuse = 400; // as the node refuses a Home save from a key that is no member there
         mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify({ v: 1, order: [], hidden: ['events'], dismissed: {}, updatedAt: new Date().toISOString() }));
         await render();
-        expect(cards()).toEqual(['events', 'market', 'community']);
+        // A visitor's Home is the newcomer's (CARD-FRAME §3): New in the Market before Coming up.
+        expect(cards()).toEqual(['market', 'events', 'community']);
         expect(document.querySelectorAll('[aria-label^="Card options for"]')).toHaveLength(0);
         expect(document.querySelector('[data-testid="home-edit"]')).toBeNull();
         expect(document.querySelector('[data-testid="home-hint"]')).toBeNull();
@@ -939,6 +942,8 @@ describe('the account leaves the phone while Home\'s read is out: the screen wri
         node.answer = { ...localMember(), me: { ...localMember().me!, interests: ['food'] } };
         let release!: () => void;
         node.homeGate = new Promise<void>(r => { release = r; });
+        // A first landing: nothing of Home on the phone yet.
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
         await render();
         expect(homeKeys()).toEqual([]);
         return release;

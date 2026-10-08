@@ -204,7 +204,7 @@ describe('the refusal: a file not readable by every user stops the build before 
         expect(r.status).toBe(2);
         const [head, ...named] = r.stderr.trim().split('\n').filter((l) => !l.includes('(not a release image)'));
         expect(head).toBe('build.sh: not readable by every user, so the image would not run:');
-        expect(named.sort()).toEqual([path.join(s.work, 'mkosi.extra/etc/left-private.conf'), path.join(s.work, 'mkosi.extra/srv/not-searchable')]);
+        expect(named.map((p) => realpathSync(p)).sort()).toEqual(['mkosi.extra/etc/left-private.conf', 'mkosi.extra/srv/not-searchable'].map((p) => realpathSync(path.join(s.work, p))));
         expect(existsSync(s.log)).toBe(false);
     });
 
@@ -217,7 +217,7 @@ describe('the refusal: a file not readable by every user stops the build before 
         expect(named.length).toBeGreaterThan(0);
         expect(named.length).toBeLessThanOrEqual(5);
         for (const p of named) {
-            expect(p.startsWith(s.work)).toBe(true);
+            expect(path.relative(realpathSync(s.work), realpathSync(p)).startsWith('..')).toBe(false);
             const st = lstatSync(p);
             expect((st.mode & 0o004) === 0 || (st.isDirectory() && (st.mode & 0o001) === 0)).toBe(true);
         }

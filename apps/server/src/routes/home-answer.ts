@@ -48,7 +48,10 @@
  * Every text a member, a feed or a peer sets is cut or left out (`clip`, `bounded`), the category and the Pulse link
  * included, so the answer stays a few kilobytes whatever anyone typed (§5.2 "under 6 KB gzipped").
  */
-import { PRICING_CATEGORIES, avatarUrlOf, normalizeCategory } from '@beanpool/core';
+import {
+    PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, normalizeCategory, readHomeLayout as readFrameLayout, readSearchSettings,
+    HOME_FRAME_LIMITS, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings,
+} from '@beanpool/core';
 import { ONE_PASS_MAX_MEASURED, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import {
@@ -82,15 +85,15 @@ const CARD_IDS: ReadonlySet<string> = new Set(HOME_CARD_IDS);
 export const isHomeCardId = (id: unknown): id is HomeCardId => typeof id === 'string' && CARD_IDS.has(id);
 
 /** Cards a member can't hide (§4.1): `needs` costs them something if missed, `community` holds "Edit home". `find` too, for its first 30 days on the global node. */
-const UNHIDEABLE: ReadonlySet<HomeCardId> = new Set(['needs', 'community']);
+const UNHIDEABLE: ReadonlySet<string> = new Set(['needs', 'community']);
 const FIND_PINNED_DAYS = 30;
 
 /** The cards a visitor's Home is made of (§5.3). */
-export const VISITOR_CARDS: ReadonlySet<HomeCardId> = new Set(['find', 'market', 'events', 'community']);
+export const VISITOR_CARDS: ReadonlySet<string> = new Set(['find', 'market', 'events', 'community']);
 
 /** Each card's assembly, counted: the suite proves `cards=` skips the work of a card not asked for. */
 export const homeCardBuilds: Record<string, number> = {};
-const built = (id: HomeCardId) => { homeCardBuilds[id] = (homeCardBuilds[id] ?? 0) + 1; };
+const built = (type: string) => { homeCardBuilds[type] = (homeCardBuilds[type] ?? 0) + 1; };
 
 const DAY_MS = 86_400_000;
 /** How far back the Market and Pulse cards look (§3.1), and how far ahead "Coming up". */
@@ -106,6 +109,8 @@ const EVENT_ITEMS = 3;
 const GROUP_ITEMS = 3;
 const JOINED_NAMES = 4;
 const PULSE_ITEMS = 2;
+/** The listings a saved search shows, then "N more" (the card frame's design §4). */
+const SEARCH_ITEMS = 4;
 /** The newest listings the Market card chooses its few from (starred categories first), and counts in `total14d`. */
 const MARKET_POOL = 40;
 /**
@@ -143,7 +148,12 @@ export type NeedsTarget =
 /** One line of "Needs you", the shape apps/native utils/needs-you.ts builds. `closesAt` on a vote, so an app words it in the member's own time. */
 export interface NeedsItem { kind: NeedsKind; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
-export interface HomeLayout { v: 1; order: HomeCardId[]; hidden: HomeCardId[]; dismissed: { safety?: string }; updatedAt: string | null }
+export interface HomeLayoutV1 { v: 1; order: HomeCardId[]; hidden: HomeCardId[]; dismissed: { safety?: string }; updatedAt: string | null }
+/**
+ * The member's layout as the answer carries it: version 1 (today's apps), or version 2, the card frame's list of card
+ * instances (@beanpool/core home-frame.ts), every instance kept whatever its type: an app draws the types it knows.
+ */
+export type HomeLayout = HomeLayoutV1 | HomeLayoutV2;
 
 export interface HomeMe {
     joinedAt: string | null;
@@ -187,8 +197,17 @@ export interface HomeCards {
     pulse?: { items: { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null }[] };
     beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
-    community?: { name: string | null; members: number; tradesThisMonth?: number; communities?: number };
+    /** The node's own place (local-config `location`) to two decimals, for a member; absent when the node has none. */
+    community?: { name: string | null; members: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number } };
+    /**
+     * A card of a type that comes in many is keyed by its instance id (`search-k7mq`), not its type; so is any card the
+     * member's version-2 layout names (a one-of-a-kind card's id is its type, so today's keys are unchanged).
+     */
+    [instanceId: string]: unknown;
 }
+
+/** A saved search's card (type `search`): the words and distance it was saved with, and the first listings that match. */
+export interface SearchCard { q: string; kind: HomeSearchSettings['kind']; category: string | null; km: number | null; items: MarketItem[]; more: boolean }
 
 export interface HomeAnswer {
     generatedAt: string;
@@ -208,8 +227,11 @@ export interface HomeReader {
     actor: string | undefined;
     /** A point the request gave (lat, lng), parsed. */
     point: { lat: number; lng: number } | null;
-    /** `cards=` as asked, unknown ids dropped; undefined when not given (the default list). */
-    asked: HomeCardId[] | undefined;
+    /**
+     * `cards=` as asked: card ids and instance ids, each once; undefined when not given (the default list). A card type's
+     * id is built as today; any other id only when it names an instance in the member's stored version-2 layout.
+     */
+    asked: string[] | undefined;
     now?: number;
 }
 
@@ -264,6 +286,8 @@ const isIso = (v: unknown): v is string => typeof v === 'string' && v.length <= 
 export function readHomeLayout(me: string): HomeLayout | null {
     const raw = readPref(me, HOME_LAYOUT_PREF_KEY) as Record<string, unknown> | undefined;
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    // Version 2 (the card frame): every instance whose shape is right, whatever its type (core's tolerant reader).
+    if (raw.v === 2) return readFrameLayout(raw);
     const dismissed = raw.dismissed && typeof raw.dismissed === 'object' ? raw.dismissed as Record<string, unknown> : {};
     return {
         v: 1,
@@ -577,6 +601,29 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
     return { items: shown, total14d: Math.min(recent.length, MARKET_POOL), more: recent.length > MARKET_POOL, ...(examples ? { examples: true as const } : {}) };
 }
 
+/**
+ * A saved search (type `search`, the card frame's design §4): the first few listings matching the words, kind,
+ * category and distance stored in the member's layout, read as the Market's own search reads them (`query`), nearest
+ * the member's point within `km` when there is one. Always a body, even with no rows: a search that finds nothing is a
+ * fact the member asked for. (The Market's synonym expansion and the card's words come with slice F4.)
+ */
+function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
+    built('search');
+    const s = readSearchSettings(settings);
+    const near = c.point && s.km ? { ...c.point, radiusKm: s.km } : undefined;
+    const pool = postsFor(c, {
+        types: s.kind === 'any' ? ['offer', 'need'] : [s.kind], category: s.category, query: s.q || undefined, limit: SEARCH_ITEMS + 1,
+        near, sortByDistance: !!near, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,
+    }).filter(p => p.status === 'active' && p.active !== false && !!bounded(p.id, ID_CHARS));
+    const items = pool.slice(0, SEARCH_ITEMS).map((p): MarketItem => ({
+        id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
+        ...(c.switches.beans ? { credits: p.credits } : {}),
+        photoUrl: p.photos?.[0] ?? null,
+        ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
+    }));
+    return { q: s.q, kind: s.kind, category: s.category ?? null, km: near ? s.km! : null, items, more: pool.length > SEARCH_ITEMS };
+}
+
 function decideCard(c: Ctx): HomeCards['decide'] | undefined {
     built('decide');
     const open = decisionsOn()
@@ -667,24 +714,33 @@ function communityCard(c: Ctx): HomeCards['community'] {
         out.tradesThisMonth = (db.prepare("SELECT COUNT(*) AS c FROM marketplace_transactions WHERE status = 'completed' AND completed_at >= ?").get(monthStart) as { c: number }).c;
     }
     if (c.switches.directoryMirror) out.communities = listedCommunityCount();
+    // The community's own place, rounded to about a kilometre, for the cards worked out on the device (sun and moon):
+    // to a member only, never in a visitor's answer.
+    const place = config.location;
+    if (c.member && place && Number.isFinite(place.lat) && Number.isFinite(place.lng)) {
+        out.place = { lat: Math.round(place.lat * 100) / 100, lng: Math.round(place.lng * 100) / 100 };
+    }
     return out;
 }
 
 // ── the answer ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Which cards each part of a reader may have (the module's header). */
-const OWN_CARDS: ReadonlySet<HomeCardId> = new Set(['needs', 'safety', 'steps', 'deals', 'enterprise', 'groups', 'beans', 'notices']);
-const COMMUNITY_CARDS: ReadonlySet<HomeCardId> = new Set(['find', 'events', 'market', 'decide', 'joined', 'pulse']);
+const OWN_CARDS: ReadonlySet<string> = new Set(['needs', 'safety', 'steps', 'deals', 'enterprise', 'groups', 'beans', 'notices']);
+const COMMUNITY_CARDS: ReadonlySet<string> = new Set(['find', 'events', 'market', 'search', 'decide', 'joined', 'pulse']);
 
-type Builder = (c: Ctx) => unknown;
-const BUILDERS: Partial<Record<HomeCardId, Builder>> = {
+/** A card type's builder: the reader, and the instance's settings through its type's reader (absent for a type with none). */
+type Builder = (c: Ctx, settings?: Record<string, unknown>) => unknown;
+/** By type. A type with no builder here (one the apps draw, or one newer than this node) is kept in the layout and not built. */
+const BUILDERS: Partial<Record<string, Builder>> = {
+    search: searchCard,
     needs: needsCard, safety: safetyCard, find: findCard, steps: stepsCard, deals: dealsCard, enterprise: enterpriseCard,
     events: eventsCard, market: marketCard, decide: decideCard, groups: groupsCard, joined: joinedCard, pulse: pulseCard,
     beans: beansCard, notices: noticesCard, community: communityCard,
 };
 
 /** Whether this reader may have this card at all: their own cards, the community's, or the visitors' subset. */
-function mayHave(c: Ctx, id: HomeCardId): boolean {
+function mayHave(c: Ctx, id: string): boolean {
     if (id === 'community') return true;
     if (OWN_CARDS.has(id)) return c.own;
     if (COMMUNITY_CARDS.has(id)) return c.member || (c.guestView && VISITOR_CARDS.has(id));
@@ -696,12 +752,33 @@ function mayHave(c: Ctx, id: HomeCardId): boolean {
  * (never `needs` or `community`, nor `find` in a member's first 30 days), so a first landing with no copy of the layout
  * on the phone still skips a hidden card's work.
  */
-function cardsToBuild(c: Ctx, asked: HomeCardId[] | undefined, layout: HomeLayout | null, joinedAt: string | null): HomeCardId[] {
-    if (asked) return HOME_CARD_IDS.filter(id => asked.includes(id));
-    const hidden = new Set(layout?.hidden ?? []);
+function cardsToBuild(c: Ctx, asked: string[] | undefined, layout: HomeLayout | null, joinedAt: string | null): HomeCardInstance[] {
+    const frame = layout?.v === 2 ? layout : null;
+    const stored = (id: string) => frame?.cards.find(card => card.id === id);
+    // Catalogue order, then id (core compareForAsk), whatever order they were asked or listed in: the same set is the same
+    // answer, so the same tag and a 304.
+    if (asked) {
+        const out: HomeCardInstance[] = [];
+        for (const id of asked) {
+            const card = stored(id);
+            // A card type's id is built as today's apps ask it (with the member's settings for it, if their layout has them);
+            // any other id only when it names an instance in the member's stored layout: the settings are the node's to read.
+            if (isHomeCardId(id)) out.push(card && card.type === id ? card : { id, type: id });
+            else if (card) out.push(card);
+        }
+        return out.sort(compareForAsk);
+    }
     const joinedMs = joinedAt ? Date.parse(joinedAt) : NaN;
     const findPinned = !Number.isFinite(joinedMs) || c.now - joinedMs < FIND_PINNED_DAYS * DAY_MS;
-    return HOME_CARD_IDS.filter(id => !hidden.has(id) || UNHIDEABLE.has(id) || (id === 'find' && findPinned));
+    if (frame) {
+        // Version 2: the list is the Home. A card not in it is not built; the two always drawn and a pinned find are.
+        const out: HomeCardInstance[] = [...UNHIDEABLE].map(id => ({ id, type: id }));
+        if (findPinned) out.push({ id: 'find', type: 'find' });
+        for (const card of frame.cards) if (!out.some(o => o.id === card.id)) out.push(card);
+        return out.sort(compareForAsk);
+    }
+    const hidden = new Set<string>(layout?.v === 1 ? layout.hidden : []);
+    return HOME_CARD_IDS.filter(id => !hidden.has(id) || UNHIDEABLE.has(id) || (id === 'find' && findPinned)).map(id => ({ id, type: id }));
 }
 
 /** The whole Home for this reader (the route has already refused a reader homeReaderStanding refuses). */
@@ -721,14 +798,15 @@ export function buildHome(reader: HomeReader): HomeAnswer {
     const c: Ctx = { me, own, member, guestView: !member && switches.guestListingsOnly, point, askedPoint: reader.point, now, switches, features, interests };
 
     const cards: HomeCards = {};
-    for (const id of cardsToBuild(c, reader.asked, layout, row?.joinedAt ?? null)) {
-        const build = BUILDERS[id];
-        if (!build || !mayHave(c, id)) continue;
+    for (const instance of cardsToBuild(c, reader.asked, layout, row?.joinedAt ?? null)) {
+        const { id, type } = instance;
+        const build = BUILDERS[type];
+        if (!build || !mayHave(c, type)) continue;
         // One card that can't be read is left out, never the whole screen (nothing on Home blocks the app): the next
         // read tries again, and the tag of an answer without it is a different tag.
         let card: unknown;
         try {
-            card = build(c);
+            card = build(c, cardSettings(instance));
         } catch (e) {
             console.warn(`[Home] the ${id} card could not be read:`, (e as Error)?.message || e);
             continue;
@@ -762,9 +840,17 @@ export function buildHome(reader: HomeReader): HomeAnswer {
     };
 }
 
-/** `cards=` as sent: a comma list, unknown ids dropped. Null when it is given more than once (a 400). */
-export function parseAskedCards(raw: unknown): HomeCardId[] | undefined | null {
+/** The most ids `cards=` is read for: a full Home, the two always drawn and a pinned find, with room to spare. */
+const ASKED_MAX = 32;
+
+/**
+ * `cards=` as sent: a comma list of card ids and instance ids (`search-k7mq`), each once, at most ASKED_MAX of them; an
+ * id longer than an instance id can be is dropped (buildHome builds only a known type, or an instance the member's
+ * layout holds). Null when it is given more than once (a 400).
+ */
+export function parseAskedCards(raw: unknown): string[] | undefined | null {
     if (raw === undefined) return undefined;
     if (typeof raw !== 'string') return null;
-    return [...new Set(raw.split(',').map(s => s.trim()).filter(isHomeCardId))];
+    const ids = raw.split(',').map(s => s.trim()).filter(id => id.length > 0 && id.length <= HOME_FRAME_LIMITS.idChars);
+    return [...new Set(ids)].slice(0, ASKED_MAX);
 }

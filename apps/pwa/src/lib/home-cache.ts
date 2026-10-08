@@ -15,7 +15,7 @@
 import { getNodeApiUrl } from './api';
 import { accountEpoch, accountEpochHolds, endAccountEpoch, type AccountEpochEnd } from './account-epoch';
 import { type HomeAnswer } from './home-cards';
-import { layoutV1Of, readLayout, type HomeLayoutV2 } from './home-layout';
+import { MARK_SENT_MAX, layoutV1Of, readLayout, type HomeLayoutV2 } from './home-layout';
 
 const DB_NAME = 'beanpool-home';
 const STORE = 'answers';
@@ -39,6 +39,11 @@ export interface CachedHome {
      * (lib/home-layout.ts pickLayout). Undefined: not marked.
      */
     localOnlyOver?: string;
+    /**
+     * With `localOnlyOver`: the dates of the marked edits this browser sent. A version-2 answer dated as one of them is
+     * this browser's own save, not the account's real list (lib/home-layout.ts ownMarkedSave).
+     */
+    localOnlySent?: string[];
     savedAt: number;
 }
 
@@ -101,6 +106,8 @@ export async function readCachedHome(key: string): Promise<CachedHome | null> {
                     layout: emptyV1 ? null : readLayout(v.layout),
                     layoutUnsaved: !emptyV1 && v.layoutUnsaved === true,
                     ...(typeof v.localOnlyOver === 'string' && v.localOnlyOver.length <= 40 ? { localOnlyOver: v.localOnlyOver } : {}),
+                    ...(typeof v.localOnlyOver === 'string' && Array.isArray(v.localOnlySent)
+                        ? { localOnlySent: v.localOnlySent.filter((x): x is string => typeof x === 'string' && x.length <= 40).slice(-MARK_SENT_MAX) } : {}),
                     asked: Array.isArray(v.asked) ? [...new Set(v.asked.filter((x): x is string => typeof x === 'string' && x.length <= 64))].slice(0, 64) : null,
                     savedAt: Number(v.savedAt) || 0,
                 });

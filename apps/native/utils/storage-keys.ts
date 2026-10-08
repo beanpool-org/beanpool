@@ -192,6 +192,11 @@ export function homeHintStoreKey(publicKey: string): string {
     return `${HOME_STORE_PREFIX}hint:${publicKey.toLowerCase()}`;
 }
 
+/** The one-time line "Home now starts with fewer cards" (CARD-FRAME §2.6), per account, like the hint. */
+export function homeFewerStoreKey(publicKey: string): string {
+    return `${HOME_STORE_PREFIX}fewer:${publicKey.toLowerCase()}`;
+}
+
 /**
  * The Tips card's record, per account (@beanpool/core home-tips.ts `TipsRecord`: the tips seen, the one on the card and
  * the day it was first shown, the dismissal). Per account and phone, not per community, and it leaves with the account.

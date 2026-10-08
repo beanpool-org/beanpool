@@ -714,7 +714,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         if (isVisitor || !canRemoveCard(card.type, pins)) return undefined;
         const i = movable.findIndex(c => c.id === card.id);
         return {
-            label: cardLabelName(card, profile),
+            // A saved search is named by its words; any other card by its heading, as before.
+            ...(card.type === 'search' ? { label: cardLabelName(card, profile) } : {}),
             canMoveUp: i > 0,
             canMoveDown: i >= 0 && i < movable.length - 1,
             onRemove: () => removeFromHome(card.id),

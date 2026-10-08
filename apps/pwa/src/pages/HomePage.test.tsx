@@ -238,8 +238,9 @@ describe('tailoring (§4)', () => {
         const dots = within(first).getByRole('button', { name: 'Card options for Tips · 1 of 15' });
         fireEvent.click(dots);
         expect(within(first).getByRole('button', { name: 'Move up' })).toBeDisabled();
-        fireEvent.keyDown(within(first).getByRole('button', { name: 'Hide' }), { key: 'Escape' });
-        expect(within(first).queryByRole('button', { name: 'Hide' })).toBeNull();
+        // The frame's menu ends with Remove where version 1 had Hide.
+        fireEvent.keyDown(within(first).getByTestId('home-menu-remove'), { key: 'Escape' });
+        expect(within(first).queryByTestId('home-menu-remove')).toBeNull();
         await waitFor(() => expect(dots).toHaveFocus());
     });
 

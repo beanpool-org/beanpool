@@ -38,7 +38,7 @@ vi.mock('react-native', () => {
     class Value { constructor(public v: number) {} setValue(v: number) { this.v = v; } interpolate() { return 0; } }
     return {
         Platform: { OS: 'android' },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), Switch: el('button'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), Switch: el('button'), TextInput: el('input'),
         ActivityIndicator: () => createElement('span', null, '…'),
         RefreshControl: () => null,
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
@@ -338,20 +338,26 @@ describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
 });
 
 describe('tailoring: the "…" menu, Edit home, interests', () => {
-    it('Hide: the card goes at once, the layout is kept on the phone and saved to the account', async () => {
+    it('Remove: the card goes at once, the instance leaves the list on the phone and the account, and it is said (CARD-FRAME §1.3)', async () => {
         await render();
         await act(async () => { byLabel('Card options for Coming up')!.click(); });
-        expect(document.querySelector('[data-modal]')?.textContent).toContain('Hide');
+        expect(document.querySelector('[data-modal]')?.textContent).toContain('Remove');
+        expect(document.querySelector('[data-modal]')?.textContent).not.toContain('Hide');
+        expect(document.querySelector('[data-modal]')?.textContent).not.toContain('Settings');
         expect(byLabel('Move Coming up up')).not.toBeNull();
         expect(byLabel('Move Coming up down')).not.toBeNull();
-        await act(async () => { byLabel('Hide Coming up')!.click(); });
+        await act(async () => { byLabel('Remove Coming up from Home')!.click(); });
         await settle();
         expect(cards()).not.toContain('events');
         const phone = JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!);
-        expect(phone.hidden).toEqual(['events']);
+        expect(phone.v).toBe(2);
+        expect(phone.cards.map((c: { id: string }) => c.id)).not.toContain('events');
         const post = node.requests.find(r => r.method === 'POST')!;
-        expect(JSON.parse(post.body).preferences['home.layout'].hidden).toEqual(['events']);
+        expect(JSON.parse(post.body).preferences['home.layout'].cards.map((c: { id: string }) => c.id)).not.toContain('events');
         expect(boundSignatureValid(post, who.identity.publicKey)).toBe(true);
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Coming up removed. Add a card brings it back.');
+        // A remove reads nothing.
+        expect(homeReads()).toHaveLength(1);
     });
 
     it('Move down: the card swaps with the one below it on screen', async () => {
@@ -371,21 +377,50 @@ describe('tailoring: the "…" menu, Edit home, interests', () => {
         expect(byLabel('Move Your Beans down')!.getAttribute('aria-disabled')).toBe('true');
     });
 
-    it('Edit home: a hidden card comes back from its switch, and Reset puts the default back', async () => {
+    it('Add a card: only this node\'s types, "On Home" for one already there; Add puts it first, says so, and reads Home only after the save is answered', async () => {
         await render();
         await act(async () => { byLabel('Card options for The Pulse')!.click(); });
-        await act(async () => { byLabel('Hide The Pulse')!.click(); });
+        await act(async () => { byLabel('Remove The Pulse from Home')!.click(); });
         await settle();
         expect(cards()).not.toContain('pulse');
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        const sw = document.querySelector('[data-testid="edit-home-pulse-switch"]') as HTMLElement;
-        expect(sw.getAttribute('aria-checked')).toBe('false');
-        await act(async () => { sw.click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="add-card-sheet"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="add-card-beans-on-home"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="add-card-find"]')).toBeNull();
+        expect(byLabel('Your Beans is already on Home')).not.toBeNull();
+        const before = node.requests.length;
+        await act(async () => { byLabel('Add The Pulse to Home')!.click(); });
         await settle();
-        expect(cards()).toContain('pulse');
+        expect(document.querySelector('[data-testid="add-card-sheet"]')).toBeNull();
+        expect(cards()[0]).toBe('pulse');
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('The Pulse added to Home');
+        const after = node.requests.slice(before).map(r => `${r.method} ${new URL(r.url).pathname}`);
+        // The save first, and the read only once it is answered (§2.4), with the card in it. (This test node doesn't keep
+        // layouts, so its next answer is older than the phone's and the phone sends its list again after: not counted.)
+        expect(after.slice(0, 2)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
+        expect(JSON.parse(node.requests[before].body).preferences['home.layout'].cards[0]).toEqual({ id: 'pulse', type: 'pulse' });
+        expect(homeReads().at(-1)!.url).toContain('pulse');
+    });
+
+    it('Edit home: ＋ Add a card first, ↑ ↓ … per card, no switches, and Reset gives the newcomer\'s list', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="edit-home-add"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="edit-home-pulse-switch"]')).toBeNull();
+        expect(document.querySelector('[data-testid="edit-home-pulse-menu"]')).not.toBeNull();
         await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
         await settle();
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
+        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+    });
+
+    it('a saved search: Add opens its settings sheet, Add to Home puts it first with its words, and it says it fills in from the node', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add A saved search to Home')!.click(); });
+        await settle(2);
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).not.toBeNull();
+        const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLElement;
+        expect(input).not.toBeNull();
     });
 
     it('a tap on an interest reorders the Market card in place, before the save lands, and saves to both copies', async () => {

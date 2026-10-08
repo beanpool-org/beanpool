@@ -27,7 +27,7 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, hiddenWords, tipsKey } from './HomePage';
-import { tipsFor } from '@beanpool/core';
+import { localDay, tipsFor } from '@beanpool/core';
 import { NOTICES_SEEN_EVENT } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
@@ -1005,6 +1005,47 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         fireEvent.click(within(dialog).getByTestId('home-edit-done'));
         expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
         expect(record()).toMatchObject({ seen: [], dismissedAt: null });
+    });
+
+    // PR #1694 review 6: the tip a restart draws is the record's, from that day, so the next day's landing moves on.
+    it('Tips switched on again records tip 1 as shown today', async () => {
+        localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: [LOCAL[0].id], current: null, currentShownOn: null, dismissedAt: '2026-10-01T00:00:00.000Z' }));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: { v: 1, order: [], hidden: ['tips'], dismissed: {}, updatedAt: new Date().toISOString() } as never })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
+        fireEvent.click(within(dialog).getByRole('switch', { name: 'Show Tips' }));
+        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        expect(within(await screen.findByTestId('home-card-tips')).getByTestId('home-tip-text')).toHaveTextContent(LOCAL[0].text);
+        expect(record()).toEqual({ v: 1, seen: [], current: LOCAL[0].id, currentShownOn: localDay(), dismissedAt: null });
+    });
+
+    // PR #1694 review 3: Reset to defaults shows Tips again, so it starts the tips over (as switching it on does).
+    it("Reset to defaults after Don't show tips again draws the card again, from tip 1", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-tips');
+        fireEvent.click(within(card).getByRole('button', { name: 'Next tip' }));
+        fireEvent.click(within(tipsCard()).getByRole('button', { name: "Don't show tips again. Edit home brings them back." }));
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
+        fireEvent.click(within(dialog).getByTestId('home-edit-reset'));
+        expect(within(dialog).getByRole('switch', { name: 'Show Tips' })).toHaveAttribute('aria-checked', 'true');
+        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
+        expect(record()).toEqual({ v: 1, seen: [], current: LOCAL[0].id, currentShownOn: localDay(), dismissedAt: null });
+    });
+
+    // PR #1694 review 4: the tip follows the reader's text size (a rem size, as every other line on Home), never fixed px.
+    it("the tip's text is sized in rem, so it grows with the reader's text size", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const text = within(await screen.findByTestId('home-card-tips')).getByTestId('home-tip-text');
+        expect(text.className).not.toMatch(/text-\[\d+(\.\d+)?px\]/);
+        expect(text.className).toMatch(/(^| )text-(\[0\.9375rem\]|base)( |$)/);
     });
 
     it('Read more opens the guide at the tip\'s page, labelled with the page title', async () => {

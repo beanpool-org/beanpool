@@ -746,7 +746,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
                 return (
                     <HomeCard key={id} {...common} title={tipsCaption(v)}>
-                        <p data-testid="home-tip-text" className="m-0 mb-2 text-[15px] text-nature-900 dark:text-nature-100 break-words">{v.tip.text}</p>
+                        <p data-testid="home-tip-text" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{v.tip.text}</p>
                         <div className="flex flex-wrap gap-2">
                             {/* The same element on every tip, so focus stays on it after a tap. */}
                             <button type="button" onClick={tipsNext} aria-label={tipsNextLabel(v)} data-testid="home-tips-next"
@@ -1041,10 +1041,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     onToggle={(id, show) => {
                         if (!changeLayout((l) => (show ? showCard(l, id) : hideCard(l, id)))) return;
                         // Tips switched on starts over from the first tip; off holds as "Don't show tips again" does.
-                        if (id === 'tips') keepTips(show ? restartTips() : dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
+                        if (id === 'tips') keepTips(show ? restartTips(tipsList, localDay()) : dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
                     }}
                     onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editable.shown)); }}
-                    onReset={() => { changeLayout(resetLayout); }}
+                    // Reset shows Tips again, so the tips start over as a switch-on does (PR #1694 review 3).
+                    onReset={() => { if (changeLayout(resetLayout)) keepTips(restartTips(tipsList, localDay())); }}
                     onClose={() => setEditOpen(false)}
                 />
             )}

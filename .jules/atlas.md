@@ -185,3 +185,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `useClaimState` custom hook in `apps/manager/src/components/auth/useClaimState.ts` was untested directly.
 **Learning:** Testing `useClaimState` with `renderHook` required mocking `fetchClaimState` and `fetchCommunityInfo` from `../../lib/node-claim` to verify initial fetch, merging community addresses for unclaimed nodes, interval polling, tab visibility change events, and AbortController cleanup.
 **Action:** Continue identifying remaining untested auth hooks or components in `apps/manager/src/components/auth/`.
+
+## 2026-10-08 - [manager tests] ThreatReviewModal report dismissal and metric parsing unit tests
+**Gap:** `onDismissReport` execution/error handling and insularity/cohort telemetry metric parsing in `ThreatReviewModal` (`apps/manager/src/components/modules/ThreatReviewModal.tsx`) were untested.
+**Learning:** Testing `ThreatReviewModal` report dismissal requires mocking `onDismissReport` promises and using Vitest fake timers (`vi.useFakeTimers()`) to verify async timer delays, error state banner rendering (`role="alert"`), and subsequent `onDismiss` callbacks.
+**Action:** Continue expanding edge case coverage for module components in `apps/manager/src/components/modules/`.

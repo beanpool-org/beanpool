@@ -36,8 +36,8 @@ export const HOME_PREFERENCE_KEYS: readonly string[] = [HOME_LAYOUT_PREF_KEY, IN
 
 /** Every card Home can show, in the design's default order (§3.1). A member can't make a card; the catalogue is the catalogue. */
 export const HOME_CARD_IDS = [
-    'needs', 'safety', 'find', 'steps', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined',
-    'pulse', 'beans', 'notices', 'invite', 'community',
+    'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups',
+    'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
 ] as const;
 export type HomeCardId = (typeof HOME_CARD_IDS)[number];
 

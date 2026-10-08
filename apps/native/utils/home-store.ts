@@ -28,11 +28,12 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { readTipsRecord, type TipsRecord } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import { homeAccount, homeGeneration, onHomeAccountChange, resetHomeAccountForTests, stillOnPhone, type HomeAccount } from './home-account';
 import {
-    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeInterestsOwedStoreKey, homeLayoutStoreKey, homeRevealStoreKey,
+    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeTipsStoreKey, homeInterestsOwedStoreKey, homeLayoutStoreKey, homeRevealStoreKey,
 } from './storage-keys';
 import {
     HOME_FRESH_FOR_HEADER_MS, readHomeAnswer, readHomeLayout,
@@ -357,6 +358,28 @@ export async function markSeenOnce(whose: HomeAccount, which: HomeOnce): Promise
         await AsyncStorage.setItem(onceKey(which, whose.publicKey), '1');
     } catch {
         // Shown once more at the next landing at most.
+    }
+}
+
+// ── The Tips card's record ─────────────────────────────────────────────────────────────────────────────────────────
+
+/** The account's Tips record here (@beanpool/core `readTipsRecord`: anything unreadable is a fresh one). */
+export async function readTips(publicKey: string): Promise<TipsRecord> {
+    try {
+        const raw = await AsyncStorage.getItem(homeTipsStoreKey(publicKey));
+        return readTipsRecord(raw ? JSON.parse(raw) : null);
+    } catch {
+        return readTipsRecord(null);
+    }
+}
+
+/** The Tips record kept, for `whose` while it is still on the phone (a write that fails shows a tip once more, at most). */
+export async function writeTips(whose: HomeAccount, record: TipsRecord): Promise<void> {
+    if (!stillOnPhone(whose)) return;
+    try {
+        await AsyncStorage.setItem(homeTipsStoreKey(whose.publicKey), JSON.stringify(record));
+    } catch {
+        // Kept in memory for this visit; the next landing reads the last one written.
     }
 }
 

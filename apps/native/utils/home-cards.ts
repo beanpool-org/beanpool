@@ -3,7 +3,7 @@
  * so they are tested once (utils/__tests__/home-cards.test.ts) and ported to the web app as they are (H3). The screen
  * (app/(tabs)/index.tsx) only loads the answer and draws what this file says.
  *
- * - **The catalogue** is the design's 17 cards (§3.1), in one default order for everyone. A card with nothing to say takes
+ * - **The catalogue** is the design's 17 cards (§3.1) and Tips (scratch/home/TIPS-DESIGN-fable.md), in one default order for everyone. A card with nothing to say takes
  *   no space: the node leaves it out of its answer (GET /api/home, apps/server routes/home-answer.ts), and the few rules
  *   that need the phone (a layout's hidden cards, the interests card, the invite card) are here.
  * - **The layout** (§4) is kept on the account (`home.layout`, H1) with a copy on the phone; the newer wins by `updatedAt`.
@@ -29,8 +29,8 @@ import {
 
 /** Every card, in the default order (§3.1 "Default order"). The node's own list is the same (home-preferences.ts). */
 export const HOME_CARD_IDS = [
-    'needs', 'safety', 'find', 'steps', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined',
-    'pulse', 'beans', 'notices', 'invite', 'community',
+    'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups',
+    'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
 ] as const;
 export type HomeCardId = typeof HOME_CARD_IDS[number];
 const CARD_SET: ReadonlySet<string> = new Set(HOME_CARD_IDS);
@@ -47,8 +47,11 @@ export const HOME_DRAWN: readonly HomeCardId[] = [...HOME_CARD_IDS];
 /** Find your community is pinned for a member's first 30 days on the global node, then it can be hidden (§4.1, §7, §13 Q5). */
 export const FIND_PINNED_DAYS = 30;
 const DAY_MS = 86_400_000;
-/** Cards with no data of their own in the answer: drawn from `me` and `features` (routes/home-answer.ts header). */
-const NO_DATA: ReadonlySet<HomeCardId> = new Set(['interests', 'invite']);
+/**
+ * Cards with no data of their own in the answer: drawn from `me` and `features` (routes/home-answer.ts header), and Tips
+ * from the list bundled in @beanpool/core (home-tips.ts). Never in `cards=`, so the address and its tag stay as they were.
+ */
+const NO_DATA: ReadonlySet<HomeCardId> = new Set(['tips', 'interests', 'invite']);
 
 /** A layout names at most this many ids in each list (the node refuses more, home-preferences.ts MAX_LAYOUT_IDS). */
 export const LAYOUT_MAX_IDS = 32;
@@ -59,6 +62,7 @@ export const HOME_CARD_NAMES: Record<HomeCardId, string> = {
     safety: 'Your way back in',
     find: 'Find your community',
     steps: 'First steps',
+    tips: 'Tips',
     interests: 'What are you into?',
     deals: 'Your deals',
     enterprise: 'Your enterprise',
@@ -399,6 +403,8 @@ export interface HomeDrawContext {
     knocked?: boolean;
     /** The phone's clock, for the 30-day pin; absent: now. */
     now?: number;
+    /** The Tips card has a tip to show (@beanpool/core home-tips.ts, from the device's record); absent: none. */
+    tipsUp?: boolean;
 }
 
 /**
@@ -527,6 +533,8 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             case 'find': return isFindCard(c.find);
             case 'steps': return firstSteps(answer, ctx).show;
             case 'interests': return !!answer.me && (ctx.interests.length === 0 || ctx.tuneOpen);
+            // A member's only, never a visitor's; a suspended member still learns the app.
+            case 'tips': return !!answer.me && !!ctx.tipsUp;
             case 'invite': return !global && canInvite && !!answer.me?.firstOffer;
             case 'market': return !!c.market && (c.market.items.length > 0 || !!c.market.examples);
             case 'decide': return !!c.decide && decideLines(c.decide, answer.features, 0).length > 0;

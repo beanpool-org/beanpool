@@ -24,6 +24,8 @@ interface Props {
     onSuggest?: () => void;
     /** Defaults to FEEDBACK_LIVE; tests pass it to check both states. */
     feedbackLive?: boolean;
+    /** Open at this page (by slug), with the front page behind it (Home's Tips card, Read more). */
+    initialPage?: string;
 }
 
 const card = 'bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm overflow-hidden divide-y divide-nature-100 dark:divide-nature-800';
@@ -61,9 +63,9 @@ function useCommunityStatus(): 'checking' | 'online' | 'offline' {
     return status;
 }
 
-export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE }: Props) {
+export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, initialPage }: Props) {
     const { guide, source } = useGuide();
-    const [stack, setStack] = useState<View[]>([{ kind: 'home' }]);
+    const [stack, setStack] = useState<View[]>(() => (initialPage ? [{ kind: 'home' }, { kind: 'page', slug: initialPage }] : [{ kind: 'home' }]));
     const [query, setQuery] = useState('');
     const topRef = useRef<HTMLDivElement>(null);
     const view = stack[stack.length - 1];

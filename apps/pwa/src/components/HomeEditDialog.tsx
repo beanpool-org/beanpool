@@ -8,6 +8,7 @@
  * label says what it does ("Move Coming up up", a switch that says whether the card is shown).
  */
 import { useEffect, useRef, useState } from 'react';
+import { TIPS_ALL_SEEN } from '@beanpool/core';
 import { cardTitle, type HomeAnswer, type HomeCardId } from '../lib/home-cards';
 
 interface Props {
@@ -18,11 +19,13 @@ interface Props {
     onMove: (id: HomeCardId, direction: 'up' | 'down') => void;
     onReset: () => void;
     onClose: () => void;
+    /** Tips is on but every tip is seen, so the card has gone by itself: said under its name (off and on starts over). */
+    tipsAllSeen?: boolean;
 }
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function HomeEditDialog({ answer, shown, hidden, onToggle, onMove, onReset, onClose }: Props) {
+export function HomeEditDialog({ answer, shown, hidden, onToggle, onMove, onReset, onClose, tipsAllSeen }: Props) {
     const dialog = useRef<HTMLDivElement | null>(null);
     const opener = useRef<Element | null>(typeof document !== 'undefined' ? document.activeElement : null);
     // A switch moves its row between "Shown" and "Hidden", which draws it anew: focus follows it there.
@@ -77,7 +80,12 @@ export function HomeEditDialog({ answer, shown, hidden, onToggle, onMove, onRese
         return (
             <li key={id} data-testid={`home-edit-row-${id}`}
                 className={`flex items-center gap-2 py-1.5 border-b border-nature-100 dark:border-nature-800 last:border-b-0 min-w-0 ${on ? '' : 'opacity-70'}`}>
-                <span className={`flex-1 min-w-0 break-words text-sm font-semibold ${on ? 'text-nature-900 dark:text-white' : 'text-nature-600 dark:text-nature-300'}`}>{title}</span>
+                <span className={`flex-1 min-w-0 break-words text-sm font-semibold ${on ? 'text-nature-900 dark:text-white' : 'text-nature-600 dark:text-nature-300'}`}>
+                    {title}
+                    {id === 'tips' && on && tipsAllSeen && (
+                        <span data-testid="home-edit-tips-all-seen" className="block text-xs font-normal text-nature-600 dark:text-nature-300">{TIPS_ALL_SEEN}</span>
+                    )}
+                </span>
                 {on && (
                     <>
                         <button type="button" className={btn} aria-label={`Move ${title} up`} disabled={index === 0} onClick={() => onMove(id, 'up')}>

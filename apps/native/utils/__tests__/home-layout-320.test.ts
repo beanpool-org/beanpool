@@ -25,6 +25,7 @@ import { MAX_FONT_SCALE } from '../../constants/responsive';
 import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, homeStyles } from '../../components/home/HomeParts';
 import { editHomeStyles } from '../../components/home/EditHomeSheet';
 import { HOME_CARD_NAMES } from '../home-cards';
+import { HOME_TIPS, TIPS_DONT_SHOW, tipsCaption } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
 
 const SCREEN = 320;
@@ -56,12 +57,27 @@ describe('a card at 320dp × 1.3', () => {
         const menu = num(s.menuButton.width) + num(s.menuButton.marginRight);
         const tune = HOME_TARGET_DP;
         const room = CARD_INNER - menu - tune;
-        for (const name of [...Object.values(HOME_CARD_NAMES), 'Near you', 'The worldwide community']) {
+        for (const name of [...Object.values(HOME_CARD_NAMES), 'Near you', 'The worldwide community', tipsCaption({ position: 15, total: 15 })]) {
             const w = longestWord(name.toUpperCase(), num(s.caption.fontSize), { scale: CAPTION_MAX_SCALE, caps: true, letterSpacing: num(s.caption.letterSpacing) });
             expect(w, name).toBeLessThan(room);
         }
         // Long community names wrap to a second line rather than run under the "…".
         expect(s.caption.flex).toBe(1);
+    });
+
+    it('the Tips card (TIPS-DESIGN §5): every tip\'s longest word fits; Next and Read more share a row; "Don\'t show tips again" fits a line and may wrap, never cut', () => {
+        // §5 guessed under 140dp; measured, the longest is "recognition," at about 145dp of the 258: one word never runs out.
+        for (const t of HOME_TIPS) expect(longestWord(t.text, 15), t.id).toBeLessThan(CARD_INNER * 0.6);
+        const button = (w: string) => textWidth(w, 14) + 2 * 16;
+        expect(button('Next') + 8 + button('Read more')).toBeLessThan(CARD_INNER);
+        expect(textWidth(TIPS_DONT_SHOW, num(s.linkText.fontSize))).toBeLessThan(CARD_INNER);
+        const body = read('components/home/HomeCardBodies.tsx');
+        const tips = body.slice(body.indexOf('export function TipsBody'));
+        expect(tips).not.toMatch(/numberOfLines/);
+        expect(tips).toMatch(/minHeight: HOME_TARGET_DP/);
+        // The floating "+ ADD POST" steps aside for both bands (HomeParts.tsx FabAware).
+        expect(tips).toMatch(/<FabAware id="tips:buttons"/);
+        expect(tips).toMatch(/<FabAware id="tips:dont-show"/);
     });
 
     it('a listing row: the title beside the thumbnail keeps a long word; the OFFER/NEED badge rides on the second line', () => {

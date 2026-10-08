@@ -33,8 +33,8 @@ const pulse = { items: [{ id: 'u1', title: 'How our LETS started', thumbnailUrl:
 const beans = { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false };
 
 describe('the catalogue and the default order (§3.1)', () => {
-    it('is the 17 ids in the design order, community last', () => {
-        expect(HOME_CARD_IDS).toEqual(['needs', 'safety', 'find', 'steps', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'invite', 'community']);
+    it('is the 18 ids in the design order (the 17 and Tips after First steps), community last', () => {
+        expect(HOME_CARD_IDS).toEqual(['needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'invite', 'community']);
         expect(effectiveOrder(null)).toEqual([...HOME_CARD_IDS]);
     });
 
@@ -43,7 +43,7 @@ describe('the catalogue and the default order (§3.1)', () => {
         const order = effectiveOrder(l);
         expect(order.slice(0, 2)).toEqual(['pulse', 'events']);
         expect(order[order.length - 1]).toBe('community');
-        expect(new Set(order).size).toBe(17);
+        expect(new Set(order).size).toBe(18);
     });
 });
 
@@ -201,6 +201,16 @@ describe('the layout from anywhere: unknown ids, merge (§4.1, §4.2)', () => {
         expect(asked).not.toContain('invite');
         expect(asked).toContain('needs');
         expect(asked).toContain('community');
+    });
+
+    it('Tips is never asked of the node (no data: the address and its tag are what they were), and shows only for a member with a tip', () => {
+        const a = answer({ community });
+        expect(askedCards(hideCard(null, 'pulse', NOW), a, NOW)).not.toContain('tips');
+        expect(askedCards(hideCard(null, 'tips', NOW), a, NOW)).toEqual(askedCards(normalizeLayout({ v: 1, order: [], hidden: [], dismissed: {}, updatedAt: daysAgo(0) }), a, NOW));
+        expect(shownCards(a, null, { now: NOW, tipsUp: true })).toContain('tips');
+        expect(shownCards(a, null, { now: NOW })).not.toContain('tips');
+        expect(shownCards(a, hideCard(null, 'tips', NOW), { now: NOW, tipsUp: true })).not.toContain('tips');
+        expect(shownCards({ ...a, me: null }, null, { now: NOW, tipsUp: true })).not.toContain('tips');
     });
 
     it('a pinned find is always asked for, and so is a hidden one before any answer says whether it is pinned', () => {

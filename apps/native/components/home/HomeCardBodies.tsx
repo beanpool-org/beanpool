@@ -14,7 +14,9 @@ import {
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type StepLine,
 } from '../../utils/home-cards';
-import { FabAware, HomeButton, HomeLink, HomeRow, homeStyles } from './HomeParts';
+import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, tipsNextLabel, type TipsView } from '@beanpool/core';
+import { getBundledGuide } from '../../utils/guide';
+import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, homeStyles } from './HomeParts';
 
 /**
  * What each Home card says (design §3.1, §9), from the answer the screen holds. Every line is one target into a screen
@@ -338,6 +340,45 @@ export function CommunityBody({ card, profile, invitesOn, colors, onEdit }: {
         <>
             {!!line && <HomeRow colors={colors} text={line} a11y={line} lines={3} testID="home-community-line" />}
             {onEdit && <HomeLink id="community:edit" colors={colors} text="Edit home" a11y="Edit home: hide, show or move cards" onPress={onEdit} testID="home-edit" />}
+        </>
+    );
+}
+
+/**
+ * Tips (scratch/home/TIPS-DESIGN-fable.md §1, §5): one tip, its whole text; Next (Done on the last) and Read more when the
+ * tip names a guide page, in a band the floating button steps aside for; then "Don't show tips again", full width,
+ * allowed to wrap. Next is the same element from tip to tip, so focus stays on it.
+ */
+export function TipsBody({ view, colors, onNext, onReadMore, onDontShow }: {
+    view: TipsView;
+    colors: AppColors;
+    onNext: () => void;
+    onReadMore: (slug: string) => void;
+    onDontShow: () => void;
+}) {
+    const s = homeStyles(colors);
+    const slug = view.tip.guide;
+    const page = slug ? getBundledGuide().guides.find(g => g.slug === slug) : undefined;
+    return (
+        <>
+            <Text style={{ fontSize: 15, lineHeight: 21, color: colors.text.body }} testID="home-tip-text">{view.tip.text}</Text>
+            <FabAware id="tips:buttons" style={s.buttonRow}>
+                <HomeButton primary colors={colors} text={view.last ? 'Done' : 'Next'} a11y={tipsNextLabel(view)} onPress={onNext} testID="home-tip-next" />
+                {page && slug && (
+                    <HomeButton colors={colors} text="Read more" a11y={`Read more in the guide: ${page.title}`} onPress={() => onReadMore(slug)} testID="home-tip-read-more" />
+                )}
+            </FabAware>
+            <FabAware id="tips:dont-show">
+                <Pressable
+                    onPress={onDontShow}
+                    style={({ pressed }) => [{ minHeight: HOME_TARGET_DP, justifyContent: 'center', alignSelf: 'stretch' }, pressed && s.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={TIPS_DONT_SHOW_LABEL}
+                    testID="home-tips-dont-show"
+                >
+                    <Text style={s.linkText}>{TIPS_DONT_SHOW}</Text>
+                </Pressable>
+            </FabAware>
         </>
     );
 }

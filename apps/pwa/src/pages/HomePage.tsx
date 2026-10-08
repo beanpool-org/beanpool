@@ -24,6 +24,11 @@
  *   tier-locked, examples always say Example, nothing here blocks the app or waits on the network to draw.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+    TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
+    restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
+    type TipsRecord,
+} from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
 import {
@@ -42,6 +47,7 @@ import { withJitter } from '../lib/jitter';
 import { loadRadiusSettings } from '../lib/geo';
 import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
+import { getBundledGuide } from '../lib/guide';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
 import { EXAMPLE_BADGE, EXAMPLE_LISTINGS, EXAMPLES_HEADING, EXAMPLES_NOTE, exampleLabel } from '../lib/example-listings';
 import { NO_BEANS_TERMS_TEXT, PLACE_AFTER_JOIN, VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
@@ -67,9 +73,13 @@ export const HOME_SIGNED_OUT = 'You signed out of this browser in another tab. R
 export const HOME_NOT_ON_NODE = "This community's server doesn't have Home yet. The Market and the other tabs work as before.";
 /** Said politely once a card is hidden: where it went, and how it comes back. */
 export const hiddenWords = (title: string) => `${title} is hidden. Edit home brings it back.`;
+/** Said politely when Done on the last tip takes the Tips card away. */
+export const TIPS_DONE_WORDS = 'That was the last tip. Edit home brings them back.';
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
+/** The Tips card's record (@beanpool/core home-tips.ts), per account in this browser, never on the account. */
+export const tipsKey = (pk: string) => `beanpool_home_tips_${pk}`;
 
 function readFlag(key: string): boolean {
     try { return localStorage.getItem(key) === '1'; } catch { return true; }
@@ -78,6 +88,18 @@ function readFlag(key: string): boolean {
 function writeFlag(key: string): void {
     if (!accountEpochHolds()) return;
     try { localStorage.setItem(key, '1'); } catch { /* a private window: shown again next time */ }
+}
+/** A private window that keeps nothing starts the tips at the first one each visit. */
+function readTips(pk: string): TipsRecord {
+    try {
+        const raw = localStorage.getItem(tipsKey(pk));
+        return readTipsRecord(raw ? JSON.parse(raw) : null);
+    } catch { return emptyTipsRecord(); }
+}
+/** Written only while the member's account is still in this browser (lib/account-epoch.ts), as the flags above. */
+function writeTips(pk: string, record: TipsRecord): void {
+    if (!accountEpochHolds()) return;
+    try { localStorage.setItem(tipsKey(pk), JSON.stringify(record)); } catch { /* a private window: not kept */ }
 }
 function reducedMotion(): boolean {
     try { return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return true; }
@@ -105,7 +127,8 @@ interface Props {
     /**
      * Into the screens that already exist: 'marketplace' (a post), 'map', 'map-post', 'projects', 'messages' (a
      * conversation), 'people', 'people-community', 'people-invites', 'ledger', 'pulse', 'enterprise' (its key),
-     * 'settings-profile'. The lobby takes 'marketplace' and 'map' only.
+     * 'settings-profile', 'guide' (a page of the members' guide, by slug: the Tips card's Read more). The lobby takes
+     * 'marketplace' and 'map' only.
      */
     onNavigate: (tab: string, contextId?: string) => void;
     /** The safety card's "See my 12 words". */
@@ -132,6 +155,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const [pointProblem, setPointProblem] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
+    // The Tips card's record as changed on this landing (Next, Don't show, Edit home); another landing's is not this one's.
+    const [tipsChanged, setTipsChanged] = useState<{ landing: string; record: TipsRecord } | null>(null);
+    const tipsRef = useRef<TipsRecord | null>(null);
+    // The landing whose once-a-day advance has been written: once per landing, never while Home is in front.
+    const tipsLandedFor = useRef<string | null>(null);
 
     const statusRef = useRef(status);
     const answerRef = useRef<HomeAnswer | null>(null);
@@ -421,9 +449,34 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         setHintOpen(!readFlag(hintKey(publicKey)));
     }, [publicKey, !!answer]);
 
+    // ── Tips (scratch/home/TIPS-DESIGN-fable.md): the node's list from the answer in hand, the record this browser's ──
+    // The web holds no role on the node, so a community whose door is admins-only leaves the invites tip out for all.
+    const tipsList = answer?.me && !visitor ? tipsFor({ profile: String(answer.profile), features: answer.features }, null) : [];
+    const tipsLanding = publicKey && answer?.me && !visitor ? `${publicKey}:${landing}` : null;
+    // Once per landing, with an answer in hand (the kept copy counts: tips work with no connection), read in the same
+    // render as the cards so the card is there from the first draw: a tip first shown on an earlier local day is marked
+    // seen and the next one drawn.
+    const tipsLanded = useMemo(() => (publicKey && tipsLanding ? tipOnLanding(readTips(publicKey), tipsList, localDay()).record : null),
+        [tipsLanding]);
+    const tips = tipsChanged && tipsChanged.landing === tipsLanding ? tipsChanged.record : tipsLanded;
+    tipsRef.current = tips;
+    const keepTips = useCallback((next: TipsRecord) => {
+        if (!tipsLanding) return;
+        tipsRef.current = next;
+        setTipsChanged({ landing: tipsLanding, record: next });
+        if (publicKey) writeTips(publicKey, next);
+    }, [publicKey, tipsLanding]);
+    // The landing's advance is kept, once.
+    useEffect(() => {
+        if (!publicKey || !tipsLanding || !tipsLanded || tipsLandedFor.current === tipsLanding || landedEpoch() === null) return;
+        tipsLandedFor.current = tipsLanding;
+        writeTips(publicKey, tipsLanded);
+    }, [tipsLanding, tipsLanded]);
+    const tipsView = tips && answer?.me && !visitor ? tipNow(tips, tipsList, localDay()).view : null;
+
     const now = Date.now();
     const myInterests = interests ?? answer?.me?.interests ?? [];
-    const shown = answer ? shownCards(answer, layout, { now, interests: myInterests, interestsOpen }) : [];
+    const shown = answer ? shownCards(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView }) : [];
     // A card shown as Home opened stays open for the visit (a first tap must not take it away).
     useEffect(() => {
         if (shown.includes('interests') && !interestsOpen) setInterestsOpen(true);
@@ -465,7 +518,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 ?? card.querySelector<HTMLElement>('h2');
             if (target) { target.focus(); return; }
         }
-    }, [layout]);
+    }, [layout, tips]);
 
     // On the account and in this browser's Market (lib/home-interests.ts); a save that fails is marked in this browser
     // and sent again after the next read, whichever page made it. Never from a Home the page no longer holds (a chip on
@@ -539,6 +592,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             canMoveUp: i > 0,
             canMoveDown: i >= 0 && i < movable.length - 1,
             onHide: () => {
+                // Hide on Tips does what "Don't show tips again" does: the record holds it on a node that drops `tips`.
+                if (id === 'tips') { tipsDontShow(); return; }
                 const at = shown.indexOf(id);
                 if (!changeLayout((l) => hideCard(l, id))) return;
                 // Read once the layout has been drawn (the effect below), so set in the same turn as the change.
@@ -548,6 +603,30 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             },
             onMove: (d: 'up' | 'down') => { changeLayout((l) => moveCard(l, id, d, movable)); },
         };
+    }
+
+    /** Focus to the nearest card left once `id` has gone (read after the next draw, the effect above). */
+    function focusAround(id: HomeCardId) {
+        const at = shown.indexOf(id);
+        focusAfterHide.current = [...shown.slice(at + 1), ...shown.slice(0, Math.max(at, 0)).reverse()];
+    }
+
+    // Next (Done on the last): the tip is seen and the next one drawn in place, said politely; Done takes the card away.
+    function tipsNext() {
+        if (!publicKey || landedEpoch() === null || !tipsRef.current) return;
+        const step = nextTip(tipsRef.current, tipsList, localDay());
+        if (!step.view) focusAround('tips');
+        keepTips(step.record);
+        setLive(step.view ? step.view.tip.text : TIPS_DONE_WORDS);
+    }
+
+    // "Don't show tips again" (and the card's Hide): the record says so, and the layout hides it for the other devices.
+    function tipsDontShow() {
+        if (!publicKey || landedEpoch() === null) return;
+        focusAround('tips');
+        keepTips(dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
+        changeLayout((l) => hideCard(l, 'tips'));
+        setLive(hiddenWords(cardTitle('tips', a)));
     }
 
     const cardStyle = (index: number): React.CSSProperties | undefined => reveal
@@ -656,6 +735,35 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                                 : <HomeLine key={l.text} onClick={l.go} label={label}>{body}</HomeLine>;
                         })}
                         {limits && <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid="home-steps-limits">{limits}</p>}
+                    </HomeCard>
+                );
+            }
+            case 'tips': {
+                const v = tipsView;
+                if (!v) return null;
+                const slug = v.tip.guide;
+                const page = slug ? findGuidePage(getBundledGuide(), slug) : null;
+                const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
+                return (
+                    <HomeCard key={id} {...common} title={tipsCaption(v)}>
+                        <p data-testid="home-tip-text" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{v.tip.text}</p>
+                        <div className="flex flex-wrap gap-2">
+                            {/* The same element on every tip, so focus stays on it after a tap. */}
+                            <button type="button" onClick={tipsNext} aria-label={tipsNextLabel(v)} data-testid="home-tips-next"
+                                className={`${btn} flex-1 min-w-[96px] border-0 bg-emerald-700 hover:bg-emerald-800 text-white focus-visible:ring-emerald-400`}>
+                                {v.last ? 'Done' : 'Next'}
+                            </button>
+                            {slug && page && (
+                                <button type="button" onClick={() => onNavigate('guide', slug)} aria-label={`Read more in the guide: ${page.title}`} data-testid="home-tips-more"
+                                    className={`${btn} flex-1 min-w-[96px] border border-nature-300 dark:border-nature-700 bg-transparent text-nature-900 dark:text-white focus-visible:ring-emerald-500`}>
+                                    Read more
+                                </button>
+                            )}
+                        </div>
+                        <button type="button" onClick={tipsDontShow} aria-label={TIPS_DONT_SHOW_LABEL} data-testid="home-tips-dont-show"
+                            className="w-full min-h-[44px] mt-1 px-2 bg-transparent border-0 rounded-lg text-sm font-bold text-nature-700 dark:text-nature-200 whitespace-normal break-words cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                            {TIPS_DONT_SHOW}
+                        </button>
                     </HomeCard>
                 );
             }
@@ -929,9 +1037,19 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     answer={a}
                     shown={editable.shown}
                     hidden={editable.hidden}
-                    onToggle={(id, show) => { changeLayout((l) => (show ? showCard(l, id) : hideCard(l, id))); }}
+                    tipsAllSeen={!!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList)}
+                    onToggle={(id, show) => {
+                        if (!changeLayout((l) => (show ? showCard(l, id) : hideCard(l, id)))) return;
+                        // Tips switched on starts over from the first tip; off holds as "Don't show tips again" does.
+                        if (id === 'tips') keepTips(show ? restartTips(tipsList, localDay()) : dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
+                    }}
                     onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editable.shown)); }}
-                    onReset={() => { changeLayout(resetLayout); }}
+                    // Reset shows Tips again when it was off, so then the tips start over as a switch-on does (PR #1694
+                    // review 3); a member part-way through keeps their place (confirmation 1, finding 2).
+                    onReset={() => {
+                        const tipsOff = !!tipsRef.current?.dismissedAt || !!layoutRef.current?.hidden.includes('tips');
+                        if (changeLayout(resetLayout) && tipsOff) keepTips(restartTips(tipsList, localDay()));
+                    }}
                     onClose={() => setEditOpen(false)}
                 />
             )}

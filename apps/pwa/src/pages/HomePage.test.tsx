@@ -26,7 +26,8 @@ vi.mock('../lib/sync', () => ({
 }));
 
 import * as api from '../lib/api';
-import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, hiddenWords } from './HomePage';
+import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, hiddenWords, tipsKey } from './HomePage';
+import { localDay, tipsFor } from '@beanpool/core';
 import { NOTICES_SEEN_EVENT } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
@@ -94,7 +95,8 @@ describe('one request, the cached answer first (§5)', () => {
         expect(api.getHome).toHaveBeenCalledTimes(1);
         // No layout in this browser yet: the node applies the account's own (no `cards=`).
         expect(vi.mocked(api.getHome).mock.calls[0][0]).toEqual({});
-        expect(cardIds()).toEqual(['events', 'market', 'pulse', 'beans', 'community']);
+        // Tips with the first draw (bundled, never asked of the node), after First steps' place.
+        expect(cardIds()).toEqual(['tips', 'events', 'market', 'pulse', 'beans', 'community']);
         expect(screen.getByTestId('home-card-beans')).toHaveTextContent('12 Beans · room to spend 200');
         expect(screen.getByTestId('home-card-community')).toHaveTextContent('81 members · 23 trades this month.');
     });
@@ -228,12 +230,13 @@ describe('tailoring (§4)', () => {
     it('the menu closes on Escape and gives focus back to its "…"; Move up is off for the first movable card', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        const events = await screen.findByTestId('home-card-events');
-        const dots = within(events).getByRole('button', { name: 'Card options for Coming up' });
+        // A new member's first movable card is Tips (after First steps, which this member has done).
+        const first = await screen.findByTestId('home-card-tips');
+        const dots = within(first).getByRole('button', { name: 'Card options for Tips · 1 of 15' });
         fireEvent.click(dots);
-        expect(within(events).getByRole('button', { name: 'Move up' })).toBeDisabled();
-        fireEvent.keyDown(within(events).getByRole('button', { name: 'Hide' }), { key: 'Escape' });
-        expect(within(events).queryByRole('button', { name: 'Hide' })).toBeNull();
+        expect(within(first).getByRole('button', { name: 'Move up' })).toBeDisabled();
+        fireEvent.keyDown(within(first).getByRole('button', { name: 'Hide' }), { key: 'Escape' });
+        expect(within(first).queryByRole('button', { name: 'Hide' })).toBeNull();
         await waitFor(() => expect(dots).toHaveFocus());
     });
 
@@ -243,7 +246,7 @@ describe('tailoring (§4)', () => {
         const market = await screen.findByTestId('home-card-market');
         fireEvent.click(within(market).getByRole('button', { name: 'Card options for New in the Market' }));
         fireEvent.click(within(market).getByRole('button', { name: 'Move down' }));
-        await waitFor(() => expect(cardIds()).toEqual(['events', 'pulse', 'market', 'beans', 'community']));
+        await waitFor(() => expect(cardIds()).toEqual(['tips', 'events', 'pulse', 'market', 'beans', 'community']));
         expect(within(screen.getByTestId('home-card-community')).queryByTestId('home-card-menu')).toBeNull();
     });
 
@@ -903,5 +906,202 @@ describe('a clear this tab is the first to hear of, inside its own next call: no
         expect(api.saveHomePreferences).not.toHaveBeenCalled();
         expect(localStorage.getItem('bp_fav_categories')).toBeNull();
         expect(Object.keys(localStorage).filter(k => k.includes(ME.publicKey))).toEqual([]);
+    });
+});
+
+describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)', () => {
+    const LOCAL = tipsFor({ profile: 'local', features: answer().features }, null);
+    const record = () => JSON.parse(localStorage.getItem(tipsKey(ME.publicKey)) ?? 'null');
+    const tipsCard = () => screen.getByTestId('home-card-tips');
+
+    it('a new member lands on the first tip, after First steps; Next draws the next in place, says it, and keeps focus', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-tips');
+        expect(within(card).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
+        expect(within(card).getByTestId('home-tip-text')).toHaveTextContent(LOCAL[0].text);
+        // Shown on landing is kept, with the local day it was first shown.
+        expect(record()).toMatchObject({ v: 1, seen: [], current: LOCAL[0].id, dismissedAt: null });
+        const next = within(card).getByRole('button', { name: 'Next tip' });
+        next.focus();
+        fireEvent.click(next);
+        expect(within(tipsCard()).getByRole('heading', { name: 'Tips · 2 of 15' })).toBeInTheDocument();
+        expect(within(tipsCard()).getByTestId('home-tip-text')).toHaveTextContent(LOCAL[1].text);
+        expect(screen.getByTestId('home-live')).toHaveTextContent(LOCAL[1].text);
+        // The same element: focus stays on it.
+        expect(within(tipsCard()).getByRole('button', { name: 'Next tip' })).toBe(next);
+        expect(next).toHaveFocus();
+        expect(record()).toMatchObject({ seen: [LOCAL[0].id], current: LOCAL[1].id });
+    });
+
+    it('a landing on a later day advances once; Home in front never moves it', async () => {
+        localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: [], current: LOCAL[0].id, currentShownOn: '2000-01-01', dismissedAt: null }));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-tips');
+        expect(within(card).getByRole('heading', { name: 'Tips · 2 of 15' })).toBeInTheDocument();
+        expect(record()).toMatchObject({ seen: [LOCAL[0].id], current: LOCAL[1].id });
+        // A poll's read while Home is in front: the same tip.
+        await act(async () => { hooks.sync.forEach(cb => cb()); });
+        expect(within(tipsCard()).getByRole('heading', { name: 'Tips · 2 of 15' })).toBeInTheDocument();
+    });
+
+    it('Done on the last tip takes the card away, says so, moves focus on; Edit home then says All tips seen', async () => {
+        localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: LOCAL.slice(0, -1).map(t => t.id), current: null, currentShownOn: null, dismissedAt: null }));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-tips');
+        expect(within(card).getByRole('heading', { name: 'Tips · 15 of 15' })).toBeInTheDocument();
+        const done = within(card).getByRole('button', { name: 'Done with tips. The card goes.' });
+        expect(done).toHaveTextContent('Done');
+        fireEvent.click(done);
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        expect(screen.getByTestId('home-live')).toHaveTextContent(TIPS_DONE_WORDS);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Card options for Coming up' })).toHaveFocus());
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
+        expect(within(dialog).getByRole('switch', { name: 'Show Tips' })).toHaveAttribute('aria-checked', 'true');
+        expect(within(within(dialog).getByTestId('home-edit-row-tips')).getByTestId('home-edit-tips-all-seen')).toHaveTextContent('All tips seen');
+        // Off and on again starts over from the first tip.
+        fireEvent.click(within(dialog).getByRole('switch', { name: 'Show Tips' }));
+        fireEvent.click(within(dialog).getByRole('switch', { name: 'Show Tips' }));
+        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
+    });
+
+    it("Don't show tips again: gone at once, the record and the layout say so, focus to the nearest card; a node that dropped the id keeps it gone", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-tips');
+        fireEvent.click(within(card).getByRole('button', { name: "Don't show tips again. Edit home brings them back." }));
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        expect(record().dismissedAt).toEqual(expect.any(String));
+        const saved = vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout']!;
+        expect(saved.hidden).toContain('tips');
+        expect(screen.getByTestId('home-live')).toHaveTextContent(hiddenWords('Tips'));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Card options for Coming up' })).toHaveFocus());
+        cleanup();
+        // An older node stored the layout without `tips` (it drops ids it does not know): the record still holds.
+        resetHomeCacheForTest();
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: new Date(Date.now() + 60_000).toISOString() } as never })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+    });
+
+    it("the card's own Hide does what Don't show does; Edit home's switch brings it back from the first tip", async () => {
+        localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: [LOCAL[0].id, LOCAL[1].id], current: LOCAL[2].id, currentShownOn: '2999-01-01', dismissedAt: null }));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-tips');
+        fireEvent.click(within(card).getByRole('button', { name: 'Card options for Tips · 3 of 15' }));
+        fireEvent.click(within(card).getByRole('button', { name: 'Hide' }));
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        expect(record().dismissedAt).toEqual(expect.any(String));
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
+        fireEvent.click(within(dialog).getByRole('switch', { name: 'Show Tips' }));
+        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
+        expect(record()).toMatchObject({ seen: [], dismissedAt: null });
+    });
+
+    // PR #1694 review 6: the tip a restart draws is the record's, from that day, so the next day's landing moves on.
+    it('Tips switched on again records tip 1 as shown today', async () => {
+        localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: [LOCAL[0].id], current: null, currentShownOn: null, dismissedAt: '2026-10-01T00:00:00.000Z' }));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: { v: 1, order: [], hidden: ['tips'], dismissed: {}, updatedAt: new Date().toISOString() } as never })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
+        fireEvent.click(within(dialog).getByRole('switch', { name: 'Show Tips' }));
+        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        expect(within(await screen.findByTestId('home-card-tips')).getByTestId('home-tip-text')).toHaveTextContent(LOCAL[0].text);
+        expect(record()).toEqual({ v: 1, seen: [], current: LOCAL[0].id, currentShownOn: localDay(), dismissedAt: null });
+    });
+
+    // PR #1694 review 3: Reset to defaults shows Tips again, so it starts the tips over (as switching it on does).
+    it("Reset to defaults after Don't show tips again draws the card again, from tip 1", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-tips');
+        fireEvent.click(within(card).getByRole('button', { name: 'Next tip' }));
+        fireEvent.click(within(tipsCard()).getByRole('button', { name: "Don't show tips again. Edit home brings them back." }));
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
+        fireEvent.click(within(dialog).getByTestId('home-edit-reset'));
+        expect(within(dialog).getByRole('switch', { name: 'Show Tips' })).toHaveAttribute('aria-checked', 'true');
+        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
+        expect(record()).toEqual({ v: 1, seen: [], current: LOCAL[0].id, currentShownOn: localDay(), dismissedAt: null });
+    });
+
+    // PR #1694 review 4: the tip follows the reader's text size (a rem size, as every other line on Home), never fixed px.
+    it("the tip's text is sized in rem, so it grows with the reader's text size", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const text = within(await screen.findByTestId('home-card-tips')).getByTestId('home-tip-text');
+        expect(text.className).not.toMatch(/text-\[\d+(\.\d+)?px\]/);
+        expect(text.className).toMatch(/(^| )text-(\[0\.9375rem\]|base)( |$)/);
+    });
+
+    it('Read more opens the guide at the tip\'s page, labelled with the page title', async () => {
+        localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: LOCAL.slice(0, 4).map(t => t.id), current: null, currentShownOn: null, dismissedAt: null }));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const card = await screen.findByTestId('home-card-tips');
+        expect(LOCAL[4].id).toBe('words');
+        fireEvent.click(within(card).getByRole('button', { name: /^Read more in the guide: / }));
+        expect(nav).toHaveBeenCalledWith('guide', 'your-12-words');
+    });
+
+    it('the worldwide community: 11 tips; a visitor gets none; a suspended member still does', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: false } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 11' })).toBeInTheDocument();
+        cleanup();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ profile: 'global', welcome: true, me: null, layout: null })));
+        render(<HomePage identity={null} onNavigate={vi.fn()} visitor={{ joinCard: <div>Join</div>, beans: false }} />);
+        await screen.findByText('Join');
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        cleanup();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ me: { ...answer().me!, standing: 'suspended' } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-card-tips')).toBeInTheDocument();
+    });
+
+    it('cards= never names tips: the address, and so its tag, is what it was', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-tips');
+        // Move it, so the layout names it, and read again.
+        fireEvent.click(within(card).getByRole('button', { name: /^Card options for Tips/ }));
+        fireEvent.click(within(card).getByRole('button', { name: 'Move down' }));
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await waitFor(() => expect(vi.mocked(api.getHome).mock.calls.length).toBeGreaterThan(1));
+        for (const [q] of vi.mocked(api.getHome).mock.calls) expect((q as { cards?: string[] }).cards ?? []).not.toContain('tips');
+    });
+});
+
+describe('Home tips: Reset keeps a member part-way through on their tip (PR #1694 confirmation 1)', () => {
+    const LOCAL = tipsFor({ profile: 'local', features: answer().features }, null);
+    const record = () => JSON.parse(localStorage.getItem(tipsKey(ME.publicKey)) ?? 'null');
+    it('Reset to defaults while Tips is on, part-way (tip 4): the same tip stays', async () => {
+        localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: LOCAL.slice(0, 3).map(t => t.id), current: LOCAL[3].id, currentShownOn: localDay(), dismissedAt: null }));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-tips');
+        const before = within(card).getByTestId('home-tip-text').textContent;
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
+        fireEvent.click(within(dialog).getByTestId('home-edit-reset'));
+        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        const after = within(await screen.findByTestId('home-card-tips')).getByTestId('home-tip-text').textContent;
+        expect(after).toBe(before);
     });
 });

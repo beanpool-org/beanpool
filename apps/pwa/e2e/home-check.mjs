@@ -8,12 +8,14 @@
  *      and saves on the account; "…" Hide gives focus to the next card and survives a reload (the account's layout);
  *      Edit home is a real dialog (axe clean, Escape gives focus back), and its Show brings a card hidden on an earlier
  *      visit back at once; with the node unreachable the kept answer is drawn and the page says so; Sign Out (Device
- *      Only) leaves no cached Home in the browser;
+ *      Only) leaves no cached Home in the browser; the Tips card after First steps on tip 1, Next by keyboard draws the
+ *      next one in place, says it and keeps focus, and the tip's text grows with the reader's text size;
  *   2. the cost (§5.4): the landing's requests against what the Market reads when it is opened, and an idle Home tab's
  *      traffic over a window with one doorbell (a new listing) in it, by Chromium's own byte counts;
  *   3. a visitor in the global lobby: Home first, the Join card, then the public cards from one unsigned read, axe clean;
  *      "Share my area" reads Home again from a rough point; the Market one tap away;
  *   4. a new member of the global node: Find your community first and pinned, no money cards, who joined as a count;
+ *      the Tips card after First steps, from the worldwide community's own list;
  *   5. two tabs of one browser (PR #1479's second review): a card shown in another browser is drawn at this one's next
  *      landing, and in a tab left open at its next read, with one more read at once. With her Home open in other tabs,
  *      Sign Out (Device Only), the delete at the last community and Force Clear & Re-Sync in one: a tab that hears it
@@ -376,6 +378,32 @@ function printRequests(title, reqs) {
     for (const [k, v] of Object.entries(s)) console.log(`      ${v.n} × ${k}  [${v.statuses.join(',')}]  ${v.down.toLocaleString('en')} B down`);
 }
 
+/**
+ * The Tips card on a new member's Home (scratch/home/TIPS-DESIGN-fable.md §6 item 6): tip 1, right after First steps;
+ * Next by keyboard draws the next tip in the same place, says it on the live line, and keeps focus on the same button;
+ * and the tip's text follows the reader's text size (PR #1694 review 4: a fixed 15 px stayed smaller than every line).
+ */
+async function tipsCardChecks(page, where) {
+    const card = page.getByTestId('home-card-tips');
+    const caption = async () => (await card.getByRole('heading').first().textContent())?.trim();
+    const first = await caption();
+    check(/^Tips · 1 of \d+$/.test(first ?? ''), `${where}: the Tips card starts at tip 1 (${first})`);
+    const sizes = await page.evaluate(() => {
+        const px = (el) => (el ? parseFloat(getComputedStyle(el).fontSize) : 0);
+        return { tip: px(document.querySelector('[data-testid="home-tip-text"]')), root: px(document.documentElement) };
+    });
+    check(sizes.tip >= sizes.root * 0.9375 - 0.1, `${where}: the tip's text grows with the reader's text size (${sizes.tip} px with the page at ${sizes.root} px)`);
+    const next = card.getByRole('button', { name: 'Next tip' });
+    await next.focus();
+    await page.keyboard.press('Enter');
+    const second = await caption();
+    const tipText = (await card.getByTestId('home-tip-text').textContent())?.trim() ?? '';
+    const live = (await page.getByTestId('home-live').textContent())?.trim() ?? '';
+    const focusKept = await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'home-tips-next');
+    check(/^Tips · 2 of \d+$/.test(second ?? '') && live === tipText && tipText.length > 0 && focusKept,
+        `${where}: Next by keyboard draws tip 2 in place, says it, and keeps focus on Next (${second}; said: ${live === tipText ? 'the tip' : JSON.stringify(live)}; focus ${focusKept ? 'kept' : 'lost'})`);
+}
+
 // ---------- 1 and 2: a member of a local community ----------
 
 async function localMember(browser, root) {
@@ -394,8 +422,9 @@ async function localMember(browser, root) {
         printRequests('landing on Home', landing.filter((r) => r.path.startsWith('/api/')));
 
         const ids = await cardIds(page);
-        check(JSON.stringify(ids) === JSON.stringify(['needs', 'steps', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'community']),
+        check(JSON.stringify(ids) === JSON.stringify(['needs', 'steps', 'tips', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'community']),
             `the cards, top down: ${ids.join(' · ')}`);
+        await tipsCardChecks(page, 'a member\'s Home');
         const needs = await page.getByTestId('home-card-needs').innerText();
         check(/Unread message from Kofi/.test(needs) && /Vote closes (tonight|today|tomorrow).*compost bay/i.test(needs), `Needs you says what waits, in words (${needs.replace(/\s+/g, ' ').slice(0, 120)})`);
         check(/0 Beans · nothing to repay/.test(await page.getByTestId('home-card-beans').innerText()), 'Your Beans: her own, nothing to repay, how credit opens');
@@ -556,6 +585,7 @@ async function localMember(browser, root) {
         const darkCtx = await openContext(browser, node.origin, { identity: ana, dark: true });
         await land(darkCtx.page, node.origin);
         await darkCtx.page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
+        check(await darkCtx.page.getByTestId('home-card-tips').count() === 1, 'the Tips card is on her Home in dark too (the axe check below takes it in)');
         await axeClean(darkCtx.page, '[data-testid="home-page"]', 'a member\'s Home (dark)');
         await darkCtx.page.getByTestId('home-edit-open').click();
         await axeClean(darkCtx.page, '[data-testid="home-edit-dialog"]', 'Edit home (dark)');
@@ -1026,6 +1056,9 @@ async function globalNode(browser, root) {
         const mids = await cardIds(m.page);
         check(mids[0] === 'find' && !mids.some((id) => ['beans', 'deals', 'invite', 'decide'].includes(id)), `Find your community first, no money cards (${mids.join(' · ')})`);
         check(!(await m.page.getByTestId('home-card-find').getByTestId('home-card-menu').count()), 'Find your community is pinned in the first 30 days (no "…")');
+        check(JSON.stringify(mids.slice(0, 3)) === JSON.stringify(['find', 'steps', 'tips']), `the Tips card after First steps (${mids.slice(0, 3).join(' · ')})`);
+        const globalCaption = (await m.page.getByTestId('home-card-tips').getByRole('heading').first().textContent())?.trim();
+        check(globalCaption === 'Tips · 1 of 11', `the worldwide community's own list: tip 1 of 11 (${globalCaption})`);
         const joined = m.page.getByTestId('home-card-joined');
         if (await joined.count()) check(!/Kofi|Mere/.test(await joined.innerText()), `Who joined is a count, no names (${(await joined.innerText()).replace(/\s+/g, ' ')})`);
         const steps = await m.page.getByTestId('home-card-steps').innerText();

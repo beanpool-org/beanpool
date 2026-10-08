@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     View, Text, ScrollView, Pressable, RefreshControl, StyleSheet, Animated, AccessibilityInfo, AppState, DeviceEventEmitter,
-    Alert, ActivityIndicator, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
+    Alert, ActivityIndicator, Platform, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import {
-    dismissTips, emptyTipsRecord, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor,
-    type TipsRecord,
+    TIPS_ALL_SEEN, dismissTips, emptyTipsRecord, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
+    tipsCaption, tipsFor, type TipsRecord,
 } from '@beanpool/core';
 import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
@@ -21,19 +21,22 @@ import { useManageNode } from '../../components/useManageNode';
 import { FabBandContext, HomeCard, HomeButton, homeStyles, type FabBand } from '../../components/home/HomeParts';
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
 import { EditHomeSheet } from '../../components/home/EditHomeSheet';
+import { AddCardSheet } from '../../components/home/AddCardSheet';
+import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
-    MarketBody, NeedsBody, NoticesBody, PulseBody, StepsBody, TipsBody,
+    MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
-    HOME_DOORBELL_SETTLE_MS, HOME_SAFETY_POLL_MS, askPinned, canHideCard, canMoveCard, canTailor, cardCaption, cardOrder, cardsToAsk,
-    cardsToDraw, createDoorbellDebounce, dismissSafety, effectiveInterests, firstSteps, hideCard, invitesForReader, isHidden, localNeeds,
-    marketForward, marketInOrder, mergeNeeds, moveCard, pickLayout, pinnedCards, safetyWord, starredFirst,
-    type HomeCardId, type HomeLayout, type HomeRole, type LocalNeeds, type StepLine,
+    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, askPinned, canMoveCard, canRemoveCard,
+    canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
+    effectiveInterests, fewerCardsNews, firstSteps, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
+    pickLayout, pickerGroups, pinnedCards, removeCard, removedLine, safetyWord, starredFirst,
+    type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
-    SAVE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
+    SAVE_REFUSED, SAVE_SHAPE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
     readTips, saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
 } from '../../utils/home-store';
 import { readGlobalHome } from '../../utils/community-directory';
@@ -57,9 +60,12 @@ import type { NeedsYouEntry } from '../../utils/needs-you';
  *   every two minutes while it is in front: never a timer per card.
  * - **Nothing here waits on the network or blocks anything** (memory onboarding-no-hard-gates): with no answer yet and
  *   none kept, it says so plainly and the tabs work as ever.
- * - **Tailoring**: each card's "…" (Hide, Move up, Move down) and Edit home at the bottom; kept on the account. A member's
- *   only: a visitor (a key with no account on the global node, which answers with its public cards) gets none of it, no
- *   hint, and no layout is ever sent for one.
+ * - **Tailoring** (scratch/home/CARD-FRAME-DESIGN-fable.md, slice F2): a member's Home is a list of cards they own. Add a
+ *   card (the picker) and Edit home at the bottom; each card's "…" (Settings…, Move up, Move down, Remove); kept on the
+ *   account (`home.layout` version 2). A card added lands first and is read for once its save is answered (§2.4). A node
+ *   from before the frame refuses the new shape: the cards stay on the phone, "not on your account yet", and are sent
+ *   again at each landing (§2.3). A member's only: a visitor (a key with no account on the global node, which answers
+ *   with its public cards) gets none of it, no hint, and no layout is ever sent for one.
  * - **The one-time reveal** (~300 ms, skipped when the phone asks for less motion) and its one-line hint (§6.2).
  * - **Where only the community's admins invite** (`door: 'admins'`), Grow your community and First steps' invite line are
  *   an owner's or admin's alone (PR #1483 review 4166559683): the role is the header's ten-minute copy
@@ -78,6 +84,12 @@ import type { NeedsYouEntry } from '../../utils/needs-you';
 type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community' | 'needs_update';
 
 const REVEAL_MS = 300;
+
+/** A sheet opened as another closes: iOS can't present one modal while the last is still going (Android can). */
+const afterModal = (fn: () => void) => (Platform.OS === 'ios' ? void setTimeout(fn, 350) : fn());
+
+/** The settings sheet's subject: a card about to be added, or one on Home being changed in place. */
+type SettingsFor = { type: string; mode: 'add' } | { type: string; mode: 'save'; id: string; settings?: Record<string, unknown> };
 
 /** The phone's last known place, only where location is already allowed: Home never asks for it. Null otherwise. */
 async function lastKnownPlace(): Promise<HomePoint | null> {
@@ -128,8 +140,14 @@ export default function HomeScreen() {
     const [tuneOpen, setTuneOpen] = useState(false);
     const [safetyUp, setSafetyUp] = useState(false);
     const [local, setLocal] = useState<LocalNeeds | null>(null);
-    const [menuFor, setMenuFor] = useState<HomeCardId | null>(null);
+    const [menuFor, setMenuFor] = useState<HomeCardInstance | null>(null);
     const [editOpen, setEditOpen] = useState(false);
+    const [addOpen, setAddOpen] = useState(false);
+    const [settingsFor, setSettingsFor] = useState<SettingsFor | null>(null);
+    /** A node from before the frame refused the member's cards: they stay on the phone and are sent again (§2.3). */
+    const [notOnAccount, setNotOnAccount] = useState(false);
+    /** The one-time "Home now starts with fewer cards" line (§2.6). */
+    const [fewer, setFewer] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [offlineNote, setOfflineNote] = useState(false);
     const [postPicker, setPostPicker] = useState(false);
@@ -155,9 +173,9 @@ export default function HomeScreen() {
     layoutRef.current = layout;
     const focused = useRef(false);
     const scrollRef = useRef<ScrollView>(null);
-    const cardY = useRef(new Map<HomeCardId, number>());
-    const menuRefs = useRef(new Map<HomeCardId, React.RefObject<View | null>>());
-    const menuRef = (id: HomeCardId) => {
+    const cardY = useRef(new Map<string, number>());
+    const menuRefs = useRef(new Map<string, React.RefObject<View | null>>());
+    const menuRef = (id: string) => {
         let r = menuRefs.current.get(id);
         if (!r) { r = React.createRef<View | null>(); menuRefs.current.set(id, r); }
         return r;
@@ -206,6 +224,14 @@ export default function HomeScreen() {
         Animated.timing(reveal, { toValue: 1, duration: REVEAL_MS, useNativeDriver: true }).start(() => setBandVersion(v => v + 1));
     }, [reveal]);
 
+    // A member who never edited, here before the frame: one line, once (§2.6).
+    const maybeFewer = useCallback(async (whose: HomeAccount) => {
+        if (await seenOnce(whose.publicKey, 'fewer')) return;
+        if (!stillOnPhone(whose) || identityRef.current?.publicKey !== whose.publicKey) return;
+        setFewer(true);
+        void markSeenOnce(whose, 'fewer');
+    }, []);
+
     // ── The phone's own Needs you lines: its database, no request ──
     const readLocal = useCallback(async (me: string) => {
         const settle = <T,>(p: Promise<T>) => p.catch(() => null);
@@ -224,7 +250,14 @@ export default function HomeScreen() {
         const saved = await saveHomePreferences(u, id, { layout: next });
         // The account left the phone while the save was out: nothing of it is drawn or kept.
         if (!stillOnPhone(whose)) return;
-        if (saved === SAVE_REFUSED) {
+        const answered = storedRef.current?.answer;
+        if (saved === SAVE_SHAPE_REFUSED && (!answered?.layout || answered.layoutV1)) {
+            // A node from before the frame (its Home answer is version 1): the cards stay on the phone and are sent again at
+            // each landing, never thrown away (CARD-FRAME §2.3).
+            setNotOnAccount(true);
+            return;
+        }
+        if (saved === SAVE_REFUSED || saved === SAVE_SHAPE_REFUSED) {
             // The node won't keep it: the account's copy stands, and the phone's is never sent again by itself.
             const account = storedRef.current?.answer.layout ?? null;
             phoneLayout.current = account;
@@ -232,6 +265,7 @@ export default function HomeScreen() {
             await yieldPhoneLayout(id.publicKey, u, account, whose);
             return;
         }
+        if (saved) setNotOnAccount(false);
         // The node keeps the newer layout (another phone's, the web app's): that one, then.
         if (saved?.layout && (saved.layout.updatedAt ?? '') > (next.updatedAt ?? '')) {
             phoneLayout.current = saved.layout;
@@ -281,7 +315,9 @@ export default function HomeScreen() {
             setPlace(null);
             setKnocks([]);
             setStored(copy);
-            setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine).layout : null);
+            setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine, copy!.answer.layoutV1).layout : null);
+            setNotOnAccount(false);
+            setFewer(false);
             setInterests(effectiveInterests(copy?.answer.me?.interests, phoneStars));
             setStatus(copy ? 'ok' : 'loading');
         }
@@ -290,7 +326,7 @@ export default function HomeScreen() {
         // (the first landing), from what this read brings, at its end.
         const tipsLandNow = why === 'focus' && !!cached?.answer.me;
         if (tipsLandNow) void landTips(whose);
-        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current).layout, askPinned(cached?.answer, Date.now()));
+        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current, cached?.answer.layoutV1).layout, askPinned(cached?.answer, Date.now()));
         // The global node only: "near you" from where the phone is (where location is already allowed).
         const global = await readsGlobal(u, cached);
         const point = global ? await lastKnownPlace() : null;
@@ -306,10 +342,14 @@ export default function HomeScreen() {
             setOfflineNote(false);
             // A visitor keeps no Home here: drawn in the default order, and nothing is sent.
             const member = canTailor(read.stored.answer);
-            const pick = member ? pickLayout(read.stored.answer.layout, phoneLayout.current) : { layout: null, push: false };
+            const answered = read.stored.answer;
+            const pick = member ? pickLayout(answered.layout, phoneLayout.current, answered.layoutV1) : { layout: null, push: false };
             setLayout(pick.layout);
+            if (member && fewerCardsNews(answered.layout, phoneLayout.current, answered.me, Date.now())) void maybeFewer(whose);
             if (pick.push && pick.layout) void pushLayout(pick.layout, whose);
-            else if (pick.layout) {
+            else if (pick.layout && !answered.layoutV1) {
+                // A version-1 copy is drawn and never kept as the phone's: it is not written until the member edits (§2.6),
+                // and it must never stand in for the phone's own version 2 (review of #1697, note b).
                 phoneLayout.current = pick.layout;
                 void writePhoneLayout(id.publicKey, u, pick.layout, whose);
             }
@@ -347,7 +387,7 @@ export default function HomeScreen() {
         }
         // No answer this time (offline, members only, needs an update): land from what the phone holds.
         if (why === 'focus' && !tipsLandNow && read.kind !== 'answer') await landTips(whose);
-    }, [readLocal, pushLayout, maybeReveal, landTips]);
+    }, [readLocal, pushLayout, maybeReveal, maybeFewer, landTips]);
 
     const refreshRef = useRef(refresh);
     refreshRef.current = refresh;
@@ -380,6 +420,8 @@ export default function HomeScreen() {
         phoneLayout.current = null;
         setStored(null);
         setLayout(null);
+        setNotOnAccount(false);
+        setFewer(false);
         setRole(undefined);
         setPlace(null);
         setKnocks([]);
@@ -401,46 +443,79 @@ export default function HomeScreen() {
         if (!id || !ans || !tipsRef.current) return;
         const step = nextTip(tipsRef.current, tipsFor(ans, role), localDay());
         keepTips(homeAccount(id.publicKey), step.record);
-        AccessibilityInfo.announceForAccessibility(step.view ? step.view.tip.text : 'That was the last tip. Edit home brings them back.');
+        AccessibilityInfo.announceForAccessibility(step.view ? step.view.tip.text : 'That was the last tip. Add a card brings them back.');
     }, [role, keepTips]);
 
     // ── The member's edits ──
-    const changeLayout = useCallback((next: HomeLayout | null) => {
+    // `reread`: a card's settings changed or a card was added, so Home is read again, but only once the save is answered:
+    // the node builds an instance from the settings it keeps, and a read sent before them answers no body (CARD-FRAME
+    // §2.4). A move or a remove reads nothing.
+    const changeLayout = useCallback((next: HomeLayout | null, opts: { reread?: boolean } = {}) => {
         const id = identityRef.current;
         if (!next || !id || !url || !canTailor(storedRef.current?.answer)) return;
         const before = layoutRef.current;
         const whose = homeAccount(id.publicKey);
         phoneLayout.current = next;
+        layoutRef.current = next;
         setLayout(next);
         void writePhoneLayout(id.publicKey, url, next, whose);
-        void pushLayout(next, whose);
-        // A card that comes back was never asked for: read Home again for it.
+        const saving = pushLayout(next, whose);
         const pins = askPinned(storedRef.current?.answer, Date.now());
-        const shownAgain = cardsToAsk(next, pins).some(c => !cardsToAsk(before, pins).includes(c));
-        if (shownAgain) void refreshRef.current('layout');
+        const asksMore = cardsToAsk(next, pins).some(c => !cardsToAsk(before, pins).includes(c));
+        if (asksMore || opts.reread) void saving.then(() => refreshRef.current('layout'));
     }, [url, pushLayout]);
-    // "Don't show tips again", and the card's own Hide: the record says so (it holds on a node that doesn't know `tips` yet)
-    // and the layout hides it, so the member's other devices follow.
+    // "Don't show tips again", and Remove on Tips: the record says so and the card leaves the list, so the member's other
+    // devices follow.
     const onTipsDontShow = useCallback(() => {
         const id = identityRef.current;
         if (!id) return;
         keepTips(homeAccount(id.publicKey), dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
         setHint(false);
-        changeLayout(hideCard(layoutRef.current, 'tips', Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
-        AccessibilityInfo.announceForAccessibility('Tips is hidden. Edit home brings it back.');
+        changeLayout(removeCard(layoutRef.current, 'tips', Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
+        AccessibilityInfo.announceForAccessibility(removedLine(cardName('tips')));
     }, [keepTips, changeLayout]);
-    // Tips switched on in Edit home, or Reset to defaults: the tips start over from the first one, kept as shown today.
+    // Tips added from the picker, or Reset to defaults while they were off: the tips start over from the first one.
     const onTipsOn = useCallback(() => {
         const id = identityRef.current;
         const ans = storedRef.current?.answer;
         if (id) keepTips(homeAccount(id.publicKey), restartTips(ans ? tipsFor(ans, roleRef.current) : [], localDay()));
     }, [keepTips]);
-    // Tips switched off in Edit home holds as "Don't show tips again" does: on a node that doesn't know `tips` yet, the
-    // layout comes back without it, and only the record keeps the card away (PR #1694 review 2).
-    const onTipsOff = useCallback(() => {
-        const id = identityRef.current;
-        if (id) keepTips(homeAccount(id.publicKey), dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
-    }, [keepTips]);
+
+    // ── Adding, removing, and a card's settings (CARD-FRAME §1.3) ──
+    const addNow = useCallback((type: string, settings?: Record<string, unknown>) => {
+        const ans = storedRef.current?.answer;
+        const added = addCard(layoutRef.current, type, Date.now(), { settings, pinned: pinnedCards(ans, Date.now()) });
+        setAddOpen(false);
+        setSettingsFor(null);
+        if (!added.ok) return;
+        setHint(false);
+        if (type === 'tips') onTipsOn();
+        changeLayout(added.layout, { reread: true });
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        AccessibilityInfo.announceForAccessibility(addedLine(cardName(type, ans?.profile)));
+    }, [changeLayout, onTipsOn]);
+    const onPick = useCallback((row: PickerRow) => {
+        if (!row.hasSettings) { addNow(row.type); return; }
+        setAddOpen(false);
+        afterModal(() => setSettingsFor({ type: row.type, mode: 'add' }));
+    }, [addNow]);
+    const onRemoveCard = useCallback((c: HomeCardInstance) => {
+        if (c.type === 'tips') { onTipsDontShow(); return; }
+        setHint(false);
+        changeLayout(removeCard(layoutRef.current, c.id, Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
+        AccessibilityInfo.announceForAccessibility(removedLine(cardName(c.type, storedRef.current?.answer.profile)));
+    }, [changeLayout, onTipsDontShow]);
+    const openSettings = useCallback((c: HomeCardInstance) => {
+        afterModal(() => setSettingsFor({ type: c.type, mode: 'save', id: c.id, settings: c.settings }));
+    }, []);
+    const onSettingsDone = useCallback((next: Record<string, unknown>) => {
+        const what = settingsFor;
+        if (!what) return;
+        if (what.mode === 'add') { addNow(what.type, next); return; }
+        setSettingsFor(null);
+        // Changed in place: the card keeps where it is.
+        changeLayout(changeCardSettings(layoutRef.current, what.id, next, Date.now()), { reread: true });
+    }, [settingsFor, addNow, changeLayout]);
 
     const interestsRef = useRef(interests);
     interestsRef.current = interests;
@@ -505,7 +580,7 @@ export default function HomeScreen() {
     const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now, tipsUp: !!tipsView }) : [];
     // Find your community's pin (the global node, a member's first 30 days): no "…", no move, at the top.
     const pins = pinnedCards(answer, now);
-    const interestsUp = drawn.includes('interests');
+    const interestsUp = drawn.some(c => c.type === 'interests');
     useEffect(() => { if (interestsUp && focused.current) setTuneOpen(true); }, [interestsUp]);
     const word = answer && stored ? safetyWord(answer, stored.asked.split(',')) : null;
     const homeWord = word && stored ? { url: stored.url, standing: word } : null;
@@ -515,19 +590,22 @@ export default function HomeScreen() {
     const ordered = cardOrder(layout, pins);
     const tailor = canTailor(answer);
     const menuCard = tailor ? menuFor : null;
-    const menuAt = menuCard ? drawn.indexOf(menuCard) : -1;
+    const menuAt = menuCard ? drawn.findIndex(d => d.id === menuCard.id) : -1;
+    const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
+    const picker = answer && tailor && addOpen ? pickerGroups(answer, layout, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}) : null;
 
-    const card = (id: HomeCardId): React.ReactNode => {
+    const card = (inst: HomeCardInstance): React.ReactNode => {
         if (!answer) return null;
+        const { id, type } = inst;
         const c = answer.cards;
-        const caption = id === 'tips' && tipsView ? tipsCaption(tipsView) : cardCaption(id, answer);
-        const menu = tailor && canHideCard(id, pins) ? () => setMenuFor(id) : undefined;
+        const caption = type === 'tips' && tipsView ? tipsCaption(tipsView) : cardCaption(type, answer);
+        const menu = tailor && canRemoveCard(type, pins) ? () => setMenuFor(inst) : undefined;
         const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean }) => (
             <HomeCard id={id} caption={caption} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
                 {body}
             </HomeCard>
         );
-        switch (id) {
+        switch (type) {
             case 'needs': return frame(<NeedsBody entries={needsEntries} colors={colors} onOpen={openNeeds} />, { accent: needsEntries.some(e => e.accent) });
             case 'safety':
                 // Its own card (the two-doors design's): it says when it is up, and keeps its own ✕ and schedule.
@@ -593,14 +671,24 @@ export default function HomeScreen() {
             case 'beans': return c.beans ? frame(<BeansBody card={c.beans} colors={colors} />) : null;
             case 'notices': return c.notices ? frame(<NoticesBody card={c.notices} colors={colors} onOpen={openNotice} />) : null;
             case 'invite': return frame(<InviteBody colors={colors} />);
-            case 'community': return frame(<CommunityBody card={c.community} profile={profile} invitesOn={invitesOn} colors={colors} onEdit={tailor ? () => setEditOpen(true) : undefined} />);
+            case 'search': return frame(<SearchBody settings={inst.settings} colors={colors} />);
+            case 'community': return frame(
+                <CommunityBody
+                    card={c.community}
+                    profile={profile}
+                    invitesOn={invitesOn}
+                    colors={colors}
+                    onAdd={tailor ? () => setAddOpen(true) : undefined}
+                    onEdit={tailor ? () => setEditOpen(true) : undefined}
+                />,
+            );
             default: return null;
         }
     };
 
     // Each card in the member's order: the drawn ones, and the "one way back" card while it may be up (it decides).
-    const list = ordered.filter(id => drawn.includes(id) || (id === 'safety' && !isHidden(layout, 'safety') && !!answer));
-    const firstDrawn = list.find(id => id !== 'safety' || safetyUp);
+    const list = ordered.filter(c => drawn.some(d => d.id === c.id) || (c.type === 'safety' && !!answer));
+    const firstDrawn = list.find(c => c.type !== 'safety' || safetyUp);
 
     let empty: React.ReactNode = null;
     if (!answer) {
@@ -652,7 +740,7 @@ export default function HomeScreen() {
         }
     }
 
-    const menuName = menuCard && answer ? cardCaption(menuCard, answer) : '';
+    const menuName = menuCard && answer ? cardCaption(menuCard.type, answer) : '';
 
     return (
         <FabBandContext.Provider value={band}>
@@ -679,13 +767,21 @@ export default function HomeScreen() {
                     )}
                     {empty}
                     <Animated.View style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
-                        {list.map(id => (
-                            <View key={id} onLayout={e => cardY.current.set(id, e.nativeEvent.layout.y)}>
-                                {card(id)}
-                                {hint && tailor && id === firstDrawn && (
+                        {list.map(c => (
+                            <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
+                                {card(c)}
+                                {hint && tailor && c.id === firstDrawn?.id && (
                                     <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-hint">
-                                        <Text style={[st.hintText, { color: colors.text.body }]}>This is your Home. Tap … on any card to move or hide it.</Text>
+                                        <Text style={[st.hintText, { color: colors.text.body }]}>{HOME_HINT_LINE}</Text>
                                         <Pressable onPress={() => setHint(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Got it, hide this tip">
+                                            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text.secondary }}>✕</Text>
+                                        </Pressable>
+                                    </View>
+                                )}
+                                {fewer && tailor && c.id === firstDrawn?.id && (
+                                    <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-fewer">
+                                        <Text style={[st.hintText, { color: colors.text.body }]}>{FEWER_CARDS_LINE}</Text>
+                                        <Pressable onPress={() => setFewer(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Got it, hide this line">
                                             <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text.secondary }}>✕</Text>
                                         </Pressable>
                                     </View>
@@ -708,17 +804,15 @@ export default function HomeScreen() {
                     visible={!!menuCard}
                     name={menuName}
                     colors={colors}
-                    canHide={!!menuCard && canHideCard(menuCard, pins)}
-                    canUp={!!menuCard && canMoveCard(menuCard, pins) && menuAt > 0 && canMoveCard(drawn[menuAt - 1], pins)}
-                    canDown={!!menuCard && canMoveCard(menuCard, pins) && menuAt >= 0 && menuAt < drawn.length - 1 && canMoveCard(drawn[menuAt + 1], pins)}
-                    onHide={() => {
-                        if (menuCard === 'tips') { onTipsDontShow(); return; }
-                        if (menuCard) { setHint(false); changeLayout(hideCard(layoutRef.current, menuCard, Date.now(), pins)); }
-                    }}
-                    onUp={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard, 'up', drawn, Date.now(), pins)); }}
-                    onDown={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard, 'down', drawn, Date.now(), pins)); }}
+                    canRemove={!!menuCard && canRemoveCard(menuCard.type, pins)}
+                    canUp={!!menuCard && canMoveCard(menuCard.type, pins) && menuAt > 0 && canMoveCard(drawn[menuAt - 1].type, pins)}
+                    canDown={!!menuCard && canMoveCard(menuCard.type, pins) && menuAt >= 0 && menuAt < drawn.length - 1 && canMoveCard(drawn[menuAt + 1].type, pins)}
+                    onSettings={menuCard && homeCardType(menuCard.type)?.readSettings ? () => openSettings(menuCard) : undefined}
+                    onRemove={() => { if (menuCard) onRemoveCard(menuCard); }}
+                    onUp={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard.id, 'up', drawn, Date.now(), pins)); }}
+                    onDown={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard.id, 'down', drawn, Date.now(), pins)); }}
                     onClose={() => setMenuFor(null)}
-                    returnTo={menuCard ? menuRef(menuCard) : undefined}
+                    returnTo={menuCard ? menuRef(menuCard.id) : undefined}
                 />
                 <EditHomeSheet
                     visible={editOpen && tailor && !!answer}
@@ -728,12 +822,31 @@ export default function HomeScreen() {
                     pinned={pins}
                     drawnNow={drawn}
                     colors={colors}
-                    onChange={changeLayout}
+                    onChange={next => changeLayout(next)}
                     onClose={() => setEditOpen(false)}
-                    tipsAllSeen={!!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList)}
-                    tipsOff={!!tips?.dismissedAt}
-                    onTipsOn={onTipsOn}
-                    onTipsOff={onTipsOff}
+                    onAdd={() => { setEditOpen(false); afterModal(() => setAddOpen(true)); }}
+                    onRemove={onRemoveCard}
+                    onSettings={c => { setEditOpen(false); openSettings(c); }}
+                    onReset={() => { if (tips?.dismissedAt) onTipsOn(); }}
+                    tipsAllSeen={tipsAllSeen}
+                    notOnAccount={notOnAccount}
+                />
+                <AddCardSheet
+                    visible={!!picker}
+                    groups={picker?.groups ?? []}
+                    full={!!picker?.full}
+                    colors={colors}
+                    onAdd={onPick}
+                    onClose={() => setAddOpen(false)}
+                />
+                <CardSettingsSheet
+                    visible={!!settingsFor && tailor}
+                    type={settingsFor?.type ?? null}
+                    settings={settingsFor?.mode === 'save' ? settingsFor.settings : undefined}
+                    mode={settingsFor?.mode ?? 'add'}
+                    colors={colors}
+                    onDone={onSettingsDone}
+                    onClose={() => setSettingsFor(null)}
                 />
                 <NewPostTypeSheet
                     visible={postPicker}

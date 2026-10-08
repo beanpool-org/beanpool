@@ -169,7 +169,9 @@ export function layoutV1Of(raw: unknown): { empty: boolean } | undefined {
 export function readHomeAnswer(raw: unknown): HomeAnswer | null {
     if (!isObj(raw) || !isObj(raw.cards) || typeof raw.profile !== 'string') return null;
     const me = isObj(raw.me) ? raw.me as unknown as HomeMe : null;
-    const v1 = layoutV1Of(raw.layout);
+    // A kept answer (utils/home-store.ts) holds the layout already read, with its version-1 mark beside it.
+    const kept = isObj(raw.layoutV1) && typeof raw.layoutV1.empty === 'boolean' ? { empty: raw.layoutV1.empty } : undefined;
+    const v1 = layoutV1Of(raw.layout) ?? kept;
     return {
         generatedAt: typeof raw.generatedAt === 'string' ? raw.generatedAt : '',
         profile: raw.profile,

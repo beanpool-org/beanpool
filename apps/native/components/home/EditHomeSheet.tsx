@@ -24,7 +24,7 @@ export const EDIT_HOME_NOTE = "Needs you stays at the top, and your community's 
  * global node) neither: the note says it stays near the top for now. Only cards this node can show are listed.
  */
 export function EditHomeSheet({
-    visible, layout, node, role, pinned = [], drawnNow, colors, onChange, onClose, onAdd, onRemove, onSettings, tipsAllSeen, notOnAccount,
+    visible, layout, node, role, pinned = [], drawnNow, colors, onChange, onClose, onAdd, onRemove, onSettings, onReset, tipsAllSeen, notOnAccount,
 }: {
     visible: boolean;
     layout: HomeLayout | null;
@@ -46,6 +46,8 @@ export function EditHomeSheet({
     onRemove: (card: HomeCardInstance) => void;
     /** Settings… on a type that has them: the screen closes this sheet and opens the card's settings. */
     onSettings: (card: HomeCardInstance) => void;
+    /** Reset to defaults was tapped (the screen starts Tips over when they were off): beside `onChange`'s new layout. */
+    onReset?: () => void;
     /** Every tip this node shows is seen (the card went by itself): its line says so rather than "Nothing to show now". */
     tipsAllSeen?: boolean;
     /** A node from before the frame can't keep the member's cards on their account yet (§2.3): one line says so. */
@@ -134,7 +136,7 @@ export function EditHomeSheet({
                         </Pressable>
                         {listed.map(row)}
                         <Pressable
-                            onPress={() => onChange(resetLayout(layout, Date.now()))}
+                            onPress={() => { onReset?.(); onChange(resetLayout(layout, Date.now())); }}
                             style={[editHomeStyles.reset, { borderColor: colors.border.strong }]}
                             accessibilityRole="button"
                             accessibilityLabel="Reset Home to its default cards and order"

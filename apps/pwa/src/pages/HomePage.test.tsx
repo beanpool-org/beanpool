@@ -941,7 +941,7 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const card = await screen.findByTestId('home-card-tips');
         expect(within(card).getByRole('heading', { name: 'Tips · 2 of 15' })).toBeInTheDocument();
-        expect(record()).toMatchObject({ seen: [LOCAL[0].id], current: LOCAL[1].id });
+        await waitFor(() => expect(record()).toMatchObject({ seen: [LOCAL[0].id], current: LOCAL[1].id }));
         // A poll's read while Home is in front: the same tip.
         await act(async () => { hooks.sync.forEach(cb => cb()); });
         expect(within(tipsCard()).getByRole('heading', { name: 'Tips · 2 of 15' })).toBeInTheDocument();

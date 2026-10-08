@@ -53,7 +53,7 @@ import {
     resetHomeStoreForTests, saveInterests, writePhoneLayout, yieldPhoneLayout,
 } from '../home-store';
 import { cardsToAsk, type HomeAnswer } from '../home-cards';
-import { homeHintStoreKey, homeRevealStoreKey } from '../storage-keys';
+import { homeHintStoreKey, homeRevealStoreKey, homeTipsStoreKey } from '../storage-keys';
 import { boundSignatureValid } from './server-signature-check';
 
 const NODE = 'https://mullum.beanpool.org';
@@ -124,6 +124,8 @@ async function zaraUsesHome() {
     expect(await reconcileInterests(NODE, zara, ['food'])).toEqual(['food']);
     mem.async.set(homeRevealStoreKey(zara.publicKey), '1');
     mem.async.set(homeHintStoreKey(zara.publicKey), '1');
+    // The Tips card's record (TIPS-DESIGN §2): it leaves with the account like the rest.
+    mem.async.set(homeTipsStoreKey(zara.publicKey), JSON.stringify({ v: 1, seen: ['what-this-is'], current: 'offer', currentShownOn: '2026-10-08', dismissedAt: null }));
     expect(node.rows.get(zara.publicKey)?.interests).toEqual(['food']);
 }
 

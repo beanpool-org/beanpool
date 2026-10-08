@@ -13,16 +13,16 @@ vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(), setItemAsync: vi.fn
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Array(n)) }));
 
 import {
-    HOME_CARD_IDS, HOME_CARD_NAMES, HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canHideCard, cardOrder, cardsToAsk, cardsToDraw, communityLines,
+    HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
     invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
-    hideCard, isHidden, joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
-    needsLineA11y, resetLayout, safetyWord, sentence, showCard, starredFirst, stepLines, voteLabelHere,
+    joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
+    addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
-import { normalizeCategory } from '@beanpool/core';
+import { HOME_V1_CARD_IDS, defaultCards, homeCardType, normalizeCategory, translateV1 } from '@beanpool/core';
 import { mayInviteHere } from '../invite-entries';
 
 const ME = 'a'.repeat(64);
@@ -43,7 +43,16 @@ function answer(over: Partial<HomeAnswer> & { cards?: HomeCards } = {}): HomeAns
     };
 }
 const ctx = (over: Partial<Parameters<typeof cardsToDraw>[2]> = {}) => ({ interests: [] as string[], tuneOpen: false, safetyUp: false, ...over });
-const layout = (over: Partial<HomeLayout> = {}): HomeLayout => ({ v: 1, order: [], hidden: [], dismissed: {}, updatedAt: iso(NOW), ...over });
+/** A layout as a member who edited with a version-1 app left it (their order, hidden cards left out), read through core's translateV1. */
+const layout = (over: { order?: string[]; hidden?: string[]; dismissed?: Record<string, string>; updatedAt?: string | null } = {}): HomeLayout =>
+    translateV1({ order: over.order ?? [], hidden: over.hidden ?? [], dismissed: over.dismissed ?? {}, updatedAt: over.updatedAt === undefined ? iso(NOW) : over.updatedAt });
+/** Every card of version 1 on Home, in its default order: the show-when rules below are each card's, whatever the default list. */
+const EVERY = layout();
+/** The ids drawn, top down. */
+const draw = (...args: Parameters<typeof cardsToDraw>) => cardsToDraw(...args).map(c => c.id);
+const ids = (l: { id: string }[]) => l.map(c => c.id);
+/** Cards on screen, one of a kind each, as the "…" menu's neighbours. */
+const inst = (...list: string[]) => list.map(id => ({ id, type: id }));
 
 const market = (n: number, cats: string[] = []): HomeCards['market'] => ({
     items: Array.from({ length: n }, (_, i) => ({ id: `p${i}`, type: i % 2 ? 'need' : 'offer', title: `Listing ${i}`, category: cats[i] ?? 'goods', credits: 10 + i, photoUrl: null })),
@@ -60,38 +69,35 @@ const find = (over: Partial<NonNullable<HomeCards['find']>> = {}): NonNullable<H
     communityCount: 38, nearbyPosts: { radiusKm: 25, count: 9, more: false }, watches: [], knock: null, directoryFetchedAt: iso(NOW - H), ...over,
 });
 
-describe('the catalogue and the default order (§3.1)', () => {
-    it('18 cards in the design\'s order (the 17 and Tips after First steps), the node\'s own list (apps/server engine/home-preferences.ts)', () => {
-        expect(HOME_CARD_IDS).toEqual([
-            'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups',
-            'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
-        ]);
-        expect(cardOrder(null)).toEqual([...HOME_CARD_IDS]);
+describe('the catalogue and the newcomer\'s Home (CARD-FRAME §2.2, §3)', () => {
+    it('one catalogue, core\'s: every type this build draws is in the registry; a newcomer starts with the five and the two riders', () => {
+        for (const t of HOME_DRAWN) expect(homeCardType(t)).toBeDefined();
+        expect(ids(cardOrder(null))).toEqual(['needs', 'safety', 'steps', 'tips', 'interests', 'market', 'events', 'notices', 'community']);
     });
 
-    it('this build draws the whole catalogue: Find your community came to Home in H4', () => {
-        expect(HOME_DRAWN).toContain('find');
-        expect(HOME_DRAWN).toEqual([...HOME_CARD_IDS]);
+    it('this build draws every type of version 1 and the saved search; Find your community came to Home in H4', () => {
+        expect([...HOME_DRAWN]).toEqual(expect.arrayContaining([...HOME_V1_CARD_IDS, 'search']));
+        expect(HOME_DRAWN.has('find')).toBe(true);
     });
 
-    it('`needs` and `community` can\'t be hidden or moved; everything else can', () => {
-        expect(canHideCard('needs')).toBe(false);
-        expect(canHideCard('community')).toBe(false);
-        for (const id of HOME_CARD_IDS.filter(i => i !== 'needs' && i !== 'community')) expect(canHideCard(id)).toBe(true);
+    it('`needs` and `community` can\'t be removed or moved; everything else can', () => {
+        expect(canRemoveCard('needs')).toBe(false);
+        expect(canRemoveCard('community')).toBe(false);
+        for (const id of HOME_V1_CARD_IDS.filter(i => i !== 'needs' && i !== 'community')) expect(canRemoveCard(id)).toBe(true);
     });
 });
 
 describe('what each person sees, top down (§3.2)', () => {
     it('Tips (TIPS-DESIGN §1): right after First steps for a new member with a tip to show; never a visitor, never asked of the node', () => {
         const a = answer({ cards: { steps: steps(), events, community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 } } });
-        expect(cardsToDraw(a, null, ctx({ tipsUp: true }))).toEqual(['steps', 'tips', 'interests', 'events', 'community']);
-        expect(cardsToDraw(a, null, ctx({ tipsUp: false }))).toEqual(['steps', 'interests', 'events', 'community']);
-        expect(cardsToDraw({ ...a, me: null }, null, ctx({ tipsUp: true }))).not.toContain('tips');
-        expect(cardsToDraw({ ...a, me: { ...a.me!, standing: 'suspended' } }, null, ctx({ tipsUp: true }))).toContain('tips');
-        expect(cardsToDraw(a, layout({ hidden: ['tips'] }), ctx({ tipsUp: true }))).not.toContain('tips');
+        expect(draw(a, EVERY, ctx({ tipsUp: true }))).toEqual(['steps', 'tips', 'interests', 'events', 'community']);
+        expect(draw(a, EVERY, ctx({ tipsUp: false }))).toEqual(['steps', 'interests', 'events', 'community']);
+        expect(draw({ ...a, me: null }, EVERY, ctx({ tipsUp: true }))).not.toContain('tips');
+        expect(draw({ ...a, me: { ...a.me!, standing: 'suspended' } }, EVERY, ctx({ tipsUp: true }))).toContain('tips');
+        expect(draw(a, layout({ hidden: ['tips'] }), ctx({ tipsUp: true }))).not.toContain('tips');
         expect(cardsToAsk(null)).not.toContain('tips');
-        expect(cardsToAsk(layout({ hidden: ['tips'] }))).toEqual(cardsToAsk(null));
-        expect(HOME_CARD_NAMES.tips).toBe('Tips');
+        expect(cardsToAsk(layout({ hidden: ['tips'] }))).toEqual(cardsToAsk(EVERY));
+        expect(cardName('tips')).toBe('Tips');
     });
 
     it('(b) a new local member: steps · interests · events · market · joined · pulse · beans · community', () => {
@@ -103,7 +109,7 @@ describe('what each person sees, top down (§3.2)', () => {
                 community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
             },
         });
-        expect(cardsToDraw(a, null, ctx())).toEqual(['steps', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
+        expect(draw(a, EVERY, ctx())).toEqual(['steps', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
     });
 
     it('(b) the same member a month in: needs when something waits, the invite card after their first Offer; steps and interests gone', () => {
@@ -117,7 +123,7 @@ describe('what each person sees, top down (§3.2)', () => {
                 community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
             },
         });
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'] }))).toEqual(['needs', 'events', 'market', 'joined', 'pulse', 'beans', 'invite', 'community']);
+        expect(draw(a, EVERY, ctx({ interests: ['food'] }))).toEqual(['needs', 'events', 'market', 'joined', 'pulse', 'beans', 'invite', 'community']);
     });
 
     it('(b) an active trader: needs · deals · events · market · decide · groups · pulse · beans · community (+ invite, by its rule)', () => {
@@ -133,9 +139,9 @@ describe('what each person sees, top down (§3.2)', () => {
                 community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
             },
         });
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'] }))).toEqual(['needs', 'deals', 'events', 'market', 'decide', 'groups', 'pulse', 'beans', 'invite', 'community']);
+        expect(draw(a, EVERY, ctx({ interests: ['food'] }))).toEqual(['needs', 'deals', 'events', 'market', 'decide', 'groups', 'pulse', 'beans', 'invite', 'community']);
         // Where invites are off there is no invite card.
-        expect(cardsToDraw({ ...a, features: { ...a.features, invites: false } }, null, ctx({ interests: ['food'] }))).not.toContain('invite');
+        expect(draw({ ...a, features: { ...a.features, invites: false } }, EVERY, ctx({ interests: ['food'] }))).not.toContain('invite');
     });
 
     it('(b) an enterprise keeper: the enterprise card after deals', () => {
@@ -147,7 +153,7 @@ describe('what each person sees, top down (§3.2)', () => {
                 events, market: market(1), community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
             },
         });
-        expect(cardsToDraw(a, null, ctx({ interests: ['tools'] }))).toEqual(['deals', 'enterprise', 'events', 'market', 'community']);
+        expect(draw(a, EVERY, ctx({ interests: ['tools'] }))).toEqual(['deals', 'enterprise', 'events', 'market', 'community']);
     });
 
     it('(b) the operator of a brand-new node, alone: steps · market (examples, when the node asks) · community', () => {
@@ -156,10 +162,10 @@ describe('what each person sees, top down (§3.2)', () => {
             cards: { steps: steps(), market: { items: [], total14d: 0, more: false, examples: true }, community: { name: 'Newtown', members: 1, tradesThisMonth: 0 } },
         });
         // `interests` too: nothing starred yet (the card is the design's empty state for that, §3.2 day one).
-        expect(cardsToDraw(a, null, ctx())).toEqual(['steps', 'interests', 'market', 'community']);
+        expect(draw(a, EVERY, ctx())).toEqual(['steps', 'interests', 'market', 'community']);
         expect(communityLines(a.cards.community, 'local', true).line).toBe("1 member. You're first. Invite someone.");
         // A local node that doesn't ask for examples: no market card at all when nothing is listed.
-        expect(cardsToDraw(answer({ cards: { market: undefined, community: a.cards.community } }), null, ctx({ interests: ['food'] }))).toEqual(['community']);
+        expect(draw(answer({ cards: { market: undefined, community: a.cards.community } }), EVERY, ctx({ interests: ['food'] }))).toEqual(['community']);
     });
 
     it('(a) a new global member by 12 words, a community 12 km away: safety · find · steps · interests · market · events · joined · community', () => {
@@ -171,8 +177,8 @@ describe('what each person sees, top down (§3.2)', () => {
                 market: market(2), events, joined: { count7d: 14, radiusKm: 50 }, community: { name: 'Global', members: 2310, communities: 38 },
             },
         });
-        expect(cardsToDraw(a, null, ctx({ safetyUp: true, now: NOW }))).toEqual(['safety', 'find', 'steps', 'interests', 'events', 'market', 'joined', 'community']);
-        expect(cardsToDraw(a, null, ctx({ safetyUp: false, interests: ['food'], now: NOW }))).toEqual(['find', 'steps', 'events', 'market', 'joined', 'community']);
+        expect(draw(a, EVERY, ctx({ safetyUp: true, now: NOW }))).toEqual(['safety', 'find', 'steps', 'interests', 'events', 'market', 'joined', 'community']);
+        expect(draw(a, EVERY, ctx({ safetyUp: false, interests: ['food'], now: NOW }))).toEqual(['find', 'steps', 'events', 'market', 'joined', 'community']);
         expect(joinedLine(a.cards.joined!, 'global')).toBe('14 people within 50 km joined this week.');
         expect(communityLines(a.cards.community, 'global', false)).toEqual({ title: 'The worldwide community', line: '2,310 members · 38 communities listed.' });
     });
@@ -182,18 +188,18 @@ describe('what each person sees, top down (§3.2)', () => {
             me: { ...answer().me!, standing: 'suspended', interests: ['food'] },
             cards: { beans: { balance: 4, room: 0, tier: 'Newcomer', activated: true, frozen: true }, community: { name: 'M', members: 3 } },
         });
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'] }))).toEqual(['beans', 'community']);
+        expect(draw(a, EVERY, ctx({ interests: ['food'] }))).toEqual(['beans', 'community']);
     });
 
     it('a card with nothing to say takes no space, and an empty Market card isn\'t drawn without examples', () => {
         const a = answer({ me: { ...answer().me!, interests: ['food'] }, cards: { market: { items: [], total14d: 0, more: false }, community: { name: 'M', members: 9 } } });
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'] }))).toEqual(['community']);
+        expect(draw(a, EVERY, ctx({ interests: ['food'] }))).toEqual(['community']);
     });
 
     it('First steps shows while any line is undone, and goes once all are done', () => {
         const a = (s: HomeCards['steps']) => answer({ me: { ...answer().me!, interests: ['food'] }, cards: { steps: s, community: { name: 'M', members: 9 } } });
-        expect(cardsToDraw(a(steps({ firstOffer: true, photo: true, interests: true, invited: true })), null, ctx({ interests: ['food'] }))).toEqual(['community']);
-        expect(cardsToDraw(a(steps({ firstOffer: true, photo: false, interests: true, invited: true })), null, ctx({ interests: ['food'] }))).toEqual(['steps', 'community']);
+        expect(draw(a(steps({ firstOffer: true, photo: true, interests: true, invited: true })), EVERY, ctx({ interests: ['food'] }))).toEqual(['community']);
+        expect(draw(a(steps({ firstOffer: true, photo: false, interests: true, invited: true })), EVERY, ctx({ interests: ['food'] }))).toEqual(['steps', 'community']);
         // The invite line only after the first Offer, and none where invites are off (null).
         expect(stepLines(steps({ firstOffer: false }), false).map(l => l.id)).toEqual(['offer', 'photo', 'interests']);
         expect(stepLines(steps({ firstOffer: true }), false).map(l => l.id)).toEqual(['offer', 'photo', 'interests', 'invite']);
@@ -204,17 +210,17 @@ describe('what each person sees, top down (§3.2)', () => {
 
     it('the interests card: while nothing is starred, or opened from "Tune"', () => {
         const a = answer({ cards: { community: { name: 'M', members: 9 } } });
-        expect(cardsToDraw(a, null, ctx())).toContain('interests');
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'] }))).not.toContain('interests');
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'], tuneOpen: true }))).toContain('interests');
+        expect(draw(a, EVERY, ctx())).toContain('interests');
+        expect(draw(a, EVERY, ctx({ interests: ['food'] }))).not.toContain('interests');
+        expect(draw(a, EVERY, ctx({ interests: ['food'], tuneOpen: true }))).toContain('interests');
         // A visitor's answer (no `me`) has no interests card.
-        expect(cardsToDraw({ ...a, me: null }, null, ctx())).not.toContain('interests');
+        expect(draw({ ...a, me: null }, EVERY, ctx())).not.toContain('interests');
     });
 
     it('Needs you counts the phone\'s own lines too (an unread message the answer doesn\'t carry yet)', () => {
         const a = answer({ me: { ...answer().me!, interests: ['food'] } });
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'], needs: 1 }))[0]).toBe('needs');
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'], needs: 0 }))).not.toContain('needs');
+        expect(draw(a, EVERY, ctx({ interests: ['food'], needs: 1 }))[0]).toBe('needs');
+        expect(draw(a, EVERY, ctx({ interests: ['food'], needs: 0 }))).not.toContain('needs');
     });
 });
 
@@ -224,19 +230,21 @@ describe('the layout (§4)', () => {
         cards: { events, market: market(2), beans: { balance: 1, room: 1, tier: 'Resident', activated: true, frozen: false }, community: { name: 'M', members: 9 } },
     });
 
-    it('a hidden card is never drawn, nor asked for; `needs` and `community` can\'t be hidden', () => {
+    it('a card not in the list is never drawn, nor asked for; `needs` and `community` are always there and can\'t be removed', () => {
         const l = layout({ hidden: ['market', 'beans'] });
-        expect(cardsToDraw(full, l, ctx({ interests: ['food'] }))).toEqual(['events', 'community']);
+        expect(draw(full, l, ctx({ interests: ['food'] }))).toEqual(['events', 'community']);
         expect(cardsToAsk(l)).not.toContain('market');
         expect(cardsToAsk(l)).not.toContain('beans');
-        expect(hideCard(null, 'needs', NOW)).toBeNull();
-        expect(hideCard(null, 'community', NOW)).toBeNull();
-        expect(readHomeLayout({ v: 1, hidden: ['needs', 'community', 'pulse'] })!.hidden).toEqual(['pulse']);
+        expect(removeCard(null, 'needs', NOW)).toBeNull();
+        expect(removeCard(null, 'community', NOW)).toBeNull();
+        // A version-1 layout reads as the member's order with the hidden cards left out, and never lists the fixed two.
+        expect(ids(readHomeLayout({ v: 1, hidden: ['needs', 'community', 'pulse'] })!.cards)).toEqual(HOME_V1_CARD_IDS.filter(id => !['needs', 'community', 'pulse'].includes(id)));
     });
 
-    it('cards= is the catalogue\'s order, the same each time: `find` too (a local node answers none), no data-less cards; a move doesn\'t change it', () => {
-        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'find', 'steps', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
-        expect(cardsToAsk(layout({ order: ['beans', 'market'] }))).toEqual(cardsToAsk(null));
+    it('cards= is catalogue order then id, the same each time; no data-less cards; a move doesn\'t change it', () => {
+        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'events', 'market', 'notices', 'community']);
+        expect(cardsToAsk(EVERY)).toEqual(['needs', 'safety', 'find', 'steps', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
+        expect(cardsToAsk(layout({ order: ['beans', 'market'] }))).toEqual(cardsToAsk(EVERY));
     });
 
     it('cards= never depends on what the last answer said of the node: a community that changed still gets First steps', () => {
@@ -246,43 +254,43 @@ describe('the layout (§4)', () => {
         expect(cardsToAsk(null)).toContain('steps');
         // A local answer that names a First steps card with every line done draws none; the global one draws its own lines.
         const done = steps({ firstOffer: true, firstPost: true, photo: true, interests: true, invited: true });
-        expect(cardsToDraw(answer({ cards: { steps: done, community: { name: 'L', members: 9 } } }), null, ctx({ interests: ['food'] }))).not.toContain('steps');
+        expect(draw(answer({ cards: { steps: done, community: { name: 'L', members: 9 } } }), EVERY, ctx({ interests: ['food'] }))).not.toContain('steps');
         const global = answer({ profile: 'global', cards: { steps: steps(), community: { name: 'G', members: 9 } } });
-        expect(cardsToDraw(global, null, ctx({ interests: ['food'] }))).toContain('steps');
+        expect(draw(global, EVERY, ctx({ interests: ['food'] }))).toContain('steps');
     });
 
-    it('hide, show again, and the date moves on each edit', () => {
-        const hidden = hideCard(null, 'pulse', NOW)!;
-        expect(hidden.hidden).toEqual(['pulse']);
-        expect(hidden.updatedAt).toBe(iso(NOW));
-        expect(isHidden(hidden, 'pulse')).toBe(true);
-        expect(hideCard(hidden, 'pulse', NOW + 1)).toBeNull();
-        const back = showCard(hidden, 'pulse', NOW + 1000)!;
-        expect(back.hidden).toEqual([]);
-        expect(back.updatedAt).toBe(iso(NOW + 1000));
-        expect(showCard(back, 'pulse', NOW)).toBeNull();
+    it('remove, add back, and the date moves on each edit', () => {
+        const gone = removeCard(EVERY, 'pulse', NOW)!;
+        expect(ids(gone.cards)).not.toContain('pulse');
+        expect(gone.updatedAt).toBe(iso(NOW));
+        expect(removeCard(gone, 'pulse', NOW + 1)).toBeNull();
+        const back = addCard(gone, 'pulse', NOW + 1000);
+        if (!back.ok) throw new Error('not added');
+        expect(ids(back.layout.cards)[0]).toBe('pulse');
+        expect(back.layout.updatedAt).toBe(iso(NOW + 1000));
+        expect(addCard(back.layout, 'pulse', NOW)).toEqual({ ok: false, refused: 'on-home' });
     });
 
     it('move up and down past the card next to it on screen, keeping every other card\'s place', () => {
-        const onScreen = ['needs', 'events', 'market', 'beans', 'community'] as const;
-        const up = moveCard(null, 'beans', 'up', onScreen, NOW)!;
-        const order = cardOrder(up);
+        const onScreen = inst('needs', 'events', 'market', 'beans', 'community');
+        const up = moveCard(EVERY, 'beans', 'up', onScreen, NOW)!;
+        const order = ids(cardOrder(up));
         expect(order.indexOf('beans')).toBeLessThan(order.indexOf('market'));
-        expect(cardsToDraw(full, up, ctx({ interests: ['food'] }))).toEqual(['events', 'beans', 'market', 'community']);
+        expect(draw(full, up, ctx({ interests: ['food'] }))).toEqual(['events', 'beans', 'market', 'community']);
         // Not past `needs` or `community`, and not off the ends.
-        expect(moveCard(null, 'events', 'up', onScreen, NOW)).toBeNull();
-        expect(moveCard(up, 'market', 'down', ['needs', 'events', 'beans', 'market', 'community'], NOW)).toBeNull();
-        expect(moveCard(null, 'needs', 'down', onScreen, NOW)).toBeNull();
+        expect(moveCard(EVERY, 'events', 'up', onScreen, NOW)).toBeNull();
+        expect(moveCard(up, 'market', 'down', inst('needs', 'events', 'beans', 'market', 'community'), NOW)).toBeNull();
+        expect(moveCard(EVERY, 'needs', 'down', onScreen, NOW)).toBeNull();
         // `needs` stays first and `community` last whatever a layout says.
-        expect(cardOrder(layout({ order: ['community', 'beans', 'needs'] }))[0]).toBe('needs');
-        expect(cardOrder(layout({ order: ['community', 'beans', 'needs'] })).at(-1)).toBe('community');
+        expect(ids(cardOrder(layout({ order: ['community', 'beans', 'needs'] })))[0]).toBe('needs');
+        expect(ids(cardOrder(layout({ order: ['community', 'beans', 'needs'] }))).at(-1)).toBe('community');
     });
 
-    it('reset: the default order, nothing hidden; the safety card\'s dismissal (a schedule, not a choice) is kept', () => {
+    it('reset: the newcomer\'s list; the safety card\'s dismissal (a schedule, not a choice) is kept', () => {
         const l = layout({ order: ['beans'], hidden: ['pulse'], dismissed: { safety: iso(NOW - H) } });
         const r = resetLayout(l, NOW);
-        expect(r).toEqual({ v: 1, order: [], hidden: [], dismissed: { safety: iso(NOW - H) }, updatedAt: iso(NOW) });
-        expect(cardOrder(r)).toEqual([...HOME_CARD_IDS]);
+        expect(r).toEqual({ v: 2, cards: defaultCards(), dismissed: { safety: iso(NOW - H) }, updatedAt: iso(NOW) });
+        expect(ids(cardOrder(r))).toEqual(ids(cardOrder(null)));
     });
 
     it('the newer copy wins by updatedAt; a phone copy newer than the account\'s is sent', () => {
@@ -297,25 +305,145 @@ describe('the layout (§4)', () => {
         expect(pickLayout(layout({ updatedAt: null }), layout({ updatedAt: iso(0) })).push).toBe(true);
     });
 
-    it('unknown ids are dropped, never refused (a node or app older or newer); repeats too; at most 32', () => {
-        const l = readHomeLayout({ v: 1, order: ['weather', 'beans', 'beans', 42, 'pulse'], hidden: ['news', 'joined'], dismissed: { safety: iso(NOW), widgets: iso(NOW), needs: iso(NOW), beans: 'not a date' }, updatedAt: iso(NOW) })!;
-        expect(l.order).toEqual(['beans', 'pulse']);
-        expect(l.hidden).toEqual(['joined']);
-        expect(l.dismissed).toEqual({ safety: iso(NOW) });
-        expect(readHomeLayout({ v: 2 })).toBeNull();
+    it('a card of a type this build doesn\'t know (a newer app\'s) is kept through every edit, byte for byte, never drawn, never asked (§2.3)', () => {
+        const future = { id: 'zzz-k7mq', type: 'zzz-future', settings: { a: 1, words: 'kept' } };
+        const l = readHomeLayout({ v: 2, cards: [{ id: 'beans', type: 'beans' }, future, { id: 'pulse', type: 'pulse' }], dismissed: {}, updatedAt: iso(NOW) })!;
+        expect(l.cards[1]).toEqual(future);
+        expect(draw(full, l, ctx({ interests: ['food'] }))).not.toContain('zzz-k7mq');
+        expect(cardsToAsk(l)).not.toContain('zzz-k7mq');
+        const moved = moveCard(l, 'pulse', 'up', inst('needs', 'beans', 'pulse', 'community'), NOW)!;
+        expect(moved.cards).toContainEqual(future);
+        const added = addCard(moved, 'events', NOW);
+        expect(added.ok && added.layout.cards).toContainEqual(future);
+        expect(removeCard(moved, 'beans', NOW)!.cards).toContainEqual(future);
+        expect(resetLayout(moved, NOW).cards).toContainEqual(future);
+        expect(dismissSafety(moved, NOW).cards).toContainEqual(future);
         expect(readHomeLayout('nope')).toBeNull();
-        expect(readHomeLayout({ updatedAt: 'yesterday' })!.updatedAt).toBeNull();
-        const many = readHomeLayout({ order: Array.from({ length: 40 }, () => 'beans') })!;
-        expect(many.order).toEqual(['beans']);
+        expect(readHomeLayout({ v: 3 })).toBeNull();
     });
 
-    it('an answer is read tolerantly: unknown cards stay unknown, a non-answer is null', () => {
+    it('an answer is read tolerantly: an unknown card stays unknown, a non-answer is null', () => {
         expect(readHomeAnswer(null)).toBeNull();
         expect(readHomeAnswer({ profile: 'local' })).toBeNull();
-        const a = readHomeAnswer({ profile: 'local', cards: { widget: { x: 1 }, community: { name: 'M', members: 2 } }, me: { interests: ['food', 3] }, layout: { hidden: ['nope'] } })!;
+        const a = readHomeAnswer({
+            profile: 'local', cards: { widget: { x: 1 }, community: { name: 'M', members: 2 } }, me: { interests: ['food', 3] },
+            layout: { v: 2, cards: [{ id: 'widget', type: 'widget' }], dismissed: {}, updatedAt: null },
+        })!;
         expect(a.me!.interests).toEqual(['food']);
-        expect(a.layout!.hidden).toEqual([]);
-        expect(cardsToDraw(a, a.layout, ctx({ interests: ['food'] }))).toEqual(['community']);
+        expect(a.layout!.cards).toEqual([{ id: 'widget', type: 'widget' }]);
+        expect(a.layoutV1).toBeUndefined();
+        expect(draw(a, a.layout, ctx({ interests: ['food'] }))).toEqual(['community']);
+    });
+});
+
+describe('the frame: the picker, adding, and the members who were here before (CARD-FRAME §1, §2.6, F2)', () => {
+    const LOCAL_NODE = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true } };
+    const GLOBAL_NODE = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, wordsDoor: true } };
+    const types = (g: ReturnType<typeof pickerGroups>) => g.groups.flatMap(x => x.rows.map(r => r.type));
+    const row = (g: ReturnType<typeof pickerGroups>, type: string) => g.groups.flatMap(x => x.rows).find(r => r.type === type);
+
+    it('the picker: three groups in order, only this node\'s types, "On Home" for a one-of-a-kind already there, counts for an instance type', () => {
+        const g = pickerGroups(LOCAL_NODE, null, 'admin');
+        expect(g.groups.map(x => x.name)).toEqual(['For you', 'Around you', 'Getting started']);
+        expect(types(g)).not.toContain('needs');
+        expect(types(g)).not.toContain('community');
+        expect(types(g)).not.toContain('find');
+        expect(types(g)).toEqual(expect.arrayContaining(['beans', 'deals', 'enterprise', 'decide', 'invite', 'search']));
+        expect(row(g, 'beans')).toMatchObject({ state: 'add', count: null, name: 'Your Beans' });
+        expect(row(g, 'market')!.state).toBe('on-home');
+        expect(row(g, 'search')).toMatchObject({ state: 'add', count: null, hasSettings: true });
+        const two = { v: 2 as const, cards: [...defaultCards(), { id: 'search-aaaa', type: 'search' }, { id: 'search-bbbb', type: 'search' }], dismissed: {}, updatedAt: iso(NOW) };
+        expect(row(pickerGroups(LOCAL_NODE, two, 'admin'), 'search')).toMatchObject({ state: 'add', count: '2 of 5 on Home' });
+        const five = { ...two, cards: [...defaultCards(), ...'abcde'.split('').map(c => ({ id: `search-${c}aaa`, type: 'search' }))] };
+        expect(row(pickerGroups(LOCAL_NODE, five, 'admin'), 'search')).toMatchObject({ state: 'full', count: '5 of 5 on Home' });
+        // Where only admins invite, a plain member isn't offered Grow your community: never shown as locked, just not there.
+        expect(types(pickerGroups({ ...LOCAL_NODE, features: { ...LOCAL_NODE.features, door: 'admins' } }, null, null))).not.toContain('invite');
+        // A type's state line, from the screen ("All tips seen").
+        expect(row(pickerGroups(LOCAL_NODE, null, 'admin', [], { tips: 'All tips seen' }), 'tips')!.status).toBe('All tips seen');
+    });
+
+    it('the worldwide community\'s picker lists no Beans, deals, enterprise, Decide or Grow your community; Find your community only after its pin', () => {
+        const g = pickerGroups(GLOBAL_NODE, null, null, ['find']);
+        for (const t of ['beans', 'deals', 'enterprise', 'decide', 'invite', 'find']) expect(types(g)).not.toContain(t);
+        expect(row(g, 'market')!.name).toBe('Near you');
+        expect(types(pickerGroups(GLOBAL_NODE, null, null, []))).toContain('find');
+    });
+
+    it('a full Home (24 cards): every Add goes', () => {
+        const full24 = { v: 2 as const, cards: Array.from({ length: 24 }, (_, i) => ({ id: `zzz-${i}`, type: 'zzz' })), dismissed: {}, updatedAt: iso(NOW) };
+        const g = pickerGroups(LOCAL_NODE, full24, 'admin');
+        expect(g.full).toBe(true);
+        expect(g.groups.flatMap(x => x.rows).every(r => r.state !== 'add')).toBe(true);
+        expect(addCard(full24, 'beans', NOW)).toEqual({ ok: false, refused: 'home-full' });
+    });
+
+    it('Add puts the card first, under a pinned Find your community; a saved search keeps its settings; the sixth is refused', () => {
+        const pinnedFirst = { v: 2 as const, cards: [{ id: 'find', type: 'find' }, ...defaultCards()], dismissed: {}, updatedAt: iso(NOW) };
+        const a = addCard(pinnedFirst, 'beans', NOW, { pinned: ['find'] });
+        if (!a.ok) throw new Error('not added');
+        expect(ids(a.layout.cards).slice(0, 2)).toEqual(['find', 'beans']);
+        expect(a.id).toBe('beans');
+        const s1 = addCard(null, 'search', NOW, { settings: { q: 'eggs', kind: 'any', km: 5 } });
+        if (!s1.ok) throw new Error('not added');
+        expect(s1.id).toMatch(/^search-[a-z2-7]{4}$/);
+        expect(s1.layout.cards[0]).toEqual({ id: s1.id, type: 'search', settings: { q: 'eggs', kind: 'any', km: 5 } });
+        let l = s1.layout;
+        for (let i = 0; i < 4; i++) { const r = addCard(l, 'search', NOW); if (r.ok) l = r.layout; }
+        expect(addCard(l, 'search', NOW)).toEqual({ ok: false, refused: 'type-full' });
+        // Never a type this build can't draw.
+        expect(addCard(null, 'zzz-future', NOW)).toEqual({ ok: false, refused: 'unknown' });
+    });
+
+    it('a member who edited with a version-1 app: their order, hidden cards left out; nothing is written until they edit (translateV1)', () => {
+        const a = readHomeAnswer({ ...answer(), layout: { v: 1, order: ['market', 'beans'], hidden: ['events'], dismissed: {}, updatedAt: iso(NOW - H) } })!;
+        expect(ids(a.layout!.cards).slice(0, 2)).toEqual(['market', 'beans']);
+        expect(ids(a.layout!.cards)).not.toContain('events');
+        expect(a.layoutV1).toEqual({ empty: false });
+        // The account's copy alone: drawn, not sent.
+        expect(pickLayout(a.layout, null, a.layoutV1)).toEqual({ layout: a.layout, push: false });
+    });
+
+    it('a not-yet-updated standby answers a v2 row as an empty v1 layout dated like it: the phone\'s own v2 copy wins, on a tie and after (review of #1697, note b)', () => {
+        const phone = { v: 2 as const, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, ...defaultCards()], dismissed: {}, updatedAt: iso(NOW) };
+        const standby = readHomeAnswer({ ...answer(), layout: { v: 1, order: [], hidden: [], updatedAt: iso(NOW) } })!;
+        expect(standby.layoutV1).toEqual({ empty: true });
+        expect(pickLayout(standby.layout, phone, standby.layoutV1)).toEqual({ layout: phone, push: false });
+        const later = readHomeAnswer({ ...answer(), layout: { v: 1, order: [], hidden: [], updatedAt: iso(NOW + H) } })!;
+        expect(pickLayout(later.layout, phone, later.layoutV1)).toEqual({ layout: phone, push: false });
+        // A version-1 edit that names something, made after (an older app on another device), is the member's own: it wins.
+        const edited = readHomeAnswer({ ...answer(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], updatedAt: iso(NOW + H) } })!;
+        expect(pickLayout(edited.layout, phone, edited.layoutV1).layout).toBe(edited.layout);
+        // On a tie it doesn't.
+        const tie = readHomeAnswer({ ...answer(), layout: { v: 1, order: ['beans'], hidden: ['pulse'], updatedAt: iso(NOW) } })!;
+        expect(pickLayout(tie.layout, phone, tie.layoutV1)).toEqual({ layout: phone, push: false });
+    });
+
+    it('a stored list with 24 `market` or 7 `search` instances draws one Market and five searches, and never crashes (review of #1697, note c)', () => {
+        const markets = Array.from({ length: 24 }, (_, i) => ({ id: i === 0 ? 'market' : `market-${i}`, type: 'market' }));
+        const crowd = { v: 2 as const, cards: markets, dismissed: {}, updatedAt: iso(NOW) };
+        const a = answer({ cards: { market: market(2), community: { name: 'M', members: 9 } } });
+        expect(draw(a, crowd, ctx({ interests: ['food'] }))).toEqual(['market', 'community']);
+        const searches = { ...crowd, cards: Array.from({ length: 7 }, (_, i) => ({ id: `search-${i}aaa`, type: 'search', settings: { q: `w${i}` } })) };
+        expect(draw(a, searches, ctx({ interests: ['food'] })).filter(id => id.startsWith('search-'))).toHaveLength(5);
+        // A fixed type in the list is drawn once, in its own place.
+        const fixed = { ...crowd, cards: [{ id: 'community', type: 'community' }, { id: 'needs', type: 'needs' }, { id: 'market', type: 'market' }] };
+        expect(draw(a, fixed, ctx({ interests: ['food'] }))).toEqual(['market', 'community']);
+    });
+
+    it('the one-time "fewer cards" line: a member who never edited and joined over a week ago; never a newcomer, never one who edited', () => {
+        const old = { joinedAt: iso(NOW - 30 * 24 * H) };
+        expect(fewerCardsNews(null, null, old, NOW)).toBe(true);
+        expect(fewerCardsNews(null, null, { joinedAt: iso(NOW - 2 * 24 * H) }, NOW)).toBe(false);
+        expect(fewerCardsNews(EVERY, null, old, NOW)).toBe(false);
+        expect(fewerCardsNews(null, EVERY, old, NOW)).toBe(false);
+        expect(fewerCardsNews(null, null, null, NOW)).toBe(false);
+    });
+
+    it('the picker\'s words are fixed and say nothing locked, earned or tiered, and Beans by name', () => {
+        const g = pickerGroups(LOCAL_NODE, null, 'admin');
+        for (const r of g.groups.flatMap(x => x.rows)) {
+            expect(`${r.name} ${r.line}`).not.toMatch(/lock|earn|tier|Ʀ/i);
+        }
     });
 });
 
@@ -484,7 +612,7 @@ describe('the safety card\'s schedule (two-doors §2.5) with the account\'s dism
         const l = dismissSafety(layout({ hidden: ['pulse'] }), NOW);
         expect(l.dismissed.safety).toBe(iso(NOW));
         expect(l.updatedAt).toBe(iso(NOW));
-        expect(l.hidden).toEqual(['pulse']);
+        expect(ids(l.cards)).not.toContain('pulse');
     });
 
     it('the community\'s word from Home\'s answer: only when it asked for the card and answered as the account\'s own', () => {
@@ -543,9 +671,10 @@ describe('what a node can show, and where the Decide card leads (PR #1483 review
     const GLOBAL = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false } };
 
     it('the money cards and the invite card only where the node has them; Find your community only on the global node, First steps on both', () => {
-        const on = (n: typeof LOCAL) => HOME_CARD_IDS.filter(id => cardOnNode(id, n));
-        expect(on(LOCAL)).toEqual(HOME_CARD_IDS.filter(id => id !== 'find'));
-        expect(on(GLOBAL)).toEqual(['needs', 'safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices', 'community']);
+        const on = (n: typeof LOCAL) => HOME_V1_CARD_IDS.filter(id => cardOnNode(id, n));
+        expect(on(LOCAL)).toEqual(HOME_V1_CARD_IDS.filter(id => id !== 'find'));
+        // Core's one rule (CARD-FRAME §1.2): no Beans, deals, enterprise, Decide or invites on the worldwide community.
+        expect(on(GLOBAL)).toEqual(['needs', 'safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'groups', 'joined', 'pulse', 'notices', 'community']);
         // A node that says nothing has everything, as every node before the switches.
         expect(on({ profile: 'local', features: { invites: true } } as typeof LOCAL)).toEqual(on(LOCAL));
     });
@@ -561,7 +690,7 @@ describe('what a node can show, and where the Decide card leads (PR #1483 review
                 community: { name: 'BeanPool', members: 2, communities: 1 },
             },
         });
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'] }))).toEqual(['community']);
+        expect(draw(a, EVERY, ctx({ interests: ['food'] }))).toEqual(['community']);
     });
 
     it('Decisions open Commons → Decide; polls open the Market\'s Polls; each line says where it goes', () => {
@@ -599,19 +728,19 @@ describe('where only a community\'s admins invite, Home asks only them to (PR #1
 
     it('a plain member (no role, a moderator, or a role not heard yet): no Grow your community, and First steps completes without an invite', () => {
         for (const role of [null, 'moderator', undefined] as const) {
-            expect(cardsToDraw(known(), null, ctx({ interests: ['food'], role })), String(role)).toEqual(['community']);
+            expect(draw(known(), EVERY, ctx({ interests: ['food'], role })), String(role)).toEqual(['community']);
             expect(cardOnNode('invite', known(), role), String(role)).toBe(false);
         }
         // The node sends `invited: false` there whatever the door (routes/home-answer.ts): the phone leaves the line out.
         expect(stepLines(known().cards.steps!, true, false).map(l => l.id)).toEqual(['offer', 'photo', 'interests']);
         // With a photo still to add, First steps stays for that, and still has no invite line to press.
         const photoLeft = known({ cards: { ...known().cards, steps: steps({ firstOffer: true, photo: false, interests: true, invited: false }) } });
-        expect(cardsToDraw(photoLeft, null, ctx({ interests: ['food'], role: null }))).toEqual(['steps', 'community']);
+        expect(draw(photoLeft, EVERY, ctx({ interests: ['food'], role: null }))).toEqual(['steps', 'community']);
     });
 
     it('an owner or admin there: the card and the step, as before', () => {
         for (const role of ['owner', 'admin'] as const) {
-            expect(cardsToDraw(known(), null, ctx({ interests: ['food'], role }))).toEqual(['steps', 'invite', 'community']);
+            expect(draw(known(), EVERY, ctx({ interests: ['food'], role }))).toEqual(['steps', 'invite', 'community']);
             expect(cardOnNode('invite', known(), role)).toBe(true);
         }
         expect(stepLines(known().cards.steps!, true, true).map(l => l.id)).toEqual(['offer', 'photo', 'interests', 'invite']);
@@ -633,11 +762,11 @@ describe('where only a community\'s admins invite, Home asks only them to (PR #1
     it('any other door, or a node too old to say: every member invites, the role never needed', () => {
         for (const door of [undefined, 'members', 'open']) {
             const a = known({ features: { ...known().features, door } });
-            expect(cardsToDraw(a, null, ctx({ interests: ['food'] }))).toEqual(['steps', 'invite', 'community']);
+            expect(draw(a, EVERY, ctx({ interests: ['food'] }))).toEqual(['steps', 'invite', 'community']);
         }
         // Invites off (the node then sends `invited: null`): neither, whatever the role.
         const off = known({ features: { ...known().features, invites: false }, cards: { ...known().cards, steps: steps({ firstOffer: true, photo: true, interests: true, invited: null }) } });
-        expect(cardsToDraw(off, null, ctx({ interests: ['food'], role: 'owner' }))).toEqual(['community']);
+        expect(draw(off, EVERY, ctx({ interests: ['food'], role: 'owner' }))).toEqual(['community']);
     });
 });
 
@@ -661,15 +790,15 @@ describe('the global node\'s Home (H4)', () => {
         const pins = pinnedCards(a, NOW);
         expect(pins).toEqual(['find']);
         // First, whatever the layout says: hidden and moved down on another copy, it is still drawn at the top.
-        expect(cardsToDraw(a, hidesFind, ctx({ interests: ['food'], now: NOW }))).toEqual(['find', 'market', 'events', 'community']);
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'], now: NOW }))[0]).toBe('find');
-        expect(canHideCard('find', pins)).toBe(false);
+        expect(draw(a, hidesFind, ctx({ interests: ['food'], now: NOW }))).toEqual(['find', 'market', 'events', 'community']);
+        expect(draw(a, EVERY, ctx({ interests: ['food'], now: NOW }))[0]).toBe('find');
+        expect(canRemoveCard('find', pins)).toBe(false);
         expect(canMoveCard('find', pins)).toBe(false);
-        expect(hideCard(null, 'find', NOW, pins)).toBeNull();
-        expect(isHidden(hidesFind, 'find', pins)).toBe(false);
-        expect(moveCard(null, 'find', 'down', ['find', 'events', 'market'], NOW, pins)).toBeNull();
+        expect(removeCard(EVERY, 'find', NOW, pins)).toBeNull();
+        expect(ids(cardOrder(hidesFind, pins))).toContain('find');
+        expect(moveCard(EVERY, 'find', 'down', inst('find', 'events', 'market'), NOW, pins)).toBeNull();
         // Nothing moves up past it: the card under it has no movable card above it on screen.
-        expect(moveCard(null, 'events', 'up', ['needs', 'find', 'events', 'market', 'community'], NOW, pins)).toBeNull();
+        expect(moveCard(null, 'events', 'up', inst('needs', 'find', 'events', 'market', 'community'), NOW, pins)).toBeNull();
         // Asked for even where the layout hides it, so the node builds it.
         expect(cardsToAsk(hidesFind, pins)).toContain('find');
         // The last moment of day 30 is still pinned; a join date the node didn't send counts as pinned (the node's rule).
@@ -682,27 +811,29 @@ describe('the global node\'s Home (H4)', () => {
         expect(findPinned(a, NOW)).toBe(false);
         const pins = pinnedCards(a, NOW);
         expect(pins).toEqual([]);
-        expect(canHideCard('find', pins)).toBe(true);
-        const hidden = hideCard(null, 'find', NOW, pins)!;
-        expect(hidden.hidden).toEqual(['find']);
-        expect(cardsToDraw(a, hidden, ctx({ interests: ['food'], now: NOW }))).toEqual(['events', 'market', 'community']);
+        expect(canRemoveCard('find', pins)).toBe(true);
+        const hidden = removeCard(EVERY, 'find', NOW, pins)!;
+        expect(ids(hidden.cards)).not.toContain('find');
+        expect(draw(a, hidden, ctx({ interests: ['food'], now: NOW }))).toEqual(['events', 'market', 'community']);
         expect(cardsToAsk(hidden, pins)).not.toContain('find');
-        expect(cardsToDraw(a, null, ctx({ interests: ['food'], now: NOW }))).toEqual(['find', 'events', 'market', 'community']);
+        expect(draw(a, EVERY, ctx({ interests: ['food'], now: NOW }))).toEqual(['find', 'events', 'market', 'community']);
         // It moves now.
-        const down = moveCard(null, 'find', 'down', ['needs', 'find', 'events', 'market', 'community'], NOW, pins)!;
-        expect(cardsToDraw(a, down, ctx({ interests: ['food'], now: NOW }))).toEqual(['events', 'find', 'market', 'community']);
+        const down = moveCard(EVERY, 'find', 'down', inst('needs', 'find', 'events', 'market', 'community'), NOW, pins)!;
+        expect(draw(a, down, ctx({ interests: ['food'], now: NOW }))).toEqual(['events', 'find', 'market', 'community']);
     });
 
-    it('pinned: under Needs you, and under "Your way back in" while that one leads; a move made during the pin keeps it near the top after', () => {
+    it('pinned: under Needs you, and under "Your way back in" while that one leads; after the pin it is the picker\'s, like any card', () => {
         const pins: ['find'] = ['find'];
-        expect(cardOrder(null, pins).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'steps']);
-        expect(cardOrder(layout({ order: ['market', 'events'] }), pins).slice(0, 4)).toEqual(['needs', 'find', 'market', 'events']);
-        expect(cardOrder(layout({ order: ['safety', 'market', 'find'] }), pins).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'market']);
-        expect(cardOrder(null, pins).at(-1)).toBe('community');
-        // Events moved above market during the pin: the whole order is written with find where it stands.
-        const moved = moveCard(null, 'market', 'up', ['find', 'events', 'market'], NOW, pins)!;
-        expect(moved.order.slice(0, 3)).toEqual(['safety', 'find', 'steps']);
-        expect(cardOrder(moved).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'steps']);
+        expect(ids(cardOrder(null, pins)).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'steps']);
+        expect(ids(cardOrder(layout({ order: ['market', 'events'] }), pins)).slice(0, 4)).toEqual(['needs', 'find', 'market', 'events']);
+        expect(ids(cardOrder(layout({ order: ['safety', 'market', 'find'] }), pins)).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'market']);
+        expect(ids(cardOrder(null, pins)).at(-1)).toBe('community');
+        // A move made during the pin moves the two cards and nothing else.
+        const moved = moveCard(null, 'market', 'up', inst('find', 'events', 'market'), NOW, pins)!;
+        expect(ids(moved.cards)).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'market', 'notices']);
+        // The newcomer's list doesn't hold `find`: once the pin ends, the picker brings it back (CARD-FRAME §1.2, §3).
+        expect(ids(cardOrder(moved))).not.toContain('find');
+        expect(ids(cardOrder(EVERY))).toContain('find');
     });
 
     it('no answer yet: a hidden `find` is asked for until an answer says whether it is pinned; a local node never pins', () => {
@@ -715,10 +846,10 @@ describe('the global node\'s Home (H4)', () => {
 
     it('a local community never draws Find your community, whatever an answer holds', () => {
         const local = answer({ me: { ...answer().me!, interests: ['food'] }, cards: { find: find(), community: { name: 'M', members: 9 } } });
-        expect(cardsToDraw(local, null, ctx({ interests: ['food'], now: NOW }))).toEqual(['community']);
+        expect(draw(local, EVERY, ctx({ interests: ['food'], now: NOW }))).toEqual(['community']);
         // A body that isn't one is no card.
         expect(isFindCard({ communities: 'nope' })).toBe(false);
-        expect(cardsToDraw(member(3, { cards: { find: { anything: true } as never, community: { name: 'G', members: 9 } } }), null, ctx({ interests: ['food'], now: NOW }))).toEqual(['community']);
+        expect(draw(member(3, { cards: { find: { anything: true } as never, community: { name: 'G', members: 9 } } }), EVERY, ctx({ interests: ['food'], now: NOW }))).toEqual(['community']);
     });
 
     it('First steps\' global words: a first post free or for swap; asking a community near while no knock is remembered', () => {
@@ -753,11 +884,11 @@ describe('the global node\'s Home (H4)', () => {
         // On the card: under the lines, and the card stays while the limits apply even with the post made.
         const posted = member(1, { me: { ...member(1).me!, probation: words }, cards: { steps: steps({ firstPost: true }), find: find(), community: { name: 'G', members: 9 } } });
         expect(firstSteps(posted, { interests: ['food'], knocked: true })).toEqual({ lines: [{ id: 'post', text: 'Post something free or for swap', done: true }], note: 'For your first 7 days: 2 posts and 3 new chats a day.', show: true });
-        expect(cardsToDraw(posted, null, ctx({ interests: ['food'], knocked: true, now: NOW }))).toContain('steps');
+        expect(draw(posted, EVERY, ctx({ interests: ['food'], knocked: true, now: NOW }))).toContain('steps');
         // The post made, the limits over: nothing to say, though a community is near (the ask never holds the card open).
         const done = member(20, { cards: { steps: steps({ firstPost: true }), find: find(), community: { name: 'G', members: 9 } } });
         expect(firstSteps(done, { interests: ['food'], knocked: false }).show).toBe(false);
-        expect(cardsToDraw(done, null, ctx({ interests: ['food'], now: NOW }))).not.toContain('steps');
+        expect(draw(done, EVERY, ctx({ interests: ['food'], now: NOW }))).not.toContain('steps');
         // A local community's First steps never says the limits (unchanged from H2).
         expect(firstSteps(answer({ me: { ...answer().me!, probation: words }, cards: { steps: steps() } }), { interests: [] }).note).toBeNull();
     });

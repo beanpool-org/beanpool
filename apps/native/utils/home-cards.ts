@@ -3,13 +3,14 @@
  * so they are tested once (utils/__tests__/home-cards.test.ts) and ported to the web app as they are (H3). The screen
  * (app/(tabs)/index.tsx) only loads the answer and draws what this file says.
  *
- * - **The catalogue** is the design's 17 cards (§3.1) and Tips (scratch/home/TIPS-DESIGN-fable.md), in one default order for everyone. A card with nothing to say takes
- *   no space: the node leaves it out of its answer (GET /api/home, apps/server routes/home-answer.ts), and the few rules
- *   that need the phone (a layout's hidden cards, the interests card, the invite card) are here.
- * - **The layout** (§4) is kept on the account (`home.layout`, H1) with a copy on the phone; the newer wins by `updatedAt`.
- *   A member hides, moves and resets cards; nothing is dragged and nothing is typed. `needs` stays at the top and
- *   `community` at the bottom (it carries Edit home): neither can be hidden or moved. Unknown ids are dropped, never
- *   refused, so a node older or newer than the app keeps the rest.
+ * - **The catalogue** is core's registry (@beanpool/core home-frame.ts, scratch/home/CARD-FRAME-DESIGN-fable.md §2.2):
+ *   one list of types, names, lines and rules for both apps and the node. A card with nothing to say takes no space: the
+ *   node leaves it out of its answer (GET /api/home, apps/server routes/home-answer.ts), and the few rules that need the
+ *   phone (the interests card, the invite card) are here.
+ * - **The layout** (CARD-FRAME §2) is a list of card instances the member owns, kept on the account (`home.layout`
+ *   version 2) with a copy on the phone; the newer wins by `updatedAt`. A member adds (the picker), removes, moves and
+ *   resets cards; nothing is dragged. `needs` stays at the top and `community` at the bottom (it carries Add a card and
+ *   Edit home): neither is in the list. A card of a type this build doesn't know is kept through every save, never drawn.
  * - **Interests reorder, they never filter** (§4.3): starred categories first, the rest after, each part in its order.
  * - **Needs you** is the header's own list (utils/needs-you.ts): the phone's own deals and unread messages from its
  *   database (fresher, no request), the node's admin work, votes and group lines from the answer.
@@ -21,62 +22,48 @@
  */
 
 import {
+    HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
+    homeCardType, readHomeLayout as frameReadHomeLayout, removeCard as frameRemoveCard,
+    type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
+} from '@beanpool/core';
+import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
     type NeedsYouConversation, type NeedsYouEntry, type NeedsYouKind, type NeedsYouTarget, type NeedsYouTransaction,
 } from './needs-you';
 
-// ── The catalogue ──────────────────────────────────────────────────────────────────────────────────────────────────
+// ── The catalogue: core's registry (@beanpool/core home-frame.ts, design CARD-FRAME §2.2) ──────────────────────────
 
-/** Every card, in the default order (§3.1 "Default order"). The node's own list is the same (home-preferences.ts). */
-export const HOME_CARD_IDS = [
-    'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups',
-    'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
-] as const;
-export type HomeCardId = typeof HOME_CARD_IDS[number];
-const CARD_SET: ReadonlySet<string> = new Set(HOME_CARD_IDS);
-export const isHomeCardId = (id: unknown): id is HomeCardId => typeof id === 'string' && CARD_SET.has(id);
+/**
+ * A card type's id, as core's registry names it (`beans`, `search`, …). A list may hold a type this build doesn't know
+ * (a newer app's): it is kept through every save and not drawn.
+ */
+export type HomeCardId = string;
+export type { HomeCardInstance };
 
 /** First and last, always: the one card that costs a member something if missed, and the one that holds Edit home. */
 export const FIXED_FIRST: HomeCardId = 'needs';
 export const FIXED_LAST: HomeCardId = 'community';
 const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
 
-/** The cards this build draws: the whole catalogue since H4 (Find your community came to Home from the Market). */
-export const HOME_DRAWN: readonly HomeCardId[] = [...HOME_CARD_IDS];
+/**
+ * The types this build has a body for (app/(tabs)/index.tsx `card`). A type in the registry but not here is listed
+ * nowhere and drawn nowhere; a type in neither is a newer app's, kept and not drawn.
+ */
+export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
+    'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'search', 'decide', 'groups',
+    'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
+]);
 
-/** Find your community is pinned for a member's first 30 days on the global node, then it can be hidden (§4.1, §7, §13 Q5). */
+/** Find your community is pinned for a member's first 30 days on the global node, then it can be removed (§4.1, §7, §13 Q5). */
 export const FIND_PINNED_DAYS = 30;
 const DAY_MS = 86_400_000;
-/**
- * Cards with no data of their own in the answer: drawn from `me` and `features` (routes/home-answer.ts header), and Tips
- * from the list bundled in @beanpool/core (home-tips.ts). Never in `cards=`, so the address and its tag stay as they were.
- */
-const NO_DATA: ReadonlySet<HomeCardId> = new Set(['tips', 'interests', 'invite']);
 
-/** A layout names at most this many ids in each list (the node refuses more, home-preferences.ts MAX_LAYOUT_IDS). */
-export const LAYOUT_MAX_IDS = 32;
-
-/** Each card's name: its caption, its line in Edit home, and the screen reader's words for its menu. */
-export const HOME_CARD_NAMES: Record<HomeCardId, string> = {
-    needs: 'Needs you',
-    safety: 'Your way back in',
-    find: 'Find your community',
-    steps: 'First steps',
-    tips: 'Tips',
-    interests: 'What are you into?',
-    deals: 'Your deals',
-    enterprise: 'Your enterprise',
-    events: 'Coming up',
-    market: 'New in the Market',
-    decide: 'Decide',
-    groups: 'Your groups',
-    joined: 'Who joined',
-    pulse: 'The Pulse',
-    beans: 'Your Beans',
-    notices: 'From your community',
-    invite: 'Grow your community',
-    community: 'Your community',
-};
+/** A type's name: its caption, its row in the picker and Edit home, and the screen reader's words for its menu. */
+export function cardName(type: HomeCardId, profile?: string): string {
+    const t = homeCardType(type);
+    if (!t) return type;
+    return profile === 'global' && t.globalName ? t.globalName : t.name;
+}
 
 // ── The answer, as GET /api/home sends it (apps/server routes/home-answer.ts HomeAnswer) ────────────────────────────
 
@@ -137,14 +124,12 @@ export interface HomeMe {
     standing: 'member' | 'suspended';
 }
 
-export interface HomeLayout {
-    v: 1;
-    order: HomeCardId[];
-    hidden: HomeCardId[];
-    dismissed: Partial<Record<HomeCardId, string>>;
-    /** null: a layout with no date (the oldest there is). */
-    updatedAt: string | null;
-}
+/**
+ * A member's Home as kept on their account and on the phone: core's version 2 (`{ v: 2, cards: [{ id, type, settings? }],
+ * dismissed, updatedAt }`). A card is on Home because it is in `cards`, and nowhere else. Version 1 is read through core's
+ * `translateV1` (their order, hidden cards left out) and never written.
+ */
+export type HomeLayout = HomeLayoutV2;
 
 export interface HomeAnswer {
     generatedAt: string;
@@ -153,43 +138,38 @@ export interface HomeAnswer {
     welcome?: true;
     me: HomeMe | null;
     layout: HomeLayout | null;
+    /**
+     * The account's layout came as version 1 (translated): from a node before the frame, or a member who last edited with
+     * an older app. `empty`: it named no order and nothing hidden, as a not-yet-updated standby answers a version-2 row
+     * (review of #1697, note b), so it says nothing of the member's choice.
+     */
+    layoutV1?: { empty: boolean };
     cards: HomeCards;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
-const isIso = (v: unknown): v is string => typeof v === 'string' && v.length <= 40 && Number.isFinite(Date.parse(v));
-
-/** Known ids, each once, at most {@link LAYOUT_MAX_IDS}. */
-function cardIds(raw: unknown): HomeCardId[] {
-    if (!Array.isArray(raw)) return [];
-    return [...new Set(raw.filter(isHomeCardId))].slice(0, LAYOUT_MAX_IDS);
-}
 
 /**
- * A layout as the node or the phone's copy holds it, read tolerantly: unknown ids and repeats dropped, `needs` and
- * `community` never hidden or dismissed, a bad date read as none. Null for anything that isn't a version-1 layout.
+ * A layout as the node or the phone's copy holds it, read by core (tolerant): version 2 keeps every instance whose shape
+ * is right, known type or not, so a newer app's card survives this one's saves; version 1 reads as the member's order with
+ * hidden cards left out. Null for anything else (the newcomer's Home).
  */
-export function readHomeLayout(raw: unknown): HomeLayout | null {
-    if (!isObj(raw) || (raw.v !== undefined && raw.v !== 1)) return null;
-    const dismissed: Partial<Record<HomeCardId, string>> = {};
-    if (isObj(raw.dismissed)) {
-        for (const [id, at] of Object.entries(raw.dismissed)) {
-            if (isHomeCardId(id) && !FIXED.has(id) && isIso(at)) dismissed[id] = at;
-        }
-    }
-    return {
-        v: 1,
-        order: cardIds(raw.order),
-        hidden: cardIds(raw.hidden).filter(id => !FIXED.has(id)),
-        dismissed,
-        updatedAt: isIso(raw.updatedAt) ? raw.updatedAt : null,
-    };
+export const readHomeLayout = (raw: unknown): HomeLayout | null => frameReadHomeLayout(raw);
+
+/** Whether a stored or answered value is a version-1 layout, and whether it named anything. Undefined for any other. */
+export function layoutV1Of(raw: unknown): { empty: boolean } | undefined {
+    if (!isObj(raw)) return undefined;
+    const v1 = raw.v === 1 || (raw.v === undefined && (Array.isArray(raw.order) || Array.isArray(raw.hidden)));
+    if (!v1) return undefined;
+    const named = (l: unknown) => Array.isArray(l) && l.length > 0;
+    return { empty: !named(raw.order) && !named(raw.hidden) };
 }
 
 /** An answer read tolerantly: anything that isn't one is null, and the screen keeps what it had. */
 export function readHomeAnswer(raw: unknown): HomeAnswer | null {
     if (!isObj(raw) || !isObj(raw.cards) || typeof raw.profile !== 'string') return null;
     const me = isObj(raw.me) ? raw.me as unknown as HomeMe : null;
+    const v1 = layoutV1Of(raw.layout);
     return {
         generatedAt: typeof raw.generatedAt === 'string' ? raw.generatedAt : '',
         profile: raw.profile,
@@ -197,6 +177,7 @@ export function readHomeAnswer(raw: unknown): HomeAnswer | null {
         ...(raw.welcome === true ? { welcome: true as const } : {}),
         me: me ? { ...me, interests: Array.isArray(me.interests) ? me.interests.filter((c): c is string => typeof c === 'string') : [] } : null,
         layout: readHomeLayout(raw.layout),
+        ...(v1 ? { layoutV1: v1 } : {}),
         cards: raw.cards as HomeCards,
     };
 }
@@ -208,11 +189,20 @@ const stamp = (l: HomeLayout | null) => (l?.updatedAt ? Date.parse(l.updatedAt) 
 /**
  * The account's copy or the phone's, the newer by `updatedAt` (§4.2; the node keeps the newer too, home-preferences.ts).
  * `push`: the phone's copy is newer than the account's, so it is sent (an edit made offline, or one whose save failed).
+ *
+ * A version-1 account copy (`accountV1`) never wins over the phone's on a tie, and an empty one never wins at all: a
+ * not-yet-updated standby answers a version-2 row as an empty version-1 layout dated exactly like it (review of #1697,
+ * note b), and adopting it would throw away every card the member added. The phone's is drawn and not sent (the node
+ * already has it, or can't keep it yet).
  */
-export function pickLayout(account: HomeLayout | null, phone: HomeLayout | null): { layout: HomeLayout | null; push: boolean } {
+export function pickLayout(
+    account: HomeLayout | null, phone: HomeLayout | null, accountV1?: { empty: boolean },
+): { layout: HomeLayout | null; push: boolean } {
     if (!phone) return { layout: account, push: false };
     if (!account) return { layout: phone, push: true };
-    return stamp(phone) > stamp(account) ? { layout: phone, push: true } : { layout: account, push: false };
+    if (stamp(phone) > stamp(account)) return { layout: phone, push: true };
+    if (accountV1 && (accountV1.empty || stamp(phone) === stamp(account))) return { layout: phone, push: false };
+    return { layout: account, push: false };
 }
 
 /**
@@ -226,108 +216,190 @@ export function findPinned(answer: Pick<HomeAnswer, 'profile' | 'me'>, now: numb
     return !Number.isFinite(joined) || now - joined < FIND_PINNED_DAYS * DAY_MS;
 }
 
-/** The cards pinned for this reader now: they can't be hidden or moved, and stand at the top (only `find` has a pin). */
+/** The cards pinned for this reader now: they can't be removed or moved, and stand at the top (only `find` has a pin). */
 export function pinnedCards(answer: Pick<HomeAnswer, 'profile' | 'me'> | null | undefined, now: number): HomeCardId[] {
     return answer && findPinned(answer, now) ? ['find'] : [];
 }
 
+/** The list a layout holds: the member's, or the newcomer's while there is none. */
+export const listOf = (layout: HomeLayout | null): HomeCardInstance[] => layout?.cards ?? defaultHomeLayout().cards;
+
 /**
- * The member's order: `needs` first, the cards they placed, the rest in the default order, `community` last. A pinned
- * `find` stands right under `needs` (and under "Your way back in" while that one keeps its place there, as the design's
- * global Home draws them, §9 (a)), whatever the layout says: "pinned at the top for 30 days" (§0, §7).
+ * The cards in the member's order, drawn defensively (review of #1697, note c: only core's `addCard` keeps the limits, so
+ * a stored list may hold anything): `needs` first, the list's cards of a type this build draws (a one-of-a-kind type
+ * once, an instance type up to its limit, the fixed two never from the list), `community` last. A pinned `find` stands
+ * right under `needs` (and under "Your way back in" while that one keeps its place there, as the design's global Home
+ * draws them, §9 (a)), whatever the list says: "pinned at the top for 30 days" (§0, §7).
  */
-export function cardOrder(layout: HomeLayout | null, pinned: readonly HomeCardId[] = []): HomeCardId[] {
-    const placed = (layout?.order ?? []).filter(id => !FIXED.has(id));
-    const rest = HOME_CARD_IDS.filter(id => !FIXED.has(id) && !placed.includes(id));
-    const order: HomeCardId[] = [FIXED_FIRST, ...placed, ...rest, FIXED_LAST];
+export function cardOrder(layout: HomeLayout | null, pinned: readonly HomeCardId[] = []): HomeCardInstance[] {
+    const count = new Map<string, number>();
+    const placed: HomeCardInstance[] = [];
+    for (const c of listOf(layout)) {
+        const t = homeCardType(c.type);
+        if (!t || t.fixed || !HOME_DRAWN.has(c.type) || pinned.includes(c.type)) continue;
+        const n = count.get(c.type) ?? 0;
+        if (n >= (t.multiple?.max ?? 1)) continue;
+        count.set(c.type, n + 1);
+        placed.push(c);
+    }
+    const order: HomeCardInstance[] = [{ id: FIXED_FIRST, type: FIXED_FIRST }, ...placed, { id: FIXED_LAST, type: FIXED_LAST }];
     if (!pinned.includes('find')) return order;
-    const without = order.filter(id => id !== 'find');
-    const at = without[1] === 'safety' ? 2 : 1;
-    return [...without.slice(0, at), 'find', ...without.slice(at)];
+    const at = order[1]?.type === 'safety' ? 2 : 1;
+    return [...order.slice(0, at), { id: 'find', type: 'find' }, ...order.slice(at)];
 }
 
-/** Whether a card can be hidden: everything but `needs`, `community` and a pinned card (§4.1). */
-export const canHideCard = (id: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(id) && !pinned.includes(id);
+/** Whether a card can be removed: everything but `needs`, `community` and a pinned card (§1.3). */
+export const canRemoveCard = (type: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(type) && !pinned.includes(type);
 /** Whether a card can be moved: the same cards; `needs` stays first, a pinned card under it, and `community` last. */
-export const canMoveCard = (id: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(id) && !pinned.includes(id);
+export const canMoveCard = (type: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(type) && !pinned.includes(type);
 
-const emptyLayout = (): HomeLayout => ({ v: 1, order: [], hidden: [], dismissed: {}, updatedAt: null });
+const at = (now: number) => new Date(now).toISOString();
 
-/** Hidden by the layout and hideable now: a pinned card shows whatever the layout says. */
-export function isHidden(layout: HomeLayout | null, id: HomeCardId, pinned: readonly HomeCardId[] = []): boolean {
-    return canHideCard(id, pinned) && !!layout?.hidden.includes(id);
+/**
+ * A card added (§1.3): first, under Needs you and a pinned card; its settings through its type's reader. Null when it
+ * can't be (one already there, the type's limit, a full Home, a type this build can't draw), with core's reason.
+ */
+export function addCard(
+    layout: HomeLayout | null, type: HomeCardId, now: number, opts: { settings?: unknown; pinned?: readonly HomeCardId[]; random?: () => number } = {},
+): { ok: true; layout: HomeLayout; id: string } | { ok: false; refused: HomeAddRefusal } {
+    if (!HOME_DRAWN.has(type)) return { ok: false, refused: 'unknown' };
+    return frameAddCard(layout ?? defaultHomeLayout(), type, { settings: opts.settings, pinned: opts.pinned, now, random: opts.random });
 }
 
-/** Hidden: it goes from Home and comes back from Edit home (§4.1 "Add = un-hide"). Null when it can't be. */
-export function hideCard(layout: HomeLayout | null, id: HomeCardId, now: number, pinned: readonly HomeCardId[] = []): HomeLayout | null {
-    if (!canHideCard(id, pinned)) return null;
-    const l = layout ?? emptyLayout();
-    if (l.hidden.includes(id)) return null;
-    return { ...l, hidden: [...l.hidden, id], updatedAt: new Date(now).toISOString() };
+/** A card taken off Home: the instance goes, its settings and any dismissal with it (§1.3). Null when it can't be. */
+export function removeCard(layout: HomeLayout | null, id: string, now: number, pinned: readonly HomeCardId[] = []): HomeLayout | null {
+    const card = listOf(layout).find(c => c.id === id);
+    if (!card || !canRemoveCard(card.type, pinned)) return null;
+    return frameRemoveCard(layout ?? defaultHomeLayout(), id, now);
 }
 
-export function showCard(layout: HomeLayout | null, id: HomeCardId, now: number): HomeLayout | null {
-    if (!layout?.hidden.includes(id)) return null;
-    return { ...layout, hidden: layout.hidden.filter(h => h !== id), updatedAt: new Date(now).toISOString() };
+/** A card's settings changed in place (Settings… → Save): it keeps its place. Null when it isn't there. */
+export function changeCardSettings(layout: HomeLayout | null, id: string, settings: unknown, now: number): HomeLayout | null {
+    const list = listOf(layout);
+    const i = list.findIndex(c => c.id === id);
+    const reader = i < 0 ? undefined : homeCardType(list[i].type)?.readSettings;
+    if (!reader) return null;
+    const cards = [...list];
+    cards[i] = { ...cards[i], settings: reader(settings) };
+    return { ...(layout ?? defaultHomeLayout()), cards, updatedAt: at(now) };
 }
 
 /**
  * Up or down past the card next to it in `among` (the cards on screen, for the "…" menu; every card Edit home lists,
- * there), so a move always shows. The whole order is kept, so a card not in `among` keeps its place. Null when it can't
- * move that way.
+ * there), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way.
  */
 export function moveCard(
-    layout: HomeLayout | null, id: HomeCardId, dir: 'up' | 'down', among: readonly HomeCardId[], now: number, pinned: readonly HomeCardId[] = [],
+    layout: HomeLayout | null, id: string, dir: 'up' | 'down', among: readonly HomeCardInstance[], now: number, pinned: readonly HomeCardId[] = [],
 ): HomeLayout | null {
-    if (!canMoveCard(id, pinned)) return null;
-    const movable = among.filter(c => canMoveCard(c, pinned));
-    const at = movable.indexOf(id);
-    const other = at < 0 ? undefined : movable[dir === 'up' ? at - 1 : at + 1];
+    const list = listOf(layout);
+    const movable = among.filter(c => canMoveCard(c.type, pinned) && list.some(l => l.id === c.id));
+    const from = movable.findIndex(c => c.id === id);
+    const other = from < 0 ? undefined : movable[dir === 'up' ? from - 1 : from + 1];
     if (!other) return null;
-    // Every card's place is written, a pinned card's where it stands now: it keeps that place once its pin is over.
-    const order = cardOrder(layout, pinned).filter(c => !FIXED.has(c));
-    const i = order.indexOf(id);
-    const j = order.indexOf(other);
-    [order[i], order[j]] = [order[j], order[i]];
-    return { ...(layout ?? emptyLayout()), order, updatedAt: new Date(now).toISOString() };
+    const cards = [...list];
+    const i = cards.findIndex(c => c.id === id);
+    const j = cards.findIndex(c => c.id === other.id);
+    [cards[i], cards[j]] = [cards[j], cards[i]];
+    return { ...(layout ?? defaultHomeLayout()), cards, updatedAt: at(now) };
 }
 
-/** Back to the default order with nothing hidden (§4.1). A schedule's dismissal (the `safety` card) is not a layout choice: kept. */
+/**
+ * Reset to defaults: the newcomer's list (§1.3). A schedule's dismissal (the `safety` card) is not a layout choice: kept.
+ * A card of a type this build doesn't know (a newer app's) is kept too, at the end: Reset is this app's defaults, not a
+ * licence to throw away what it can't see.
+ */
 export function resetLayout(layout: HomeLayout | null, now: number): HomeLayout {
-    return { v: 1, order: [], hidden: [], dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: new Date(now).toISOString() };
+    const unknown = listOf(layout).filter(c => !homeCardType(c.type));
+    const cards = [...defaultHomeLayout().cards, ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
+    return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: at(now) };
 }
 
 /** The `safety` card was put away: when, on the account too (§3.1 "dismissal in home.layout"). */
 export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayout {
-    const l = layout ?? emptyLayout();
-    const at = new Date(now).toISOString();
-    return { ...l, dismissed: { ...l.dismissed, safety: at }, updatedAt: at };
+    const l = layout ?? defaultHomeLayout();
+    return { ...l, dismissed: { ...l.dismissed, safety: at(now) }, updatedAt: at(now) };
 }
+
+/**
+ * Whether a member who never edited sees the one-time line "Home now starts with fewer cards. Add a card brings the rest
+ * back." (§2.6): neither the account nor the phone holds a layout, and they joined more than a week ago (a newcomer never
+ * saw the longer Home, so has nothing to miss).
+ */
+export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | null, me: Pick<HomeMe, 'joinedAt'> | null | undefined, now: number): boolean {
+    if (account || phone || !me) return false;
+    const joined = me.joinedAt ? Date.parse(me.joinedAt) : NaN;
+    return Number.isFinite(joined) && now - joined > 7 * DAY_MS;
+}
+
+export const FEWER_CARDS_LINE = 'Home now starts with fewer cards. Add a card brings the rest back.';
+/** The one-time hint (§1.3). */
+export const HOME_HINT_LINE = 'This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.';
+/** Edit home's line while a node before the frame can't keep the member's cards (§2.3). */
+export const NOT_ON_ACCOUNT_LINE = "Your community's server needs an update before your cards follow you to other devices.";
+
+// ── The picker (§1.2) ─────────────────────────────────────────────────────────────────────────────────────────────
+
+export interface PickerRow {
+    type: HomeCardId;
+    name: string;
+    line: string;
+    /** `add`: an Add button; `on-home`: a one-of-a-kind already there; `full`: an instance type at its limit. */
+    state: 'add' | 'on-home' | 'full';
+    /** "2 of 5 on Home", for an instance type with one there. */
+    count: string | null;
+    /** A type's own state line ("All tips seen"). */
+    status: string | null;
+    hasSettings: boolean;
+}
+
+export interface PickerGroup { id: HomeCardGroup; name: string; rows: PickerRow[] }
+
+/**
+ * The picker's groups (For you · Around you · Getting started), each type this node can show and this build can draw,
+ * in the catalogue's order. Never a type that isn't here, never one shown as locked. A pinned `find` is on Home already
+ * and not listed. `full`: Home holds 24 cards, so every Add goes.
+ */
+export function pickerGroups(
+    answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }, layout: HomeLayout | null, role: HomeRole,
+    pinned: readonly HomeCardId[] = [], status: Partial<Record<HomeCardId, string>> = {},
+): { groups: PickerGroup[]; full: boolean } {
+    const list = listOf(layout);
+    const full = list.length >= HOME_FRAME_LIMITS.cards;
+    const groups = HOME_CARD_GROUPS.map(g => ({ id: g.id, name: g.name, rows: [] as PickerRow[] }));
+    for (const t of HOME_CARD_TYPES) {
+        if (t.fixed || !HOME_DRAWN.has(t.id) || pinned.includes(t.id) || !cardOnNode(t.id, answer, role)) continue;
+        const n = list.filter(c => c.type === t.id).length;
+        const max = t.multiple?.max ?? 1;
+        const state: PickerRow['state'] = !t.multiple && n > 0 ? 'on-home' : n >= max ? 'full' : 'add';
+        groups.find(g => g.id === t.group)!.rows.push({
+            type: t.id,
+            name: cardName(t.id, answer.profile),
+            line: t.line,
+            state: full && state === 'add' ? 'full' : state,
+            count: t.multiple && n > 0 ? `${Math.min(n, max)} of ${max} on Home` : null,
+            status: status[t.id] ?? null,
+            hasSettings: !!t.readSettings,
+        });
+    }
+    return { groups: groups.filter(g => g.rows.length > 0), full };
+}
+
+/** What the screen reader hears, and the live line says, when a card is added or removed (§1.3). */
+export const addedLine = (name: string) => `${name} added to Home`;
+export const removedLine = (name: string) => `${name} removed. Add a card brings it back.`;
 
 // ── What is asked, and what is drawn ───────────────────────────────────────────────────────────────────────────────
 
 /**
- * Whether a node of this profile can ever show the card in this build: the money cards only where Beans, escrow and
- * enterprises are on (the node builds them only then, routes/home-answer.ts), the invite card only where invites are,
- * Find your community only on the global node (the Market drew it only there before H4), and "Your way back in" only
- * where the 12-words door is open (only a member who came in by 12 words has it: a local community's door never takes 12
- * words), or where the node sent one (a member who came in before the door shut keeps theirs). Unknown counts as on, as
- * utils/node-profile.ts reads a node's features (kept here so this file stays pure). Home draws only these whatever an
- * answer holds, and Edit home offers only these: "Nothing to show now" is said of a card that could show, never of one
- * that can't.
+ * Whether a node of this kind can show the card to this reader: core's one rule (home-frame.ts `onNode`, per type: no
+ * Beans, deals, enterprise, Decide or invites on the worldwide community; Grow your community only where the reader can
+ * invite; Find your community only on the global node; "Your way back in" only where the 12-words door is open or the node
+ * sent one), and only for a type this build draws. Home draws only these whatever an answer holds, the picker lists only
+ * these, and Edit home's "Nothing to show now" is said of a card that could show, never of one that can't.
  */
-export function cardOnNode(id: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }, role?: HomeRole): boolean {
-    if (!HOME_DRAWN.includes(id)) return false;
-    const f = answer.features;
-    switch (id) {
-        case 'safety': return f.wordsDoor !== false || !!answer.cards?.safety;
-        case 'find': return answer.profile === 'global';
-        case 'beans': return f.beans !== false;
-        case 'deals': return f.escrow !== false;
-        case 'enterprise': return f.enterprises !== false;
-        case 'invite': return answer.profile !== 'global' && invitesForReader(f, role);
-        default: return true;
-    }
+export function cardOnNode(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }, role?: HomeRole): boolean {
+    const t = homeCardType(type);
+    return !!t && HOME_DRAWN.has(type) && t.onNode({ profile: answer.profile, features: answer.features, cards: answer.cards as Record<string, unknown> | undefined }, role);
 }
 
 /** The reader's role on this node as the node said it (GET /api/node-admin/me, utils/node-admin.ts): null for none, undefined not heard. */
@@ -348,26 +420,26 @@ export function invitesForReader(features: HomeAnswer['features'], role: HomeRol
 
 /**
  * Whether the reader tailors this Home: a member (the answer has a `me`). A visitor's answer (a key with no account on
- * the global node gets the public cards, routes/home.ts) has no "…", no Edit home and no hint, and the phone never
- * sends a layout for it: the node keeps a Home only for its members (design §2 (c): nothing a visitor could write with).
+ * the global node gets the public cards, routes/home.ts) has no "…", no Add a card, no Edit home and no hint, and the
+ * phone never sends a layout for it: the node keeps a Home only for its members (design §2 (c)).
  */
 export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): boolean => !!answer?.me;
 
 /**
- * The cards to ask the node for (`cards=`), in the catalogue's order so the address is the same each time and a repeat
- * read can be a 304: what this build draws and the answer carries, minus the member's hidden cards (never `needs` or
- * `community`). Never decided by what the last answer said of the node (its profile): a list built on a stale answer
- * would leave out a card the node now has (measured on the emulator: First steps went missing after a switch). `find` is
- * asked on every node like the rest: a local community has no such card and answers none (routes/home-answer.ts
- * `findCard`). `pinned` ({@link askPinned}): a pinned card is asked for even where the layout hides it.
+ * The instance ids to ask the node for (`cards=`), core's rule: catalogue order then id, so a move never changes the
+ * address and a repeat read can be a 304; the fixed two, every instance in the list the node builds, and a pinned card
+ * whatever the list says. A type this build doesn't know is never asked. `pinned`: {@link askPinned}.
  */
-export function cardsToAsk(layout: HomeLayout | null, pinned: readonly HomeCardId[] = []): HomeCardId[] {
-    return HOME_DRAWN.filter(id => !NO_DATA.has(id) && !isHidden(layout, id, pinned));
+export function cardsToAsk(layout: HomeLayout | null, pinned: readonly HomeCardId[] = []): string[] {
+    return frameCardsToAsk(layout ?? defaultHomeLayout(), pinned).filter(id => {
+        const c = listOf(layout).find(l => l.id === id);
+        return HOME_DRAWN.has(c?.type ?? id);
+    });
 }
 
 /**
- * The pins to ask by: the account's, from the answer in hand; with none yet, `find` counts as pinned, so a hidden one is
- * asked for until an answer says whether it still is (the web app's rule, apps/pwa lib/home-cards.ts `askedCards`).
+ * The pins to ask by: the account's, from the answer in hand; with none yet, `find` counts as pinned, so it is asked for
+ * until an answer says whether it still is (the web app's rule, apps/pwa lib/home-cards.ts `askedCards`).
  */
 export function askPinned(answer: Pick<HomeAnswer, 'profile' | 'me'> | null | undefined, now: number): HomeCardId[] {
     return answer ? pinnedCards(answer, now) : ['find'];
@@ -516,18 +588,18 @@ function nearestFirst<T extends { distanceKm?: number | null }>(items: readonly 
 }
 
 /**
- * The cards to draw, top to bottom (§3.2): the member's order (a pinned `find` at the top), each card only while it has
- * something to say, a hidden card never (but `needs`, `community` and a pinned card).
+ * The cards to draw, top to bottom (§3.2): the member's list in their order (a pinned `find` at the top, drawn
+ * defensively by {@link cardOrder}), each card only while it has something to say. A card's body is keyed by its
+ * instance id in the answer (`cards[id]`); a one-of-a-kind card's id is its type.
  */
-export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: HomeDrawContext): HomeCardId[] {
-    const c = answer.cards;
+export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: HomeDrawContext): HomeCardInstance[] {
+    const c = answer.cards as Record<string, unknown> & HomeCards;
     const global = answer.profile === 'global';
     const canInvite = invitesForReader(answer.features, ctx.role);
     const pinned = pinnedCards(answer, ctx.now ?? Date.now());
-    const shows = (id: HomeCardId): boolean => {
-        if (!cardOnNode(id, answer, ctx.role)) return false;
-        if (isHidden(layout, id, pinned)) return false;
-        switch (id) {
+    const shows = ({ id, type }: HomeCardInstance): boolean => {
+        if (!cardOnNode(type, answer, ctx.role)) return false;
+        switch (type) {
             case 'needs': return ctx.needs !== undefined ? ctx.needs > 0 : !!c.needs?.items?.length;
             case 'safety': return ctx.safetyUp;
             case 'find': return isFindCard(c.find);
@@ -538,8 +610,10 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             case 'invite': return !global && canInvite && !!answer.me?.firstOffer;
             case 'market': return !!c.market && (c.market.items.length > 0 || !!c.market.examples);
             case 'decide': return !!c.decide && decideLines(c.decide, answer.features, 0).length > 0;
+            // A settings card is drawn with no body yet ("Shows when your community answers", §2.4): the add took.
+            case 'search': return true;
             case 'community': return true;
-            default: return c[id as keyof HomeCards] !== undefined;
+            default: return c[id] !== undefined;
         }
     };
     return cardOrder(layout, pinned).filter(shows);
@@ -650,7 +724,7 @@ export function beansLines(b: NonNullable<HomeCards['beans']>): { main: string; 
 /** The community's card (§3.1): its name and totals, public by rule. */
 export function communityLines(card: HomeCards['community'] | undefined, profile: string, invitesOn: boolean): { title: string; line: string } {
     const global = profile === 'global';
-    const title = global ? 'The worldwide community' : (card?.name?.trim() || HOME_CARD_NAMES.community);
+    const title = global ? 'The worldwide community' : (card?.name?.trim() || cardName('community'));
     if (!card) return { title, line: '' };
     if (!global && card.members <= 1) {
         return { title, line: invitesOn ? "1 member. You're first. Invite someone." : "1 member. You're first." };
@@ -758,14 +832,13 @@ export function pulseTitle(p: HomePulseItem): string {
 
 /** The Market card's caption: "Near you" where listings come nearest first (the global node), else what's new. */
 export function marketCaption(profile: string): string {
-    return profile === 'global' ? 'Near you' : HOME_CARD_NAMES.market;
+    return cardName('market', profile);
 }
 
-/** A card's caption: most are its name; the Market's and the community's depend on the node. */
-export function cardCaption(id: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'cards'>): string {
-    if (id === 'market') return marketCaption(answer.profile);
-    if (id === 'community') return communityLines(answer.cards.community, answer.profile, false).title;
-    return HOME_CARD_NAMES[id];
+/** A card's caption: its type's name (fixed words, never member text); the Market's and the community's depend on the node. */
+export function cardCaption(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'cards'>): string {
+    if (type === 'community') return communityLines(answer.cards.community, answer.profile, false).title;
+    return cardName(type, answer.profile);
 }
 
 // ── When Home asks the node again ─────────────────────────────────────────────────────────────────────────────────

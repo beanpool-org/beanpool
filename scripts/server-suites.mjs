@@ -55,6 +55,7 @@ export const SUITES = [
     'test-pairing-relay',
     'test-pairing-routes',
     'test-pricing-guide',
+    'test-pricing-guide-admin',
     'test-pricing-aggregator-lifecycle',
     'test-activity-feed',
     'test-member-purge',

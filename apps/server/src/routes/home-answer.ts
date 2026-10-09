@@ -197,7 +197,7 @@ export interface HomeCards {
     pulse?: { items: { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null }[] };
     beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
-    /** The node's own place (local-config `location`) to two decimals, for a member; absent when the node has none. */
+    /** The node's own place (local-config `location`) to two decimals, for a member; absent when the node has none and on the global profile. */
     community?: { name: string | null; members: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number } };
     /**
      * A card of a type that comes in many is keyed by its instance id (`search-k7mq`), not its type; so is any card the
@@ -721,9 +721,10 @@ function communityCard(c: Ctx): HomeCards['community'] {
     }
     if (c.switches.directoryMirror) out.communities = listedCommunityCount();
     // The community's own place, rounded to about a kilometre, for the cards worked out on the device (sun and moon):
-    // to a member only, never in a visitor's answer.
+    // to a member only, never in a visitor's answer. The worldwide community has no place of its own (wherever its
+    // server sits), so there the card uses the member's area (decided by Marty, 9 Oct 2026).
     const place = config.location;
-    if (c.member && place && Number.isFinite(place.lat) && Number.isFinite(place.lng)) {
+    if (c.member && getNodeProfile() !== 'global' && place && Number.isFinite(place.lat) && Number.isFinite(place.lng)) {
         out.place = { lat: Math.round(place.lat * 100) / 100, lng: Math.round(place.lng * 100) / 100 };
     }
     return out;

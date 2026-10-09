@@ -197,6 +197,7 @@ export const SUITES = [
     'test-takeover-split-brain',
     'test-takeover-two-standbys',
     'test-sync-reads-carry-epoch',
+    'test-posts-sync-paged',
     'test-takeover-keeps-listing-times',
     'test-profile-takeover',
     'test-open-join-failover',

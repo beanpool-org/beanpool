@@ -528,6 +528,73 @@ async function main(): Promise<void> {
             `a 'beans' id stored with another type is the Beans card both ways (${JSON.stringify(listed)?.slice(0, 120)} / ${JSON.stringify(askedBeans)?.slice(0, 120)})`);
     }
 
+    // ── 5c. a saved search is the Market's own search ───────────────────────────────────────────────────────────
+    console.log('\n── 5c. a saved search: the rows the Market\'s own search gives (slice F4, §5.2 item 19) ──');
+    {
+        const { expandSearchTerms } = await import('@beanpool/core');
+        // A place nobody else lists near, so only these listings are within 5 km of it; each a little further than the last.
+        const FAR = { lat: -29.5, lng: 152.0 };
+        const fay = member('HomeSearchFay', { area: FAR });
+        const gus = member('HomeSearchGus'); // no area: no point
+        const at = (author: Id, type: 'offer' | 'need', title: string, dLat: number) =>
+            se.createPost(type, 'food', title, `${title} description`, MONEY ? 5 : 0, 'fixed', author.pk, FAR.lat + dLat, FAR.lng, [TINY_PNG], false, undefined, false, {} as any)!;
+        // The nearest is a need with "chicken" in it and no "egg": only the synonym map (eggs → chicken) finds it.
+        const coop = at(bob, 'need', 'HomeQuail chicken coop wanted', 0.001);
+        const near = [1, 2, 3, 4, 5].map(i => at(bob, 'offer', `HomeQuail fresh eggs ${i}`, 0.001 + i * 0.002));
+        const far = at(carol, 'offer', 'HomeQuail eggs out of town', 0.1); // ~11 km: outside 5 km, newest
+        assert(!!coop && near.length === 5 && !!far, 'setup: six listings within 5 km of Fay and one ~11 km away');
+        const saveSearch = (who: Id, settings: Record<string, unknown>) => postJson('/api/members/preferences', who, { publicKey: who.pk, preferences: {
+            'home.layout': { v: 2, cards: [{ id: 'search-eggs', type: 'search', settings }], dismissed: {}, updatedAt: new Date(Date.now() - 5_000).toISOString() },
+        } });
+        const market = async (who: Id, q: string, point?: { lat: number; lng: number }, km?: number) => {
+            const where = point ? `&lat=${point.lat}&lng=${point.lng}&radiusKm=${km}&sort=distance` : '';
+            const res = await get(`/api/marketplace/posts?q=${encodeURIComponent(expandSearchTerms(q).join(' '))}${where}&limit=50`, who);
+            return { status: res.status, rows: (Array.isArray(res.body) ? res.body : []).filter((p: { type: string; status: string }) => (p.type === 'offer' || p.type === 'need') && p.status === 'active') };
+        };
+        const ids = (rows: { id: string }[]) => rows.map(r => r.id);
+
+        const savedFay = await saveSearch(fay, { q: 'eggs', kind: 'any', km: 5 });
+        const fayCard = (await get('/api/home?cards=needs,search-eggs', fay)).body?.cards?.['search-eggs'];
+        const fayMarket = await market(fay, 'eggs', FAR, 5);
+        assert(savedFay.status === 200 && fayMarket.status === 200 && fayMarket.rows.length === 6,
+            `setup: the Market's search for eggs within 5 km of Fay finds six (${fayMarket.status}, ${fayMarket.rows.length})`);
+        assert(JSON.stringify(ids(fayCard?.items ?? [])) === JSON.stringify(ids(fayMarket.rows).slice(0, 4)) && fayCard?.more === true,
+            `the card's four rows are the Market's first four for q=eggs within 5 km, nearest first, and more (${JSON.stringify(fayCard?.items?.map((i: { title: string }) => i.title))}, more ${fayCard?.more})`);
+        assert(fayCard?.items?.[0]?.id === coop.id,
+            `synonyms: "eggs" finds the chicken coop wanted, as the Market's search does (${fayCard?.items?.[0]?.title})`);
+        assert(fayCard?.q === 'eggs' && fayCard?.km === 5 && !fayCard.items.some((i: { id: string }) => i.id === far.id)
+            && fayCard.items.every((i: { distanceKm: number | null }) => typeof i.distanceKm === 'number' && i.distanceKm <= 5),
+            `the answer keeps the words as typed and the 5 km bound: nothing from out of town (${fayCard?.q}, ${fayCard?.km})`);
+
+        // No point: km is ignored, as the sheet hides the distance; the rows are the Market's newest-first search.
+        const savedGus = await saveSearch(gus, { q: 'eggs', kind: 'any', km: 5 });
+        const gusCard = (await get('/api/home?cards=needs,search-eggs', gus)).body?.cards?.['search-eggs'];
+        const gusMarket = await market(gus, 'eggs');
+        assert(savedGus.status === 200 && gusCard?.km === null && gusCard.items.length === 4 && gusCard.more === true
+            && JSON.stringify(ids(gusCard.items)) === JSON.stringify(ids(gusMarket.rows).slice(0, 4)) && gusCard.items[0].id === far.id,
+            `with no point km is ignored: the Market's own newest four, the out-of-town listing first (${JSON.stringify(gusCard?.items?.map((i: { title: string }) => i.title))})`);
+
+        // A kind narrows as the Market's tab does: needs only.
+        await saveSearch(fay, { q: 'eggs', kind: 'need', km: 5 });
+        const needs = (await get('/api/home?cards=needs,search-eggs', fay)).body?.cards?.['search-eggs'];
+        assert(JSON.stringify(ids(needs?.items ?? [])) === JSON.stringify([coop.id]) && needs?.more === false,
+            `kind 'need' is the one need (${JSON.stringify(needs?.items?.map((i: { title: string }) => i.title))})`);
+
+        // 41 characters: the node stores a layout by shape and bounds only (F1), and the card reads the words cut to the
+        // sheet's 40, so nothing longer is ever searched or answered.
+        const long = `eggs ${'q'.repeat(36)}`;
+        const savedLong = await saveSearch(fay, { q: long, kind: 'any', km: 5 });
+        const longCard = (await get('/api/home?cards=needs,search-eggs', fay)).body?.cards?.['search-eggs'];
+        assert(long.length === 41 && savedLong.status === 200 && longCard?.q === long.slice(0, 40),
+            `a 41-character q is read as its first 40 (${savedLong.status}, ${longCard?.q?.length})`);
+
+        // Words the synonym map's own object holds as properties ("constructor") are plain words, not a crash of the read.
+        await saveSearch(fay, { q: 'constructor', kind: 'any' });
+        const odd = await get('/api/home?cards=needs,search-eggs', fay);
+        assert(odd.status === 200 && Array.isArray(odd.body?.cards?.['search-eggs']?.items),
+            `a saved search for "constructor" is answered (${odd.status})`);
+    }
+
     // ── 6. the size ─────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. the size, and what a landing costs ──');
     {

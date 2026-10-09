@@ -47,44 +47,7 @@ import { ExampleListings } from '../../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
-
-// Build reverse synonym index: given a category/synonym, find all words that map to it
-// e.g. "fruit" → ["lemon", "lime", "orange", "apple", ...]
-const reverseSynonyms: Record<string, string[]> = {};
-for (const [word, syns] of Object.entries(synonymMap)) {
-    if (word === '_meta') continue;
-    for (const syn of syns as string[]) {
-        if (!reverseSynonyms[syn]) reverseSynonyms[syn] = [];
-        reverseSynonyms[syn].push(word);
-    }
-}
-
-/** Expand a search query using synonyms: "fruit" → ["fruit", "lemon", "lime", ...] */
-function expandSearchTerms(query: string): string[] {
-    const words = query.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 1);
-    const expanded = new Set<string>(words);
-    for (const w of words) {
-        // Forward: word → its synonyms (e.g. "lemon" → ["fruit", "citrus"])
-        const fwd = (synonymMap as any)[w];
-        if (fwd) for (const s of fwd) expanded.add(s);
-        // Reverse: word → all words that have it as synonym (e.g. "fruit" → ["lemon", "lime"])
-        if (reverseSynonyms[w]) for (const s of reverseSynonyms[w]) expanded.add(s);
-        // Also try stemmed forms
-        let stem = w;
-        if (w.endsWith('ies')) stem = w.slice(0, -3) + 'y';
-        else if (w.endsWith('es')) stem = w.slice(0, -2);
-        else if (w.endsWith('s') && w.length > 3) stem = w.slice(0, -1);
-        else if (w.endsWith('ing') && w.length > 5) stem = w.slice(0, -3);
-        if (stem !== w) {
-            expanded.add(stem);
-            const fwdStem = (synonymMap as any)[stem];
-            if (fwdStem) for (const s of fwdStem) expanded.add(s);
-            if (reverseSynonyms[stem]) for (const s of reverseSynonyms[stem]) expanded.add(s);
-        }
-    }
-    return [...expanded];
-}
+import { expandSearchTerms } from '@beanpool/core';
 
 export const MARKETPLACE_CATEGORIES = [
     { id: 'all', emoji: '🏷️', label: 'All Categories' },

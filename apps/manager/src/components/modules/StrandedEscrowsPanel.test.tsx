@@ -54,6 +54,15 @@ describe('StrandedEscrowsPanel', () => {
         vi.spyOn(nodeClient, 'fetchStrandedEscrows').mockResolvedValue(list);
     });
 
+    it('displays loading state indicator while fetching stranded escrows', async () => {
+        let resolveFetch!: (value: nodeClient.StrandedEscrowsResponse) => void;
+        vi.spyOn(nodeClient, 'fetchStrandedEscrows').mockImplementation(() => new Promise((resolve) => { resolveFetch = resolve; }));
+        renderPanel();
+        expect(screen.getByTestId('stranded-escrows-loading')).toHaveTextContent('Loading stranded escrows…');
+        resolveFetch(list);
+        await waitFor(() => expect(screen.queryByTestId('stranded-escrows-loading')).not.toBeInTheDocument());
+    });
+
     it('lists each stranded escrow with its balance, its trade and the Commons after all', async () => {
         renderPanel();
         expect(await screen.findByText('escrow_70003252…')).toBeInTheDocument();

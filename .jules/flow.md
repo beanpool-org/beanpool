@@ -127,3 +127,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-07 - Add loading indicator for OffboxBackupsPanel
 **Learning:** `OffboxBackupsPanel.tsx` rendered an empty card body below the header while fetching backup settings (`!status && !loadError`), leaving operators without visual feedback during network calls.
 **Action:** Render an explicit loading indicator with an animated spinner when `!status && !loadError`.
+
+## 2026-12-08 - Add loading indicator for StrandedEscrowsPanel
+**Learning:** `StrandedEscrowsPanel.tsx` returned `null` while fetching stranded escrow records asynchronously (`!data && !loadError`), leaving operators without visual feedback during network calls.
+**Action:** Render an explicit loading indicator with an animated spinner when `loading && !data && !loadError`.

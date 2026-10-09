@@ -43,6 +43,7 @@ interface StrandedEscrowsPanelProps {
  */
 export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isStandby, onWrittenOff }: StrandedEscrowsPanelProps) {
     const [data, setData] = useState<StrandedEscrowsResponse | null>(null);
+    const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [openId, setOpenId] = useState<string | null>(null);
     const [reason, setReason] = useState('');
@@ -54,11 +55,14 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
     const [done, setDone] = useState<string | null>(null);
 
     const load = useCallback(async () => {
+        setLoading(true);
         try {
             setData(await fetchStrandedEscrows(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
             setLoadError(null);
         } catch (e: unknown) {
             setLoadError(e instanceof Error ? e.message : 'Could not load the stranded escrows');
+        } finally {
+            setLoading(false);
         }
     }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
@@ -97,6 +101,15 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
             setSubmitting(false);
         }
     };
+
+    if (loading && !data && !loadError) {
+        return (
+            <div className="flex items-center gap-2 text-xs text-nature-400" data-testid="stranded-escrows-loading">
+                <span className="animate-spin">🔄</span>
+                <span>Loading stranded escrows…</span>
+            </div>
+        );
+    }
 
     const escrows = data?.escrows ?? [];
     if (!loadError && escrows.length === 0 && !done) return null;

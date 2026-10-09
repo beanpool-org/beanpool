@@ -1704,8 +1704,8 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-search-k7mq');
         fireEvent.click(screen.getByTestId('home-edit-open'));
-        expect(screen.getByTestId('home-edit-row-search-k7mq')).toHaveTextContent('eggs · Offers');
-        expect(screen.getByTestId('home-edit-row-search-m4p9')).toHaveTextContent('eggs · Needs');
+        expect(screen.getByTestId('home-edit-row-search-k7mq')).toHaveTextContent('Offers · eggs');
+        expect(screen.getByTestId('home-edit-row-search-m4p9')).toHaveTextContent('Needs · eggs');
         expect(screen.getByTestId('home-edit-row-search-r8t2')).toHaveTextContent('eggs');
         expect(screen.getByTestId('home-edit-row-search-r8t2')).not.toHaveTextContent(/Offers|Needs|Both/);
         expect(screen.getByTestId('home-edit-up-search-k7mq')).toHaveAccessibleName('Move "eggs" (Offers) up');

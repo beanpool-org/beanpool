@@ -25,7 +25,7 @@ import { MAX_FONT_SCALE } from '../../constants/responsive';
 import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
 import { EDIT_HOME_NOTE, editHomeStyles } from '../../components/home/EditHomeSheet';
 import { ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
-import { FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
+import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
 import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_SEARCH_KMS, HOME_TIPS, TIPS_ALL_SEEN, TIPS_DONT_SHOW, tipsCaption } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
 
@@ -174,6 +174,13 @@ describe('Edit home at 320dp × 1.3 (CARD-FRAME §1.3)', () => {
             expect(longestWord(name, num(e.name.fontSize)), name).toBeLessThan(room);
         }
         for (const sub of ['Nothing to show now', TIPS_ALL_SEEN]) expect(longestWord(sub, num(e.sub.fontSize)), sub).toBeLessThan(room);
+        // A saved search's row leads with its kind, so the first of its two lines shows it however long the words (#1716
+        // confirmation, finding 4): "Needs · " fits a line whole.
+        for (const q of ['organic free range eggs', 'firewood delivery', 'x'.repeat(40)]) {
+            const name = cardRowName({ type: 'search', settings: { q, kind: 'need' } });
+            expect(name.startsWith('Needs · '), name).toBe(true);
+            expect(textWidth('Needs · ', num(e.name.fontSize)), name).toBeLessThan(room);
+        }
         expect(e.rowText).toMatchObject({ flex: 1, minWidth: 0 });
         expect(e.arrow.flexShrink).toBe(0);
         expect(num(e.arrow.height)).toBeGreaterThanOrEqual(48);

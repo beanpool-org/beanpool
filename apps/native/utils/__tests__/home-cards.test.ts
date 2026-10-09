@@ -271,8 +271,8 @@ describe('the layout (§4)', () => {
         expect(cardLabelName({ type: 'search', settings: { q: 'eggs', kind: 'offer' } })).toBe('"eggs" (Offers)');
         expect(cardLabelName({ type: 'search', settings: { q: 'eggs', kind: 'need' } })).toBe('"eggs" (Needs)');
         expect(cardLabelName({ type: 'search', settings: { q: 'x'.repeat(25), kind: 'need' } })).toBe(`"${'x'.repeat(24)}…" (Needs)`);
-        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'offer' } })).toBe('eggs · Offers');
-        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'need' } })).toBe('eggs · Needs');
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'offer' } })).toBe('Offers · eggs');
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'need' } })).toBe('Needs · eggs');
         expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'any' } })).toBe('eggs');
         expect(cardRowName({ type: 'search', settings: { kind: 'need' } })).toBe('A saved search');
         expect(cardLabelName({ type: 'market' }, 'global')).toBe('Near you');

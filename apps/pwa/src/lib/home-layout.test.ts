@@ -297,10 +297,10 @@ describe("a saved search's words on its card and in Edit home (CARD-FRAME §4, �
         expect(cardRowName({ type: 'market' }, 'local')).not.toBe('');
         expect(cardLabelName({ type: 'search', settings: { q: 'eggs' } })).toBe('"eggs"');
         // Two searches with the same words and another kind read differently (review of #1716): Both says no kind.
-        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'offer' } })).toBe('eggs · Offers');
-        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'need' } })).toBe('eggs · Needs');
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'offer' } })).toBe('Offers · eggs');
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'need' } })).toBe('Needs · eggs');
         expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'any' } })).toBe('eggs');
-        expect(cardRowName({ type: 'search', settings: { q: 'x'.repeat(40), kind: 'need' } })).toBe(`${'x'.repeat(24)}… · Needs`);
+        expect(cardRowName({ type: 'search', settings: { q: 'x'.repeat(40), kind: 'need' } })).toBe(`Needs · ${'x'.repeat(24)}…`);
         expect(cardRowName({ type: 'search', settings: { kind: 'need' } })).toBe('A saved search');
         expect(cardLabelName({ type: 'search', settings: { q: 'eggs', kind: 'offer' } })).toBe('"eggs" (Offers)');
         expect(cardLabelName({ type: 'search', settings: { q: 'eggs', kind: 'need' } })).toBe('"eggs" (Needs)');

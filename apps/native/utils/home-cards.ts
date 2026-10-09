@@ -95,14 +95,15 @@ function searchKindWord(c: Pick<HomeCardInstance, 'type' | 'settings'>): string 
 }
 
 /**
- * One card's row name in Edit home: a saved search by its words, and its kind when it isn't Both (`eggs`, `eggs · Needs`),
+ * One card's row name in Edit home: a saved search by its words, and its kind when it isn't Both (`eggs`, `Needs · eggs`),
  * so two searches are two rows even with the same words; else its name.
  */
 export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
     const words = searchWords(c);
     if (!words) return cardName(c.type, profile);
     const kind = searchKindWord(c);
-    return kind ? `${words} · ${kind}` : words;
+    // The kind leads, so a long search's row cut at two lines (320dp × 1.3) still shows it (#1716 confirmation, finding 4).
+    return kind ? `${kind} · ${words}` : words;
 }
 
 // ── The answer, as GET /api/home sends it (apps/server routes/home-answer.ts HomeAnswer) ────────────────────────────

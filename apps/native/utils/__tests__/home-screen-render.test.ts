@@ -1943,8 +1943,8 @@ describe('two saved searches: each is named by its words, never in its caption (
         expect(byLabel('Card options for "eggs" (Offers)')).not.toBeNull();
         expect(byLabel('Card options for "eggs" (Needs)')).not.toBeNull();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="edit-home-search-k2x7"]')!.textContent).toContain('eggs · Offers');
-        expect(document.querySelector('[data-testid="edit-home-search-m4p9"]')!.textContent).toContain('eggs · Needs');
+        expect(document.querySelector('[data-testid="edit-home-search-k2x7"]')!.textContent).toContain('Offers · eggs');
+        expect(document.querySelector('[data-testid="edit-home-search-m4p9"]')!.textContent).toContain('Needs · eggs');
         const both = document.querySelector('[data-testid="edit-home-search-r8t2"]')!.textContent!;
         expect(both).toContain('eggs');
         expect(both).not.toMatch(/Offers|Needs|Both/);

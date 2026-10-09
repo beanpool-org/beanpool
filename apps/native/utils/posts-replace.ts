@@ -3,10 +3,13 @@
  * take-over, what the old main server wrote after its standby's last copy (services/pillar-sync.ts). No tombstone
  * will ever come for them, so utils/db.ts `applyDelta` deletes them when it is told to replace (`postsReplace`).
  *
- * The node sends its most recently changed listings first, capped at a page (200 today), so its answer speaks for
- * every listing changed after the oldest one it carries, and for all of them when it carries none. A cached row
- * changed after that and missing from the answer goes. An older row may just be past the page, so it stays, as it
- * would on a fresh install that never had it. A row the phone wrote itself has no `updated_at` until a sync brings
+ * The node sends its most recently changed listings first, 200 a page; the phone reads every page, up to
+ * POSTS_PAGE_CAP of them in one cycle (services/pillar-sync.ts), and `posts` is every page it read. So the answer speaks
+ * for every listing changed after the oldest one it carries, and for all of them when it carries none. A cached row
+ * changed after that and missing from the answer goes. An older row may just be past the last page read, so it stays,
+ * as it would on a fresh install that never had it. A read of more than one page is not one moment of the node: a
+ * listing that changed while it paged is past every page, so the phone also reads what changed since the read began
+ * and hands it in with `posts` before this rule runs. A row the phone wrote itself has no `updated_at` until a sync brings
  * one, so its `created_at` stands in (`at`).
  *
  * It speaks only for the scopes it could carry. The pull is signed on its way out, but only best-effort

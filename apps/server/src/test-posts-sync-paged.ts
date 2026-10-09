@@ -170,7 +170,7 @@ async function main() {
     });
     const got = new Set(mid.rows.map(r => r.id));
     const missing = visibleBefore.filter(id => id !== editId && id !== leaveId && !got.has(id));
-    assert(once(mid.rows) && missing.length === 0,
+    assert(mid.sizes.length >= 3 && once(mid.rows) && missing.length === 0,
         `between two pages one listing edited, one made, one of the first page's leaving the reader's view: every other listing comes, once (${missing.length} missing)`);
     const after = await readAll(takenAt, carol);
     const edited = after.rows.find(r => r.id === editId);

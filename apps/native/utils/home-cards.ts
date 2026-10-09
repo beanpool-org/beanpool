@@ -24,7 +24,7 @@
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard,
-    type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
+    type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind,
 } from '@beanpool/core';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
@@ -448,6 +448,10 @@ export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | n
 export const FEWER_CARDS_LINE = 'Home now starts with fewer cards. Add a card brings the rest back.';
 /** The one-time hint (§1.3). */
 export const HOME_HINT_LINE = 'This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.';
+/** A saved search's kinds, as its settings sheet offers them (CARD-FRAME §4). */
+export const SEARCH_KIND_CHIPS: ReadonlyArray<{ kind: HomeSearchKind; label: string }> = [
+    { kind: 'any', label: 'Both' }, { kind: 'offer', label: 'Offers' }, { kind: 'need', label: 'Needs' },
+];
 /** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */
 export const SEARCH_OFFLINE_LINE = 'Shows when your community answers';
 

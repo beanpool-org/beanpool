@@ -446,6 +446,45 @@ describe('tailoring: the "…" menu, Edit home, interests', () => {
         expect(input).not.toBeNull();
     });
 
+    it('the settings sheet asks Offers or Needs or both, a category and a distance; Add to Home sends them (CARD-FRAME §4, §5.2 item 20)', async () => {
+        node.answer = { ...localMember(), me: { ...localMember().me!, area: { lat: -28.55, lng: 153.5 } } };
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add A saved search to Home')!.click(); });
+        await settle(2);
+        const chosen = (id: string) => Array.from(document.querySelectorAll(`[data-testid="card-settings-${id}"] [aria-selected="true"]`), e => e.textContent);
+        const labels = (id: string) => Array.from(document.querySelectorAll(`[data-testid="card-settings-${id}"] button`), e => e.textContent);
+        expect(labels('kind')).toEqual(['Both', 'Offers', 'Needs']);
+        expect(chosen('kind')).toEqual(['Both']);
+        expect(labels('km')).toEqual(['Any distance', '1 km', '2 km', '5 km', '10 km', '25 km']);
+        expect(labels('category')[0]).toBe('Any category');
+        expect(labels('category')).toHaveLength(18);
+        const input = document.querySelector('[data-testid="card-settings-words"]') as HTMLInputElement;
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'eggs');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await act(async () => { (document.querySelector('[data-testid="card-settings-kind-need"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="card-settings-category-food"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="card-settings-km-5"]') as HTMLElement).click(); });
+        expect(chosen('kind')).toEqual(['Needs']);
+        expect(chosen('km')).toEqual(['5 km']);
+        const before = node.requests.length;
+        await act(async () => { (document.querySelector('[data-testid="card-settings-done"]') as HTMLElement).click(); });
+        await settle();
+        const post = node.requests.slice(before).find(r => r.method === 'POST')!;
+        expect(JSON.parse(post.body).preferences['home.layout'].cards[0]).toMatchObject({ type: 'search', settings: { q: 'eggs', kind: 'need', category: 'food', km: 5 } });
+    });
+
+    it('with no point to measure from (no area, a local community) the sheet offers no distance', async () => {
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add A saved search to Home')!.click(); });
+        await settle(2);
+        expect(document.querySelector('[data-testid="card-settings-kind"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="card-settings-km"]')).toBeNull();
+    });
+
     it('the settings sheet stands above the keyboard: lifted by its height and fitted above it, as Create a Group is (review of #1699, finding 3)', async () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });

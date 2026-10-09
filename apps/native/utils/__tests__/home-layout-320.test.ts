@@ -25,8 +25,8 @@ import { MAX_FONT_SCALE } from '../../constants/responsive';
 import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
 import { EDIT_HOME_NOTE, editHomeStyles } from '../../components/home/EditHomeSheet';
 import { ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
-import { FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_OFFLINE_LINE, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
-import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_TIPS, TIPS_ALL_SEEN, TIPS_DONT_SHOW, tipsCaption } from '@beanpool/core';
+import { FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
+import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_SEARCH_KMS, HOME_TIPS, TIPS_ALL_SEEN, TIPS_DONT_SHOW, tipsCaption } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
 
 /** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
@@ -235,6 +235,28 @@ describe('the picker at 320dp × 1.3 (CARD-FRAME §1.2, §1.4)', () => {
             expect(textWidth(g.name.toUpperCase(), num(e.section.fontSize), { caps: true, letterSpacing: num(e.section.letterSpacing) }), g.name).toBeLessThan(inner);
         }
         for (const t of [ADD_CARD_NOTE, ADD_CARD_FULL_NOTE]) expect(longestWord(t, num(e.note.fontSize)), t).toBeLessThan(inner);
+    });
+});
+
+describe("a saved search's settings sheet at 320dp × 1.3 (CARD-FRAME §4, §5.2 item 20)", () => {
+    it("every chip (kind, category, distance) fits the sheet's width on one line, and is a 48dp target", () => {
+        const sheetInner = SCREEN - 2 * num((editHomeStyles as unknown as Record<string, Record<string, unknown>>).list.paddingHorizontal);
+        const labels = [
+            ...SEARCH_KIND_CHIPS.map(k => k.label),
+            'Any category', ...POST_CATEGORIES.map(c => `${c.emoji} ${c.label}`),
+            'Any distance', ...HOME_SEARCH_KMS.map(k => `${k} km`),
+        ];
+        for (const l of labels) {
+            const w = textWidth(l, num(s.chipText.fontSize)) + 2 * num(s.chip.paddingHorizontal) + 2 * num(s.chip.borderWidth);
+            expect(w, l).toBeLessThan(sheetInner);
+        }
+        expect(num(s.chip.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(HOME_TARGET_DP).toBeGreaterThanOrEqual(48);
+        // The three kinds share one row at the floor, so "Both" reads as one choice of three.
+        const row = SEARCH_KIND_CHIPS.reduce((w, k) => w + textWidth(k.label, num(s.chipText.fontSize)) + 2 * num(s.chip.paddingHorizontal) + 2, 0) + 2 * 8;
+        expect(row).toBeLessThan(sheetInner);
+        // The sheet scrolls: eighteen category chips and a keyboard don't fit 569dp at once.
+        expect(read('components/home/CardSettingsSheet.tsx')).toMatch(/<ScrollView style=\{editHomeStyles\.list\}/);
     });
 });
 

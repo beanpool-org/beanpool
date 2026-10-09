@@ -948,6 +948,8 @@ export default function HomeScreen() {
                     type={settingsFor?.type ?? null}
                     settings={settingsFor?.mode === 'save' ? settingsFor.settings : undefined}
                     mode={settingsFor?.mode ?? 'add'}
+                    // A distance needs a point the node measures from: the member's area, or the phone's place (global only).
+                    hasPoint={!!place || !!answer?.me?.area}
                     colors={colors}
                     onDone={onSettingsDone}
                     onClose={() => setSettingsFor(null)}

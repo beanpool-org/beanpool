@@ -37,6 +37,7 @@ import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '
 import {
     MARKET_TYPE_PILLS, marketFilterFromLink, marketSearchFromLink, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
+    marketSearchQuery, marketSearchMatches,
 } from '../../utils/market-filters';
 import { localDaysAgo } from '../../utils/feed-sections';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -47,7 +48,6 @@ import { ExampleListings } from '../../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { expandSearchTerms } from '@beanpool/core';
 
 export const MARKETPLACE_CATEGORIES = [
     { id: 'all', emoji: '🏷️', label: 'All Categories' },
@@ -751,7 +751,7 @@ export default function MarketScreen() {
                 const cat = categoryFilter !== 'all' && row.kind === 'filters' && row.category ? `&category=${categoryFilter}` : '';
                 
                 // Expand synonyms so the server's FTS5 'OR' logic can find them
-                const expandedQ = expandSearchTerms(q).join(' ');
+                const expandedQ = marketSearchQuery(q);
                 
                 // Nearest first where the node sorts by distance and the phone already knows where it is.
                 const near = marketSearchDistanceParams(nodeProfile, myLocation);
@@ -871,14 +871,7 @@ export default function MarketScreen() {
         // Works on ALL servers, even those without FTS5 deployed
         if (searchQuery.trim()) {
             const serverHasFTS = searchResults !== null && searchResults.length > 0 && 'search_keywords' in searchResults[0];
-            if (!serverHasFTS) {
-                const terms = expandSearchTerms(searchQuery);
-                const titleStr = p.title ? p.title.toLowerCase() : '';
-                const descStr = p.description ? p.description.toLowerCase() : '';
-                const postText = `${titleStr} ${descStr}`;
-                const matched = terms.some(term => postText.includes(term));
-                if (!matched) return false;
-            }
+            if (!serverHasFTS && !marketSearchMatches(p, searchQuery)) return false;
         }
         return true;
     });

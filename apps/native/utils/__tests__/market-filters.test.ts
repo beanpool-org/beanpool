@@ -4,11 +4,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
     MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFeedQuery, DEFAULT_MARKET_FILTERS,
     distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketFilterState,
-    marketSearchFromLink,
+    marketSearchFromLink, marketSearchQuery, marketSearchMatches,
 } from '../market-filters';
 import { CATEGORY_FILTER_CHIPS, categoryPanelReducer } from '../map-filters';
 import { CATEGORY_META } from '../../constants/categories';
@@ -206,5 +208,35 @@ describe('marketSearchFromLink: a saved search\'s See more fills the Market\'s s
         expect(marketSearchFromLink('   ')).toBeNull();
         expect(marketSearchFromLink('')).toBeNull();
         expect(marketSearchFromLink(undefined)).toBeNull();
+    });
+});
+
+describe('the Market\'s search in any script (review of #1716, finding 1)', () => {
+    const eggs = { title: 'Свежие яйца', description: 'от наших кур' };
+    const garden = { title: 'Jardín comunitario', description: null };
+    const duck = { title: 'Duck 蛋 by the dozen', description: '' };
+    const spade = { title: 'Spade to lend', description: 'garden tools' };
+
+    it('asks the node for the words as written, not for nothing', () => {
+        expect(marketSearchQuery('яйца')).toBe('яйца');
+        expect(marketSearchQuery('jardín')).toBe('jardín');
+        expect(marketSearchQuery('अंडे')).toBe('अंडे');
+        expect(marketSearchQuery('蛋')).toBe('蛋');
+        expect(marketSearchQuery('eggs').split(' ')).toEqual(expect.arrayContaining(['eggs', 'chicken']));
+    });
+
+    it('its own filter keeps the listing that holds the words and drops the rest', () => {
+        expect(marketSearchMatches(eggs, 'яйца')).toBe(true);
+        expect(marketSearchMatches(garden, 'jardín')).toBe(true);
+        expect(marketSearchMatches(duck, '蛋')).toBe(true);
+        for (const q of ['яйца', 'jardín', '蛋']) expect(marketSearchMatches(spade, q)).toBe(false);
+        expect(marketSearchMatches(spade, 'garden')).toBe(true);
+    });
+
+    it('the Market screen searches and filters with these, not words of its own', () => {
+        const src = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/market.tsx'), 'utf8');
+        expect(src).toMatch(/marketSearchQuery\(q\)/);
+        expect(src).toMatch(/marketSearchMatches\(p, searchQuery\)/);
+        expect(src).not.toMatch(/expandSearchTerms/);
     });
 });

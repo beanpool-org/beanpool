@@ -37,8 +37,8 @@ import {
     homeRevealStoreKey,
 } from './storage-keys';
 import {
-    HOME_FRESH_FOR_HEADER_MS, MARK_SENT_MAX, readHomeAnswer, readHomeLayout,
-    type HomeAnswer, type HomeCardId, type HomeLayout,
+    HOME_FRESH_FOR_HEADER_MS, readHomeAnswer, readHomeLayout, readMarkSent,
+    type HomeAnswer, type HomeCardId, type HomeLayout, type MarkSent,
 } from './home-cards';
 
 /** How long the node has to answer before Home keeps what it had. */
@@ -304,21 +304,20 @@ export async function writePhoneOnlyMark(publicKey: string, url: string, over: s
 }
 
 /**
- * With the mark: the dates of the edits the phone sent while marked (utils/home-cards.ts ownMarkedSave), the latest
- * {@link MARK_SENT_MAX}. None when there is no mark.
+ * With the mark: the edits the phone sent while marked, each its date and its list's print (utils/home-cards.ts
+ * ownMarkedSave), the latest MARK_SENT_MAX. An older build's dates alone still load. None when there is no mark.
  */
-export async function readPhoneOnlySent(publicKey: string, url: string): Promise<string[]> {
+export async function readPhoneOnlySent(publicKey: string, url: string): Promise<MarkSent[]> {
     try {
         const raw = await AsyncStorage.getItem(homeLayoutPhoneOnlySentStoreKey(publicKey, url));
-        const v: unknown = raw ? JSON.parse(raw) : [];
-        return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length <= 40).slice(-MARK_SENT_MAX) : [];
+        return readMarkSent(raw ? JSON.parse(raw) : []);
     } catch {
         return [];
     }
 }
 
-/** Keeps those dates, while `whose` is still on the phone. */
-export async function writePhoneOnlySent(publicKey: string, url: string, sent: readonly string[], whose: HomeAccount = homeAccount(publicKey)): Promise<void> {
+/** Keeps those edits, while `whose` is still on the phone. */
+export async function writePhoneOnlySent(publicKey: string, url: string, sent: readonly MarkSent[], whose: HomeAccount = homeAccount(publicKey)): Promise<void> {
     if (whose.publicKey !== publicKey || !stillOnPhone(whose)) return;
     try {
         await AsyncStorage.setItem(homeLayoutPhoneOnlySentStoreKey(publicKey, url), JSON.stringify(sent));

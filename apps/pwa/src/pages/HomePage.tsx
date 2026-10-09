@@ -43,7 +43,7 @@ import {
     FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_HINT_LINE, SEARCH_WAITING_LINE, addCard, addedLine, askPinned, canMoveCard,
     canRemoveCard, cardLabelName, cardName, cardOnNode, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
     listOf, moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
-    resetLayout, type HomeCardInstance, type HomeLayoutV2,
+    resetLayout, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
 } from '../lib/home-layout';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { settleInterests, shareInterests } from '../lib/home-interests';
@@ -191,9 +191,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     // Set while this browser's copy is an edit made on the newcomer's list drawn for an unknown account list: that list's
     // date (lib/home-layout.ts pickLayout). Such an edit is never sent by itself: a read decides (review of #1699, finding 2).
     const overRef = useRef<string | undefined>(undefined);
-    // While marked: the dates of the edits this browser sent. A version-2 answer dated as one is this browser's own save,
-    // not the account's real list (lib/home-layout.ts ownMarkedSave; review of #1701 confirmation, finding 2).
-    const overSentRef = useRef<string[]>([]);
+    // While marked: the edits this browser sent (each its date and its list's print). A version-2 answer that is one of them
+    // is this browser's own save, not the account's real list (lib/home-layout.ts ownMarkedSave; review of #1701
+    // confirmation, finding 2; review of #1715, finding 1).
+    const overSentRef = useRef<MarkSent[]>([]);
     // The node refused this browser's version-2 layout on this landing: it is sent again at the next landing, never in a loop.
     const refusedLanding = useRef(false);
     // The one extra read a landing makes for cards the answer wasn't built for (review of #1697, note a: bounded).
@@ -272,7 +273,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         if (!publicKey || epoch === null) return Promise.resolve();
         const seq = ++layoutSeq.current;
         savingLayout.current += 1;
-        if (overRef.current !== undefined) overSentRef.current = rememberMarkSent(overSentRef.current, next.updatedAt);
+        if (overRef.current !== undefined) overSentRef.current = rememberMarkSent(overSentRef.current, next);
         return saveHomePreferences(publicKey, { 'home.layout': next })
             .finally(() => { savingLayout.current -= 1; })
             .then((r) => {

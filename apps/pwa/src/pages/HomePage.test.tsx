@@ -1369,14 +1369,19 @@ describe('an empty version-1 account list, no copy here: every edit stands once 
 
 describe('a read that overtakes the first save\'s answer on an empty version-1 list: the newer edit stands and is sent (review of #1701 confirmation, finding 2)', () => {
     const ids = (l: unknown) => ((l as { cards?: Array<{ id: string }> } | null)?.cards ?? []).map(c => c.id);
-    /** nodeKeeping, but a save is applied at once and answered `delayMs` later. */
-    function nodeSlowSave(full: HomeAnswer, start: unknown, delayMs: number) {
+    /**
+     * nodeKeeping, but a save is applied at once and answered `delayMs` later. As home-preferences.ts, a date ahead of the
+     * node's clock is held to its now; `behindMs`: the node's clock is that far behind this browser's.
+     */
+    function nodeSlowSave(full: HomeAnswer, start: unknown, delayMs: number, behindMs = 0) {
         let account: unknown = start;
         const log: string[] = [];
         const at = (x: unknown) => (x && typeof x === 'object' && typeof (x as { updatedAt?: unknown }).updatedAt === 'string' ? Date.parse((x as { updatedAt: string }).updatedAt) : -Infinity);
         vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
-            const l = prefs['home.layout'] as unknown;
-            log.push(`POST ${ids(l).join(',')}`);
+            const sent = prefs['home.layout'] as unknown;
+            log.push(`POST ${ids(sent).join(',')}`);
+            const nodeNow = Date.now() - behindMs;
+            const l = sent && at(sent) > nodeNow ? { ...(sent as object), updatedAt: new Date(nodeNow).toISOString() } : sent;
             if (l && at(l) >= at(account)) account = l;
             await new Promise(r => setTimeout(r, delayMs));
             log.push('answered');
@@ -1463,6 +1468,48 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         expect(api.saveHomePreferences).toHaveBeenCalledTimes(1);
         expect(cardIds()).toEqual(expect.arrayContaining(['market', 'events', 'pulse']));
         expect(cardIds()).not.toContain('beans');
+    });
+
+    for (const behind of [200, 5_000]) {
+        it(`S1: X1 with the node's clock ${behind} ms behind this browser's, so the node dates the first save earlier than sent: both edits stand, on the account too (review of #1715, finding 1)`, async () => {
+            const node = nodeSlowSave(answer(), EMPTY_V1, 400, behind);
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-events');
+            add('beans');
+            await waitFor(() => expect(posts(node.log)).toBe(1));
+            await pause(20);
+            // The second edit's read carries the first save back with the node's date, not the one this browser sent.
+            add('pulse');
+            await pause(60);
+            expect(node.log).not.toContain('answered');
+            await pause(900);
+            expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
+            expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
+            expect(posts(node.log)).toBe(2);
+            expect(screen.getByTestId('home-live').textContent).toContain('The Pulse');
+            await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+            await pause(300);
+            expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
+            expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
+        });
+    }
+
+    it('S1, the mark kept in this browser: the node\'s clock 5 s behind, closed before either answer, opened again: the node\'s copy of the first save is still this browser\'s own, so the newer edit wins and is sent', async () => {
+        const node = nodeSlowSave(answer(), EMPTY_V1, 400, 5_000);
+        const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-events');
+        add('beans');
+        await waitFor(() => expect(posts(node.log)).toBe(1));
+        await pause(20);
+        add('pulse');
+        first.unmount();
+        await pause(20);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        await pause(900);
+        expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
+        expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
+        expect(posts(node.log)).toBe(2);
     });
 
     it('W2b: another device\'s list lands just before the first save, which the node drops as older: that list stands, and the edit that waited is not sent (review of #1715, finding 2)', async () => {

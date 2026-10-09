@@ -33,7 +33,7 @@ import {
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
     effectiveInterests, fewerCardsNews, firstSteps, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, starredFirst,
-    type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type PickerRow, type StepLine,
+    type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
     SAVE_REFUSED, SAVE_SHAPE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readPhoneOnlyMark, readPhoneOnlySent,
@@ -90,7 +90,7 @@ const REVEAL_MS = 300;
  * The account's list is known again: the phone's list is no longer marked as made while it wasn't (pickLayout), and the
  * dates of the edits sent under the mark go with it.
  */
-function clearPhoneOnly(mark: { current: string | null }, sent: { current: string[] }, publicKey: string, url: string, whose: HomeAccount): void {
+function clearPhoneOnly(mark: { current: string | null }, sent: { current: MarkSent[] }, publicKey: string, url: string, whose: HomeAccount): void {
     if (mark.current === null) return;
     mark.current = null;
     sent.current = [];
@@ -192,9 +192,10 @@ export default function HomeScreen() {
     // one, it is rare (no copy here, an offline first edit, another device's save meanwhile), and one edit is lost either
     // way: the other device's, were this phone's sent instead.
     const phoneOver = useRef<string | null>(null);
-    // While marked: the dates of the edits the phone sent. A version-2 answer dated as one is the phone's own save, not the
-    // account's real list (utils/home-cards.ts ownMarkedSave; review of #1701 confirmation, finding 2). Kept with the mark.
-    const phoneSent = useRef<string[]>([]);
+    // While marked: the edits the phone sent (each its date and its list's print). A version-2 answer that is one of them is
+    // the phone's own save, not the account's real list (utils/home-cards.ts ownMarkedSave; review of #1701 confirmation,
+    // finding 2; review of #1715, finding 1). Kept with the mark.
+    const phoneSent = useRef<MarkSent[]>([]);
     const layoutRef = useRef<HomeLayout | null>(null);
     layoutRef.current = layout;
     const focused = useRef(false);
@@ -274,7 +275,7 @@ export default function HomeScreen() {
         const u = storedRef.current?.url ?? url;
         if (!id || !u || id.publicKey !== whose.publicKey || !stillOnPhone(whose)) return;
         if (phoneOver.current !== null) {
-            phoneSent.current = rememberMarkSent(phoneSent.current, next.updatedAt);
+            phoneSent.current = rememberMarkSent(phoneSent.current, next);
             void writePhoneOnlySent(id.publicKey, u, phoneSent.current, whose);
         }
         const saved = await saveHomePreferences(u, id, { layout: next });

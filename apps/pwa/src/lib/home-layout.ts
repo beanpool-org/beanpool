@@ -134,24 +134,77 @@ export function pickLayout(
     return { layout: account, push: false };
 }
 
-/** The most dates of marked edits this browser remembers having sent (the latest ones). */
-export const MARK_SENT_MAX = 8;
-
-/**
- * Whether a version-2 account answer is this browser's own save of an edit made on the unknown list: dated exactly as
- * one this browser sent while marked (`sent`). Then the account's list is known, and it is this browser's: the mark goes
- * and the dates decide as usual, so a newer edit made while that save was out wins and is sent. Without this, a read
- * that overtook the save's answer carried the save back as "the account's real list" and the newer edit was lost unsent
- * (review of #1701 confirmation, finding 2).
- */
-export function ownMarkedSave(account: HomeLayoutV2 | null, accountV1: { empty: boolean } | undefined, sent: readonly string[]): boolean {
-    return !!account?.updatedAt && !accountV1 && sent.includes(account.updatedAt);
+// A 64-bit hash (cyrb53's mixing, both halves kept) as 16 hex characters: a print, not a secret.
+function hash64(s: string): string {
+    let h1 = 0xdeadbeef;
+    let h2 = 0x41c6ce57;
+    for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        h1 = Math.imul(h1 ^ c, 2654435761);
+        h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0');
 }
 
-/** `sent` with one more date of a marked edit sent, the latest {@link MARK_SENT_MAX} kept. */
-export function rememberMarkSent(sent: readonly string[], at: string | null | undefined): string[] {
-    if (!at || sent.includes(at)) return [...sent];
-    return [...sent, at].slice(-MARK_SENT_MAX);
+/**
+ * A layout's list (its cards and dismissals, not its date) as a short print: read as core reads any layout, then as JSON
+ * with every object's keys sorted, so the list this browser sent and the node's answer of it print alike.
+ */
+export function layoutPrint(l: HomeLayoutV2): string {
+    const read = readLayout(l) ?? l;
+    return hash64(JSON.stringify({ cards: read.cards, dismissed: read.dismissed ?? {} }, (_k, v: unknown) => (
+        isObj(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v
+    )));
+}
+
+/** Whether two layouts hold the same list, whatever their dates. */
+export const sameList = (a: HomeLayoutV2, b: HomeLayoutV2): boolean => layoutPrint(a) === layoutPrint(b);
+
+/** The most marked edits this browser remembers having sent (the latest ones). */
+export const MARK_SENT_MAX = 8;
+
+/** A marked edit this browser sent: its date and its list's {@link layoutPrint}. One kept by an older build has no print. */
+export interface MarkSent {
+    at: string;
+    print?: string;
+}
+
+/**
+ * Whether a version-2 account answer is this browser's own save of an edit made on the unknown list, one it sent while
+ * marked (`sent`): dated exactly as sent, or the same list dated at or before it. The node holds a date ahead of its own
+ * clock to its now, so a browser whose clock runs ahead gets its save back dated earlier than it sent it, never later
+ * (review of #1715, finding 1). Then the account's list is known, and it is this browser's: the mark goes and the dates
+ * decide as usual, so a newer edit made while that save was out wins and is sent. Without this, a read that overtook the
+ * save's answer carried the save back as "the account's real list" and the newer edit was lost unsent (review of #1701
+ * confirmation, finding 2). Another device's list matches only if it is this same list, and then nothing is lost.
+ */
+export function ownMarkedSave(account: HomeLayoutV2 | null, accountV1: { empty: boolean } | undefined, sent: readonly MarkSent[]): boolean {
+    if (!account?.updatedAt || accountV1) return false;
+    const at = Date.parse(account.updatedAt);
+    let print: string | undefined;
+    return sent.some(s => s.at === account.updatedAt || (!!s.print && at <= Date.parse(s.at) && s.print === (print ??= layoutPrint(account))));
+}
+
+/** `sent` with one more marked edit sent, the latest {@link MARK_SENT_MAX} kept. */
+export function rememberMarkSent(sent: readonly MarkSent[], l: HomeLayoutV2): MarkSent[] {
+    if (!l.updatedAt) return [...sent];
+    return [...sent.filter(s => s.at !== l.updatedAt), { at: l.updatedAt, print: layoutPrint(l) }].slice(-MARK_SENT_MAX);
+}
+
+/** The marked edits sent, as kept: a date alone (an older build's) or with its print; anything else is dropped. */
+export function readMarkSent(raw: unknown): MarkSent[] {
+    if (!Array.isArray(raw)) return [];
+    const out: MarkSent[] = [];
+    for (const x of raw) {
+        if (typeof x === 'string') {
+            if (x.length <= 40) out.push({ at: x });
+        } else if (isObj(x) && typeof x.at === 'string' && x.at.length <= 40) {
+            out.push(typeof x.print === 'string' && /^[0-9a-f]{16}$/.test(x.print) ? { at: x.at, print: x.print } : { at: x.at });
+        }
+    }
+    return out.slice(-MARK_SENT_MAX);
 }
 
 /** Whether `find` is pinned for this member: on the global node, in their first 30 days (or while their join date is unknown). */

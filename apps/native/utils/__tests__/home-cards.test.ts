@@ -19,6 +19,7 @@ import {
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
+    MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList,
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
@@ -974,5 +975,52 @@ describe('the global node\'s Home (H4)', () => {
         // A local community: what's new, as the node sent it, starred first (H2), never by distance.
         expect(marketInOrder(items, [], 'local').map(i => i.id)).toEqual(['far', 'none', 'near', 'mid', 'mid2']);
         expect(marketInOrder(items, ['food'], 'local').map(i => i.id)).toEqual(starredFirst(items, i => i.category, ['food']).map(i => i.id));
+    });
+});
+
+describe('the phone\'s own marked save, read back (review of #1701 confirmation, finding 2; review of #1715, finding 1; the web app\'s home-layout.test.ts)', () => {
+    const sent: HomeLayout = {
+        v: 2, updatedAt: iso(NOW),
+        cards: [{ id: 'beans', type: 'beans' }, { id: 'search-aaaa', type: 'search', settings: { q: 'eggs', kind: 'any' } }],
+        dismissed: { safety: iso(NOW - 2 * H) },
+    };
+    // As the node answers it: its keys in another order, its date held to the node's now.
+    const answered = (at: number): HomeLayout => ({
+        updatedAt: iso(at), dismissed: { safety: iso(NOW - 2 * H) }, v: 2,
+        cards: [{ type: 'beans', id: 'beans' }, { settings: { kind: 'any', q: 'eggs' }, type: 'search', id: 'search-aaaa' }],
+    });
+
+    it('a list prints alike whatever its keys\' order and its date, and differently for another list', () => {
+        expect(layoutPrint(sent)).toMatch(/^[0-9a-f]{16}$/);
+        expect(layoutPrint(answered(NOW - 5_000))).toBe(layoutPrint(sent));
+        expect(sameList(sent, answered(NOW + H))).toBe(true);
+        expect(sameList(sent, { ...sent, cards: [...sent.cards].reverse() })).toBe(false);
+        expect(sameList(sent, { ...sent, dismissed: {} })).toBe(false);
+        expect(sameList(sent, { ...sent, cards: [sent.cards[0], { ...sent.cards[1], settings: { q: 'jam', kind: 'any' } }] })).toBe(false);
+    });
+
+    it('the same list dated as sent or earlier is the phone\'s; dated later, another list, or a version-1 answer is not', () => {
+        const marks = rememberMarkSent([], sent);
+        expect(marks).toEqual([{ at: iso(NOW), print: layoutPrint(sent) }]);
+        expect(ownMarkedSave(answered(NOW), undefined, marks)).toBe(true);
+        expect(ownMarkedSave(answered(NOW - 200), undefined, marks)).toBe(true);
+        expect(ownMarkedSave(answered(NOW - H), undefined, marks)).toBe(true);
+        expect(ownMarkedSave(answered(NOW + 1), undefined, marks)).toBe(false);
+        expect(ownMarkedSave({ ...answered(NOW - 200), dismissed: {} }, undefined, marks)).toBe(false);
+        expect(ownMarkedSave(answered(NOW - 200), { empty: false }, marks)).toBe(false);
+        expect(ownMarkedSave(answered(NOW - 200), undefined, [])).toBe(false);
+    });
+
+    it('an entry an older build kept (a date alone) still loads and matches by its date only; at most the latest eight', () => {
+        const old = readMarkSent([iso(NOW), 7, 'x'.repeat(41), { at: iso(NOW - H), print: 'not-a-print' }, null]);
+        expect(old).toEqual([{ at: iso(NOW) }, { at: iso(NOW - H) }]);
+        expect(ownMarkedSave(answered(NOW), undefined, old)).toBe(true);
+        expect(ownMarkedSave(answered(NOW - 200), undefined, old)).toBe(false);
+        expect(ownMarkedSave(answered(NOW - 200), undefined, readMarkSent(JSON.parse(JSON.stringify(rememberMarkSent(old, sent)))))).toBe(true);
+        let marks = rememberMarkSent([], sent);
+        for (let i = 1; i <= 10; i++) marks = rememberMarkSent(marks, { ...sent, updatedAt: iso(NOW + i) });
+        expect(marks).toHaveLength(MARK_SENT_MAX);
+        expect(marks[0].at).toBe(iso(NOW + 3));
+        expect(readMarkSent('nope')).toEqual([]);
     });
 });

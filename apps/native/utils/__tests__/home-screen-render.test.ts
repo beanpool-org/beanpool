@@ -1622,6 +1622,108 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         return { log, release: () => release() };
     }
 
+    /**
+     * As home-preferences.ts: the node keeps the newer by date, a date ahead of its clock held to its now (`behindMs`: its
+     * clock is that far behind the phone's), and answers what it keeps; the first save's answer waits (`holdFirst`).
+     */
+    function slowClampedSave(behindMs: number, holdFirst = true) {
+        const real = globalThis.fetch;
+        const log: string[] = [];
+        let release = () => {};
+        const gate = new Promise<void>(r => { release = r; });
+        let held = !holdFirst;
+        globalThis.fetch = vi.fn(async (input: any, init: any = {}) => {
+            const res = await real(input, init);
+            if (new URL(String(input)).pathname !== '/api/members/preferences' || init.method !== 'POST' || res.status !== 200) return res;
+            const sent = JSON.parse(init.body).preferences['home.layout'];
+            const nodeNow = Date.now() - behindMs;
+            const l = sent && stampOf(sent) > nodeNow ? { ...sent, updatedAt: new Date(nodeNow).toISOString() } : sent;
+            if (l && stampOf(l) >= stampOf(node.answer.layout)) node.answer = { ...node.answer, layout: l };
+            log.push(`POST ${ids(sent).join(',')}`);
+            if (!held) {
+                held = true;
+                await gate;
+                log.push('answered');
+            }
+            return new Response(JSON.stringify({ success: true, 'home.layout': node.answer.layout }), { status: 200 });
+        }) as any;
+        return { log, release: () => release() };
+    }
+
+    for (const behind of [200, 5_000]) {
+        it(`NX1: X1 with the node's clock ${behind} ms behind the phone's, so the node dates the first save earlier than sent: both edits stand, on the account too (review of #1715, finding 1)`, async () => {
+            emptyV1(iso(Date.now() - 2 * H));
+            const save = slowClampedSave(behind);
+            await render();
+            let before = node.requests.length;
+            await removeVia('events');
+            expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
+            // The second edit's read carries the first save back with the node's date, not the one the phone sent.
+            before = node.requests.length;
+            await removeVia('market');
+            expect(save.log).not.toContain('answered');
+            expect(stampOf(node.answer.layout)).toBeLessThan(Date.parse(JSON.parse(posts()[0].body).preferences['home.layout'].updatedAt));
+            expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
+            expect(sentIds(posts().at(-1)!)).toEqual(LESS_BOTH);
+            save.release();
+            await settle();
+            expect(cards()).not.toContain('market');
+            expect(cards()).not.toContain('events');
+            expect(ids(node.answer.layout)).toEqual(LESS_BOTH);
+            expect(phoneIds()).toEqual(LESS_BOTH);
+            expect(mem.store.has(markKey())).toBe(false);
+            expect(mem.store.has(sentKey())).toBe(false);
+            // And it stays so at the next landing.
+            await act(async () => { nav.focus?.(); });
+            await settle();
+            expect(cards()).not.toContain('market');
+            expect(ids(node.answer.layout)).toEqual(LESS_BOTH);
+        });
+    }
+
+    it('NX1, the edits kept with the mark: the node\'s clock 5 s behind, the app closed before the first save answers and the second edit\'s read failed; opened again, the node\'s copy of the first save is still the phone\'s own, so the newer edit wins and is sent', async () => {
+        emptyV1(iso(Date.now() - 2 * H));
+        slowClampedSave(5_000);
+        await render();
+        await removeVia('events');
+        expect(posts()).toHaveLength(1);
+        node.down = true;
+        await removeVia('market');
+        expect(cards()).not.toContain('market');
+        act(() => root?.unmount());
+        host?.remove();
+        resetHomeStoreForTests();
+        node.down = false;
+        const before = node.requests.length;
+        await render();
+        expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
+        expect(sentIds(posts().at(-1)!)).toEqual(LESS_BOTH);
+        expect(cards()).not.toContain('market');
+        expect(ids(node.answer.layout)).toEqual(LESS_BOTH);
+        expect(mem.store.has(markKey())).toBe(false);
+    });
+
+    it('a date an older build kept with the mark (no print) still loads and still matches the phone\'s own save by its date', async () => {
+        emptyV1(iso(Date.now() - 2 * H));
+        slowFirstSave();
+        await render();
+        await removeVia('events');
+        const first = JSON.parse(posts()[0].body).preferences['home.layout'].updatedAt;
+        node.down = true;
+        await removeVia('market');
+        act(() => root?.unmount());
+        host?.remove();
+        resetHomeStoreForTests();
+        // As the build before the print kept it: the dates alone.
+        mem.store.set(sentKey(), JSON.stringify([first]));
+        node.down = false;
+        const before = node.requests.length;
+        await render();
+        expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
+        expect(sentIds(posts().at(-1)!)).toEqual(LESS_BOTH);
+        expect(ids(node.answer.layout)).toEqual(LESS_BOTH);
+    });
+
     it('X1: Remove Coming up, then Remove the Market before the first save answers, and the second edit\'s read answers first: both stand, on the account too', async () => {
         emptyV1(iso(Date.now() - 2 * H));
         const save = slowFirstSave();
@@ -1660,7 +1762,7 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         await render();
         await removeVia('events');
         expect(posts()).toHaveLength(1);
-        expect(JSON.parse(mem.store.get(sentKey())!)).toEqual([JSON.parse(posts()[0].body).preferences['home.layout'].updatedAt]);
+        expect(JSON.parse(mem.store.get(sentKey())!)).toEqual([{ at: JSON.parse(posts()[0].body).preferences['home.layout'].updatedAt, print: expect.stringMatching(/^[0-9a-f]{16}$/) }]);
         node.down = true;
         await removeVia('market');
         expect(cards()).not.toContain('market');
@@ -1688,7 +1790,7 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         await removeVia('events');
         expect(posts().map(p => p.status)).toEqual([400]);
         expect(mem.store.get(markKey())).toBe(when);
-        expect(JSON.parse(mem.store.get(sentKey())!)).toEqual([JSON.parse(posts()[0].body).preferences['home.layout'].updatedAt]);
+        expect(JSON.parse(mem.store.get(sentKey())!)).toEqual([{ at: JSON.parse(posts()[0].body).preferences['home.layout'].updatedAt, print: expect.stringMatching(/^[0-9a-f]{16}$/) }]);
         await removeVia('market');
         expect(posts()).toHaveLength(1);
         node.refuse = 0;

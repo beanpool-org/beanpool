@@ -1637,7 +1637,9 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
             const res = await real(input, init);
             if (new URL(String(input)).pathname !== '/api/members/preferences' || init.method !== 'POST' || res.status !== 200) return res;
             const sent = JSON.parse(init.body).preferences['home.layout'];
-            const nodeNow = Date.now() - behindMs;
+            // The node's clock is behind by behindMs; a runner that stalls longer than that between the stamp and the POST would
+            // otherwise leave the save un-clamped, and the case would not test the clamp at all.
+            const nodeNow = behindMs ? Math.min(Date.now() - behindMs, stampOf(sent) - 1) : Date.now();
             const l = sent && stampOf(sent) > nodeNow ? { ...sent, updatedAt: new Date(nodeNow).toISOString() } : sent;
             if (l) kept.push(stampOf(l));
             if (l && stampOf(l) >= stampOf(node.answer.layout)) node.answer = { ...node.answer, layout: l };

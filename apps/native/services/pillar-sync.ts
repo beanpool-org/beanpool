@@ -438,6 +438,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // False when a take-over's read changed under it and the rows that changed could not all be read: its rows are
         // written, but nothing is dropped, and the epoch stays as held, so the next cycle replaces again.
         let postsReplaceSafe = true;
+        // The ids the take-over's catch-up read carried and its pull didn't: they count as the node's, never as part of
+        // the pull's answer (utils/posts-replace.ts `sentOnly`).
+        let postsSentOnly: string[] = [];
 
         // Each request gets its own 30s budget (extended for heavy initial payloads), started when
         // THAT request starts. Two controllers armed at the top of the cycle used to be shared by
@@ -481,7 +484,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const writePostsEarly = async (posts: any[]): Promise<boolean> => {
             let done = false;
             try {
-                const wrote = await applyDelta({ posts, ...(takenOver && postsReplaceSafe ? { postsReplace: true } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
+                const wrote = await applyDelta({ posts, ...(takenOver && postsReplaceSafe ? { postsReplace: true, postsSentOnly } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
                 // Not written (the member switched community while this batch waited for the sync lock): the epoch
                 // stays as held, so the next cycle replaces the cache again.
                 postsReplaced = takenOver && postsReplaceSafe && wrote;
@@ -662,8 +665,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     const first = await pullPosts(sinceStart).catch(() => null);
                     const firstRows = first?.ok && epochOf(first) === epochNow ? await rowsOf(first) : null;
                     const changed = firstRows ? await laterPages(sinceStart, nextPageKeyOf(first), 1) : null;
-                    if (firstRows && changed && !changed.stoppedAt) rest.rows.push(...firstRows, ...changed.rows);
-                    else postsReplaceSafe = false;
+                    if (firstRows && changed && !changed.stoppedAt) {
+                        const pulled = new Set([...(Array.isArray(postsData) ? postsData : []), ...rest.rows].map(p => String(p?.id)));
+                        const caughtUp = [...firstRows, ...changed.rows];
+                        postsSentOnly = caughtUp.map(p => String(p?.id)).filter(id => !pulled.has(id));
+                        rest.rows.push(...caughtUp);
+                    } else postsReplaceSafe = false;
                 }
                 if (rest.rows.length > 0) postsData = [...(Array.isArray(postsData) ? postsData : []), ...rest.rows];
                 if (postsData !== undefined || laterWritten > 0) {
@@ -926,7 +933,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // The full-directory GC flag must travel with the members table it describes.
         if (gatedDelta.members && delta.membersComplete) gatedDelta.membersComplete = true;
         // So must the take-over's replace, when the early write above did not land and the posts come in the batch.
-        if (gatedDelta.posts && takenOver && postsReplaceSafe) gatedDelta.postsReplace = true;
+        if (gatedDelta.posts && takenOver && postsReplaceSafe) {
+            gatedDelta.postsReplace = true;
+            gatedDelta.postsSentOnly = postsSentOnly;
+        }
         // Listings the node pushed while this cycle was in flight. Its posts pull may have left before them, and
         // applyDelta writes these after `posts`, so a push is never undone by the older copy this cycle carries.
         // Not a table: never fingerprinted, never a reason to tell the screens something changed.

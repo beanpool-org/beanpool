@@ -52,7 +52,7 @@ vi.mock('../nodes', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
 import { getDb } from '../db';
-import { forgetSyncCursors, performSync, resetSyncFingerprints, syncCursorKeysOf } from '../../services/pillar-sync';
+import { forgetSyncCursors, performSync, POSTS_PAGE_CAP, resetSyncFingerprints, syncCursorKeysOf } from '../../services/pillar-sync';
 
 const ANN = 'a'.repeat(64);
 const KEY = (id: string) => `pillar_sync_beanpool_test.beanpool.org.db_${id}`;
@@ -494,4 +494,40 @@ describe('a whole read written as it comes', () => {
         expect(held()).toHaveLength(450);
         expect(store.get(EPOCH_KEY)).toBe('1');
     });
+});
+
+// A take-over's catch-up read (what changed since the pull began) can carry a photo heal's first page, the node's oldest
+// listings among it. Counted toward the pull's oldest time, they made the replace drop every listing the node still has
+// below a pull the page cap cut short, until the next cycle read them back (review of PR #1719, NB5; R6).
+describe('a capped take-over and its catch-up read', () => {
+    it('R6 old rows on the catch-up read count as the node\'s, never as the pull\'s: nothing it still has is dropped, even for a cycle', async () => {
+        const all = many('all', POSTS_PAGE_CAP * PAGE + 300, Date.parse('2026-06-01T00:00:00.000Z'));
+        node.posts = [...all];
+        await sync(); await sync(); // two cycles: the cap's 50 pages, then the last 2
+        expect(held()).toHaveLength(all.length);
+        node.epoch = '1';
+        let sawWhole = false;
+        (globalThis as any).fetch = async (url: string) => {
+            const r: any = await fetchMock(url);
+            if (!url.includes('/api/marketplace/posts')) return r;
+            const q = new URL(url).searchParams;
+            if (!q.has('updatedAfter')) sawWhole = true;
+            if (sawWhole && q.has('updatedAfter') && q.get('paged') === '1') {
+                // The heal's first page rides on the catch-up: the node's oldest five listings.
+                const rows = JSON.parse(await r.text());
+                const body = JSON.stringify([...rows, ...[...node.posts].sort(order).slice(-5)]);
+                return { ...r, text: async () => body, json: async () => JSON.parse(body) };
+            }
+            return r;
+        };
+        try {
+            await sync();
+            expect(held()).toHaveLength(all.length);
+            expect(store.get(EPOCH_KEY)).toBe('1');
+            await sync();
+            expect(held()).toHaveLength(all.length);
+        } finally {
+            (globalThis as any).fetch = fetchMock;
+        }
+    }, 120_000);
 });

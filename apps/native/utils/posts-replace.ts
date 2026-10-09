@@ -9,8 +9,11 @@
  * changed after that and missing from the answer goes. An older row may just be past the last page read, so it stays,
  * as it would on a fresh install that never had it. A read of more than one page is not one moment of the node: a
  * listing that changed while it paged is past every page, so the phone also reads what changed since the read began
- * and hands it in with `posts` before this rule runs. A row the phone wrote itself has no `updated_at` until a sync brings
- * one, so its `created_at` stands in (`at`).
+ * and hands it in with `posts` before this rule runs, naming those rows `sentOnly`: the node has them, so none goes, but
+ * that read is no part of the pull's answer, so its rows never lower the pull's oldest time nor say whose view it was.
+ * A photo heal's page can ride on it with the node's oldest listings, and counted, they dropped every listing the node
+ * still has below a pull the page cap cut short (review of PR #1719, NB5). A row the phone wrote itself has no
+ * `updated_at` until a sync brings one, so its `created_at` stands in (`at`).
  *
  * It speaks only for the scopes it could carry. The pull is signed on its way out, but only best-effort
  * (node-request-signing.ts), and the node answers a reader it cannot name with the public listings alone (engine
@@ -28,13 +31,19 @@ export interface HeldListing {
     scope: string | null;
 }
 
-/** The ids of the `held` listings that the whole pull `posts` shows the node no longer has. */
-export function postsTheNodeNoLongerHas(posts: any[], held: HeldListing[]): string[] {
+/**
+ * The ids of the `held` listings that the whole pull `posts` shows the node no longer has. `sentOnly`: the ids among
+ * `posts` another read carried, not the pull's answer (above).
+ */
+export function postsTheNodeNoLongerHas(posts: any[], held: HeldListing[], sentOnly: ReadonlySet<string> = new Set()): string[] {
     const sent = new Set<string>();
     let oldest: string | null = null;
     let membersView = false;
+    let answered = 0;
     for (const p of posts) {
         if (p?.id) sent.add(String(p.id));
+        if (p?.id && sentOnly.has(String(p.id))) continue;
+        answered++;
         // Only a time that reads as one: an empty or malformed one (`''`, `'0'`) would sort before every row held.
         const at = p?.updatedAt || p?.updated_at || p?.createdAt || p?.created_at;
         const isTime = typeof at === 'string' && /^\d{4}-\d{2}-\d{2}/.test(at) && Number.isFinite(Date.parse(at));
@@ -43,7 +52,7 @@ export function postsTheNodeNoLongerHas(posts: any[], held: HeldListing[]): stri
         if ((p?.audienceScope || p?.audience_scope || 'public') !== 'public') membersView = true;
     }
     // An answer with listings and no times speaks for nothing it left out.
-    if (posts.length > 0 && oldest === null) return [];
+    if (answered > 0 && oldest === null) return [];
     return held
         .filter(r => membersView || r.scope === null || r.scope === 'public')
         .filter(r => !sent.has(r.id) && (oldest === null || (r.at !== null && r.at > oldest)))

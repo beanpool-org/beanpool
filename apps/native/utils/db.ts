@@ -2919,9 +2919,9 @@ async function dropListingsOfARefusedCommunity(txn: SQLite.SQLiteDatabase, selfP
  * After a take-over, the listings the whole pull `posts` shows the node no longer has go (utils/posts-replace.ts says
  * which: its rule, and why).
  */
-async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: any[]): Promise<void> {
+async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: any[], sentOnly: unknown): Promise<void> {
     const held = await txn.getAllAsync<HeldListing>('SELECT id, COALESCE(updated_at, created_at) AS at, audience_scope AS scope FROM posts');
-    const gone = postsTheNodeNoLongerHas(posts, held);
+    const gone = postsTheNodeNoLongerHas(posts, held, new Set(Array.isArray(sentOnly) ? sentOnly.map(String) : []));
     for (let i = 0; i < gone.length; i += 500) {
         const batch = gone.slice(i, i + 500);
         await txn.runAsync(`DELETE FROM posts WHERE id IN (${batch.map(() => '?').join(',')})`, batch);
@@ -3092,7 +3092,8 @@ export async function applyDelta(delta: any, expectedDbName?: string): Promise<b
             }
             // After a take-over, the whole pull replaces what the phone holds (services/pillar-sync.ts). Before the
             // pushed changes below: a push that landed during this cycle is newer than the pull, not left over.
-            if (delta.postsReplace === true) await dropPostsTheNodeNoLongerHas(txn, delta.posts);
+            // `postsSentOnly`: the ids among them that the take-over's catch-up read carried, not the pull (posts-replace.ts).
+            if (delta.postsReplace === true) await dropPostsTheNodeNoLongerHas(txn, delta.posts, delta.postsSentOnly);
         }
 
         // The community refused this phone its listings (a local community's are its members', utils/members-only-listings.ts):

@@ -25,6 +25,7 @@ function own(map: Record<string, string[]>, w: string): string[] | undefined {
 // where they throw (member-guide.ts SEPARATORS, the same ranges). Spaces are made plain first so they still part words,
 // and the zero-width joiners (U+200C, U+200D) stay inside the words that use them (Persian, emoji). Control characters go
 // too: a NUL reaching FTS5 breaks the read (#1716 confirmation, finding 2).
+// eslint-disable-next-line no-control-regex -- removing control characters is the point
 const PUNCTUATION = /[\u0000-\u001f\u007f-\u009f!-/:-@[-`{-~\u00a0-\u00bf\u2000-\u200b\u200e-\u206f\u3000-\u303f]/g;
 
 /** Expand a search query using synonyms: "fruit" → ["fruit", "lemon", "lime", ...] */
@@ -64,5 +65,6 @@ export function expandSearchTerms(query: string): string[] {
 export function searchTermsFor(query: string): string[] {
     const terms = expandSearchTerms(query);
     // Quotes go as the engine strips them, and control characters as above: what is left is what FTS5 can be asked.
+    // eslint-disable-next-line no-control-regex -- removing control characters is the point
     return terms.length ? terms : query.toLowerCase().replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/["']/g, '').split(/\s+/).filter(Boolean);
 }

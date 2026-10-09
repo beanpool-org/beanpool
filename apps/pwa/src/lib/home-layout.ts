@@ -40,7 +40,7 @@ const FIXED: ReadonlySet<string> = new Set([FIXED_FIRST, FIXED_LAST]);
  */
 export const HOME_DRAWN: ReadonlySet<string> = new Set([
     'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'search', 'decide', 'groups',
-    'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
+    'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'community',
 ]);
 
 /** Find your community is pinned for a member's first 30 days on the global node, then it can be removed (§4.1, §7). */

@@ -17,7 +17,7 @@
  * browser (lib/home-cache.ts); the last write wins by `updatedAt`.
  */
 
-import { readSearchSettings } from '@beanpool/core';
+import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 
 /** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
@@ -118,7 +118,8 @@ export interface HomeCards {
     pulse?: { items: { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null }[] };
     beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
-    community?: { name: string | null; members: number; tradesThisMonth?: number; communities?: number };
+    /** `place`: the community's own, to two decimals (a member's answer on a local community that has one). */
+    community?: { name: string | null; members: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number } };
 }
 
 export interface HomeFeatures {
@@ -169,7 +170,7 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
         return HOME_CARD_IDS.filter(id => VISITOR_CARDS.includes(id) && !!answer.cards[id as keyof HomeCards]).map(id => ({ id, type: id }));
     }
     const me = answer.me;
-    const has = (type: string): boolean => {
+    const has = ({ type, settings }: HomeCardInstance): boolean => {
         switch (type) {
             case 'interests': {
                 if (me.standing !== 'member') return false;
@@ -184,11 +185,14 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
                 return !!opts.tipsUp;
             case 'search':
                 return true;
+            // Worked out in this browser; drawn only where a place is known (CARD-FRAME §4).
+            case 'sky':
+                return skyOf(answer, { settings }, now) !== null;
             default:
                 return !!answer.cards[type as keyof HomeCards];
         }
     };
-    const shown = cardOrder(layout, pinnedCards(answer, now)).filter(c => cardOnNode(c.type, frameOf(answer)) && has(c.type));
+    const shown = cardOrder(layout, pinnedCards(answer, now)).filter(c => cardOnNode(c.type, frameOf(answer)) && has(c));
     if (opts.interestsOpen && me.standing === 'member' && !shown.some(c => c.type === 'interests')) {
         const market = shown.findIndex(c => c.type === 'market');
         shown.splice(market >= 0 ? market + 1 : shown.length - 1, 0, { id: 'interests', type: 'interests' });
@@ -449,4 +453,20 @@ export function searchCardFor(answer: HomeAnswer | null | undefined, inst: Pick<
     if (card.q !== s.q || card.kind !== s.kind || card.category !== (s.category ?? null)) return null;
     if (card.km !== null && card.km !== (s.km ?? null)) return null;
     return card;
+}
+
+// ── Sun and moon ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** Edit home's line for a sun and moon card with no place to work from. */
+export const SKY_NO_PLACE_LINE = 'Nothing to show now: no place is known.';
+
+/**
+ * The sun and moon card's words (@beanpool/core sky.ts), worked out in this browser with no request: from the
+ * community's place in the answer, else the member's area; `place: 'me'` puts the member's first. The browser's own
+ * location is never read for it (the phone uses its last known place only where it already has one). Null: no place is
+ * known, and the card isn't drawn. Times are this browser's own clock.
+ */
+export function skyOf(answer: Pick<HomeAnswer, 'me' | 'cards'>, inst: Pick<HomeCardInstance, 'settings'>, now: number = Date.now()): SkyToday | null {
+    const place = skyPlaceFor(readSkySettings(inst.settings), { community: answer.cards.community?.place, member: answer.me?.area });
+    return place ? skyToday(place, now) : null;
 }

@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_IDS, beansLines, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, searchCardFor, shownFrame,
+    HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -241,5 +241,28 @@ describe("a saved search's body (slice F4): only the node's answer for the words
         expect(searchCardFor(withCard({ ...body, km: null }), { ...inst, settings: { q: 'eggs', kind: 'any', km: 25 } })).toEqual({ ...body, km: null });
         const tools = { ...body, kind: 'need', category: 'tools', km: 10 };
         expect(searchCardFor(withCard(tools), { ...inst, settings: { q: 'eggs', kind: 'need', category: 'tools', km: 10 } })).toEqual(tools);
+    });
+});
+
+describe('sun and moon (CARD-FRAME §4, §5.2 item 22): worked out here, from the place the answer holds', () => {
+    const MULLUM = { lat: -28.55, lng: 153.5 };
+    const AREA = { lat: -37.07, lng: 144.22 };
+    const withSky = (settings?: Record<string, unknown>): HomeLayoutV2 => ({ v: 2, cards: [{ id: 'sky', type: 'sky', ...(settings ? { settings } : {}) }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: null });
+    const placed = (c: typeof MULLUM | null, area: typeof MULLUM | null) => answer({ market, community: { ...community, ...(c ? { place: c } : {}) } }, { me: me({ area }) });
+
+    it("the community's place, else the member's area; 'me' puts the member's first; the browser's own location never", () => {
+        expect(skyOf(placed(MULLUM, AREA), {}, NOW)!.place).toEqual(MULLUM);
+        expect(skyOf(placed(null, AREA), {}, NOW)!.place).toEqual(AREA);
+        expect(skyOf(placed(MULLUM, AREA), { settings: { place: 'me' } }, NOW)!.place).toEqual(AREA);
+        expect(skyOf(placed(MULLUM, null), { settings: { place: 'me' } }, NOW)!.place).toEqual(MULLUM);
+        expect(skyOf(placed(null, null), {}, NOW)).toBeNull();
+        expect(SKY_NO_PLACE_LINE).toBe('Nothing to show now: no place is known.');
+    });
+
+    it('is drawn only where a place is known, and is never asked of the node', () => {
+        expect(shown(placed(MULLUM, null), { now: NOW }, withSky())).toEqual(['sky', 'market', 'community']);
+        expect(shown(placed(null, AREA), { now: NOW }, withSky())).toContain('sky');
+        expect(shown(placed(null, null), { now: NOW }, withSky())).not.toContain('sky');
+        expect(cardsToAsk(withSky(), [], { profile: 'local', features: LOCAL_FEATURES as never, cards: {} })).not.toContain('sky');
     });
 });

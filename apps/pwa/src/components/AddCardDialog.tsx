@@ -13,7 +13,7 @@
  * control is at least 44 px.
  */
 import { useRef, useState, type ReactNode } from 'react';
-import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, type HomeSearchKind } from '@beanpool/core';
+import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, readSkySettings, type HomeSearchKind, type SkySettings } from '@beanpool/core';
 import { type PickerGroup, type PickerRow } from '../lib/home-layout';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { useDialogFocus } from './dialog-focus';
@@ -134,6 +134,11 @@ export const SEARCH_KIND_CHIPS: ReadonlyArray<{ kind: HomeSearchKind; label: str
     { kind: 'any', label: 'Both' }, { kind: 'offer', label: 'Offers' }, { kind: 'need', label: 'Needs' },
 ];
 
+/** Whose place the sun and moon card shows, as its sheet offers it (CARD-FRAME §4). */
+export const SKY_PLACE_CHIPS: ReadonlyArray<{ place: SkySettings['place']; label: string }> = [
+    { place: 'community', label: 'Your community' }, { place: 'me', label: 'Your area' },
+];
+
 const chip = (on: boolean) => `min-w-[44px] min-h-[44px] px-3 rounded-full border text-sm font-semibold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
     on ? 'bg-emerald-700 border-emerald-700 text-white' : 'bg-transparent border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-100'}`;
 
@@ -155,8 +160,8 @@ function Chips<T>({ legend, testId, options, value, onPick }: {
 }
 
 /**
- * A card's settings. Today only the saved search has any (CARD-FRAME §4): its words, then Offers or Needs or both, a
- * category, and a distance. The distance chips show only where the node has a point to measure from (the member's area,
+ * A card's settings (CARD-FRAME §4). Sun and moon asks one thing: whose place, the community's or the member's own. The
+ * saved search asks its words, then Offers or Needs or both, a category, and a distance. The distance chips show only where the node has a point to measure from (the member's area,
  * or the place this browser shared); without one the node ignores the distance, so the sheet doesn't offer it, and a
  * distance already kept stays as it was.
  */
@@ -168,7 +173,21 @@ export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false
     const [kind, setKind] = useState<HomeSearchKind>(start.kind);
     const [category, setCategory] = useState<string>(start.category ?? '');
     const [km, setKm] = useState<number | null>(start.km ?? null);
+    const [place, setPlace] = useState<SkySettings['place']>(() => readSkySettings(initial).place);
     const words = q.trim();
+    if (type === 'sky') {
+        return (
+            <Shell id="home-settings-title" testId="home-settings-dialog" title={name} onClose={onClose} dialog={dialog}>
+                <form onSubmit={(e) => { e.preventDefault(); onSubmit({ place }); }}>
+                    <Chips legend="Whose place" testId="home-settings-place" value={place} onPick={setPlace}
+                        options={SKY_PLACE_CHIPS.map((p) => ({ value: p.place, label: p.label }))} />
+                    <button type="submit" data-testid="home-settings-submit" className={`mt-4 w-full ${primary}`}>
+                        {mode === 'add' ? 'Add to Home' : 'Save'}
+                    </button>
+                </form>
+            </Shell>
+        );
+    }
     if (type !== 'search') return null;
     const submit = () => onSubmit({ q: words, kind, ...(category ? { category } : {}), ...(km ? { km } : {}) });
     return (

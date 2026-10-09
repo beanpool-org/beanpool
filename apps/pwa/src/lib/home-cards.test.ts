@@ -230,4 +230,16 @@ describe("a saved search's body (slice F4): only the node's answer for the words
     it('an absent km is none, an absent more is false', () => {
         expect(searchCardFor(withCard({ q: 'eggs', items: [] }), inst)).toEqual({ q: 'eggs', kind: 'any', category: null, km: null, items: [], more: false });
     });
+
+    it('a kept answer for another kind, category or distance is no body; km null (the node had no point) still answers (review of #1716, finding 2)', () => {
+        expect(searchCardFor(withCard({ ...body, kind: 'offer' }), inst)).toBeNull();
+        expect(searchCardFor(withCard({ ...body, category: 'food' }), inst)).toBeNull();
+        expect(searchCardFor(withCard({ ...body, km: 25 }), inst)).toBeNull();
+        expect(searchCardFor(withCard(body), { ...inst, settings: { q: 'eggs', kind: 'need', km: 5 } })).toBeNull();
+        expect(searchCardFor(withCard(body), { ...inst, settings: { q: 'eggs', kind: 'any', category: 'tools', km: 5 } })).toBeNull();
+        expect(searchCardFor(withCard(body), { ...inst, settings: { q: 'eggs', kind: 'any' } })).toBeNull();
+        expect(searchCardFor(withCard({ ...body, km: null }), { ...inst, settings: { q: 'eggs', kind: 'any', km: 25 } })).toEqual({ ...body, km: null });
+        const tools = { ...body, kind: 'need', category: 'tools', km: 10 };
+        expect(searchCardFor(withCard(tools), { ...inst, settings: { q: 'eggs', kind: 'need', category: 'tools', km: 10 } })).toEqual(tools);
+    });
 });

@@ -1670,6 +1670,18 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         expect(card).not.toHaveTextContent('coming app update');
     });
 
+    it('a kept answer for another kind is no answer after Settings… changes it: no old rows (review of #1716, finding 2)', async () => {
+        nodeKeeping(withBody({ q: 'eggs', kind: 'offer', category: null, km: 5, more: false, items: [row('p2', 'Fresh eggs', 'offer', 0.5)] }), layout());
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-search-k7mq');
+        // The node has answered (with the kept Offers rows), not merely not yet.
+        await waitFor(() => expect(api.getHome).toHaveBeenCalled());
+        await pause();
+        await waitFor(() => expect(within(card).getByTestId('home-search-offline')).toHaveTextContent('Shows when your community answers'));
+        expect(within(card).queryAllByTestId('home-search-item')).toHaveLength(0);
+        expect(card).not.toHaveTextContent('Fresh eggs');
+    });
+
     it('Edit home names the row by its words, so two searches are two rows', async () => {
         nodeKeeping(answer(), v2(['market'], AT, [
             { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } },

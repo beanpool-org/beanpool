@@ -2303,6 +2303,15 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         expect(card.querySelector('[data-testid="home-search-offline"]')!.textContent).toBe('Shows when your community answers');
         expect(card.textContent).not.toContain('Rye loaf');
     });
+
+    it('a kept answer for another kind is no answer after Settings… changes it: no old rows (review of #1716, finding 2)', async () => {
+        withSearch({ q: 'eggs', kind: 'offer', category: null, km: 5, more: false, items: [row('p2', 'Fresh eggs', 'offer', 0.5)] });
+        await render();
+        const card = document.querySelector('[data-testid="home-card-search-k2x7"]')!;
+        expect(card.querySelector('[data-testid="home-search-offline"]')!.textContent).toBe('Shows when your community answers');
+        expect(card.querySelectorAll('[data-testid^="home-search-row-"]').length).toBe(0);
+        expect(card.textContent).not.toContain('Fresh eggs');
+    });
 });
 
 describe('the frame on screen: the fewer-cards line, the standby tie, a newer app\'s card, Settings… (CARD-FRAME §1.3, §2.6; review of #1697)', () => {

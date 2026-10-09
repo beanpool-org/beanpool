@@ -436,13 +436,17 @@ export function distanceText(km: number | null | undefined): string | null {
 }
 
 /**
- * The node's body for this saved search, when it answers the words the card holds now. A kept answer from before a
- * change of words is no answer for the new ones (the card says it shows when the community answers), and an odd body
- * is none.
+ * The node's body for this saved search, when it answers the search the card holds now: its words, kind and category,
+ * and its distance where the node used one (with no point it answers km null whatever is kept). A kept answer from
+ * before a change in Settings… is no answer for the new search (the card says it shows when the community answers),
+ * and an odd body is none.
  */
 export function searchCardFor(answer: HomeAnswer | null | undefined, inst: Pick<HomeCardInstance, 'id' | 'settings'>): HomeSearchCard | null {
     const raw = (answer?.cards as Record<string, unknown> | undefined)?.[inst.id] as Partial<HomeSearchCard> | undefined;
     if (!raw || typeof raw !== 'object' || typeof raw.q !== 'string' || !Array.isArray(raw.items)) return null;
-    if (raw.q !== readSearchSettings(inst.settings).q) return null;
-    return { q: raw.q, kind: raw.kind ?? 'any', category: raw.category ?? null, km: typeof raw.km === 'number' ? raw.km : null, items: raw.items, more: raw.more === true };
+    const s = readSearchSettings(inst.settings);
+    const card: HomeSearchCard = { q: raw.q, kind: raw.kind ?? 'any', category: raw.category ?? null, km: typeof raw.km === 'number' ? raw.km : null, items: raw.items, more: raw.more === true };
+    if (card.q !== s.q || card.kind !== s.kind || card.category !== (s.category ?? null)) return null;
+    if (card.km !== null && card.km !== (s.km ?? null)) return null;
+    return card;
 }

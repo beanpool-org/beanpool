@@ -23,6 +23,7 @@ On the phone and in the web app, your Home is a list of cards you choose. A new 
 - **Add a card**, on your community's card at the bottom of Home, opens a list of every card your community can show, in three groups: **For you**, **Around you** and **Getting started**. Tap **Add** beside a card to put it on Home. It goes to the top, just under **Needs you**, and Home scrolls up to show it.
 - A card that is already on Home says **On Home** instead of **Add**. Some cards can be added more than once, such as **A saved search**: they say how many you have, such as "2 of 5 on Home".
 - **A saved search** asks for the words to look for before it is added, such as "eggs". You can also choose **Offers**, **Needs** or **Both**, a category, and how far to look: 1, 2, 5, 10 or 25 km. The distance is offered only where your community knows your area, or where you have shared your place; without one, the search looks everywhere.
+- **Sun and moon** asks whose place to use before it is added: **Your community** (the usual choice) or **Your area**.
 - A Home holds at most 24 cards. When it is full, the list says so, and you remove a card to add another.
 - Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Edit home** says "Your community's server needs an update before your cards follow you to other devices." They are sent again each time you open Home.
 - If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you start with the five, and Home tells you once: "Home now starts with fewer cards. Add a card brings the rest back."
@@ -47,6 +48,7 @@ Home shows only the cards that have something to tell you, in this order from to
 - **Your groups:** your groups and chats, with unread message counts.
 - **Who joined:** people who joined this week. On a local community it shows names and faces. On the global community it shows only a count, by area, and no names.
 - **The Pulse:** posts shared by neighbours from external channels like YouTube and blogs, with starred categories first. Tap **See all** to open the Pulse.
+- **Sun and moon:** tonight's moon and today's sunrise and sunset, in one line, such as "🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48". Your phone or browser works it out by itself: the card asks nothing of your community's server. It uses your community's place, rounded to about a kilometre, or your area where your community has no place (on the global community it is always your area). On the global community, the phone can also use where it last was, but only if you have already let the app use your location: it never asks. To use your area even where your community has a place, tap **…** then **Settings…** and choose **Your area**. The times are on your own phone's or computer's clock, so when you travel you see them in your own time. The moon is drawn as it looks from that side of the equator. Where the sun doesn't rise or set today, it says so, such as "Sun up all day" or "No sunset today". If no place is known, the card doesn't show, and **Edit home** says "Nothing to show now: no place is known." A screen reader reads it in words, such as "Moon waxing gibbous, 72 percent lit. Sunrise 6:12 am. Sunset 5:48 pm."
 - **Your Beans:** your balance and credit line (room to spend). Not on the global community.
 - **From your community:** announcements and notices from your community's admins.
 - **Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin.
@@ -61,7 +63,7 @@ Most cards have a **…** button at the top right. These do not:
 
 Tap **…** to:
 
-- **Settings…:** only on a card that has settings, such as **A saved search**. It changes the card where it stands.
+- **Settings…:** only on a card that has settings, such as **A saved search** or **Sun and moon**. It changes the card where it stands.
 - **Move up:** swaps the card with the card above it.
 - **Move down:** swaps the card with the card below it.
 - **Remove:** takes the card off Home, with its settings. **Add a card** puts it back. Nothing asks you to confirm. Removing **Tips** is the same as **Don't show tips again**.
@@ -76,7 +78,7 @@ At the bottom of Home, on your community's card, tap **Edit home**.
 
 - **＋ Add a card** comes first. It opens the same list as **Add a card** on Home.
 - Then come the cards on your Home, in your order. Each has up and down arrows and its own **…** (Settings…, Move up, Move down, Remove). A saved search is listed by its words, and by **Offers** or **Needs** when it looks for only one, such as "eggs" or "Needs · eggs", so two searches are two different rows.
-- A card with nothing to show right now says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip.
+- A card with nothing to show right now says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip, and **Sun and moon** says **Nothing to show now: no place is known.** while there is no place to work from.
 - Tap **Reset to defaults** to go back to the five cards a new member starts with.
 - There are no switches and no hidden list: a card you removed is in **Add a card**.
 - Only the cards your community can show are listed, on the phone and in the web app. For example, there is no **Your Beans** or **Your deals** on the global community.

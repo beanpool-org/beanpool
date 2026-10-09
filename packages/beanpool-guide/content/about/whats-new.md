@@ -8,6 +8,7 @@ related: home, the-bean, how-it-works, rules, faq
 ## Home
 
 - **A new Home tab.** The app now opens on Home: a dashboard answering what needs you, what is new around you, and what you could do next. The Market is now its own tab, and the Pulse is a card on Home. You choose your cards: on the phone, **Add a card** puts one on Home and each card's **…** moves or removes it; in the web app, **Edit home** shows, hides and orders them.
+- **A saved search on Home.** Choose words such as "eggs", and whether you want offers, needs or both, a category and a distance. The card shows the first four listings that match, the same ones the Market's search finds, and **See more** opens the Market with your words in its search. It needs an up-to-date app and your community's server to be updated.
 
 ## Privacy by default
 

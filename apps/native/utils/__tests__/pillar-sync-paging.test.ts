@@ -52,7 +52,7 @@ vi.mock('../nodes', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
 import { getDb } from '../db';
-import { forgetSyncCursors, getLastSyncTime, performSync, POSTS_PAGE_CAP, resetSyncFingerprints, syncCursorKeysOf } from '../../services/pillar-sync';
+import { forgetSyncCursors, getLastSyncTime, performSync, POSTS_HELD_TRIES, POSTS_PAGE_CAP, resetSyncFingerprints, syncCursorKeysOf } from '../../services/pillar-sync';
 
 const ANN = 'a'.repeat(64);
 const KEY = (id: string) => `pillar_sync_beanpool_test.beanpool.org.db_${id}`;
@@ -576,5 +576,42 @@ describe('the last synced time shown', () => {
         await sync();
         expect(store.get(LAST_SYNC_KEY)).toBe(cursor);
         expect((await getLastSyncTime())!).toBeGreaterThanOrEqual(before304);
+    });
+});
+
+// A page that fails every time it is asked for (one bad row deep in the order) held the read at its key for good: the
+// phone never asked for page 1 again, so no new listing came (review of PR #1719, NB7). After POSTS_HELD_TRIES cycles
+// that asked the node for the held page and got no further, the read starts again from its first page.
+describe('a held page that never comes', () => {
+    it(`after ${POSTS_HELD_TRIES} cycles at one key the read starts again from page 1, new listings come, and it repeats only after as many more`, async () => {
+        node.posts = many('all', 450, Date.parse('2026-09-01T00:00:00.000Z'));
+        // all-00100 is on the second page, whatever comes above it: any page that carries it fails.
+        (globalThis as any).fetch = async (url: string) => {
+            const r: any = await fetchMock(url);
+            if (!url.includes('/api/marketplace/posts') || r.status !== 200) return r;
+            const body = await r.text();
+            return body.includes('"all-00100"') ? answer(500, '{"error":"a bad row"}') : { ...r, text: async () => body, json: async () => JSON.parse(body) };
+        };
+        const firstAsks = () => (new URL(postsReads()[0]).searchParams.has('pageAfter') ? 'held' : 'page 1');
+        try {
+            await sync();
+            expect(held()).toHaveLength(PAGE);
+            const asked: string[] = [];
+            for (let i = 0; i < POSTS_HELD_TRIES; i++) {
+                await sync(false);
+                asked.push(firstAsks());
+            }
+            expect(asked).toEqual(Array(POSTS_HELD_TRIES).fill('held'));
+            expect(JSON.parse(store.get(HELD_KEY)!).tries).toBe(POSTS_HELD_TRIES);
+            node.posts.push(listing('new-one', 'Made while the read was stuck', new Date(Date.now()).toISOString()));
+            await sync();
+            expect(firstAsks()).toBe('page 1');
+            expect(heldTitles().get('new-one')).toBe('Made while the read was stuck');
+            expect(JSON.parse(store.get(HELD_KEY)!).tries).toBe(0);
+            await sync(false);
+            expect(firstAsks()).toBe('held');
+        } finally {
+            (globalThis as any).fetch = fetchMock;
+        }
     });
 });

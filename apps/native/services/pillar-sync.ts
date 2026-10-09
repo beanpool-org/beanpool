@@ -37,17 +37,29 @@ export const POSTS_PAGE_CAP = 50;
 /** Where a posts read cut short is held (HeldPostsRead), one per community's copy (getSyncCursorKey). */
 const POSTS_HELD_READ = 'posts_held_read';
 
-/** A posts read cut short: the cursor it reads from ('' a whole read), the key of its next page, and when it began. */
+/**
+ * How many cycles in a row may ask the node for a held read's page and get no further (it fails, isn't a list, or is a
+ * 304 each time: one bad row deep in the order). The next one logs it and starts the read again from its first page,
+ * so new listings still come; held again at that page, it starts over again after as many more (review of PR #1719, NB7).
+ */
+export const POSTS_HELD_TRIES = 5;
+
+/**
+ * A posts read cut short: the cursor it reads from ('' a whole read), the key of its next page, when it began, and how
+ * many cycles have asked the node for that page since (POSTS_HELD_TRIES).
+ */
 interface HeldPostsRead {
     since: string;
     after: string;
     startedAt: number;
+    tries: number;
 }
 
 function heldPostsRead(raw: string | null): HeldPostsRead | null {
     try {
         const h = raw ? JSON.parse(raw) : null;
-        return h && typeof h.since === 'string' && typeof h.after === 'string' && h.after !== '' && Number.isFinite(h.startedAt) ? h : null;
+        return h && typeof h.since === 'string' && typeof h.after === 'string' && h.after !== '' && Number.isFinite(h.startedAt)
+            ? { since: h.since, after: h.after, startedAt: h.startedAt, tries: Number.isFinite(h.tries) ? h.tries : 0 } : null;
     } catch {
         return null;
     }
@@ -426,6 +438,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // does a held delta with no cursor to be a delta of. The stored hold goes with it, so no later cycle resumes it
         // (and moves the cursor back to when it began).
         if (postsHeld && (localPostsCount === 0 || (postsHeld.since !== '' && !postsIsIncremental))) postsHeld = null;
+        if (postsHeld && postsHeld.tries >= POSTS_HELD_TRIES) {
+            console.warn(`[Pillar Sync] The posts read has been held at one page for ${postsHeld.tries} syncs; reading it again from its first page.`);
+            postsHeld = null;
+        }
         if (postsHeldRaw !== null && !postsHeld) await AsyncStorage.removeItem(kPostsHeld);
         if (postsHeld) postsIsIncremental = postsHeld.since !== '';
         let postsSyncParam = postsHeld
@@ -545,6 +561,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 return { rows, stoppedAt: null as string | null, pages };
             };
             let postsRes = await pullPosts(postsSyncParam, postsHeld?.after ?? null);
+            // The node answered the held page (whatever it said): one more cycle that asked for it. Stored now, so a cycle
+            // the answer ends counts too.
+            if (postsHeld) {
+                postsHeld = { ...postsHeld, tries: postsHeld.tries + 1 };
+                await AsyncStorage.setItem(kPostsHeld, JSON.stringify(postsHeld));
+            }
             epochNow = epochOf(postsRes);
             epochHeld = epochNow === null ? null : await AsyncStorage.getItem(kEpoch);
             takenOver = epochNow !== null && epochHeld !== null && epochHeld !== epochNow;
@@ -658,7 +680,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                         DeviceEventEmitter.emit('sync_data_updated');
                     } catch (e) {}
                 }
-                if (rest.stoppedAt) postsHoldAt = { since: postsSinceIso, after: rest.stoppedAt, startedAt: postsReadStartedAt };
+                if (rest.stoppedAt) postsHoldAt = { since: postsSinceIso, after: rest.stoppedAt, startedAt: postsReadStartedAt, tries: 0 };
                 // A take-over's whole read in more than one page is no longer one moment of the node: a listing that
                 // changed while it paged moved above every key and isn't in it, and the replace would drop it. So the
                 // listings changed since it began are read too, and written after it.

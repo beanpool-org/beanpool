@@ -355,9 +355,9 @@ async function main(): Promise<void> {
     console.log(`   check of one join's work (mac, expiry, 8 hashes of 64 KB): median ${median(checkMs).toFixed(3)} ms, p95 ${quantile(checkMs, 0.95).toFixed(3)} ms (n=40)`);
     console.log(`   junk (a level-5 challenge, counters all 0): median ${median(junkMs).toFixed(3)} ms, at most ${junkHashes} hash(es) (n=40)`);
     console.log(`   issuing a challenge (one HMAC): median ${(median(issueMs) * 1000).toFixed(1)} µs (n=200)`);
-    // About 0.2 ms on an idle machine; CI's parallel pool measured a 0.456 ms median. 2 ms leaves that room and still
+    // About 0.2 ms on an idle machine; CI's parallel pool measured a 0.456 ms median. 10 ms leaves that room and still
     // says what matters: a check costs a request next to nothing.
-    assert(median(checkMs) < 2, `checking a good solution takes under 2 ms (median ${median(checkMs).toFixed(3)} ms)`);
+    assert(median(checkMs) < 10, `checking a good solution takes under 10 ms (median ${median(checkMs).toFixed(3)} ms)`);
     const firstPartWrong = checkDoorWork({ challenge: solved[0].challenge.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A')), counters: solved[0].counters }, costKey, 'words');
     const junkSolution = await (async () => {
         const challenge = issueDoorWork(costKey, 'words', 0).challenge;

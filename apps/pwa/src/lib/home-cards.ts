@@ -17,8 +17,10 @@
  * browser (lib/home-cache.ts); the last write wins by `updatedAt`.
  */
 
-/** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
+import { readSearchSettings } from '@beanpool/core';
 import { cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
+
+/** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
 export const HOME_CARD_IDS = [
     'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups',
     'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
@@ -97,6 +99,8 @@ export interface HomeFind {
 }
 
 export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null }
+/** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
+export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
 export interface HomeEventItem { id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null }
 
 export interface HomeCards {
@@ -429,4 +433,20 @@ export function probationSentence(p: HomeProbation | null | undefined): string |
 export function distanceText(km: number | null | undefined): string | null {
     if (km === null || km === undefined || !Number.isFinite(km)) return null;
     return km < 1 ? 'under 1 km' : `${Math.round(km).toLocaleString('en')} km`;
+}
+
+/**
+ * The node's body for this saved search, when it answers the search the card holds now: its words, kind and category,
+ * and its distance where the node used one (with no point it answers km null whatever is kept). A kept answer from
+ * before a change in Settings… is no answer for the new search (the card says it shows when the community answers),
+ * and an odd body is none.
+ */
+export function searchCardFor(answer: HomeAnswer | null | undefined, inst: Pick<HomeCardInstance, 'id' | 'settings'>): HomeSearchCard | null {
+    const raw = (answer?.cards as Record<string, unknown> | undefined)?.[inst.id] as Partial<HomeSearchCard> | undefined;
+    if (!raw || typeof raw !== 'object' || typeof raw.q !== 'string' || !Array.isArray(raw.items)) return null;
+    const s = readSearchSettings(inst.settings);
+    const card: HomeSearchCard = { q: raw.q, kind: raw.kind ?? 'any', category: raw.category ?? null, km: typeof raw.km === 'number' ? raw.km : null, items: raw.items, more: raw.more === true };
+    if (card.q !== s.q || card.kind !== s.kind || card.category !== (s.category ?? null)) return null;
+    if (card.km !== null && card.km !== (s.km ?? null)) return null;
+    return card;
 }

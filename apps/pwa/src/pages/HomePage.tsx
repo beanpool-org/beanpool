@@ -29,19 +29,19 @@ import {
     TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
-    homeCardType,
+    homeCardType, readSearchSettings,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
 import {
     NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, dayLabel, dealsLine,
     decideLine, distanceText, findBody, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, starredFirst,
-    stepLines, toggleInterest,
-    type HomeAnswer, type HomeCardId, type NeedsItem, type StepLine,
+    searchCardFor, stepLines, toggleInterest,
+    type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
 import {
-    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_HINT_LINE, SEARCH_WAITING_LINE, addCard, addedLine, askPinned, canMoveCard,
-    canRemoveCard, cardLabelName, cardName, cardOnNode, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
+    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
+    canRemoveCard, cardLabelName, cardName, cardOnNode, cardRowName, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
     listOf, moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
 } from '../lib/home-layout';
@@ -862,6 +862,28 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         return <HomeLine key={i} onClick={go} label={item.accent ? `${words}. Waiting on you.` : words} testId={`home-needs-${item.kind}`}>{body}</HomeLine>;
     }
 
+    /** One listing as the Market card draws it (photo, Offer or Need, title, price, distance); opens the listing. */
+    function marketLine(item: HomeMarketItem, testId: string): ReactNode {
+        const photo = resolveImageUrl(item.photoUrl);
+        const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
+        const price = !beansOn ? (isVisitor ? NO_BEANS_TERMS_TEXT : null)
+            : typeof item.credits === 'number' ? (item.credits > 0 ? `${item.credits.toLocaleString('en')} Beans` : 'Free') : null;
+        const km = distanceText(item.distanceKm);
+        const kind = item.type === 'need' ? 'NEED' : 'OFFER';
+        return (
+            <HomeLine key={item.id} onClick={() => onNavigate('marketplace', item.id)} testId={testId}
+                label={[kind === 'NEED' ? 'Need' : 'Offer', item.title, price, km ? `${km} away` : null].filter(Boolean).join(', ')}>
+                {photo
+                    ? <img src={photo} alt="" loading="lazy" decoding="async" className="shrink-0 w-12 h-12 rounded-lg object-cover bg-nature-100 dark:bg-nature-800" />
+                    : <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-nature-100 dark:bg-nature-800">{cat?.emoji ?? '🌱'}</span>}
+                <span className="min-w-0 flex-1">
+                    <span className="block break-words"><span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>{kind}</span>{item.title}</span>
+                    {(price || km) && <span className="block text-xs text-nature-600 dark:text-nature-300">{[price, km].filter(Boolean).join(' · ')}</span>}
+                </span>
+            </HomeLine>
+        );
+    }
+
     function renderCard(card: HomeCardInstance, index: number): ReactNode {
         const id = card.type as HomeCardId;
         const c = a.cards;
@@ -1049,26 +1071,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                             Tune
                         </button>
                     )}>
-                        {items.map(item => {
-                            const photo = resolveImageUrl(item.photoUrl);
-                            const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
-                            const price = !beansOn ? (isVisitor ? NO_BEANS_TERMS_TEXT : null)
-                                : typeof item.credits === 'number' ? (item.credits > 0 ? `${item.credits.toLocaleString('en')} Beans` : 'Free') : null;
-                            const km = distanceText(item.distanceKm);
-                            const kind = item.type === 'need' ? 'NEED' : 'OFFER';
-                            return (
-                                <HomeLine key={item.id} onClick={() => onNavigate('marketplace', item.id)} testId="home-market-item"
-                                    label={[kind === 'NEED' ? 'Need' : 'Offer', item.title, price, km ? `${km} away` : null].filter(Boolean).join(', ')}>
-                                    {photo
-                                        ? <img src={photo} alt="" loading="lazy" decoding="async" className="shrink-0 w-12 h-12 rounded-lg object-cover bg-nature-100 dark:bg-nature-800" />
-                                        : <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-nature-100 dark:bg-nature-800">{cat?.emoji ?? '🌱'}</span>}
-                                    <span className="min-w-0 flex-1">
-                                        <span className="block break-words"><span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>{kind}</span>{item.title}</span>
-                                        {(price || km) && <span className="block text-xs text-nature-600 dark:text-nature-300">{[price, km].filter(Boolean).join(' · ')}</span>}
-                                    </span>
-                                </HomeLine>
-                            );
-                        })}
+                        {items.map(item => marketLine(item, 'home-market-item'))}
                         {isVisitor && items.length > 0 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{VISITOR_LIST_NOTE}</p>}
                         {examples && (
                             <div data-testid="home-examples" className="mt-2">
@@ -1204,13 +1207,25 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     </HomeCard>
                 );
             }
-            case 'search':
-                // A saved search: its words name it to a screen reader, never on the card; its listings come with slice F4.
+            case 'search': {
+                // A saved search (CARD-FRAME §4): the caption is fixed; the words and distance are the first line, never the
+                // caption. Up to four listings as the Market card draws them, See more opens the Market with the words in its
+                // search; nothing found says so; before the node has answered for these words, it says it will.
+                const { q, km } = readSearchSettings(card.settings);
+                const found = searchCardFor(a, card);
+                const first = searchFirstLine(q, found ? found.km : km ?? null);
                 return (
                     <HomeCard key={card.id} {...common}>
-                        <p className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{SEARCH_WAITING_LINE}</p>
+                        <p data-testid="home-search-words" className="m-0 mb-1 text-sm font-semibold text-nature-900 dark:text-white break-words">{first}</p>
+                        {!found && <p data-testid="home-search-offline" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{SEARCH_OFFLINE_LINE}</p>}
+                        {found && !found.items.length && <p data-testid="home-search-empty" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{searchEmptyLine(q, found.km)}</p>}
+                        {found?.items.map(item => marketLine(item, 'home-search-item'))}
+                        {found?.more && (
+                            <HomeMore onClick={() => onNavigate('marketplace-search', q)} testId="home-search-more" label={`See more listings for ${q || 'this search'} in the Market`}>See more ›</HomeMore>
+                        )}
                     </HomeCard>
                 );
+            }
             default:
                 return null;
         }
@@ -1223,11 +1238,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         : [];
     const editRows: EditHomeRow[] = editCards.map(c => ({
                 id: c.id,
-                name: nameOf(c),
+                // A saved search's row is named by its words (cardRowName), so two searches read as two rows.
+                name: c.type === 'search' ? cardRowName(c, profile) : nameOf(c),
                 label: cardLabelName(c, profile),
                 note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? 'All tips seen' : 'Nothing to show now',
                 hasSettings: !!homeCardType(c.type)?.readSettings,
             }));
+    // A saved search's distance needs a point the node measures from: the member's area, or the place this browser shared.
+    const hasPoint = !!point || !!a.me?.area;
     const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), layout, null, pins, tipsAllSeen ? { tips: 'All tips seen' } : {}) : null;
 
     return (
@@ -1285,7 +1303,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 />
             )}
             {picker && (
-                <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)}
+                <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} hasPoint={hasPoint}
                     // Opened from Edit home, which has closed: the community card's Add a card.
                     returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')} />
             )}
@@ -1295,6 +1313,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     name={cardName(settingsFor.type, profile)}
                     mode="save"
                     initial={settingsFor.settings}
+                    hasPoint={hasPoint}
                     onSubmit={(next) => {
                         const id = settingsFor.id;
                         setSettingsFor(null);

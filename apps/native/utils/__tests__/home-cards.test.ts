@@ -13,13 +13,13 @@ vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(), setItemAsync: vi.fn
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Array(n)) }));
 
 import {
-    HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardLabelName, cardName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
+    HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardLabelName, cardName, cardRowName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
     invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
-    MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList,
+    MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList, searchCardFor,
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
@@ -267,6 +267,14 @@ describe('the layout (§4)', () => {
         expect(cardLabelName({ type: 'search', settings: { q: 'x'.repeat(25), kind: 'any' } })).toBe(`"${'x'.repeat(24)}…"`);
         expect(cardLabelName({ type: 'search', settings: { q: '', kind: 'any' } })).toBe('A saved search');
         expect(cardLabelName({ type: 'search' })).toBe('A saved search');
+        // Two searches with the same words and another kind sound different (review of #1716): Both says no kind.
+        expect(cardLabelName({ type: 'search', settings: { q: 'eggs', kind: 'offer' } })).toBe('"eggs" (Offers)');
+        expect(cardLabelName({ type: 'search', settings: { q: 'eggs', kind: 'need' } })).toBe('"eggs" (Needs)');
+        expect(cardLabelName({ type: 'search', settings: { q: 'x'.repeat(25), kind: 'need' } })).toBe(`"${'x'.repeat(24)}…" (Needs)`);
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'offer' } })).toBe('Offers · eggs');
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'need' } })).toBe('Needs · eggs');
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'any' } })).toBe('eggs');
+        expect(cardRowName({ type: 'search', settings: { kind: 'need' } })).toBe('A saved search');
         expect(cardLabelName({ type: 'market' }, 'global')).toBe('Near you');
         expect(cardLabelName({ type: 'pulse' })).toBe('The Pulse');
     });
@@ -1022,5 +1030,29 @@ describe('the phone\'s own marked save, read back (review of #1701 confirmation,
         expect(marks).toHaveLength(MARK_SENT_MAX);
         expect(marks[0].at).toBe(iso(NOW + 3));
         expect(readMarkSent('nope')).toEqual([]);
+    });
+});
+
+describe("a saved search's kept answer is only for the search the card holds now (review of #1716, finding 2; the web app's lib/home-cards.test.ts)", () => {
+    const inst = { id: 'search-k2x7', settings: { q: 'eggs', kind: 'any', km: 5 } };
+    const body = { q: 'eggs', kind: 'any', category: null, km: 5, more: true, items: [{ id: 'p1', type: 'offer', title: 'Fresh eggs', category: 'food', photoUrl: null }] };
+    const withCard = (c: unknown) => ({ cards: { 'search-k2x7': c } } as unknown as HomeAnswer);
+
+    it('the same words, kind, category and distance: the rows', () => {
+        expect(searchCardFor(withCard(body), inst)).toEqual(body);
+        const tools = { ...body, kind: 'need', category: 'tools', km: 10 };
+        expect(searchCardFor(withCard(tools), { ...inst, settings: { q: 'eggs', kind: 'need', category: 'tools', km: 10 } })).toEqual(tools);
+    });
+
+    it('another kind, category or distance: no body, so the card says it shows when the community answers', () => {
+        expect(searchCardFor(withCard({ ...body, kind: 'offer' }), inst)).toBeNull();
+        expect(searchCardFor(withCard({ ...body, category: 'food' }), inst)).toBeNull();
+        expect(searchCardFor(withCard({ ...body, km: 25 }), inst)).toBeNull();
+        expect(searchCardFor(withCard(body), { ...inst, settings: { q: 'eggs', kind: 'need', km: 5 } })).toBeNull();
+        expect(searchCardFor(withCard(body), { ...inst, settings: { q: 'eggs', kind: 'any' } })).toBeNull();
+    });
+
+    it('km null (the node had no point and ignored the distance) answers whatever distance is kept', () => {
+        expect(searchCardFor(withCard({ ...body, km: null }), { ...inst, settings: { q: 'eggs', kind: 'any', km: 25 } })).toEqual({ ...body, km: null });
     });
 });

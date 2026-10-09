@@ -13,8 +13,9 @@
  * control is at least 44 px.
  */
 import { useRef, useState, type ReactNode } from 'react';
-import { HOME_SEARCH_MAX_CHARS, readSearchSettings } from '@beanpool/core';
-import { SEARCH_WAITING_LINE, type PickerGroup, type PickerRow } from '../lib/home-layout';
+import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, type HomeSearchKind } from '@beanpool/core';
+import { type PickerGroup, type PickerRow } from '../lib/home-layout';
+import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { useDialogFocus } from './dialog-focus';
 
 const primary = 'min-w-[44px] min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
@@ -50,9 +51,11 @@ interface PickerProps {
     onClose: () => void;
     /** Where focus goes on close when what opened the picker has gone (Edit home's ＋ Add a card). */
     returnFocus?: () => HTMLElement | null | undefined;
+    /** For a saved search's distance chips: see {@link CardSettingsDialog}. */
+    hasPoint?: boolean;
 }
 
-export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus }: PickerProps) {
+export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus, hasPoint }: PickerProps) {
     const dialog = useRef<HTMLDivElement | null>(null);
     // An add sends focus to the new card's "…" (the page does it): closing then doesn't pull it back to the opener.
     const added = useRef(false);
@@ -66,7 +69,7 @@ export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus }: Pic
 
     if (settingsFor) {
         return (
-            <CardSettingsDialog type={settingsFor.type} name={settingsFor.name} mode="add" keepFocus={added}
+            <CardSettingsDialog type={settingsFor.type} name={settingsFor.name} mode="add" keepFocus={added} hasPoint={hasPoint}
                 onSubmit={(s) => add(settingsFor.type, s)} onClose={() => setSettingsFor(null)}
                 // Back in the picker: its row's Add, else its heading.
                 returnFocus={() => dialog.current?.querySelector<HTMLElement>(`[data-testid="home-add-${settingsFor.type}"]`) ?? dialog.current?.querySelector<HTMLElement>('h2')} />
@@ -117,6 +120,8 @@ interface SettingsProps {
     mode: 'add' | 'save';
     /** The card's settings now (for `save`). */
     initial?: unknown;
+    /** The node has a point to measure a distance from (the member's area, or a place this browser shared). */
+    hasPoint?: boolean;
     onSubmit: (settings: Record<string, unknown>) => void;
     onClose: () => void;
     keepFocus?: React.RefObject<boolean>;
@@ -124,25 +129,68 @@ interface SettingsProps {
     returnFocus?: () => HTMLElement | null | undefined;
 }
 
+/** A saved search's kinds, as its sheet offers them (CARD-FRAME §4). */
+export const SEARCH_KIND_CHIPS: ReadonlyArray<{ kind: HomeSearchKind; label: string }> = [
+    { kind: 'any', label: 'Both' }, { kind: 'offer', label: 'Offers' }, { kind: 'need', label: 'Needs' },
+];
+
+const chip = (on: boolean) => `min-w-[44px] min-h-[44px] px-3 rounded-full border text-sm font-semibold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+    on ? 'bg-emerald-700 border-emerald-700 text-white' : 'bg-transparent border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-100'}`;
+
+function Chips<T>({ legend, testId, options, value, onPick }: {
+    legend: string; testId: string; options: ReadonlyArray<{ value: T; label: string }>; value: T; onPick: (v: T) => void;
+}) {
+    return (
+        <fieldset data-testid={testId} className="m-0 mt-3 p-0 border-0 min-w-0">
+            <legend className="mb-1 p-0 text-sm font-semibold text-nature-900 dark:text-white">{legend}</legend>
+            <div className="flex flex-wrap gap-2">
+                {options.map((o) => (
+                    <button key={String(o.value)} type="button" aria-pressed={o.value === value} className={chip(o.value === value)} onClick={() => onPick(o.value)}>
+                        {o.label}
+                    </button>
+                ))}
+            </div>
+        </fieldset>
+    );
+}
+
 /**
- * A card's settings. Today only the saved search has any, and only its words here: its kind, category and distance,
- * and its listings on the card, come with slice F4 ({@link SEARCH_WAITING_LINE}).
+ * A card's settings. Today only the saved search has any (CARD-FRAME §4): its words, then Offers or Needs or both, a
+ * category, and a distance. The distance chips show only where the node has a point to measure from (the member's area,
+ * or the place this browser shared); without one the node ignores the distance, so the sheet doesn't offer it, and a
+ * distance already kept stays as it was.
  */
-export function CardSettingsDialog({ type, name, mode, initial, onSubmit, onClose, keepFocus, returnFocus }: SettingsProps) {
+export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false, onSubmit, onClose, keepFocus, returnFocus }: SettingsProps) {
     const dialog = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialog, onClose, { keepFocus, fallback: returnFocus });
-    const [q, setQ] = useState(() => readSearchSettings(initial).q);
+    const [start] = useState(() => readSearchSettings(initial));
+    const [q, setQ] = useState(start.q);
+    const [kind, setKind] = useState<HomeSearchKind>(start.kind);
+    const [category, setCategory] = useState<string>(start.category ?? '');
+    const [km, setKm] = useState<number | null>(start.km ?? null);
     const words = q.trim();
     if (type !== 'search') return null;
+    const submit = () => onSubmit({ q: words, kind, ...(category ? { category } : {}), ...(km ? { km } : {}) });
     return (
         <Shell id="home-settings-title" testId="home-settings-dialog" title={name} onClose={onClose} dialog={dialog}>
-            <form onSubmit={(e) => { e.preventDefault(); if (words) onSubmit({ ...readSearchSettings(initial), q: words }); }}>
+            <form onSubmit={(e) => { e.preventDefault(); if (words) submit(); }}>
                 <label htmlFor="home-settings-q" className="block mb-1 text-sm font-semibold text-nature-900 dark:text-white">Words to look for</label>
                 <input id="home-settings-q" data-testid="home-settings-q" type="text" value={q} maxLength={HOME_SEARCH_MAX_CHARS}
                     onChange={(e) => setQ(e.target.value)} autoComplete="off"
                     className="w-full min-w-0 min-h-[44px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-base text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" />
-                <p className="m-0 mt-2 text-xs text-nature-700 dark:text-nature-200">{SEARCH_WAITING_LINE}</p>
-                <button type="submit" data-testid="home-settings-submit" disabled={!words} className={`mt-3 w-full disabled:opacity-40 disabled:cursor-default ${primary}`}>
+                <Chips legend="Show" testId="home-settings-kind" value={kind} onPick={setKind}
+                    options={SEARCH_KIND_CHIPS.map((k) => ({ value: k.kind, label: k.label }))} />
+                <label htmlFor="home-settings-category" className="block mt-3 mb-1 text-sm font-semibold text-nature-900 dark:text-white">Category</label>
+                <select id="home-settings-category" data-testid="home-settings-category" value={category} onChange={(e) => setCategory(e.target.value)}
+                    className="w-full min-w-0 min-h-[44px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-base text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                    <option value="">Any category</option>
+                    {MARKETPLACE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{`${c.emoji} ${c.label}`}</option>)}
+                </select>
+                {hasPoint && (
+                    <Chips legend="Distance" testId="home-settings-km" value={km} onPick={setKm}
+                        options={[{ value: null, label: 'Any distance' }, ...HOME_SEARCH_KMS.map((k) => ({ value: k as number | null, label: `${k} km` }))]} />
+                )}
+                <button type="submit" data-testid="home-settings-submit" disabled={!words} className={`mt-4 w-full disabled:opacity-40 disabled:cursor-default ${primary}`}>
                     {mode === 'add' ? 'Add to Home' : 'Save'}
                 </button>
             </form>

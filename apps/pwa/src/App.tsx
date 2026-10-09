@@ -160,6 +160,9 @@ export function App() {
     useEffect(() => { if (!showSettings) { setSettingsInitialMode('menu'); setSettingsGuidePage(null); } }, [showSettings]);
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
+    // A saved search's See more on Home: the words the Market's search opens with.
+    const [openMarketSearch, setOpenMarketSearch] = useState<string | null>(null);
+    const clearMarketSearch = useCallback(() => setOpenMarketSearch(null), []);
     const [openNewPost, setOpenNewPost] = useState(false);
     const [openNewPostGroupId, setOpenNewPostGroupId] = useState<string | undefined>(undefined);
     // An event's "Show on map" (docs/events-on-the-map.md §3): the map centres on it.
@@ -302,6 +305,12 @@ export function App() {
         if (tab === 'settings-profile') {
             setSettingsInitialMode('profile');
             setShowSettings(true);
+            return;
+        }
+        // A saved search's See more: the Market with the words in its search.
+        if (tab === 'marketplace-search') {
+            setActiveTab('marketplace');
+            setOpenMarketSearch(contextId ?? '');
             return;
         }
         // The Tips card's Read more: the members' guide in Settings, open at that page (Back walks to its front page).
@@ -943,6 +952,8 @@ export function App() {
                                     marketClickCount={marketClickCount}
                                     openPostId={openMarketPostId}
                                     onPostOpened={() => setOpenMarketPostId(null)}
+                                    openSearch={openMarketSearch}
+                                    onSearchOpened={clearMarketSearch}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     transactions={myTransactions}

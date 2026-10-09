@@ -10,10 +10,10 @@ import { resolvePulseThumbnailUrl } from '../../utils/pulse';
 import { formatDistance } from '../../utils/events';
 import type { NeedsYouEntry } from '../../utils/needs-you';
 import {
-    SEARCH_WAITING_LINE,
+    SEARCH_OFFLINE_LINE, searchEmptyLine, searchFirstLine,
     RSVP_WORDS, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventDay, eventLine, formatBeans,
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence,
-    type HomeAnswer, type HomeCards, type HomeMarketItem, type StepLine,
+    type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
 import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, readSearchSettings, tipsNextLabel, type TipsView } from '@beanpool/core';
 import { getBundledGuide } from '../../utils/guide';
@@ -184,33 +184,35 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
     colors: AppColors;
     onSeeAll: () => void;
 }) {
-    const s = homeStyles(colors);
     return (
         <>
-            {items.map(p => {
-                const type = p.type === 'need' ? colors.market.need : colors.market.offer;
-                const word = p.type === 'need' ? 'NEED' : 'OFFER';
-                const price = showsBeans && typeof p.credits === 'number' && p.credits > 0 ? `${formatBeans(p.credits)} Beans` : null;
-                const far = formatDistance(p.distanceKm);
-                const facts = [price, far].filter(Boolean).join(' · ');
-                return (
-                    <HomeRow
-                        key={p.id}
-                        colors={colors}
-                        text={p.title}
-                        sub={facts || categoryLabel(p.category)}
-                        a11y={`${p.type === 'need' ? 'Need' : 'Offer'}: ${sentence(p.title)} ${facts ? `${facts}. ` : ''}${categoryLabel(p.category)}. Opens the listing.`}
-                        onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
-                        left={<Thumb uri={onNode(nodeUrl, p.photoUrl)} emoji={categoryEmoji(p.category)} colors={colors} />}
-                        subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
-                        testID={`home-market-${p.id}`}
-                    />
-                );
-            })}
+            {items.map(p => <MarketRow key={p.id} p={p} nodeUrl={nodeUrl} showsBeans={showsBeans} colors={colors} testID={`home-market-${p.id}`} />)}
             {/* A node that asks for them, with fewer than a handful of real listings: the made-up ones, each marked Example (§6.1). */}
             {examples && <View style={{ marginHorizontal: -14 }}><ExampleListings /></View>}
             <HomeLink id="market:all" colors={colors} text="See all" a11y="See all listings in the Market" onPress={onSeeAll} testID="home-market-all" />
         </>
+    );
+}
+
+/** One listing as the Market card draws it: photo, title, price or distance, Offer or Need; opens the listing. */
+function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketItem; nodeUrl: string | null; showsBeans: boolean; colors: AppColors; testID: string }) {
+    const s = homeStyles(colors);
+    const type = p.type === 'need' ? colors.market.need : colors.market.offer;
+    const word = p.type === 'need' ? 'NEED' : 'OFFER';
+    const price = showsBeans && typeof p.credits === 'number' && p.credits > 0 ? `${formatBeans(p.credits)} Beans` : null;
+    const far = formatDistance(p.distanceKm);
+    const facts = [price, far].filter(Boolean).join(' · ');
+    return (
+        <HomeRow
+            colors={colors}
+            text={p.title}
+            sub={facts || categoryLabel(p.category)}
+            a11y={`${p.type === 'need' ? 'Need' : 'Offer'}: ${sentence(p.title)} ${facts ? `${facts}. ` : ''}${categoryLabel(p.category)}. Opens the listing.`}
+            onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
+            left={<Thumb uri={onNode(nodeUrl, p.photoUrl)} emoji={categoryEmoji(p.category)} colors={colors} />}
+            subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
+            testID={testID}
+        />
     );
 }
 
@@ -395,17 +397,34 @@ export function TipsBody({ view, colors, onNext, onReadMore, onDontShow }: {
 }
 
 /**
- * A saved search (CARD-FRAME §4): its caption is fixed (A saved search) and its words stand in a bounded row, never the
- * caption (member text clips there). Its rows are the node's to build (slice F4); until then it says it fills in when the
- * community answers, so a member on 2G knows the add took.
+ * A saved search (CARD-FRAME §4): its caption is fixed and its words stand in the first row, bounded, with the distance
+ * ("eggs · within 5 km"), never in the caption (member text clips there). Then up to four listings as the Market card
+ * draws them, each opening the listing, and "See more" opening the Market with the words filled in. A search that finds
+ * nothing says so; before the node has answered for these words, it says it shows when the community answers.
  */
-export function SearchBody({ settings, colors }: { settings: unknown; colors: AppColors }) {
+export function SearchBody({ settings, card, nodeUrl, showsBeans, colors, onMore }: {
+    settings: unknown;
+    /** The node's body for these words (utils/home-cards.ts `searchCardFor`), or null when it hasn't answered for them. */
+    card: HomeSearchCard | null;
+    nodeUrl: string | null;
+    showsBeans: boolean;
+    colors: AppColors;
+    onMore: (q: string) => void;
+}) {
     const s = homeStyles(colors);
-    const { q } = readSearchSettings(settings);
+    const { q, km } = readSearchSettings(settings);
+    // The distance as the node applied it (none where it had no point); the stored one until it answers.
+    const shownKm = card ? card.km : km ?? null;
+    const first = searchFirstLine(q, shownKm);
     return (
         <>
-            {!!q && <HomeRow colors={colors} text={q} a11y={`Looks for ${q}.`} strong testID="home-search-words" />}
-            <Text style={s.note} testID="home-search-waiting">{SEARCH_WAITING_LINE}</Text>
+            <HomeRow colors={colors} text={first} a11y={`Looks for ${first}.`} strong testID="home-search-words" />
+            {!card && <Text style={s.note} testID="home-search-offline">{SEARCH_OFFLINE_LINE}</Text>}
+            {card && !card.items.length && <Text style={s.note} testID="home-search-empty">{searchEmptyLine(q, card.km)}</Text>}
+            {card?.items.map(p => <MarketRow key={p.id} p={p} nodeUrl={nodeUrl} showsBeans={showsBeans} colors={colors} testID={`home-search-row-${p.id}`} />)}
+            {card?.more && (
+                <HomeLink id="search:more" colors={colors} text="See more" a11y={`See more listings for ${q || 'this search'} in the Market`} onPress={() => onMore(q)} testID="home-search-more" />
+            )}
         </>
     );
 }

@@ -95,6 +95,35 @@ describe('MarketplacePage: the viewer balance is a member-only request', () => {
     });
 });
 
+describe("MarketplacePage: a saved search's See more on Home fills the search (CARD-FRAME §4; slice F4)", () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([
+            ...posts,
+            { ...posts[0], id: 'post-2', title: 'Fresh eggs', description: 'A dozen', category: 'food' },
+        ] as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    });
+
+    it('opens with the words in the search box, once, and the list narrowed to them', async () => {
+        const onSearchOpened = vi.fn();
+        render(<MarketplacePage identity={identity} openSearch="  eggs " onSearchOpened={onSearchOpened} />);
+        await screen.findByText('Fresh eggs');
+        expect(screen.getByPlaceholderText('Search marketplace...')).toHaveValue('eggs');
+        await waitFor(() => expect(screen.queryByText('Bicycle Repair')).not.toBeInTheDocument());
+        expect(onSearchOpened).toHaveBeenCalledTimes(1);
+    });
+
+    it('no words leaves the search as it was', async () => {
+        render(<MarketplacePage identity={identity} openSearch="   " onSearchOpened={vi.fn()} />);
+        await screen.findByText('Bicycle Repair');
+        expect(screen.getByPlaceholderText('Search marketplace...')).toHaveValue('');
+    });
+});
+
 describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, slice 2)', () => {
     const HOUR = 60 * 60 * 1000;
     const inHours = (h: number) => new Date(Date.now() + h * HOUR).toISOString();

@@ -22,7 +22,7 @@ On the phone and in the web app, your Home is a list of cards you choose. A new 
 
 - **Add a card**, on your community's card at the bottom of Home, opens a list of every card your community can show, in three groups: **For you**, **Around you** and **Getting started**. Tap **Add** beside a card to put it on Home. It goes to the top, just under **Needs you**, and Home scrolls up to show it.
 - A card that is already on Home says **On Home** instead of **Add**. Some cards can be added more than once, such as **A saved search**: they say how many you have, such as "2 of 5 on Home".
-- **A saved search** asks for the words to look for before it is added. Its listings show in a coming app update; until then the card says so.
+- **A saved search** asks for the words to look for before it is added, such as "eggs". You can also choose **Offers**, **Needs** or **Both**, a category, and how far to look: 1, 2, 5, 10 or 25 km. The distance is offered only where your community knows your area, or where you have shared your place; without one, the search looks everywhere.
 - A Home holds at most 24 cards. When it is full, the list says so, and you remove a card to add another.
 - Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Edit home** says "Your community's server needs an update before your cards follow you to other devices." They are sent again each time you open Home.
 - If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you start with the five, and Home tells you once: "Home now starts with fewer cards. Add a card brings the rest back."
@@ -43,7 +43,7 @@ Home shows only the cards that have something to tell you, in this order from to
 - **Coming up:** upcoming events near you, with your RSVP.
 - **New in the Market:** the newest listings, with starred categories first. On the global community it is called **Near you**, and the nearest listings come first. Tap **Tune** to pick your interests, or **See all** to open the Market. While there are only a few listings, it may show a couple of example listings, marked as examples, if your community has them turned on.
 - **Decide:** open Decisions and open polls, as separate lines on the phone. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app it is one line, and tapping it opens Commons. Not on the global community: polls there are in the Market's **Polls**.
-- **A saved search:** listings that match words you choose. You can have up to five. See "Your cards".
+- **A saved search:** listings that match words you choose. You can have up to five. Its first line is your words and the distance, such as "eggs · within 5 km". Then come up to four listings, each opening the listing; **See more** opens the Market with your words already in its search. It finds what the Market's search finds, so "eggs" also finds listings with words that mean much the same. When nothing matches it says so, such as "No eggs within 5 km right now". A search you have just added or changed without a connection says "Shows when your community answers" until your community's server answers. To change the words, tap **…** then **Settings…**: the card stays where it is.
 - **Your groups:** your groups and chats, with unread message counts.
 - **Who joined:** people who joined this week. On a local community it shows names and faces. On the global community it shows only a count, by area, and no names.
 - **The Pulse:** posts shared by neighbours from external channels like YouTube and blogs, with starred categories first. Tap **See all** to open the Pulse.
@@ -75,7 +75,7 @@ A move is greyed out when there is nowhere to go: at the top or bottom of the ca
 At the bottom of Home, on your community's card, tap **Edit home**.
 
 - **＋ Add a card** comes first. It opens the same list as **Add a card** on Home.
-- Then come the cards on your Home, in your order. Each has up and down arrows and its own **…** (Settings…, Move up, Move down, Remove).
+- Then come the cards on your Home, in your order. Each has up and down arrows and its own **…** (Settings…, Move up, Move down, Remove). A saved search is listed by its words, and by **Offers** or **Needs** when it looks for only one, such as "eggs" or "Needs · eggs", so two searches are two different rows.
 - A card with nothing to show right now says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip.
 - Tap **Reset to defaults** to go back to the five cards a new member starts with.
 - There are no switches and no hidden list: a card you removed is in **Add a card**.

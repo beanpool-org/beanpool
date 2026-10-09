@@ -34,7 +34,8 @@
  * Fails on any sideways scroll, a control under 44 px, an axe violation, a document-policy violation, or a request to
  * any host but this machine.
  *
- * Run: pnpm --filter @beanpool/pwa home-check   (HOME_IDLE_S sets the idle window, 150 by default)
+ * Run: pnpm --filter @beanpool/pwa home-check   (HOME_IDLE_S sets the idle window, 150 by default; HOME_ONLY=localMember,
+ * globalNode runs only those parts)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
 /* global URL, URLSearchParams, console, process, setTimeout, document, window, indexedDB, localStorage, axe, Event, getComputedStyle -- Node, and the page's side of evaluate() */
@@ -582,6 +583,53 @@ async function localMember(browser, root) {
         const resetIds = await cardIds(page);
         check(JSON.stringify(resetIds.filter((id) => id !== 'interests')) === JSON.stringify(ids.filter((id) => id !== 'interests')),
             `and Home draws the newcomer's cards she landed on (${resetIds.join(' · ')})`);
+
+        // A saved search, by keyboard (CARD-FRAME §4, §5.2 item 20; slice F4): Add a card → A saved search → "bread" →
+        // Enter. The save is answered before the read (§2.4), and the node's own builder draws the rows with the Market's
+        // synonyms ("bread" finds "Sourdough loaves"). A reload draws them again from the account; then it is removed, so
+        // the cost below is measured on the same Home as before.
+        const searchAdd = page.getByTestId('home-add-open');
+        await searchAdd.scrollIntoViewIfNeeded();
+        await searchAdd.focus();
+        await page.keyboard.press('Enter');
+        const searchPicker = page.getByRole('dialog', { name: 'Add a card' });
+        await searchPicker.waitFor();
+        await searchPicker.getByTestId('home-add-search').focus();
+        await page.keyboard.press('Enter');
+        const searchSheet = page.getByRole('dialog', { name: 'A saved search' });
+        await searchSheet.waitFor();
+        await searchSheet.getByTestId('home-settings-q').focus();
+        await page.keyboard.type('bread');
+        const searchAt = net.mark();
+        const searchSaved = layoutPost();
+        await page.keyboard.press('Enter');
+        const searchSave = await searchSaved;
+        const searchCard = page.locator('[data-testid^="home-card-search-"]');
+        await searchCard.locator('[data-testid="home-search-item"]').first().waitFor({ timeout: 10_000 }).catch(() => {});
+        const searchRows = () => searchCard.locator('[data-testid="home-search-item"]').allInnerTexts();
+        const searchFirst = (await searchCard.getByTestId('home-search-words').innerText().catch(() => '')).trim();
+        const rowsNow = await searchRows();
+        check(rowsNow.some((t) => /Sourdough loaves/.test(t)) && searchFirst === 'bread',
+            `a saved search added by keyboard draws its listings, synonyms and all ("${searchFirst}": ${rowsNow.map((t) => t.replace(/\s+/g, ' ')).join('; ') || 'no rows'})`);
+        const searchSent = JSON.parse(searchSave.request().postData() || '{}').preferences?.['home.layout']?.cards?.find((c) => c.type === 'search');
+        const searchReads = net.since(searchAt).filter((r) => r.path === '/api/home');
+        check(!!searchSent && searchReads.length >= 1 && searchReads[0].at >= searchAt && !!new URLSearchParams(searchReads[0].search).get('cards')?.split(',').includes(searchSent.id),
+            `the save went first, then the read asked for it by its id (${searchSent?.id ?? 'none sent'}; ${searchReads.map((r) => new URLSearchParams(r.search).get('cards')).join('; ') || 'no read'})`);
+        check(!(await searchCard.getByText(/coming app update/).count()), 'the card no longer says its listings come in an update');
+        await noSideScroll(page, 'a member\'s Home with a saved search');
+        await touchTargets(page, '[data-testid^="home-card-search-"]', 'a saved search');
+        await shot(page, '2-member-saved-search');
+        await page.reload({ waitUntil: 'load' });
+        await scaleText(page);
+        await page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
+        await searchCard.locator('[data-testid="home-search-item"]').first().waitFor({ timeout: 10_000 }).catch(() => {});
+        const rowsBack = await searchRows();
+        check(rowsBack.some((t) => /Sourdough loaves/.test(t)), `coming back, the saved search draws its listings again (${rowsBack.length} rows)`);
+        const searchGone = layoutPost();
+        await searchCard.getByRole('button', { name: 'Card options for "bread"' }).click();
+        await searchCard.getByRole('button', { name: 'Remove "bread" from Home' }).click();
+        await searchGone;
+        await wait(1_000);
 
         // The Market's own reads when it is opened: what a Market landing makes beyond the shell's.
         const tm = net.mark();
@@ -1206,7 +1254,8 @@ async function main() {
         await build({ root: PWA_DIR, logLevel: 'warn', build: { outDir: path.join(root, 'public'), emptyOutDir: true } });
         browser = await chromium.launch();
         console.log('The web app as built; Chromium at 320 px, 1.3x text, reduced motion.');
-        for (const run of [localMember, twoTabs, pointedAtAnother, globalNode]) {
+        const only = process.env.HOME_ONLY?.split(',').map((n) => n.trim()).filter(Boolean);
+        for (const run of [localMember, twoTabs, pointedAtAnother, globalNode].filter((r) => !only?.length || only.includes(r.name))) {
             try {
                 await run(browser, root);
             } catch (e) {

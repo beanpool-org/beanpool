@@ -35,8 +35,9 @@ import { FilterChipRow, FilterChipBar } from '../../components/FilterChipRow';
 import { FilterChipButton, FilterChipPanel } from '../../components/FilterChipPicker';
 import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '../../utils/map-filters';
 import {
-    MARKET_TYPE_PILLS, marketFilterFromLink, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
+    MARKET_TYPE_PILLS, marketFilterFromLink, marketSearchFromLink, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
+    marketSearchQuery, marketSearchMatches,
 } from '../../utils/market-filters';
 import { localDaysAgo } from '../../utils/feed-sections';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -47,44 +48,6 @@ import { ExampleListings } from '../../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
-
-// Build reverse synonym index: given a category/synonym, find all words that map to it
-// e.g. "fruit" → ["lemon", "lime", "orange", "apple", ...]
-const reverseSynonyms: Record<string, string[]> = {};
-for (const [word, syns] of Object.entries(synonymMap)) {
-    if (word === '_meta') continue;
-    for (const syn of syns as string[]) {
-        if (!reverseSynonyms[syn]) reverseSynonyms[syn] = [];
-        reverseSynonyms[syn].push(word);
-    }
-}
-
-/** Expand a search query using synonyms: "fruit" → ["fruit", "lemon", "lime", ...] */
-function expandSearchTerms(query: string): string[] {
-    const words = query.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 1);
-    const expanded = new Set<string>(words);
-    for (const w of words) {
-        // Forward: word → its synonyms (e.g. "lemon" → ["fruit", "citrus"])
-        const fwd = (synonymMap as any)[w];
-        if (fwd) for (const s of fwd) expanded.add(s);
-        // Reverse: word → all words that have it as synonym (e.g. "fruit" → ["lemon", "lime"])
-        if (reverseSynonyms[w]) for (const s of reverseSynonyms[w]) expanded.add(s);
-        // Also try stemmed forms
-        let stem = w;
-        if (w.endsWith('ies')) stem = w.slice(0, -3) + 'y';
-        else if (w.endsWith('es')) stem = w.slice(0, -2);
-        else if (w.endsWith('s') && w.length > 3) stem = w.slice(0, -1);
-        else if (w.endsWith('ing') && w.length > 5) stem = w.slice(0, -3);
-        if (stem !== w) {
-            expanded.add(stem);
-            const fwdStem = (synonymMap as any)[stem];
-            if (fwdStem) for (const s of fwdStem) expanded.add(s);
-            if (reverseSynonyms[stem]) for (const s of reverseSynonyms[stem]) expanded.add(s);
-        }
-    }
-    return [...expanded];
-}
 
 export const MARKETPLACE_CATEGORIES = [
     { id: 'all', emoji: '🏷️', label: 'All Categories' },
@@ -665,7 +628,16 @@ export default function MarketScreen() {
         }, [filter, groupFilter, identity?.publicKey, userGroupsKey])
     );
 
-    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string }>();
+    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string, q?: string }>();
+
+    // A saved search's "See more" on Home opens the Market with its words in the search (CARD-FRAME §4).
+    useEffect(() => {
+        const q = marketSearchFromLink(params.q);
+        if (q) {
+            setSearchQuery(q);
+            router.setParams({ q: '' });
+        }
+    }, [params.q]);
 
     // Home's "All events ›" opens the Market on its Events pill, and its Decide card's polls line on Polls.
     useEffect(() => {
@@ -779,7 +751,7 @@ export default function MarketScreen() {
                 const cat = categoryFilter !== 'all' && row.kind === 'filters' && row.category ? `&category=${categoryFilter}` : '';
                 
                 // Expand synonyms so the server's FTS5 'OR' logic can find them
-                const expandedQ = expandSearchTerms(q).join(' ');
+                const expandedQ = marketSearchQuery(q);
                 
                 // Nearest first where the node sorts by distance and the phone already knows where it is.
                 const near = marketSearchDistanceParams(nodeProfile, myLocation);
@@ -899,14 +871,7 @@ export default function MarketScreen() {
         // Works on ALL servers, even those without FTS5 deployed
         if (searchQuery.trim()) {
             const serverHasFTS = searchResults !== null && searchResults.length > 0 && 'search_keywords' in searchResults[0];
-            if (!serverHasFTS) {
-                const terms = expandSearchTerms(searchQuery);
-                const titleStr = p.title ? p.title.toLowerCase() : '';
-                const descStr = p.description ? p.description.toLowerCase() : '';
-                const postText = `${titleStr} ${descStr}`;
-                const matched = terms.some(term => postText.includes(term));
-                if (!matched) return false;
-            }
+            if (!serverHasFTS && !marketSearchMatches(p, searchQuery)) return false;
         }
         return true;
     });

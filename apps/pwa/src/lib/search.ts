@@ -5,7 +5,7 @@
  * "fruit", "citrus", "produce" etc., improving marketplace discovery.
  */
 
-import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
+import { HOME_SEARCH_MAX_CHARS, SYNONYM_MAP as synonymMap } from '@beanpool/core';
 
 const SYNONYMS: Record<string, string[]> = { ...synonymMap };
 delete (SYNONYMS as any)._meta;
@@ -59,4 +59,13 @@ export function matchesExpandedSearch(searchQuery: string, title: string, descri
     }
 
     return false;
+}
+
+/**
+ * The words a saved search's "See more" on Home fills the Market's search with: trimmed, at most a saved search's 40
+ * characters; null for none, and the search stays as it was.
+ */
+export function marketSearchFromLink(value: string | null | undefined): string | null {
+    const v = value?.trim().slice(0, HOME_SEARCH_MAX_CHARS).trim();
+    return v ? v : null;
 }

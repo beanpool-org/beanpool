@@ -25,8 +25,8 @@ import { MAX_FONT_SCALE } from '../../constants/responsive';
 import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
 import { EDIT_HOME_NOTE, editHomeStyles } from '../../components/home/EditHomeSheet';
 import { ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
-import { FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_WAITING_LINE, pickerGroups } from '../home-cards';
-import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_TIPS, TIPS_ALL_SEEN, TIPS_DONT_SHOW, tipsCaption } from '@beanpool/core';
+import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
+import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_SEARCH_KMS, HOME_TIPS, TIPS_ALL_SEEN, TIPS_DONT_SHOW, tipsCaption } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
 
 /** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
@@ -174,6 +174,13 @@ describe('Edit home at 320dp × 1.3 (CARD-FRAME §1.3)', () => {
             expect(longestWord(name, num(e.name.fontSize)), name).toBeLessThan(room);
         }
         for (const sub of ['Nothing to show now', TIPS_ALL_SEEN]) expect(longestWord(sub, num(e.sub.fontSize)), sub).toBeLessThan(room);
+        // A saved search's row leads with its kind, so the first of its two lines shows it however long the words (#1716
+        // confirmation, finding 4): "Needs · " fits a line whole.
+        for (const q of ['organic free range eggs', 'firewood delivery', 'x'.repeat(40)]) {
+            const name = cardRowName({ type: 'search', settings: { q, kind: 'need' } });
+            expect(name.startsWith('Needs · '), name).toBe(true);
+            expect(textWidth('Needs · ', num(e.name.fontSize)), name).toBeLessThan(room);
+        }
         expect(e.rowText).toMatchObject({ flex: 1, minWidth: 0 });
         expect(e.arrow.flexShrink).toBe(0);
         expect(num(e.arrow.height)).toBeGreaterThanOrEqual(48);
@@ -238,6 +245,28 @@ describe('the picker at 320dp × 1.3 (CARD-FRAME §1.2, §1.4)', () => {
     });
 });
 
+describe("a saved search's settings sheet at 320dp × 1.3 (CARD-FRAME §4, §5.2 item 20)", () => {
+    it("every chip (kind, category, distance) fits the sheet's width on one line, and is a 48dp target", () => {
+        const sheetInner = SCREEN - 2 * num((editHomeStyles as unknown as Record<string, Record<string, unknown>>).list.paddingHorizontal);
+        const labels = [
+            ...SEARCH_KIND_CHIPS.map(k => k.label),
+            'Any category', ...POST_CATEGORIES.map(c => `${c.emoji} ${c.label}`),
+            'Any distance', ...HOME_SEARCH_KMS.map(k => `${k} km`),
+        ];
+        for (const l of labels) {
+            const w = textWidth(l, num(s.chipText.fontSize)) + 2 * num(s.chip.paddingHorizontal) + 2 * num(s.chip.borderWidth);
+            expect(w, l).toBeLessThan(sheetInner);
+        }
+        expect(num(s.chip.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(HOME_TARGET_DP).toBeGreaterThanOrEqual(48);
+        // The three kinds share one row at the floor, so "Both" reads as one choice of three.
+        const row = SEARCH_KIND_CHIPS.reduce((w, k) => w + textWidth(k.label, num(s.chipText.fontSize)) + 2 * num(s.chip.paddingHorizontal) + 2, 0) + 2 * 8;
+        expect(row).toBeLessThan(sheetInner);
+        // The sheet scrolls: eighteen category chips and a keyboard don't fit 569dp at once.
+        expect(read('components/home/CardSettingsSheet.tsx')).toMatch(/<ScrollView style=\{editHomeStyles\.list\}/);
+    });
+});
+
 describe('the frame\'s words on Home at 320dp × 1.3', () => {
     it('"Add a card ›" and "Edit home ›" each fit a row whole, wrap rather than clip, and each is its own 48dp target the floating button steps aside for', () => {
         const add = textWidth('Add a card ›', num(s.linkText.fontSize));
@@ -253,12 +282,29 @@ describe('the frame\'s words on Home at 320dp × 1.3', () => {
         expect(body).toMatch(/<HomeLink id="community:edit"/);
     });
 
-    it('the hint, the fewer-cards line and a saved search\'s waiting line keep their longest word beside the ✕', () => {
+    it('the hint and the fewer-cards line keep their longest word beside the ✕; a saved search\'s lines fit the card', () => {
         const home = read('app/(tabs)/index.tsx');
         const hintText = Number(/hintText: \{ flex: 1, fontSize: (\d+)/.exec(home)?.[1]);
         const room = SCREEN - 2 * 16 - 12 - HOME_TARGET_DP;
         for (const t of [HOME_HINT_LINE, FEWER_CARDS_LINE]) expect(longestWord(t, hintText), t).toBeLessThan(room);
-        expect(longestWord(SEARCH_WAITING_LINE, num(s.note.fontSize))).toBeLessThan(CARD_INNER);
+        // The offline and empty lines are notes; the first line is a strong row of at most 40 characters of words plus the
+        // distance, which wraps at word breaks: its longest word (40 characters with no space is the worst case) still
+        // has to be readable, so it is bounded like any row (HomeRow's two lines) and never put in the caption.
+        const longest = 'x'.repeat(40);
+        for (const t of [SEARCH_OFFLINE_LINE, searchEmptyLine('duck eggs', 25), searchFirstLine('duck eggs', 25)]) {
+            expect(longestWord(t, num(s.note.fontSize)), t).toBeLessThan(CARD_INNER);
+        }
+        expect(searchFirstLine('eggs', 5)).toBe('eggs · within 5 km');
+        expect(searchFirstLine('eggs', null)).toBe('eggs');
+        expect(searchFirstLine(longest, 25).startsWith(longest)).toBe(true);
+        expect(searchEmptyLine('eggs', 5)).toBe('No eggs within 5 km right now');
+        expect(searchEmptyLine('eggs', null)).toBe('No eggs right now');
+        const body = read('components/home/HomeCardBodies.tsx');
+        // The first line is a HomeRow (bounded to its lines), the rows the Market card's own, and See more a HomeLink (≥ 48 dp).
+        expect(body).toMatch(/<HomeRow colors=\{colors\} text=\{first\}/);
+        expect(body).toMatch(/<MarketRow key=\{p\.id\} p=\{p\}[^\n]*home-search-row-/);
+        expect(body).toMatch(/<HomeLink id="search:more"/);
+        expect(num(s.link.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
     });
 });
 

@@ -72,15 +72,40 @@ export const CARD_WORDS_MAX = 24;
 
 /**
  * One card's name for the screen reader: its "…" and Edit home's labels, and the "added" and "removed" lines. A saved
- * search is named by its words, in quotes and bounded (`"eggs"`), so two of them never sound alike (review of #1699,
- * finding 4); every other card by its type's name. Never the caption: a caption is fixed words, never a member's.
+ * search is named by its words, in quotes and bounded, and its kind when it isn't Both (`"eggs"`, `"eggs" (Needs)`), so
+ * two of them never sound alike (review of #1699, finding 4; review of #1716); every other card by its type's name.
+ * Never the caption: a caption is fixed words, never a member's.
  */
 export function cardLabelName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
-    if (c.type === 'search') {
-        const q = readSearchSettings(c.settings).q.trim().replace(/\s+/g, ' ');
-        if (q) return `"${q.length > CARD_WORDS_MAX ? `${q.slice(0, CARD_WORDS_MAX).trimEnd()}…` : q}"`;
-    }
-    return cardName(c.type, profile);
+    const words = searchWords(c);
+    if (!words) return cardName(c.type, profile);
+    const kind = searchKindWord(c);
+    return kind ? `"${words}" (${kind})` : `"${words}"`;
+}
+
+/** A saved search's words, bounded (CARD_WORDS_MAX, then "…"); null for any other card or a search with none. */
+function searchWords(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | null {
+    if (c.type !== 'search') return null;
+    const q = readSearchSettings(c.settings).q.trim().replace(/\s+/g, ' ');
+    return q ? (q.length > CARD_WORDS_MAX ? `${q.slice(0, CARD_WORDS_MAX).trimEnd()}…` : q) : null;
+}
+
+/** A saved search's kind as its names say it: "Offers" or "Needs" (the sheet's chips), nothing for Both. */
+function searchKindWord(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | null {
+    const kind = readSearchSettings(c.settings).kind;
+    return kind === 'offer' ? 'Offers' : kind === 'need' ? 'Needs' : null;
+}
+
+/**
+ * One card's row name in Edit home: a saved search by its words, and its kind when it isn't Both (`eggs`, `Needs · eggs`),
+ * so two searches are two rows even with the same words; else its name.
+ */
+export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
+    const words = searchWords(c);
+    if (!words) return cardName(c.type, profile);
+    const kind = searchKindWord(c);
+    // The kind leads, so a long search's row cut at two lines (320dp × 1.3) still shows it (#1716 confirmation, finding 4).
+    return kind ? `${kind} · ${words}` : words;
 }
 
 // ── Reading, and which copy wins ──────────────────────────────────────────────────────────────────────────────────
@@ -340,8 +365,22 @@ export function fewerCardsNews(account: HomeLayoutV2 | null, local: HomeLayoutV2
 export const FEWER_CARDS_LINE = 'Home now starts with fewer cards. Add a card brings the rest back.';
 /** The one-time hint (§1.3). */
 export const HOME_HINT_LINE = 'This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.';
-/** A saved search's card in this build: its listings come with slice F4 (review of #1699, finding 4). */
-export const SEARCH_WAITING_LINE = 'Its listings show in a coming app update.';
+/** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */
+export const SEARCH_OFFLINE_LINE = 'Shows when your community answers';
+
+/** "within 5 km", or nothing where the node had no point (it ignored the distance). */
+const within = (km: number | null): string => (km ? `within ${km} km` : '');
+
+/** A saved search's first line: the words and the distance ("eggs · within 5 km"); just the words with no point. */
+export function searchFirstLine(q: string, km: number | null): string {
+    return [q.trim().replace(/\s+/g, ' ') || 'Every listing', within(km)].filter(Boolean).join(' · ');
+}
+
+/** A search that finds nothing says so in its own words: "No eggs within 5 km right now". */
+export function searchEmptyLine(q: string, km: number | null): string {
+    const words = q.trim().replace(/\s+/g, ' ');
+    return ['No', words || 'listings', within(km), 'right now'].filter(Boolean).join(' ');
+}
 /** Edit home's line while a node before the frame can't keep the member's cards (§2.3). */
 export const NOT_ON_ACCOUNT_LINE = "Your community's server needs an update before your cards follow you to other devices.";
 

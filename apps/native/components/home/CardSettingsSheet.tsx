@@ -1,29 +1,34 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, Modal, TextInput, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Modal, TextInput, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HOME_SEARCH_MAX_CHARS, readSearchSettings } from '@beanpool/core';
+import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, type HomeSearchKind } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
-import { cardName } from '../../utils/home-cards';
-import { HOME_TARGET_DP } from './HomeParts';
+import { SEARCH_KIND_CHIPS, cardName } from '../../utils/home-cards';
+import { POST_CATEGORIES } from '../../constants/categories';
+import { HOME_TARGET_DP, homeStyles } from './HomeParts';
 import { editHomeStyles } from './EditHomeSheet';
 import { useModalKeyboardLift } from '../useModalKeyboardLift';
 
 /**
  * A card's settings sheet (CARD-FRAME §1.2, §1.3): the picker opens it on Add for a type with settings (its last button
  * is Add to Home), and the card's "…" → Settings… opens it again with Save, keeping the card where it is. Today only the
- * saved search has settings, and only its words are asked here: the kind, category and distance chips are slice F4's.
+ * saved search has settings (CARD-FRAME §4): its words, then Offers or Needs or both, a category, and a distance. The
+ * distance chips show only where the node has a point to measure from (the member's area, or the phone's place on the
+ * global community); without one the node ignores the distance, so the sheet doesn't offer it, and a kept one stays.
  *
  * Keyboard: lifted by useModalKeyboardLift from the root provider's state, as Create a Group and Invite people are (the
  * Modal's window doesn't shrink for the keyboard, which at 320 dp covered this whole sheet: review of #1699, finding 3).
  * Never a nested KeyboardProvider inside the Modal.
  */
-export function CardSettingsSheet({ visible, type, settings, mode, colors, onDone, onClose }: {
+export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = false, colors, onDone, onClose }: {
     visible: boolean;
     type: string | null;
     /** The card's settings now (Settings…), or none (a new card). */
     settings?: Record<string, unknown>;
     /** `add`: from the picker, the button says Add to Home. `save`: from the card's "…". */
     mode: 'add' | 'save';
+    /** The node has a point to measure a distance from: the distance chips show. */
+    hasPoint?: boolean;
     colors: AppColors;
     onDone: (settings: Record<string, unknown>) => void;
     onClose: () => void;
@@ -31,13 +36,21 @@ export function CardSettingsSheet({ visible, type, settings, mode, colors, onDon
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8);
     const [q, setQ] = useState('');
+    const [kind, setKind] = useState<HomeSearchKind>('any');
+    const [category, setCategory] = useState<string | null>(null);
+    const [km, setKm] = useState<number | null>(null);
     useEffect(() => {
-        if (visible) setQ(readSearchSettings(settings).q);
+        if (!visible) return;
+        const start = readSearchSettings(settings);
+        setQ(start.q);
+        setKind(start.kind);
+        setCategory(start.category ?? null);
+        setKm(start.km ?? null);
     }, [visible, settings]);
     if (!type) return null;
     const name = cardName(type);
     const words = q.trim();
-    const done = () => onDone({ ...readSearchSettings(settings), q: words });
+    const done = () => onDone({ q: words, kind, ...(category ? { category } : {}), ...(km ? { km } : {}) });
 
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
@@ -49,7 +62,7 @@ export function CardSettingsSheet({ visible, type, settings, mode, colors, onDon
                             <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>Cancel</Text>
                         </Pressable>
                     </View>
-                    <View style={editHomeStyles.list}>
+                    <ScrollView style={editHomeStyles.list} keyboardShouldPersistTaps="handled" testID="card-settings-scroll">
                         <Text style={[settingsStyles.label, { color: colors.text.body }]} nativeID="card-settings-words-label">Words to look for</Text>
                         <TextInput
                             value={q}
@@ -64,6 +77,14 @@ export function CardSettingsSheet({ visible, type, settings, mode, colors, onDon
                             onSubmitEditing={() => { if (words) done(); }}
                             testID="card-settings-words"
                         />
+                        <SettingChips label="Show" id="kind" colors={colors} value={kind} onPick={setKind}
+                            options={SEARCH_KIND_CHIPS.map(k => ({ value: k.kind, label: k.label }))} />
+                        <SettingChips label="Category" id="category" colors={colors} value={category} onPick={setCategory}
+                            options={[{ value: null, label: 'Any category' }, ...POST_CATEGORIES.map(c => ({ value: c.id as string | null, label: `${c.emoji} ${c.label}` }))]} />
+                        {hasPoint && (
+                            <SettingChips label="Distance" id="km" colors={colors} value={km} onPick={setKm}
+                                options={[{ value: null, label: 'Any distance' }, ...HOME_SEARCH_KMS.map(k => ({ value: k as number | null, label: `${k} km` }))]} />
+                        )}
                         <Pressable
                             disabled={!words}
                             onPress={done}
@@ -75,10 +96,34 @@ export function CardSettingsSheet({ visible, type, settings, mode, colors, onDon
                         >
                             <Text style={[settingsStyles.buttonText, { color: words ? colors.text.inverse : colors.text.secondary }]}>{mode === 'add' ? 'Add to Home' : 'Save'}</Text>
                         </Pressable>
-                    </View>
+                    </ScrollView>
                 </View>
             </View>
         </Modal>
+    );
+}
+
+/** One row of chips under its label; the chosen one is filled, and a screen reader hears it as selected. */
+function SettingChips<T>({ label, id, colors, options, value, onPick }: {
+    label: string; id: string; colors: AppColors; options: ReadonlyArray<{ value: T; label: string }>; value: T; onPick: (v: T) => void;
+}) {
+    const s = homeStyles(colors);
+    return (
+        <View accessibilityRole="radiogroup" accessibilityLabel={label} testID={`card-settings-${id}`}>
+            <Text style={[settingsStyles.label, { color: colors.text.body, marginTop: 14 }]}>{label}</Text>
+            <View style={s.chips}>
+                {options.map(o => {
+                    const on = o.value === value;
+                    return (
+                        <Pressable key={String(o.value)} onPress={() => onPick(o.value)} style={[s.chip, on && s.chipOn]}
+                            accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }} accessibilityLabel={o.label}
+                            testID={`card-settings-${id}-${String(o.value)}`}>
+                            <Text style={[s.chipText, on && s.chipTextOn]}>{o.label}</Text>
+                        </Pressable>
+                    );
+                })}
+            </View>
+        </View>
     );
 }
 

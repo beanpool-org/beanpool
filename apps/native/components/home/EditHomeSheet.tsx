@@ -5,7 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AppColors } from '../../constants/colors';
 import {
-    NOT_ON_ACCOUNT_LINE, canMoveCard, canRemoveCard, cardLabelName, cardName, cardOnNode, cardOrder, moveCard, resetLayout,
+    NOT_ON_ACCOUNT_LINE, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName, cardOrder, moveCard, resetLayout,
     type HomeAnswer, type HomeCardId, type HomeCardInstance, type HomeLayout, type HomeRole,
 } from '../../utils/home-cards';
 import { homeCardType } from '@beanpool/core';
@@ -57,7 +57,8 @@ export function EditHomeSheet({
     const [menuFor, setMenuFor] = useState<HomeCardInstance | null>(null);
     const listed = cardOrder(layout, pinned).filter(c => canMoveCard(c.type, pinned) && cardOnNode(c.type, node, role));
     const findPinnedHere = pinned.includes('find') && cardOnNode('find', node, role);
-    const name = (c: HomeCardInstance) => cardName(c.type, node.profile);
+    // A row's name: a saved search by its words (cardRowName), so two searches read as two rows.
+    const name = (c: HomeCardInstance) => cardRowName(c, node.profile);
     // Labels name the card as the screen reader should hear it: a saved search by its words (cardLabelName).
     const said = (c: HomeCardInstance) => cardLabelName(c, node.profile);
     const apply = (next: HomeLayout | null) => { if (next) onChange(next); };

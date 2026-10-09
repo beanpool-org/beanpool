@@ -8527,10 +8527,13 @@ export function getAllProjects(): CommunityProject[] {
         // The proposer's name only: getMember read their photo too, once a project (#1478).
         const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
 
+        // ⚡ Bolt: pre-map blobProjects by ID for O(1) lookups instead of O(E * P) .find() linear scans inside enterprise loop
+        const blobProjectsMap = new Map(blobProjects.map(p => [p.id, p]));
+
         for (const e of enterprises) {
             const lead = e.lead_keeper || e.any_keeper || e.public_key;
             const leadMember = callsignOfKey.get(lead) as { callsign: string } | undefined;
-            const existing = blobProjects.find(p => p.id === e.public_key);
+            const existing = blobProjectsMap.get(e.public_key);
             if (existing) {
                 // Keep live values from members table so blob doesn't shadow SQL
                 existing.title = e.callsign || existing.title;

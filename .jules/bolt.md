@@ -252,3 +252,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-12 - O(1) Escrow Banner Pending Transaction Lookups in PWA MessagesPage
 **Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, checking for active trust hold / escrow banners executed `userTransactions.find(...)` inside the render block on every render cycle ($O(T)$ complexity).
 **Action:** Memoized `activePendingTransaction` via `useMemo` dependent on `activeConv` and `userTransactions`, eliminating $O(T)$ array scans during active chat renders.
+
+## 2026-10-13 - O(1) Project Lookup in getAllProjects State Engine Helper
+**Learning:** In `apps/server/src/state-engine.ts`, `getAllProjects` iterated over bounded enterprise rows and performed `blobProjects.find(p => p.id === e.public_key)` for every row, causing an $O(E \times P)$ linear array scan when merging project records.
+**Action:** Pre-indexed `blobProjects` into a `Map<string, CommunityProject>` by `id` prior to the enterprise loop, converting project resolution into constant-time $O(1)$ Map lookups ($O(E + P)$ overall).

@@ -170,3 +170,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-11-22 - Add accessibilityHint to group invite landing action button
 **Learning:** In group invite landing screens, primary action buttons whose function changes based on viewer join status (joining or opening chat) benefit from dynamic `accessibilityHint` attributes so screen reader users know the exact outcome of tapping the button.
 **Action:** Supply dynamic `accessibilityHint` attributes on group invite primary action buttons.
+
+## 2026-11-28 - Add dynamic accessibilityLabel to ReviewModal submit button
+**Learning:** Action buttons in rating or review flows whose text child is replaced by an `ActivityIndicator` during submission leave screen readers without explicit loading state feedback unless provided with a dynamic `accessibilityLabel` that reflects the in-progress state.
+**Action:** Provide dynamic `accessibilityLabel` (`submitting ? (isExisting ? 'Updating rating...' : 'Submitting rating...') : (isExisting ? 'Update Rating' : 'Submit Rating')`) on review submit buttons rendering `ActivityIndicator` when submitting.

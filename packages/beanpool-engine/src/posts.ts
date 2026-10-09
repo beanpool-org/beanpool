@@ -761,7 +761,8 @@ const DELTA_ORDER = " ORDER BY +p.updated_at DESC, p.created_at DESC";
 /**
  * A sync read paged by key (PostFilter.syncPage): RECENT_ORDER made total, with the id last. A missing time reads as ''
  * (the last), so every row has a key a page can start below. An expression, so no index sets the order: a delta's OR
- * stays an index search (DELTA_ORDER), and a whole read sorts every row, as the heal read does (postRowsForHeal).
+ * stays an index search (DELTA_ORDER), and a whole read sorts every row below the key, as the heal read does. So, as
+ * there, only the page's ids are ranked in it, and only they are read in full (postRowsForSyncPage).
  */
 const PAGE_ORDER = " ORDER BY COALESCE(p.updated_at, '') DESC, COALESCE(p.created_at, '') DESC, p.id DESC";
 const PAGE_BELOW = " AND (COALESCE(p.updated_at, '') < ? OR (COALESCE(p.updated_at, '') = ?"
@@ -782,6 +783,33 @@ export interface SyncPage {
 /** A page key: a row's time, its creation time and its id, as PAGE_ORDER reads them. Opaque to the phone. */
 function pageKeyOf(row: { updated_at?: string | null; created_at?: string | null; id: string }): string {
     return Buffer.from(JSON.stringify([row.updated_at ?? '', row.created_at ?? '', row.id])).toString('base64url');
+}
+
+/**
+ * One page of a sync read paged by key, in PAGE_ORDER, from `where` (which reads `p` and `m` only, as postRowsForHeal's
+ * does). The order sorts every row below the key, so the page's ids are ranked first, with just the columns of the order,
+ * and only those rows are read in full: sorted with the full row (POST_ROW_SELECT), each row below the key computed its
+ * author's two trade counts before the sort, and a whole pull cost the node O(N²). Measured at 10,000 listings, 20,000
+ * ledger rows and 3,000 deals: page 1 2.4 s, the whole pull 65 s over 51 pages (review of PR #1719, B2). The same rows,
+ * in the same order. `page.next` is the key of its last row, set before anything after the SQL drops a row: a page cut
+ * short after it still hands one out.
+ */
+function postRowsForSyncPage(db: Db, where: string, whereParams: unknown[], page: SyncPage, filter: PostFilter | undefined): any[] {
+    let sql = `
+        SELECT p.id AS id, p.updated_at AS updated_at, p.created_at AS created_at
+        FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE 1=1${where}${PAGE_ORDER}`;
+    const params: unknown[] = [...whereParams];
+    if (filter?.limit) {
+        sql += ' LIMIT ?';
+        params.push(filter.limit);
+    }
+    const ranked = db.prepare(sql).all(...params) as Array<{ id: string; updated_at: string | null; created_at: string | null }>;
+    page.next = filter?.limit && ranked.length === filter.limit ? pageKeyOf(ranked[ranked.length - 1]) : null;
+    const full = selectInChunks(db, ranked.map(r => r.id), ph => `${postRowSelect(filter)}\n        WHERE p.id IN (${ph})`);
+    const byId = new Map(full.map(row => [row.id as string, row]));
+    return ranked.flatMap(r => byId.get(r.id) ?? []);
 }
 
 /** The key's three parts, or null when it isn't one this node handed out. */
@@ -1270,16 +1298,17 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             where += PAGE_BELOW;
             params.push(below[0], below[0], below[1], below[1], below[2]);
         }
-        let query = `${postRowSelect(filter)}
+        if (page) {
+            rows = postRowsForSyncPage(db, where, params, page, filter);
+        } else {
+            let query = `${postRowSelect(filter)}
         WHERE 1=1${where}${recentOrder(filter)}`;
-        if (filter?.limit) {
-            query += " LIMIT ? OFFSET ?";
-            params.push(filter.limit, page ? 0 : filter.offset || 0);
+            if (filter?.limit) {
+                query += " LIMIT ? OFFSET ?";
+                params.push(filter.limit, filter.offset || 0);
+            }
+            rows = db.prepare(query).all(...params) as any[];
         }
-        rows = db.prepare(query).all(...params) as any[];
-        // The key of the page's last row, read before anything below drops a row: a page cut short after the SQL still
-        // hands one out.
-        if (page) page.next = filter?.limit && rows.length === filter.limit ? pageKeyOf(rows[rows.length - 1]) : null;
     }
     const postIds = rows.map(r => r.id);
 

@@ -235,6 +235,26 @@ export function pickLayout(
     return { layout: account, push: false };
 }
 
+/** The most dates of marked edits the phone remembers having sent (the latest ones). */
+export const MARK_SENT_MAX = 8;
+
+/**
+ * Whether a version-2 account answer is this phone's own save of an edit made on the unknown list: dated exactly as one
+ * the phone sent while marked (`sent`). Then the account's list is known, and it is this phone's: the mark goes and the
+ * dates decide as usual, so a newer edit made while that save was out wins and is sent. Without this, a read that
+ * overtook the save's answer carried the save back as "the account's real list" and the newer edit was lost unsent
+ * (review of #1701 confirmation, finding 2; the web app's lib/home-layout.ts `ownMarkedSave`).
+ */
+export function ownMarkedSave(account: HomeLayout | null, accountV1: { empty: boolean } | undefined, sent: readonly string[]): boolean {
+    return !!account?.updatedAt && !accountV1 && sent.includes(account.updatedAt);
+}
+
+/** `sent` with one more date of a marked edit sent, the latest {@link MARK_SENT_MAX} kept. */
+export function rememberMarkSent(sent: readonly string[], at: string | null | undefined): string[] {
+    if (!at || sent.includes(at)) return [...sent];
+    return [...sent, at].slice(-MARK_SENT_MAX);
+}
+
 /**
  * Whether Find your community is pinned for this reader: on the global node, in the member's first 30 days from joining,
  * or while the join date is unknown (the node's own rule, routes/home-answer.ts `cardsToBuild`, and the web app's,

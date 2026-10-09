@@ -156,6 +156,11 @@ export interface PostFilter {
     offset?: number;
     limit?: number;
     updatedAfter?: string;
+    /**
+     * A phone's sync read paged by key (SyncPage): every listing in one total order, newest changed first, each page
+     * starting below the last row of the one before. Unset, a read is ordered and paged as it always was.
+     */
+    syncPage?: SyncPage;
     query?: string;
     authorPubkey?: string;
     viewerPubkey?: string;
@@ -753,9 +758,47 @@ const RECENT_ORDER = " ORDER BY p.updated_at DESC, p.created_at DESC";
  */
 const DELTA_ORDER = " ORDER BY +p.updated_at DESC, p.created_at DESC";
 
+/**
+ * A sync read paged by key (PostFilter.syncPage): RECENT_ORDER made total, with the id last. A missing time reads as ''
+ * (the last), so every row has a key a page can start below. An expression, so no index sets the order: a delta's OR
+ * stays an index search (DELTA_ORDER), and a whole read sorts every row, as the heal read does (postRowsForHeal).
+ */
+const PAGE_ORDER = " ORDER BY COALESCE(p.updated_at, '') DESC, COALESCE(p.created_at, '') DESC, p.id DESC";
+const PAGE_BELOW = " AND (COALESCE(p.updated_at, '') < ? OR (COALESCE(p.updated_at, '') = ?"
+    + " AND (COALESCE(p.created_at, '') < ? OR (COALESCE(p.created_at, '') = ? AND p.id < ?))))";
+
+/**
+ * One page of a phone's sync read paged by key. `after` is the key the page before handed out (null for the first); the
+ * read sets `next` to its own last row's key when it filled `limit`, so a page that comes back without one is the last.
+ * A listing that changes while the phone pages moves above every key handed out, so it is in the delta from any cursor
+ * the phone takes before its first page (services/pillar-sync.ts); every other one keeps its place below or above
+ * the key, so none is skipped, and none is sent twice unless it changed.
+ */
+export interface SyncPage {
+    after: string | null;
+    next: string | null;
+}
+
+/** A page key: a row's time, its creation time and its id, as PAGE_ORDER reads them. Opaque to the phone. */
+function pageKeyOf(row: { updated_at?: string | null; created_at?: string | null; id: string }): string {
+    return Buffer.from(JSON.stringify([row.updated_at ?? '', row.created_at ?? '', row.id])).toString('base64url');
+}
+
+/** The key's three parts, or null when it isn't one this node handed out. */
+export function parsePageKey(key: string): [string, string, string] | null {
+    try {
+        const parts = JSON.parse(Buffer.from(key, 'base64url').toString('utf8'));
+        return Array.isArray(parts) && parts.length === 3 && parts.every(p => typeof p === 'string' && p.length <= 200)
+            ? parts as [string, string, string] : null;
+    } catch {
+        return null;
+    }
+}
+
 /** The newest-first order: DELTA_ORDER for a delta read, RECENT_ORDER for every other. */
 function recentOrder(filter: PostFilter | undefined): string {
     if (filter?.upcomingUntil) return START_ORDER;
+    if (filter?.syncPage) return PAGE_ORDER;
     return filter?.updatedAfter ? DELTA_ORDER : RECENT_ORDER;
 }
 /** Soonest start first (PostFilter.upcomingUntil), ending on p.id so the order is total. */
@@ -827,7 +870,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
     upcomingUntil: null,
-    id: null, status: null, updatedAfter: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
+    id: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
     includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
 
@@ -1015,6 +1058,7 @@ function healKeyOf(after: string | undefined): [number, number, string, string, 
 export function getPostsForPhotoHeal(db: Db, filter: PostFilter, heal: PhotoHealRead): MarketplacePost[] {
     return getPostsRankedBy(db, {
         ...filter, updatedAfter: undefined, sync: true, near: undefined, sortByDistance: undefined, limit: undefined, offset: undefined,
+        syncPage: undefined,
     }, postRowsNear, heal);
 }
 
@@ -1219,13 +1263,23 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     } else if (near) {
         rows = rowsNear(db, near, where, params, filter!);
     } else {
+        const page = filter?.syncPage;
+        const below = page?.after ? parsePageKey(page.after) : null;
+        if (page?.after && !below) throw new Error('Not a page key this node handed out');
+        if (below) {
+            where += PAGE_BELOW;
+            params.push(below[0], below[0], below[1], below[1], below[2]);
+        }
         let query = `${postRowSelect(filter)}
         WHERE 1=1${where}${recentOrder(filter)}`;
         if (filter?.limit) {
             query += " LIMIT ? OFFSET ?";
-            params.push(filter.limit, filter.offset || 0);
+            params.push(filter.limit, page ? 0 : filter.offset || 0);
         }
         rows = db.prepare(query).all(...params) as any[];
+        // The key of the page's last row, read before anything below drops a row: a page cut short after the SQL still
+        // hands one out.
+        if (page) page.next = filter?.limit && rows.length === filter.limit ? pageKeyOf(rows[rows.length - 1]) : null;
     }
     const postIds = rows.map(r => r.id);
 

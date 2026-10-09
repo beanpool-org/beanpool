@@ -615,6 +615,8 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
     const near = c.point && s.km ? { ...c.point, radiusKm: s.km } : undefined;
     // Words that expand to nothing (蛋, "!!!") are searched as typed, never an unfiltered read under the member's words.
     const query = searchTermsFor(s.q).join(' ');
+    // Words that leave nothing FTS5 can ask (quote marks alone) find nothing: never every listing under them.
+    if (s.q.trim() && !query) return { q: s.q, kind: s.kind, category: s.category ?? null, km: near ? s.km! : null, items: [], more: false };
     const pool = postsFor(c, {
         types: s.kind === 'any' ? ['offer', 'need'] : [s.kind], status: 'active', category: s.category, query: query || undefined, limit: SEARCH_ITEMS + 1,
         near, sortByDistance: !!near, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,

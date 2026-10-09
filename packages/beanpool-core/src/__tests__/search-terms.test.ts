@@ -45,4 +45,20 @@ describe('searchTermsFor', () => {
         expect(searchTermsFor('')).toEqual([]);
         expect(searchTermsFor('  ')).toEqual([]);
     });
+    it('asks FTS5 nothing it cannot take: quote marks alone are no words, and control characters go (#1716 confirmation)', () => {
+        expect(searchTermsFor('"')).toEqual([]);
+        expect(searchTermsFor("' \"")).toEqual([]);
+        expect(searchTermsFor('eggs\u0000')).toEqual(expandSearchTerms('eggs'));
+        expect(searchTermsFor('\u0000')).toEqual([]);
+        expect(searchTermsFor('x\u0000y').join(' ')).not.toContain('\u0000');
+    });
+});
+
+describe('one-character words', () => {
+    it('keeps a one-character word outside ASCII beside another word; a lone a-z letter still goes (#1716 confirmation)', () => {
+        expect(expandSearchTerms('大米 鱼')).toEqual(['大米', '鱼']);
+        expect(expandSearchTerms('알 우유')).toEqual(['알', '우유']);
+        expect(expandSearchTerms('米 rice')).toEqual(expect.arrayContaining(['米', 'rice']));
+        expect(expandSearchTerms('a kale')).not.toContain('a');
+    });
 });

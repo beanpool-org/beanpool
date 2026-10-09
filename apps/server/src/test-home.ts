@@ -620,6 +620,15 @@ async function main(): Promise<void> {
         const bang = await answer('!!!');
         assert(bang?.q === '!!!' && Array.isArray(bang.items) && bang.items.length === 0 && bang.more === false,
             `"!!!" answers nothing, never the newest listings unfiltered (${titles(bang)})`);
+        // Quote marks alone leave nothing to ask, a NUL never reaches FTS5, and a one-character CJK word beside another
+        // word is still searched (#1716 confirmation, findings 1–3).
+        for (const q of ['"', "'", '"\''])
+            assert((await answer(q))?.items?.length === 0, `${JSON.stringify(q)} answers nothing, never the newest listings unfiltered`);
+        const nul = await answer('jardín\u0000');
+        assert(JSON.stringify(ids(nul?.items ?? [])) === JSON.stringify([garden.id]), `a NUL in the words is dropped, the card still answers (${titles(nul)})`);
+        const mixed = await answer('jardín 蛋');
+        assert(JSON.stringify(ids(mixed?.items ?? []).sort()) === JSON.stringify([garden.id, duck.id].sort()),
+            `"jardín 蛋" finds both words' listings (${titles(mixed)})`);
     }
 
     // ── 6. the size ─────────────────────────────────────────────────────────────────────────────────────────────

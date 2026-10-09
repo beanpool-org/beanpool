@@ -8,7 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Alert, LogBox, AppState, AppStateStatus, View, TextInput, Platform, StyleSheet, DeviceEventEmitter, Keyboard, BackHandler } from 'react-native';
 import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
-import { requestSync } from '../services/pillar-sync';
+import { forgetSyncCursors, requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
 import { registerForPushNotifications, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
@@ -468,6 +468,8 @@ function RootLayoutNav() {
                                                     onPress: async () => {
                                                         try {
                                                             await clearDB();
+                                                            // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
+                                                            await forgetSyncCursors();
                                                             await AsyncStorage.removeItem('beanpool_anchor_url');
                                                             // No community on the phone: the update screen's block comes down.
                                                             communitySwitched();

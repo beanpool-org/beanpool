@@ -621,6 +621,9 @@ export default function PeopleScreen() {
                         try {
                             const { clearDB } = await import('../../utils/db');
                             await clearDB();
+                            // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
+                            const { forgetSyncCursors } = await import('../../services/pillar-sync');
+                            await forgetSyncCursors();
                             
                             const activeUrl = anchorUrl;
                             await AsyncStorage.removeItem('beanpool_anchor_url');

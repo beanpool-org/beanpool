@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
+import Module from 'node:module';
 
 // The posts sync read past its first page (services/pillar-sync.ts, POSTS_NEXT_HEADER). The node answers at most 200
 // listings a read, newest changed first (apps/server https-server.ts MAX_PAGE_LIMIT); a phone that took one page and
@@ -51,7 +52,7 @@ vi.mock('../nodes', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
 import { getDb } from '../db';
-import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
+import { forgetSyncCursors, performSync, resetSyncFingerprints, syncCursorKeysOf } from '../../services/pillar-sync';
 
 const ANN = 'a'.repeat(64);
 const KEY = (id: string) => `pillar_sync_beanpool_test.beanpool.org.db_${id}`;
@@ -133,12 +134,26 @@ const postsReads = () => requests.filter(u => u.includes('/api/marketplace/posts
 const held = () => (sql.prepare('SELECT id, title FROM posts ORDER BY id').all() as any[]);
 const heldTitles = () => new Map(held().map(r => [r.id as string, r.title as string]));
 
+/** What the cycle told the screens (DeviceEventEmitter), in order. */
+let told: string[] = [];
+
 async function sync(expectSuccess = true) {
     requests = [];
     postsReadsThisCycle = 0;
-    const r = await performSync();
-    if (expectSuccess) expect(r.success).toBe(true);
-    return r;
+    told = [];
+    // pillar-sync tells the screens through `require('react-native')`, which does not load under node: it is stood in
+    // for during the cycle only, as members-only-refusal-sync.test.ts does.
+    const nodeLoad = (Module as any)._load;
+    (Module as any)._load = function (request: string, ...rest: unknown[]) {
+        return request === 'react-native' ? { DeviceEventEmitter: { emit: (e: string) => { told.push(e); } } } : nodeLoad.call(this, request, ...rest);
+    };
+    try {
+        const r = await performSync();
+        if (expectSuccess) expect(r.success).toBe(true);
+        return r;
+    } finally {
+        (Module as any)._load = nodeLoad;
+    }
 }
 
 /** A phone that synced once (one old listing), so its next cycle is a delta from that cycle's cursor. */
@@ -334,5 +349,89 @@ describe('a whole pull of more than one page', () => {
         expect(titles.get(edited)).toBe('Edited during the take-over pull');
         expect(held()).toHaveLength(450);
         expect(store.get(EPOCH_KEY)).toBe('1');
+    });
+});
+
+// A reset of the copy (Force Resync, "Wipe & Join Fresh", "Wipe Connection", the members-only drop) after a read was held:
+// carried on below its key, a whole read never read the listings above it again, and the 200 newest stayed missing until
+// each was edited (review of PR #1719, B1: R1, R2; R3 its delta twin).
+describe('a reset after a held read', () => {
+    /** app/(tabs)/settings.tsx Force Resync as it was: four cursors, then clearDB. The held read was not among them. */
+    const forceResyncAsBefore = () => {
+        for (const id of ['last-sync', 'checkpoint', 'members_last_sync', 'members_held_since']) store.delete(KEY(id));
+        sql.exec('DELETE FROM posts');
+        resetSyncFingerprints();
+    };
+    /** A fresh phone on a node of 450 listings whose whole read failed at its second page: 200 written, the rest held. */
+    async function wholeReadHeldAtPage2() {
+        const all = many('all', 450, Date.parse('2026-09-01T00:00:00.000Z'));
+        node.posts = [...all];
+        node.broken = { read: 1, status: 500, body: '{"error":"busy"}' };
+        await sync();
+        expect(held()).toHaveLength(PAGE);
+        expect(JSON.parse(store.get(HELD_KEY)!).since).toBe('');
+        node.broken = null;
+        return all;
+    }
+    const missingOf = (all: Listing[]) => { const t = heldTitles(); return all.filter(p => !t.has(p.id)).map(p => p.id); };
+
+    it('R1 Force Resync as it was (the hold not removed): the emptied cache drops the hold and the read starts again from page 1', async () => {
+        const all = await wholeReadHeldAtPage2();
+        forceResyncAsBefore();
+        await sync();
+        expect(new URL(postsReads()[0]).searchParams.has('pageAfter')).toBe(false);
+        expect(missingOf(all)).toEqual([]);
+        expect(store.has(HELD_KEY)).toBe(false);
+        await sync();
+        expect(missingOf(all)).toEqual([]);
+        expect(held()).toHaveLength(450);
+    });
+
+    it('Force Resync removes the held read with the other cursors (syncCursorKeysOf), and so does a wipe (forgetSyncCursors)', async () => {
+        expect(syncCursorKeysOf('beanpool_test.beanpool.org.db')).toEqual(expect.arrayContaining([LAST_SYNC_KEY, HELD_KEY]));
+        expect(syncCursorKeysOf('beanpool_test.beanpool.org.db')).not.toContain(EPOCH_KEY);
+        const all = await wholeReadHeldAtPage2();
+        await forgetSyncCursors();
+        expect(store.has(HELD_KEY)).toBe(false);
+        expect(store.get(EPOCH_KEY)).toBe('0');
+        sql.exec('DELETE FROM posts');
+        resetSyncFingerprints();
+        await sync();
+        expect(new URL(postsReads()[0]).searchParams.has('pageAfter')).toBe(false);
+        expect(missingOf(all)).toEqual([]);
+    });
+
+    it('R2 the members-only refusal drops the hold with the listings: re-admitted, the phone reads them all again', async () => {
+        const all = await wholeReadHeldAtPage2();
+        node.broken = { read: 0, status: 403, body: '{"error":"members only","code":"members_only"}' };
+        const refused = await sync(false);
+        expect(refused.errorMessage).toBe('members_only');
+        expect(held()).toHaveLength(0);
+        expect(store.has(HELD_KEY)).toBe(false);
+        expect(store.has(LAST_SYNC_KEY)).toBe(false);
+        node.broken = null;
+        await sync();
+        expect(new URL(postsReads()[0]).searchParams.has('pageAfter')).toBe(false);
+        expect(missingOf(all)).toEqual([]);
+        await sync();
+        expect(missingOf(all)).toEqual([]);
+    });
+
+    it('R3 Force Resync while a delta is held: the whole pull lets the stale hold go, and the next cycle is a delta from the pull', async () => {
+        await phoneWithACursor();
+        node.posts.push(...many('chg', 450, Date.now()));
+        node.broken = { read: 1, status: 500, body: '{"error":"busy"}' };
+        await sync();
+        expect(JSON.parse(store.get(HELD_KEY)!).since).not.toBe('');
+        node.broken = null;
+        forceResyncAsBefore();
+        await sync();
+        expect(held()).toHaveLength(451);
+        expect(store.has(HELD_KEY)).toBe(false);
+        const cursorAfterWhole = Number(store.get(LAST_SYNC_KEY));
+        await sync();
+        expect(new URL(postsReads()[0]).searchParams.has('pageAfter')).toBe(false);
+        expect(Number(store.get(LAST_SYNC_KEY))).toBeGreaterThanOrEqual(cursorAfterWhole);
+        expect(held()).toHaveLength(451);
     });
 });

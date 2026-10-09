@@ -34,6 +34,9 @@ export const POSTS_NEXT_HEADER = 'X-Posts-Next';
  */
 export const POSTS_PAGE_CAP = 50;
 
+/** Where a posts read cut short is held (HeldPostsRead), one per community's copy (getSyncCursorKey). */
+const POSTS_HELD_READ = 'posts_held_read';
+
 /** A posts read cut short: the cursor it reads from ('' a whole read), the key of its next page, and when it began. */
 interface HeldPostsRead {
     since: string;
@@ -88,6 +91,23 @@ export async function getSyncCursorKey(keyId: string): Promise<string> {
     await communityCachesRenamed();
     const url = await AsyncStorage.getItem('beanpool_anchor_url');
     return `pillar_sync_${getDatabaseFilenameForNode(url)}_${keyId}`;
+}
+
+/**
+ * Every sync cursor of one community's copy, by its file name (utils/nodes.ts getDatabaseFilenameForNode): what a reset
+ * or a wipe of that copy removes, so its next sync reads it whole, from its first page. The held posts read is one: a
+ * whole read carried on after a reset resumes below its key and never reads the newest listings above it again
+ * (review of PR #1719, B1). The identity epoch is not: it says which server the phone last read, not what it holds.
+ */
+export function syncCursorKeysOf(dbFilename: string): string[] {
+    return [StorageKeysConfig.LAST_SYNC, StorageKeysConfig.SYNC_CHECKPOINT, 'members_last_sync', 'members_held_since', POSTS_HELD_READ]
+        .map(id => `pillar_sync_${dbFilename}_${id}`);
+}
+
+/** Forget the sync cursors of the community the phone is on (syncCursorKeysOf): for a wipe of its copy. */
+export async function forgetSyncCursors(): Promise<void> {
+    await communityCachesRenamed();
+    await AsyncStorage.multiRemove(syncCursorKeysOf(getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url'))));
 }
 
 export interface SyncResult {
@@ -382,10 +402,16 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // return only recently-changed posts and the market would look empty/incomplete.
         // Force a full re-pull in that case so a wiped cache heals in one sync — this also
         // re-enables the fast-first-paint below. Steady state (posts present) stays incremental.
-        // The local count only matters when we already hold a sync cursor; without one it's a
+        // The local count only matters when we already hold a sync cursor or a held read; without either it's a
         // full pull regardless, so skip the extra COUNT query on every cursor-less cycle.
+        // A posts read the page cap cut short (POSTS_PAGE_CAP) carries on where it stopped, from the cursor it read from:
+        // only a read that reaches its last page moves kLastSync, and to the time it began, so a listing that changed
+        // while it paged (it moves to the top of the node's order, above every page key) is in the next delta.
+        const kPostsHeld = await getSyncCursorKey(POSTS_HELD_READ);
+        const postsHeldRaw = await AsyncStorage.getItem(kPostsHeld);
+        let postsHeld = heldPostsRead(postsHeldRaw);
         let localPostsCount = 0;
-        if (lastSyncParam) {
+        if (lastSyncParam || postsHeld) {
             try {
                 const database = await getDb();
                 const postsRow = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM posts');
@@ -393,13 +419,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             } catch (e) {}
         }
         let postsIsIncremental = !!lastSyncParam && localPostsCount > 0;
-        // A posts read the page cap cut short (POSTS_PAGE_CAP) carries on where it stopped, from the cursor it read from:
-        // only a read that reaches its last page moves kLastSync, and to the time it began, so a listing that changed
-        // while it paged (it moves to the top of the node's order, above every page key) is in the next delta.
-        const kPostsHeld = await getSyncCursorKey('posts_held_read');
-        let postsHeld = heldPostsRead(await AsyncStorage.getItem(kPostsHeld));
-        // A held delta whose cache has been emptied since starts again whole, as any delta would (above).
-        if (postsHeld && postsHeld.since !== '' && !postsIsIncremental) postsHeld = null;
+        // A held read whose cache has been emptied since (Force Resync, a wipe, the members-only drop) starts again whole,
+        // from its first page: carried on below its key, a whole read would never read the listings above it again. So
+        // does a held delta with no cursor to be a delta of. The stored hold goes with it, so no later cycle resumes it
+        // (and moves the cursor back to when it began).
+        if (postsHeld && (localPostsCount === 0 || (postsHeld.since !== '' && !postsIsIncremental))) postsHeld = null;
+        if (postsHeldRaw !== null && !postsHeld) await AsyncStorage.removeItem(kPostsHeld);
         if (postsHeld) postsIsIncremental = postsHeld.since !== '';
         let postsSyncParam = postsHeld
             ? (postsHeld.since ? `&updatedAfter=${encodeURIComponent(postsHeld.since)}` : '')
@@ -518,6 +543,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     try {
                         if (await applyDelta({ postsRefused: true }, expectedDbName)) {
                             await AsyncStorage.removeItem(kLastSync);
+                            await AsyncStorage.removeItem(kPostsHeld);
                             forgetFingerprintsOf(anchorUrl);
                             DeviceEventEmitter.emit('sync_data_updated');
                         }

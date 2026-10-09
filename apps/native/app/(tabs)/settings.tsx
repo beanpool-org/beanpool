@@ -1263,6 +1263,9 @@ export default function SettingsScreen() {
                                 for (const p of paths) {
                                     await FileSystem.deleteAsync(p, { idempotent: true });
                                 }
+                                // Its cursors go with its copy, so a rejoin reads it whole.
+                                const { syncCursorKeysOf } = await import('../../services/pillar-sync');
+                                await AsyncStorage.multiRemove(syncCursorKeysOf(filename));
                             } catch(e) {}
                             
                             // Automatically pivot to the next available node
@@ -1292,6 +1295,9 @@ export default function SettingsScreen() {
                             for (const p of paths) {
                                     await FileSystem.deleteAsync(p, { idempotent: true });
                             }
+                            // Its cursors go with its copy, so a rejoin reads it whole.
+                            const { syncCursorKeysOf } = await import('../../services/pillar-sync');
+                            await AsyncStorage.multiRemove(syncCursorKeysOf(filename));
                         } catch(e) {}
                     }
                 }
@@ -1332,13 +1338,10 @@ export default function SettingsScreen() {
                             ];
                             // Each community caches its own minimum-app-version floor.
                             keysToRemove.push(...(await AsyncStorage.getAllKeys()).filter(k => k.startsWith('beanpool_min_app_version')));
-                            for (const u of urlsToClear) {
-                                const filename = getDatabaseFilenameForNode(u);
-                                keysToRemove.push(`pillar_sync_${filename}_last-sync`);
-                                keysToRemove.push(`pillar_sync_${filename}_checkpoint`);
-                                keysToRemove.push(`pillar_sync_${filename}_members_last_sync`);
-                                keysToRemove.push(`pillar_sync_${filename}_members_held_since`);
-                            }
+                            // Every sync cursor of each copy, a held posts read among them: carried on, a whole read
+                            // would resume below its key and never re-download the newest listings.
+                            const { syncCursorKeysOf } = await import('../../services/pillar-sync');
+                            for (const u of urlsToClear) keysToRemove.push(...syncCursorKeysOf(getDatabaseFilenameForNode(u)));
                             await AsyncStorage.multiRemove(keysToRemove);
                             const { clearDB, initDB } = await import('../../utils/db');
                             await clearDB();

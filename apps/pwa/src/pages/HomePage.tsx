@@ -281,7 +281,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 // read decided): it is sent now, as any edit on the member's own list (review of #1701 confirmation,
                 // finding 2). Otherwise this answer marked it saved and it waited, unsent, for some later read.
                 const waiting = unsavedRef.current && layoutRef.current && layoutRef.current !== next ? layoutRef.current : null;
-                const mine = waiting ?? next;
                 unsavedRef.current = false;
                 refusedLanding.current = false;
                 // On the account now: the list is the member's, no longer an edit on an unknown one (the phone's
@@ -291,10 +290,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 setNotOnAccount(false);
                 // What the node kept: this layout, or a newer one saved from another device (a phone's, another tab's).
                 const kept = readLayout(r['home.layout']);
-                if (kept && (kept.updatedAt ?? '') > (mine.updatedAt ?? '')) {
+                if (kept && (kept.updatedAt ?? '') > (next.updatedAt ?? '')) {
+                    // Newer than this save: the node dropped it. That list stands, and an edit that waited on this save
+                    // goes with it, unsent: it was made on a list the account no longer holds (review of #1715, finding 2).
                     layoutRef.current = kept;
                     draw(kept);
                 } else if (waiting) {
+                    // The node kept this save (never dated later than sent: the node only holds a date to its now).
                     unsavedRef.current = true;
                 }
                 if (answerRef.current) keep(answerRef.current, layoutRef.current, epoch);

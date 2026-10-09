@@ -1464,6 +1464,52 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         expect(cardIds()).toEqual(expect.arrayContaining(['market', 'events', 'pulse']));
         expect(cardIds()).not.toContain('beans');
     });
+
+    it('W2b: another device\'s list lands just before the first save, which the node drops as older: that list stands, and the edit that waited is not sent (review of #1715, finding 2)', async () => {
+        const full = answer();
+        const at = (x: unknown) => (x && typeof x === 'object' && typeof (x as { updatedAt?: unknown }).updatedAt === 'string' ? Date.parse((x as { updatedAt: string }).updatedAt) : -Infinity);
+        let account: unknown = EMPTY_V1;
+        const log: string[] = [];
+        vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
+            const l = prefs['home.layout'] as unknown;
+            log.push(`POST ${ids(l).join(',')}`);
+            if (log.filter(x => x.startsWith('POST ')).length === 1) {
+                // The first save is applied only as it answers; another device's list, dated 5 ms after it, lands first.
+                await new Promise(r => setTimeout(r, 400));
+                const other = {
+                    v: 2, dismissed: {}, updatedAt: new Date(at(l) + 5).toISOString(),
+                    cards: [{ id: 'market', type: 'market' }, { id: 'decide', type: 'decide' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }],
+                };
+                if (at(other) >= at(account)) account = other;
+            }
+            if (at(l) >= at(account)) account = l;
+            log.push('answered');
+            return { success: true, 'home.layout': account } as never;
+        });
+        vi.mocked(api.getHome).mockImplementation(async (params = {}) => {
+            log.push(params.cards ? 'GET cards=' : 'GET');
+            const asked = params.cards ? [...params.cards] : Object.keys(full.cards);
+            return fresh({ ...full, layout: account as never, cards: Object.fromEntries(Object.entries(full.cards).filter(([id]) => asked.includes(id))) });
+        });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-events');
+        add('beans');
+        await waitFor(() => expect(posts(log)).toBe(1));
+        await pause(40);
+        // The second edit's read still sees the empty row: the first save is not applied yet.
+        add('pulse');
+        await pause(920);
+        expect(log).toContain('answered');
+        expect(posts(log)).toBe(1);
+        expect(ids(account)).toEqual(['market', 'decide', 'search-k2x7']);
+        expect(cardIds()).toEqual(expect.arrayContaining(['market', 'search-k2x7']));
+        expect(cardIds()).not.toContain('pulse');
+        // Nothing more is sent at the next read either.
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await pause(300);
+        expect(posts(log)).toBe(1);
+        expect(ids(account)).toEqual(['market', 'decide', 'search-k2x7']);
+    });
 });
 
 describe('what a never-edited member asks, and the old web app\'s empty copy (review of #1701, findings 6 and 4)', () => {

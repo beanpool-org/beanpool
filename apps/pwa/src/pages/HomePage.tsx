@@ -43,7 +43,7 @@ import {
     FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_HINT_LINE, SEARCH_WAITING_LINE, addCard, addedLine, askPinned, canMoveCard,
     canRemoveCard, cardLabelName, cardName, cardOnNode, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
     listOf, moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
-    resetLayout, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
+    resetLayout, sameList, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
 } from '../lib/home-layout';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { settleInterests, shareInterests } from '../lib/home-interests';
@@ -299,6 +299,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 } else if (waiting) {
                     // The node kept this save (never dated later than sent: the node only holds a date to its now).
                     unsavedRef.current = true;
+                } else if (kept && layoutRef.current === next && kept.updatedAt !== next.updatedAt && sameList(kept, next)) {
+                    // This save, dated earlier by the node (a clock ahead of the node's is held to its now): that date is
+                    // this browser's copy's too, so no read takes the copy as newer and sends it again (review of #1715, note 1).
+                    layoutRef.current = kept;
+                    draw(kept);
                 }
                 if (answerRef.current) keep(answerRef.current, layoutRef.current, epoch);
                 if (unsavedRef.current && waiting) void saveLayout(waiting);

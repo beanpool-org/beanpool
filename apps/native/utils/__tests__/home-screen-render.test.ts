@@ -1673,13 +1673,34 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
             expect(phoneIds()).toEqual(LESS_BOTH);
             expect(mem.store.has(markKey())).toBe(false);
             expect(mem.store.has(sentKey())).toBe(false);
-            // And it stays so at the next landing.
+            // And it stays so at the next landing, which sends nothing: the phone's copy took the node's date from the save's
+            // answer (review of #1715, note 1).
+            before = node.requests.length;
             await act(async () => { nav.focus?.(); });
             await settle();
             expect(cards()).not.toContain('market');
             expect(ids(node.answer.layout)).toEqual(LESS_BOTH);
+            expect(posts().filter(p => node.requests.indexOf(p) >= before)).toEqual([]);
         });
     }
+
+    it('NS2: the member\'s own list, the node\'s clock 5 s behind the phone\'s: one Remove is sent once, and a return sends nothing (review of #1715, note 1)', async () => {
+        node.answer = { ...localMember(), layout: { v: 2, cards: [{ id: 'events', type: 'events' }, { id: 'market', type: 'market' }, { id: 'pulse', type: 'pulse' }], dismissed: {}, updatedAt: iso(Date.now() - 2 * H) } as never };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(node.answer.layout));
+        slowClampedSave(5_000, false);
+        await render();
+        await removeVia('events');
+        expect(posts()).toHaveLength(1);
+        expect(ids(node.answer.layout)).toEqual(['market', 'pulse']);
+        const before = node.requests.length;
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(trace(before)).toContain('GET /api/home 200');
+        expect(posts()).toHaveLength(1);
+        expect(cards()).not.toContain('events');
+        expect(phoneIds()).toEqual(['market', 'pulse']);
+        expect(JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE))!).updatedAt).toBe((node.answer.layout as { updatedAt: string }).updatedAt);
+    });
 
     it('NX1, the edits kept with the mark: the node\'s clock 5 s behind, the app closed before the first save answers and the second edit\'s read failed; opened again, the node\'s copy of the first save is still the phone\'s own, so the newer edit wins and is sent', async () => {
         emptyV1(iso(Date.now() - 2 * H));

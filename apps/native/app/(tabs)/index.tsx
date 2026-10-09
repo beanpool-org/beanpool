@@ -32,7 +32,7 @@ import {
     FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, askPinned, canMoveCard, canRemoveCard, cardLabelName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
     effectiveInterests, fewerCardsNews, firstSteps, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
-    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, starredFirst,
+    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, starredFirst,
     type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
@@ -305,6 +305,12 @@ export default function HomeScreen() {
         }
         // The node keeps the newer layout (another phone's, the web app's): that one, then.
         if (saved?.layout && (saved.layout.updatedAt ?? '') > (next.updatedAt ?? '')) {
+            phoneLayout.current = saved.layout;
+            setLayout(saved.layout);
+            await writePhoneLayout(id.publicKey, u, saved.layout, whose);
+        } else if (saved?.layout && phoneLayout.current === next && saved.layout.updatedAt !== next.updatedAt && sameList(saved.layout, next)) {
+            // This save, dated earlier by the node (a clock ahead of the node's is held to its now): that date is the phone's
+            // copy's too, so no read takes the copy as newer and sends it again (review of #1715, note 1).
             phoneLayout.current = saved.layout;
             setLayout(saved.layout);
             await writePhoneLayout(id.publicKey, u, saved.layout, whose);

@@ -1491,8 +1491,27 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
             await pause(300);
             expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
             expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
+            // The copy took the node's date from the save's answer: the read sends nothing more (review of #1715, note 1).
+            expect(posts(node.log)).toBe(2);
         });
     }
+
+    it('S2: the member\'s own list, the node\'s clock 5 s behind this browser\'s: one Add is sent once, and the reads after it send nothing (review of #1715, note 1)', async () => {
+        const node = nodeSlowSave(answer(), v2(['events', 'market', 'pulse'], AT), 0, 5_000);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-events');
+        add('beans');
+        await pause(200);
+        expect(posts(node.log)).toBe(1);
+        for (let i = 0; i < 4; i++) {
+            await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+            await pause(300);
+        }
+        expect(node.log.filter(l => l.startsWith('GET')).length).toBeGreaterThanOrEqual(5);
+        expect(posts(node.log)).toBe(1);
+        expect(cardIds()).toEqual(expect.arrayContaining(['events', 'market', 'pulse', 'beans']));
+        expect(ids(node.account())).toEqual(expect.arrayContaining(['events', 'market', 'pulse', 'beans']));
+    });
 
     it('S1, the mark kept in this browser: the node\'s clock 5 s behind, closed before either answer, opened again: the node\'s copy of the first save is still this browser\'s own, so the newer edit wins and is sent', async () => {
         const node = nodeSlowSave(answer(), EMPTY_V1, 400, 5_000);

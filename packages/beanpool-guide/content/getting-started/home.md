@@ -75,7 +75,7 @@ A move is greyed out when there is nowhere to go: at the top or bottom of the ca
 At the bottom of Home, on your community's card, tap **Edit home**.
 
 - **＋ Add a card** comes first. It opens the same list as **Add a card** on Home.
-- Then come the cards on your Home, in your order. Each has up and down arrows and its own **…** (Settings…, Move up, Move down, Remove). A saved search is listed by its words, such as "eggs", so two searches are two different rows.
+- Then come the cards on your Home, in your order. Each has up and down arrows and its own **…** (Settings…, Move up, Move down, Remove). A saved search is listed by its words, and by **Offers** or **Needs** when it looks for only one, such as "eggs" or "eggs · Needs", so two searches are two different rows.
 - A card with nothing to show right now says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip.
 - Tap **Reset to defaults** to go back to the five cards a new member starts with.
 - There are no switches and no hidden list: a card you removed is in **Add a card**.

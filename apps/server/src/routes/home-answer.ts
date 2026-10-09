@@ -49,7 +49,7 @@
  * included, so the answer stays a few kilobytes whatever anyone typed (§5.2 "under 6 KB gzipped").
  */
 import {
-    PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, expandSearchTerms, normalizeCategory, readHomeLayout as readFrameLayout, readSearchSettings,
+    PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, normalizeCategory, readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor,
     HOME_FRAME_LIMITS, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings,
 } from '@beanpool/core';
 import { ONE_PASS_MAX_MEASURED, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
@@ -606,14 +606,15 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
  * category and distance stored in the member's layout, read as the Market's own search reads them (`query`), nearest
  * the member's point within `km` when there is one. Always a body, even with no rows: a search that finds nothing is a
  * fact the member asked for. The words are expanded with core's synonyms before the read, as the Market expands them
- * before it asks (`expandSearchTerms`), so "eggs" finds what the Market's search finds; `q` in the answer is the words
+ * before it asks (`searchTermsFor`), so "eggs" finds what the Market's search finds; `q` in the answer is the words
  * the member typed.
  */
 function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
     built('search');
     const s = readSearchSettings(settings);
     const near = c.point && s.km ? { ...c.point, radiusKm: s.km } : undefined;
-    const query = expandSearchTerms(s.q).join(' ');
+    // Words that expand to nothing (蛋, "!!!") are searched as typed, never an unfiltered read under the member's words.
+    const query = searchTermsFor(s.q).join(' ');
     const pool = postsFor(c, {
         types: s.kind === 'any' ? ['offer', 'need'] : [s.kind], status: 'active', category: s.category, query: query || undefined, limit: SEARCH_ITEMS + 1,
         near, sortByDistance: !!near, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,

@@ -531,7 +531,7 @@ async function main(): Promise<void> {
     // ── 5c. a saved search is the Market's own search ───────────────────────────────────────────────────────────
     console.log('\n── 5c. a saved search: the rows the Market\'s own search gives (slice F4, §5.2 item 19) ──');
     {
-        const { expandSearchTerms } = await import('@beanpool/core');
+        const { searchTermsFor } = await import('@beanpool/core');
         // A place nobody else lists near, so only these listings are within 5 km of it; each a little further than the last.
         const FAR = { lat: -29.5, lng: 152.0 };
         const fay = member('HomeSearchFay', { area: FAR });
@@ -548,7 +548,7 @@ async function main(): Promise<void> {
         } });
         const market = async (who: Id, q: string, point?: { lat: number; lng: number }, km?: number) => {
             const where = point ? `&lat=${point.lat}&lng=${point.lng}&radiusKm=${km}&sort=distance` : '';
-            const res = await get(`/api/marketplace/posts?q=${encodeURIComponent(expandSearchTerms(q).join(' '))}${where}&limit=50`, who);
+            const res = await get(`/api/marketplace/posts?q=${encodeURIComponent(searchTermsFor(q).join(' '))}${where}&limit=50`, who);
             return { status: res.status, rows: (Array.isArray(res.body) ? res.body : []).filter((p: { type: string; status: string }) => (p.type === 'offer' || p.type === 'need') && p.status === 'active') };
         };
         const ids = (rows: { id: string }[]) => rows.map(r => r.id);
@@ -593,6 +593,33 @@ async function main(): Promise<void> {
         const odd = await get('/api/home?cards=needs,search-eggs', fay);
         assert(odd.status === 200 && Array.isArray(odd.body?.cards?.['search-eggs']?.items),
             `a saved search for "constructor" is answered (${odd.status})`);
+
+        // Words in any script are searched as words, and words that expand to nothing (one CJK character, punctuation
+        // alone) are searched as typed: never the newest listings, unfiltered, under the member's own words (review 1716 #1).
+        const eggsRu = at(bob, 'offer', 'HomeKestrel свежие яйца', 0.3);
+        const garden = at(bob, 'offer', 'Jardín comunitario HomeKestrel', 0.3);
+        const duck = at(bob, 'offer', 'HomeKestrel duck 蛋 by the dozen', 0.3);
+        const newest = at(carol, 'offer', 'HomeKestrel spade to lend', 0.3); // the newest, and none of the words above
+        assert(!!eggsRu && !!garden && !!duck && !!newest, 'setup: listings in Cyrillic, with an accent, with a CJK word, and a newest unrelated one');
+        const answer = async (q: string) => {
+            await saveSearch(gus, { q, kind: 'any' });
+            return (await get('/api/home?cards=needs,search-eggs', gus)).body?.cards?.['search-eggs'];
+        };
+        const titles = (card: { items?: { title: string }[] } | undefined) => JSON.stringify(card?.items?.map(i => i.title));
+        const ru = await answer('яйца');
+        const ruMarket = await market(gus, 'яйца');
+        assert(ru?.q === 'яйца' && JSON.stringify(ids(ru.items)) === JSON.stringify([eggsRu.id]) && ru.more === false
+            && JSON.stringify(ids(ruMarket.rows)) === JSON.stringify([eggsRu.id]),
+            `a saved search for "яйца" answers its listing, as the Market's search does, not the newest unrelated ones (${titles(ru)}, Market ${titles({ items: ruMarket.rows })})`);
+        const es = await answer('jardín');
+        assert(JSON.stringify(ids(es?.items ?? [])) === JSON.stringify([garden.id]),
+            `"jardín" finds "Jardín comunitario" (${titles(es)})`);
+        const zh = await answer('蛋');
+        assert(JSON.stringify(ids(zh?.items ?? [])) === JSON.stringify([duck.id]) && zh?.more === false,
+            `"蛋" is searched as typed: the one listing with it (${titles(zh)})`);
+        const bang = await answer('!!!');
+        assert(bang?.q === '!!!' && Array.isArray(bang.items) && bang.items.length === 0 && bang.more === false,
+            `"!!!" answers nothing, never the newest listings unfiltered (${titles(bang)})`);
     }
 
     // ── 6. the size ─────────────────────────────────────────────────────────────────────────────────────────────

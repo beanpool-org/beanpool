@@ -20,9 +20,15 @@ function own(map: Record<string, string[]>, w: string): string[] | undefined {
     return Object.prototype.hasOwnProperty.call(map, w) ? map[w] : undefined;
 }
 
+// Punctuation and symbols only (ASCII, Latin-1, general punctuation, CJK punctuation), so letters of every script stay:
+// яйца, अंडे, 鸡蛋, jardín. No Unicode property escapes (\p{L}): this module loads at app start on old Android engines,
+// where they throw (member-guide.ts SEPARATORS, the same ranges). Spaces are made plain first so they still part words,
+// and the zero-width joiners (U+200C, U+200D) stay inside the words that use them (Persian, emoji).
+const PUNCTUATION = /[!-/:-@[-`{-~\u00a0-\u00bf\u2000-\u200b\u200e-\u206f\u3000-\u303f]/g;
+
 /** Expand a search query using synonyms: "fruit" → ["fruit", "lemon", "lime", ...] */
 export function expandSearchTerms(query: string): string[] {
-    const words = query.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 1);
+    const words = query.toLowerCase().replace(/\s+/g, ' ').replace(PUNCTUATION, '').split(' ').filter(w => w.length > 1);
     const expanded = new Set<string>(words);
     for (const w of words) {
         // Forward: word → its synonyms (e.g. "lemon" → ["fruit", "citrus"])
@@ -46,4 +52,14 @@ export function expandSearchTerms(query: string): string[] {
         }
     }
     return [...expanded];
+}
+
+/**
+ * The terms a search asks for: the expanded words, or, when expanding leaves none (a one-character word such as 蛋, or
+ * punctuation alone), the words as typed. Typed words never become no words, so a search never reads every listing
+ * under the member's words. The node's saved-search card and the phone's Market both ask with these.
+ */
+export function searchTermsFor(query: string): string[] {
+    const terms = expandSearchTerms(query);
+    return terms.length ? terms : query.toLowerCase().split(/\s+/).filter(Boolean);
 }

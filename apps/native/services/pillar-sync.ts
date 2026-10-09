@@ -439,9 +439,19 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 headers: { 'Accept': 'application/json' },
                 signal: timeouts.signal(30000)
             });
+            // A page's rows, or null for a body that isn't a list: never a throw, which would end the cycle after the first
+            // page's fingerprint was recorded, and the next cycle would skip that page as applied.
+            const rowsOf = async (res: { text(): Promise<string> }): Promise<any[] | null> => {
+                try {
+                    const rows = JSON.parse(await res.text());
+                    return Array.isArray(rows) ? rows : null;
+                } catch {
+                    return null;
+                }
+            };
             // The pages after one, while the node hands out a next key, up to POSTS_PAGE_CAP pages in all. A page that
-            // doesn't come (a failure, a refusal, another server answering, the visitors' view) stops the read where it
-            // is: what came is written, and `stoppedAt` is the key the next cycle asks for.
+            // doesn't come (a failure, a refusal, another server answering, the visitors' view, a body that isn't a list)
+            // stops the read where it is: what came is written, and `stoppedAt` is the key the next cycle asks for.
             const laterPages = async (cursor: string, next: string | null, pagesRead: number) => {
                 const rows: any[] = [];
                 let pages = pagesRead;
@@ -449,8 +459,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     if (pages >= POSTS_PAGE_CAP) return { rows, stoppedAt: next, pages };
                     const res = await pullPosts(cursor, next).catch(() => null);
                     if (!res || !res.ok || epochOf(res) !== epochNow || await postsViewRefusal(res, anchorUrl, pubKey)) return { rows, stoppedAt: next, pages };
-                    const page = JSON.parse(await res.text());
-                    if (!Array.isArray(page)) return { rows, stoppedAt: next, pages };
+                    const page = await rowsOf(res);
+                    if (!page) return { rows, stoppedAt: next, pages };
                     rows.push(...page);
                     pages++;
                     next = nextPageKeyOf(res);
@@ -545,9 +555,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 if (takenOver && rest.pages > 1) {
                     const sinceStart = `&updatedAfter=${encodeURIComponent(new Date(Math.max(0, postsReadStartedAt - 300_000)).toISOString())}`;
                     const first = await pullPosts(sinceStart).catch(() => null);
-                    const firstRows = first?.ok && epochOf(first) === epochNow ? JSON.parse(await first.text()) : null;
-                    const changed = Array.isArray(firstRows) ? await laterPages(sinceStart, nextPageKeyOf(first), 1) : null;
-                    if (changed && !changed.stoppedAt) rest.rows.push(...firstRows, ...changed.rows);
+                    const firstRows = first?.ok && epochOf(first) === epochNow ? await rowsOf(first) : null;
+                    const changed = firstRows ? await laterPages(sinceStart, nextPageKeyOf(first), 1) : null;
+                    if (firstRows && changed && !changed.stoppedAt) rest.rows.push(...firstRows, ...changed.rows);
                     else postsReplaceSafe = false;
                 }
                 if (rest.rows.length > 0) postsData = [...(Array.isArray(postsData) ? postsData : []), ...rest.rows];

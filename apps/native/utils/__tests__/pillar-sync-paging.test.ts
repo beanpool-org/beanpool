@@ -81,6 +81,8 @@ const node = {
     epoch: '0' as string | null,
     paging: true,
     notModified: false,
+    /** The read of a cycle (0 the first) answered with this instead: a failure, or a body that isn't a list. */
+    broken: null as null | { read: number; status: number; body: string },
     /** Called before the node answers each posts read after the first one of a cycle (1 = the second read). */
     beforeRead: null as null | ((n: number) => void),
 };
@@ -108,6 +110,7 @@ function postsAnswer(url: string) {
     if (postsReadsThisCycle > 0) node.beforeRead?.(postsReadsThisCycle);
     postsReadsThisCycle++;
     if (node.notModified) return answer(304, '');
+    if (node.broken?.read === postsReadsThisCycle - 1) return answer(node.broken.status, node.broken.body);
     const q = new URL(url).searchParams;
     const since = q.get('updatedAfter');
     let rows = node.posts.filter(p => !since || p.updatedAt >= since).sort(order);
@@ -150,7 +153,7 @@ beforeEach(async () => {
     store.clear();
     store.set('beanpool_anchor_url', ANCHOR);
     resetSyncFingerprints();
-    Object.assign(node, { posts: [], epoch: '0', paging: true, notModified: false, beforeRead: null });
+    Object.assign(node, { posts: [], epoch: '0', paging: true, notModified: false, broken: null, beforeRead: null });
     (globalThis as any).fetch = fetchMock;
     await getDb();
     for (const t of ['posts', 'marketplace_transactions', 'conversations', 'members']) sql.exec(`DELETE FROM ${t}`);
@@ -242,6 +245,30 @@ describe('a delta of more than one page', () => {
         expect(after.get('made-mid-read')).toBe('Made between pages');
         expect(changed.filter(p => p.id !== edited && after.get(p.id) !== p.title).map(p => p.id)).toEqual([]);
     });
+
+    for (const [what, status, body] of [['fails', 500, '{"error":"busy"}'], ['is not a list', 200, '<html>proxy error</html>']] as const) {
+        it(`a page that ${what}: what came is written, the read is held at that page, and the next cycle finishes it`, async () => {
+            await phoneWithACursor();
+            const cursorBefore = store.get(LAST_SYNC_KEY);
+            const changed = many('chg', 450, Date.now());
+            node.posts.push(...changed);
+            node.broken = { read: 1, status, body };
+            await sync();
+            expect(postsReads()).toHaveLength(2);
+            expect(held()).toHaveLength(201);
+            expect(store.get(LAST_SYNC_KEY)).toBe(cursorBefore);
+            const hold = JSON.parse(store.get(HELD_KEY)!);
+            expect(new URL(postsReads()[1]).searchParams.get('pageAfter')).toBe(hold.after);
+
+            node.broken = null;
+            await sync();
+            expect(postsReads()).toHaveLength(2);
+            const titles = heldTitles();
+            expect(changed.filter(p => titles.get(p.id) !== p.title)).toEqual([]);
+            expect(Number(store.get(LAST_SYNC_KEY))).toBe(hold.startedAt);
+            expect(store.has(HELD_KEY)).toBe(false);
+        });
+    }
 
     it('a 304 to the first page: one request, nothing written, and the cursor stays', async () => {
         await phoneWithACursor();

@@ -8,6 +8,7 @@ import {
     MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFeedQuery, DEFAULT_MARKET_FILTERS,
     distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketFilterState,
+    marketSearchFromLink,
 } from '../market-filters';
 import { CATEGORY_FILTER_CHIPS, categoryPanelReducer } from '../map-filters';
 import { CATEGORY_META } from '../../constants/categories';
@@ -194,5 +195,16 @@ describe('what the feed asks the cache for', () => {
         expect(marketFeedQuery('offers', 'all', 'pk-me')).toEqual({ includeEvents: true, type: 'offer', includeGroupsOf: 'pk-me' });
         expect(marketFeedQuery('offers', 'g1', 'pk-me')).toEqual({ includeEvents: true, type: 'offer', targetGroupId: 'g1' });
         expect(marketFeedQuery('all', 'all', null)).toEqual({ includeEvents: true });
+    });
+});
+
+describe('marketSearchFromLink: a saved search\'s See more fills the Market\'s search (CARD-FRAME §4)', () => {
+    it('takes the words, trimmed and held to a saved search\'s 40 characters; nothing for none', () => {
+        expect(marketSearchFromLink('eggs')).toBe('eggs');
+        expect(marketSearchFromLink(['  duck eggs ', 'x'])).toBe('duck eggs');
+        expect(marketSearchFromLink('y'.repeat(60))).toBe('y'.repeat(40));
+        expect(marketSearchFromLink('   ')).toBeNull();
+        expect(marketSearchFromLink('')).toBeNull();
+        expect(marketSearchFromLink(undefined)).toBeNull();
     });
 });

@@ -75,11 +75,20 @@ export const CARD_WORDS_MAX = 24;
  * member's.
  */
 export function cardLabelName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
-    if (c.type === 'search') {
-        const q = readSearchSettings(c.settings).q.trim().replace(/\s+/g, ' ');
-        if (q) return `"${q.length > CARD_WORDS_MAX ? `${q.slice(0, CARD_WORDS_MAX).trimEnd()}…` : q}"`;
-    }
-    return cardName(c.type, profile);
+    const words = searchWords(c);
+    return words ? `"${words}"` : cardName(c.type, profile);
+}
+
+/** A saved search's words, bounded (CARD_WORDS_MAX, then "…"); null for any other card or a search with none. */
+function searchWords(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | null {
+    if (c.type !== 'search') return null;
+    const q = readSearchSettings(c.settings).q.trim().replace(/\s+/g, ' ');
+    return q ? (q.length > CARD_WORDS_MAX ? `${q.slice(0, CARD_WORDS_MAX).trimEnd()}…` : q) : null;
+}
+
+/** One card's row name in Edit home: a saved search by its words (`eggs`), so two searches are two rows; else its name. */
+export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
+    return searchWords(c) ?? cardName(c.type, profile);
 }
 
 // ── The answer, as GET /api/home sends it (apps/server routes/home-answer.ts HomeAnswer) ────────────────────────────
@@ -439,11 +448,37 @@ export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | n
 export const FEWER_CARDS_LINE = 'Home now starts with fewer cards. Add a card brings the rest back.';
 /** The one-time hint (§1.3). */
 export const HOME_HINT_LINE = 'This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.';
+/** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */
+export const SEARCH_OFFLINE_LINE = 'Shows when your community answers';
+
+/** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
+export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
+
 /**
- * A saved search's card in this build: an updated node already builds its listings, and this app draws them from its
- * next update (slice F4), so the line promises nothing this build can't draw (review of #1699, finding 4).
+ * The node's body for this saved search, when it answers the words the card holds now. A kept answer from before a
+ * change of words is no answer for the new ones (the card says it shows when the community answers), and an odd body
+ * is none.
  */
-export const SEARCH_WAITING_LINE = 'Its listings show in a coming app update.';
+export function searchCardFor(answer: HomeAnswer | null | undefined, inst: Pick<HomeCardInstance, 'id' | 'settings'>): HomeSearchCard | null {
+    const raw = (answer?.cards as Record<string, unknown> | undefined)?.[inst.id] as Partial<HomeSearchCard> | undefined;
+    if (!raw || typeof raw !== 'object' || typeof raw.q !== 'string' || !Array.isArray(raw.items)) return null;
+    if (raw.q !== readSearchSettings(inst.settings).q) return null;
+    return { q: raw.q, kind: raw.kind ?? 'any', category: raw.category ?? null, km: typeof raw.km === 'number' ? raw.km : null, items: raw.items, more: raw.more === true };
+}
+
+/** "within 5 km", or nothing where the node had no point (it ignored the distance). */
+const within = (km: number | null): string => (km ? `within ${km} km` : '');
+
+/** The card's first line: the words and the distance ("eggs · within 5 km"); just the words with no point. */
+export function searchFirstLine(q: string, km: number | null): string {
+    return [q.trim().replace(/\s+/g, ' ') || 'Every listing', within(km)].filter(Boolean).join(' · ');
+}
+
+/** A search that finds nothing says so in its own words: "No eggs within 5 km right now". */
+export function searchEmptyLine(q: string, km: number | null): string {
+    const words = q.trim().replace(/\s+/g, ' ');
+    return ['No', words || 'listings', within(km), 'right now'].filter(Boolean).join(' ');
+}
 /** Edit home's line while a node before the frame can't keep the member's cards (§2.3). */
 export const NOT_ON_ACCOUNT_LINE = "Your community's server needs an update before your cards follow you to other devices.";
 
@@ -728,7 +763,8 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             case 'invite': return !global && canInvite && !!answer.me?.firstOffer;
             case 'market': return !!c.market && (c.market.items.length > 0 || !!c.market.examples);
             case 'decide': return !!c.decide && decideLines(c.decide, answer.features, 0).length > 0;
-            // A settings card is drawn with no body yet (SEARCH_WAITING_LINE until slice F4 draws its listings): the add took.
+            // Drawn with no body too (SEARCH_OFFLINE_LINE), so a member on 2G knows the add took; a search that finds
+            // nothing says so (searchEmptyLine).
             case 'search': return true;
             case 'community': return true;
             default: return c[id] !== undefined;

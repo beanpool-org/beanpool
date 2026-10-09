@@ -29,7 +29,7 @@ import {
     MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
-    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, askPinned, canMoveCard, canRemoveCard, cardLabelName,
+    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
     effectiveInterests, fewerCardsNews, firstSteps, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, starredFirst,
@@ -765,7 +765,16 @@ export default function HomeScreen() {
             case 'beans': return c.beans ? frame(<BeansBody card={c.beans} colors={colors} />) : null;
             case 'notices': return c.notices ? frame(<NoticesBody card={c.notices} colors={colors} onOpen={openNotice} />) : null;
             case 'invite': return frame(<InviteBody colors={colors} />);
-            case 'search': return frame(<SearchBody settings={inst.settings} colors={colors} />);
+            case 'search': return frame(
+                <SearchBody
+                    settings={inst.settings}
+                    card={searchCardFor(answer, inst)}
+                    nodeUrl={url}
+                    showsBeans={showsBeans}
+                    colors={colors}
+                    onMore={q => router.navigate({ pathname: '/(tabs)/market', params: { q } })}
+                />,
+            );
             case 'community': return frame(
                 <CommunityBody
                     card={c.community}

@@ -1847,7 +1847,7 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
     });
 });
 
-describe('two saved searches: each is named by its words, never in its caption, and its line promises no rows (review of #1699, finding 4)', () => {
+describe('two saved searches: each is named by its words, never in its caption (review of #1699, finding 4; slice F4)', () => {
     it('their "…", the menu, Edit home and the removed line each say the words, bounded; the caption stays the type\'s', async () => {
         const long = 'second hand children\'s bicycles near the school';
         const mine = { v: 2, cards: [
@@ -1865,9 +1865,11 @@ describe('two saved searches: each is named by its words, never in its caption, 
             // The caption is the type's name; the words are the body's (and the labels').
             expect(card.querySelector('[role="heading"]')!.textContent).toBe('A saved search');
             expect(card.querySelector('[role="heading"]')!.getAttribute('aria-label')).toBe('A saved search');
-            expect(card.querySelector('[data-testid="home-search-waiting"]')!.textContent).toBe('Its listings show in a coming app update.');
-            expect(card.textContent).not.toContain('Shows when your community answers');
+            // The node answered no body for it (an older node, or before the save): it says it shows when the community answers.
+            expect(card.querySelector('[data-testid="home-search-offline"]')!.textContent).toBe('Shows when your community answers');
+            expect(card.textContent).not.toContain('coming app update');
         }
+        expect(document.querySelector('[data-testid="home-card-search-k2x7"] [data-testid="home-search-words"]')!.textContent).toBe('eggs');
         expect(byLabel('Card options for "eggs"')).not.toBeNull();
         expect(byLabel(`Card options for ${bounded}`)).not.toBeNull();
         expect(byLabel('Card options for A saved search')).toBeNull();
@@ -1880,10 +1882,11 @@ describe('two saved searches: each is named by its words, never in its caption, 
         await settle();
         expect(vi.mocked(AccessibilityInfo.announceForAccessibility)).toHaveBeenCalledWith('"eggs" removed. Add a card brings it back.');
         expect(cards()).not.toContain('search-k2x7');
-        // Edit home: the row shows the type's name; its arrows and "…" say the words.
+        // Edit home: the row shows the words, bounded, so two searches are two different rows; its arrows and "…" say them too.
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
         const row = document.querySelector('[data-testid="edit-home-search-m4p9"]')!;
-        expect(row.textContent).toContain('A saved search');
+        expect(row.textContent).toContain('second hand children\'s b…');
+        expect(row.textContent).not.toContain('A saved search');
         expect(row.textContent).not.toContain('bicycles');
         expect(byLabel(`Move ${bounded} down`)).not.toBeNull();
         expect(byLabel(`Card options for ${bounded}`)).not.toBeNull();
@@ -2200,6 +2203,66 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         node.answer = { ...localMember(), me: { ...localMember().me!, standing: 'suspended' } };
         await again();
         expect(cards()).toContain('tips');
+    });
+});
+
+describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slice F4)', () => {
+    const row = (id: string, title: string, type: 'offer' | 'need', km: number) => ({ id, type, title, category: 'food', credits: 5, photoUrl: null, distanceKm: km });
+    const withSearch = (body: unknown, q = 'eggs') => {
+        const mine = { v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'search-k2x7', type: 'search', settings: { q, kind: 'any', km: 5 } }, { id: 'market', type: 'market' }],
+            dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        const base = localMember();
+        node.answer = { ...base, layout: mine as never, cards: { ...base.cards, ...(body ? { 'search-k2x7': body } : {}) } as never };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
+    };
+
+    it('the words and distance first, four Market rows each opening its listing, and See more opening the Market with q=eggs', async () => {
+        withSearch({ q: 'eggs', kind: 'any', category: null, km: 5, more: true, items: [
+            row('p1', 'Chicken coop wanted', 'need', 0.2), row('p2', 'Fresh eggs', 'offer', 0.5), row('p3', 'Duck eggs', 'offer', 1.4), row('p4', 'Quail eggs', 'offer', 3),
+        ] });
+        await render();
+        const card = document.querySelector('[data-testid="home-card-search-k2x7"]')!;
+        // The caption is the type's, never the member's words; the first body line carries them.
+        expect(card.querySelector('[role="heading"]')!.textContent).toBe('A saved search');
+        expect(card.querySelector('[data-testid="home-search-words"]')!.textContent).toBe('eggs · within 5 km');
+        const rows = Array.from(card.querySelectorAll('[data-testid^="home-search-row-"]'));
+        expect(rows.map(r => r.getAttribute('data-testid'))).toEqual(['home-search-row-p1', 'home-search-row-p2', 'home-search-row-p3', 'home-search-row-p4']);
+        expect(rows[0].textContent).toContain('Chicken coop wanted');
+        expect(rows[0].textContent).toContain('NEED');
+        expect(rows[1].textContent).toContain('5 Beans');
+        expect(card.querySelector('[data-testid="home-search-offline"]')).toBeNull();
+        expect(card.querySelector('[data-testid="home-search-empty"]')).toBeNull();
+        await act(async () => { (rows[2] as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/post/[id]', params: { id: 'p3' } });
+        const more = card.querySelector('[data-testid="home-search-more"]') as HTMLElement;
+        expect(more.textContent).toBe('See more ›');
+        expect(more.getAttribute('aria-label')).toBe('See more listings for eggs in the Market');
+        await act(async () => { more.click(); });
+        expect(nav.router.navigate).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { q: 'eggs' } });
+    });
+
+    it('nothing found says so in its own words, and no See more without more', async () => {
+        withSearch({ q: 'eggs', kind: 'any', category: null, km: 5, more: false, items: [] });
+        await render();
+        const card = document.querySelector('[data-testid="home-card-search-k2x7"]')!;
+        expect(card.querySelector('[data-testid="home-search-empty"]')!.textContent).toBe('No eggs within 5 km right now');
+        expect(card.querySelector('[data-testid="home-search-more"]')).toBeNull();
+    });
+
+    it('with no point the node ignored the distance: the first line is the words alone', async () => {
+        withSearch({ q: 'eggs', kind: 'any', category: null, km: null, more: false, items: [row('p2', 'Fresh eggs', 'offer', 0.5)] });
+        await render();
+        const card = document.querySelector('[data-testid="home-card-search-k2x7"]')!;
+        expect(card.querySelector('[data-testid="home-search-words"]')!.textContent).toBe('eggs');
+        expect(card.querySelectorAll('[data-testid^="home-search-row-"]').length).toBe(1);
+    });
+
+    it('a kept answer for other words is no answer for these: it shows when the community answers', async () => {
+        withSearch({ q: 'rye', kind: 'any', category: null, km: 5, more: false, items: [row('p9', 'Rye loaf', 'offer', 1)] });
+        await render();
+        const card = document.querySelector('[data-testid="home-card-search-k2x7"]')!;
+        expect(card.querySelector('[data-testid="home-search-offline"]')!.textContent).toBe('Shows when your community answers');
+        expect(card.textContent).not.toContain('Rye loaf');
     });
 });
 

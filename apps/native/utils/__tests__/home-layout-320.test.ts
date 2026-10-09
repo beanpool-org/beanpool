@@ -25,7 +25,7 @@ import { MAX_FONT_SCALE } from '../../constants/responsive';
 import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
 import { EDIT_HOME_NOTE, editHomeStyles } from '../../components/home/EditHomeSheet';
 import { ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
-import { FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_WAITING_LINE, pickerGroups } from '../home-cards';
+import { FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_OFFLINE_LINE, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
 import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_TIPS, TIPS_ALL_SEEN, TIPS_DONT_SHOW, tipsCaption } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
 
@@ -253,12 +253,29 @@ describe('the frame\'s words on Home at 320dp × 1.3', () => {
         expect(body).toMatch(/<HomeLink id="community:edit"/);
     });
 
-    it('the hint, the fewer-cards line and a saved search\'s waiting line keep their longest word beside the ✕', () => {
+    it('the hint and the fewer-cards line keep their longest word beside the ✕; a saved search\'s lines fit the card', () => {
         const home = read('app/(tabs)/index.tsx');
         const hintText = Number(/hintText: \{ flex: 1, fontSize: (\d+)/.exec(home)?.[1]);
         const room = SCREEN - 2 * 16 - 12 - HOME_TARGET_DP;
         for (const t of [HOME_HINT_LINE, FEWER_CARDS_LINE]) expect(longestWord(t, hintText), t).toBeLessThan(room);
-        expect(longestWord(SEARCH_WAITING_LINE, num(s.note.fontSize))).toBeLessThan(CARD_INNER);
+        // The offline and empty lines are notes; the first line is a strong row of at most 40 characters of words plus the
+        // distance, which wraps at word breaks: its longest word (40 characters with no space is the worst case) still
+        // has to be readable, so it is bounded like any row (HomeRow's two lines) and never put in the caption.
+        const longest = 'x'.repeat(40);
+        for (const t of [SEARCH_OFFLINE_LINE, searchEmptyLine('duck eggs', 25), searchFirstLine('duck eggs', 25)]) {
+            expect(longestWord(t, num(s.note.fontSize)), t).toBeLessThan(CARD_INNER);
+        }
+        expect(searchFirstLine('eggs', 5)).toBe('eggs · within 5 km');
+        expect(searchFirstLine('eggs', null)).toBe('eggs');
+        expect(searchFirstLine(longest, 25).startsWith(longest)).toBe(true);
+        expect(searchEmptyLine('eggs', 5)).toBe('No eggs within 5 km right now');
+        expect(searchEmptyLine('eggs', null)).toBe('No eggs right now');
+        const body = read('components/home/HomeCardBodies.tsx');
+        // The first line is a HomeRow (bounded to its lines), the rows the Market card's own, and See more a HomeLink (≥ 48 dp).
+        expect(body).toMatch(/<HomeRow colors=\{colors\} text=\{first\}/);
+        expect(body).toMatch(/<MarketRow key=\{p\.id\} p=\{p\}[^\n]*home-search-row-/);
+        expect(body).toMatch(/<HomeLink id="search:more"/);
+        expect(num(s.link.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
     });
 });
 

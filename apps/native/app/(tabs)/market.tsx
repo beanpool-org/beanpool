@@ -35,7 +35,7 @@ import { FilterChipRow, FilterChipBar } from '../../components/FilterChipRow';
 import { FilterChipButton, FilterChipPanel } from '../../components/FilterChipPicker';
 import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '../../utils/map-filters';
 import {
-    MARKET_TYPE_PILLS, marketFilterFromLink, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
+    MARKET_TYPE_PILLS, marketFilterFromLink, marketSearchFromLink, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
 } from '../../utils/market-filters';
 import { localDaysAgo } from '../../utils/feed-sections';
@@ -628,7 +628,16 @@ export default function MarketScreen() {
         }, [filter, groupFilter, identity?.publicKey, userGroupsKey])
     );
 
-    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string }>();
+    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string, q?: string }>();
+
+    // A saved search's "See more" on Home opens the Market with its words in the search (CARD-FRAME §4).
+    useEffect(() => {
+        const q = marketSearchFromLink(params.q);
+        if (q) {
+            setSearchQuery(q);
+            router.setParams({ q: '' });
+        }
+    }, [params.q]);
 
     // Home's "All events ›" opens the Market on its Events pill, and its Decide card's polls line on Polls.
     useEffect(() => {

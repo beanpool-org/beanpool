@@ -16,7 +16,7 @@
  * screen: a filter the member cannot see never hides a post.
  */
 
-import { tierIndexForCredit } from '@beanpool/core';
+import { HOME_SEARCH_MAX_CHARS, tierIndexForCredit } from '@beanpool/core';
 import { CATEGORY_META, normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, isEventInFeed, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
@@ -39,6 +39,15 @@ export const MARKET_TYPE_PILLS: ReadonlyArray<{ id: MarketTypeFilter; label: str
 export function marketFilterFromLink(value: string | string[] | undefined): Extract<MarketTypeFilter, 'events' | 'polls'> | null {
     const v = Array.isArray(value) ? value[0] : value;
     return v === 'events' || v === 'polls' ? v : null;
+}
+
+/**
+ * The words a link fills the Market's search with (`/(tabs)/market?q=…`): a saved search's "See more" on Home. Trimmed,
+ * at most a saved search's 40 characters; null for none, and the search stays as it was.
+ */
+export function marketSearchFromLink(value: string | string[] | undefined): string | null {
+    const v = (Array.isArray(value) ? value[0] : value)?.trim().slice(0, HOME_SEARCH_MAX_CHARS).trim();
+    return v ? v : null;
 }
 
 export type MarketExtraFilter = 'distance' | 'trust' | 'beans';

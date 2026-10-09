@@ -197,23 +197,23 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
 /** One listing as the Market card draws it: photo, title, price or distance, Offer or Need; opens the listing. */
 function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketItem; nodeUrl: string | null; showsBeans: boolean; colors: AppColors; testID: string }) {
     const s = homeStyles(colors);
-        const type = p.type === 'need' ? colors.market.need : colors.market.offer;
-        const word = p.type === 'need' ? 'NEED' : 'OFFER';
-        const price = showsBeans && typeof p.credits === 'number' && p.credits > 0 ? `${formatBeans(p.credits)} Beans` : null;
-        const far = formatDistance(p.distanceKm);
-        const facts = [price, far].filter(Boolean).join(' · ');
-        return (
-            <HomeRow
-                colors={colors}
-                text={p.title}
-                sub={facts || categoryLabel(p.category)}
-                a11y={`${p.type === 'need' ? 'Need' : 'Offer'}: ${sentence(p.title)} ${facts ? `${facts}. ` : ''}${categoryLabel(p.category)}. Opens the listing.`}
-                onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
-                left={<Thumb uri={onNode(nodeUrl, p.photoUrl)} emoji={categoryEmoji(p.category)} colors={colors} />}
-                subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
-                testID={testID}
-            />
-        );
+    const type = p.type === 'need' ? colors.market.need : colors.market.offer;
+    const word = p.type === 'need' ? 'NEED' : 'OFFER';
+    const price = showsBeans && typeof p.credits === 'number' && p.credits > 0 ? `${formatBeans(p.credits)} Beans` : null;
+    const far = formatDistance(p.distanceKm);
+    const facts = [price, far].filter(Boolean).join(' · ');
+    return (
+        <HomeRow
+            colors={colors}
+            text={p.title}
+            sub={facts || categoryLabel(p.category)}
+            a11y={`${p.type === 'need' ? 'Need' : 'Offer'}: ${sentence(p.title)} ${facts ? `${facts}. ` : ''}${categoryLabel(p.category)}. Opens the listing.`}
+            onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
+            left={<Thumb uri={onNode(nodeUrl, p.photoUrl)} emoji={categoryEmoji(p.category)} colors={colors} />}
+            subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
+            testID={testID}
+        />
+    );
 }
 
 /** One line per place (utils/home-cards.ts `decideLines`): Decisions open Commons → Decide, polls the Market's Polls. */
@@ -288,6 +288,7 @@ export function PulseBody({ card, nodeUrl, colors }: { card: NonNullable<HomeCar
                 const title = pulseTitle(p);
                 return (
                     <HomeRow
+                        key={p.id}
                         colors={colors}
                         text={title}
                         sub={`by ${p.callsign}`}

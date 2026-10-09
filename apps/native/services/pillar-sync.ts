@@ -455,6 +455,50 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         let epochNow: string | null = null;
         let epochHeld: string | null = null;
         let takenOver = false;
+        // Tables applied THIS cycle OUTSIDE the batch (the early fast-paint write, below).
+        // If the batch below fails we must invalidate these fingerprints too —
+        // otherwise a write that recorded its fingerprint but didn't durably land
+        // (e.g. applyDelta's node-switch contamination guard returned early) would be
+        // treated as applied and skipped forever.
+        const earlyApplied = new Set<string>();
+        // Whether the whole pull after a take-over has replaced the posts cache (utils/db.ts `postsReplace`).
+        let postsReplaced = false;
+        // Whether an early write wrote nothing (the member switched community while it waited for the sync lock,
+        // and maybe back): the cycle goes on for the other tables, but its cursor stays, so the next cycle reads those
+        // posts again, and their fingerprints go, so it writes them.
+        let postsUnwritten = false;
+        // Whether the posts this read carries were written by the early write, not the cycle's batch.
+        let postsWrittenEarly = false;
+        // Fast first paint: on the FIRST (full) sync for this node the marketplace is
+        // still showing its loading spinner, and the remaining pillars below (balance,
+        // members, crowdfund, transactions, ratings) can add several seconds on a slow
+        // node before the single end-of-cycle applyDelta runs. Write the posts to SQLite
+        // and tell the marketplace to render NOW, then drop them from the batch so we
+        // don't re-write the same rows (the double-apply that historically starved the
+        // sync lock). Runs only on a FULL posts fetch (first sync, or a healed empty cache)
+        // — steady-state incremental cycles keep the single batched apply untouched.
+        // False when the write threw: the posts go with the batch.
+        const writePostsEarly = async (posts: any[]): Promise<boolean> => {
+            let done = false;
+            try {
+                const wrote = await applyDelta({ posts, ...(takenOver && postsReplaceSafe ? { postsReplace: true } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
+                // Not written (the member switched community while this batch waited for the sync lock): the epoch
+                // stays as held, so the next cycle replaces the cache again.
+                postsReplaced = takenOver && postsReplaceSafe && wrote;
+                if (wrote === false) {
+                    postsUnwritten = true;
+                    forgetCycleFingerprints(anchorUrl, ['posts']);
+                }
+                earlyApplied.add('posts');
+                rawGated.delete('posts');
+                done = true;
+                const { DeviceEventEmitter } = require('react-native');
+                DeviceEventEmitter.emit('sync_data_updated');
+            } catch (e) {
+                console.warn('[Pillar Sync] Early posts apply failed (will apply in batch):', e);
+            }
+            return done;
+        };
         try {
             // `types=` opts in to events (docs/events-on-the-map.md §2.6). Without it the node leaves them out, which
             // is what keeps builds that predate events from ever caching one.
@@ -477,7 +521,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // The pages after one, while the node hands out a next key, up to POSTS_PAGE_CAP pages in all. A page that
             // doesn't come (a failure, a refusal, another server answering, the visitors' view, a body that isn't a list)
             // stops the read where it is: what came is written, and `stoppedAt` is the key the next cycle asks for.
-            const laterPages = async (cursor: string, next: string | null, pagesRead: number) => {
+            // With `writePage`, each page is handed to it as it comes and not kept; one it didn't write stops the read
+            // at that page too.
+            const laterPages = async (cursor: string, next: string | null, pagesRead: number, writePage: ((rows: any[]) => Promise<boolean>) | null = null) => {
                 const rows: any[] = [];
                 let pages = pagesRead;
                 while (next) {
@@ -486,7 +532,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     if (!res || !res.ok || epochOf(res) !== epochNow || await postsViewRefusal(res, anchorUrl, pubKey)) return { rows, stoppedAt: next, pages };
                     const page = await rowsOf(res);
                     if (!page) return { rows, stoppedAt: next, pages };
-                    rows.push(...page);
+                    if (!writePage) rows.push(...page);
+                    else if (!(await writePage(page))) return { rows, stoppedAt: next, pages };
                     pages++;
                     next = nextPageKeyOf(res);
                 }
@@ -573,7 +620,39 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 postsNotModified = true;
             } else {
                 postsData = await parseIfChanged(postsRes, anchorUrl, 'posts', rawGated);
-                const rest = await laterPages(postsSyncParam, nextPageKeyOf(postsRes), 1);
+                // A whole read that isn't a take-over's is written as it comes (review of PR #1719, NB3): its first page
+                // now, so the Market draws it while the rest pages in, then each later page in its own write, so no write
+                // of up to POSTS_PAGE_CAP pages holds the sync lock. A take-over's needs every page before its replace
+                // drops anything, and a delta's goes with the cycle's batch, as they always have.
+                let asItComes = !postsIsIncremental && !takenOver;
+                if (asItComes && Array.isArray(postsData) && postsData.length > 0) {
+                    postsWrittenEarly = await writePostsEarly(postsData);
+                    asItComes = postsWrittenEarly;
+                }
+                let laterWritten = 0;
+                const writePage = async (rows: any[]): Promise<boolean> => {
+                    try {
+                        const wrote = await applyDelta({ posts: rows, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
+                        if (wrote === false) {
+                            postsUnwritten = true;
+                            forgetCycleFingerprints(anchorUrl, ['posts']);
+                            return false;
+                        }
+                        laterWritten += rows.length;
+                        return true;
+                    } catch (e) {
+                        console.warn('[Pillar Sync] A page of posts could not be written; the read is held at it:', e);
+                        return false;
+                    }
+                };
+                // Nothing more is read for a community the member has just left (the first page went unwritten).
+                const rest = await laterPages(postsSyncParam, postsUnwritten ? null : nextPageKeyOf(postsRes), 1, asItComes ? writePage : null);
+                if (laterWritten > 0) {
+                    try {
+                        const { DeviceEventEmitter } = require('react-native');
+                        DeviceEventEmitter.emit('sync_data_updated');
+                    } catch (e) {}
+                }
                 if (rest.stoppedAt) postsHoldAt = { since: postsSinceIso, after: rest.stoppedAt, startedAt: postsReadStartedAt };
                 // A take-over's whole read in more than one page is no longer one moment of the node: a listing that
                 // changed while it paged moved above every key and isn't in it, and the replace would drop it. So the
@@ -587,8 +666,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     else postsReplaceSafe = false;
                 }
                 if (rest.rows.length > 0) postsData = [...(Array.isArray(postsData) ? postsData : []), ...rest.rows];
-                if (postsData !== undefined) {
-                    console.log(`[Pillar Sync] Received ${Array.isArray(postsData) ? postsData.length : 'non-array'} posts from server in ${rest.pages} page(s)${rest.stoppedAt ? ', the rest held for the next sync' : ''}`);
+                if (postsData !== undefined || laterWritten > 0) {
+                    console.log(`[Pillar Sync] Received ${Array.isArray(postsData) ? postsData.length + laterWritten : 'non-array'} posts from server in ${rest.pages} page(s)${rest.stoppedAt ? ', the rest held for the next sync' : ''}`);
                 }
             }
         } catch (e: any) {
@@ -604,46 +683,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const delta: any = {
             accounts: []
         };
-        if (Array.isArray(postsData)) delta.posts = postsData;
+        if (Array.isArray(postsData) && !postsWrittenEarly) delta.posts = postsData;
 
-        // Fast first paint: on the FIRST (full) sync for this node the marketplace is
-        // still showing its loading spinner, and the remaining pillars below (balance,
-        // members, crowdfund, transactions, ratings) can add several seconds on a slow
-        // node before the single end-of-cycle applyDelta runs. Write the posts to SQLite
-        // and tell the marketplace to render NOW, then drop them from the batch so we
-        // don't re-write the same rows (the double-apply that historically starved the
-        // sync lock). Runs only on a FULL posts fetch (first sync, or a healed empty cache)
-        // — steady-state incremental cycles keep the single batched apply untouched.
-        // Tables applied THIS cycle OUTSIDE the batch (the early fast-paint write).
-        // If the batch below fails we must invalidate these fingerprints too —
-        // otherwise a write that recorded its fingerprint but didn't durably land
-        // (e.g. applyDelta's node-switch contamination guard returned early) would be
-        // treated as applied and skipped forever.
-        const earlyApplied = new Set<string>();
-        // Whether the whole pull after a take-over has replaced the posts cache (utils/db.ts `postsReplace`).
-        let postsReplaced = false;
-        // Whether the early write below wrote nothing (the member switched community while it waited for the sync lock,
-        // and maybe back): the cycle goes on for the other tables, but its cursor stays, so the next cycle reads those
-        // posts again, and their fingerprints go, so it writes them.
-        let postsUnwritten = false;
-        if (!postsIsIncremental && Array.isArray(postsData) && (postsData.length > 0 || takenOver)) {
-            try {
-                const wrote = await applyDelta({ posts: postsData, ...(takenOver && postsReplaceSafe ? { postsReplace: true } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
-                // Not written (the member switched community while this batch waited for the sync lock): the epoch
-                // stays as held, so the next cycle replaces the cache again.
-                postsReplaced = takenOver && postsReplaceSafe && wrote;
-                if (wrote === false) {
-                    postsUnwritten = true;
-                    forgetCycleFingerprints(anchorUrl, ['posts']);
-                }
-                earlyApplied.add('posts');
-                delete delta.posts;
-                rawGated.delete('posts');
-                const { DeviceEventEmitter } = require('react-native');
-                DeviceEventEmitter.emit('sync_data_updated');
-            } catch (e) {
-                console.warn('[Pillar Sync] Early posts apply failed (will apply in batch):', e);
-            }
+        // The early write of a whole read not written as it came: a take-over's, once every page is in (its replace
+        // needs them all), or one whose first early write threw.
+        if (!postsIsIncremental && !postsWrittenEarly && Array.isArray(postsData) && (postsData.length > 0 || takenOver)) {
+            if (await writePostsEarly(postsData)) delete delta.posts;
         }
 
         // Fetch balance

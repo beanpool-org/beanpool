@@ -435,3 +435,63 @@ describe('a reset after a held read', () => {
         expect(held()).toHaveLength(451);
     });
 });
+
+// A whole read that isn't a take-over's is written as it comes: the Market drew nothing until every page was in (51
+// requests and 6.6 MB at 10,000 listings), and then one write of up to 10,000 rows held the sync lock (review of PR
+// #1719, NB3). A take-over's still needs every page before its replace drops anything.
+describe('a whole read written as it comes', () => {
+    /** Before each later read of the cycle: the rows the phone held, and how often the screens had been told. */
+    function watchBetweenReads() {
+        const seen: Record<number, { rows: number; told: number }> = {};
+        node.beforeRead = (n) => { seen[n] = { rows: held().length, told: told.filter(e => e === 'sync_data_updated').length }; };
+        return seen;
+    }
+
+    it('a first sync of 450: page 1 is written and the screens told before page 2 is asked for, and each later page before the next', async () => {
+        const all = many('all', 450, Date.parse('2026-09-01T00:00:00.000Z'));
+        node.posts = [...all];
+        const seen = watchBetweenReads();
+        await sync();
+        expect(seen[1]).toEqual({ rows: PAGE, told: 1 });
+        expect(seen[2].rows).toBe(2 * PAGE);
+        expect(held()).toHaveLength(450);
+        expect(told.filter(e => e === 'sync_data_updated').length).toBeGreaterThanOrEqual(2);
+        expect(store.has(HELD_KEY)).toBe(false);
+        expect(store.get(LAST_SYNC_KEY)).toBeTruthy();
+    });
+
+    it('a whole read held at page 3: its two written pages stay, and the next cycle asks only for the held page', async () => {
+        const all = many('all', 450, Date.parse('2026-09-01T00:00:00.000Z'));
+        node.posts = [...all];
+        node.broken = { read: 2, status: 500, body: '{"error":"busy"}' };
+        await sync();
+        expect(held()).toHaveLength(2 * PAGE);
+        const hold = JSON.parse(store.get(HELD_KEY)!);
+        expect(hold.since).toBe('');
+        node.broken = null;
+        await sync();
+        expect(postsReads()).toHaveLength(1);
+        expect(new URL(postsReads()[0]).searchParams.get('pageAfter')).toBe(hold.after);
+        const t = heldTitles();
+        expect(all.filter(p => t.get(p.id) !== p.title)).toEqual([]);
+        expect(store.has(HELD_KEY)).toBe(false);
+    });
+
+    it('a take-over still writes only once every page is in: the old server\'s tail is held until the replace', async () => {
+        const all = many('all', 450, Date.parse('2026-09-01T00:00:00.000Z'));
+        node.posts = [...all];
+        await sync();
+        node.posts.push(listing('tail', 'Only the old server had this', new Date(Date.now() - 1000).toISOString()));
+        await sync();
+        node.posts = [...all];
+        node.epoch = '1';
+        const seen: Record<number, boolean> = {};
+        node.beforeRead = (n) => { seen[n] = heldTitles().has('tail'); };
+        await sync();
+        // Read 0 saw the new epoch, read 1 is the pull's first page; before reads 2 and 3 nothing is written yet.
+        expect([seen[2], seen[3]]).toEqual([true, true]);
+        expect(heldTitles().has('tail')).toBe(false);
+        expect(held()).toHaveLength(450);
+        expect(store.get(EPOCH_KEY)).toBe('1');
+    });
+});

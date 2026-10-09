@@ -1629,6 +1629,7 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
     function slowClampedSave(behindMs: number, holdFirst = true) {
         const real = globalThis.fetch;
         const log: string[] = [];
+        const kept: number[] = [];
         let release = () => {};
         const gate = new Promise<void>(r => { release = r; });
         let held = !holdFirst;
@@ -1638,6 +1639,7 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
             const sent = JSON.parse(init.body).preferences['home.layout'];
             const nodeNow = Date.now() - behindMs;
             const l = sent && stampOf(sent) > nodeNow ? { ...sent, updatedAt: new Date(nodeNow).toISOString() } : sent;
+            if (l) kept.push(stampOf(l));
             if (l && stampOf(l) >= stampOf(node.answer.layout)) node.answer = { ...node.answer, layout: l };
             log.push(`POST ${ids(sent).join(',')}`);
             if (!held) {
@@ -1647,11 +1649,11 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
             }
             return new Response(JSON.stringify({ success: true, 'home.layout': node.answer.layout }), { status: 200 });
         }) as any;
-        return { log, release: () => release() };
+        return { log, kept, release: () => release() };
     }
 
-    for (const behind of [200, 5_000]) {
-        it(`NX1: X1 with the node's clock ${behind} ms behind the phone's, so the node dates the first save earlier than sent: both edits stand, on the account too (review of #1715, finding 1)`, async () => {
+    for (const [behind, gap] of [[200, 0], [5_000, 0], [200, 400]]) {
+        it(`NX1: X1 with the node's clock ${behind} ms behind the phone's${gap ? `, the second edit ${gap} ms after the first` : ''}, so the node dates the first save earlier than sent: both edits stand, on the account too (review of #1715, finding 1)`, async () => {
             emptyV1(iso(Date.now() - 2 * H));
             const save = slowClampedSave(behind);
             await render();
@@ -1659,10 +1661,12 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
             await removeVia('events');
             expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
             // The second edit's read carries the first save back with the node's date, not the one the phone sent.
+            if (gap) await act(async () => { await new Promise(r => setTimeout(r, gap)); });
             before = node.requests.length;
             await removeVia('market');
             expect(save.log).not.toContain('answered');
-            expect(stampOf(node.answer.layout)).toBeLessThan(Date.parse(JSON.parse(posts()[0].body).preferences['home.layout'].updatedAt));
+            // (The node's copy of the FIRST save; by now it may hold the second, dated later under a slow runner.)
+            expect(save.kept[0]).toBeLessThan(Date.parse(JSON.parse(posts()[0].body).preferences['home.layout'].updatedAt));
             expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
             expect(sentIds(posts().at(-1)!)).toEqual(LESS_BOTH);
             save.release();

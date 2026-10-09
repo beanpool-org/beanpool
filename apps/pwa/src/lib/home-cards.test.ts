@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_IDS, beansLines, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, shownFrame,
+    HOME_CARD_IDS, beansLines, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, searchCardFor, shownFrame,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -207,5 +207,27 @@ describe('First steps goes when it has nothing to say on the web (§6.1, PR #147
             { me: me({ joinedAt: august, firstOffer: true }) });
         expect(shown(a, { now: NOW, interests: [] })).toContain('steps');
         expect(shown(a, { now: NOW, interests: ['food'] })).not.toContain('steps');
+    });
+});
+
+describe("a saved search's body (slice F4): only the node's answer for the words the card holds now", () => {
+    const inst = { id: 'search-k7mq', settings: { q: 'eggs', kind: 'any', km: 5 } };
+    const body = { q: 'eggs', kind: 'any', category: null, km: 5, more: true, items: [{ id: 'p1', type: 'offer', title: 'Fresh eggs', category: 'food', photoUrl: null }] };
+    const withCard = (c: unknown) => ({ cards: { 'search-k7mq': c } } as unknown as HomeAnswer);
+
+    it("reads the node's rows and more for these words", () => {
+        expect(searchCardFor(withCard(body), inst)).toEqual(body);
+    });
+
+    it('a kept answer for other words, an odd body or none is no body (the card says it shows when the community answers)', () => {
+        expect(searchCardFor(withCard({ ...body, q: 'rye' }), inst)).toBeNull();
+        expect(searchCardFor(withCard({ q: 'eggs' }), inst)).toBeNull();
+        expect(searchCardFor(withCard('eggs'), inst)).toBeNull();
+        expect(searchCardFor({ cards: {} } as unknown as HomeAnswer, inst)).toBeNull();
+        expect(searchCardFor(null, inst)).toBeNull();
+    });
+
+    it('an absent km is none, an absent more is false', () => {
+        expect(searchCardFor(withCard({ q: 'eggs', items: [] }), inst)).toEqual({ q: 'eggs', kind: 'any', category: null, km: null, items: [], more: false });
     });
 });

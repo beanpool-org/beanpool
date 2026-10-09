@@ -7,9 +7,9 @@
 import { describe, expect, it } from 'vitest';
 import { HOME_FRAME_LIMITS, defaultCards, defaultHomeLayout, translateV1 } from '@beanpool/core';
 import {
-    MARK_SENT_MAX, addCard, addedLine, cardLabelName, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutPrint, layoutV1Of,
+    MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings, fewerCardsNews, layoutPrint, layoutV1Of,
     moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, type HomeLayoutV2,
+    resetLayout, sameList, searchEmptyLine, searchFirstLine, type HomeLayoutV2,
 } from './home-layout';
 
 const NOW = Date.UTC(2026, 9, 2, 4, 0, 0);
@@ -274,5 +274,27 @@ describe('this browser\'s own marked save, read back (review of #1701 confirmati
         expect(again).toHaveLength(MARK_SENT_MAX);
         expect(again.at(-1)).toEqual({ at: iso(NOW + 10), print: layoutPrint({ ...sent, cards: [sent.cards[0]] }) });
         expect(rememberMarkSent(marks, { ...sent, updatedAt: null })).toEqual(marks);
+    });
+});
+
+describe("a saved search's words on its card and in Edit home (CARD-FRAME §4, §5.2 item 20; slice F4)", () => {
+    it('the first line is the words and the distance, the words alone with no point', () => {
+        expect(searchFirstLine('eggs', 5)).toBe('eggs · within 5 km');
+        expect(searchFirstLine('  duck   eggs ', 25)).toBe('duck eggs · within 25 km');
+        expect(searchFirstLine('eggs', null)).toBe('eggs');
+    });
+
+    it("nothing found says so in the search's own words", () => {
+        expect(searchEmptyLine('eggs', 5)).toBe('No eggs within 5 km right now');
+        expect(searchEmptyLine('eggs', null)).toBe('No eggs right now');
+        expect(SEARCH_OFFLINE_LINE).toBe('Shows when your community answers');
+    });
+
+    it("Edit home names a search's row by its words (bounded), any other card by its name", () => {
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs' } })).toBe('eggs');
+        expect(cardRowName({ type: 'search', settings: { q: 'x'.repeat(40) } })).toBe(`${'x'.repeat(24)}…`);
+        expect(cardRowName({ type: 'search', settings: {} })).toBe('A saved search');
+        expect(cardRowName({ type: 'market' }, 'local')).not.toBe('');
+        expect(cardLabelName({ type: 'search', settings: { q: 'eggs' } })).toBe('"eggs"');
     });
 });

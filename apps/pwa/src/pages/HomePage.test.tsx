@@ -1616,6 +1616,74 @@ describe('what a never-edited member asks, and the old web app\'s empty copy (re
     });
 });
 
+describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slice F4)', () => {
+    const row = (id: string, title: string, type: 'offer' | 'need', km: number) => ({ id, type, title, category: 'food', credits: 5, photoUrl: null, distanceKm: km });
+    const layout = (q = 'eggs') => v2(['market', 'events'], AT, [{ id: 'search-k7mq', type: 'search', settings: { q, kind: 'any', km: 5 } }]);
+    const withBody = (body: unknown) => answer({}, { ...answer().cards, 'search-k7mq': body } as never);
+
+    it('the words and distance first, four Market rows each opening its listing, See more opening the Market with the words', async () => {
+        const onNavigate = vi.fn();
+        nodeKeeping(withBody({ q: 'eggs', kind: 'any', category: null, km: 5, more: true, items: [
+            row('p1', 'Chicken coop wanted', 'need', 0.2), row('p2', 'Fresh eggs', 'offer', 0.5), row('p3', 'Duck eggs', 'offer', 1.4), row('p4', 'Quail eggs', 'offer', 3),
+        ] }), layout());
+        render(<HomePage identity={ME} onNavigate={onNavigate} />);
+        const card = await screen.findByTestId('home-card-search-k7mq');
+        await waitFor(() => expect(within(card).getAllByTestId('home-search-item')).toHaveLength(4));
+        // The caption is the type's, never the member's words.
+        expect(within(card).getByRole('heading', { name: 'A saved search' })).toBeInTheDocument();
+        expect(within(card).getByTestId('home-search-words')).toHaveTextContent(/^eggs · within 5 km$/);
+        const items = within(card).getAllByTestId('home-search-item');
+        expect(items[0]).toHaveAccessibleName('Need, Chicken coop wanted, 5 Beans, under 1 km away');
+        expect(items[1]).toHaveTextContent('5 Beans');
+        fireEvent.click(items[2]);
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'p3');
+        const more = within(card).getByTestId('home-search-more');
+        expect(more).toHaveTextContent('See more ›');
+        expect(more).toHaveAccessibleName('See more listings for eggs in the Market');
+        fireEvent.click(more);
+        expect(onNavigate).toHaveBeenCalledWith('marketplace-search', 'eggs');
+        expect(within(card).queryByTestId('home-search-offline')).toBeNull();
+    });
+
+    it('nothing found says so in its own words; no See more without more', async () => {
+        nodeKeeping(withBody({ q: 'eggs', kind: 'any', category: null, km: 5, more: false, items: [] }), layout());
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-search-k7mq');
+        await waitFor(() => expect(within(card).getByTestId('home-search-empty')).toHaveTextContent('No eggs within 5 km right now'));
+        expect(within(card).queryByTestId('home-search-more')).toBeNull();
+    });
+
+    it('with no point the node ignored the distance: the words alone', async () => {
+        nodeKeeping(withBody({ q: 'eggs', kind: 'any', category: null, km: null, more: false, items: [row('p2', 'Fresh eggs', 'offer', 0.5)] }), layout());
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-search-k7mq');
+        await waitFor(() => expect(within(card).getAllByTestId('home-search-item')).toHaveLength(1));
+        expect(within(card).getByTestId('home-search-words')).toHaveTextContent(/^eggs$/);
+    });
+
+    it('no body for these words (an older node, or a kept answer for other words): it shows when the community answers', async () => {
+        nodeKeeping(withBody({ q: 'rye', kind: 'any', category: null, km: 5, more: false, items: [row('p9', 'Rye loaf', 'offer', 1)] }), layout());
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-search-k7mq');
+        await waitFor(() => expect(within(card).getByTestId('home-search-offline')).toHaveTextContent('Shows when your community answers'));
+        expect(card).not.toHaveTextContent('Rye loaf');
+        expect(card).not.toHaveTextContent('coming app update');
+    });
+
+    it('Edit home names the row by its words, so two searches are two rows', async () => {
+        nodeKeeping(answer(), v2(['market'], AT, [
+            { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } },
+            { id: 'search-m4p9', type: 'search', settings: { q: 'duck eggs', kind: 'any' } },
+        ]));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-search-k7mq');
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        expect(screen.getByTestId('home-edit-row-search-k7mq')).toHaveTextContent('eggs');
+        expect(screen.getByTestId('home-edit-row-search-m4p9')).toHaveTextContent('duck eggs');
+        expect(screen.getByTestId('home-edit-row-search-k7mq')).not.toHaveTextContent('A saved search');
+    });
+});
+
 describe('Home\'s dialogs: only the one in front has the keys, and focus never drops to the page (review of #1701, findings 2 and 3)', () => {
     const withSearch = () => v2(['market', 'events'], AT, [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }]);
     const focused = () => document.activeElement?.getAttribute('data-testid') ?? document.activeElement?.tagName;

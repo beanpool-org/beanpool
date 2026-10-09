@@ -51,7 +51,8 @@ describe('AddCardDialog', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Add A saved search to Home' }));
         const settings = screen.getByRole('dialog', { name: 'A saved search' });
         expect(within(settings).getByTestId('home-settings-submit')).toBeDisabled();
-        expect(settings).toHaveTextContent('Its listings show in a coming app update.');
+        // The waiting line went with slice F4: the card draws its listings now.
+        expect(settings).not.toHaveTextContent('coming app update');
         fireEvent.change(screen.getByTestId('home-settings-q'), { target: { value: '  eggs ' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add to Home' }));
         expect(onAdd).toHaveBeenLastCalledWith('search', { q: 'eggs', kind: 'any' });
@@ -78,5 +79,34 @@ describe('CardSettingsDialog', () => {
         fireEvent.change(screen.getByTestId('home-settings-q'), { target: { value: 'duck eggs' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
         expect(onSubmit).toHaveBeenCalledWith({ q: 'duck eggs', kind: 'offer', km: 5 });
+    });
+
+    it('the words, then Offers or Needs or both, a category and a distance (CARD-FRAME §4, §5.2 item 20; slice F4)', () => {
+        const onSubmit = vi.fn();
+        render(<CardSettingsDialog type="search" name="A saved search" mode="add" hasPoint onSubmit={onSubmit} onClose={vi.fn()} />);
+        const kind = screen.getByRole('group', { name: 'Show' });
+        expect(within(kind).getAllByRole('button').map(b => b.textContent)).toEqual(['Both', 'Offers', 'Needs']);
+        expect(within(kind).getByRole('button', { name: 'Both' })).toHaveAttribute('aria-pressed', 'true');
+        const km = screen.getByRole('group', { name: 'Distance' });
+        expect(within(km).getAllByRole('button').map(b => b.textContent)).toEqual(['Any distance', '1 km', '2 km', '5 km', '10 km', '25 km']);
+        for (const b of screen.getAllByRole('button')) expect(b.className).toContain('min-h-[44px]');
+        expect(screen.getByLabelText('Category')).toHaveClass('min-h-[44px]');
+        fireEvent.change(screen.getByTestId('home-settings-q'), { target: { value: 'eggs' } });
+        fireEvent.click(within(kind).getByRole('button', { name: 'Needs' }));
+        expect(within(kind).getByRole('button', { name: 'Needs' })).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'food' } });
+        fireEvent.click(within(km).getByRole('button', { name: '5 km' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add to Home' }));
+        expect(onSubmit).toHaveBeenCalledWith({ q: 'eggs', kind: 'need', category: 'food', km: 5 });
+    });
+
+    it('with no point to measure from there are no distance chips, and a distance already kept stays', () => {
+        const onSubmit = vi.fn();
+        render(<CardSettingsDialog type="search" name="A saved search" mode="save" initial={{ q: 'eggs', kind: 'any', category: 'food', km: 10 }} onSubmit={onSubmit} onClose={vi.fn()} />);
+        expect(screen.queryByRole('group', { name: 'Distance' })).toBeNull();
+        expect(screen.getByLabelText('Category')).toHaveValue('food');
+        fireEvent.change(screen.getByLabelText('Category'), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        expect(onSubmit).toHaveBeenCalledWith({ q: 'eggs', kind: 'any', km: 10 });
     });
 });

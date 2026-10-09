@@ -52,7 +52,7 @@ import {
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 
-import { matchesExpandedSearch } from '../lib/search';
+import { marketSearchFromLink, matchesExpandedSearch } from '../lib/search';
 import { getProfileStatus, describeMissing } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
@@ -79,6 +79,9 @@ interface Props {
     marketClickCount?: number;
     openPostId?: string | null;
     onPostOpened?: () => void;
+    /** Words to put in the search (a saved search's See more on Home); taken once, then `onSearchOpened`. */
+    openSearch?: string | null;
+    onSearchOpened?: () => void;
     onNavigate?: (tab: string, conversationId?: string) => void;
     onOpenProfile?: (pubkey: string) => void;
     transactions?: MarketplaceTransaction[];
@@ -147,7 +150,7 @@ function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter
     return filter;
 }
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, openSearch, onSearchOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -320,6 +323,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // "Your events" is its own read of /api/events/mine, so an RSVP made on this page has to tell it to
     // read again — otherwise leaving an event still shows it in the row until the next full load.
     const [yourEventsKey, setYourEventsKey] = useState(0);
+
+    // A saved search's See more on Home: its words in the search box, as if typed.
+    useEffect(() => {
+        if (openSearch === undefined || openSearch === null) return;
+        const q = marketSearchFromLink(openSearch);
+        if (q) setSearchQuery(q);
+        onSearchOpened?.();
+    }, [openSearch, onSearchOpened]);
 
     // Handle deep-link from Map pins or routes
     const deepLinkFetched = useRef<string | null>(null);

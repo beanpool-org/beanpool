@@ -15,7 +15,7 @@
 import { getNodeApiUrl } from './api';
 import { accountEpoch, accountEpochHolds, endAccountEpoch, type AccountEpochEnd } from './account-epoch';
 import { type HomeAnswer } from './home-cards';
-import { layoutV1Of, readLayout, type HomeLayoutV2 } from './home-layout';
+import { layoutV1Of, readLayout, readMarkSent, type HomeLayoutV2, type MarkSent } from './home-layout';
 
 const DB_NAME = 'beanpool-home';
 const STORE = 'answers';
@@ -39,6 +39,11 @@ export interface CachedHome {
      * (lib/home-layout.ts pickLayout). Undefined: not marked.
      */
     localOnlyOver?: string;
+    /**
+     * With `localOnlyOver`: the marked edits this browser sent, each its date and its list's print. A version-2 answer that
+     * is one of them is this browser's own save, not the account's real list (lib/home-layout.ts ownMarkedSave).
+     */
+    localOnlySent?: MarkSent[];
     savedAt: number;
 }
 
@@ -101,6 +106,7 @@ export async function readCachedHome(key: string): Promise<CachedHome | null> {
                     layout: emptyV1 ? null : readLayout(v.layout),
                     layoutUnsaved: !emptyV1 && v.layoutUnsaved === true,
                     ...(typeof v.localOnlyOver === 'string' && v.localOnlyOver.length <= 40 ? { localOnlyOver: v.localOnlyOver } : {}),
+                    ...(typeof v.localOnlyOver === 'string' && Array.isArray(v.localOnlySent) ? { localOnlySent: readMarkSent(v.localOnlySent) } : {}),
                     asked: Array.isArray(v.asked) ? [...new Set(v.asked.filter((x): x is string => typeof x === 'string' && x.length <= 64))].slice(0, 64) : null,
                     savedAt: Number(v.savedAt) || 0,
                 });

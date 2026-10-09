@@ -32,12 +32,13 @@ import {
     FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, askPinned, canMoveCard, canRemoveCard, cardLabelName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
     effectiveInterests, fewerCardsNews, firstSteps, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
-    pickLayout, pickerGroups, pinnedCards, removeCard, removedLine, safetyWord, starredFirst,
-    type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type PickerRow, type StepLine,
+    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, starredFirst,
+    type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
-    SAVE_REFUSED, SAVE_SHAPE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readPhoneOnlyMark, readStoredHome,
-    reconcileInterests, readTips, saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, writePhoneOnlyMark, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
+    SAVE_REFUSED, SAVE_SHAPE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readPhoneOnlyMark, readPhoneOnlySent,
+    readStoredHome, reconcileInterests, readTips, saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, writePhoneOnlyMark,
+    writePhoneOnlySent, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
 } from '../../utils/home-store';
 import { readGlobalHome } from '../../utils/community-directory';
 import { rememberedKnocks, type RememberedKnock } from '../../utils/knock';
@@ -85,10 +86,14 @@ type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community' | '
 
 const REVEAL_MS = 300;
 
-/** The account's list is known again: the phone's list is no longer marked as made while it wasn't (pickLayout). */
-function clearPhoneOnly(mark: { current: string | null }, publicKey: string, url: string, whose: HomeAccount): void {
+/**
+ * The account's list is known again: the phone's list is no longer marked as made while it wasn't (pickLayout), and the
+ * dates of the edits sent under the mark go with it.
+ */
+function clearPhoneOnly(mark: { current: string | null }, sent: { current: MarkSent[] }, publicKey: string, url: string, whose: HomeAccount): void {
     if (mark.current === null) return;
     mark.current = null;
+    sent.current = [];
     void writePhoneOnlyMark(publicKey, url, null, whose);
 }
 
@@ -187,6 +192,10 @@ export default function HomeScreen() {
     // one, it is rare (no copy here, an offline first edit, another device's save meanwhile), and one edit is lost either
     // way: the other device's, were this phone's sent instead.
     const phoneOver = useRef<string | null>(null);
+    // While marked: the edits the phone sent (each its date and its list's print). A version-2 answer that is one of them is
+    // the phone's own save, not the account's real list (utils/home-cards.ts ownMarkedSave; review of #1701 confirmation,
+    // finding 2; review of #1715, finding 1). Kept with the mark.
+    const phoneSent = useRef<MarkSent[]>([]);
     const layoutRef = useRef<HomeLayout | null>(null);
     layoutRef.current = layout;
     const focused = useRef(false);
@@ -265,6 +274,10 @@ export default function HomeScreen() {
         const id = identityRef.current;
         const u = storedRef.current?.url ?? url;
         if (!id || !u || id.publicKey !== whose.publicKey || !stillOnPhone(whose)) return;
+        if (phoneOver.current !== null) {
+            phoneSent.current = rememberMarkSent(phoneSent.current, next);
+            void writePhoneOnlySent(id.publicKey, u, phoneSent.current, whose);
+        }
         const saved = await saveHomePreferences(u, id, { layout: next });
         // The account left the phone while the save was out: nothing of it is drawn or kept.
         if (!stillOnPhone(whose)) return;
@@ -281,17 +294,23 @@ export default function HomeScreen() {
             const account = storedRef.current?.answer.layout ?? null;
             phoneLayout.current = account;
             setLayout(account);
-            clearPhoneOnly(phoneOver, id.publicKey, u, whose);
+            clearPhoneOnly(phoneOver, phoneSent, id.publicKey, u, whose);
             await yieldPhoneLayout(id.publicKey, u, account, whose);
             return;
         }
         if (saved) {
             refusedShape.current = null;
-            clearPhoneOnly(phoneOver, id.publicKey, u, whose);
+            clearPhoneOnly(phoneOver, phoneSent, id.publicKey, u, whose);
             setNotOnAccount(false);
         }
         // The node keeps the newer layout (another phone's, the web app's): that one, then.
         if (saved?.layout && (saved.layout.updatedAt ?? '') > (next.updatedAt ?? '')) {
+            phoneLayout.current = saved.layout;
+            setLayout(saved.layout);
+            await writePhoneLayout(id.publicKey, u, saved.layout, whose);
+        } else if (saved?.layout && phoneLayout.current === next && saved.layout.updatedAt !== next.updatedAt && sameList(saved.layout, next)) {
+            // This save, dated earlier by the node (a clock ahead of the node's is held to its now): that date is the phone's
+            // copy's too, so no read takes the copy as newer and sends it again (review of #1715, note 1).
             phoneLayout.current = saved.layout;
             setLayout(saved.layout);
             await writePhoneLayout(id.publicKey, u, saved.layout, whose);
@@ -331,13 +350,15 @@ export default function HomeScreen() {
         let cached = storedRef.current;
         if (!cached || cached.url !== u || cached.publicKey !== id.publicKey) {
             // Another community or account than the one drawn: its own copies, drawn before the network answers.
-            const [copy, mine, over, phoneStars] = await Promise.all([
-                readStoredHome(id.publicKey, u), readPhoneLayout(id.publicKey, u), readPhoneOnlyMark(id.publicKey, u), readPhoneInterests(),
+            const [copy, mine, over, sent, phoneStars] = await Promise.all([
+                readStoredHome(id.publicKey, u), readPhoneLayout(id.publicKey, u), readPhoneOnlyMark(id.publicKey, u), readPhoneOnlySent(id.publicKey, u),
+                readPhoneInterests(),
             ]);
             cached = copy;
             storedRef.current = copy;
             phoneLayout.current = mine;
             phoneOver.current = mine ? over : null;
+            phoneSent.current = phoneOver.current !== null ? sent : [];
             setUrl(u);
             setRole(undefined);
             setPlace(null);
@@ -371,6 +392,11 @@ export default function HomeScreen() {
             // A visitor keeps no Home here: drawn in the default order, and nothing is sent.
             const member = canTailor(read.stored.answer);
             const answered = read.stored.answer;
+            if (member && phoneOver.current !== null && ownMarkedSave(answered.layout, answered.layoutV1, phoneSent.current)) {
+                // The phone's own marked save, read back (this read overtook the save's answer): the account's list is known
+                // and is the phone's, so the mark goes and the dates decide (a newer edit made since wins and is sent).
+                clearPhoneOnly(phoneOver, phoneSent, id.publicKey, u, whose);
+            }
             const pick = member ? pickLayout(answered.layout, phoneLayout.current, answered.layoutV1, phoneOver.current) : { layout: null, push: false };
             if (member && answered.layout && !answered.layoutV1) {
                 // A version-2 answer: this node keeps the new shape now (it was updated), so nothing waits on it: the list
@@ -382,7 +408,7 @@ export default function HomeScreen() {
             if (member && !pick.push && !answered.layoutV1 && phoneOver.current !== null) {
                 // The account's real list is back (a version-2 answer at or after the unknown one): it stands, and the
                 // phone's list made meanwhile goes (its copy is replaced below). Nothing of it is sent.
-                clearPhoneOnly(phoneOver, id.publicKey, u, whose);
+                clearPhoneOnly(phoneOver, phoneSent, id.publicKey, u, whose);
             }
             setLayout(pick.layout);
             // An empty version-1 list with no copy here moved or hid nothing (a way-back dismissal or a Reset on an older app):
@@ -471,6 +497,7 @@ export default function HomeScreen() {
         storedRef.current = null;
         phoneLayout.current = null;
         phoneOver.current = null;
+        phoneSent.current = [];
         setStored(null);
         setLayout(null);
         setNotOnAccount(false);
@@ -512,6 +539,7 @@ export default function HomeScreen() {
         if (phoneOver.current === null && !phoneLayout.current && answered?.layoutV1?.empty) {
             // Made while the account's list is unknown: the phone's only, until the account's real list answers.
             phoneOver.current = answered.layout?.updatedAt ?? '';
+            phoneSent.current = [];
             void writePhoneOnlyMark(id.publicKey, url, phoneOver.current, whose);
         }
         phoneLayout.current = next;

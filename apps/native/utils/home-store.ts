@@ -33,11 +33,12 @@ import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import { homeAccount, homeGeneration, onHomeAccountChange, resetHomeAccountForTests, stillOnPhone, type HomeAccount } from './home-account';
 import {
-    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeFewerStoreKey, homeHintStoreKey, homeTipsStoreKey, homeInterestsOwedStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeRevealStoreKey,
+    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeFewerStoreKey, homeHintStoreKey, homeTipsStoreKey, homeInterestsOwedStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey,
+    homeRevealStoreKey,
 } from './storage-keys';
 import {
-    HOME_FRESH_FOR_HEADER_MS, readHomeAnswer, readHomeLayout,
-    type HomeAnswer, type HomeCardId, type HomeLayout,
+    HOME_FRESH_FOR_HEADER_MS, readHomeAnswer, readHomeLayout, readMarkSent,
+    type HomeAnswer, type HomeCardId, type HomeLayout, type MarkSent,
 } from './home-cards';
 
 /** How long the node has to answer before Home keeps what it had. */
@@ -287,14 +288,41 @@ export async function readPhoneOnlyMark(publicKey: string, url: string): Promise
     }
 }
 
-/** Sets (a date, or '') or clears (null) that mark, while `whose` is still on the phone. */
+/**
+ * Sets (a date, or '') or clears (null) that mark, while `whose` is still on the phone. Either way no edit has been sent
+ * under it yet: the dates of those sent go too (writePhoneOnlySent).
+ */
 export async function writePhoneOnlyMark(publicKey: string, url: string, over: string | null, whose: HomeAccount = homeAccount(publicKey)): Promise<void> {
     if (whose.publicKey !== publicKey || !stillOnPhone(whose)) return;
     try {
         if (over === null) await AsyncStorage.removeItem(homeLayoutPhoneOnlyStoreKey(publicKey, url));
         else await AsyncStorage.setItem(homeLayoutPhoneOnlyStoreKey(publicKey, url), over);
+        await AsyncStorage.removeItem(homeLayoutPhoneOnlySentStoreKey(publicKey, url));
     } catch {
         // Not kept: the phone's list then wins by its date, as any other.
+    }
+}
+
+/**
+ * With the mark: the edits the phone sent while marked, each its date and its list's print (utils/home-cards.ts
+ * ownMarkedSave), the latest MARK_SENT_MAX. An older build's dates alone still load. None when there is no mark.
+ */
+export async function readPhoneOnlySent(publicKey: string, url: string): Promise<MarkSent[]> {
+    try {
+        const raw = await AsyncStorage.getItem(homeLayoutPhoneOnlySentStoreKey(publicKey, url));
+        return readMarkSent(raw ? JSON.parse(raw) : []);
+    } catch {
+        return [];
+    }
+}
+
+/** Keeps those edits, while `whose` is still on the phone. */
+export async function writePhoneOnlySent(publicKey: string, url: string, sent: readonly MarkSent[], whose: HomeAccount = homeAccount(publicKey)): Promise<void> {
+    if (whose.publicKey !== publicKey || !stillOnPhone(whose)) return;
+    try {
+        await AsyncStorage.setItem(homeLayoutPhoneOnlySentStoreKey(publicKey, url), JSON.stringify(sent));
+    } catch {
+        // Not kept: once the app is opened again, a read of the phone's own save is taken as the account's real list.
     }
 }
 

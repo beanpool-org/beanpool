@@ -42,8 +42,8 @@ import {
 import {
     FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_HINT_LINE, SEARCH_WAITING_LINE, addCard, addedLine, askPinned, canMoveCard,
     canRemoveCard, cardLabelName, cardName, cardOnNode, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
-    listOf, moveCard, pickLayout, pickerGroups, pinnedCards, readLayout, removeCard, removedLine, resetLayout,
-    type HomeCardInstance, type HomeLayoutV2,
+    listOf, moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
+    resetLayout, sameList, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
 } from '../lib/home-layout';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { settleInterests, shareInterests } from '../lib/home-interests';
@@ -191,6 +191,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     // Set while this browser's copy is an edit made on the newcomer's list drawn for an unknown account list: that list's
     // date (lib/home-layout.ts pickLayout). Such an edit is never sent by itself: a read decides (review of #1699, finding 2).
     const overRef = useRef<string | undefined>(undefined);
+    // While marked: the edits this browser sent (each its date and its list's print). A version-2 answer that is one of them
+    // is this browser's own save, not the account's real list (lib/home-layout.ts ownMarkedSave; review of #1701
+    // confirmation, finding 2; review of #1715, finding 1).
+    const overSentRef = useRef<MarkSent[]>([]);
     // The node refused this browser's version-2 layout on this landing: it is sent again at the next landing, never in a loop.
     const refusedLanding = useRef(false);
     // The one extra read a landing makes for cards the answer wasn't built for (review of #1697, note a: bounded).
@@ -251,7 +255,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const keep = useCallback((a: HomeAnswer, l: HomeLayoutV2 | null, epoch: number) => {
         void writeCachedHome(cacheKey, {
             answer: a, asked: builtForRef.current, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current,
-            ...(overRef.current !== undefined ? { localOnlyOver: overRef.current } : {}), savedAt: Date.now(),
+            ...(overRef.current !== undefined ? { localOnlyOver: overRef.current, localOnlySent: overSentRef.current } : {}), savedAt: Date.now(),
         }, epoch);
     }, [cacheKey]);
 
@@ -269,23 +273,40 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         if (!publicKey || epoch === null) return Promise.resolve();
         const seq = ++layoutSeq.current;
         savingLayout.current += 1;
+        if (overRef.current !== undefined) overSentRef.current = rememberMarkSent(overSentRef.current, next);
         return saveHomePreferences(publicKey, { 'home.layout': next })
             .finally(() => { savingLayout.current -= 1; })
             .then((r) => {
                 if (!mounted.current || seq !== layoutSeq.current || !holds(epoch)) return;
+                // A newer edit made here while this save was out, and not sent by itself (one made while marked, which a
+                // read decided): it is sent now, as any edit on the member's own list (review of #1701 confirmation,
+                // finding 2). Otherwise this answer marked it saved and it waited, unsent, for some later read.
+                const waiting = unsavedRef.current && layoutRef.current && layoutRef.current !== next ? layoutRef.current : null;
                 unsavedRef.current = false;
                 refusedLanding.current = false;
                 // On the account now: the list is the member's, no longer an edit on an unknown one (the phone's
                 // clearPhoneOnly; review of #1701, finding 1: the next edit was otherwise thrown away unsent).
                 overRef.current = undefined;
+                overSentRef.current = [];
                 setNotOnAccount(false);
                 // What the node kept: this layout, or a newer one saved from another device (a phone's, another tab's).
                 const kept = readLayout(r['home.layout']);
                 if (kept && (kept.updatedAt ?? '') > (next.updatedAt ?? '')) {
+                    // Newer than this save: the node dropped it. That list stands, and an edit that waited on this save
+                    // goes with it, unsent: it was made on a list the account no longer holds (review of #1715, finding 2).
+                    layoutRef.current = kept;
+                    draw(kept);
+                } else if (waiting) {
+                    // The node kept this save (never dated later than sent: the node only holds a date to its now).
+                    unsavedRef.current = true;
+                } else if (kept && layoutRef.current === next && kept.updatedAt !== next.updatedAt && sameList(kept, next)) {
+                    // This save, dated earlier by the node (a clock ahead of the node's is held to its now): that date is
+                    // this browser's copy's too, so no read takes the copy as newer and sends it again (review of #1715, note 1).
                     layoutRef.current = kept;
                     draw(kept);
                 }
                 if (answerRef.current) keep(answerRef.current, layoutRef.current, epoch);
+                if (unsavedRef.current && waiting) void saveLayout(waiting);
             }, (e: unknown) => {
                 if (!mounted.current || seq !== layoutSeq.current || !holds(epoch)) return;
                 const code = (e as { status?: number } | null)?.status;
@@ -299,6 +320,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 }
                 unsavedRef.current = false;
                 overRef.current = undefined;
+                overSentRef.current = [];
                 const account = readLayout(answered);
                 layoutRef.current = account;
                 draw(account);
@@ -357,13 +379,19 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             const v1 = layoutV1Of(a.layout);
             const local = layoutRef.current;
             const member = !!a.me && !a.welcome;
+            if (member && overRef.current !== undefined && ownMarkedSave(account, v1, overSentRef.current)) {
+                // This browser's own marked save, read back (the read overtook the save's answer): the account's list is
+                // known and is this browser's, so the mark goes and the dates decide (a newer edit made since wins).
+                overRef.current = undefined;
+                overSentRef.current = [];
+            }
             const pick = member ? pickLayout(account, local, v1, overRef.current) : { layout: null, push: false };
             if (member && account && !v1) {
                 // A version-2 answer: this node keeps the new shape, so nothing waits on it any more.
                 refusedLanding.current = false;
                 setNotOnAccount(false);
                 // The account's real list is back: it stands, and the edit made on the unknown one goes, unsent.
-                if (overRef.current !== undefined && !pick.push) overRef.current = undefined;
+                if (overRef.current !== undefined && !pick.push) { overRef.current = undefined; overSentRef.current = []; }
             }
             // The newcomer's list drawn for an unknown account list is not this browser's copy: nothing of it is sent.
             const unknown = member && !local && !!v1?.empty;
@@ -434,6 +462,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         layoutRef.current = null;
         drawnRef.current = null;
         overRef.current = undefined;
+        overSentRef.current = [];
         refusedLanding.current = false;
         extraRead.current = false;
         builtForRef.current = null;
@@ -465,6 +494,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 etagRef.current = cached.etag;
                 layoutRef.current = cached.layout;
                 overRef.current = cached.localOnlyOver;
+                overSentRef.current = cached.localOnlySent ?? [];
                 unsavedRef.current = cached.layoutUnsaved;
                 setAnswer(cached.answer);
                 const ans = cached.answer;
@@ -487,6 +517,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         layoutRef.current = null;
         drawnRef.current = null;
         overRef.current = undefined;
+        overSentRef.current = [];
         builtForRef.current = null;
         unsavedRef.current = false;
         setAnswer(null);
@@ -607,6 +638,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         if (overRef.current === undefined && !layoutRef.current && layoutV1Of(answered.layout)?.empty) {
             // Made while the account's list is unknown: this browser's only, until the account's real list answers.
             overRef.current = rawDate(answered.layout);
+            overSentRef.current = [];
         }
         unsavedRef.current = true;
         layoutRef.current = next;

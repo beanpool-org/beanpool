@@ -176,6 +176,14 @@ export function homeLayoutPhoneOnlyStoreKey(publicKey: string, url: string): str
     return `${HOME_STORE_PREFIX}layout-phone-only:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
 }
 
+/**
+ * With that mark: the dates of the edits the phone sent while marked, so a version-2 answer dated as one is the phone's
+ * own save, not the account's real list (utils/home-cards.ts ownMarkedSave). Set and cleared with the mark.
+ */
+export function homeLayoutPhoneOnlySentStoreKey(publicKey: string, url: string): string {
+    return `${HOME_STORE_PREFIX}layout-phone-only-sent:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
+}
+
 export function homeInterestsOwedStoreKey(publicKey: string, url: string): string {
     return `${HOME_STORE_PREFIX}interests-owed:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
 }

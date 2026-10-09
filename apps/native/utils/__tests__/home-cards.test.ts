@@ -13,7 +13,7 @@ vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(), setItemAsync: vi.fn
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Array(n)) }));
 
 import {
-    HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardLabelName, cardName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
+    HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardLabelName, cardName, cardRowName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
     invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
@@ -267,6 +267,14 @@ describe('the layout (§4)', () => {
         expect(cardLabelName({ type: 'search', settings: { q: 'x'.repeat(25), kind: 'any' } })).toBe(`"${'x'.repeat(24)}…"`);
         expect(cardLabelName({ type: 'search', settings: { q: '', kind: 'any' } })).toBe('A saved search');
         expect(cardLabelName({ type: 'search' })).toBe('A saved search');
+        // Two searches with the same words and another kind sound different (review of #1716): Both says no kind.
+        expect(cardLabelName({ type: 'search', settings: { q: 'eggs', kind: 'offer' } })).toBe('"eggs" (Offers)');
+        expect(cardLabelName({ type: 'search', settings: { q: 'eggs', kind: 'need' } })).toBe('"eggs" (Needs)');
+        expect(cardLabelName({ type: 'search', settings: { q: 'x'.repeat(25), kind: 'need' } })).toBe(`"${'x'.repeat(24)}…" (Needs)`);
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'offer' } })).toBe('eggs · Offers');
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'need' } })).toBe('eggs · Needs');
+        expect(cardRowName({ type: 'search', settings: { q: 'eggs', kind: 'any' } })).toBe('eggs');
+        expect(cardRowName({ type: 'search', settings: { kind: 'need' } })).toBe('A saved search');
         expect(cardLabelName({ type: 'market' }, 'global')).toBe('Near you');
         expect(cardLabelName({ type: 'pulse' })).toBe('The Pulse');
     });

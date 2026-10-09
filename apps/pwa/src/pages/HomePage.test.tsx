@@ -1694,6 +1694,24 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         expect(screen.getByTestId('home-edit-row-search-m4p9')).toHaveTextContent('duck eggs');
         expect(screen.getByTestId('home-edit-row-search-k7mq')).not.toHaveTextContent('A saved search');
     });
+
+    it('Edit home: two searches with the same words and another kind read differently, rows and labels (review of #1716)', async () => {
+        nodeKeeping(answer(), v2(['market'], AT, [
+            { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'offer' } },
+            { id: 'search-m4p9', type: 'search', settings: { q: 'eggs', kind: 'need' } },
+            { id: 'search-r8t2', type: 'search', settings: { q: 'eggs', kind: 'any' } },
+        ]));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-search-k7mq');
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        expect(screen.getByTestId('home-edit-row-search-k7mq')).toHaveTextContent('eggs · Offers');
+        expect(screen.getByTestId('home-edit-row-search-m4p9')).toHaveTextContent('eggs · Needs');
+        expect(screen.getByTestId('home-edit-row-search-r8t2')).toHaveTextContent('eggs');
+        expect(screen.getByTestId('home-edit-row-search-r8t2')).not.toHaveTextContent(/Offers|Needs|Both/);
+        expect(screen.getByTestId('home-edit-up-search-k7mq')).toHaveAccessibleName('Move "eggs" (Offers) up');
+        expect(screen.getByTestId('home-edit-up-search-m4p9')).toHaveAccessibleName('Move "eggs" (Needs) up');
+        expect(screen.getByTestId('home-edit-up-search-r8t2')).toHaveAccessibleName('Move "eggs" up');
+    });
 });
 
 describe('Home\'s dialogs: only the one in front has the keys, and focus never drops to the page (review of #1701, findings 2 and 3)', () => {

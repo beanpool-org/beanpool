@@ -70,13 +70,15 @@ export const CARD_WORDS_MAX = 24;
 
 /**
  * One card's name for the screen reader: its "…" and Edit home's labels, and the "added" and "removed" lines. A saved
- * search is named by its words, in quotes and bounded (`"eggs"`), so two of them never sound alike (CARD-FRAME §1.3;
- * review of #1699, finding 4); every other card by its type's name. Never the caption: a caption is fixed words, never a
- * member's.
+ * search is named by its words, in quotes and bounded, and its kind when it isn't Both (`"eggs"`, `"eggs" (Needs)`), so
+ * two of them never sound alike (CARD-FRAME §1.3; review of #1699, finding 4; review of #1716); every other card by its
+ * type's name. Never the caption: a caption is fixed words, never a member's.
  */
 export function cardLabelName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
     const words = searchWords(c);
-    return words ? `"${words}"` : cardName(c.type, profile);
+    if (!words) return cardName(c.type, profile);
+    const kind = searchKindWord(c);
+    return kind ? `"${words}" (${kind})` : `"${words}"`;
 }
 
 /** A saved search's words, bounded (CARD_WORDS_MAX, then "…"); null for any other card or a search with none. */
@@ -86,9 +88,21 @@ function searchWords(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | n
     return q ? (q.length > CARD_WORDS_MAX ? `${q.slice(0, CARD_WORDS_MAX).trimEnd()}…` : q) : null;
 }
 
-/** One card's row name in Edit home: a saved search by its words (`eggs`), so two searches are two rows; else its name. */
+/** A saved search's kind as its names say it: "Offers" or "Needs" (the sheet's chips), nothing for Both. */
+function searchKindWord(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | null {
+    const kind = readSearchSettings(c.settings).kind;
+    return kind === 'offer' ? 'Offers' : kind === 'need' ? 'Needs' : null;
+}
+
+/**
+ * One card's row name in Edit home: a saved search by its words, and its kind when it isn't Both (`eggs`, `eggs · Needs`),
+ * so two searches are two rows even with the same words; else its name.
+ */
 export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
-    return searchWords(c) ?? cardName(c.type, profile);
+    const words = searchWords(c);
+    if (!words) return cardName(c.type, profile);
+    const kind = searchKindWord(c);
+    return kind ? `${words} · ${kind}` : words;
 }
 
 // ── The answer, as GET /api/home sends it (apps/server routes/home-answer.ts HomeAnswer) ────────────────────────────

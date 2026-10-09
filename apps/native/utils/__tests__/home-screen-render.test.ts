@@ -1931,6 +1931,28 @@ describe('two saved searches: each is named by its words, never in its caption (
         expect(byLabel(`Card options for ${bounded}`)).not.toBeNull();
     });
 
+    it('two searches with the same words and another kind: Edit home\'s rows and labels say the kind (review of #1716)', async () => {
+        const mine = { v: 2, cards: [
+            { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'offer' } },
+            { id: 'search-m4p9', type: 'search', settings: { q: 'eggs', kind: 'need' } },
+            { id: 'search-r8t2', type: 'search', settings: { q: 'eggs', kind: 'any' } },
+        ], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        node.answer = { ...localMember(), layout: mine as never };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
+        await render();
+        expect(byLabel('Card options for "eggs" (Offers)')).not.toBeNull();
+        expect(byLabel('Card options for "eggs" (Needs)')).not.toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="edit-home-search-k2x7"]')!.textContent).toContain('eggs · Offers');
+        expect(document.querySelector('[data-testid="edit-home-search-m4p9"]')!.textContent).toContain('eggs · Needs');
+        const both = document.querySelector('[data-testid="edit-home-search-r8t2"]')!.textContent!;
+        expect(both).toContain('eggs');
+        expect(both).not.toMatch(/Offers|Needs|Both/);
+        expect(byLabel('Move "eggs" (Offers) down')).not.toBeNull();
+        expect(byLabel('Move "eggs" (Needs) up')).not.toBeNull();
+        expect(byLabel('Move "eggs" up')).not.toBeNull();
+    });
+
     it('a new saved search is announced by its words', async () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });

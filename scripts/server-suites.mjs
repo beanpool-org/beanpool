@@ -317,6 +317,7 @@ export const SUITES = [
     'test-app-floors',
     'test-node-profile',
     'test-profile-feature-gate',
+    'test-probation',
     'test-global-no-beans',
     'test-open-door-hardening',
     'test-funnel-event',

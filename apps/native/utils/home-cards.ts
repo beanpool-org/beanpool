@@ -23,8 +23,9 @@
 
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
-    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard,
-    type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind,
+    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
+    skyToday, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
+    type SkyToday,
 } from '@beanpool/core';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
@@ -51,7 +52,7 @@ const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
  */
 export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
     'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'search', 'decide', 'groups',
-    'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
+    'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'community',
 ]);
 
 /** Find your community is pinned for a member's first 30 days on the global node, then it can be removed (§4.1, §7, §13 Q5). */
@@ -152,7 +153,8 @@ export interface HomeCards {
     pulse?: { items: HomePulseItem[] };
     beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
-    community?: { name: string | null; members: number; tradesThisMonth?: number; communities?: number };
+    /** `place`: the community's own, to two decimals (a member's answer on a local community that has one). */
+    community?: { name: string | null; members: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number } };
 }
 
 export interface HomeMe {
@@ -505,6 +507,28 @@ export function searchEmptyLine(q: string, km: number | null): string {
 /** Edit home's line while a node before the frame can't keep the member's cards (§2.3). */
 export const NOT_ON_ACCOUNT_LINE = "Your community's server needs an update before your cards follow you to other devices.";
 
+/** Whose place the sun and moon card shows, as its settings sheet offers it (CARD-FRAME §4). */
+export const SKY_PLACE_CHIPS: ReadonlyArray<{ place: SkySettings['place']; label: string }> = [
+    { place: 'community', label: 'Your community' }, { place: 'me', label: 'Your area' },
+];
+/** Edit home's line for a sun and moon card with no place to work from. */
+export const SKY_NO_PLACE_LINE = 'Nothing to show now: no place is known.';
+
+/**
+ * The sun and moon card's words (@beanpool/core sky.ts), worked out on the phone with no request: from the community's
+ * place in the answer, else the member's area, else the phone's last known place where Home already has it; `place: 'me'`
+ * puts the member's first. Null: no place is known, and the card isn't drawn. Times are the phone's own clock.
+ */
+export function skyOf(
+    answer: Pick<HomeAnswer, 'me'> & { cards: Pick<HomeCards, 'community'> },
+    inst: Pick<HomeCardInstance, 'settings'>,
+    device: { lat: number; lng: number } | null | undefined,
+    now: number = Date.now(),
+): SkyToday | null {
+    const place = skyPlaceFor(readSkySettings(inst.settings), { community: answer.cards.community?.place, member: answer.me?.area, device });
+    return place ? skyToday(place, now) : null;
+}
+
 // ── The picker (§1.2) ─────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface PickerRow {
@@ -653,6 +677,8 @@ export interface HomeDrawContext {
     now?: number;
     /** The Tips card has a tip to show (@beanpool/core home-tips.ts, from the device's record); absent: none. */
     tipsUp?: boolean;
+    /** The phone's last known place, only where Home already reads it (the global node, location allowed); absent: none. */
+    place?: { lat: number; lng: number } | null;
 }
 
 /**
@@ -773,7 +799,7 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
     const global = answer.profile === 'global';
     const canInvite = invitesForReader(answer.features, ctx.role);
     const pinned = pinnedCards(answer, ctx.now ?? Date.now());
-    const shows = ({ id, type }: HomeCardInstance): boolean => {
+    const shows = ({ id, type, settings }: HomeCardInstance): boolean => {
         if (!cardOnNode(type, answer, ctx.role)) return false;
         switch (type) {
             case 'needs': return ctx.needs !== undefined ? ctx.needs > 0 : !!c.needs?.items?.length;
@@ -789,6 +815,8 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             // Drawn with no body too (SEARCH_OFFLINE_LINE), so a member on 2G knows the add took; a search that finds
             // nothing says so (searchEmptyLine).
             case 'search': return true;
+            // Worked out on the phone; drawn only where a place is known (CARD-FRAME §4).
+            case 'sky': return skyOf(answer, { settings }, ctx.place) !== null;
             case 'community': return true;
             default: return c[id] !== undefined;
         }

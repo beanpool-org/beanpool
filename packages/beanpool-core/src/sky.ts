@@ -231,9 +231,7 @@ export function readSkyPlace(raw: unknown): SkyPlace | null {
 }
 
 /** The sky card's settings: whose place it shows. */
-export interface SkySettings {
-    place: 'community' | 'me';
-}
+export type SkySettings = { place: 'community' | 'me' };
 
 /** The sky card's settings, tolerant: anything but `me` is the community's place (the default). */
 export function readSkySettings(raw: unknown): SkySettings {

@@ -135,9 +135,9 @@ import { rememberKnock } from '../knock';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
-import { HOME_TIPS, localDay, translateV1 } from '@beanpool/core';
+import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { AccessibilityInfo, AppState, DeviceEventEmitter } from 'react-native';
-import { FEWER_CARDS_LINE, HOME_SAFETY_POLL_MS, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
+import { FEWER_CARDS_LINE, HOME_SAFETY_POLL_MS, SKY_NO_PLACE_LINE, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
 import { commonsSectionFor } from '../commons-sections';
 import { marketFilterFromLink } from '../market-filters';
@@ -2534,5 +2534,113 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
             { id: 'events', type: 'events' }, { id: 'search-k2x7', type: 'search', settings: { q: 'duck eggs', kind: 'any' } }, { id: 'market', type: 'market' },
         ]);
         expect(boundSignatureValid(save, who.identity.publicKey)).toBe(true);
+    });
+});
+
+describe('sun and moon: worked out on the phone, from the place it already has (CARD-FRAME §4, §5.2 item 22)', () => {
+    const MULLUM = { lat: -28.55, lng: 153.5 };
+    const REYKJAVIK = { lat: 64.15, lng: -21.94 };
+    /** The sun's half of the card's line, which can't tick over between the screen's moment and the test's (the moon's percent could). */
+    const sunPart = (text: string) => text.slice(text.indexOf(' · '));
+    const skyLine = () => document.querySelector('[data-testid="home-sky-line"]') as HTMLElement | null;
+    function withSky(opts: { settings?: Record<string, unknown>; community?: typeof MULLUM | null; area?: typeof MULLUM | null }) {
+        const now = Date.now();
+        const base = localMember();
+        const layout = { v: 2 as const, cards: [{ id: 'sky', type: 'sky', ...(opts.settings ? { settings: opts.settings } : {}) }, { id: 'steps', type: 'steps' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: iso(now - 72 * H) };
+        node.answer = {
+            ...base,
+            me: { ...base.me!, area: opts.area ?? null },
+            layout,
+            cards: { ...base.cards, community: { ...base.cards.community!, ...(opts.community ? { place: opts.community } : {}) } },
+        };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(layout));
+    }
+
+    it("draws the community's place: the moon, sunrise and sunset there on the phone's clock, and a screen-reader label in words", async () => {
+        withSky({ community: MULLUM, area: REYKJAVIK });
+        await render();
+        expect(cards()).toContain('sky');
+        const line = skyLine()!;
+        const there = skyToday(MULLUM, Date.now());
+        expect(line.textContent).toMatch(/^\S+ (New moon|Waxing crescent|First quarter|Waxing gibbous|Full moon|Waning gibbous|Last quarter|Waning crescent), \d{1,3}% · /);
+        expect(sunPart(line.textContent!)).toBe(sunPart(there.text));
+        expect(sunPart(line.textContent!)).not.toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
+        const label = line.getAttribute('aria-label')!;
+        expect(label).toMatch(/^(Moon [a-z ]+|New moon|Full moon), \d{1,3} percent lit\. /);
+        expect(label).not.toMatch(/[\u{1F311}-\u{1F318}]/u);
+        expect(label.slice(label.indexOf('lit. '))).toBe(there.label.slice(there.label.indexOf('lit. ')));
+        // Its caption is the type's own name; nothing on it is a target, so nothing for the floating button to step around.
+        expect(document.querySelector('[data-testid="home-card-sky"]')!.textContent).toContain('Sun and moon');
+        expect(document.querySelector('[data-testid="home-card-sky"] button:not([data-testid$="-menu"])')).toBeNull();
+    });
+
+    it("with no community place, the member's area; and 'Your area' puts the member's first", async () => {
+        withSky({ area: REYKJAVIK });
+        await render();
+        expect(sunPart(skyLine()!.textContent!)).toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
+        act(() => root?.unmount());
+        host?.remove();
+        resetHomeStoreForTests();
+        withSky({ community: MULLUM, area: REYKJAVIK, settings: { place: 'me' } });
+        await render();
+        expect(sunPart(skyLine()!.textContent!)).toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
+    });
+
+    it('with no place at all, it is not drawn, and Edit home says why', async () => {
+        withSky({});
+        await render();
+        expect(cards()).not.toContain('sky');
+        expect(skyLine()).toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(document.querySelector('[data-testid="edit-home-sky"]')!.textContent).toContain(SKY_NO_PLACE_LINE);
+        expect(SKY_NO_PLACE_LINE).toBe('Nothing to show now: no place is known.');
+    });
+
+    it('makes no request of its own: a landing with it asks exactly what a landing without it asks', async () => {
+        const asked = () => node.requests.map(r => `${r.method} ${new URL(r.url).pathname}${new URL(r.url).search}`);
+        withSky({ community: MULLUM });
+        node.answer = { ...node.answer, layout: { ...node.answer.layout!, cards: node.answer.layout!.cards.filter(c => c.type !== 'sky') } };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(node.answer.layout));
+        // Both landings start from the same phone: nothing kept from the first is there for the second.
+        const phone = new Map(mem.store);
+        await render();
+        const without = asked();
+        act(() => root?.unmount());
+        host?.remove();
+        resetHomeStoreForTests();
+        mem.store.clear();
+        phone.forEach((v, k) => mem.store.set(k, v));
+        node.requests = [];
+        withSky({ community: MULLUM });
+        await render();
+        expect(cards()).toContain('sky');
+        expect(asked()).toEqual(without);
+        expect(homeReads().every(r => !new URL(r.url).searchParams.get('cards')!.split(',').includes('sky'))).toBe(true);
+    });
+
+    it("Add a card: Sun and moon under Around you; its sheet asks whose place; Add to Home saves it and reads nothing", async () => {
+        withSky({ community: MULLUM, area: REYKJAVIK });
+        node.answer = { ...node.answer, layout: { ...node.answer.layout!, cards: node.answer.layout!.cards.filter(c => c.type !== 'sky') } };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(node.answer.layout));
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        const marks = Array.from(document.querySelectorAll('[data-testid^="add-card-group-"], [data-testid="add-card-sky"]'), e => e.getAttribute('data-testid'));
+        expect(marks.slice(marks.indexOf('add-card-sky') - 1, marks.indexOf('add-card-sky') + 1)).toEqual(['add-card-group-around', 'add-card-sky']);
+        await act(async () => { byLabel('Add Sun and moon to Home')!.click(); });
+        await settle(2);
+        const chips = Array.from(document.querySelectorAll('[data-testid="card-settings-place"] button'), e => e.textContent);
+        expect(chips).toEqual(['Your community', 'Your area']);
+        expect(Array.from(document.querySelectorAll('[data-testid="card-settings-place"] [aria-selected="true"]'), e => e.textContent)).toEqual(['Your community']);
+        expect(document.querySelector('[data-testid="card-settings-words"]')).toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="card-settings-place-me"]') as HTMLElement).click(); });
+        const before = node.requests.length;
+        await act(async () => { (document.querySelector('[data-testid="card-settings-done"]') as HTMLElement).click(); });
+        await settle();
+        expect(cards()[0]).toBe('sky');
+        expect(sunPart(skyLine()!.textContent!)).toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Sun and moon added to Home');
+        const after = node.requests.slice(before);
+        expect(after.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences']);
+        expect(JSON.parse(after[0].body).preferences['home.layout'].cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
     });
 });

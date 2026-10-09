@@ -5,7 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AppColors } from '../../constants/colors';
 import {
-    NOT_ON_ACCOUNT_LINE, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName, cardOrder, moveCard, resetLayout,
+    NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName, cardOrder, moveCard, resetLayout,
     type HomeAnswer, type HomeCardId, type HomeCardInstance, type HomeLayout, type HomeRole,
 } from '../../utils/home-cards';
 import { homeCardType } from '@beanpool/core';
@@ -72,7 +72,7 @@ export function EditHomeSheet({
             <View key={c.id} style={[editHomeStyles.row, { borderBottomColor: colors.border.default }]} testID={`edit-home-${c.id}`}>
                 <View style={editHomeStyles.rowText}>
                     <Text style={[editHomeStyles.name, { color: colors.text.heading }]} numberOfLines={2}>{name(c)}</Text>
-                    {idle && <Text style={[editHomeStyles.sub, { color: colors.text.secondary }]}>{c.type === 'tips' && tipsAllSeen ? TIPS_ALL_SEEN : 'Nothing to show now'}</Text>}
+                    {idle && <Text style={[editHomeStyles.sub, { color: colors.text.secondary }]}>{c.type === 'tips' && tipsAllSeen ? TIPS_ALL_SEEN : c.type === 'sky' ? SKY_NO_PLACE_LINE : 'Nothing to show now'}</Text>}
                 </View>
                 <Pressable
                     disabled={!canUp}

@@ -65,6 +65,8 @@ const StorageKeysConfig = {
     TRANSACTIONS: 'transactions',
     SYNC_CHECKPOINT: 'checkpoint',
     IDENTITY_EPOCH: 'identity-epoch',
+    // When the last sync cycle completed, for display only (getLastSyncTime).
+    LAST_CYCLE: 'last-cycle',
 };
 
 /**
@@ -100,7 +102,7 @@ export async function getSyncCursorKey(keyId: string): Promise<string> {
  * (review of PR #1719, B1). The identity epoch is not: it says which server the phone last read, not what it holds.
  */
 export function syncCursorKeysOf(dbFilename: string): string[] {
-    return [StorageKeysConfig.LAST_SYNC, StorageKeysConfig.SYNC_CHECKPOINT, 'members_last_sync', 'members_held_since', POSTS_HELD_READ]
+    return [StorageKeysConfig.LAST_SYNC, StorageKeysConfig.SYNC_CHECKPOINT, 'members_last_sync', 'members_held_since', POSTS_HELD_READ, StorageKeysConfig.LAST_CYCLE]
         .map(id => `pillar_sync_${dbFilename}_${id}`);
 }
 
@@ -1006,6 +1008,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             }
         }
         await AsyncStorage.removeItem(kCheckpoint);
+        // The cycle completed (getLastSyncTime): whether its read finished, was held or was a 304. Not when its posts
+        // went unwritten (the member switched community), as the cursor before it.
+        if (!postsUnwritten) await AsyncStorage.setItem(await getSyncCursorKey(StorageKeysConfig.LAST_CYCLE), String(Date.now()));
         // The epoch this phone now holds the node as: the first one it sees, or the new one once the whole sync after
         // a take-over has replaced the cache. Until then the next cycle sees the change again and does it again.
         if (epochNow !== null && epochNow !== epochHeld && (!takenOver || postsReplaced)) {
@@ -1045,9 +1050,16 @@ export async function performSync(onProgress?: (step: number, total: number, sta
     }
 }
 
+/**
+ * When this community's last sync cycle completed, for display: SyncStatus, the header's "synced recently"
+ * (GlobalHeader), the communities list. Not the posts cursor (kLastSync), which is when the last finished read BEGAN
+ * and doesn't move while a read is held or on a 304: read here, a read longer than 90 s or a held one showed a stale
+ * time, and two failed health pings the offline banner while syncs were succeeding (review of PR #1719, NB6). Until a
+ * cycle has recorded one, the cursor.
+ */
 export async function getLastSyncTime(): Promise<number | null> {
-    const kLastSync = await getSyncCursorKey(StorageKeysConfig.LAST_SYNC);
-    const raw = await AsyncStorage.getItem(kLastSync);
+    const raw = await AsyncStorage.getItem(await getSyncCursorKey(StorageKeysConfig.LAST_CYCLE))
+        ?? await AsyncStorage.getItem(await getSyncCursorKey(StorageKeysConfig.LAST_SYNC));
     return raw ? Number(raw) : null;
 }
 

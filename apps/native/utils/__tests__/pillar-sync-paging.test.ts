@@ -52,7 +52,7 @@ vi.mock('../nodes', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
 import { getDb } from '../db';
-import { forgetSyncCursors, performSync, POSTS_PAGE_CAP, resetSyncFingerprints, syncCursorKeysOf } from '../../services/pillar-sync';
+import { forgetSyncCursors, getLastSyncTime, performSync, POSTS_PAGE_CAP, resetSyncFingerprints, syncCursorKeysOf } from '../../services/pillar-sync';
 
 const ANN = 'a'.repeat(64);
 const KEY = (id: string) => `pillar_sync_beanpool_test.beanpool.org.db_${id}`;
@@ -530,4 +530,51 @@ describe('a capped take-over and its catch-up read', () => {
             (globalThis as any).fetch = fetchMock;
         }
     }, 120_000);
+});
+
+// The time shown as "last synced" (getLastSyncTime: SyncStatus, the header's syncedRecently under 90 s, the communities
+// list) is when the last cycle completed, not the posts cursor: the cursor is when the last finished read began, and it
+// stays put while a read is held or on a 304, which showed the offline banner while syncs succeeded (review of PR #1719, NB6).
+describe('the last synced time shown', () => {
+    /** A clock the fake node moves a minute on before each later read of a cycle: a slow link. */
+    function slowLink() {
+        let skew = 0;
+        const realNow = Date.now.bind(Date);
+        const spy = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + skew);
+        node.beforeRead = () => { skew += 60_000; };
+        return () => spy.mockRestore();
+    }
+
+    it('a whole read of three pages over two minutes: the cursor is when it began, the time shown is when it ended', async () => {
+        node.posts = many('all', 450, Date.parse('2026-09-01T00:00:00.000Z'));
+        const restore = slowLink();
+        try {
+            const began = Date.now();
+            await sync();
+            expect(Number(store.get(LAST_SYNC_KEY))).toBeLessThan(began + 60_000);
+            const shown = (await getLastSyncTime())!;
+            expect(Date.now() - shown).toBeLessThan(90_000);
+            expect(Date.now() - Number(store.get(LAST_SYNC_KEY))).toBeGreaterThan(90_000);
+        } finally {
+            restore();
+        }
+    });
+
+    it('a held read and a 304 each move the time shown, and neither moves the cursor', async () => {
+        await phoneWithACursor();
+        const cursor = store.get(LAST_SYNC_KEY);
+        node.posts.push(...many('chg', 450, Date.now()));
+        node.broken = { read: 1, status: 500, body: '{"error":"busy"}' };
+        const beforeHeld = Date.now();
+        await sync();
+        expect(store.get(LAST_SYNC_KEY)).toBe(cursor);
+        expect((await getLastSyncTime())!).toBeGreaterThanOrEqual(beforeHeld);
+        node.broken = null;
+        node.notModified = true;
+        await new Promise(r => setTimeout(r, 5));
+        const before304 = Date.now();
+        await sync();
+        expect(store.get(LAST_SYNC_KEY)).toBe(cursor);
+        expect((await getLastSyncTime())!).toBeGreaterThanOrEqual(before304);
+    });
 });

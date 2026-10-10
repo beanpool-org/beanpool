@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS alert_outbox (
 );
 CREATE INDEX IF NOT EXISTS idx_alert_outbox_waiting ON alert_outbox(sent_at, held, muted);
 CREATE INDEX IF NOT EXISTS idx_alert_outbox_at ON alert_outbox(at);   -- the 7-day prune each event runs reads by it
+CREATE INDEX IF NOT EXISTS idx_alert_outbox_claim ON alert_outbox(claim);   -- each flush reads and clears its claimed rows by it
 CREATE UNIQUE INDEX IF NOT EXISTS idx_alert_outbox_once ON alert_outbox(once);
 
 CREATE TABLE IF NOT EXISTS alert_channel (
@@ -63,5 +64,6 @@ CREATE TABLE IF NOT EXISTS alert_channel (
     hour_start      INTEGER NOT NULL DEFAULT 0,     -- the UTC hour the counts below are for (unix s)
     hour_sent       INTEGER NOT NULL DEFAULT 0,     -- messages sent in it (the cap is 20)
     hour_muted      INTEGER NOT NULL DEFAULT 0,     -- events not sent in it
+    hour_line       INTEGER NOT NULL DEFAULT 0,     -- 1 once its one "muted" line has its place (given back if the send fails)
     dropped         INTEGER NOT NULL DEFAULT 0      -- waiting events dropped over 50
 );

@@ -459,7 +459,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const recent = st.recent || [];
             if (recent.length) {
                 html += '<div class="scroll-x" style="margin-top: 1rem;"><table class="admin-table"><thead><tr><th>When</th><th>Alert</th><th>State</th></tr></thead><tbody>' + recent.map(function(r) {
-                    const state = r.sent_at ? 'sent' : r.muted ? 'muted (over the hourly cap)' : r.held ? 'held for the summary' : 'waiting';
+                    const state = r.sent_at ? 'sent' : r.muted ? 'muted (over the hourly cap)' : r.held ? 'held (digest)' : 'waiting';
                     return '<tr><td style="font-family: monospace; font-size: 0.75rem; white-space: nowrap;">' + esc(when(r.at)) + '</td>' +
                         '<td><b style="color: #fff;">' + esc(r.title) + '</b><br><span style="font-size: 0.8rem;">' + esc(r.body) + '</span></td>' +
                         '<td style="font-size: 0.75rem;">' + esc(state) + '</td></tr>';

@@ -299,6 +299,58 @@ test('a condition raised while the cap muted it is told in the next hour, once',
     } finally { r.done(); }
 });
 
+test('the "muted" line whose send fails is sent later that hour, though more was muted while it was out', async () => {
+    const r = await room();
+    try {
+        r.toNextHour();
+        const ev = (title) => ({ category: 'names', priority: 3, tag: 'seedling', name: null, title, body: `${title}.` });
+        for (let i = 1; i <= 20; i++) await alerts.notify(r.w.env, ev(`Fill ${i}`));
+        assert.equal(r.sent.length, 20);
+        let release; r.ntfy.hold = new Promise((ok) => { release = ok; });
+        r.step(30); const line = alerts.notify(r.w.env, ev('Normal 21'));   // the "muted" line goes out, and hangs
+        while (r.sent.length < 21) await new Promise((ok) => setTimeout(ok, 1));
+        assert.match(r.sent[20].headers.title, /^Muted: 1 more this hour$/);
+        r.step(5); await alerts.notify(r.w.env, ev('Normal 22'));   // muted while the line is out
+        r.ntfy.status = 503; r.ntfy.hold = null; release(); await line;
+        r.ntfy.status = 200;
+        r.step(300); await alerts.flush(r.w.env);
+        r.step(1); await alerts.notify(r.w.env, ev('Normal 23'));
+        const lines = r.sent.slice(21).filter((m) => m.status === 200 && /^Muted: /.test(m.headers.title));
+        assert.equal(lines.length, 1, 'one "muted" line got through this hour: ' + JSON.stringify(r.sent.slice(21).map((m) => [m.headers.title, m.status])));
+    } finally { r.done(); }
+});
+
+test('two sweeps overlapping in the next hour tell a muted condition once (the retell is claimed with told_id)', async () => {
+    const r = await room();
+    try {
+        r.toNextHour();
+        for (let i = 1; i <= 21; i++) await alerts.notify(r.w.env, { category: 'names', priority: 3, tag: 'seedling', name: null, title: `Event ${i}`, body: `Event ${i}.` });
+        const cond = { key: 'teardown-owed', category: 'health', priority: 3, tag: 'warning', title: 'Thing', active: true, detail: 'Thing is on.' };
+        r.step(60); await alerts.updateConditions(r.w.env, [cond]);
+        r.toNextHour(); r.step(300);
+        // Sweep A's told_id write waits until sweep B has run: B reads alert_state after A's claim, before A's told_id.
+        let startB; const bStarted = new Promise((ok) => { startB = ok; });
+        let finishB; const bDone = new Promise((ok) => { finishB = ok; });
+        const envA = Object.create(r.w.env);
+        envA.DB = new Proxy(r.w.env.DB, { get(db, prop) {
+            if (prop !== 'prepare') return Reflect.get(db, prop);
+            return (sql) => {
+                const st = db.prepare(sql);
+                if (!sql.startsWith('UPDATE alert_state SET told_id')) return st;
+                return { bind: (...a) => { const b = st.bind(...a); return { run: async () => { startB(); await bDone; return b.run(); } }; } };
+            };
+        } });
+        const a = alerts.updateConditions(envA, [cond]);
+        await bStarted;
+        await alerts.updateConditions(r.w.env, [cond]);
+        finishB(); await a;
+        const rows = (await r.w.env.DB.prepare("SELECT count(*) n FROM alert_outbox WHERE title='Thing' AND muted=0").first()).n;
+        assert.equal(rows, 1, 'one retell row');
+        const told = r.sent.filter((m) => m.status === 200 && m.headers.title.startsWith('Thing'));
+        assert.deepEqual(told.map((m) => m.headers.title), ['Thing']);
+    } finally { r.done(); }
+});
+
 test('the cap holds with senders racing, and more than 50 waiting keeps the newest 50, the rest counted', async () => {
     const r = await room();
     try {
@@ -524,6 +576,11 @@ test('migration 0008: four tables and the categories, all on; re-running changes
         const plan = w.sqlite.prepare('EXPLAIN QUERY PLAN DELETE FROM alert_outbox WHERE at < ? AND (sent_at IS NOT NULL OR muted=1 OR held=1)').all(0).map((r) => r.detail);
         assert.ok(plan.some((d) => d.includes('idx_alert_outbox_at')), JSON.stringify(plan));
         assert.ok(!plan.some((d) => /^SCAN alert_outbox$/.test(d)), JSON.stringify(plan));
+        // Each flush reads and clears its claimed rows by the index on `claim`, not the whole outbox.
+        for (const q of ['SELECT * FROM alert_outbox WHERE claim=? ORDER BY id', 'UPDATE alert_outbox SET claim=NULL WHERE claim=?']) {
+            const p = w.sqlite.prepare(`EXPLAIN QUERY PLAN ${q}`).all('x').map((r) => r.detail);
+            assert.ok(p.some((d) => d.includes('idx_alert_outbox_claim')), q + ' ' + JSON.stringify(p));
+        }
     } finally { w.restore(); }
 });
 

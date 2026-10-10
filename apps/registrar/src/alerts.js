@@ -266,8 +266,8 @@ export async function updateConditions(env, conditions) {
                 const muted = r.told_id ? await env.DB.prepare('SELECT title FROM alert_outbox WHERE id=? AND muted=1 AND at < ?')
                     .bind(r.told_id, now - (now % 3600)).first() : null;
                 const due = !!muted || now - r.last_told_at >= ALERT_REMIND_S;
-                const w = await env.DB.prepare('UPDATE alert_state SET detail=?, last_seen_json=?, last_told_at=? WHERE key=? AND last_told_at=?')
-                    .bind(c.detail, seen, due ? now : r.last_told_at, c.key, r.last_told_at).run();
+                const w = await env.DB.prepare('UPDATE alert_state SET detail=?, last_seen_json=?, last_told_at=?, told_id = CASE WHEN ? THEN NULL ELSE told_id END WHERE key=? AND last_told_at=?')
+                    .bind(c.detail, seen, due ? now : r.last_told_at, due && muted ? 1 : 0, c.key, r.last_told_at).run();
                 if (due && w?.meta?.changes) await tell(muted && !muted.title.startsWith('Still: ') ? 'raised' : 'still', r.since);
             } else if (!c.active && r) {
                 const w = await env.DB.prepare('DELETE FROM alert_state WHERE key=? AND since=?').bind(c.key, r.since).run();
@@ -303,9 +303,9 @@ export async function flush(env, { force = false } = {}) {
         // "muted" line, which also counts what it mutes), and a send that fails gives it back.
         const hour = now - (now % 3600);
         const cur = (col) => `CASE WHEN hour_start=${hour} THEN ${col} ELSE 0 END`;
-        const reserve = async (limit, line = 0) => ((await env.DB.prepare(`UPDATE alert_channel
-            SET hour_sent = ${cur('hour_sent')} + 1, hour_muted = ${cur('hour_muted')} + ?, hour_start=?
-            WHERE channel='ntfy' AND ${cur('hour_sent')} < ?${line ? ` AND ${cur('hour_muted')} = 0` : ''}`).bind(line, hour, limit).run())?.meta?.changes ?? 0) > 0;
+        const reserve = async (limit, muting = 0) => ((await env.DB.prepare(`UPDATE alert_channel
+            SET hour_sent = ${cur('hour_sent')} + 1, hour_muted = ${cur('hour_muted')} + ?, hour_line = ${cur('hour_line')} + ?, hour_start=?
+            WHERE channel='ntfy' AND ${cur('hour_sent')} < ?${muting ? ` AND ${cur('hour_line')} = 0` : ''}`).bind(muting, muting ? 1 : 0, hour, limit).run())?.meta?.changes ?? 0) > 0;
         const loud = events.some((e) => e.priority >= PRIORITY.high);
         const mutedLine = !(await reserve(HOURLY_CAP)) && !(loud && await reserve(HOURLY_CEILING));
         if (mutedLine && !(await reserve(HOURLY_CEILING + 1, events.length))) {
@@ -327,8 +327,8 @@ export async function flush(env, { force = false } = {}) {
             return { sent: 1, muted: mutedLine ? events.length : 0, status: r.status };
         }
         await env.DB.prepare('UPDATE alert_outbox SET claim=NULL WHERE claim=?').bind(claim).run();
-        await env.DB.prepare("UPDATE alert_channel SET hour_sent = MAX(0, hour_sent - 1), hour_muted = MAX(0, hour_muted - ?) WHERE channel='ntfy' AND hour_start=?")
-            .bind(mutedLine ? events.length : 0, hour).run();
+        await env.DB.prepare("UPDATE alert_channel SET hour_sent = MAX(0, hour_sent - 1), hour_muted = MAX(0, hour_muted - ?), hour_line = CASE WHEN ? THEN 0 ELSE hour_line END WHERE channel='ntfy' AND hour_start=?")
+            .bind(mutedLine ? events.length : 0, mutedLine ? 1 : 0, hour).run();
         await env.DB.prepare("UPDATE alert_channel SET last_try_at=?, last_status=?, failed_in_a_row=failed_in_a_row+1, next_try_at=? WHERE channel='ntfy'")
             .bind(now, r.status, now + ALERT_RETRY_S).run();
         console.error('[ALERT_SEND]', `ntfy: ${r.status}; ${plural(events.length, 'event')} waiting, tried again in ${ALERT_RETRY_S / 60} min`);

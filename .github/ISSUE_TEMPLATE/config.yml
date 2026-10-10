@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/beanpool-org/beanpool/discussions/categories/q-a
+    about: How do I…? Is this normal? Ask here, not as an issue.
+  - name: Suggest an idea
+    url: https://github.com/beanpool-org/beanpool/discussions/categories/ideas
+    about: New features and changes start as a discussion.
+  - name: Report a security problem (privately)
+    url: https://github.com/beanpool-org/beanpool/security/advisories/new
+    about: Never open a public issue for a security problem. This form is private.
+  - name: Members' guide
+    url: https://beanpool.org/guide/
+    about: How BeanPool works, step by step.
+  - name: r/beanpool on Reddit
+    url: https://www.reddit.com/r/beanpool/
+    about: Chat with other members and community organisers.

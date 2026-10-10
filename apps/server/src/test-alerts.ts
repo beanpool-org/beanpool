@@ -14,7 +14,7 @@
  *     and are never sent to the channel.
  *  3. The channel set in Settings: data/alerts.json is mode 600, the status shows the host and never the path or token;
  *     the waiting alert goes at the next minute with ntfy's Title, Priority and Authorization; 95 % raises 90 and 95 in one
- *     urgent message; 77 % clears those two and keeps 80 (three points of hysteresis); 76 % clears it.
+ *     urgent message; 77 % for 15 minutes clears those two and keeps 80 (hysteresis); 76 % for 15 minutes clears it.
  *  4. Retry: the channel answers 503; the alert waits, is not tried again before 5 minutes, and goes after with what it
  *     missed. A disk back within 6 hours is told as STILL, not as new.
  *  5. A 302 is a failed send: the address it points to is never asked.
@@ -26,6 +26,10 @@
  *  9. The secret: in no table of state.db (so in no standby copy: every table the replication manifest copies is checked
  *     too), no snapshot, no locked backup (opened with the code), no log line, no answer. No member's name in any message
  *     sent, header or body. docker-compose.yml passes the three settings through; boot-file-safety lists alerts.json.
+ * 10. The owners' pushes: one per minute at most, the disk's levels as one; three days at 92 % is three pushes, with
+ *     "Marketplace Activity" turned off.
+ * 11. An end is told after 15 minutes, and not at all if the condition is back before that: a disk swinging 81 % ↔ 76 %
+ *     every 5 minutes for a day is one message.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts.ts
@@ -355,13 +359,21 @@ async function main(): Promise<void> {
         `3. one push for 90 and 95 together, naming the highest (${JSON.stringify(told.slice(-2))})`);
     setSimulatedDiskUsageForTesting(77);
     await tick();
+    assert((await ntfyHits()).length === 2, '3. 77 %: the end of 90 and 95 is not told at once');
+    advance(14 * MIN);
+    await tick();
+    assert((await ntfyHits()).length === 2, '3. nor 14 minutes on');
+    advance(MIN);
+    await tick();
     active = alerts.getAlertsStatus().active.map((a) => a.key);
     hits = await ntfyHits();
-    assert(active.includes('disk.80') && !active.includes('disk.90') && !active.includes('disk.95'), `3. 77 %: 90 and 95 cleared, 80 kept by the hysteresis (${active})`);
+    assert(active.includes('disk.80') && !active.includes('disk.90') && !active.includes('disk.95'), `3. 77 % for 15 minutes: 90 and 95 cleared, 80 kept by the hysteresis (${active})`);
     assert(hits.length === 3 && /resolved/.test(hits[2].headers.title) && hits[2].headers.priority === '2', '3. one resolved message, low priority');
     setSimulatedDiskUsageForTesting(76);
     await tick();
-    assert(!alerts.getAlertsStatus().active.some((a) => a.key === 'disk.80'), '3. 76 %: 80 cleared too');
+    advance(15 * MIN);
+    await tick();
+    assert(!alerts.getAlertsStatus().active.some((a) => a.key === 'disk.80'), '3. 76 % for 15 minutes: 80 cleared too');
     assert((await ntfyHits()).length === 4, '3. and told once');
 
     // ── 4. Retry, and a disk back within 6 hours ─────────────────────────────────────────────────────────────────────
@@ -386,6 +398,8 @@ async function main(): Promise<void> {
     await ntfy.fault(302, 1, ntfy.url('/elsewhere'));
     setSimulatedDiskUsageForTesting(70);
     await tick();
+    advance(15 * MIN);
+    await tick();
     st = alerts.getAlertsStatus();
     assert(st.error !== null && /redirect/.test(st.error) && st.waiting === 1, `5. a 302 is a failed send (${st.error})`);
     assert(!(await ntfy.hits()).some((h) => h.path === '/elsewhere'), '5. the address it points to is never asked');
@@ -409,7 +423,9 @@ async function main(): Promise<void> {
     // ── 6. The hourly cap ────────────────────────────────────────────────────────────────────────────────────────────
     advance(2 * HOUR);
     const before6 = (await ntfyHits()).length;
-    for (let i = 0; i < 24; i++) await alerts.updateAlerts([{ key: 'snapshots.failed', active: i % 2 === 0, detail: `flap ${i}` }]);
+    // One-shot events, so each is told at once (an end waits 15 minutes): 24 low ones in a minute.
+    const lowOne = (i: number) => alerts.updateAlerts([{ key: 'snapshots.failed', active: true, oneShot: true, detail: `low ${i}` }]);
+    for (let i = 0; i < 24; i++) await lowOne(i);
     let sent6 = (await ntfyHits()).length - before6;
     st = alerts.getAlertsStatus();
     assert(sent6 === alerts.ALERT_HOURLY_CAP && st.waiting > 0, `6. 20 messages in an hour, then low ones are held (${sent6} sent, ${st.waiting} held)`);
@@ -417,7 +433,7 @@ async function main(): Promise<void> {
     sent6 = (await ntfyHits()).length - before6;
     hits = await ntfyHits();
     assert(sent6 === alerts.ALERT_HOURLY_CAP + 1 && hits[hits.length - 1].headers.priority === '4', '6. a high one still goes past the cap, with the held ones');
-    await alerts.updateAlerts([{ key: 'tls.fallback', active: false, detail: 'test: back' }]);
+    await lowOne(24);
     assert(alerts.getAlertsStatus().waiting === 1, '6. a low one after it is held again');
     advance(HOUR + 1000);
     await alerts.flushAlerts();
@@ -434,6 +450,8 @@ async function main(): Promise<void> {
     // Destinations set but nothing sent to them (no recovery code; then none usable): raised, as failing is.
     assert(offbox.getOffboxStatus().state === 'not-locked', '7. a destination and no recovery code: not-locked');
     const offboxDetail = () => alerts.getAlertsStatus().active.find((a) => a.key === 'backups.offbox')?.detail ?? '';
+    await tick();
+    advance(15 * MIN);
     await tick();
     active = alerts.getAlertsStatus().active.map((a) => a.key);
     assert(active.includes('backups.offbox') && !active.includes('backups.none') && /make a recovery code/i.test(offboxDetail()),
@@ -454,9 +472,9 @@ async function main(): Promise<void> {
     }));
     fixture(0, Date.now());
     await tick();
-    assert(!alerts.getAlertsStatus().active.some((a) => a.key === 'backups.offbox'), '7. locked, usable and arriving: cleared');
     advance(16 * MIN);
     await tick();
+    assert(!alerts.getAlertsStatus().active.some((a) => a.key === 'backups.offbox'), '7. locked, usable and arriving: cleared');
     fixture(2, Date.now() - HOUR);
     const before7 = (await ntfyHits()).length;
     await tick();
@@ -467,6 +485,8 @@ async function main(): Promise<void> {
     assert(!!offMsg && offMsg.headers.priority === '4' && /1 of 1 off-box destination is failing/.test(offMsg.body), '7. told as high, with counts only');
     assert(!offMsg!.body.includes('Fixture store') && !offMsg!.body.includes('AKIA') && !offMsg!.body.includes('fixture-bucket'), "7. no destination's name, key or bucket");
     fixture(0, Date.now());
+    await tick();
+    advance(15 * MIN);
     await tick();
     assert(!alerts.getAlertsStatus().active.some((a) => a.key === 'backups.offbox'), '7. the next upload that arrives clears it');
     // Three clean restarts (docker compose up -d) in 15 minutes are no crash loop; three after unclean stops are.
@@ -556,6 +576,37 @@ async function main(): Promise<void> {
     told = await pushedKeys();
     assert(told.length === 3 && told.every((p) => p.alert === 'disk.90'),
         `10. three days at 92 %, Marketplace Activity off: one push a day, naming 90 only (${told.length}: ${told.map((p) => p.alert)})`);
+
+    // ── 11. A condition swinging on and off is one condition ─────────────────────────────────────────────────────────
+    setSimulatedDiskUsageForTesting(50);
+    await tick();
+    advance(16 * MIN);
+    await tick();
+    const reset11 = await call('/api/local/admin/alerts/settings', { url: ntfy.url(`/${TOPIC}`), format: 'ntfy', token: TOKEN }, asOwner);
+    assert(reset11.status === 200, '11. (the channel set again)');
+    advance(25 * HOUR);
+    await tick();
+    assert(alerts.getAlertsStatus().active.length === 0 && alerts.getAlertsStatus().waiting === 0, '11. (nothing active or waiting to start)');
+    const before11 = (await ntfyHits()).length;
+    pushes.length = 0;
+    // The reviewer's trace: 81 % and 76 % in turn every 5 minutes for a day, one tick a minute.
+    for (let minute = 0; minute < 24 * 60; minute++) {
+        setSimulatedDiskUsageForTesting(Math.floor(minute / 5) % 2 === 0 ? 81 : 76);
+        await tick();
+        advance(MIN);
+    }
+    const day11 = (await ntfyHits()).slice(before11);
+    told = await pushedKeys();
+    assert(day11.length >= 1 && day11.length <= 2 && /DISK 80% FULL/.test(day11[0].body),
+        `11. a disk swinging 81 % ↔ 76 % every 5 minutes for a day: ${day11.length} message(s), not 288`);
+    assert(told.length <= 2, `11. and ${told.length} push(es)`);
+    assert(!day11.some((h) => /RESOLVED/.test(h.body)), '11. no resolved line while it keeps coming back');
+    setSimulatedDiskUsageForTesting(50);
+    await tick();
+    advance(15 * MIN);
+    await tick();
+    hits = await ntfyHits();
+    assert(/RESOLVED \(disk 80% full/.test(hits[hits.length - 1].body) && !alerts.getAlertsStatus().active.length, '11. once it stays down 15 minutes: resolved, told once');
 
     alerts.stopServerAlerts();
     await ntfy.close();

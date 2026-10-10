@@ -12,9 +12,10 @@
  * failed integrity check is urgent), the host watchdog restarting a frozen server or going quiet, the standby needing its
  * owners (services/standby-health.ts), and a public server whose Let's Encrypt certificate fell back to self-signed.
  *
- * A condition that starts is told once (raised), again every 24 hours while it lasts (still), and once when it ends
- * (resolved). One that starts again within 6 hours of ending is told as `still`, not as new: a disk at 79/80 % sends two
- * lines a day at most, with the hysteresis besides.
+ * A condition that starts is told once (raised), again every 24 hours while it lasts (still), and once when it has been
+ * over for 15 minutes (resolved). Back within those 15 minutes, nothing is told: the condition just goes on. One that
+ * starts again within 6 hours of a told end is told as `still`, not as new. So a condition swinging on and off sends two
+ * lines a day at most, with the disk's hysteresis besides.
  *
  * ## Who is told, and how
  *
@@ -74,6 +75,11 @@ export const ALERT_REMIND_MS = 24 * 60 * 60_000;
 export const ALERT_RETRY_MS = 5 * 60_000;
 /** A condition back this soon after it ended is told as `still`, not as new. */
 export const ALERT_FLAP_MS = 6 * 60 * 60_000;
+/**
+ * An end is told only once it has lasted this long; back before that, nothing is told at all (the condition just goes
+ * on). A disk swinging 81 % ↔ 76 % every 5 minutes is one condition, not 288 messages a day.
+ */
+export const ALERT_CLEAR_HOLD_MS = 15 * 60_000;
 export const ALERT_HOURLY_CAP = 20;
 /** Even urgent ones stop here: a loop that raises and clears must not flood the operator's phone. */
 export const ALERT_HOURLY_CEILING = 60;
@@ -155,6 +161,8 @@ interface Raised {
     detail: string;
     toldAt: number;
     priority: AlertPriority;
+    /** When it was first seen over, while that end waits ALERT_CLEAR_HOLD_MS to be told. */
+    endedAt?: number;
 }
 
 interface ChannelState {
@@ -593,6 +601,8 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
             const cleared = s.clearedAt[c.key];
             tell({ key: c.key, kind: cleared !== undefined && t - cleared < ALERT_FLAP_MS ? 'still' : 'raised', at: t, since, priority, detail: c.detail });
         } else if (c.active && r) {
+            // Back before its end was told: nothing to tell, it just goes on.
+            delete r.endedAt;
             r.detail = c.detail;
             if (priority > r.priority) {
                 // Worse than when it was told (an unclean stop whose check then failed): told again now.
@@ -604,9 +614,13 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
                 tell({ key: c.key, kind: 'still', at: t, since: r.since, priority: r.priority, detail: c.detail });
             }
         } else if (!c.active && r) {
-            delete s.raised[c.key];
-            s.clearedAt[c.key] = t;
-            tell({ key: c.key, kind: 'cleared', at: t, since: r.since, priority: r.priority, detail: c.detail });
+            if (r.endedAt === undefined) {
+                r.endedAt = t;
+            } else if (t - r.endedAt >= ALERT_CLEAR_HOLD_MS) {
+                delete s.raised[c.key];
+                s.clearedAt[c.key] = t;
+                tell({ key: c.key, kind: 'cleared', at: t, since: r.since, priority: r.priority, detail: c.detail });
+            }
         }
     }
     pushOwners(s, told, t);

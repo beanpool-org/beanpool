@@ -27,7 +27,12 @@ export type NeedsYouTarget =
     | { to: 'chat'; conversationId: string; event?: boolean; thread?: 'group' | 'enterprise' }
     | { to: 'unread-messages' }
     /** Talk → Groups (groups slice 2): group, enterprise and event chats are listed there, not under Messages. */
-    | { to: 'your-groups' };
+    | { to: 'your-groups' }
+    /**
+     * An enterprise's own screen, for its keepers' vote (DESIGN-group-decisions §2.8). The node sends it only to an app
+     * that asks with `lands=enterprise` (utils/home-store.ts homePath); the two ship together.
+     */
+    | { to: 'enterprise'; id: string };
 
 /**
  * The screen each landing opens, as `router.push` takes it (components/NeedsYouIcons.tsx `goToNeedsTarget`; Home's Needs
@@ -50,6 +55,8 @@ export function needsTargetHref(target: Exclude<NeedsYouTarget, { to: 'admin' }>
         case 'unread-messages': return { pathname: '/(tabs)/chats', params: { view: 'messages', filter: 'unread' } };
         // Group, enterprise and event chats live in Talk → Groups (groups slice 2), with their counts.
         case 'your-groups': return { pathname: '/(tabs)/chats', params: { view: 'groups' } };
+        // A keepers' vote is never in Commons → Decide: it lands on the enterprise, whose Decisions block lists it.
+        case 'enterprise': return { pathname: '/treasury-detail', params: { publicKey: target.id } };
     }
 }
 

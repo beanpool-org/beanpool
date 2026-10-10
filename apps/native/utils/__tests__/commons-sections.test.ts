@@ -146,10 +146,12 @@ describe('the screens go through the helpers (source check)', () => {
         expect(src).toContain('<PageTitle title={heading.title}');
     });
 
-    it("the header's vote icon asks for Decisions only where the node has them and shows Commons → Decide (PR #1483 review 4166559525)", () => {
+    it("the header's vote icon asks for votes only where the node has Decisions, and draws them by Home's rule (PR #1483 review 4166559525, opus-1767 N3)", () => {
         const src = read('components/NeedsYouIcons.tsx');
-        expect(src).toContain("decideOnNode({ ...features }) ? settle(getDecisions('open')) : null,");
-        expect(src.split('getDecisions(').length - 1).toBe(1);
+        // Home's own vote line, asked as Home asks it (lands=enterprise), so a keepers' vote shows and opens the enterprise.
+        expect(src).toContain("decisionsOn(features) ? settle(signedGet(homePath(['needs'])).then(r => (r.ok ? r.json() : null))) : null,");
+        expect(src).toContain('...mergeNeeds(votes, null, now, features)');
+        expect(src).not.toContain('getDecisions(');
         // Home's rule for a vote's landing, the one its own lines follow (mergeNeeds): Decisions on, and Beans on.
         expect(read('utils/home-cards.ts')).toContain("export const decideOnNode = (features: HomeAnswer['features']): boolean => features.decisions !== false && features.beans !== false;");
     });

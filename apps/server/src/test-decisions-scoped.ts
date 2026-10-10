@@ -249,15 +249,16 @@ async function main(): Promise<void> {
     // Closed, so the bakery vote is the only one Kai has to cast in the Home checks below.
     db.prepare("UPDATE decisions SET status = 'failed' WHERE id = ?").run(byKeeper.body?.decision?.id);
 
-    // Home's Needs-you line and Decide count (§2.8): a keepers' vote only for an app that says it can open the enterprise's
-    // own screen (lands=enterprise), and then the line lands there; an older app gets no line or count that lands nowhere.
+    // Home's Needs-you line (§2.8): a keepers' vote only for an app that says it can open the enterprise's own screen
+    // (lands=enterprise), and then the line lands there; an older app gets no line that lands nowhere. The Decide card never
+    // counts it: that card opens Commons → Decide, which never lists a keepers' vote.
     const voteLine = (h: Signed) => (h.body?.cards?.needs?.items ?? []).find((i: any) => i.kind === 'vote');
     const homeOld = await signedFetch('GET', '/api/home?cards=needs,decide', null, k1);
     assert(homeOld.status === 200 && !voteLine(homeOld) && (homeOld.body?.cards?.decide?.open ?? 0) === 0,
         `an app that names no landing gets no keepers' vote line or count (got ${JSON.stringify(voteLine(homeOld))}, decide ${JSON.stringify(homeOld.body?.cards?.decide)})`);
     const homeNew = await signedFetch('GET', '/api/home?cards=needs,decide&lands=enterprise', null, k1);
-    assert(homeNew.status === 200 && voteLine(homeNew)?.target?.to === 'enterprise' && voteLine(homeNew)?.target?.id === e1 && homeNew.body.cards.decide?.open === 1,
-        `one that can lands the line on the enterprise (got ${JSON.stringify(voteLine(homeNew))}, decide ${JSON.stringify(homeNew.body?.cards?.decide)})`);
+    assert(homeNew.status === 200 && voteLine(homeNew)?.target?.to === 'enterprise' && voteLine(homeNew)?.target?.id === e1 && (homeNew.body.cards.decide?.open ?? 0) === 0,
+        `one that can lands the line on the enterprise, and the Decide card doesn't count it (got ${JSON.stringify(voteLine(homeNew))}, decide ${JSON.stringify(homeNew.body?.cards?.decide)})`);
     const homeOutsider = await signedFetch('GET', '/api/home?cards=needs,decide&lands=enterprise', null, outsider);
     assert(homeOutsider.status === 200 && !voteLine(homeOutsider), 'a member off the roll gets no line for it');
 

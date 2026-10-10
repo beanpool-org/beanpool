@@ -20,6 +20,10 @@ function notice(over: Partial<PushNoticeData> = {}, seed = SEED, key = KEY, reci
 }
 
 describe('the kinds', () => {
+    it("a keepers' vote opening lands on Home, whose Needs-you line opens the enterprise, never Talk (review opus-1767 N4)", () => {
+        expect(PUSH_NOTICE_KINDS['decision.open'].tab).toBe('home');
+    });
+
     it('every kind has a sentence, and every push has the same title', () => {
         for (const kind of Object.keys(PUSH_NOTICE_KINDS) as PushNoticeKind[]) {
             const words = pushNoticeWords(kind);

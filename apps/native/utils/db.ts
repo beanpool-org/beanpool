@@ -19,7 +19,7 @@ import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAft
 import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
-import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange } from '@beanpool/core';
+import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange, type ScopedDecisionList, type ScopedEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -2371,6 +2371,33 @@ export async function removeEnterpriseKeeper(treasury: string, memberPubkey: str
 
 export async function objectToKeeperChange(treasury: string, changeId: string) {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/changes/${encodeURIComponent(changeId)}/object`, {});
+}
+
+/**
+ * An enterprise's keepers' votes (DESIGN-group-decisions S2; routes/enterprise-decisions.ts). Only its keepers, and those on
+ * a vote's roll, are answered; anyone else gets a 404, so null here means "nothing for you", never an error to show.
+ */
+export async function getEnterpriseDecisions(treasury: string): Promise<ScopedDecisionList | null> {
+    try {
+        const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/decisions`);
+        if (!res.ok) return null;
+        const body = await res.json();
+        return body && Array.isArray(body.decisions) ? body as ScopedDecisionList : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A keeper proposes a vote. A pay-out names its recipient as params.to; the node checks everything again. */
+export async function proposeEnterpriseDecision(treasury: string, body: {
+    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount: number; memo?: string };
+}) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/decisions`, body);
+}
+
+/** Yes or No on a keepers' vote. A vote can't be changed once cast. */
+export async function voteEnterpriseDecision(treasury: string, decisionId: string, support: boolean) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
 }
 
 export async function stepDownAsKeeper(treasury: string) {

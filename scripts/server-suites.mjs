@@ -402,6 +402,7 @@ export const SUITES = [
     'test-decisions-client-api',
     'test-decisions-voting-answers',
     'test-decisions-scoped',
+    'test-decisions-scoped-push',
     'test-decisions-tick-route-gone',
     'test-decisions-funding-queue',
     'test-decisions-grant-cap',

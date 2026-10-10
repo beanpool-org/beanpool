@@ -30,6 +30,7 @@ import {
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
+import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { pledgeClosedLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
 
@@ -62,6 +63,8 @@ export default function TreasuryDetailScreen() {
     const [detail, setDetail] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
+    // Bumped on each focus, so the Decisions block reads its votes again (a tap on a Needs-you vote line lands here).
+    const [decisionsRefresh, setDecisionsRefresh] = useState(0);
     const [sweepAmount, setSweepAmount] = useState('');
     const [sweeping, setSweeping] = useState(false);
     const [actionState, setActionState] = useState<{ id: string; type: 'approve' | 'reject' | 'complete' } | null>(null);
@@ -419,6 +422,7 @@ export default function TreasuryDetailScreen() {
     };
 
     useFocusEffect(load);
+    useFocusEffect(useCallback(() => { setDecisionsRefresh(n => n + 1); }, []));
 
     const loadLedger = useCallback(async (period: LedgerPeriod) => {
         if (!treasuryKey) return;
@@ -1303,6 +1307,15 @@ export default function TreasuryDetailScreen() {
                                 </View>
                             )}
                         </View>
+
+                        {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
+                        {treasuryKey && (
+                            <EnterpriseDecisions
+                                treasuryKey={treasuryKey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
+                                earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null}
+                                lifecycle={detail?.lifecycle} refreshKey={decisionsRefresh}
+                            />
+                        )}
 
                         {/* Operator controls */}
                         {isKeeperOfThis && (

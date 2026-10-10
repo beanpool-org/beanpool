@@ -9,6 +9,9 @@
  * node with Beans off and Decisions on, its vote then opened the Commons tab the strip hides, and the icon came and went
  * with the age of Home's answer.
  *
+ * The keepers' votes (DESIGN-group-decisions S2, review opus-1767 N3): the header's own read is Home's vote line, asked
+ * with lands=enterprise as Home asks, so a keepers' vote shows and opens the enterprise whatever the age of Home's answer.
+ *
  * Rendered with react-dom in jsdom, React Native's host components as plain tags carrying their labels; the phone's
  * database, the node's profile and the node-admin role are stubs, so nothing is contacted.
  */
@@ -66,7 +69,7 @@ vi.mock('../db', () => ({
     getMarketplaceTransactions: vi.fn(async () => []),
     getUnreadByConversation: vi.fn(async () => []),
     getDecisions: vi.fn(),
-    signedGet: vi.fn(async () => ({ ok: true, json: async () => ({ items: [] }) })),
+    signedGet: vi.fn(),
 }));
 const profile = vi.hoisted(() => ({ features: {} as Record<string, unknown> }));
 vi.mock('../node-profile', async (importOriginal) => ({
@@ -81,6 +84,15 @@ import { decideOnNode, mergeNeeds } from '../home-cards';
 import { hiddenTabsFor } from '../node-profile';
 
 const H = 3600_000;
+const ENT = 'e'.repeat(64);
+
+/** Home's vote line as GET /api/home?cards=needs&lands=enterprise words it (apps/server routes/home-answer.ts needsCard). */
+const voteLine = (target: { to: 'decide' } | { to: 'enterprise'; id: string }) => ({
+    kind: 'vote', count: 1, accent: true, label: 'Vote closes in 5 hours: Pay Bob for the oven', target,
+    closesAt: new Date(Date.now() + 5 * H).toISOString(),
+});
+const node = vi.hoisted(() => ({ votes: [] as unknown[] }));
+const homeAsks = () => vi.mocked(db.signedGet).mock.calls.map(([p]) => String(p)).filter(p => p.startsWith('/api/home'));
 
 /** One open Decision the member hasn't voted on, closing in five hours, as GET /api/commons/decisions?status=open signs it. */
 function openVote() {
@@ -100,6 +112,12 @@ beforeEach(() => {
     nav.push.mockClear();
     vi.mocked(db.getDecisions).mockReset();
     vi.mocked(db.getDecisions).mockImplementation(async () => openVote() as never);
+    node.votes = [voteLine({ to: 'decide' })];
+    vi.mocked(db.signedGet).mockReset();
+    vi.mocked(db.signedGet).mockImplementation(async (p: string) => ({
+        ok: true,
+        json: async () => (String(p).startsWith('/api/home') ? { features: profile.features, cards: { needs: node.votes.length ? { items: node.votes } : undefined } } : { items: [] }),
+    }) as never);
 });
 
 afterEach(() => {
@@ -145,7 +163,7 @@ describe('the header reading the node itself (Home\'s answer not fresh): one rul
         profile.features = { beans: true, decisions: true };
         expect(decideOnNode(profile.features)).toBe(true);
         await renderHeader();
-        expect(db.getDecisions).toHaveBeenCalledWith('open');
+        expect(homeAsks()).toEqual(['/api/home?cards=needs&lands=enterprise']);
         expect(voteIcon()).not.toBeNull();
         await act(async () => { (voteIcon()!.closest('button') as HTMLElement).click(); });
         expect(nav.push).toHaveBeenCalledWith({ pathname: '/(tabs)/projects', params: { section: 'decide' } });
@@ -155,6 +173,30 @@ describe('the header reading the node itself (Home\'s answer not fresh): one rul
         profile.features = { beans: false, decisions: false };
         await renderHeader();
         expect(db.getDecisions).not.toHaveBeenCalled();
+        expect(homeAsks()).toEqual([]);
+        expect(voteIcon()).toBeNull();
+    });
+});
+
+describe("the header reading the node itself: a keepers' vote (review opus-1767 N3)", () => {
+    for (const beans of [true, false]) {
+        it(`shown and opening the enterprise, as Home's line does (Beans ${beans ? 'on' : 'off'})`, async () => {
+            profile.features = { beans, decisions: true };
+            node.votes = [voteLine({ to: 'enterprise', id: ENT })];
+            await renderHeader();
+            expect(homeAsks()).toEqual(['/api/home?cards=needs&lands=enterprise']);
+            // The same icons drawn from Home's fresh answer: none comes and goes with its age.
+            expect(mergeNeeds(node.votes as never, null, Date.now(), profile.features).map(e => e.kind)).toEqual(['vote']);
+            expect(voteIcon()).not.toBeNull();
+            await act(async () => { (voteIcon()!.closest('button') as HTMLElement).click(); });
+            expect(nav.push).toHaveBeenCalledWith({ pathname: '/treasury-detail', params: { publicKey: ENT } });
+        });
+    }
+
+    it('nothing to vote on: no vote icon', async () => {
+        profile.features = { beans: true, decisions: true };
+        node.votes = [];
+        await renderHeader();
         expect(voteIcon()).toBeNull();
     });
 });

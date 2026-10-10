@@ -47,6 +47,7 @@ import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { isNodeOwner } from './engine/node-roles.js';
+import { unmutedRecipients } from './engine/chat-mutes.js';
 import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
@@ -66,6 +67,7 @@ import {
     inviteBranchOf,
     reportSuspensionTakesPrivilegedRole,
     broadcast,
+    dispatchPushNotification,
     isNodeAdmin,
     isSoleOwner,
     persistDecayEvents,
@@ -2430,7 +2432,33 @@ export interface CreateScopedDecisionOptions {
  * scope); the roll, frozen now, needs two people; one open vote per proposer per enterprise; 7 days, closing early.
  * A refusal a non-keeper could learn from is ScopedNotFoundError.
  */
-export function createScopedDecision(opts: CreateScopedDecisionOptions): Decision {
+/** What sends a push (state-engine dispatchPushNotification); a suite passes a spy (test-decisions-scoped-push). */
+export type ScopedVotePush = (
+    targets: string[], actor: string, title: string, body: string, data: Record<string, any>, category: 'chat', kind: 'decision.open',
+) => unknown;
+
+/**
+ * A vote opened: one push to each keeper on its roll but the proposer (the dispatcher drops the actor), in one batch
+ * (DESIGN-group-decisions §2.8). The push names nobody: the lock screen shows the kind's fixed words, and the notice's
+ * details carry the enterprise's name and nothing about the vote (not its title, whom it pays or whom it removes),
+ * since a push leaves the trust boundary of the device. The details (only the recipient reads them) name the
+ * enterprise's screen, so a tap lands on it (the app's noticeRoute). The member's own notify_chat setting applies, and a
+ * keeper who muted the enterprise's chat (the thread keyed by its key) isn't told: the vote waits on Home's Needs-you line.
+ */
+export function noticeScopedVoteOpened(d: Decision, electors: string[], push: ScopedVotePush): void {
+    const name = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(d.scopeId) as { callsign?: string } | undefined)?.callsign
+        || 'Your enterprise';
+    try {
+        const told = unmutedRecipients(d.scopeId ?? '', electors);
+        if (!told.some(pk => pk !== d.authorPubkey)) return;
+        push(told, d.authorPubkey, `🗳️ ${name}`, 'A vote opened. Open the enterprise to see it.', { screen: 'enterprise', publicKey: d.scopeId }, 'chat', 'decision.open');
+    } catch (err) {
+        // A push that fails never undoes the vote it announces.
+        console.warn('[Decisions] vote-opened push failed:', err);
+    }
+}
+
+export function createScopedDecision(opts: CreateScopedDecisionOptions, push: ScopedVotePush = dispatchPushNotification): Decision {
     assertPlainTablesWritable();
     assertDecisionsOn();
     if (opts.scopeKind !== 'enterprise') throw new Error('Unknown scope');
@@ -2509,6 +2537,7 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions): Decisio
 
     const decision = getDecision(id)!;
     broadcast({ type: 'decision_created', decision: publicDecision(decision), scopeKind: 'enterprise', scopeId: opts.scopeId }, roll.map(k => k.pubkey));
+    noticeScopedVoteOpened(decision, roll.map(k => k.pubkey), push);
     return decision;
 }
 

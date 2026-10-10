@@ -846,6 +846,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 case 'decide': return onNavigate('projects');
                 case 'chat': return onNavigate('messages', t.conversationId);
                 case 'unread-messages': case 'your-groups': return onNavigate('messages');
+                // A keepers' vote is never in Commons → Decide: it lands on the enterprise, whose Decisions block lists it.
+                case 'enterprise': return onNavigate('enterprise', t.id);
                 default: return undefined;
             }
         };

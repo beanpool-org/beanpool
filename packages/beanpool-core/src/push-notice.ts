@@ -61,6 +61,8 @@ export const PUSH_NOTICE_KINDS = {
     'chat.group': { body: 'New message in one of your groups.', tab: 'chats' },
     'chat.mention': { body: 'You were mentioned in a group.', tab: 'chats' },
     'group.lead': { body: 'There is news about a group you lead.', tab: 'chats' },
+    // Home, whose Needs-you line opens the enterprise: Talk shows nothing of a keepers' vote.
+    'decision.open': { body: 'A vote opened in one of your groups.', tab: 'home' },
     'market.request': { body: 'Someone answered one of your listings.', tab: 'market' },
     'market.answer': { body: 'There is news on one of your requests.', tab: 'market' },
     'market.listing': { body: 'There is news on one of your listings.', tab: 'market' },

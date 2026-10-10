@@ -488,10 +488,27 @@ export interface GroupEpochCheck {
     /** The epoch the caller expects, if it knows (the node's current + 1). */
     epoch?: number;
     /**
-     * The active members per the roster the caller holds (§7.3): the maker must be one. Omit only where no roster is
-     * known; the record's own rules still apply.
+     * The active members per the roster the caller holds (§7.3): the maker must be one. Give a roster only for the epoch
+     * you are about to seal under (the node's POST checks; the app's pre-seal check, provenance §7 rule 3); never when
+     * reading. The roster is the node's own table, so checking an old epoch against it asks the node whether to trust what
+     * the node served, and costs every member that epoch once its maker leaves or is re-keyed
+     * (DESIGN-group-chat-epochs-over-time-fable.md §2). The read path takes GroupKeyOpenCheck, which has no roster.
      */
     activeMembers?: readonly string[];
+}
+
+/**
+ * What the read path (openMyGroupKey, openGroupEpochRecord) checks a record against: the group and, when known, the
+ * epoch. Never a roster: reading verifies the record's signature and the key's commitment, which are the maker's and not
+ * the node's, and each line's own signature says who wrote it (DESIGN-group-chat-epochs-over-time-fable.md §2).
+ */
+export interface GroupKeyOpenCheck {
+    /** The group the caller asked about: a record for any other doesn't open. */
+    groupId: string;
+    /** The epoch the caller asked for, if it knows. */
+    epoch?: number;
+    /** No roster on the read path, by type. */
+    activeMembers?: never;
 }
 
 /**
@@ -514,9 +531,12 @@ export function verifyGroupEpochRecord(record: GroupEpochRecord, check: GroupEpo
     }
 }
 
-/** Verify a full epoch record (with its wraps), then open my wrap in it against its commitment: the epoch key. */
-export function openGroupEpochRecord(record: GroupEpochRecord, myEdPrivHex: string, check: GroupEpochCheck): Uint8Array {
-    verifyGroupEpochRecord(record, check);
+/**
+ * Verify a full epoch record (with its wraps), then open my wrap in it against its commitment: the epoch key. Reading:
+ * no roster (GroupKeyOpenCheck), so an epoch made by someone who has since left or been re-keyed still opens.
+ */
+export function openGroupEpochRecord(record: GroupEpochRecord, myEdPrivHex: string, check: GroupKeyOpenCheck): Uint8Array {
+    verifyGroupEpochRecord(record, { groupId: check.groupId, epoch: check.epoch });
     if (!record.wraps) throw new GroupKeyNotVerifiedError('This record carries no wraps; open the served wrap with openMyGroupKey.');
     let myPub: string;
     try { myPub = dmPublicKeyOf(myEdPrivHex); } catch { throw new GroupKeyNotVerifiedError('Not a private key this app can use.'); }
@@ -528,10 +548,10 @@ export function openGroupEpochRecord(record: GroupEpochRecord, myEdPrivHex: stri
 /**
  * The served shape (GET …/keys, provenance design §5.2): verify the record from its header, then open my wrap against its
  * commitment. A wrap with no signature came in the record and must name its maker as wrapper; a signed one is a top-up and
- * is checked as one, against the same roster. Throws GroupKeyNotVerifiedError.
+ * is checked as one. Reading: no roster (GroupKeyOpenCheck). Throws GroupKeyNotVerifiedError.
  */
-export function openMyGroupKey(record: GroupEpochRecord, myWrap: GroupServedWrap, myEdPrivHex: string, check: GroupEpochCheck): Uint8Array {
-    verifyGroupEpochRecord(record, check);
+export function openMyGroupKey(record: GroupEpochRecord, myWrap: GroupServedWrap, myEdPrivHex: string, check: GroupKeyOpenCheck): Uint8Array {
+    verifyGroupEpochRecord(record, { groupId: check.groupId, epoch: check.epoch });
     if (!myWrap || myWrap.epoch !== record.epoch) throw new GroupKeyNotVerifiedError('This wrap is for another epoch.');
     let myPub: string;
     try { myPub = dmPublicKeyOf(myEdPrivHex); } catch { throw new GroupKeyNotVerifiedError('Not a private key this app can use.'); }
@@ -540,8 +560,7 @@ export function openMyGroupKey(record: GroupEpochRecord, myWrap: GroupServedWrap
         if (myWrap.wrapper !== record.createdBy) throw new GroupKeyNotVerifiedError("An unsigned wrap is the record maker's, and this one names another.");
         return openGroupKeyWrap(wrap, { groupId: record.groupId, epoch: record.epoch, wrapperPubHex: record.createdBy, keyCommit: record.keyCommit }, myEdPrivHex);
     }
-    return openGroupTopUp(record.groupId, { ...wrap, epoch: myWrap.epoch, wrapper: myWrap.wrapper, sig: myWrap.sig }, myEdPrivHex, record.keyCommit,
-        { activeMembers: check.activeMembers });
+    return openGroupTopUp(record.groupId, { ...wrap, epoch: myWrap.epoch, wrapper: myWrap.wrapper, sig: myWrap.sig }, myEdPrivHex, record.keyCommit);
 }
 
 // ─── Top-ups (§2.5) ─────────────────────────────────────────────────────────────────────────
@@ -572,8 +591,9 @@ export function makeGroupTopUp(
 export interface GroupTopUpCheck {
     /**
      * The active members per the roster the caller holds (§2.5): the wrapper and the recipient must both be one, so a key
-     * signed by someone outside the group, or handed to someone no longer in it, is refused. Omit only where no roster is
-     * known.
+     * signed by someone outside the group, or handed to someone no longer in it, is refused. At write time only (the node's
+     * POST check); never when reading: a top-up by a member who has since left or been re-keyed holds the key its epoch
+     * commits to, and openGroupTopUp checks that (DESIGN-group-chat-epochs-over-time-fable.md §2).
      */
     activeMembers?: readonly string[];
 }
@@ -596,11 +616,12 @@ export function verifyGroupTopUp(groupId: string, t: GroupTopUp, check: GroupTop
 }
 
 /**
- * Verify a top-up locked to me (against the roster, when given), then open it and check the key against its epoch
- * record's commitment (provenance design §6): the epoch key. A top-up by a member holding another key is refused here.
+ * Verify a top-up locked to me (its wrapper's signature), then open it and check the key against its epoch record's
+ * commitment (provenance design §6): the epoch key. A top-up by a member holding another key is refused here. Reading:
+ * no roster (§2).
  */
-export function openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string, keyCommit: string, check: GroupTopUpCheck = {}): Uint8Array {
-    verifyGroupTopUp(groupId, t, check);
+export function openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string, keyCommit: string): Uint8Array {
+    verifyGroupTopUp(groupId, t);
     return openGroupKeyWrap(t, { groupId, epoch: t.epoch, wrapperPubHex: t.wrapper, keyCommit }, myEdPrivHex);
 }
 

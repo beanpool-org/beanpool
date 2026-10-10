@@ -884,7 +884,7 @@ export function editMessage(
         try {
             assertCanWriteInGroupChat(row.conversation_id, authorPubkey);
             // Sealed again under the current epoch (group chat encryption design §7.4): the row's epoch moves with it.
-            const edited = groupChatEdit(row.conversation_id, row, ciphertext, nonce, metadata);
+            const edited = groupChatEdit(row.conversation_id, row, ciphertext, nonce, metadata, authorPubkey);
             storedCiphertext = edited.ciphertext;
             storedNonce = edited.nonce;
             storedMetadata = edited.metadata;

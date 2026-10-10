@@ -44,7 +44,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import {
     dmPublicKeyOf, groupEpochCanonical, groupKeyCommit, groupMembersDigest, groupWrapsDigest, makeGroupEpochRecord, makeGroupTopUp,
-    openGroupLine, openMyGroupKey, sealGroupLine, verifyGroupEpochRecord, wrapGroupKey, GROUP_NONCE_PREFIX,
+    openGroupLine, openMyGroupKey, sealGroupLine, verifyGroupEpochRecord, verifyGroupTopUp, wrapGroupKey, GROUP_NONCE_PREFIX,
     type GroupEpochReason, type GroupEpochRecord, type GroupServedWrap,
 } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -129,14 +129,14 @@ function resign(r: Omit<GroupEpochRecord, 'sig'>, signer: Id): GroupEpochRecord 
     return { ...r, sig: b64(ed25519.sign(sha256Utf8(groupEpochCanonical(r)), Buffer.from(signer.seedHex, 'hex'))) };
 }
 
-/** A member's side: fetch …/keys, verify the record and open my wrap for `epoch` against the roster the node serves. */
+/** A member's side: fetch …/keys, verify the record and open my wrap for `epoch`. Reading checks no roster (step 2b, §2). */
 async function myKey(who: Id, groupId: string, epoch: number, served?: Res): Promise<Uint8Array> {
     const keys = served ?? await call('GET', who, `/api/groups/${groupId}/keys`);
     const rec = (keys.body.epochs as any[]).find((e) => e.epoch === epoch);
     const wrap = (keys.body.myWraps as any[]).find((w) => w.epoch === epoch) as GroupServedWrap | undefined;
     if (!rec || !wrap) throw new Error(`no record or wrap for epoch ${epoch}`);
     const record: GroupEpochRecord = { groupId, ...rec };
-    return openMyGroupKey(record, wrap, who.seedHex, { groupId, activeMembers: keys.body.roster });
+    return openMyGroupKey(record, wrap, who.seedHex, { groupId });
 }
 
 async function main(): Promise<void> {
@@ -335,16 +335,19 @@ async function main(): Promise<void> {
     const rogueTopUp = makeGroupTopUp(new Uint8Array(rogueKey), { myEdPrivHex: outsider.seedHex, groupId: G, epoch: 4, recipientPubHex: ben.pk });
     db.prepare('UPDATE group_key_wraps SET wrapper_pubkey = ?, eph_pub = ?, nonce = ?, wrapped = ?, sig = ? WHERE group_id = ? AND epoch = 4 AND recipient_pubkey = ?')
         .run(outsider.pk, rogueTopUp.ephPub, rogueTopUp.nonce, rogueTopUp.wrapped, rogueTopUp.sig, G, ben.pk);
+    // Reading checks no roster (step 2b, §2): a key of the operator's own is refused by the commitment, whoever signed it.
     refuses(() => openMyGroupKey({ groupId: G, ...(swapped.body.epochs.find((e: any) => e.epoch === 4)) },
         { epoch: 4, wrapper: outsider.pk, ephPub: rogueTopUp.ephPub, nonce: rogueTopUp.nonce, wrapped: rogueTopUp.wrapped, sig: rogueTopUp.sig }, ben.seedHex,
-        { groupId: G, activeMembers: roster }), /wrapper is not an active member/, 'a top-up row signed by a key in no roster is refused by the roster check');
+        { groupId: G }), /commits to/, 'a top-up row signed by a key in no roster, holding the operator\'s key, is refused by the commitment');
     const k4served = (await call('GET', ben, keysPath)).body;
-    refuses(() => myKeySync(ben, G, 4, k4served, roster), /wrapper is not an active member/, '… and so it is when served through GET …/keys');
+    refuses(() => myKeySync(ben, G, 4, k4served), /commits to/, '… and so it is when served through GET …/keys');
+    refuses(() => verifyGroupTopUp(G, { ...rogueTopUp, recipient: ben.pk }, { activeMembers: roster }), /wrapper is not an active member/,
+        'and the node\'s own check refuses to store it: its wrapper is in no roster');
     const wrongByAna = makeGroupTopUp(new Uint8Array(rogueKey), { myEdPrivHex: ana.seedHex, groupId: G, epoch: 4, recipientPubHex: ben.pk });
     db.prepare('UPDATE group_key_wraps SET wrapper_pubkey = ?, eph_pub = ?, nonce = ?, wrapped = ?, sig = ? WHERE group_id = ? AND epoch = 4 AND recipient_pubkey = ?')
         .run(ana.pk, wrongByAna.ephPub, wrongByAna.nonce, wrongByAna.wrapped, wrongByAna.sig, G, ben.pk);
     const k4c = (await call('GET', ben, keysPath)).body;
-    refuses(() => myKeySync(ben, G, 4, k4c, roster), /commits to/, "a member's genuine top-up holding another key is refused by the commitment");
+    refuses(() => myKeySync(ben, G, 4, k4c), /commits to/, "a member's genuine top-up holding another key is refused by the commitment");
     db.prepare('UPDATE group_key_wraps SET wrapper_pubkey = ?, eph_pub = ?, nonce = ?, wrapped = ?, sig = ? WHERE group_id = ? AND epoch = 4 AND recipient_pubkey = ?')
         .run(realBenWrap.wrapper_pubkey, realBenWrap.eph_pub, realBenWrap.nonce, realBenWrap.wrapped, realBenWrap.sig, G, ben.pk);
     assert(Buffer.from(await myKey(ben, G, 4)).equals(Buffer.from(rem4.groupKey)), 'with the real row back, Ben opens epoch 4 again');
@@ -361,7 +364,7 @@ async function main(): Promise<void> {
         .run(G, ben.pk, ana.pk, opWrap.ephPub, opWrap.nonce, opWrap.wrapped, now, now);
     const k5 = (await call('GET', ben, keysPath)).body;
     assert(k5.current === 5, 'the node now serves its forged epoch 5 as current');
-    refuses(() => myKeySync(ben, G, 5, k5, roster), /signature/, 'a forged epoch record is refused: its signature is not Ana\'s');
+    refuses(() => myKeySync(ben, G, 5, k5), /signature/, 'a forged epoch record is refused: its signature is not Ana\'s');
     db.prepare('DELETE FROM group_key_wraps WHERE group_id = ? AND epoch = 5').run(G);
     db.prepare('DELETE FROM group_key_epochs WHERE group_id = ? AND epoch = 5').run(G);
 
@@ -507,10 +510,10 @@ async function main(): Promise<void> {
 }
 
 /** myKey with an answer already fetched. */
-function myKeySync(who: Id, groupId: string, epoch: number, served: any, activeMembers: string[]): Uint8Array {
+function myKeySync(who: Id, groupId: string, epoch: number, served: any): Uint8Array {
     const rec = (served.epochs as any[]).find((e) => e.epoch === epoch);
     const wrap = (served.myWraps as any[]).find((w) => w.epoch === epoch) as GroupServedWrap;
-    return openMyGroupKey({ groupId, ...rec }, wrap, who.seedHex, { groupId, activeMembers });
+    return openMyGroupKey({ groupId, ...rec }, wrap, who.seedHex, { groupId });
 }
 
 main().catch((e) => {

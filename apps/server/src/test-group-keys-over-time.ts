@@ -13,6 +13,13 @@
  *         junk top-up on a re-keyed member's empty slot: rejected, filled, the junk wrapper may not retry and `missing`
  *         asked by them leaves the slot out. Another's wrap, a wrong ephPub, an outsider, a self top-up: each refused.
  *         …/wraps flags the refused row, and the record's own wraps still hash to its wrapsDigest
+ *   F4.   Ana makes epochs 1 and 3, Cat (later re-keyed) 2 and 4, Cat tops Dov up; Ana leaves and Cat is re-keyed: every
+ *         member still opens every epoch with { groupId } and no roster; created_by, subject_pubkey and wrapper_pubkey stay
+ *         on the old key and the records still verify; the pre-seal check against today's roster refuses the current
+ *         record (the app rotates); the node still refuses a non-member's record and top-up
+ *   Re-key lines. Ana's line under epoch 2, then completeRekey: metadata.sender is her old key, author_pubkey her new
+ *         one; Ben opens it with metadata.sender (not with author_pubkey; not with a wrong sender); Ana opens it on her new
+ *         key after a top-up
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-group-keys-over-time node scripts/run-server-suites.mjs
  */
@@ -30,7 +37,8 @@ import { resetChatRateLimit } from './chat-rate-limit.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import {
-    dmPublicKeyOf, groupEpochCanonical, groupWrapsDigest, makeGroupEpochRecord, makeGroupTopUp, openMyGroupKey, sealGroupLine, wrapGroupKey,
+    dmPublicKeyOf, groupEpochCanonical, groupWrapsDigest, makeGroupEpochRecord, makeGroupTopUp, openGroupLine, openMyGroupKey, sealGroupLine,
+    verifyGroupEpochRecord, wrapGroupKey,
     type GroupEpochReason, type GroupEpochRecord, type GroupServedWrap,
 } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -318,6 +326,89 @@ async function main(): Promise<void> {
         assert(eveRetry.status === 409 && eveRetry.body.code === 'wrap_rejected', `Eve cannot retry: 409 wrap_rejected (got ${eveRetry.status} ${eveRetry.body?.code})`);
         const live = (db.prepare('SELECT COUNT(*) AS n FROM group_key_wraps WHERE group_id = ? AND epoch = 2 AND recipient_pubkey = ? AND rejected_at IS NULL').get(g, newBen.pk) as any).n;
         assert(live === 1, `one live wrap per slot (got ${live})`);
+    }
+
+    // ── F4. old epochs and top-ups by someone no longer in today's roster ────────────────────────────
+    console.log('\n── F4. an epoch or a top-up by someone who left or was re-keyed still opens; the roster is checked only before sealing ──');
+    {
+        const [a, b, c, d] = [member('Ann'), member('Bob'), member('Cy'), member('Di')];
+        const g = createGroup({ name: 'Old Epochs', joinPolicy: 'open', createdBy: b.pk }).id;
+        const kp = `/api/groups/${g}/keys`;
+        assert((await call('POST', a, `/api/groups/${g}/join`, {})).status === 200, 'Ann joins Bob\'s group before any epoch: from epoch 1');
+        const e1 = epochBy(a, g, 1, 'start', [a, b]);
+        assert((await call('POST', a, `${kp}/epoch`, { epoch: e1.record })).status === 201, 'Ann starts epoch 1');
+        const e2 = epochBy(c, g, 2, 'join', [a, b, c], c);
+        assert((await call('POST', c, `/api/groups/${g}/join`, { epoch: e2.record })).status === 200, 'Cy joins with her own epoch 2');
+        const e3 = epochBy(a, g, 3, 'rotate', [a, b, c]);
+        assert((await call('POST', a, `${kp}/epoch`, { epoch: e3.record })).status === 201, 'Ann rotates to epoch 3');
+        assert((await call('POST', d, `/api/groups/${g}/join`, {})).status === 200, 'Di joins with no epoch: from epoch 4');
+        const e4 = epochBy(c, g, 4, 'rotate', [a, b, c, d]);
+        assert((await call('POST', c, `${kp}/epoch`, { epoch: e4.record })).status === 201, 'Cy rotates to epoch 4');
+        db.prepare('DELETE FROM group_key_wraps WHERE group_id = ? AND epoch = 4 AND recipient_pubkey = ?').run(g, d.pk); // a wrap lost to a bug
+        assert((await call('POST', c, `${kp}/wrap`, makeGroupTopUp(e4.groupKey, { myEdPrivHex: c.seedHex, groupId: g, epoch: 4, recipientPubHex: d.pk }))).status === 201, 'Cy tops Di up for epoch 4');
+
+        const newC = newId('Cy2');
+        completeRekey(c.pk, newC.pk, issueRekeyCode(c.pk, owner.pk).code, owner.pk);
+        const row = (e: number) => db.prepare('SELECT created_by, subject_pubkey FROM group_key_epochs WHERE group_id = ? AND epoch = ?').get(g, e) as any;
+        const diWrap = db.prepare('SELECT wrapper_pubkey FROM group_key_wraps WHERE group_id = ? AND epoch = 4 AND recipient_pubkey = ?').get(g, d.pk) as any;
+        assert(row(2).created_by === c.pk && row(2).subject_pubkey === c.pk && row(4).created_by === c.pk && diWrap?.wrapper_pubkey === c.pk,
+            "after Cy's re-key, created_by, subject_pubkey and wrapper_pubkey stay on her old key: the signatures were made by it");
+        const diK = await keysOf(d, g);
+        assert(Buffer.from(openFrom(diK, d, g, 4)).equals(Buffer.from(e4.groupKey)), "Di opens epoch 4 from Cy's top-up, though Cy's old key is in no roster now");
+        assert((await call('DELETE', a, `/api/groups/${g}/members/${a.pk}`, {})).status === 200, 'Ann leaves');
+        const bK = await keysOf(b, g);
+        assert(!bK.roster.includes(a.pk) && !bK.roster.includes(c.pk), "today's roster has neither Ann nor Cy's old key");
+        const opened = [1, 2, 3, 4].map((e) => { try { return Buffer.from(openFrom(bK, b, g, e)).toString('hex'); } catch (err: any) { return `refused: ${err?.message}`; } });
+        assert(JSON.stringify(opened) === JSON.stringify([e1, e2, e3, e4].map((x) => Buffer.from(x.groupKey).toString('hex'))),
+            `Bob opens epochs 1–4 with { groupId } alone: two by Ann, who left, two by Cy's old key (got ${JSON.stringify(opened.map((o) => o.slice(0, 16)))})`);
+        for (const e of [1, 2, 3, 4]) {
+            let ok = true;
+            try { verifyGroupEpochRecord({ groupId: g, ...(bK.epochs as any[]).find((x) => x.epoch === e) }, { groupId: g, epoch: e }); } catch { ok = false; }
+            assert(ok, `epoch ${e}'s record still verifies under its maker's key`);
+        }
+        const cur = { groupId: g, ...(bK.epochs as any[]).find((x) => x.epoch === 4) } as GroupEpochRecord;
+        refuses(() => verifyGroupEpochRecord(cur, { groupId: g, epoch: 4, activeMembers: bK.roster }), /maker is not an active member/,
+            "before sealing, the current record is checked against today's roster and refused: the app rotates");
+        assert(bK.stale === true, 'and the node calls it stale');
+        const annRot = await call('POST', a, `${kp}/epoch`, { epoch: epochBy(a, g, 5, 'rotate', [a, b, newC, d]).record });
+        const annTop = await call('POST', a, `${kp}/wrap`, makeGroupTopUp(e4.groupKey, { myEdPrivHex: a.seedHex, groupId: g, epoch: 4, recipientPubHex: newC.pk }));
+        assert(annRot.status === 403 && annTop.status === 403 && (db.prepare('SELECT MAX(epoch) AS n FROM group_key_epochs WHERE group_id = ?').get(g) as any).n === 4
+            && !db.prepare('SELECT 1 FROM group_key_wraps WHERE group_id = ? AND recipient_pubkey = ?').get(g, newC.pk),
+            `the node still refuses a non-member's record and top-up: 403, nothing written (got ${annRot.status}, ${annTop.status})`);
+    }
+
+    // ── Re-key lines ─────────────────────────────────────────────────────────────────────────────────
+    console.log('\n── a re-keyed author\'s old line still opens: metadata.sender ──');
+    {
+        const [a, b] = [member('Amy'), member('Bo')];
+        const g = createGroup({ name: 'Rekey Lines', joinPolicy: 'open', createdBy: a.pk }).id;
+        const kp = `/api/groups/${g}/keys`;
+        assert((await call('POST', b, `/api/groups/${g}/join`, {})).status === 200, 'Bo joins');
+        assert((await call('POST', a, `${kp}/epoch`, { epoch: epochBy(a, g, 1, 'start', [a, b]).record })).status === 201, 'Amy starts epoch 1');
+        const e2 = epochBy(b, g, 2, 'rotate', [a, b]);
+        assert((await call('POST', b, `${kp}/epoch`, { epoch: e2.record })).status === 201, 'Bo rotates to epoch 2');
+        const words = 'the seed swap moved to the library';
+        const line = await send(a, g, e2.groupKey, 2, words);
+        assert(line.status === 201 && JSON.parse(line.body.message.metadata).sender === a.pk, `Amy's line under 2 is stored with metadata.sender, her key (got ${line.body?.message?.metadata})`);
+        const newA = newId('Amy2');
+        completeRekey(a.pk, newA.pk, issueRekeyCode(a.pk, owner.pk).code, owner.pk);
+        const stored = db.prepare('SELECT author_pubkey, metadata, ciphertext, nonce FROM messages WHERE id = ?').get(line.id) as any;
+        const meta = JSON.parse(stored.metadata);
+        assert(stored.author_pubkey === newA.pk && meta.sender === a.pk && meta.epoch === 2,
+            `after completeRekey: author_pubkey is her new key, metadata.sender still her old one (got ${stored.author_pubkey === newA.pk ? 'new' : 'old'}, ${meta.sender === a.pk ? 'old' : meta.sender})`);
+        const served = ((await call('GET', b, `/api/groups/${g}/chat`)).body.messages as any[]).find((m) => m.id === line.id);
+        const servedMeta = JSON.parse(served.metadata);
+        const bKey2 = openFrom(await keysOf(b, g), b, g, 2);
+        const openAs = (sender: string, key: Uint8Array) => {
+            try { return openGroupLine({ ciphertext: served.ciphertext, nonce: served.nonce }, { groupId: g, epoch: 2, senderPubHex: sender, messageId: line.id }, key).text; } catch { return null; }
+        };
+        assert(openAs(servedMeta.sender ?? served.authorPubkey, bKey2) === words, 'Bo opens it with metadata.sender ?? author_pubkey, as the apps will');
+        assert(openAs(served.authorPubkey, bKey2) === null, 'with author_pubkey alone (the new key) it does not open: that is why sender is stored');
+        assert(openAs(b.pk, bKey2) === null, 'and a wrong sender fails to open: the node cannot lie here');
+        assert(JSON.stringify(await missingFor(b, g, newA.pk)) === '[1,2]', "Amy's new key lacks epochs 1 and 2");
+        assert((await call('POST', b, `${kp}/wrap`, makeGroupTopUp(bKey2, { myEdPrivHex: b.seedHex, groupId: g, epoch: 2, recipientPubHex: newA.pk }))).status === 201, 'Bo tops Amy up for epoch 2');
+        const aKey2 = openFrom(await keysOf(newA, g), newA, g, 2);
+        assert(openAs(servedMeta.sender, aKey2) === words, 'and Amy, on her new key, opens her own old line');
     }
 
     console.log(`\n${passed}/${run} passed`);

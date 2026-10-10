@@ -391,8 +391,11 @@ export function assertSealedGroupLine(groupId: string, ciphertext: unknown, nonc
 /**
  * Post a sealed line in a group's chat. Convenors and members only; observers read. The same author block and client-id
  * idempotency as the other threads; the line must be sealed under the current, non-stale epoch (assertSealedGroupLine).
- * The node stores { epoch, replyToId?, mentions? } beside it, the mentions being the ones the app declared, cut to active
- * members other than the author (§9). Every other member in the chat gets a push unless they muted it; a mention gets
+ * The node stores { epoch, sender, replyToId?, mentions? } beside it, the mentions being the ones the app declared, cut to
+ * active members other than the author (§9). `sender` is the signed caller, the key the line's associated data and inner
+ * signature are bound to: a re-key moves author_pubkey to the new key and leaves metadata alone, so apps open a line with
+ * `metadata.sender ?? author_pubkey` and show author_pubkey (DESIGN-group-chat-epochs-over-time-fable.md §2). The node
+ * cannot lie here: a wrong sender fails to open. Every other member in the chat gets a push unless they muted it; a mention gets
  * through a mute.
  */
 export function postGroupThreadMessage(
@@ -436,7 +439,7 @@ export function postGroupThreadMessage(
     const nonce = line.nonce;
     const timestamp = new Date().toISOString();
     // `replyToId` is stored exactly as a DM stores it, so one component draws a quoted reply in either chat.
-    const meta: Record<string, unknown> = { epoch };
+    const meta: Record<string, unknown> = { epoch, sender: authorPubkey };
     if (mentions.length > 0) meta.mentions = mentions;
     if (replyToId) meta.replyToId = replyToId;
     const metadata = JSON.stringify(meta);
@@ -526,14 +529,15 @@ export function assertCanWriteInGroupChat(groupId: string, actorPubkey: string):
 /**
  * An edited group chat line (§7.4), checked exactly as a new one is: sealed, bounded, under the current non-stale epoch,
  * which the edit re-seals under. Returns what to store: the line as sent, and the row's metadata with its epoch moved
- * to the current one (the reply and the mentions stay the original's).
+ * to the current one (the reply and the mentions stay the original's) and `sender` the editor, who sealed the bytes
+ * stored now: the author, under the key they hold today (postGroupThreadMessage).
  */
-export function groupChatEdit(groupId: string, row: { metadata?: string | null }, ciphertext: string, nonce: string, metadata: unknown): { ciphertext: string; nonce: string; metadata: string } {
+export function groupChatEdit(groupId: string, row: { metadata?: string | null }, ciphertext: string, nonce: string, metadata: unknown, editor: string): { ciphertext: string; nonce: string; metadata: string } {
     const epoch = assertSealedGroupLine(groupId, ciphertext, nonce, metadataObject(metadata));
     let kept: Record<string, unknown> = {};
     try { kept = row.metadata ? JSON.parse(row.metadata) : {}; } catch { kept = {}; }
     if (!kept || typeof kept !== 'object' || Array.isArray(kept)) kept = {};
-    return { ciphertext, nonce, metadata: JSON.stringify({ ...kept, epoch }) };
+    return { ciphertext, nonce, metadata: JSON.stringify({ ...kept, epoch, sender: editor }) };
 }
 
 /** A message this group chat may be replied to: in this chat, and not a system line. */

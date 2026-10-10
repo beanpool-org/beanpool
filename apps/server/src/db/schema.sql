@@ -1095,8 +1095,10 @@ CREATE INDEX IF NOT EXISTS idx_moderation_notices_updated_at ON moderation_notic
 -- web-blocklist-where, 2026-09-27), so the web app has it back on any browser after signing in and leaves nothing about it
 -- on a shared computer.
 --
--- Only `owner_pubkey` reads or changes it (routes/blocks.ts, the signer's own); nothing else here reads it, sends it or
--- counts it for anyone: not another member, a visitor, the activity feed or a broadcast. The community's operator can see
+-- Only `owner_pubkey` reads or changes it (routes/blocks.ts, the signer's own), and their own rows are read for them
+-- alone where their set of listings is worked out (engine getNearbySet, on a node that syncs by area: the listings of an
+-- author they blocked take none of its slots); nothing else here reads it, sends it or counts it for anyone: not another
+-- member, a visitor, the activity feed or a broadcast. The community's operator can see
 -- it, as they see reports. `blocked_pubkey` is any key in the one spelling, a member's or not, never the owner's own. At
 -- most 500 per member (MEMBER_BLOCKS_MAX). Replicated to a standby (SyncPayload.memberBlocks, watermarked on
 -- `updated_at`), with a `member_blocks` tombstone for each removal, stamped no earlier than the rows it deletes: keyed

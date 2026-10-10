@@ -22,7 +22,9 @@
  *   7. `ids=` answers exactly what `id=` answers for each id (a group listing the reader isn't in, a hidden one);
  *   8. every nearby answer carries the identity epoch header, the 304 included;
  *   9. a member with no area gets the newest 100 listings; a listing posted with no place takes its author's area (Q4):
- *      an offer, and a poll (which never keeps a pin of its own, so one sent with a pin takes the area too).
+ *      an offer, and a poll (which never keeps a pin of its own, so one sent with a pin takes the area too);
+ *  10. a member's set leaves out the authors she blocked: blocking the author of her 60 nearest listings fills it with
+ *      the next nearest.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-sync-nearby)
  */
@@ -222,6 +224,7 @@ async function main() {
                     p.target_group_id, p.target_pubkey, p.assigned_to, p.hidden_by_reports_at, p.event_end_at, p.origin_node FROM posts p`).all() as any[];
         const onHoliday = new Set((db.prepare(`SELECT public_key FROM member_preferences WHERE pref_key = 'holiday_mode' AND pref_value = 'true'`).all() as any[]).map(r => r.public_key));
         const offEnterprise = new Set((db.prepare(`SELECT public_key FROM members WHERE NOT ((paused IS NULL OR paused = 0) AND (status IS NULL OR status NOT IN ('winding_up', 'completed')))`).all() as any[]).map(r => r.public_key));
+        const blocked = new Set((db.prepare('SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = ?').all(m.pubKeyHex) as any[]).map(r => r.blocked_pubkey));
         const myGroups = new Set((db.prepare(`SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'`).all(m.pubKeyHex) as any[]).map(r => r.group_id));
         const mayRead = (p: any) => !p.audience_scope || p.audience_scope === 'public'
             || (p.audience_scope === 'group' && (p.author_pubkey === m.pubKeyHex || myGroups.has(p.target_group_id)))
@@ -232,7 +235,7 @@ async function main() {
             && (['active', 'pending'].includes(p.status) || (p.type === 'poll' && p.status === 'completed'))
             && !(p.type === 'event' && p.event_end_at && p.event_end_at <= now)
             && !onHoliday.has(p.author_pubkey) && !offEnterprise.has(p.author_pubkey)
-            && mayRead(p) && (!p.hidden_by_reports_at || p.author_pubkey === m.pubKeyHex));
+            && mayRead(p) && (!p.hidden_by_reports_at || p.author_pubkey === m.pubKeyHex) && !blocked.has(p.author_pubkey));
         let near: string[];
         if (me.area_lat == null || me.area_lng == null) {
             near = listed.sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? '') || (b.created_at ?? '').localeCompare(a.created_at ?? '') || b.id.localeCompare(a.id))
@@ -297,7 +300,7 @@ async function main() {
         const plan = ran.filter(r => !r.sql.startsWith('SELECT is_visitor'))
             .flatMap(r => (db.prepare(`EXPLAIN QUERY PLAN ${r.sql}`).all(...r.args) as Array<{ detail: string }>).map(p => p.detail));
         const uses = (index: string) => plan.some(d => d.includes(index));
-        const wholeTable = plan.filter(d => /^SCAN (members|member_preferences|m|cp)\b/.test(d) && !/USING (COVERING )?INDEX/.test(d));
+        const wholeTable = plan.filter(d => /^SCAN (members|member_preferences|member_blocks|m|cp)\b/.test(d) && !/USING (COVERING )?INDEX/.test(d));
         assert(uses('idx_posts_lat_lng') && uses('idx_members_off_board') && uses('idx_member_preferences_on_holiday')
             && uses('idx_members_standing_by_key') && wholeTable.length === 0,
             `each statement of a set reads an index: the box, the authors off the board, on holiday, whose standing moved; no table of people (${wholeTable.join('; ') || 'none read whole'})`);
@@ -468,6 +471,27 @@ async function main() {
         const neighbour = memberAt(`PollNear${k}`, { lat: area.area_lat, lng: area.area_lng });
         assert((await get(`${SYNC}&nearby=1`, neighbour)).set.includes(poll.id ?? ''), `and is in the set of another member in that area (${what})`);
     }
+
+    // ── 10. blocks ──
+    console.log('\n── 10. a member\'s set leaves out the authors she blocked ──');
+    const { addBlocks } = await import('./engine/member-blocks.js');
+    const crowd = memberAt('Crowd', null);
+    const anaAt = db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?').get(ana.pubKeyHex) as { area_lat: number; area_lng: number };
+    const crowded = db.transaction(() => Array.from({ length: 60 }, () => post(around({ lat: anaAt.area_lat, lng: anaAt.area_lng }, 1), crowd, 'offer')))();
+    const unblocked = await get(`${SYNC}&nearby=1&paged=1`, ana);
+    const nearUnblocked = unblocked.set.slice(0, 500);
+    assert(unblocked.status === 200 && nearUnblocked.join() === bruteSet(ana).near.join() && crowded.every(id => nearUnblocked.slice(0, 70).includes(id)),
+        `one author's 60 listings within 1 km of her take 60 of the first places of her near set (${unblocked.status}, ${crowded.filter(id => nearUnblocked.includes(id)).length} of them in it)`);
+    addBlocks(ana.pubKeyHex, [crowd.pubKeyHex]);
+    const blockedRead = await get(`${SYNC}&nearby=1&paged=1`, ana, { 'If-None-Match': unblocked.etag || '' });
+    const wantBlocked = bruteSet(ana);
+    const keptNear = nearUnblocked.filter(id => !crowded.includes(id));
+    assert(blockedRead.status === 200 && !crowded.some(id => blockedRead.set.includes(id)) && wantBlocked.near.length === 500
+        && blockedRead.set.slice(0, 500).join() === wantBlocked.near.join() && sameSet(blockedRead.set, wantBlocked.all)
+        && blockedRead.set.slice(0, keptNear.length).join() === keptNear.join(),
+        `she blocks that author: 200, none of the 60 in her set, which is the nearest 500 of everyone else's (${blockedRead.status}, ${blockedRead.set.filter(id => crowded.includes(id)).length} of the 60 left)`);
+    const otherBusy = members[1].id;
+    assert(sameSet((await get(`${SYNC}&nearby=1`, otherBusy)).set, bruteSet(otherBusy).all), 'another member\'s set is untouched by her blocks');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -1093,7 +1093,8 @@ export interface NearbySet {
  *   at most `measureAtMost` of the matching posts in the box are measured. It reads no author's row: the enterprise
  *   half of the board's rule is tested on the author's key (ENTERPRISE_ON_BOARD_BY_KEY_SQL), as the holiday half
  *   already is. A post with no place is never in it. With no area: the newest `newestWithoutArea` listings under the
- *   same rules, wherever they are.
+ *   same rules, wherever they are. Neither holds a listing by an author the member blocked (member_blocks, their own
+ *   rows only): their phone hides those, so they would only take the slots of listings it shows.
  * - own(M): every listing the member wrote here, whatever its place or state.
  * - ties(M): the listings they have an open deal on (asked for, or taken and not yet done) or a conversation about,
  *   the node's side of the phone's keep rule (apps/native utils/db.ts localPostTies).
@@ -1114,14 +1115,23 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     } catch {
         // No conversations table: an engine-only database.
     }
+    // The authors this member blocked: their own list, read for them alone (schema.sql's member_blocks).
+    let blocked: string[] = [];
+    try {
+        blocked = (prepared(db, 'SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = ?').all(member) as Array<{ blocked_pubkey: string }>).map(r => r.blocked_pubkey);
+    } catch {
+        // No member_blocks table: an engine-only database.
+    }
     const base: PostFilter = { viewerPubkey: member, types: q.types, excludeEvents: q.excludeEvents, includeHidden: q.includeHidden };
 
     // near(M): the rows are never read in full; the hook keeps what the lean pass ranked. `m` stays joined for any
     // other condition on the author's row; with none, SQLite leaves the join out. Each statement is compiled once
     // (prepared): compiling the near pass took about 60 µs, more than a quarter of a set with nothing near (2026-10-10).
     let ranked: Array<{ id: string; updated_at: string | null; author_pubkey: string }> = [];
-    const rankNear: RowsNear = (d, near, listingWhere, whereParams) => {
-        const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL);
+    const rankNear: RowsNear = (d, near, listingWhere, listingParams) => {
+        const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL)
+            + (blocked.length > 0 ? ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))' : '');
+        const whereParams = blocked.length > 0 ? [...listingParams, JSON.stringify(blocked)] : listingParams;
         if (!q.area) {
             ranked = prepared(d, `
         SELECT p.id, p.updated_at, p.author_pubkey FROM posts p

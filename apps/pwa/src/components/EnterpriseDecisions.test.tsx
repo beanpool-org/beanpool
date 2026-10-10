@@ -98,6 +98,23 @@ describe("an enterprise's Decisions block (DESIGN-group-decisions S2)", () => {
         expect(screen.getByRole('button', { name: 'Open the vote' })).toBeEnabled();
     });
 
+    it('every choice chip is at least 44 px tall, and the small-roll line is in the secondary text colour (review opus-1767 N6, N7)', async () => {
+        vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [card()] as never, canPropose: true, rollSize: 3 });
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="ongoing" />);
+        // The faintest line on the block was the one about ballot secrecy (3.28:1 in light): now the notes' colour.
+        const small = await screen.findByText(/Nobody sees who voted how/);
+        expect(small.className).toContain('text-nature-700');
+        expect(small.className).toContain('dark:text-nature-300');
+        expect(small.className).not.toMatch(/nature-500|nature-400/);
+        fireEvent.click(screen.getByRole('button', { name: 'Propose a vote' }));
+        const chips = screen.getAllByRole('radio');
+        expect(chips.length).toBeGreaterThan(3);
+        for (const chip of chips) {
+            expect(chip.className).toContain('min-h-[44px]');
+            expect(chip.className).not.toContain('min-h-[40px]');
+        }
+    });
+
     it("a project: no vote takes it off its leader; the words are a project's", async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 3 });
         render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="bounded" />);

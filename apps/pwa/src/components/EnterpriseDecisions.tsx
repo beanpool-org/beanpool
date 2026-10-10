@@ -100,7 +100,7 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, e
                 );
             })}
             {voteError && <p role="alert" className="m-0 text-sm text-amber-700 dark:text-amber-400 break-words">{voteError}</p>}
-            {list.decisions.length > 0 && list.rollSize <= 4 && <p className="m-0 text-xs text-nature-500 dark:text-nature-400 break-words">{SMALL_ROLL_BALLOT_NOTE}</p>}
+            {list.decisions.length > 0 && list.rollSize <= 4 && <p className="m-0 text-xs text-nature-700 dark:text-nature-300 break-words">{SMALL_ROLL_BALLOT_NOTE}</p>}
             {list.canPropose && !proposing && (
                 <button type="button" className={`${btnNo} w-full`} onClick={() => setProposing(true)}>Propose a vote</button>
             )}
@@ -150,7 +150,7 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSu
         }
     };
 
-    const chip = (on: boolean) => `min-h-[40px] px-3 py-1 rounded-2xl border text-sm max-w-full break-words text-left ${on
+    const chip = (on: boolean) => `min-h-[44px] px-3 py-1 rounded-2xl border text-sm max-w-full break-words text-left ${on
         ? 'bg-emerald-600 border-emerald-600 text-white font-bold'
         : 'border-nature-300 dark:border-nature-600 text-nature-900 dark:text-nature-100 bg-white dark:bg-nature-900'}`;
     const label = 'block text-sm font-bold text-nature-900 dark:text-nature-100 mt-3 mb-1';

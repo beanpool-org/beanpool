@@ -179,6 +179,22 @@ describe("a keeper's pay-out is a wage (review opus-1767 N5)", () => {
     });
 });
 
+describe('touch targets and the small-roll line (review opus-1767 N6, N7)', () => {
+    for (const [name, palette] of [['light', lightColors], ['dark', darkColors]] as const) {
+        it(`every choice chip is at least 44 dp tall, and the small-roll line reads at 4.5:1 or better, in ${name}`, async () => {
+            theme.dark = name === 'dark';
+            await render();
+            const small = textEl(/^Nobody sees who voted how\./);
+            expect(styleOf(small).color).toBe(palette.text.secondary);
+            expect(contrast(styleOf(small).color, palette.surface.card)).toBeGreaterThanOrEqual(4.5);
+            await press(button(/^Propose a vote$/));
+            const chips = Array.from(host.querySelectorAll('[role=radio]'));
+            expect(chips.length).toBeGreaterThan(3);
+            for (const chip of chips) expect(styleOf(chip).minHeight, chip.textContent || '').toBeGreaterThanOrEqual(44);
+        });
+    }
+});
+
 describe('the propose sheet and the keyboard', () => {
     // components/useModalKeyboardLift.ts: a KeyboardAvoidingView inside an RN Modal collapsed a sheet to its title at
     // 320 dp; the sheet is lifted by the keyboard's height from the root provider's state instead.

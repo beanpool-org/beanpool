@@ -232,7 +232,8 @@ const styles = (colors: any) => StyleSheet.create({
     card: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, padding: 14, marginTop: 12 },
     label: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, color: colors.text.secondary, marginBottom: 4 },
     note: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 6 },
-    small: { fontSize: 12, color: colors.text.muted, lineHeight: 16, marginTop: 4 },
+    // The one line about ballot secrecy: the notes' colour, never the faintest (4.5:1 or better in both themes).
+    small: { fontSize: 12, color: colors.text.secondary, lineHeight: 16, marginTop: 4 },
     decision: { borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 10, marginTop: 8 },
     title: { fontSize: 15, fontWeight: '700', color: colors.text.heading },
     effect: { fontSize: 14, color: colors.text.body, marginTop: 2 },
@@ -252,7 +253,7 @@ const styles = (colors: any) => StyleSheet.create({
     sheetTitle: { fontSize: 18, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
     fieldLabel: { fontSize: 13, fontWeight: '700', color: colors.text.heading, marginTop: 10, marginBottom: 6 },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    chip: { borderWidth: 1, borderColor: colors.border.default, borderRadius: 18, paddingHorizontal: 12, minHeight: 40, justifyContent: 'center', maxWidth: '100%' },
+    chip: { borderWidth: 1, borderColor: colors.border.default, borderRadius: 18, paddingHorizontal: 12, minHeight: 44, justifyContent: 'center', maxWidth: '100%' },
     chipOn: { backgroundColor: colors.brand.primary, borderColor: colors.brand.primary },
     chipText: { color: colors.text.body, fontSize: 14 },
     chipTextOn: { color: colors.text.inverse, fontWeight: '700' },

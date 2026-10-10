@@ -428,6 +428,18 @@ async function main() {
         `an author in her set is renamed: 200 with a new tag, the row carrying the new name (${afterRename.status}, ${renamedRow?.authorCallsign})`);
     const heldRename = await tagged(afterRename);
     assert(heldRename.status === 304, `and asked again with that tag: 304 (${heldRename.status})`);
+    // One author's row dated ahead (an import from a node whose clock runs fast) hides no other author's change: each
+    // author's own time goes into the tag, not the newest (the review of #1739, finding 2).
+    const otherAuthors = [...new Set(afterRename.posts.map(r => r.authorPublicKey).filter(k => k !== bea.pubKeyHex))];
+    const [ahead, renamedNext] = otherAuthors;
+    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run('2099-01-01T00:00:00.000Z', ahead);
+    const afterAhead = await tagged(afterRename);
+    assert(otherAuthors.length >= 2 && afterAhead.status === 200, `an author of her set dated ahead: 200 (${afterAhead.status}, ${otherAuthors.length} authors)`);
+    db.prepare('UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?').run('Renamed later', iso(Date.now()), renamedNext);
+    const afterLaterRename = await tagged(afterAhead);
+    assert(afterLaterRename.status === 200 && afterLaterRename.posts.some(r => r.authorPublicKey === renamedNext && r.authorCallsign === 'Renamed later'),
+        `then another author renamed: 200, the new name on their rows, not hidden by the row dated ahead (${afterLaterRename.status})`);
+    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(iso(Date.now()), ahead);
 
     // ── 6. a visitor's, an unsigned and a switched-off read unchanged ──
     console.log('\n── 6. reads that aren\'t a member\'s by-area sync are answered as before ──');

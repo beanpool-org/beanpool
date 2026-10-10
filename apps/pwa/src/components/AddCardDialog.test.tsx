@@ -110,3 +110,31 @@ describe('CardSettingsDialog', () => {
         expect(onSubmit).toHaveBeenCalledWith({ q: 'eggs', kind: 'any', km: 10 });
     });
 });
+
+describe('the sun and moon settings (CARD-FRAME §4, slice F5)', () => {
+    it("asks whose place, the community's first; Add to Home sends it", () => {
+        const onSubmit = vi.fn();
+        render(<CardSettingsDialog type="sky" name="Sun and moon" mode="add" onSubmit={onSubmit} onClose={vi.fn()} />);
+        const dialog = screen.getByRole('dialog', { name: 'Sun and moon' });
+        const place = within(dialog).getByTestId('home-settings-place');
+        expect(within(place).getByText('Whose place')).toBeInTheDocument();
+        expect(within(place).getAllByRole('button').map(b => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Your community', 'true'], ['Your area', 'false']]);
+        expect(within(dialog).queryByTestId('home-settings-q')).toBeNull();
+        // Each chip and the button are 44 px targets at least.
+        for (const b of within(place).getAllByRole('button')) expect(b.className).toMatch(/min-h-\[44px\]/);
+        fireEvent.click(within(dialog).getByTestId('home-settings-submit'));
+        expect(onSubmit).toHaveBeenCalledWith({ place: 'community' });
+    });
+
+    it("Settings… opens on the kept choice and Save sends the new one; an odd kept value reads as the community's", () => {
+        const onSubmit = vi.fn();
+        const { unmount } = render(<CardSettingsDialog type="sky" name="Sun and moon" mode="save" initial={{ place: 'me' }} onSubmit={onSubmit} onClose={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Your area' })).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.click(screen.getByRole('button', { name: 'Your community' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        expect(onSubmit).toHaveBeenCalledWith({ place: 'community' });
+        unmount();
+        render(<CardSettingsDialog type="sky" name="Sun and moon" mode="save" initial={{ place: 'mars' }} onSubmit={vi.fn()} onClose={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Your community' })).toHaveAttribute('aria-pressed', 'true');
+    });
+});

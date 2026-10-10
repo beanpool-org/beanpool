@@ -20,7 +20,8 @@
  *      settings (counted), keyed by its instance id; an instance id the layout doesn't hold is dropped from the ask, the
  *      unknown type is kept in the answer's layout and never built; with no `cards=` a card not in the list is not built;
  *      the same ask in another order is the same tag; a settings change moves the tag and a 304 still answers an unchanged
- *      Home; `community.place` is the node's location to two decimals, absent when unset
+ *      Home; `community.place` is the node's location to two decimals, absent when unset, part of the tag (a move is a
+ *      200, no move a 304); none on the global node
  *   6. the size: under 6 KB gzipped with fixture data, titles of thousands of characters included (each text is cut), and
  *      what a cold landing and a 304 cost (requests, bytes, server time), printed
  *   7. H0b on a local node: the Beans card is each signer's own balance as the ledger holds it, and Beans and escrow stay
@@ -508,7 +509,20 @@ async function main(): Promise<void> {
         const placed = await get('/api/home?cards=community', erin);
         assert(JSON.stringify(placed.body?.cards?.community?.place) === JSON.stringify({ lat: -28.56, lng: 153.5 }),
             `and the node's location to two decimals once it has one (${JSON.stringify(placed.body?.cards?.community?.place)})`);
+        // F5 (the sun and moon card): the place is part of the answer's tag, so a move is a fresh answer and no move a 304.
+        const samePlace = await get('/api/home?cards=community', erin, { 'If-None-Match': placed.etag! });
+        assert(samePlace.status === 304, `an unchanged place is still a 304 (${samePlace.status})`);
+        updateLocalConfig({ location: { lat: 64.14655, lng: -21.94263 } });
+        const movedPlace = await get('/api/home?cards=community', erin, { 'If-None-Match': placed.etag! });
+        assert(movedPlace.status === 200 && movedPlace.etag !== placed.etag
+            && JSON.stringify(movedPlace.body?.cards?.community?.place) === JSON.stringify({ lat: 64.15, lng: -21.94 }),
+            `a moved place moves the tag, rounded both ways (${movedPlace.status}, ${JSON.stringify(movedPlace.body?.cards?.community?.place)})`);
+        updateLocalConfig({ location: { lat: 64.1451, lng: -21.9449 } });
+        const nearby = await get('/api/home?cards=community', erin, { 'If-None-Match': movedPlace.etag! });
+        assert(nearby.status === 304, `a move inside the same hundredth of a degree is no change to a member: a 304 (${nearby.status})`);
         updateLocalConfig({ location: null });
+        const unplaced = await get('/api/home?cards=community', erin, { 'If-None-Match': movedPlace.etag! });
+        assert(unplaced.status === 200 && !('place' in (unplaced.body?.cards?.community ?? {})), `and unset again, the place goes and the tag with it (${unplaced.status})`);
         // Review of #1697, finding 2: a pending listing never takes a saved search's row. Four live matches and the two newest
         // pending: the card shows the four (main's read let the pending two take two of its five slots and showed three).
         for (let i = 0; i < 4; i++) post(bob, 'offer', 'garden', `HomeZebrafish live ${i}`);
@@ -815,6 +829,15 @@ async function main(): Promise<void> {
             'escrow off: no deals card and no deal line, though a deal waits on her');
         assert(c.find?.point === 'area' && typeof c.community?.communities === 'number' && c.community?.tradesThisMonth === undefined,
             `find from her area; the community card counts communities, no trades (${JSON.stringify(c.community)})`);
+        // F5: the worldwide community has no place of its own, wherever its server is: the sun and moon card uses her area.
+        const { updateLocalConfig } = await import('./config/local-config.js');
+        updateLocalConfig({ location: { lat: 40.71, lng: -74.01 } });
+        const placedGlobal = await get('/api/home?cards=community', alice);
+        const visitorGlobal = await get(`/api/home?cards=community&lat=${BYRON.lat}&lng=${BYRON.lng}`, null);
+        assert(placedGlobal.status === 200 && !!placedGlobal.body?.cards?.community && !('place' in placedGlobal.body.cards.community)
+            && visitorGlobal.status === 200 && !('place' in (visitorGlobal.body?.cards?.community ?? {})),
+            `no community.place on the global node, for a member or a visitor, though its config has a location (${JSON.stringify(placedGlobal.body?.cards?.community)})`);
+        updateLocalConfig({ location: null });
         const words = await get('/api/home?cards=safety', alice);
         assert(words.body?.cards?.safety === undefined, 'no safety card for a member with no 12-words row');
         db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'words', ?, ?)").run(alice.pk, `words:${crypto.randomUUID()}`, new Date().toISOString());

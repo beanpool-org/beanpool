@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Modal, TextInput, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, type HomeSearchKind } from '@beanpool/core';
+import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, readSkySettings, type HomeSearchKind, type SkySettings } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
-import { SEARCH_KIND_CHIPS, cardName } from '../../utils/home-cards';
+import { SEARCH_KIND_CHIPS, SKY_PLACE_CHIPS, cardName } from '../../utils/home-cards';
 import { POST_CATEGORIES } from '../../constants/categories';
 import { HOME_TARGET_DP, homeStyles } from './HomeParts';
 import { editHomeStyles } from './EditHomeSheet';
@@ -11,8 +11,9 @@ import { useModalKeyboardLift } from '../useModalKeyboardLift';
 
 /**
  * A card's settings sheet (CARD-FRAME §1.2, §1.3): the picker opens it on Add for a type with settings (its last button
- * is Add to Home), and the card's "…" → Settings… opens it again with Save, keeping the card where it is. Today only the
- * saved search has settings (CARD-FRAME §4): its words, then Offers or Needs or both, a category, and a distance. The
+ * is Add to Home), and the card's "…" → Settings… opens it again with Save, keeping the card where it is. Sun and moon
+ * asks one thing: whose place, the community's or the member's own. The saved search (CARD-FRAME §4) asks its words,
+ * then Offers or Needs or both, a category, and a distance. The
  * distance chips show only where the node has a point to measure from (the member's area, or the phone's place on the
  * global community); without one the node ignores the distance, so the sheet doesn't offer it, and a kept one stays.
  *
@@ -39,8 +40,10 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
     const [kind, setKind] = useState<HomeSearchKind>('any');
     const [category, setCategory] = useState<string | null>(null);
     const [km, setKm] = useState<number | null>(null);
+    const [place, setPlace] = useState<SkySettings['place']>('community');
     useEffect(() => {
         if (!visible) return;
+        setPlace(readSkySettings(settings).place);
         const start = readSearchSettings(settings);
         setQ(start.q);
         setKind(start.kind);
@@ -49,8 +52,10 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
     }, [visible, settings]);
     if (!type) return null;
     const name = cardName(type);
+    const sky = type === 'sky';
     const words = q.trim();
-    const done = () => onDone({ q: words, kind, ...(category ? { category } : {}), ...(km ? { km } : {}) });
+    const ready = sky || !!words;
+    const done = () => onDone(sky ? { place } : { q: words, kind, ...(category ? { category } : {}), ...(km ? { km } : {}) });
 
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
@@ -63,38 +68,43 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
                         </Pressable>
                     </View>
                     <ScrollView style={editHomeStyles.list} keyboardShouldPersistTaps="handled" testID="card-settings-scroll">
-                        <Text style={[settingsStyles.label, { color: colors.text.body }]} nativeID="card-settings-words-label">Words to look for</Text>
-                        <TextInput
-                            value={q}
-                            onChangeText={setQ}
-                            maxLength={HOME_SEARCH_MAX_CHARS}
-                            placeholder="eggs"
-                            placeholderTextColor={colors.text.muted}
-                            style={[settingsStyles.input, { color: colors.text.body, borderColor: colors.border.strong, backgroundColor: colors.surface.page }]}
-                            accessibilityLabel="Words to look for"
-                            accessibilityLabelledBy="card-settings-words-label"
-                            returnKeyType="done"
-                            onSubmitEditing={() => { if (words) done(); }}
-                            testID="card-settings-words"
-                        />
-                        <SettingChips label="Show" id="kind" colors={colors} value={kind} onPick={setKind}
-                            options={SEARCH_KIND_CHIPS.map(k => ({ value: k.kind, label: k.label }))} />
-                        <SettingChips label="Category" id="category" colors={colors} value={category} onPick={setCategory}
-                            options={[{ value: null, label: 'Any category' }, ...POST_CATEGORIES.map(c => ({ value: c.id as string | null, label: `${c.emoji} ${c.label}` }))]} />
-                        {hasPoint && (
-                            <SettingChips label="Distance" id="km" colors={colors} value={km} onPick={setKm}
-                                options={[{ value: null, label: 'Any distance' }, ...HOME_SEARCH_KMS.map(k => ({ value: k as number | null, label: `${k} km` }))]} />
-                        )}
+                        {sky ? (
+                            <SettingChips label="Whose place" id="place" colors={colors} value={place} onPick={setPlace}
+                                options={SKY_PLACE_CHIPS.map(p => ({ value: p.place, label: p.label }))} />
+                        ) : (<>
+                            <Text style={[settingsStyles.label, { color: colors.text.body }]} nativeID="card-settings-words-label">Words to look for</Text>
+                            <TextInput
+                                value={q}
+                                onChangeText={setQ}
+                                maxLength={HOME_SEARCH_MAX_CHARS}
+                                placeholder="eggs"
+                                placeholderTextColor={colors.text.muted}
+                                style={[settingsStyles.input, { color: colors.text.body, borderColor: colors.border.strong, backgroundColor: colors.surface.page }]}
+                                accessibilityLabel="Words to look for"
+                                accessibilityLabelledBy="card-settings-words-label"
+                                returnKeyType="done"
+                                onSubmitEditing={() => { if (words) done(); }}
+                                testID="card-settings-words"
+                            />
+                            <SettingChips label="Show" id="kind" colors={colors} value={kind} onPick={setKind}
+                                options={SEARCH_KIND_CHIPS.map(k => ({ value: k.kind, label: k.label }))} />
+                            <SettingChips label="Category" id="category" colors={colors} value={category} onPick={setCategory}
+                                options={[{ value: null, label: 'Any category' }, ...POST_CATEGORIES.map(c => ({ value: c.id as string | null, label: `${c.emoji} ${c.label}` }))]} />
+                            {hasPoint && (
+                                <SettingChips label="Distance" id="km" colors={colors} value={km} onPick={setKm}
+                                    options={[{ value: null, label: 'Any distance' }, ...HOME_SEARCH_KMS.map(k => ({ value: k as number | null, label: `${k} km` }))]} />
+                            )}
+                        </>)}
                         <Pressable
-                            disabled={!words}
+                            disabled={!ready}
                             onPress={done}
-                            style={[settingsStyles.button, { backgroundColor: words ? colors.brand.primary : colors.surface.subtle }]}
+                            style={[settingsStyles.button, { backgroundColor: ready ? colors.brand.primary : colors.surface.subtle }]}
                             accessibilityRole="button"
                             accessibilityLabel={mode === 'add' ? `Add ${name} to Home` : `Save ${name}`}
-                            accessibilityState={{ disabled: !words }}
+                            accessibilityState={{ disabled: !ready }}
                             testID="card-settings-done"
                         >
-                            <Text style={[settingsStyles.buttonText, { color: words ? colors.text.inverse : colors.text.secondary }]}>{mode === 'add' ? 'Add to Home' : 'Save'}</Text>
+                            <Text style={[settingsStyles.buttonText, { color: ready ? colors.text.inverse : colors.text.secondary }]}>{mode === 'add' ? 'Add to Home' : 'Save'}</Text>
                         </Pressable>
                     </ScrollView>
                 </View>

@@ -15,7 +15,7 @@ import {
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, readSearchSettings, tipsNextLabel, type TipsView } from '@beanpool/core';
+import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, readSearchSettings, tipsNextLabel, type SkyToday, type TipsView } from '@beanpool/core';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
 
@@ -402,6 +402,19 @@ export function TipsBody({ view, colors, onNext, onReadMore, onDontShow }: {
  * draws them, each opening the listing, and "See more" opening the Market with the words filled in. A search that finds
  * nothing says so; before the node has answered for these words, it says it shows when the community answers.
  */
+/**
+ * Sun and moon (CARD-FRAME §4): one line worked out on the phone ("🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48"),
+ * nothing to open. It wraps at the floor and is never cut; a screen reader hears it in words, no picture read aloud.
+ */
+export function SkyBody({ sky, colors }: { sky: SkyToday; colors: AppColors }) {
+    const s = homeStyles(colors);
+    return (
+        <View accessible accessibilityLabel={sky.label} testID="home-sky-line">
+            <Text style={[s.rowLine, s.rowStrong]}>{sky.text}</Text>
+        </View>
+    );
+}
+
 export function SearchBody({ settings, card, nodeUrl, showsBeans, colors, onMore }: {
     settings: unknown;
     /** The node's body for these words (utils/home-cards.ts `searchCardFor`), or null when it hasn't answered for them. */

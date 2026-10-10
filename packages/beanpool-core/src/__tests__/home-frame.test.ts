@@ -184,11 +184,24 @@ describe('home frame §5.2 (4): the default and the words', () => {
         const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false } };
         const global: HomeNodeFacts = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, wordsDoor: true } };
         const on = (a: HomeNodeFacts, role?: 'admin' | null) => HOME_CARD_TYPES.filter(t => t.onNode(a, role)).map(t => t.id);
-        expect(on(global)).toEqual(['needs', 'safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'search', 'groups', 'joined', 'pulse', 'notices', 'community']);
+        expect(on(global)).toEqual(['needs', 'safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'search', 'groups', 'joined', 'pulse', 'sky', 'notices', 'community']);
         expect(on(local)).toEqual(HOME_CARD_TYPES.map(t => t.id).filter(id => id !== 'safety' && id !== 'find'));
         const adminsInvite = { ...local, features: { ...local.features, door: 'admins' } };
         expect(on(adminsInvite, null)).not.toContain('invite');
         expect(on(adminsInvite, 'admin')).toContain('invite');
         expect(HOME_FRAME_LIMITS.cards).toBe(24);
+    });
+
+    it('sun and moon (F5): one of a kind, Around you, on every node, never asked of the node; its place setting read tolerantly', () => {
+        const sky = HOME_CARD_TYPES.find(t => t.id === 'sky')!;
+        expect(sky).toMatchObject({ name: 'Sun and moon', line: 'Sunrise, sunset and the moon tonight.', group: 'around', asks: 'none' });
+        expect(sky.multiple).toBeUndefined();
+        expect(sky.onNode({ profile: 'global', features: {} })).toBe(true);
+        expect(sky.readSettings!({ place: 'me' })).toEqual({ place: 'me' });
+        expect(sky.readSettings!({ place: 'moon' })).toEqual({ place: 'community' });
+        const added = addCard(layout([one('steps')]), 'sky', { settings: { place: 'me', extra: 1 }, now: NOW });
+        expect(added.ok && added.layout.cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
+        expect(added.ok && addCard(added.layout, 'sky', { now: NOW })).toEqual({ ok: false, refused: 'on-home' });
+        expect(added.ok && cardsToAsk(added.layout)).not.toContain('sky');
     });
 });

@@ -19,11 +19,11 @@ import {
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
-    MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList, searchCardFor,
+    MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList, searchCardFor, skyOf,
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
-import { HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, translateV1 } from '@beanpool/core';
+import { HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, translateV1 } from '@beanpool/core';
 import { mayInviteHere } from '../invite-entries';
 
 const ME = 'a'.repeat(64);
@@ -1054,5 +1054,45 @@ describe("a saved search's kept answer is only for the search the card holds now
 
     it('km null (the node had no point and ignored the distance) answers whatever distance is kept', () => {
         expect(searchCardFor(withCard({ ...body, km: null }), { ...inst, settings: { q: 'eggs', kind: 'any', km: 25 } })).toEqual({ ...body, km: null });
+    });
+});
+
+describe('sun and moon (CARD-FRAME §4, §5.2 item 22)', () => {
+    const MULLUM = { lat: -28.55, lng: 153.5 };
+    const AREA = { lat: -37.07, lng: 144.22 };
+    const PHONE = { lat: 64.15, lng: -21.94 };
+    const sky = (settings?: Record<string, unknown>): HomeLayout => ({ v: 2, cards: [{ id: 'sky', type: 'sky', ...(settings ? { settings } : {}) }], dismissed: {}, updatedAt: iso(NOW) });
+    const placed = (community: typeof MULLUM | null, area: typeof MULLUM | null) => answer({
+        me: { ...answer().me!, area },
+        cards: { community: { name: 'Mullumbimby', members: 81, ...(community ? { place: community } : {}) } },
+    });
+
+    it("works from the community's place, else the member's area, else the phone's; 'me' puts the member's first", () => {
+        expect(skyOf(placed(MULLUM, AREA), {}, PHONE, NOW)!.place).toEqual(MULLUM);
+        expect(skyOf(placed(null, AREA), {}, PHONE, NOW)!.place).toEqual(AREA);
+        expect(skyOf(placed(null, null), {}, PHONE, NOW)!.place).toEqual(PHONE);
+        expect(skyOf(placed(null, null), {}, null, NOW)).toBeNull();
+        expect(skyOf(placed(MULLUM, AREA), { settings: { place: 'me' } }, PHONE, NOW)!.place).toEqual(AREA);
+        expect(skyOf(placed(MULLUM, null), { settings: { place: 'me' } }, PHONE, NOW)!.place).toEqual(PHONE);
+        expect(skyOf(placed(MULLUM, AREA), { settings: { place: 'mars' } }, null, NOW)!.place).toEqual(MULLUM);
+        expect(skyOf(placed(MULLUM, null), {}, null, NOW)!.text).toBe(skyToday(MULLUM, NOW).text);
+    });
+
+    it('is drawn only where a place is known, and never asked of the node', () => {
+        expect(draw(placed(MULLUM, null), sky(), ctx())).toContain('sky');
+        expect(draw(placed(null, AREA), sky(), ctx())).toContain('sky');
+        expect(draw(placed(null, null), sky(), ctx({ place: PHONE }))).toContain('sky');
+        expect(draw(placed(null, null), sky(), ctx())).not.toContain('sky');
+        expect(cardsToAsk(sky(), [], placed(MULLUM, null))).not.toContain('sky');
+    });
+
+    it('the picker offers it under Around you on a local community and the worldwide one, with its settings sheet', () => {
+        for (const node of [{ profile: 'local', features: {} }, { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false } }]) {
+            const g = pickerGroups(node, null, null);
+            const around = g.groups.find(x => x.id === 'around')!;
+            expect(around.rows.find(r => r.type === 'sky'), node.profile).toMatchObject({ name: 'Sun and moon', line: 'Sunrise, sunset and the moon tonight.', state: 'add', hasSettings: true });
+            expect(pickerGroups(node, sky(), null).groups.flatMap(x => x.rows).find(r => r.type === 'sky')!.state).toBe('on-home');
+        }
+        expect(HOME_DRAWN.has('sky')).toBe(true);
     });
 });

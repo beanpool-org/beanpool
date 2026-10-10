@@ -16,6 +16,7 @@
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone, barrel-is-universal.test.ts).
  */
 import { PRICING_CATEGORIES } from './pricing-catalog.js';
+import { readSkySettings } from './sky.js';
 
 // ── The shape ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -185,6 +186,11 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
     { id: 'groups', name: 'Your groups', line: "What's new in your groups.", group: 'you', asks: 'node', onNode: everywhere },
     { id: 'joined', name: 'Who joined', line: 'People who joined this week.', group: 'around', asks: 'node', onNode: everywhere },
     { id: 'pulse', name: 'The Pulse', line: 'Links your neighbours shared.', group: 'around', asks: 'node', onNode: everywhere },
+    // Worked out on the device (sky.ts) from the community's place or the member's, which every node can have: never asked.
+    {
+        id: 'sky', name: 'Sun and moon', line: 'Sunrise, sunset and the moon tonight.', group: 'around', asks: 'none', onNode: everywhere,
+        readSettings: readSkySettings,
+    },
     { id: 'beans', name: 'Your Beans', line: 'Your balance and room to spend.', group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.beans !== false },
     { id: 'notices', name: 'From your community', line: "Notices from your community's admins.", group: 'you', asks: 'node', onNode: everywhere },
     {

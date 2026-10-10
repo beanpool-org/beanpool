@@ -36,7 +36,7 @@ import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '..
 import {
     NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, dayLabel, dealsLine,
     decideLine, distanceText, findBody, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, starredFirst,
-    searchCardFor, stepLines, toggleInterest,
+    SKY_NO_PLACE_LINE, searchCardFor, skyOf, stepLines, toggleInterest,
     type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
 import {
@@ -801,7 +801,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         const r = addCard(drawnRef.current, type, Date.now(), { settings, pinned: pins });
         if (!r.ok) return;
         const mark = { id: r.id, read: false };
-        if (!changeLayout(() => r.layout, { reread: true, afterRead: () => { mark.read = true; if (mounted.current) setAddRead(n => n + 1); } })) return;
+        // Read once the save is answered (§2.4); sun and moon is worked out here and needs nothing from the node.
+        if (!changeLayout(() => r.layout, { reread: type !== 'sky', afterRead: () => { mark.read = true; if (mounted.current) setAddRead(n => n + 1); } })) return;
         // Tips put back after "Don't show tips again" start over from the first tip.
         if (type === 'tips' && tipsRef.current?.dismissedAt) keepTips(restartTips(tipsList, localDay()));
         if (type === 'interests') setInterestsOpen(true);
@@ -1226,6 +1227,20 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     </HomeCard>
                 );
             }
+            case 'sky': {
+                // Sun and moon (CARD-FRAME §4): one line worked out here, nothing to open, no request of its own. A screen
+                // reader hears it in words, never the picture.
+                const sky = skyOf(a, card, now);
+                if (!sky) return null;
+                return (
+                    <HomeCard key={card.id} {...common}>
+                        <p data-testid="home-sky-line" className="m-0 text-sm font-semibold text-nature-900 dark:text-white break-words">
+                            <span aria-hidden="true">{sky.text}</span>
+                            <span className="sr-only">{sky.label}</span>
+                        </p>
+                    </HomeCard>
+                );
+            }
             default:
                 return null;
         }
@@ -1241,7 +1256,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 // A saved search's row is named by its words (cardRowName), so two searches read as two rows.
                 name: c.type === 'search' ? cardRowName(c, profile) : nameOf(c),
                 label: cardLabelName(c, profile),
-                note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? 'All tips seen' : 'Nothing to show now',
+                note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? 'All tips seen' : c.type === 'sky' ? SKY_NO_PLACE_LINE : 'Nothing to show now',
                 hasSettings: !!homeCardType(c.type)?.readSettings,
             }));
     // A saved search's distance needs a point the node measures from: the member's area, or the place this browser shared.
@@ -1315,9 +1330,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     initial={settingsFor.settings}
                     hasPoint={hasPoint}
                     onSubmit={(next) => {
-                        const id = settingsFor.id;
+                        const { id, type } = settingsFor;
                         setSettingsFor(null);
-                        changeLayout((l) => changeCardSettings(l, id, next, Date.now()), { reread: true });
+                        // Sun and moon's place is worked out here: no read.
+                        changeLayout((l) => changeCardSettings(l, id, next, Date.now()), { reread: type !== 'sky' });
                     }}
                     onClose={() => setSettingsFor(null)}
                     // Its opener was a menu's Settings…, gone with the menu: Edit home's row "…" while Edit home is open, else

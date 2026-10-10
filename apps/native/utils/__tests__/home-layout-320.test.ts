@@ -25,8 +25,8 @@ import { MAX_FONT_SCALE } from '../../constants/responsive';
 import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
 import { EDIT_HOME_NOTE, editHomeStyles } from '../../components/home/EditHomeSheet';
 import { ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
-import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
-import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_SEARCH_KMS, HOME_TIPS, TIPS_ALL_SEEN, TIPS_DONT_SHOW, tipsCaption } from '@beanpool/core';
+import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
+import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
 
 /** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
@@ -305,6 +305,40 @@ describe('the frame\'s words on Home at 320dp × 1.3', () => {
         expect(body).toMatch(/<MarketRow key=\{p\.id\} p=\{p\}[^\n]*home-search-row-/);
         expect(body).toMatch(/<HomeLink id="search:more"/);
         expect(num(s.link.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+    });
+});
+
+describe('sun and moon at 320dp × 1.3 (CARD-FRAME §4, slice F5)', () => {
+    const e = editHomeStyles as unknown as Record<string, Record<string, unknown>>;
+    const body = read('components/home/HomeCardBodies.tsx');
+    const sky = body.slice(body.indexOf('export function SkyBody'), body.indexOf('export function SearchBody'));
+
+    it('its line wraps at word breaks and is never cut: every word of every kind of line fits the card, and the line is unbounded', () => {
+        // The widest lines it can say: each phase at 100%, two-digit hours, a day with one of the two, polar days and nights.
+        const lines = Object.values(MOON_PHASE_NAMES).flatMap(name => [
+            `\u{1F316} ${name}, 100% · Sunrise 12:21 · Sunset 23:59`,
+            `\u{1F316} ${name}, 100% · Sunrise 1:32 · No sunset today`,
+            `\u{1F316} ${name}, 100% · No sunrise today · Sunset 12:42`,
+            `\u{1F316} ${name}, 100% · Sun down all day`,
+        ]);
+        const size = num(s.rowLine.fontSize);
+        for (const line of lines) expect(longestWord(line, size), line).toBeLessThan(CARD_INNER);
+        // The whole line is wider than a card at the floor, so it must be allowed to wrap: no numberOfLines on it.
+        expect(textWidth(lines[0], size)).toBeGreaterThan(CARD_INNER);
+        expect(sky).toMatch(/<Text style=\{\[s\.rowLine, s\.rowStrong\]\}>\{sky\.text\}<\/Text>/);
+        expect(sky).not.toMatch(/numberOfLines/);
+        // Nothing on it to tap, so nothing for "+ ADD POST" to cover; its words are one label for a screen reader.
+        expect(sky).not.toMatch(/Pressable|HomeLink|HomeButton|onPress/);
+        expect(sky).toMatch(/accessibilityLabel=\{sky\.label\}/);
+        expect(skyToday({ lat: -28.55, lng: 153.5 }, Date.parse('2026-12-21T02:00Z')).label).not.toMatch(/\p{Extended_Pictographic}/u);
+    });
+
+    it("Edit home's no-place line and the sheet's place chips fit, each chip a 48dp target whole on a row", () => {
+        const room = SCREEN - 2 * num(e.list.paddingHorizontal) - 3 * num(e.arrow.width) - 3 * num(e.row.gap);
+        expect(longestWord(SKY_NO_PLACE_LINE, num(e.sub.fontSize)), SKY_NO_PLACE_LINE).toBeLessThan(room);
+        const pad = 2 * num(s.chip.paddingHorizontal) + 2 * num(s.chip.borderWidth);
+        for (const c of SKY_PLACE_CHIPS) expect(textWidth(c.label, num(s.chipText.fontSize)) + pad, c.label).toBeLessThanOrEqual(CARD_INNER);
+        expect(num(s.chip.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
     });
 });
 

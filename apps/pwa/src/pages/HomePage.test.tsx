@@ -27,9 +27,9 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { defaultCards, localDay, tipsFor } from '@beanpool/core';
+import { defaultCards, localDay, skyToday, tipsFor } from '@beanpool/core';
 import { removedLine } from '../lib/home-layout';
-import { NOTICES_SEEN_EVENT } from '../lib/home-cards';
+import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
 import { clearInAnotherTab, signOutInAnotherTab, signOutOnChannelOnly } from '../lib/another-tab';
@@ -1802,5 +1802,108 @@ describe('Home\'s dialogs: only the one in front has the keys, and focus never d
         const picker = screen.getByTestId('home-add-dialog');
         expect(picker.contains(document.activeElement)).toBe(true);
         expect(focused()).toBe('home-add-search');
+    });
+});
+
+describe('sun and moon: worked out in the browser, from the place the answer holds (CARD-FRAME §4, §5.2 item 22)', () => {
+    const MULLUM = { lat: -28.55, lng: 153.5 };
+    const REYKJAVIK = { lat: 64.15, lng: -21.94 };
+    /** The sun's half of the line, which can't tick over between the page's moment and the test's (the moon's percent could). */
+    const sunPart = (text: string) => text.slice(text.indexOf(' · '));
+    const skyLayout = (settings?: Record<string, unknown>, withSky = true) => ({
+        v: 2 as const, dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z',
+        cards: [...(withSky ? [{ id: 'sky', type: 'sky', ...(settings ? { settings } : {}) }] : []), { id: 'market', type: 'market' }, { id: 'events', type: 'events' }],
+    });
+    const placed = (opts: { community?: typeof MULLUM; area?: typeof MULLUM; settings?: Record<string, unknown>; withSky?: boolean }) => answer(
+        { me: { ...answer().me!, area: opts.area ?? null }, layout: skyLayout(opts.settings, opts.withSky ?? true) as never },
+        { community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23, ...(opts.community ? { place: opts.community } : {}) } },
+    );
+    const visible = () => screen.getByTestId('home-sky-line').querySelector('[aria-hidden="true"]')!.textContent!;
+    const said = () => screen.getByTestId('home-sky-line').querySelector('.sr-only')!.textContent!;
+
+    it("draws the community's place on this browser's clock; a screen reader hears it in words, never the picture", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(placed({ community: MULLUM, area: REYKJAVIK })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-sky');
+        expect(cardIds()[0]).toBe('sky');
+        expect(screen.getByTestId('home-card-sky')).toHaveTextContent('Sun and moon');
+        const there = skyToday(MULLUM, Date.now());
+        expect(visible()).toMatch(/^\S+ (New moon|Waxing crescent|First quarter|Waxing gibbous|Full moon|Waning gibbous|Last quarter|Waning crescent), \d{1,3}% · /);
+        expect(sunPart(visible())).toBe(sunPart(there.text));
+        expect(sunPart(visible())).not.toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
+        expect(said()).toMatch(/^(Moon [a-z ]+|New moon|Full moon), \d{1,3} percent lit\. /);
+        expect(said()).not.toMatch(/[\u{1F311}-\u{1F318}]/u);
+        expect(said().slice(said().indexOf('lit. '))).toBe(there.label.slice(there.label.indexOf('lit. ')));
+        // Nothing on it to open: its only button is its "…". At 320 px the line wraps at word breaks, never cut.
+        expect(within(screen.getByTestId('home-card-sky')).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual(['Card options for Sun and moon']);
+        expect(screen.getByTestId('home-sky-line')).toHaveClass('break-words');
+        expect(screen.getByTestId('home-sky-line').className).not.toMatch(/truncate|line-clamp|whitespace-nowrap|overflow-hidden/);
+    });
+
+    it("with no community place, the member's area; and 'Your area' puts the member's first", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(placed({ area: REYKJAVIK })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-sky');
+        expect(sunPart(visible())).toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
+        cleanup();
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        resetHomeCacheForTest();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(placed({ community: MULLUM, area: REYKJAVIK, settings: { place: 'me' } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-sky');
+        expect(sunPart(visible())).toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
+    });
+
+    it('with no place at all, it is not drawn, and Edit home says why', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(placed({})));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        expect(screen.queryByTestId('home-card-sky')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        expect(within(screen.getByTestId('home-edit-row-sky')).getByText(SKY_NO_PLACE_LINE)).toBeInTheDocument();
+    });
+
+    it('makes no request of its own: a landing with it asks exactly what a landing without it asks', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(placed({ community: MULLUM, withSky: false })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        const without = { reads: vi.mocked(api.getHome).mock.calls.map(c => c[0]), saves: vi.mocked(api.saveHomePreferences).mock.calls.length };
+        cleanup();
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        resetHomeCacheForTest();
+        vi.mocked(api.getHome).mockClear();
+        vi.mocked(api.saveHomePreferences).mockClear();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(placed({ community: MULLUM })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-sky');
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(vi.mocked(api.getHome).mock.calls.map(c => c[0])).toEqual(without.reads);
+        expect(vi.mocked(api.saveHomePreferences).mock.calls.length).toBe(without.saves);
+    });
+
+    it('Add a card: Sun and moon under Around you; its dialog asks whose place; Add to Home saves it and reads nothing', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(placed({ community: MULLUM, area: REYKJAVIK, withSky: false })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        fireEvent.click(screen.getByTestId('home-add-open'));
+        const around = screen.getByRole('region', { name: 'Around you' });
+        expect(within(around).getByTestId('home-add-row-sky')).toHaveTextContent('Sunrise, sunset and the moon tonight.');
+        fireEvent.click(screen.getByRole('button', { name: 'Add Sun and moon to Home' }));
+        const dialog = await screen.findByTestId('home-settings-dialog');
+        const place = within(dialog).getByTestId('home-settings-place');
+        expect(within(place).getAllByRole('button').map(b => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Your community', 'true'], ['Your area', 'false']]);
+        expect(within(dialog).queryByTestId('home-settings-q')).toBeNull();
+        fireEvent.click(within(place).getByRole('button', { name: 'Your area' }));
+        const reads = vi.mocked(api.getHome).mock.calls.length;
+        fireEvent.click(within(dialog).getByTestId('home-settings-submit'));
+        expect(await screen.findByTestId('home-card-sky')).toBeInTheDocument();
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(cardIds()[0]).toBe('sky');
+        expect(sunPart(visible())).toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
+        expect(savedLayouts().at(-1)!.cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
+        expect(vi.mocked(api.getHome).mock.calls.length).toBe(reads);
+        expect(screen.getByTestId('home-live')).toHaveTextContent('Sun and moon added to Home');
     });
 });

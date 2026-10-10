@@ -26,13 +26,13 @@ import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
-    MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, StepsBody, TipsBody,
+    MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
     FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
     effectiveInterests, fewerCardsNews, firstSteps, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
-    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, starredFirst,
+    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, skyOf, starredFirst,
     type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
@@ -584,7 +584,8 @@ export default function HomeScreen() {
         if (!added.ok) return;
         setHint(false);
         if (type === 'tips') onTipsOn();
-        changeLayout(added.layout, { reread: true });
+        // Read once the save is answered (§2.4); sun and moon is worked out here and needs nothing from the node.
+        changeLayout(added.layout, { reread: type !== 'sky' });
         scrollRef.current?.scrollTo({ y: 0, animated: true });
         AccessibilityInfo.announceForAccessibility(addedLine(cardLabelName({ type, settings }, ans?.profile)));
     }, [changeLayout, onTipsOn]);
@@ -607,8 +608,8 @@ export default function HomeScreen() {
         if (!what) return;
         if (what.mode === 'add') { addNow(what.type, next); return; }
         setSettingsFor(null);
-        // Changed in place: the card keeps where it is.
-        changeLayout(changeCardSettings(layoutRef.current, what.id, next, Date.now()), { reread: true });
+        // Changed in place: the card keeps where it is. Sun and moon's place is worked out here: no read.
+        changeLayout(changeCardSettings(layoutRef.current, what.id, next, Date.now()), { reread: what.type !== 'sky' });
     }, [settingsFor, addNow, changeLayout]);
 
     const interestsRef = useRef(interests);
@@ -671,7 +672,7 @@ export default function HomeScreen() {
     // Tips: the node's list, from the answer in hand; the card only once the record is read, and never advanced here.
     const tipsList = answer ? tipsFor(answer, role) : [];
     const tipsView = tips && answer?.me ? tipNow(tips, tipsList, localDay()).view : null;
-    const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now, tipsUp: !!tipsView }) : [];
+    const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now, tipsUp: !!tipsView, place }) : [];
     // Find your community's pin (the global node, a member's first 30 days): no "…", no move, at the top.
     const pins = pinnedCards(answer, now);
     const interestsUp = drawn.some(c => c.type === 'interests');
@@ -775,6 +776,11 @@ export default function HomeScreen() {
                     onMore={q => router.navigate({ pathname: '/(tabs)/market', params: { q } })}
                 />,
             );
+            case 'sky': {
+                // Worked out on the phone from what it already has: no request of its own (CARD-FRAME §2.4, way 3).
+                const sky = skyOf(answer, inst, place, now);
+                return sky ? frame(<SkyBody sky={sky} colors={colors} />) : null;
+            }
             case 'community': return frame(
                 <CommunityBody
                     card={c.community}

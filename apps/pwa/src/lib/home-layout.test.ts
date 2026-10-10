@@ -307,3 +307,16 @@ describe("a saved search's words on its card and in Edit home (CARD-FRAME §4, �
         expect(removedLine(cardLabelName({ type: 'search', settings: { q: 'eggs', kind: 'need' } }))).toBe('"eggs" (Needs) removed. Add a card brings it back.');
     });
 });
+
+describe('sun and moon in the picker and the list (CARD-FRAME §4, slice F5)', () => {
+    it('is offered under Around you on a local community and the worldwide one, with settings, one of a kind', () => {
+        for (const node of [LOCAL, GLOBAL]) {
+            const around = pickerGroups(node, null, null).groups.find(g => g.id === 'around')!;
+            expect(around.rows.find(r => r.type === 'sky'), node.profile).toMatchObject({ name: 'Sun and moon', line: 'Sunrise, sunset and the moon tonight.', state: 'add', hasSettings: true });
+        }
+        const added = addCard(null, 'sky', NOW, { settings: { place: 'me' } });
+        expect(added.ok && added.layout.cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
+        expect(added.ok && pickerGroups(LOCAL, added.layout, null).groups.flatMap(g => g.rows).find(r => r.type === 'sky')!.state).toBe('on-home');
+        expect(added.ok && cardsToAsk(added.layout, [], LOCAL)).not.toContain('sky');
+    });
+});

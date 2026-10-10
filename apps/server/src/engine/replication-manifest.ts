@@ -381,8 +381,10 @@ export const TABLES: Record<string, TableEntry> = {
     deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount status created_at paid_at updated_at'),
     // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
     // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
-    decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at'),
+    decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id'),
     decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
+    // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
+    decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at'),
     // A role held aside by a suspension or by a removal in its grace period (decisions-engine.ts). A row whose Decision
     // closes is deleted, with a tombstone.
     suspended_node_roles: plain('decision_id member_pubkey role granted_at granted_by session_epoch updated_at', { except: {

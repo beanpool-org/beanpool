@@ -214,8 +214,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // (y) decisions & votes - update subject for member proposals and pool hardship grants
     move('decisions', 'author_pubkey');
     move('decisions', 'admin_halted_by');
-    move('decisions', 'subject', "touches = 'member' OR touches = 'pool'");
+    move('decisions', 'subject', "touches = 'member' OR touches = 'pool' OR touches = 'scope'");
     move('decision_votes', 'voter_pubkey');
+    move('decision_electors', 'member_pubkey');
 
     // (z) enterprise_pledges
     move('enterprise_pledges', 'keeper');

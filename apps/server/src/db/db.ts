@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
+import { addDecisionScope } from './decision-scope-migration.js';
 import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
 import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
@@ -1786,9 +1787,13 @@ export function initSchema() {
     } catch (err) {
         console.error('[DB] ⚠️ Could not remove retired voting data:', err);
     }
-    // One open Decision per member author; the node's own "Keep this suspension?" votes (author SYSTEM) are exempt.
-    try { db.exec(`DROP INDEX IF EXISTS idx_decisions_author_open;`); } catch { }
-    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_member_author_open ON decisions(author_pubkey) WHERE status = 'open' AND author_pubkey != 'SYSTEM';`); } catch { }
+    // A scope on a Decision (community or one enterprise), and one open Decision per member author per scope; the node's
+    // own "Keep this suspension?" votes (author SYSTEM) are exempt.
+    try {
+        if (addDecisionScope(db, schemaSql) === 'rebuilt') console.log('[DB] ✅ Migrated decisions to carry a scope');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to give decisions a scope:', err?.message || err);
+    }
     try {
         db.exec(`
             DROP TRIGGER IF EXISTS posts_cleanup_on_group_delete;

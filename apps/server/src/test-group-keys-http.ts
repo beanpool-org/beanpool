@@ -46,8 +46,6 @@ import {
     type GroupEpochReason, type GroupEpochRecord, type GroupServedWrap,
 } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { utf8ToBytes } from '@noble/hashes/utils.js';
 // Loaded at run time, so on a server without them (origin/main, the fail-first run) the suite reports a count, not a crash.
 const groupThread: any = await import('./engine/group-thread.js');
 const groupKeys: any = await import('./engine/group-keys.js').catch(() => null);
@@ -115,6 +113,7 @@ const epochRows = (g: string) => count('SELECT COUNT(*) AS n FROM group_key_epoc
 const wrapRows = (g: string) => count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE group_id = ?', g);
 const isActive = (g: string, pk: string) => !!db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(g, pk);
 const b64 = (u: Uint8Array) => Buffer.from(u).toString('base64');
+const sha256Utf8 = (s: string): Uint8Array => crypto.createHash('sha256').update(s, 'utf8').digest();
 
 /** An epoch made on `maker`'s side, as an app makes one. */
 function epochBy(maker: Id, groupId: string, epoch: number, reason: GroupEpochReason, recipients: Id[], subject: Id | null = null) {
@@ -125,7 +124,7 @@ function epochBy(maker: Id, groupId: string, epoch: number, reason: GroupEpochRe
 }
 /** Re-sign a changed record as `signer`: what a modified app could send. */
 function resign(r: Omit<GroupEpochRecord, 'sig'>, signer: Id): GroupEpochRecord {
-    return { ...r, sig: b64(ed25519.sign(sha256(utf8ToBytes(groupEpochCanonical(r))), Buffer.from(signer.seedHex, 'hex'))) };
+    return { ...r, sig: b64(ed25519.sign(sha256Utf8(groupEpochCanonical(r)), Buffer.from(signer.seedHex, 'hex'))) };
 }
 
 /** A member's side: fetch …/keys, verify the record and open my wrap for `epoch` against the roster the node serves. */
@@ -172,7 +171,7 @@ async function main(): Promise<void> {
     const bad: [string, unknown, number, RegExp | string][] = [];
     const { wraps: startWraps, ...startHead } = start.record;
     bad.push(['a wrong membersDigest (re-signed)', resign({ ...startHead, membersDigest: groupMembersDigest([ana.pk, eve.pk]), wraps: startWraps }, ana), 400, /recipients are not the ones its digest names/]);
-    bad.push(['a wrong wrapsDigest (re-signed)', resign({ ...startHead, wrapsDigest: b64(sha256(utf8ToBytes('x'))), wraps: startWraps }, ana), 400, /wraps are not the ones its digest names/]);
+    bad.push(['a wrong wrapsDigest (re-signed)', resign({ ...startHead, wrapsDigest: b64(sha256Utf8('x')), wraps: startWraps }, ana), 400, /wraps are not the ones its digest names/]);
     bad.push(['a bad signature', { ...start.record, sig: b64(new Uint8Array(64).fill(1)) }, 400, /signature/]);
     const toEve = epochBy(ana, G, 1, 'start', [ana, eve]);
     bad.push(['a recipient set that is not the active set (Eve wrapped in)', toEve.record, 409, 'epoch_conflict']);
@@ -337,7 +336,7 @@ async function main(): Promise<void> {
     // A forged epoch record: the operator writes epoch 5 "by Ana", committing to its own key, with any signature it can make.
     const operatorKey = crypto.randomBytes(32);
     const forgedRec = { epoch: 5, created_by: ana.pk, reason: 'rotate', created_at: new Date().toISOString(), key_commit: groupKeyCommit(new Uint8Array(operatorKey)),
-        members_digest: groupMembersDigest(roster), wraps_digest: b64(sha256(utf8ToBytes('w'))), sig: b64(ed25519.sign(sha256(utf8ToBytes('x')), Buffer.from(outsider.seedHex, 'hex'))) };
+        members_digest: groupMembersDigest(roster), wraps_digest: b64(sha256Utf8('w')), sig: b64(ed25519.sign(sha256Utf8('x'), Buffer.from(outsider.seedHex, 'hex'))) };
     const opWrap = wrapGroupKey(new Uint8Array(operatorKey), { groupId: G, epoch: 5, recipientPubHex: ben.pk, wrapperPubHex: ana.pk });
     const now = new Date().toISOString();
     db.prepare(`INSERT INTO group_key_epochs (group_id, epoch, created_by, reason, subject_pubkey, created_at, key_commit, members_digest, wraps_digest, sig, stored_at, stale_since, updated_at)

@@ -379,7 +379,7 @@ describe('lines', () => {
         expect(() => seal('x', { messageId: MSG.toUpperCase() })).toThrow(/UUID v4/);
         expect(() => seal('x', { messageId: 'not-a-uuid' })).toThrow(/UUID v4/);
         expect(() => seal('x', { groupKey: new Uint8Array(16) })).toThrow();
-        expect(() => seal('x', { part: 'reaction' as any })).toThrow();
+        expect(() => seal('x', { part: 'reaction' as unknown as 'body' })).toThrow();
     });
 });
 

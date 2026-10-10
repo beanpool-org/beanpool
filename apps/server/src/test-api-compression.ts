@@ -176,12 +176,19 @@ async function main() {
     assert(varies(dirZipped), 'the snapshot says Vary: Accept-Encoding');
 
     console.log('\n── 4. a heavy read built per reader keeps its bytes and the cap its accounting ──');
-    const web = await ask('/api/community/members', alice, { 'Accept-Encoding': 'gzip' });
+    // Its raw size, from a read without gzip. Then the cap forgets every size, so what it knows after the gzip reader's
+    // read is from that read alone: had that one gone out gzipped, the cap would know the gzip size (the #1764 review,
+    // F5: compared with the bytes received, this passed with the heavy-read guard removed).
+    const raw = await ask('/api/community/members', alice);
     await sleep(100); // the cap learns the size on 'finish'
-    assert(web.status === 200 && web.bytes.length > 1024, `the web app's directory is 200, over the floor (${web.status}, ${web.bytes.length} bytes)`);
-    assert(encoding(web) === undefined, `it is sent plain under the heavy-read cap (Content-Encoding: ${encoding(web)})`);
+    heavy.setHeavyReadsForTests(undefined);
+    assert(heavy.heavyReadWeight('community-members') === undefined, 'the cap knows no size before the gzip reader\'s read');
+    const web = await ask('/api/community/members', alice, { 'Accept-Encoding': 'gzip' });
+    await sleep(100);
+    assert(web.status === 200 && raw.status === 200 && web.bytes.length > 1024, `the web app's directory is 200, over the floor (${web.status}, ${raw.status}; ${web.bytes.length} bytes)`);
+    assert(encoding(web) === undefined && web.bytes.length === raw.bytes.length, `it is sent plain under the heavy-read cap (Content-Encoding: ${encoding(web)}; ${web.bytes.length} = ${raw.bytes.length} bytes)`);
     const learned = heavy.heavyReadWeight('community-members');
-    assert(learned === web.bytes.length, `the cap learned its raw size, as before (${learned} = ${web.bytes.length})`);
+    assert(learned === raw.bytes.length, `the cap learned its raw size from the gzip reader's read, as before (${learned} = ${raw.bytes.length}, read without gzip)`);
 
     console.log('\n── 5. a photo goes out as stored ──');
     const photo = await ask(`/api/avatar/${alice.pubKeyHex}`, null, { 'Accept-Encoding': 'gzip' });

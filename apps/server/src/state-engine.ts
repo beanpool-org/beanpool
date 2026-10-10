@@ -375,6 +375,8 @@ import {
 import {
     ensureGroupThread,
     backfillGroupThreads,
+    wipeReadableGroupLines,
+    type GroupLineIn,
     syncGroupThreadMembership,
     postGroupSystemLine,
     callsignOf,
@@ -385,6 +387,7 @@ import {
     type GroupThreadView,
 } from './engine/group-thread.js';
 export { GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType, canReadGroupThread } from './engine/group-thread.js';
+import { withMembershipEpoch, markGroupEpochsStaleFor } from './engine/group-keys.js';
 import {
     proposeGroupConvenor as proposeGroupConvenorEngine,
     voteGroupConvenor as voteGroupConvenorEngine,
@@ -885,6 +888,11 @@ function runMainServerMigrations(): void {
         const made = backfillGroupThreads();
         if (made > 0) console.log(`[Groups] Gave ${made} existing group(s) their chat.`);
     } catch (e) { console.warn('[Groups] Could not backfill group chats:', e); }
+    // Group chats step 2: the node keeps only locked lines. Every readable one goes, with a line in each chat saying so.
+    try {
+        const wiped = wipeReadableGroupLines(getMessagingCb());
+        if (wiped > 0) console.log(`[Groups] Removed ${wiped} readable group chat line(s): group chats are end-to-end encrypted now.`);
+    } catch (e) { console.warn('[Groups] Could not remove readable group chat lines:', e); }
 }
 
 /**
@@ -6286,8 +6294,8 @@ export function toggleMessageReaction(messageId: string, authorPubkey: string, e
     return toggleMessageReactionEngine(getMessagingCb(), messageId, authorPubkey, emoji);
 }
 
-export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string, beforeStore?: () => void): Message {
-    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce, beforeStore);
+export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string, beforeStore?: () => void, metadata?: unknown): Message {
+    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce, beforeStore, metadata);
 }
 
 export function deleteOwnMessage(messageId: string, authorPubkey: string): Message {
@@ -7808,6 +7816,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
+        // Their groups' chats are locked to a roster they are no longer in: the next line waits for a rotation (§2.3).
+        markGroupEpochsStaleFor(publicKey);
         // Their phones, with a tombstone each, so a standby drops them too (a plain table, design G4).
         deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         // A pruned account can't sign the request that removes a place watch (G5), and must hear nothing from one.
@@ -8005,6 +8015,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         deletePlainRows('chat_mutes', 'member_pubkey = ?', publicKey);
         deletePlainRows('thread_read_cursors', 'member_pubkey = ?', publicKey);
+        // Their groups' chats are locked to a roster they have left: the next line waits for a member to rotate (§2.3).
+        markGroupEpochsStaleFor(publicKey);
         // Channels are tombstoned rather than deleted, and their links are cleared with them: the
         // row has to survive so the removal replicates to the backup, but a member who has just
         // erased their profile should not leave their Instagram handle behind on a mirror.
@@ -9623,9 +9635,15 @@ function afterGroupMembershipChange(groupId: string, targetPubkey: string, wasAc
     } catch (e) { console.warn('[Groups] Could not update the group chat after a membership change:', e); }
 }
 
-export function joinGroup(groupId: string, memberPubkey: string): GroupMember {
+/**
+ * Joining, and accepting an invitation, take the joiner's own epoch in the same transaction (group chat encryption design
+ * §2.3, engine/group-keys.ts withMembershipEpoch): reason 'join' or 'invite', made by the joiner, wrapped to every active
+ * member after the change. Without one (an old app) the join applies and the current epoch goes stale.
+ */
+export function joinGroup(groupId: string, memberPubkey: string, epoch?: unknown): GroupMember {
     const wasActive = isGroupMemberEngine(db, groupId, memberPubkey);
-    const res = joinGroupEngine(db, groupId, memberPubkey);
+    const res = withMembershipEpoch(groupId, memberPubkey, epoch, () => joinGroupEngine(db, groupId, memberPubkey),
+        { allowed: ['join', 'invite'], subject: memberPubkey });
     afterGroupMembershipChange(groupId, memberPubkey, wasActive);
     bumpGroupsVersion();
     const recipients = getGroupActiveMemberRecipients(groupId, [memberPubkey]);
@@ -9653,11 +9671,14 @@ export function setMemberRole(groupId: string, convenorPubkey: string, targetPub
     return res;
 }
 
-export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string): boolean {
+export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string, epoch?: unknown): boolean {
     // Leaving is anyone's own business; removing someone else is a convenor's.
     if (actorPubkey !== targetPubkey) assertGroupActorIsMember(actorPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
-    const res = removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey);
+    // A removal is the rotation (§2.4): the convenor's epoch, wrapped to everyone but the removed member, in the same
+    // transaction. Leaving carries none (the leaver would know the key): the current epoch goes stale instead.
+    const res = withMembershipEpoch(groupId, actorPubkey, epoch, () => removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey),
+        { allowed: ['remove'], subject: targetPubkey });
     if (res) {
         try {
             // Out of the chat at once (and out of its live updates and pushes).
@@ -9708,10 +9729,12 @@ export function updateGroup(groupId: string, convenorPubkey: string, updates: Up
     return res;
 }
 
-export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
+export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, epoch?: unknown): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
-    const res = approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey);
+    // The approving convenor makes the new member's first epoch (§2.3), in the same transaction.
+    const res = withMembershipEpoch(groupId, convenorPubkey, epoch, () => approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey),
+        { allowed: ['approve'], subject: targetPubkey });
     afterGroupMembershipChange(groupId, targetPubkey, wasActive, { approvedBy: convenorPubkey });
     bumpGroupsVersion();
     const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
@@ -9719,10 +9742,13 @@ export function approveGroupMember(groupId: string, convenorPubkey: string, targ
     return res;
 }
 
-export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member'): GroupMember {
+export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member', epoch?: unknown): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
-    const res = inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role);
+    // An invitation lets nobody in, so it takes no epoch; inviting someone who had asked admits them, and then the
+    // convenor's epoch is an approval's.
+    const res = withMembershipEpoch(groupId, convenorPubkey, epoch, () => inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role),
+        { allowed: ['approve'], subject: targetPubkey });
     // Inviting someone who had asked to join admits them at once.
     afterGroupMembershipChange(groupId, targetPubkey, wasActive, { approvedBy: convenorPubkey });
     bumpGroupsVersion();
@@ -9738,8 +9764,8 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
     return getGroupThreadEngine(groupId, viewerPubkey, limit, offset);
 }
 
-export function postGroupThreadMessage(groupId: string, authorPubkey: string, text: string, clientId?: string, replyToId?: string): EventThreadMessage {
-    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, text, clientId, replyToId);
+export function postGroupThreadMessage(groupId: string, authorPubkey: string, line: GroupLineIn, clientId?: string): EventThreadMessage {
+    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, line, clientId);
 }
 
 export function removeGroupThreadMessage(groupId: string, messageId: string, actorPubkey: string): EventThreadMessage {

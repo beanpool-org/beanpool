@@ -13,7 +13,8 @@ import {
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
-import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
+import { GROUP_THREAD_TYPE, groupChatRefusal, groupLineForReader, syncGroupThreadMembership } from '../engine/group-thread.js';
+import { fromEpochOf } from '../engine/group-keys.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
 import { accountsDeletedAmong } from '../engine/message-tombstone.js';
@@ -81,7 +82,7 @@ const MAX_PARTICIPANT_KEY_LENGTH = 128;
 function respondToMessagingError(ctx: any, e: unknown, what: string): void {
     if (e instanceof MessagingError) {
         ctx.status = e.status;
-        ctx.body = e.code ? { error: e.message, code: e.code } : { error: e.message };
+        ctx.body = e.code ? { error: e.message, code: e.code, ...(e.extra ?? {}) } : { error: e.message };
         return;
     }
     console.error(`[Messaging] ${what} failed unexpectedly:`, (e as any)?.message || e);
@@ -300,7 +301,7 @@ router.post('/api/messages/send', async (ctx) => {
 });
 
 router.post('/api/messages/edit', async (ctx) => {
-    const { messageId, ciphertext, nonce } = (ctx as any).requestBody || {};
+    const { messageId, ciphertext, nonce, metadata } = (ctx as any).requestBody || {};
     // The author is the verified request signer (ctx.state.actor) — not a client-supplied
     // field — so nobody can edit someone else's message.
     const actor = ctx.state.actor as string | undefined;
@@ -329,7 +330,7 @@ router.post('/api/messages/edit', async (ctx) => {
         // The same 64 KB as a new line (W-main), or an edit could grow a short line past it. Checked by the engine once
         // this caller may edit this message at all (never a thread's or an event chat's line, only their own, within the
         // 15 minutes), so the limit never answers in place of those refusals.
-        const msg = editMessage(messageId, actor, ciphertext, nonce, () => assertDmLineFits(ciphertext));
+        const msg = editMessage(messageId, actor, ciphertext, nonce, () => assertDmLineFits(ciphertext), metadata);
         ctx.body = { success: true, message: msg };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
@@ -625,7 +626,12 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);
-    const page = (l: number, o: number) => getConversationMessages(conversationId, l, o);
+    // A group's chat leaves out the lines sealed under an epoch from before the reader's membership (group chat encryption
+    // design §3), as GET /api/groups/:id/chat does. Filtered after the page is read, so offsets stay the same rows.
+    const fromEpoch = conv.type === GROUP_THREAD_TYPE ? fromEpochOf(conversationId, viewer) : null;
+    const page = (l: number, o: number) => conv.type === GROUP_THREAD_TYPE
+        ? getConversationMessages(conversationId, l, o).filter((m: any) => groupLineForReader(m.metadata, fromEpoch))
+        : getConversationMessages(conversationId, l, o);
     ctx.body = {
         conversation: conv,
         // A DM's lines with the signed reader's own withheld ones among them (engine/withheld-lines.ts): what they sent,

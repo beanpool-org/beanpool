@@ -4,6 +4,7 @@
 // A leaf module (the database and nothing else), so the standby's import (engine/sync.ts) and the re-key share one list.
 
 import { db, deletePlainRows } from '../db/db.js';
+import { dropGroupWrapsOf } from './group-keys.js';
 
 // ── both ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -151,6 +152,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('groups', 'created_by');
     move('group_members', 'member_pubkey');
     move('group_members', 'invited_by');
+    // A group chat's wraps for the old key can never open again (group chat encryption design §6): they go, on each
+    // server, and the member shows in …/keys/missing under the new key, from their unchanged joined_at.
+    dropGroupWrapsOf(oldKey);
     move('group_convenor_proposals', 'convenor_pubkey');
     move('group_convenor_proposals', 'candidate_pubkey');
     move('group_convenor_proposals', 'proposer_pubkey');

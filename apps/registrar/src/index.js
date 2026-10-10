@@ -1561,7 +1561,11 @@ async function routedOrRepaired(env, name) {
 }
 
 export default {
-    async fetch(request, env, ctx) {
+    async fetch(request, workerEnv, ctx) {
+        // An alert's send runs after the response (src/alerts.js notify): the request's env, with ctx.waitUntil on it.
+        const env = typeof ctx?.waitUntil === 'function'
+            ? Object.assign(Object.create(workerEnv), { waitUntil: (p) => ctx.waitUntil(p) })
+            : workerEnv;
         const url = new URL(request.url);
         const p = url.pathname;
         const method = request.method;

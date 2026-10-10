@@ -223,6 +223,55 @@ test('the hourly cap: 20 messages, the 21st is one "muted" line, then nothing un
     } finally { r.done(); }
 });
 
+test('the cap holds with senders racing, and more than 50 waiting keeps the newest 50, the rest counted', async () => {
+    const r = await room();
+    try {
+        r.toNextHour();
+        const ev = (i) => ({ category: 'names', priority: 3, tag: 'seedling', name: null, title: `Event ${i}`, body: `Event ${i}.` });
+        await Promise.all(Array.from({ length: 30 }, (_, i) => alerts.notify(r.w.env, ev(i + 1))));
+        const lines = r.sent.filter((m) => !m.headers.title.startsWith('Muted'));
+        assert.ok(lines.length <= 20, `${lines.length} messages in the hour`);
+        assert.ok(r.sent.length - lines.length <= 1, 'at most one muted line');
+        const st = (await r.admin('alerts')).body;
+        assert.ok(st.cap.sent <= 21, JSON.stringify(st.cap));
+    } finally { r.done(); }
+
+    const q = await room({});
+    try {
+        for (let i = 1; i <= 55; i++) await alerts.notify(q.w.env, { category: 'names', priority: 3, name: null, title: `Event ${i}`, body: `Event ${i}.` });
+        let st = (await q.admin('alerts')).body.channel;
+        assert.equal(st.waiting, 50);
+        assert.equal(st.dropped, 5);
+        q.w.env.NTFY_URL = TOPIC;
+        await q.admin('alerts/test', { method: 'POST' });
+        assert.equal(q.sent.length, 1, 'everything waiting in one message');
+        assert.equal(q.sent[0].headers.title, 'Event 7 (+49 more)', 'the newest 50: the test pushed out one more');
+        st = (await q.admin('alerts')).body.channel;
+        assert.equal(st.waiting, 0);
+        assert.equal(st.dropped, 6);
+    } finally { q.done(); }
+});
+
+test('with ctx.waitUntil (the real runtime), the claim answers first and the message is sent after', async () => {
+    const r = await room();
+    try {
+        const key = await makeKey();
+        const later = [];
+        const ts = String(Math.floor(Date.now() / 1000));
+        const text = JSON.stringify({ name: 'sydney', mode: 'tunnel', community_name: 'Sydney Commons' });
+        const sig = Buffer.from(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey,
+            new TextEncoder().encode(`beanpool-registrar-request/v1\nPOST\n/api/registrar/claim\n${ts}\n${text}`))).toString('hex');
+        const res = await worker.fetch(new Request('https://beanpool.org/api/registrar/claim', {
+            method: 'POST', body: text, headers: { 'content-type': 'application/json', 'x-bp-pubkey': key.pubHex, 'x-bp-timestamp': ts, 'x-bp-signature': sig },
+        }), r.w.env, { waitUntil: (p) => later.push(p) });
+        assert.equal((await res.json()).status, 'pending');
+        assert.equal(later.length, 1, 'the send was handed to waitUntil');
+        await Promise.all(later);
+        assert.equal(r.sent.length, 1);
+        assert.equal(r.sent[0].headers.title, 'Name request: sydney');
+    } finally { r.done(); }
+});
+
 test('no NTFY_URL: nothing is sent, the events wait, and /admin and the test button say so', async () => {
     const r = await room({});
     try {

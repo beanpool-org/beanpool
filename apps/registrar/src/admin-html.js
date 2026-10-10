@@ -193,6 +193,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             updateAuthUI();
             document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171;">Logged out. Please enter your ADMIN_SECRET key above.</p>';
             document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
+            document.getElementById('alertsContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
         }
 
         logoutBtn.addEventListener('click', performLogout);

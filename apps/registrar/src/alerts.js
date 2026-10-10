@@ -187,10 +187,13 @@ async function enqueue(env, ev, at) {
 }
 
 // Tell the admin of one event (A1–A3, A5, A6). Like logEvent, it never undoes what it reports: a failure is logged,
-// never thrown.
+// never thrown. The event is in the outbox before this returns; the send runs after the response when the request
+// can wait for it (env.waitUntil, index.js), so a slow ntfy never slows a claim.
 export async function notify(env, ev) {
     try {
-        if (await enqueue(env, ev, nowS())) await flush(env);
+        if (!(await enqueue(env, ev, nowS()))) return;
+        if (typeof env.waitUntil === 'function') env.waitUntil(flush(env));
+        else await flush(env);
     } catch (e) {
         console.error('[ALERT]', ev.category, ev.title, String(e?.message || e).slice(0, 200));
     }
@@ -249,16 +252,19 @@ export async function flush(env, { force = false } = {}) {
         const events = (await env.DB.prepare('SELECT * FROM alert_outbox WHERE claim=? ORDER BY id').bind(claim).all()).results || [];
         if (!events.length) return { sent: 0, muted: 0 };
 
+        // The hour's cap, held even by two senders at once: a message is sent only once it has reserved its place in the
+        // hour (one of HOURLY_CAP, or the one place after them for the "muted" line), and a send that fails gives it back.
         const hour = now - (now % 3600);
-        const sentThisHour = ch.hour_start === hour ? ch.hour_sent : 0;
-        const count = `hour_sent = CASE WHEN hour_start=? THEN hour_sent ELSE 0 END + ?, hour_muted = CASE WHEN hour_start=? THEN hour_muted ELSE 0 END + ?, hour_start=?`;
-        if (sentThisHour > HOURLY_CAP) {
+        const reserve = async (limit) => ((await env.DB.prepare(`UPDATE alert_channel
+            SET hour_sent = CASE WHEN hour_start=? THEN hour_sent ELSE 0 END + 1, hour_muted = CASE WHEN hour_start=? THEN hour_muted ELSE 0 END, hour_start=?
+            WHERE channel='ntfy' AND CASE WHEN hour_start=? THEN hour_sent ELSE 0 END < ?`).bind(hour, hour, hour, hour, limit).run())?.meta?.changes ?? 0) > 0;
+        const mutedLine = !(await reserve(HOURLY_CAP));
+        if (mutedLine && !(await reserve(HOURLY_CAP + 1))) {
             // Muted for the rest of the hour: kept for /admin, never sent.
             await env.DB.prepare('UPDATE alert_outbox SET muted=1, claim=NULL WHERE claim=?').bind(claim).run();
-            await env.DB.prepare(`UPDATE alert_channel SET ${count} WHERE channel='ntfy'`).bind(hour, 0, hour, events.length, hour).run();
+            await env.DB.prepare("UPDATE alert_channel SET hour_muted = hour_muted + ? WHERE channel='ntfy' AND hour_start=?").bind(events.length, hour).run();
             return { sent: 0, muted: events.length };
         }
-        const mutedLine = sentThisHour === HOURLY_CAP;
         const m = mutedLine ? {
             title: `Muted: ${events.length} more this hour`, body: `muted: ${events.length} more this hour, see /admin`,
             priority: PRIORITY.default, tag: TAG.warning, click: adminUrl(env, null),
@@ -267,11 +273,12 @@ export async function flush(env, { force = false } = {}) {
         if (r.ok) {
             await env.DB.prepare(`UPDATE alert_outbox SET ${mutedLine ? 'muted=1' : 'sent_at=?'}, claim=NULL WHERE claim=?`)
                 .bind(...(mutedLine ? [claim] : [now, claim])).run();
-            await env.DB.prepare(`UPDATE alert_channel SET last_ok_at=?, last_try_at=?, last_status=?, failed_in_a_row=0, next_try_at=0, ${count} WHERE channel='ntfy'`)
-                .bind(now, now, r.status, hour, 1, hour, mutedLine ? events.length : 0, hour).run();
+            await env.DB.prepare("UPDATE alert_channel SET last_ok_at=?, last_try_at=?, last_status=?, failed_in_a_row=0, next_try_at=0, hour_muted = hour_muted + ? WHERE channel='ntfy'")
+                .bind(now, now, r.status, mutedLine ? events.length : 0).run();
             return { sent: 1, muted: mutedLine ? events.length : 0, status: r.status };
         }
         await env.DB.prepare('UPDATE alert_outbox SET claim=NULL WHERE claim=?').bind(claim).run();
+        await env.DB.prepare("UPDATE alert_channel SET hour_sent = hour_sent - 1 WHERE channel='ntfy' AND hour_start=? AND hour_sent > 0").bind(hour).run();
         await env.DB.prepare("UPDATE alert_channel SET last_try_at=?, last_status=?, failed_in_a_row=failed_in_a_row+1, next_try_at=? WHERE channel='ntfy'")
             .bind(now, r.status, now + ALERT_RETRY_S).run();
         console.error('[ALERT_SEND]', `ntfy: ${r.status}; ${plural(events.length, 'event')} waiting, tried again in ${ALERT_RETRY_S / 60} min`);

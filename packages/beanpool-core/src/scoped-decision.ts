@@ -92,13 +92,15 @@ export function scopedEffectLabel(effect: ScopedEffect, lifecycle: string | null
 }
 
 /**
- * Who the pickers offer from the roll: never the proposer for a pay-out (a keeper can't vote themselves paid) or a
- * new lead; never the lead for a removal (the lead is replaced, not removed); never the lead as the new lead.
+ * Who the pickers offer from the roll, as the node allows (decisions-engine createScopedDecision): never the proposer for
+ * a pay-out (a keeper can't vote themselves paid) or a removal (to leave, they step down instead); never the lead for a
+ * removal (the lead is replaced, not removed); never the lead as the new lead. A keeper may propose themselves as the new
+ * lead, and the keepers vote on it.
  */
 export function rollChoices(effect: ScopedEffect, roll: readonly RollPerson[], me: string): RollPerson[] {
     switch (effect) {
         case 'pay_out': return roll.filter(p => p.pubkey !== me);
-        case 'remove_keeper': return roll.filter(p => p.role !== 'lead');
+        case 'remove_keeper': return roll.filter(p => p.role !== 'lead' && p.pubkey !== me);
         case 'replace_lead': return roll.filter(p => p.role !== 'lead');
     }
 }

@@ -50,10 +50,13 @@ describe("an enterprise's keepers' vote, as the apps show it", () => {
         expect(scopedEffectLabel('remove_keeper', 'ongoing')).toBe('Remove a keeper');
     });
 
-    it('the pickers come from the roll: never yourself as the one paid, never the lead to remove or as the new lead', () => {
+    it('the pickers come from the roll: never yourself as the one paid or removed, never the lead to remove or as the new lead', () => {
         expect(rollChoices('pay_out', roll, 'bob').map(p => p.pubkey)).toEqual(['ann', 'cat']);
-        expect(rollChoices('remove_keeper', roll, 'bob').map(p => p.pubkey)).toEqual(['bob', 'cat']);
+        // The node refuses a vote to remove yourself ("To leave, step down instead."), so the picker never offers it.
+        expect(rollChoices('remove_keeper', roll, 'bob').map(p => p.pubkey)).toEqual(['cat']);
         expect(rollChoices('replace_lead', roll, 'ann').map(p => p.pubkey)).toEqual(['bob', 'cat']);
+        // A keeper may propose themselves as the new lead: the node allows it, and the keepers vote on it.
+        expect(rollChoices('replace_lead', roll, 'bob').map(p => p.pubkey)).toEqual(['bob', 'cat']);
     });
 
     it('what it does, in one line', () => {

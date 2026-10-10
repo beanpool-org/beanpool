@@ -738,3 +738,29 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Category:** CLAIM FALSE (rule 11; the same modal as #1684 the day before)
 - **Why not to re-file:** `py-3` plus the 24 px line height already renders each button at about 48 px. Measure the rendered height
   before filing a touch-target fix.
+
+### 2026-10-10 — Bolt: O(1) Map lookup in getAllProjects (#1723) — CLOSED, NO BENEFIT
+- **Category:** NO BENEFIT (rule 11)
+- **Why not to re-file:** a node holds a handful of enterprises and the helper is one list call; the Map changes nothing a member or
+  the node can observe. Measure a real cost at realistic sizes before filing a lookup "optimisation".
+
+### 2026-10-10 — Expo: export ErrorBoundary in map.tsx (#1724) — CLOSED, PROTECTED FILE
+- **Category:** DELIBERATE DECISION (rule 7: the map, GlobalHeader, the logo and UnifiedMapPin are off-limits)
+- **Why not to re-file:** map.tsx is protected, and the root ErrorBoundary from #408 already covers the screen.
+
+### 2026-10-10 — Flow: loading indicator in StrandedEscrowsPanel (#1725) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** DELIBERATE DECISION
+- **Why not to re-file:** the panel renders nothing unless stranded escrows exist; a spinner would only flash and vanish on most nodes.
+
+### 2026-10-10 — Forge: swallow bad commons_projects JSON (#1728) — CLOSED, WOULD LOSE DATA
+- **Category:** DELIBERATE DECISION
+- **Why not to re-file:** returning `[]` for a corrupt `commons_projects` value lets the next write persist the empty list and wipe every
+  stored project. Failing loudly is the safer behaviour. Do not file a silent fallback for stored money/commons data.
+
+### 2026-10-10 — Watchman: raise the test-door-work timing bound (#1730) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (no reproduction on main)
+- **Why not to re-file:** #1538 already set the bound for CI; loosening it fivefold would hide a real regression. File only with a failing
+  CI log from main.
+
+Note (#1729, Scout): closed as a bundle (an unrelated tls.ts rewrite rode with the test). The missing test of `engine/probation.ts` is
+still WANTED: re-file `test-probation.ts` and its `scripts/server-suites.mjs` line on their own.

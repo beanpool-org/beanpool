@@ -70,6 +70,31 @@ If neither answers, the server is down or unreachable. See Troubleshooting.
 
 The server keeps its most recent log lines, which Settings shows under Logs. Some messages only appear in Docker's own log: docker compose logs --tail 200 beanpool-node
 
+## Alerts
+
+The server watches itself every minute and tells its owners when it needs them:
+
+- the disk is 80, 90 or 95% full (for three minutes running; it clears three points below);
+- backups going off the server fail twice in a row, or none has arrived for two intervals;
+- no backup leaves the server and backups are not locked to a recovery code (a weekly nudge to the owners only);
+- scheduled snapshots fail twice in a row;
+- the server started three times in 15 minutes (told at the third start), or stopped without shutting down;
+- the host watchdog restarted it after a freeze, or the watchdog has gone quiet;
+- the standby needs attention;
+- the Let's Encrypt certificate could not be renewed and browsers see a self-signed one.
+
+Each alert is told once when it starts, again every 24 hours while it lasts, and once when it is resolved.
+
+**Owners always hear.** Each owner gets a push on their phone (at most one a day for each alert) and a banner in Settings until it is over. Admins and moderators are not told, and only an owner can open **Appliance & Data**, then **Alerts**.
+
+**Your own channel, if you want one.** In the Alerts card, add an ntfy topic (for example https://ntfy.sh/ followed by a long name nobody can guess: the topic's name is its password) or any address that takes a JSON POST, with an optional token. Or put ALERTS_WEBHOOK_URL, ALERTS_WEBHOOK_FORMAT (ntfy or json) and ALERTS_WEBHOOK_TOKEN in .env and run docker compose up -d. **Send a test** checks it arrives. The channel is yours: nothing goes through BeanPool, and with no channel set nothing leaves the server.
+
+The address and token are kept in data/alerts.json (readable by the server's own user only) or in .env. They are never in the database, so never in a snapshot, a backup or a standby's copy, never in a log, and never shown again: the card shows the host only. A standby that takes over has no channel until an owner sets one.
+
+A channel that does not answer is tried again every 5 minutes, with everything it missed in one message. At most 20 messages an hour go to it; high and urgent ones still go. A redirect is treated as a failure and never followed.
+
+**What an alert says:** your community's name, what is wrong in plain words, since when, and counts. Never a member's name, key or address, nothing anyone wrote, and never a backup store's key or the channel's address.
+
 ## The ledger audit
 
 Beans only ever move from one account to another, so the total across every account, the Commons included, never changes. The server checks that when it starts and once a day. To check now, open **Diagnostics & Logs** and press **Run Audit Now** under **Ledger Conservation Audit**. The drift should be 0, and so should the stranded escrows.

@@ -249,6 +249,19 @@ async function main(): Promise<void> {
     assert(after6.body?.decision?.tally?.roll === 3 && after6.body.decision.tally.voted === 1,
         `a keeper removed mid-vote stays on the roll and their vote stands (got ${JSON.stringify(after6.body?.decision?.tally)})`);
 
+    // A keeper who left reads the votes they were on the roll for (they took part), and nothing opened after (§2.5).
+    const d5late = (await propose(e5, m3, { title: 'Opened after Mia left', effect: 'pay_out', params: { to: ali.pubKeyHex, amount: 3 } })).body?.decision?.id as string;
+    const d6late = (await propose(e6, n3, { title: 'Opened after Nia left', effect: 'pay_out', params: { to: ali.pubKeyHex, amount: 3 } })).body?.decision?.id as string;
+    assert(!!d5late && !!d6late, 'a new vote opens in each after the keeper left');
+    for (const [ent, was, late, who, label] of [[e5, d5, d5late, m2, 'a keeper who stepped down'], [e6, d6, d6late, n2, 'a keeper removed']] as const) {
+        assert((await detail(ent, was, who)).status === 200, `${label} still reads the vote they were on the roll for`);
+        assert((await detail(ent, late, who)).status === 404, `${label} gets 404 on a vote opened after they left`);
+        const theirs = await list(ent, who);
+        assert(theirs.status === 200 && theirs.body.decisions.map((d: any) => d.id).join() === was,
+            `${label} is listed only the vote they were on (got ${theirs.status} ${JSON.stringify(theirs.body?.decisions?.map((d: any) => d.title))})`);
+        assert((await vote(ent, late, who, true)).status === 404, `${label} gets 404 voting on the newer vote`);
+    }
+
     // ── 6. Wind-up voids; a pause still pays; a standby carries out nothing ───────────────────────────
     const [w1, w2] = [makeMember('Wes'), makeMember('Wyn')];
     const e7 = makeEnterprise('Workshop', [w1, w2], 40);

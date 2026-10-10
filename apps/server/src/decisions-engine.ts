@@ -2301,28 +2301,36 @@ function liveRoll(decisionId: string): Set<string> {
     return new Set(rows.map(r => r.pubkey));
 }
 
-/** Whether `reader` may see an enterprise's votes: a keeper of it now, or on the roll of one of its votes. */
-export function canReadEnterpriseDecisions(enterprisePubkey: string, reader: string | null | undefined): boolean {
-    if (!reader || !enterpriseRow(enterprisePubkey)) return false;
-    if (enterpriseRollNow(enterprisePubkey).some(k => k.pubkey === reader)) return true;
-    return !!db.prepare(`
-        SELECT 1 FROM decision_electors e JOIN decisions d ON d.id = e.decision_id
-        WHERE e.member_pubkey = ? AND d.scope_kind = 'enterprise' AND d.scope_id = ? LIMIT 1
-    `).get(reader, enterprisePubkey);
+/**
+ * Who may see an enterprise's votes (§2.5): its keepers now see every one of them. Anyone else sees only the votes whose
+ * roll they were on, matched by the vote, never by the enterprise: a keeper who stepped down, was unbound or was removed
+ * took part in those, and sees nothing opened after they left.
+ */
+function keepsEnterpriseNow(enterprisePubkey: string, reader: string): boolean {
+    return enterpriseRollNow(enterprisePubkey).some(k => k.pubkey === reader);
 }
 
-/** An enterprise's votes, newest first, as `reader` may see them; a reader who may not gets ScopedNotFoundError. */
+/** An enterprise's votes, newest first, as `reader` may see them; a reader who may see none gets ScopedNotFoundError. */
 export function getScopedDecisions(enterprisePubkey: string, reader: string | null | undefined): Decision[] {
-    if (!canReadEnterpriseDecisions(enterprisePubkey, reader)) throw new ScopedNotFoundError();
-    return (db.prepare("SELECT * FROM decisions WHERE scope_kind = 'enterprise' AND scope_id = ? ORDER BY created_at DESC")
-        .all(enterprisePubkey) as any[]).map(rowToDecision);
+    if (!reader || !enterpriseRow(enterprisePubkey)) throw new ScopedNotFoundError();
+    if (keepsEnterpriseNow(enterprisePubkey, reader)) {
+        return (db.prepare("SELECT * FROM decisions WHERE scope_kind = 'enterprise' AND scope_id = ? ORDER BY created_at DESC")
+            .all(enterprisePubkey) as any[]).map(rowToDecision);
+    }
+    const theirs = db.prepare(`
+        SELECT d.* FROM decisions d JOIN decision_electors e ON e.decision_id = d.id AND e.member_pubkey = ?
+        WHERE d.scope_kind = 'enterprise' AND d.scope_id = ? ORDER BY d.created_at DESC
+    `).all(reader, enterprisePubkey) as any[];
+    if (theirs.length === 0) throw new ScopedNotFoundError();
+    return theirs.map(rowToDecision);
 }
 
 /** One of an enterprise's votes, as `reader` may see it; anything else is ScopedNotFoundError (never a refusal). */
 export function getScopedDecision(enterprisePubkey: string, decisionId: string, reader: string | null | undefined): Decision {
     const d = getDecision(decisionId);
-    if (!d || d.scopeKind !== 'enterprise' || d.scopeId !== enterprisePubkey) throw new ScopedNotFoundError();
-    if (!canReadEnterpriseDecisions(enterprisePubkey, reader)) throw new ScopedNotFoundError();
+    if (!reader || !d || d.scopeKind !== 'enterprise' || d.scopeId !== enterprisePubkey || !enterpriseRow(enterprisePubkey)) throw new ScopedNotFoundError();
+    if (keepsEnterpriseNow(enterprisePubkey, reader)) return d;
+    if (!db.prepare('SELECT 1 FROM decision_electors WHERE decision_id = ? AND member_pubkey = ?').get(d.id, reader)) throw new ScopedNotFoundError();
     return d;
 }
 
@@ -2511,8 +2519,9 @@ function castScopedVote(decision: Decision, voterPubkey: string, support: boolea
     return { success: true, creditsUsed: 0 };
 }
 
+/** Who hears a scoped vote's live changes: its electors, less those who left its roll (they read it, unannounced). */
 function electorsOf(decisionId: string): string[] {
-    return (db.prepare('SELECT member_pubkey FROM decision_electors WHERE decision_id = ?').all(decisionId) as Array<{ member_pubkey: string }>)
+    return (db.prepare("SELECT member_pubkey FROM decision_electors WHERE decision_id = ? AND status != 'left'").all(decisionId) as Array<{ member_pubkey: string }>)
         .map(r => r.member_pubkey);
 }
 

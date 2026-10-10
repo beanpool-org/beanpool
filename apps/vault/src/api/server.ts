@@ -389,6 +389,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     /** The last finished day whose signed report was made, and why the last one wasn't. */
     let lastReportDay: string | null = null;
     let reportFailure: string | null = null;
+    /** The off-box store a raised tidy-up alert is about: one changed or removed since keeps its old copies. */
+    let pruneAlertStore: BackupStore | null = null;
     let alertRun: Promise<void> | null = null;
 
     const limits = {
@@ -1500,12 +1502,15 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         // in a backup (§1.7), are only kept while the old ones go.
         const prune = offsiteStatus.prune;
         const pruneFailing = !!offsite && prune.failuresInARow >= OFFSITE_PRUNE_FAILURES_ALERT;
+        const left = 'the old one is no longer tidied, and its copies past 30 days stay there until deleted by hand.';
         conditions.push({
             key: 'offsite-prune', active: pruneFailing, since: prune.lastOkAt ?? undefined,
             detail: pruneFailing
                 ? `${prune.failuresInARow} tidy-ups of the off-box store in a row failed (${prune.step ?? 'list'}: ${prune.error ?? 'failed'}): copies past 30 days are not being removed there. The copies themselves go up.`
-                : 'the off-box store is tidied again: copies past 30 days are removed.',
+                : pruneAlertStore && pruneAlertStore !== offsite ? (offsite ? `the off-box store was changed: ${left}` : `no off-box store is set now: ${left}`)
+                    : 'the off-box store is tidied again: copies past 30 days are removed.',
         });
+        pruneAlertStore = pruneFailing ? offsite : null;
 
         const midnight = Date.parse(`${dayOf(now)}T00:00:00Z`);
         const yesterday = dayOf(now - DAY_MS);

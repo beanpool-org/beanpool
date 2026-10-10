@@ -211,7 +211,48 @@ describe('when tidying the off-box store keeps failing', () => {
         await v.api.checkAlerts();
         expect(smtp.mails).toHaveLength(2);
         expect(smtp.mails[1].data).toMatch(/^Subject: BeanPool key vault 127\.0\.0\.1: off-box tidy-up failing: resolved$/m);
+        expect(smtp.mails[1].data).toMatch(/RESOLVED \(off-box tidy-up failing, since .*\): the off-box store is tidied again: copies past 30 days are removed\./);
         expect((await reportOf(v)).alerts.active).toEqual([]);
+    });
+
+    /** A day of failing tidy-ups on `s3`, then the custodians set `offsite` in its place: what the clear says. */
+    async function storeReplacedWhileFailing(offsite: (s3: StubS3) => Promise<unknown>): Promise<{ s3: StubS3; told: string[] }> {
+        const s3 = await new StubS3().start();
+        servers.push(s3);
+        const { v, smtp, hook } = await rig({ offsite: s3 });
+        s3.failStep.list = 500;
+        for (let i = 0; i < OFFSITE_PRUNE_FAILURES_ALERT; i++) {
+            await v.api.runBackup();
+            await v.api.checkAlerts();
+            v.clock.advance(HOUR);
+        }
+        expect((await reportOf(v)).alerts.active).toEqual(['offsite-prune']);
+        const settings = { v: 1, offsite: await offsite(s3), alerts: { email: smtp.channel(), webhook: { url: hook.url } } };
+        for (const i of [0, 1]) expect(((await sendSettings(v.baseUrl, v.custodians[i], settings, v.call())) as Reply).status).toBe(200);
+        await v.api.idle();
+        await v.api.checkAlerts();
+        expect((await reportOf(v)).alerts.active).toEqual([]);
+        // Nothing tidied the old store: what it holds past 30 days stays there.
+        expect(s3.objects.size).toBe(OFFSITE_PRUNE_FAILURES_ALERT);
+        return { s3, told: smtp.mails.map(m => m.data) };
+    }
+
+    it('the store removed while it fails: the clear says the old one keeps its old copies, never that it is tidied', async () => {
+        const { told } = await storeReplacedWhileFailing(async () => null);
+        expect(told).toHaveLength(2);
+        expect(told[1]).toMatch(/RESOLVED \(off-box tidy-up failing, since .*\): no off-box store is set now: the old one is no longer tidied, and its copies past 30 days stay there until deleted by hand\./);
+        expect(told[1]).not.toMatch(/tidied again/);
+    });
+
+    it('the store changed while it fails: the same, for the store left behind', async () => {
+        const { told } = await storeReplacedWhileFailing(async () => {
+            const other = await new StubS3().start();
+            servers.push(other);
+            return other.settings();
+        });
+        expect(told).toHaveLength(2);
+        expect(told[1]).toMatch(/RESOLVED \(off-box tidy-up failing, since .*\): the off-box store was changed: the old one is no longer tidied, and its copies past 30 days stay there until deleted by hand\./);
+        expect(told[1]).not.toMatch(/tidied again/);
     });
 });
 

@@ -3,9 +3,11 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { OFFSITE_PRUNE_FAILURES_ALERT } from '../api/server.js';
+import { sendSettings } from '../custodian/lib.js';
 import { VaultWatcher, WATCH_DOWN_MS } from '../custodian/watch.js';
 import { doGenesis, get, startVault, unlockWith, type VaultUnderTest } from './harness.js';
-import { StubWebhook } from './stubs.js';
+import { StubS3, StubWebhook } from './stubs.js';
 
 /**
  * The watcher outside the vault (custodian/watch.ts): it tells its own channel what the vault can't say itself (it is
@@ -110,6 +112,54 @@ describe('the watcher', () => {
         await v.api.checkAlerts();
         expect((await watcher.check()).problems).toEqual([]);
         expect(h.posts.at(-1)?.body).toMatch(/RESOLVED \(backups failing/);
+    });
+
+    /** A vault whose off-box store takes every copy but fails every listing, a day of it: the tidy-up alert raised. */
+    async function pruneFailingADay(): Promise<{ v: VaultUnderTest; s3: StubS3; h: StubWebhook; watcher: VaultWatcher; firstFailed: number }> {
+        const v = await startVault();
+        open.push(v);
+        const g = await doGenesis(v);
+        const s3 = await new StubS3().start();
+        servers.push(s3);
+        for (const i of [0, 1]) await sendSettings(v.baseUrl, v.custodians[i], { v: 1, offsite: s3.settings() }, v.call());
+        const h = await hook();
+        const watcher = new VaultWatcher({ url: v.baseUrl, ticketKey: g.ticketKey, channels: { email: null, webhook: { url: h.url, format: 'json' } }, clock: v.clock.now });
+        s3.failStep.list = 500;
+        const firstFailed = v.clock.now();
+        for (let i = 0; i < OFFSITE_PRUNE_FAILURES_ALERT; i++) {
+            await v.api.runBackup();
+            await v.api.checkAlerts();
+            if (i < OFFSITE_PRUNE_FAILURES_ALERT - 1) v.clock.advance(60 * MIN);
+        }
+        return { v, s3, h, watcher, firstFailed };
+    }
+
+    it('relays a tidy-up of the off-box store that keeps failing, from the first failure, and its clear', async () => {
+        const { v, s3, h, watcher, firstFailed } = await pruneFailingADay();
+        const look = await watcher.check();
+        expect(look.problems).toEqual([{
+            key: 'offsite-prune',
+            detail: 'its signed report says tidying the off-box store is failing (24 in a row, list: HTTP 500 InternalError): copies past 30 days are not being removed there.',
+        }]);
+        expect(events(h)).toEqual([expect.objectContaining({ condition: 'offsite-prune', state: 'raised', since: new Date(firstFailed).toISOString() })]);
+
+        delete s3.failStep.list;
+        v.clock.advance(60 * MIN);
+        await v.api.runBackup();
+        await v.api.checkAlerts();
+        expect((await watcher.check()).problems).toEqual([]);
+        expect(events(h).map(e => `${e.condition} ${e.state}`)).toEqual(['offsite-prune raised', 'offsite-prune cleared']);
+        expect(events(h).at(-1)?.detail).toBe('its signed report no longer says tidying the off-box store fails.');
+    });
+
+    it('a failing store removed: the clear says the old one keeps its old copies', async () => {
+        const { v, h, watcher } = await pruneFailingADay();
+        await watcher.check();
+        for (const i of [0, 1]) await sendSettings(v.baseUrl, v.custodians[i], { v: 1, offsite: null }, v.call());
+        await v.api.checkAlerts();
+        expect((await watcher.check()).problems).toEqual([]);
+        expect(events(h).map(e => `${e.condition} ${e.state}`)).toEqual(['offsite-prune raised', 'offsite-prune cleared']);
+        expect(events(h).at(-1)?.detail).toBe('its signed report says no off-box store is set now: copies past 30 days left in the old one stay there until deleted by hand.');
     });
 
     it('an unlock hours after the API started is not a backup failure: staleness counts from when the vault opened', async () => {

@@ -919,6 +919,20 @@ describe('every line on Home opens a screen this node shows, with what the line 
         expect(market).toMatch(/const pill = marketFilterFromLink\(params\.filter\);\s*if \(pill\) \{\s*selectType\(pill\);/);
     });
 
+    // #1517 on the real screen (320dp, text at 1.3x): global case 1 is a member 3 days in with the post made and no limits.
+    for (const [km, asks] of [[9000, false], [250, true]] as const) {
+        it(`a global member 3 days in with the post made keeps First steps; a community ${km} km away ${asks ? 'gets' : 'never gets'} the ask (#1517)`, async () => {
+            const base = everyCard('global', 1);
+            const near = { ...(base.cards.find!.communities[0] as Record<string, unknown>), distanceKm: km };
+            node.answer = { ...base, cards: { ...base.cards, find: { ...base.cards.find!, communities: [near] } } };
+            mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+            await render();
+            expect(cards()).toContain('steps');
+            expect(document.querySelector('[data-testid="home-card-steps"]')!.textContent).toContain('Post something free or for swap');
+            expect(!!document.querySelector('[data-testid="home-step-ask"]')).toBe(asks);
+        });
+    }
+
     it('a poll and no Decision on a local node: the polls line opens the Market\'s polls, not Decide (which lists Decisions only)', async () => {
         node.answer = { ...localMember(), cards: { ...localMember().cards, decide: { open: 0, soonestClosesAt: null, polls: 1, pollsMore: false } } };
         mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');

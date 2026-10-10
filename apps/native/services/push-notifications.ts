@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import type { Notification, NotificationResponse } from 'expo-notifications';
-import { loadIdentity } from '../utils/identity';
+import { loadIdentity, KEY_ITEM_OPTIONS } from '../utils/identity';
 import { registerAccountForPush, retryDueRegistrations } from '../utils/push-registrations';
 import { checkWhileOpen, followTap, type IncomingNotice } from '../utils/push-notice-check';
 import { postNoticesFromSync, type LocalNotice } from '../utils/sync-notices';
@@ -117,7 +117,7 @@ async function phonePushToken(ask: boolean): Promise<string | null> {
     const token = tokenData.data;
 
     // Store locally
-    await SecureStore.setItemAsync(PUSH_TOKEN_STORE_KEY, token);
+    await SecureStore.setItemAsync(PUSH_TOKEN_STORE_KEY, token, KEY_ITEM_OPTIONS);
 
     try {
         // Set up Android notification channel

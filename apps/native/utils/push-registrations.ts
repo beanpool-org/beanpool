@@ -31,7 +31,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { onAccountOnPhone } from './account-on-phone';
 import { buildSignedHeaders } from './crypto';
-import { loadIdentity, type BeanPoolIdentity } from './identity';
+import { loadIdentity, KEY_ITEM_OPTIONS, type BeanPoolIdentity } from './identity';
 import { communityAddress, pinPushKey, pushKeyOf } from './push-pins';
 import {
     PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, PUSH_STAMP_STORE_KEY, SAVED_NODES_STORE_KEY,
@@ -150,7 +150,7 @@ type StampCopy = Pick<Storage, 'getItem' | 'setItem'>;
  */
 const besideTheKey: StampCopy = {
     getItem: (key) => SecureStore.getItemAsync(key),
-    setItem: (key, value) => SecureStore.setItemAsync(key, value),
+    setItem: (key, value) => SecureStore.setItemAsync(key, value, KEY_ITEM_OPTIONS),
 };
 
 let lastStamp = 0;

@@ -15,7 +15,7 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Ar
 import {
     HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardLabelName, cardName, cardRowName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
-    invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
+    invitesForReader, ASK_WITHIN_KM, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
@@ -929,6 +929,16 @@ describe('the global node\'s Home (H4)', () => {
         expect(globalStepLines(steps(), find({ communities: [{ key: 'x', name: 'X', url: 'http://plain.example.org' }] }), false).map(l => l.id)).toEqual(['post']);
         expect(globalStepLines(steps(), undefined, false).map(l => l.id)).toEqual(['post']);
         expect(globalStepLines(steps({ firstPost: true }), find(), false)[0].done).toBe(true);
+        // The address is checked as Communities near you and the find card check it (community-directory.ts
+        // communityOrigin, #1517): no IP literal, no dotless host, never global's own host, no login in it.
+        const askWith = (url: string) => globalStepLines(steps(), find({ communities: [{ key: 'x', name: 'X', url, distanceKm: 12 }] }), false).map(l => l.id);
+        for (const url of ['https://203.0.113.5', 'https://[2001:db8::1]', 'https://localhost', 'https://intranet:8443', 'https://global.beanpool.org', 'https://GLOBAL.beanpool.org:443/', 'https://user@byron.example.org', 'https://-bad.example.org']) {
+            expect(askWith(url), url).toEqual(['post']);
+        }
+        expect(askWith('https://byron.example.org')).toEqual(['post', 'ask']);
+        expect(askWith('https://byron.example.org:8443/')).toEqual(['post', 'ask']);
+        // One good address among bad ones still asks.
+        expect(globalStepLines(steps(), find({ communities: [{ key: 'a', url: 'https://10.0.0.1' }, { key: 'b', url: 'https://byron.example.org', distanceKm: 30 }] }), false).map(l => l.id)).toEqual(['post', 'ask']);
         // Never a local line on the global node: no Offer, photo, interests or invite.
         const g = firstSteps(member(3, { cards: { steps: steps(), find: find(), community: { name: 'G', members: 9 } } }), { interests: [], knocked: false });
         expect(g.lines.map(l => l.text)).toEqual(['Post something free or for swap', 'Ask a community to let you in']);
@@ -955,6 +965,41 @@ describe('the global node\'s Home (H4)', () => {
         expect(draw(done, EVERY, ctx({ interests: ['food'], now: NOW }))).not.toContain('steps');
         // A local community's First steps never says the limits (unchanged from H2).
         expect(firstSteps(answer({ me: { ...answer().me!, probation: words }, cards: { steps: steps() } }), { interests: [] }).note).toBeNull();
+    });
+
+    it('"Ask a community to let you in" only for one within 250 km, the radius global\'s listings use (#1517)', () => {
+        expect(ASK_WITHIN_KM).toBe(250);
+        const askAt = (distanceKm: unknown) => globalStepLines(steps(), find({ communities: [{ key: 'x', name: 'X', url: 'https://x.example.org', distanceKm }] }), false).map(l => l.id);
+        expect(askAt(12)).toEqual(['post', 'ask']);
+        expect(askAt(0)).toEqual(['post', 'ask']);
+        expect(askAt(250)).toEqual(['post', 'ask']);
+        expect(askAt(250.1)).toEqual(['post']);
+        // A community 9,000 km away is not "within reach".
+        expect(askAt(9000)).toEqual(['post']);
+        // No distance (the node lists none without a point), or one that isn't a number: not within reach.
+        for (const d of [null, undefined, '12', Number.NaN, Infinity, -1]) expect(askAt(d), String(d)).toEqual(['post']);
+        // Both at once, on the same community: a good address within reach. A near one with no address and a far one
+        // with an address never add up to an ask.
+        expect(globalStepLines(steps(), find({ communities: [{ key: 'a', url: null, distanceKm: 5 }, { key: 'b', url: 'https://b.example.org', distanceKm: 9000 }] }), false).map(l => l.id)).toEqual(['post']);
+        expect(globalStepLines(steps(), find({ communities: [{ key: 'a', url: 'https://10.0.0.1', distanceKm: 5 }, { key: 'b', url: 'https://b.example.org', distanceKm: 240 }] }), false).map(l => l.id)).toEqual(['post', 'ask']);
+        // The card's own rule follows: nothing else holds it open, so far away a done member's First steps goes.
+        const far = member(20, { cards: { steps: steps({ firstPost: true, joinedAt: iso(NOW - 20 * DAY) }), find: find({ communities: [{ key: 'x', url: 'https://x.example.org', distanceKm: 9000 }] }), community: { name: 'G', members: 9 } } });
+        expect(firstSteps(far, { interests: ['food'], knocked: false, now: NOW })).toEqual({ lines: [{ id: 'post', text: 'Post something free or for swap', done: true }], note: null, show: false });
+    });
+
+    it('First steps stays for a global member\'s first 14 days, every line done and the limits over, as the web and the node keep it (#1517)', () => {
+        const posted = (days: number) => member(days, { cards: { steps: steps({ firstPost: true, joinedAt: iso(NOW - days * DAY) }), find: find(), community: { name: 'G', members: 9 } } });
+        // Day 3: the post made, no limits left, a knock remembered: the node still sends the card, and the phone keeps it.
+        expect(firstSteps(posted(3), { interests: ['food'], knocked: true, now: NOW })).toEqual({ lines: [{ id: 'post', text: 'Post something free or for swap', done: true }], note: null, show: true });
+        expect(draw(posted(3), EVERY, ctx({ interests: ['food'], knocked: true, now: NOW }))).toContain('steps');
+        expect(firstSteps(posted(13.9), { interests: ['food'], knocked: true, now: NOW }).show).toBe(true);
+        // Day 14 on: the node's own edge (`now - joined < 14 days`), and the card goes once nothing is left to do.
+        expect(firstSteps(posted(14), { interests: ['food'], knocked: true, now: NOW }).show).toBe(false);
+        expect(draw(posted(14), EVERY, ctx({ interests: ['food'], knocked: true, now: NOW }))).not.toContain('steps');
+        // A join date the node didn't send is not "new": the lines decide, as on the node.
+        expect(firstSteps(member(null, { cards: { steps: steps({ firstPost: true, joinedAt: null }) } }), { interests: ['food'], knocked: true, now: NOW }).show).toBe(false);
+        // The phone's clock decides when none is given (cardsToDraw passes its own).
+        expect(firstSteps(member(0, { me: { ...member(0).me!, joinedAt: iso(Date.now() - DAY) }, cards: { steps: steps({ firstPost: true }) } }), { interests: ['food'], knocked: true }).show).toBe(true);
     });
 
     it('Who joined on the global node: a count by area, never a name or a face, whatever an answer holds', () => {

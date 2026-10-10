@@ -16,8 +16,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { recordRequestSigning } from './nodes';
 import { trackInfoRead } from './request-signing-version';
 
-/** The worldwide community's one address. `earth.beanpool.org` redirects here at Cloudflare. */
-export const GLOBAL_NODE_URL = 'https://global.beanpool.org';
+import { GLOBAL_NODE_URL } from './global-node-url';
+
+/** The worldwide community's one address (utils/global-node-url.ts, which imports nothing). */
+export { GLOBAL_NODE_URL };
 
 export type NodeProfileName = 'local' | 'global';
 

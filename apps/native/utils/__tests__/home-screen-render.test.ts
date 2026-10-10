@@ -807,8 +807,9 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
         ],
     },
     // Find your community (H4) right under Needs you, its three actions each opening a screen the global node shows (no
-    // place known here, so "Tell me" opens Communities near you to ask for one); First steps' global words only while the
-    // first post isn't made (case 2; no limits sent here); no money cards and no invite whatever the answer holds, no
+    // place known here, so "Tell me" opens Communities near you to ask for one); First steps' global words for the
+    // member's first 14 days, the first post made or not (both cases are 3 days in; no limits sent here; #1517), with the
+    // ask, as the community listed is within reach; no money cards and no invite whatever the answer holds, no
     // Decisions and no vote in Needs you (Commons is hidden there): the Decide card is polls only, opening the Market's
     // Polls. Who joined is a count there, with nothing to open.
     global: {
@@ -818,6 +819,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-find-near → /find-community',
             'home-find-start → /start-community',
             'home-find-watch → /find-community',
+            'home-step-ask → /find-community',
             'home-tip-read-more → /guide/[slug] slug=posting',
             'home-event-e1 → /post/[id] id=e1',
             'home-events-all → /(tabs)/market filter=events',
@@ -916,6 +918,20 @@ describe('every line on Home opens a screen this node shows, with what the line 
         const market = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/market.tsx'), 'utf-8');
         expect(market).toMatch(/const pill = marketFilterFromLink\(params\.filter\);\s*if \(pill\) \{\s*selectType\(pill\);/);
     });
+
+    // #1517 on the real screen (320dp, text at 1.3x): global case 1 is a member 3 days in with the post made and no limits.
+    for (const [km, asks] of [[9000, false], [250, true]] as const) {
+        it(`a global member 3 days in with the post made keeps First steps; a community ${km} km away ${asks ? 'gets' : 'never gets'} the ask (#1517)`, async () => {
+            const base = everyCard('global', 1);
+            const near = { ...(base.cards.find!.communities[0] as Record<string, unknown>), distanceKm: km };
+            node.answer = { ...base, cards: { ...base.cards, find: { ...base.cards.find!, communities: [near] } } };
+            mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+            await render();
+            expect(cards()).toContain('steps');
+            expect(document.querySelector('[data-testid="home-card-steps"]')!.textContent).toContain('Post something free or for swap');
+            expect(!!document.querySelector('[data-testid="home-step-ask"]')).toBe(asks);
+        });
+    }
 
     it('a poll and no Decision on a local node: the polls line opens the Market\'s polls, not Decide (which lists Decisions only)', async () => {
         node.answer = { ...localMember(), cards: { ...localMember().cards, decide: { open: 0, soonestClosesAt: null, polls: 1, pollsMore: false } } };

@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
+    ASK_WITHIN_KM, HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -195,6 +195,18 @@ describe('First steps goes when it has nothing to say on the web (§6.1, PR #147
         expect(shown(a, { now: NOW })).not.toContain('steps');
     });
 
+    it('"Ask X to let you in" only for a community within 250 km, the radius global\'s listings use (#1517)', () => {
+        expect(ASK_WITHIN_KM).toBe(250);
+        const at = (distanceKm: number | null) => stepLines(globalMember({ firstPost: true }, { ...find, communities: [{ ...find.communities[0], distanceKm: distanceKm as number }] }), ['food']).map(l => l.key);
+        expect(at(12)).toEqual(['firstPost', 'ask']);
+        expect(at(250)).toEqual(['firstPost', 'ask']);
+        expect(at(250.1)).toEqual(['firstPost']);
+        // A community 9,000 km away is not "within reach"; nor one with no distance (the node lists none without a point).
+        expect(at(9000)).toEqual(['firstPost']);
+        expect(at(null)).toEqual(['firstPost']);
+        expect(at(Number.NaN)).toEqual(['firstPost']);
+    });
+
     it('it stays while a line is undone, the member is new, or the new-account limits apply', () => {
         expect(shown(globalMember({ firstPost: false }), { now: NOW })).toContain('steps');
         expect(shown(globalMember({ firstPost: true, joinedAt: daysAgo(3) }, find, { joinedAt: daysAgo(3) }), { now: NOW })).toContain('steps');
@@ -264,5 +276,30 @@ describe('sun and moon (CARD-FRAME §4, §5.2 item 22): worked out here, from th
         expect(shown(placed(null, AREA), { now: NOW }, withSky())).toContain('sky');
         expect(shown(placed(null, null), { now: NOW }, withSky())).not.toContain('sky');
         expect(cardsToAsk(withSky(), [], { profile: 'local', features: LOCAL_FEATURES as never, cards: {} })).not.toContain('sky');
+    });
+});
+
+describe('a pinned Find your community on the web (#1517)', () => {
+    const written = (...types: string[]): HomeLayoutV2 => ({ v: 2, cards: types.map(id => ({ id, type: id })), dismissed: {}, updatedAt: daysAgo(0) });
+    const global = (days: number) => answer(
+        { safety: { words: true, signInLinked: false }, find, steps: { ...steps, joinedAt: daysAgo(days) }, market, events, community: { name: null, members: 2310, communities: 38 } },
+        { profile: 'global', features: GLOBAL_FEATURES, me: me({ joinedAt: daysAgo(days), interests: ['food'] }) },
+    );
+
+    it('sits right under Needs you and "Your way back in", as the phone\'s cardOrder puts it, whatever layout another device wrote', () => {
+        // Moved to the bottom, "Your way back in" further down: under Needs you.
+        expect(shown(global(3), { now: NOW }, written('market', 'events', 'steps', 'safety', 'find'))).toEqual(['find', 'market', 'events', 'steps', 'safety', 'community']);
+        // "Your way back in" keeps its place at the top: under it.
+        expect(shown(global(3), { now: NOW }, written('safety', 'market', 'find'))).toEqual(['safety', 'find', 'market', 'community']);
+        // Left out of the list (removed on a copy that saw no pin), or listed twice: once, at the top.
+        expect(shown(global(3), { now: NOW }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        expect(shown(global(3), { now: NOW }, written('market', 'find', 'events', 'find'))).toEqual(['find', 'market', 'events', 'community']);
+        // The same as the phone's rule for the same list (apps/native utils/home-cards.ts cardOrder, held by its own suite).
+        expect(shown(global(29), { now: NOW }, written('events', 'find', 'market'))).toEqual(['find', 'events', 'market', 'community']);
+    });
+
+    it('after 30 days it is a card like any other: drawn where the list puts it', () => {
+        expect(shown(global(30), { now: NOW }, written('market', 'find', 'events'))).toEqual(['market', 'find', 'events', 'community']);
+        expect(shown(global(30), { now: NOW }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
     });
 });

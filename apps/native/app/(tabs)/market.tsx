@@ -8,6 +8,8 @@ import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyE
 import { refreshListingAfterPhotoError } from '../../utils/photo-refresh';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { membersOnlyHere } from '../../utils/members-only-listings';
+import { noAreaLineHere } from '../../utils/nearby-area';
+import { NoAreaLine } from '../../components/NoAreaLine';
 import { GLOBAL_NODE_URL, pollsInformal } from '../../utils/node-profile';
 import { requestSync, isPillarSyncActive, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
@@ -529,6 +531,17 @@ export default function MarketScreen() {
         const ended = DeviceEventEmitter.addListener(PILLAR_SYNC_ENDED, read);
         return () => { live = false; refused.remove(); ended.remove(); };
     }, []));
+    // A member with no area on a community that syncs listings by area (utils/nearby-area.ts): the node gives them the
+    // newest listings worldwide, and one line above the feed says so, with the way to Settings → Your area. After each
+    // sync, which is when the phone learns the area.
+    const [noArea, setNoArea] = useState(false);
+    useFocusEffect(useCallback(() => {
+        let live = true;
+        const read = () => { noAreaLineHere(identity?.publicKey).then(v => { if (live) setNoArea(v); }); };
+        read();
+        const ended = DeviceEventEmitter.addListener(PILLAR_SYNC_ENDED, read);
+        return () => { live = false; ended.remove(); };
+    }, [identity?.publicKey]));
     const [searchResults, setSearchResults] = useState<any[] | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1152,6 +1165,11 @@ export default function MarketScreen() {
     // Out of the list's 16dp gutter: these rows bring their own 16dp margins, as they did above the list.
     const ListHeader = (
         <View style={{ marginHorizontal: -16 }}>
+            {noArea && (
+                <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
+                    <NoAreaLine colors={colors} onPress={() => router.push('/your-area' as any)} />
+                </View>
+            )}
             {/* The worldwide community's way out to a local one (design §3.1) is a Home card since H4, and "Your account
                 has one way back" lives on Home, the landing screen, since H2: neither is drawn here. */}
             {/* "Unlock trading" is a Beans rule; there is none where Beans are off. */}

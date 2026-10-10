@@ -10,6 +10,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDatabaseFilenameForNode } from './nodes';
+import { getCachedNodeProfile } from './node-profile';
 
 export interface NearbyArea {
     lat: number;
@@ -80,5 +81,28 @@ export async function noteAreaSent(url: string, publicKey: string, area: NearbyA
         await storeNearbyAreaCopy(url, nextNearbyAreaCopy(held, publicKey, area ? { lat: area.lat, lng: area.lng } : null));
     } catch {
         // The sync asks the node within the hour.
+    }
+}
+
+/** The Market's line for a member with no area on a by-area community (design §3.4), in two parts: what, and the way on. */
+export const NO_AREA_LINE = {
+    seeing: "You're seeing the newest listings worldwide.",
+    action: "Set your area to see what's near you.",
+} as const;
+
+/**
+ * Whether the Market shows NO_AREA_LINE: the community the phone is on syncs by area, and the node last said this member
+ * has no area. Not known (no copy yet, another key's, no community) is no: the line never says something it can't stand
+ * behind.
+ */
+export async function noAreaLineHere(publicKey: string | null | undefined): Promise<boolean> {
+    try {
+        const url = await AsyncStorage.getItem('beanpool_anchor_url');
+        if (!url || !publicKey) return false;
+        if (!(await getCachedNodeProfile(url))?.features.nearbyListings) return false;
+        const copy = await readNearbyAreaCopy(url, publicKey);
+        return !!copy && copy.area === null;
+    } catch {
+        return false;
     }
 }

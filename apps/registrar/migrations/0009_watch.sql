@@ -11,7 +11,7 @@
 --   watch_marks  small marks the checks keep between ticks: since when our nodes run different releases, and the
 --                Brisbane day whose daily line is sent (a conditional write, so two ticks never both send it).
 --
--- Additive: two new tables and two indexes. Apply before deploying the Worker that writes them (an older
+-- Additive: two new tables and three indexes. Apply before deploying the Worker that writes them (an older
 -- Worker never reads them; a newer one without them watches nothing and logs why — the sweep is not touched).
 -- Re-running changes nothing.
 
@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS watch_log (
 );
 CREATE INDEX IF NOT EXISTS idx_watch_log_target ON watch_log(target, id);   -- a target's newest looks
 CREATE INDEX IF NOT EXISTS idx_watch_log_ran ON watch_log(ran_at);          -- the 30-day prune
+CREATE INDEX IF NOT EXISTS idx_watch_log_target_ran ON watch_log(target, ran_at);   -- /admin: a target's last day
 
 CREATE TABLE IF NOT EXISTS watch_marks (
     key   TEXT PRIMARY KEY,                  -- 'fleet-differs' | 'daily'

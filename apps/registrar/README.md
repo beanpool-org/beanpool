@@ -115,7 +115,8 @@ refused). Without it the report is "not checked" — never "fine" — and `/admi
 of a vault that is locked or gone stays as it was (nothing is known of its report). Every look is a row in `watch_log`,
 kept 30 days; `/admin`'s "Our servers" panel (`GET /api/local/admin/registrar/servers`) shows each server's newest
 look and its last day. These reproduce the Mac vault watcher (`apps/vault/src/custodian/watch.ts`), which retires
-after a week of the two agreeing (design §2.5, Marty 2026-10-10).
+after a week of the two agreeing (design §2.5, Marty 2026-10-10). With `WATCH_TARGETS` unset nothing is watched and no
+daily line is sent, so nothing the digest holds is sent either: `/admin` says so beside the digest toggles.
 
 ## Limits on what a key may do (the 2026-10-01 review)
 

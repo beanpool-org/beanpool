@@ -438,6 +438,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         function renderAlerts(st) {
             const container = document.getElementById('alertsContainer');
             const ch = st.channel || {};
+            // The daily summary goes with the outside checks of our servers: none while WATCH_TARGETS is unset.
+            const noDaily = st.daily_line === false;
             let html = '';
             if (!ch.set) {
                 html += '<p style="color: #f87171; font-size: 0.85rem;">Not set: NTFY_URL is not a Worker secret, so nothing is sent' + (ch.waiting ? ' (' + ch.waiting + ' waiting for it)' : '') + '. Set it with <code>wrangler secret put NTFY_URL</code> (the full topic URL), and NTFY_TOKEN for an ntfy access token.</p>';
@@ -449,14 +451,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             }
             const cap = st.cap || {};
             html += '<p style="font-size: 0.8rem; color: var(--text-muted);">This hour: ' + esc(cap.sent || 0) + ' sent (cap ' + esc(cap.per_hour || 20) + ', then one "muted" line; high and urgent still go, to 40)' + (cap.muted ? ', ' + esc(cap.muted) + ' muted' : '') + '.' +
-                (st.held_for_digest ? ' ' + esc(st.held_for_digest) + (ch.set ? ' held for the daily summary (08:00 Brisbane): shown below.' : ' held — no channel set, so no daily summary carries them yet: shown below.') : '') + '</p>';
+                (st.held_for_digest ? ' ' + esc(st.held_for_digest) + (noDaily ? ' held, but there is no daily summary: WATCH_TARGETS is not set, and the daily line comes with the outside checks.'
+                    : ch.set ? ' held for the daily summary (08:00 Brisbane): shown below.' : ' held — no channel set, so no daily summary carries them yet: shown below.') : '') + '</p>';
             html += '<div class="alert-modes">' + Object.keys(CATEGORY_WORDS).map(function(c) {
                 const mode = (st.settings || {})[c] || 'on';
                 return '<span class="alert-mode">' + esc(CATEGORY_WORDS[c]) + ': ' + Object.keys(MODE_WORDS).map(function(m) {
                     return '<button data-alert-category="' + c + '" data-alert-mode="' + m + '"' + (m === mode ? ' class="on"' : '') + '>' + MODE_WORDS[m] + '</button>';
                 }).join('') + '</span>';
             }).join('') + '</div>';
-            html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">on = sent at once · digest = held, then sent in the daily summary at 08:00 Brisbane · off = nothing</p>';
+            html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">on = sent at once · ' + (noDaily
+                ? 'digest = held for the daily summary, which is not sent while WATCH_TARGETS is not set' : 'digest = held, then sent in the daily summary at 08:00 Brisbane') + ' · off = nothing</p>';
             html += '<button data-alert-test="1" class="btn-approve">Send a test alert</button> <span id="alertTestResult" style="font-size: 0.8rem; color: var(--text-muted);"></span>';
             const active = st.active || [];
             if (active.length) {
@@ -468,7 +472,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             if (recent.length) {
                 html += '<div class="scroll-x" style="margin-top: 1rem;"><table class="admin-table"><thead><tr><th>When</th><th>Alert</th><th>State</th></tr></thead><tbody>' + recent.map(function(r) {
                     // A held event is marked sent only once the daily summary carrying it is sent.
-                    const state = r.held ? (r.sent_at ? 'sent in the daily summary' : ch.set ? 'held for the daily summary' : 'held — no channel set') : r.sent_at ? 'sent' : r.muted ? 'muted (over the hourly cap)' : 'waiting';
+                    const state = r.held ? (r.sent_at ? 'sent in the daily summary' : noDaily ? 'held — no daily summary (WATCH_TARGETS is not set)' : ch.set ? 'held for the daily summary' : 'held — no channel set')
+                        : r.sent_at ? 'sent' : r.muted ? 'muted (over the hourly cap)' : 'waiting';
                     return '<tr><td style="font-family: monospace; font-size: 0.75rem; white-space: nowrap;">' + esc(when(r.at)) + '</td>' +
                         '<td><b style="color: #fff;">' + esc(r.title) + '</b><br><span style="font-size: 0.8rem;">' + esc(r.body) + '</span></td>' +
                         '<td style="font-size: 0.75rem;">' + esc(state) + '</td></tr>';

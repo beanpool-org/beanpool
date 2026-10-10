@@ -311,6 +311,15 @@ test('the vault: an old report is "stale" (high, two looks); backups and the off
         assert.equal(r.sent[2].headers.priority, '4');
         assert.match(r.sent[2].body, /its signed report says backups are failing \(4 failed in a row; the newest at 2026-10-10 \d\d:\d\d UTC\)/);
         assert.match(r.sent[2].body, /its signed report says the off-box copy is failing \(0 failed in a row; the newest at 2026-10-10 \d\d:\d\d UTC\)/);
+        // What the vault says went wrong off the box (#1735's step and error), as the Mac watcher shows it.
+        r.vault.report = { backups: { lastOkAt: Date.now() - 3 * 3600_000, failuresInARow: 4 }, openSince: Date.now() - 86400_000, alerts: { active: ['offsite'] },
+            offsite: { lastOkAt: Date.now() - 3 * 3600_000, failuresInARow: 3, step: 'put', error: 'AccessDenied: bucket\u0007 policy' } };
+        await r.tick();
+        assert.equal(r.sent.length, 3, 'still raised: nothing more said');
+        const off = r.w.sqlite.prepare("SELECT detail FROM alert_state WHERE key='watch:vault:offsite'").get().detail;
+        assert.equal(off.replace(/at 2026-10-10 \d\d:\d\d UTC/, 'at T'), 'vault: its signed report says the off-box copy is failing (3 failed in a row; the newest at T; put: AccessDenied: bucket? policy).');
+        r.vault.report = { backups: { lastOkAt: Date.now() - 3 * 3600_000, failuresInARow: 4 }, openSince: Date.now() - 86400_000, alerts: { active: ['offsite'] } };
+        await r.tick();
         // Under another key, the same words are not believed: backups are not said to be fine, and stay raised.
         r.vault.signer = 'other';
         r.vault.report = {};
@@ -665,6 +674,18 @@ test('the watch looks at 3 servers at a time at most: never more than 6 connecti
     } finally { r.done(); }
 });
 
+test('watch_log keeps 30 days: older looks are pruned at each tick, newer ones kept', async () => {
+    const r = await room();
+    try {
+        const now = Math.floor(T0 / 1000) + 300;   // the tick's
+        const ins = r.w.sqlite.prepare("INSERT INTO watch_log (ran_at, target, ok, status) VALUES (?, 'global', 1, 'HTTP 200')");
+        for (const days of [45, 31, 30.01, 29.99, 1]) ins.run(Math.floor(now - days * 86400));
+        await r.tick();
+        const kept = r.w.sqlite.prepare("SELECT ran_at FROM watch_log WHERE target='global' ORDER BY ran_at").all().map((x) => Math.round((now - x.ran_at) / 864) / 100);
+        assert.deepEqual(kept, [29.99, 1, 0]);
+    } finally { r.done(); }
+});
+
 test('migration 0009: two tables; re-running changes nothing; WATCH_TARGETS skips what is not a name and an http(s) address', async () => {
     const BEFORE = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql'];
     const w = await world({ migrations: BEFORE });
@@ -682,6 +703,8 @@ test('migration 0009: two tables; re-running changes nothing; WATCH_TARGETS skip
         const plan = (q, ...a) => w.sqlite.prepare(`EXPLAIN QUERY PLAN ${q}`).all(...a).map((x) => x.detail).join(' | ');
         assert.match(plan('SELECT * FROM watch_log WHERE target=? ORDER BY id DESC LIMIT 2', 'g'), /idx_watch_log_target/);
         assert.match(plan('DELETE FROM watch_log WHERE ran_at < ?', 1), /idx_watch_log_ran/);
+        // /admin's day count per target reads that target's last day only, not its 30 days.
+        assert.match(plan('SELECT COUNT(*) AS looks, COALESCE(SUM(ok), 0) AS ok FROM watch_log WHERE target=? AND ran_at >= ?', 'g', 1), /idx_watch_log_target_ran \(target=\? AND ran_at>\?\)/);
     } finally { w.restore(); }
     const lines = [];
     const real = console.error;
@@ -739,5 +762,17 @@ test('/admin "Our servers": a row per server, what it answers and runs, escaped;
         assert.match(h, /does not answer: timed out/);
         assert.match(h, /287 of 288 looks answered/);
         assert.match(h, /Last daily summary: 2026-10-11/);
+        // With WATCH_TARGETS unset there is no daily line: what digest holds is said to wait for nothing that comes.
+        ctx.renderAlerts({ channel: { set: true, waiting: 0 }, cap: {}, settings: { admin: 'digest' }, held_for_digest: 2, daily_line: false, active: [],
+            recent: [{ at: 1, title: 'You paused x', body: 'You paused x.beanpool.org.', held: 1, sent_at: null }] });
+        const a = els.alertsContainer.innerHTML;
+        assert.match(a, /2 held, but there is no daily summary: WATCH_TARGETS is not set, and the daily line comes with the outside checks\./);
+        assert.match(a, /digest = held for the daily summary, which is not sent while WATCH_TARGETS is not set/);
+        assert.match(a, /<td style="font-size: 0\.75rem;">held — no daily summary \(WATCH_TARGETS is not set\)<\/td>/);
+        assert.doesNotMatch(a, /08:00 Brisbane/);
+        // What the page is given: whether the daily line is sent at all.
+        assert.equal((await (await worker.fetch(new Request('https://beanpool.org/api/local/admin/registrar/alerts', { headers: { 'x-admin-secret': 'test-admin-secret' } }), w.env)).json()).daily_line, false);
+        w.env.WATCH_TARGETS = TARGETS;
+        assert.equal((await (await worker.fetch(new Request('https://beanpool.org/api/local/admin/registrar/alerts', { headers: { 'x-admin-secret': 'test-admin-secret' } }), w.env)).json()).daily_line, true);
     } finally { w.restore(); }
 });

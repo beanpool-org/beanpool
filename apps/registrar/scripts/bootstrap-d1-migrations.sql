@@ -79,10 +79,10 @@ SELECT '0008_alerts.sql'
 WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('alert_settings', 'alert_state', 'alert_outbox', 'alert_channel'))
        OR (type = 'index' AND name IN ('idx_alert_outbox_waiting', 'idx_alert_outbox_at', 'idx_alert_outbox_once', 'idx_alert_outbox_claim'))) = 8;
 
--- 0009: its two tables and two indexes.
+-- 0009: its two tables and three indexes.
 INSERT OR IGNORE INTO d1_migrations (name)
 SELECT '0009_watch.sql'
 WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('watch_log', 'watch_marks'))
-       OR (type = 'index' AND name IN ('idx_watch_log_target', 'idx_watch_log_ran'))) = 4;
+       OR (type = 'index' AND name IN ('idx_watch_log_target', 'idx_watch_log_ran', 'idx_watch_log_target_ran'))) = 5;
 
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

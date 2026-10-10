@@ -154,7 +154,9 @@ function backupsFrom(report, nowMs) {
         backupBad: relayed.has('backup') || nowMs - Math.max(openedAt, lastBackup ?? 0) > BACKUP_STALE_MS,
         backupWhy: `${inARow(report.backups?.failuresInARow)} failed in a row; the newest at ${at(lastBackup)}`,
         offsiteBad: relayed.has('offsite') || (!!off && nowMs - Math.max(openedAt, num(off.lastOkAt) ?? 0) > BACKUP_STALE_MS),
-        offsiteWhy: `${inARow(off?.failuresInARow)} failed in a row; the newest at ${at(num(off?.lastOkAt))}`,
+        // What went wrong, as the vault says it (#1735: the step and its error), shown as the Mac watcher shows it.
+        offsiteWhy: `${inARow(off?.failuresInARow)} failed in a row; the newest at ${at(num(off?.lastOkAt))}${word(off?.error, 160)
+            ? `; ${word(off?.step, 32) ? `${word(off.step, 32)}: ` : ''}${word(off.error, 160)}` : ''}`,
     };
 }
 

@@ -6,8 +6,9 @@
  * (utils/member-area.ts). Type a town is the event form's AddressSearch in the step's own words (no map, no pin; a
  * town or suburb); the pick is rounded the same way. Skip writes
  * nothing. A refusal or a failed save says so in one line and never blocks: Skip is always there, even while a reading
- * or the save waits, and leaving (Skip, Cancel, ← Back) drops whatever answers later. The reading and the save each
- * have a time limit (utils/member-area.ts) that ends in the same one line.
+ * or the save waits, and leaving (Skip, Cancel, ← Back) drops whatever answers later. A town picked while a reading or a
+ * save waits drops that too: the newest choice wins. The reading and the save each have a time limit
+ * (utils/member-area.ts) that ends in the same one line.
  *
  * Small screens: three stacked full-width controls, each at least 48 dp, and five short lines; holds at 320 dp, 1.3x.
  */
@@ -55,7 +56,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
         saving.current = stop;
         const result = await writeMemberArea(url, identity, point, { signal: stop.signal });
         if (gen !== generation.current) return;
-        saving.current = null;
+        if (saving.current === stop) saving.current = null;
         setBusy(null);
         if (result.ok) onSaved(result.area, placeName);
         else setError(result.error);
@@ -84,7 +85,10 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
         }
     };
 
+    // The town box stays open while Use my location waits, so a town can be picked then. It drops the reading or the
+    // save under way: the node never keeps the reading's area while this phone names the town (review N8).
     const pickTown = (result: AddressResult) => {
+        drop();
         void save({ lat: result.lat, lng: result.lng }, result.shortName || result.displayName, 'town', generation.current);
     };
 

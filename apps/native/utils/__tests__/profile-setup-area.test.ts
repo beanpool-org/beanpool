@@ -388,6 +388,78 @@ describe('a reading or a save that never answers (review B2)', () => {
     });
 });
 
+// Confirmation review of #1766, N8: with the town box open, Use my location and a town can both be under way. The newest
+// choice wins: the town drops the reading or the save before it, so the node never keeps the reading's area while this
+// phone names the town.
+describe('a town picked while a reading or a save waits: the newest choice wins (review N8)', () => {
+    function deferred<T>() { let resolve!: (v: T) => void; const p = new Promise<T>((r) => { resolve = r; }); return { p, resolve }; }
+    const stepNow = () => text().match(/Step \d of \d/)?.[0];
+    const areaPosts = () => requests.filter((r) => r.url === `${NODE}/api/community/me/area`);
+    const SYDNEY = { coords: { latitude: -33.86, longitude: 151.21 } };
+    const BYRON_AREA = '{"lat":-28.6,"lng":153.6}';
+    const SYDNEY_AREA = '{"lat":-33.9,"lng":151.2}';
+    /** A fetch whose POSTs each wait for their own `release`, answering as the node would; the signal each was given is kept. */
+    function heldPosts() {
+        const answers: Array<(v: unknown) => void> = [];
+        const signals: Array<AbortSignal | undefined> = [];
+        const before = (globalThis as any).fetch;
+        (globalThis as any).fetch = vi.fn((url: string, init?: { method?: string; body?: string; signal?: AbortSignal }) => {
+            if ((init?.method ?? 'GET') !== 'POST') return before(url, init);
+            requests.push({ url, method: 'POST', body: init?.body });
+            signals.push(init?.signal);
+            return new Promise((r) => { answers.push(r); });
+        });
+        const release = async (i: number) => {
+            const area = JSON.parse(areaPosts()[i].body!);
+            answers[i]({ ok: true, status: 200, json: async () => ({ success: true, area }) });
+            await settle(10);
+        };
+        return { signals, release };
+    }
+
+    it('a reading pending: one POST, with the town, and this phone names the town', async () => {
+        const reading = deferred<typeof SYDNEY>();
+        vi.mocked(Location.getCurrentPositionAsync).mockImplementationOnce(() => reading.p as any);
+        await render(GLOBAL_FEATURES);
+        await toAreaStep();
+        const node = heldPosts();
+        await press('[data-testid="area-type-town"]');
+        await press('[data-testid="area-use-location"]');
+        await press('[data-testid="pick-byron"]');
+        reading.resolve(SYDNEY);
+        await settle(10);
+        expect(areaPosts().map((r) => r.body)).toEqual([BYRON_AREA]);
+        await node.release(0);
+        expect(stepNow()).toBe('Step 4 of 4');
+        expect(mem.store.get(`beanpool_area_place:${NODE}`)).toBe('Byron Bay');
+        expect(areaPosts().map((r) => r.body)).toEqual([BYRON_AREA]);
+    });
+
+    it("the reading's save waiting: that request is stopped, no false line while the town saves, and the town is kept", async () => {
+        vi.mocked(Location.getCurrentPositionAsync).mockImplementationOnce(async () => SYDNEY as any);
+        await render(GLOBAL_FEATURES);
+        await toAreaStep();
+        const node = heldPosts();
+        await press('[data-testid="area-type-town"]');
+        await press('[data-testid="area-use-location"]');
+        expect(areaPosts().map((r) => r.body)).toEqual([SYDNEY_AREA]);
+        await press('[data-testid="pick-byron"]');
+        expect(areaPosts().map((r) => r.body)).toEqual([SYDNEY_AREA, BYRON_AREA]);
+        expect(node.signals[0]?.aborted).toBe(true);
+        expect(node.signals[1]?.aborted).toBe(false);
+        // The stopped save says nothing: the town's save is still under way.
+        expect(text()).not.toContain("Couldn't reach the community");
+        expect((document.querySelector('[data-testid="area-use-location"]') as HTMLElement).getAttribute('aria-disabled')).toBe('true');
+        // The node answers the first request anyway; that answer is dropped.
+        await node.release(0);
+        expect(stepNow()).toBe('Step 3 of 4');
+        expect(text()).not.toContain("Couldn't reach the community");
+        await node.release(1);
+        expect(stepNow()).toBe('Step 4 of 4');
+        expect(mem.store.get(`beanpool_area_place:${NODE}`)).toBe('Byron Bay');
+    });
+});
+
 describe('Settings → Your area (§3.5)', () => {
     it("shows the node's value with the town typed on this phone, and Clear writes both null and forgets the town", async () => {
         mem.store.set(`beanpool_area_place:${NODE}`, 'Byron Bay');

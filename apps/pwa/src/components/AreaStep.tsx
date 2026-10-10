@@ -6,8 +6,9 @@
  * Use my location takes one low-accuracy reading and rounds it to 0.1° before the request is built (lib/member-area.ts);
  * Type a town is the Map's AddressSearch in the step's own words (no map, no pin; a town or suburb), rounded the same
  * way. Skip writes nothing. A refusal or a failed save says so in one line and never blocks: Skip is always there, even
- * while the reading or the save waits, and leaving (Skip, Back, the step closing) drops whatever answers later. The
- * reading (20 s) and the save (lib/member-area.ts) have time limits that end in the same one line.
+ * while the reading or the save waits, and leaving (Skip, Back, the step closing) drops whatever answers later. A town
+ * picked while a reading or a save waits drops that too: the newest choice wins. The reading (20 s) and the save
+ * (lib/member-area.ts) have time limits that end in the same one line.
  *
  * Small screens: three stacked full-width controls, each at least 44px tall; holds at 320px and 130% text.
  */
@@ -53,7 +54,7 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
         saving.current = stop;
         const result = await writeArea(send, point, { signal: stop.signal });
         if (gen !== generation.current) return;
-        saving.current = null;
+        if (saving.current === stop) saving.current = null;
         setBusy(null);
         if (result.ok) onSaved(result.area, placeName);
         else setError(result.error);
@@ -74,7 +75,12 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
         }
     };
 
-    const pickTown = (r: AddressResult) => { void save({ lat: r.lat, lng: r.lng }, r.shortName || r.displayName, 'town', generation.current); };
+    // The town box stays open while Use my location waits, so a town can be picked then. It drops the reading or the
+    // save under way: the node never keeps the reading's area while this browser names the town (review N8).
+    const pickTown = (r: AddressResult) => {
+        drop();
+        void save({ lat: r.lat, lng: r.lng }, r.shortName || r.displayName, 'town', generation.current);
+    };
 
     const skip = () => {
         drop();

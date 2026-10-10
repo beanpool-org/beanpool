@@ -260,3 +260,70 @@ describe('a reading or a save that never answers (review B2)', () => {
         expect(areaCalls(calls)).toHaveLength(1);
     });
 });
+
+// Confirmation review of #1766, N8: with the town box open, Use my location and a town can both be under way. The newest
+// choice wins: the town drops the reading or the save before it, so the node never keeps the reading's area while this
+// browser names the town.
+describe('a town picked while a reading or a save waits: the newest choice wins (review N8)', () => {
+    const BYRON_AREA = '{"lat":-28.6,"lng":153.6}';
+    const SYDNEY_AREA = '{"lat":-33.9,"lng":151.2}';
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    /** POSTs that each wait for their own answer, as the node would give it; the signal each was given is kept. */
+    function heldPosts() {
+        const answers: Array<(r: Response) => void> = [];
+        const signals: Array<AbortSignal | null | undefined> = [];
+        const handler: Handler = (body, _p, init) => {
+            signals.push(init.signal);
+            return new Promise<Response>((r) => { answers.push(() => r(json(200, { success: true, area: body }))); }) as unknown as Response;
+        };
+        return { handler, signals, release: (i: number) => answers[i](undefined as unknown as Response) };
+    }
+
+    it('a reading pending: one POST, with the town, and this browser names the town', async () => {
+        let late: PositionCallback | null = null;
+        geo.getCurrentPosition.mockImplementation((ok: PositionCallback) => { late = ok; });
+        const node = heldPosts();
+        const { calls, onComplete } = await toThePhoto(GLOBAL_BY_AREA, node.handler);
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Type a town or suburb/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Use my location/ }));
+        fireEvent.click(screen.getByTestId('pick-byron'));
+        await waitFor(() => expect(areaCalls(calls)).toHaveLength(1));
+        late!({ coords: { latitude: -33.86, longitude: 151.21 } } as GeolocationPosition);
+        await sleep(50);
+        expect(areaCalls(calls).map((c) => c.raw)).toEqual([BYRON_AREA]);
+        node.release(0);
+        await screen.findByText(/Your Safety Backup/);
+        expect(localStorage.getItem('beanpool_area_place')).toBe('Byron Bay');
+        await finishFromBackup(onComplete);
+        expect(areaCalls(calls).map((c) => c.raw)).toEqual([BYRON_AREA]);
+    });
+
+    it("the reading's save waiting: that request is stopped, no false line while the town saves, and the town is kept", async () => {
+        position = { ok: true, lat: -33.86, lng: 151.21 };
+        const node = heldPosts();
+        const { calls } = await toThePhoto(GLOBAL_BY_AREA, node.handler);
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Type a town or suburb/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Use my location/ }));
+        await waitFor(() => expect(areaCalls(calls)).toHaveLength(1));
+        expect(areaCalls(calls)[0].raw).toBe(SYDNEY_AREA);
+        fireEvent.click(screen.getByTestId('pick-byron'));
+        await waitFor(() => expect(areaCalls(calls)).toHaveLength(2));
+        await sleep(30);
+        expect(areaCalls(calls).map((c) => c.raw)).toEqual([SYDNEY_AREA, BYRON_AREA]);
+        expect(node.signals[0]?.aborted).toBe(true);
+        expect(node.signals[1]?.aborted).toBe(false);
+        // The stopped save says nothing: the town's save is still under way.
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByText('Saving your area…')).toBeInTheDocument();
+        // The node answers the first request anyway; that answer is dropped.
+        node.release(0);
+        await sleep(30);
+        expect(screen.queryByText(/Your Safety Backup/)).toBeNull();
+        expect(screen.queryByRole('alert')).toBeNull();
+        node.release(1);
+        await screen.findByText(/Your Safety Backup/);
+        expect(localStorage.getItem('beanpool_area_place')).toBe('Byron Bay');
+    });
+});

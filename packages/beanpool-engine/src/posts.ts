@@ -1068,8 +1068,10 @@ export interface NearbySet {
     ids: string[];
     /** near(M): nearest first (NEAREST_ORDER), or the newest first for a member with no area. */
     near: string[];
-    /** The newest change of S: its rows' updated_at and their authors' board_standing_changed_at (an author's holiday
-     *  moves no listing row). With `ids`, what a read of S answers depends on (the route's ETag). */
+    /** Each row of S with its updated_at, and each of its authors with their board_standing_changed_at (an author's
+     *  holiday moves no listing row), in one string: with `ids`, what a read of S answers depends on (the route's ETag).
+     *  Every row's own time, not the newest: a row edited to a time below another's (a clock behind, an imported row)
+     *  still changes it. */
     stamp: string;
 }
 
@@ -1152,12 +1154,11 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         getPostsRankedBy(db, { ...base, sync: true, ids: extra, near: { lat: 0, lng: 0 } }, keep);
     }
     const ids = [...near, ...kept.map(r => r.id)];
-    let stamp = '';
-    for (const r of [...ranked, ...kept]) if ((r.updated_at ?? '') > stamp) stamp = r.updated_at!;
+    let stamp = [...ranked, ...kept].map(r => `${r.id}@${r.updated_at ?? ''}`).join(',');
     if (ids.length > 0) {
-        const standing = db.prepare(`SELECT MAX(board_standing_changed_at) AS at FROM members WHERE public_key IN
-            (SELECT DISTINCT author_pubkey FROM posts WHERE id IN (SELECT value FROM json_each(?)))`).get(JSON.stringify(ids)) as { at: string | null } | undefined;
-        stamp += `|${standing?.at ?? ''}`;
+        const standing = db.prepare(`SELECT public_key, board_standing_changed_at AS at FROM members WHERE public_key IN
+            (SELECT DISTINCT author_pubkey FROM posts WHERE id IN (SELECT value FROM json_each(?))) ORDER BY public_key`).all(JSON.stringify(ids)) as Array<{ public_key: string; at: string | null }>;
+        stamp += `|${standing.map(r => `${r.public_key}@${r.at ?? ''}`).join(',')}`;
     }
     return { ids, near, stamp };
 }

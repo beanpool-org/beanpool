@@ -551,8 +551,13 @@ function movePlainPushTablesAside(): void {
     console.log('[DB] Moved the push tokens stored in the clear aside: the boot locks them (a standby drops them).');
 }
 
-/** Members whose photos move out of their rows in one transaction (moveMemberPhotosOutOfRows); MEMBER_PHOTO_MOVE_BATCH. */
+/** Members whose photos move out of their rows in one transaction, at most (moveMemberPhotosOutOfRows); MEMBER_PHOTO_MOVE_BATCH. */
 export const MEMBER_PHOTO_MOVE_BATCH = 500;
+/**
+ * Photo bytes moved in one transaction, at most (moveMemberPhotosOutOfRows); MEMBER_PHOTO_MOVE_BYTES. A photo may be up
+ * to 2 MB, so 500 of them read at once held the event loop for 7.9 s and took 732 MB of heap (#1736's review, N4).
+ */
+export const MEMBER_PHOTO_MOVE_BYTES = 8 * 1024 * 1024;
 
 /**
  * Before schema.sql runs, on a database from before member_photos: each member's avatar (`members.avatar_url`, a photo
@@ -563,7 +568,8 @@ export const MEMBER_PHOTO_MOVE_BATCH = 500;
  * a photo moved is not a change, and a standby moves its own the same way at its own boot.
  *
  * The move is in batches by rowid, each its own transaction, so no transaction of the move grows with the community (a
- * 50,000-member database is 1.3 GB of photos), and its heap stays flat. Killed part way, the batches done stay done, the
+ * 50,000-member database is 1.3 GB of photos), and its heap stays flat: at most `batch` rows and `batchBytes` of photos
+ * (never fewer than one row), each photo read on its own, as the groups' move does (moveGroupPicturesOutOfRows). Killed part way, the batches done stay done, the
  * next boot carries on from the first row still holding its photo, and nothing reads half of one. Before the server
  * listens, so no reader ever sees a member half moved.
  *
@@ -581,9 +587,10 @@ export const MEMBER_PHOTO_MOVE_BATCH = 500;
  * a node upgraded with many photo members.
  *
  * A batch that throws (a full disk, an I/O error) stops the move, loudly, and the boot carries on rather than crash-loop
- * a node whose disk is full: the members not reached show no photo until a later boot finishes it (a standby's copy
- * still carries theirs: @beanpool/engine sync.ts withPhoto). The node runs meanwhile, and its members may set, change or
- * remove their photos. Which rows a later boot may still move, the one rule (#1475's deciding review):
+ * a node whose disk is full; a main server's timer carries it on while the node runs (resumeMemberPhotoMove). Meanwhile
+ * every answer about a member not reached yet says the node holds their photo (memberHasPhoto, memberPhotoNotMovedYet,
+ * MEMBER_PHOTO_INLINE_REF), and a standby's copy still carries it (@beanpool/engine sync.ts withPhoto). The node runs
+ * meanwhile, and its members may set, change or remove their photos. Which rows a later boot may still move, the one rule (#1475's deciding review):
  *
  *   while `members.avatar_url` exists, a value in it means "this photo is not moved yet, and nobody has set or removed
  *   this member's photo since the move began".
@@ -597,37 +604,100 @@ export const MEMBER_PHOTO_MOVE_BATCH = 500;
  * from "never had one"; the column itself is the marker. And should a row still hold a value while its member already
  * has a member_photos row (a writer outside that rule), the move keeps the member_photos row, which is the newer: it
  * clears the old value and never writes over a photo. Returns how many moved: only batches that committed count.
+ *
+ * A move stopped at boot is resumed while the node runs, by a main server's timer (resumeMemberPhotoMove, #1482).
  */
-export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH): number {
+export function moveMemberPhotosOutOfRows(
+    batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH,
+    batchBytes = Number(process.env.MEMBER_PHOTO_MOVE_BYTES) || MEMBER_PHOTO_MOVE_BYTES,
+): number {
+    return moveMemberPhotos(batch, batchBytes, Infinity, 0).moved;
+}
+
+/** Where the move resumed after boot carries on from (resumeMemberPhotoMove): the last row of its last committed batch. */
+let memberPhotoResumeAfter = 0;
+
+/**
+ * One turn of a members' photo move that stopped at boot, resumed while the node runs (#1482): at most one batch (each
+ * its own transaction, as at boot), then the old column dropped once no row holds a photo. A main server's timer calls
+ * it until it answers 'done' (state-engine.ts armMemberPhotoMoveResume): 'more' when rows are left, 'stopped' when a batch or
+ * the drop threw (tried again later, after a longer wait each time), 'done' when the old column is gone, at once on a
+ * node whose move finished at boot. Until then no answer tells a phone "no photo" for a photo still inline (the gates,
+ * the member's own redeem card and the members list read it, and /api/avatar serves it: memberHasPhoto,
+ * memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF), so no phone publishes its own older copy over it; a stop that
+ * lasts (a full disk) costs only the move's own progress. `cleared` counts the rows whose old value went, each a change
+ * to the members list (state-engine.ts bumps its version).
+ *
+ * The move's one rule holds as at boot: a value in the old column is a photo not moved yet that nobody has set or
+ * removed since, every writer clears it, and the move never writes over a member_photos row. One difference: after
+ * boot members_touch_updated_at is in place, so each row whose photo moves now is stamped, which brings it (now with its
+ * reference) to a standby's next delta. A phone's delta selects by joined_at and profile_updated_at (@beanpool/engine
+ * members.ts getMemberDirectoryRows), which a move does not change: a phone learns the photo's real URL at its next full
+ * list (at least hourly), and meanwhile holds the stand-in URL, which /api/avatar serves. A row whose value was no photo
+ * is cleared unstamped, as at boot.
+ *
+ * Its own cost is one batch's transaction a turn (at most MEMBER_PHOTO_MOVE_BATCH rows and MEMBER_PHOTO_MOVE_BYTES of
+ * photos) and, once, the DROP
+ * COLUMN, which rewrites the members table in one statement (measured at boot for #1475: 0.74 s at 30,000 photo
+ * members); both hold the event loop while they run, as any write does. Kept out of a list read (#1475's heap rule).
+ */
+export function resumeMemberPhotoMove(
+    batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH,
+    batchBytes = Number(process.env.MEMBER_PHOTO_MOVE_BYTES) || MEMBER_PHOTO_MOVE_BYTES,
+): { moved: number; cleared: number; outcome: 'done' | 'more' | 'stopped' } {
+    const turn = moveMemberPhotos(batch, batchBytes, 1, memberPhotoResumeAfter);
+    memberPhotoResumeAfter = turn.after;
+    return { moved: turn.moved, cleared: turn.cleared, outcome: turn.outcome };
+}
+
+/**
+ * The move itself (moveMemberPhotosOutOfRows, resumeMemberPhotoMove): at most `maxBatches` batches, from rowid `from`.
+ * `cleared` counts every row whose old value was cleared (moved, no photo, or already in member_photos).
+ */
+function moveMemberPhotos(batch: number, batchBytes: number, maxBatches: number, from: number): { moved: number; cleared: number; after: number; outcome: 'done' | 'more' | 'stopped' } {
     const columns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('members') as { name: string }[]).map((c) => c.name));
-    if (!columns.has('avatar_url')) return 0;
+    if (!columns.has('avatar_url')) return { moved: 0, cleared: 0, after: from, outcome: 'done' };
     const started = Date.now();
-    let moved = 0, dropped = 0, kept = 0, after = 0;
+    let moved = 0, dropped = 0, kept = 0, after = from, batches = 0;
     try {
         db.exec(`CREATE TABLE IF NOT EXISTS member_photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL)`);
-        const next = db.prepare(`SELECT rowid AS rid, public_key, avatar_url FROM members WHERE rowid > ? AND avatar_url IS NOT NULL ORDER BY rowid LIMIT ?`);
+        // The rows still holding a value, and each one's size, without reading a photo.
+        const next = db.prepare(`SELECT rowid AS rid, octet_length(avatar_url) AS size FROM members
+                                 WHERE rowid > ? AND avatar_url IS NOT NULL ORDER BY rowid LIMIT ?`);
+        const read = db.prepare('SELECT public_key, avatar_url FROM members WHERE rowid = ?');
         const hasPhoto = db.prepare('SELECT 1 FROM member_photos WHERE public_key = ?');
         const putPhoto = db.prepare(`INSERT INTO member_photos (public_key, photo) VALUES (?, ?)`);
         const setRow = db.prepare('UPDATE members SET avatar_url = NULL, avatar_ref = ?, avatar_bytes = ? WHERE rowid = ?');
         const clearRow = db.prepare('UPDATE members SET avatar_url = NULL WHERE rowid = ?');
         for (;;) {
-            const rows = next.all(after, batch) as { rid: number; public_key: string; avatar_url: string }[];
-            if (rows.length === 0) break;
+            const waiting = next.all(after, batch) as { rid: number; size: number }[];
+            if (waiting.length === 0) break;
+            if (batches === maxBatches) return { moved, cleared: moved + dropped + kept, after, outcome: 'more' };
+            batches++;
+            const rids: number[] = [];
+            let bytes = 0;
+            for (const w of waiting) {
+                if (rids.length > 0 && bytes + w.size > batchBytes) break;
+                rids.push(w.rid);
+                bytes += w.size;
+            }
             const done = db.transaction(() => {
                 const n = { moved: 0, dropped: 0, kept: 0 };
-                for (const r of rows) {
+                for (const rid of rids) {
+                    const r = read.get(rid) as { public_key: string; avatar_url: string | null } | undefined;
+                    if (!r || r.avatar_url === null) continue;
                     if (hasPhoto.get(r.public_key)) {
-                        clearRow.run(r.rid); // their photo is already in member_photos: theirs, and newer
+                        clearRow.run(rid); // their photo is already in member_photos: theirs, and newer
                         n.kept++;
                         continue;
                     }
                     const photo = memberPhotoColumnsOf(r.avatar_url);
                     if (photo) {
                         putPhoto.run(r.public_key, photo.photo);
-                        setRow.run(photo.ref, photo.bytes, r.rid);
+                        setRow.run(photo.ref, photo.bytes, rid);
                         n.moved++;
                     } else {
-                        clearRow.run(r.rid);
+                        clearRow.run(rid);
                         n.dropped++;
                     }
                 }
@@ -637,22 +707,58 @@ export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOT
             moved += done.moved;
             dropped += done.dropped;
             kept += done.kept;
-            after = rows[rows.length - 1].rid;
+            after = rids[rids.length - 1];
             if (done.moved > 0 && moved % (batch * 20) < done.moved) console.log(`[DB] Members' photos moved out of their rows: ${moved} so far`);
         }
     } catch (e) {
-        console.error(`[DB] ❌ Members' photos: the move out of their rows stopped after ${moved}; the next boot carries on:`, e);
-        return moved;
+        console.error(`[DB] ❌ Members' photos: the move out of their rows stopped after ${moved}; it carries on later (a main server's timer, or the next boot):`, e);
+        return { moved, cleared: moved + dropped + kept, after, outcome: 'stopped' };
     }
     try {
         db.exec('ALTER TABLE members DROP COLUMN avatar_url');
         console.log(`[DB] Members' photos are in member_photos now: ${moved} moved, ${dropped} that were no photo left out${kept ? `, ${kept} already there kept` : ''}, in ${Date.now() - started} ms.`);
     } catch (e) {
-        // Every photo is out; the column stays, empty and read by nothing, until a boot can drop it.
-        console.error(`[DB] ❌ Members' photos are in member_photos (${moved} moved), but members.avatar_url could not be dropped; the next boot tries again:`, e);
+        // Every photo is out; the column stays, empty and read by nothing, until it can be dropped.
+        console.error(`[DB] ❌ Members' photos are in member_photos (${moved} moved), but members.avatar_url could not be dropped; it is tried again later:`, e);
+        return { moved, cleared: moved + dropped + kept, after, outcome: 'stopped' };
     }
-    return moved;
+    return { moved, cleared: moved + dropped + kept, after, outcome: 'done' };
 }
+
+/**
+ * Whether a member has a photo this node serves, wherever it is held (#1482): its reference in the row (`avatar_ref`), or,
+ * while a move stopped part way (moveMemberPhotosOutOfRows) has left the old column, a photo still inline in it. By the
+ * move's rule a value there is a photo not moved yet that nobody has set or removed since, and it counts as one by the
+ * move's own test (memberPhotoColumnsOf): never this node's own avatar address sent back. The marketplace's photo gates
+ * read this, so a member the move has not reached is not told to set a photo they have.
+ */
+export function memberHasPhoto(publicKey: string): boolean {
+    const row = db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(publicKey) as { avatar_ref: string | null } | undefined;
+    if (!row) return false;
+    return !!row.avatar_ref || memberPhotoNotMovedYet(publicKey) !== null;
+}
+
+/**
+ * One member's photo still inline in their row, while a stopped move (moveMemberPhotosOutOfRows) has left the old column,
+ * when it is one the move would carry out (memberPhotoColumnsOf); otherwise null. For reads of ONE member only (the
+ * gates above, the member's own redeem card, /api/avatar and its key check): never in a list, whose rows no longer carry
+ * photos (#1475). The members list carries only a 0/1 for it (MEMBER_PHOTO_INLINE_REF).
+ */
+export function memberPhotoNotMovedYet(publicKey: string): string | null {
+    if (!db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'avatar_url'`).get()) return null;
+    const row = db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(publicKey) as { avatar_url: string | null } | undefined;
+    return memberPhotoColumnsOf(row?.avatar_url)?.photo ?? null;
+}
+
+/**
+ * The reference a member's avatar URL is made with while their photo is still inline (memberPhotoNotMovedYet, #1482): the
+ * members list reads a 0/1 for it (@beanpool/engine getMemberDirectoryRows photo_inline), never the photo, so it has no
+ * content version to put in the URL, and this stands in for one. Any URL at all tells the member's phone the node holds
+ * a photo, so its offline-edit retry publishes nothing over it (native avatar-value.ts localRowHasNoAvatar). /api/avatar
+ * serves the inline photo at that URL, and its key check takes this reference (engine/avatar-keys.ts). Once the photo
+ * moves, its URL carries its real reference, so a phone fetches it again.
+ */
+export const MEMBER_PHOTO_INLINE_REF = 'inline';
 
 /** Image bytes of group pictures moved in one transaction, at most (moveGroupPicturesOutOfRows); GROUP_PICTURE_MOVE_BYTES. */
 export const GROUP_PICTURE_MOVE_BYTES = 16 * 1024 * 1024;

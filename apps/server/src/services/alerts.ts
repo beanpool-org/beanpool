@@ -441,12 +441,9 @@ export function flushAlerts(): Promise<void> {
     const events = s.waiting.slice();
     const top = Math.max(...events.map((e) => (e.kind === 'cleared' ? 2 : e.priority)));
     const count = sentThisHour(s, t);
-    if (count >= ALERT_HOURLY_CEILING || (count >= ALERT_HOURLY_CAP && top < 4)) {
-        // Held, not dropped: they go together once the hour's oldest message is an hour old.
-        s.channel.nextTryAt = s.sentAt[0] + 60 * 60_000;
-        writeState();
-        return Promise.resolve();
-    }
+    // Held, not dropped: they go together once the hour's oldest message is an hour old, or with the next high one. Worked
+    // out at every flush, never kept as a retry time, so a high alert is never waiting behind a hold.
+    if (count >= ALERT_HOURLY_CEILING || (count >= ALERT_HOURLY_CAP && top < 4)) return Promise.resolve();
     sending = (async () => {
         const result = await sendToChannel(c, composeAlert(communityName(), events));
         const after = now();

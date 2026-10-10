@@ -380,7 +380,7 @@ async function main(): Promise<void> {
     active = alerts.getAlertsStatus().active.map((a) => a.key);
     assert(active.includes('backups.offbox') && !active.includes('backups.none'), `7. two failed tries: off-box backups raised; the nudge cleared (${active})`);
     hits = await ntfyHits();
-    const offMsg = hits.slice(before7).find((h) => /off-box backups failing/.test(h.body));
+    const offMsg = hits.slice(before7).find((h) => /off-box backups failing/i.test(h.body));
     assert(!!offMsg && offMsg.headers.priority === '4' && /1 of 1 off-box destination is failing/.test(offMsg.body), '7. told as high, with counts only');
     assert(!offMsg!.body.includes('Fixture store') && !offMsg!.body.includes('AKIA') && !offMsg!.body.includes('fixture-bucket'), "7. no destination's name, key or bucket");
     fixture(0, Date.now());

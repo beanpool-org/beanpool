@@ -170,6 +170,19 @@ export async function recallAreaPlace(url: string): Promise<string | null> {
 }
 
 /**
+ * Settings' row line on a community that syncs by area: "About 10 km around …", "Not set", or "Couldn't check right
+ * now" when the phone has no community address or key, or the node can't be asked in time. It always settles, so the
+ * row never says "Checking…" for good (deciding review of #1766, N7).
+ */
+export async function areaRowLine(identity: Signer | null | undefined): Promise<string> {
+    const unknown = "Couldn't check right now";
+    const url = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+    if (!url || !identity) return unknown;
+    const [area, place] = await Promise.all([readMemberArea(url, identity), recallAreaPlace(url)]);
+    return area === undefined ? unknown : describeArea(area, place);
+}
+
+/**
  * The member's area on the current community while `enabled` (a form is open on a by-area community): an area, null
  * (known unset), or undefined (not asked yet, or couldn't ask). For the placeless listing's note (core
  * placelessListingNote), which says nothing on undefined rather than something false.

@@ -64,7 +64,7 @@ import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_L
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
-import { nearbyListingsOn, readMemberArea, recallAreaPlace, describeArea } from '../../utils/member-area';
+import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
 import { beansOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 import { doorOfferedToAccount, globalStandingOnPhone, type GlobalStanding } from '../../utils/global-join-existing';
@@ -372,14 +372,9 @@ export default function SettingsScreen() {
     const [areaLine, setAreaLine] = useState('Checking…');
     useFocusEffect(
         React.useCallback(() => {
-            if (!byArea || !identity) return;
+            if (!byArea) return;
             let cancelled = false;
-            (async () => {
-                const url = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
-                if (!url) return;
-                const [area, place] = await Promise.all([readMemberArea(url, identity), recallAreaPlace(url)]);
-                if (!cancelled) setAreaLine(area === undefined ? "Couldn't check right now" : describeArea(area, place));
-            })();
+            areaRowLine(identity).then((line) => { if (!cancelled) setAreaLine(line); });
             return () => { cancelled = true; };
         }, [byArea, identity?.publicKey]),
     );

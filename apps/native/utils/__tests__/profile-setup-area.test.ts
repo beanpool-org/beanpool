@@ -99,7 +99,7 @@ import * as Location from 'expo-location';
 import ProfileSetupScreen from '../../app/profile-setup';
 import YourAreaScreen from '../../app/your-area';
 import { NewPollModal } from '../../components/NewPollModal';
-import { profileSteps, areaOf, describeArea, AREA_WORDS, writeMemberArea } from '../member-area';
+import { profileSteps, areaOf, describeArea, AREA_WORDS, writeMemberArea, areaRowLine } from '../member-area';
 import { readNodeProfile } from '../node-profile';
 import { roundToArea } from '@beanpool/core';
 
@@ -487,6 +487,21 @@ describe('member-area helpers', () => {
         requests = [];
         expect((await writeMemberArea(NODE, IDENTITY, { lat: Number.NaN, lng: 1 })).ok).toBe(false);
         expect(requests).toEqual([]);
+    });
+
+    it("Settings' row line always settles: never 'Checking…' for good (review N7)", async () => {
+        mem.store.delete('beanpool_anchor_url');
+        expect(await areaRowLine(IDENTITY)).toBe("Couldn't check right now");
+        expect(requests).toEqual([]);
+        mem.store.set('beanpool_anchor_url', NODE);
+        expect(await areaRowLine(null)).toBe("Couldn't check right now");
+        answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: null } };
+        expect(await areaRowLine(IDENTITY)).toBe('Not set');
+        mem.store.set(`beanpool_area_place:${NODE}`, 'Byron Bay');
+        answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: { lat: -28.6, lng: 153.6 } } };
+        expect(await areaRowLine(IDENTITY)).toBe('About 10 km around Byron Bay');
+        answer = { status: 503, body: {} };
+        expect(await areaRowLine(IDENTITY)).toBe("Couldn't check right now");
     });
 
     it("the node's info: nearbyListings is kept only as two positive numbers", () => {

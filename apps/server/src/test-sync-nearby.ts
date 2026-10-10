@@ -461,6 +461,15 @@ async function main() {
     }
     const tooMany = await get(`/api/marketplace/posts?ids=${Array.from({ length: 101 }, (_, i) => `x${i}`).join(',')}`, ana);
     assert(tooMany.status === 400, `101 ids is a 400 (${tooMany.status})`);
+    // The set is kept to `types=`: a singular `type=` would keep the rows to it and not the set (N7 of b97677d5's review).
+    const singular = await get(`${SYNC}&nearby=1&type=offer`, ana);
+    assert(singular.status === 400, `nearby=1 with type= is a 400 (${singular.status})`);
+    // Only unknown types: nothing matches, in the set's own shape.
+    const unknownOnly = await get('/api/marketplace/posts?limit=200&sync=true&types=nonsense&nearby=1', ana);
+    const unknownBody = (() => { try { return JSON.parse(unknownOnly.text); } catch { return null; } })();
+    assert(unknownOnly.status === 200 && unknownBody && !Array.isArray(unknownBody) && unknownBody.posts?.length === 0 && unknownBody.set?.length === 0
+        && typeof unknownBody.setHash === 'string' && !!unknownOnly.epoch,
+        `nearby=1 with only unknown types: 200, no rows and an empty set, as { posts, set, setHash } with the epoch (${unknownOnly.status}, ${unknownOnly.text.slice(0, 60)})`);
 
     // ── 9. no area; a listing with no place ──
     console.log('\n── 9. a member with no area; a listing posted with no place ──');

@@ -284,6 +284,9 @@ function photoKeysSince(): string {
     }
 }
 
+/** A member's set's hash, in each answer beside its ids (DESIGN-global-sync-by-area §2.3). */
+const nearbySetHash = (ids: string[]) => crypto.createHash('sha256').update(ids.join(',')).digest('hex').slice(0, 24);
+
 router.get('/api/marketplace/posts', async (ctx) => {
     // Distance search (G4, design §3.2), on every profile: `lat`, `lng`, `radiusKm`, `sort=distance|recent`. Checked
     // first, so garbage is a 400 and never a 304. Without these parameters nothing below changes.
@@ -330,10 +333,13 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // A member's own set (`nearby=1`, DESIGN-global-sync-by-area §2.2-2.3) on a node whose `nearbyListings` is on: the
     // nearest listings within the node's radius of their stored area, their own and the ones they are tied to, with the
     // set's ids in every answer. Only for a member's sync read: anyone else's read, and every read on a node with the
-    // switch off, is answered as without it, byte for byte.
+    // switch off, is answered as without it, byte for byte. A whole read must page (paged=1, X-Posts-Next), as a phone
+    // (S3) does: without it, it answers only the first `limit` rows, newest first, and no key to the next page, and the
+    // rest of the set comes only by `ids=`. Its types are `types=` alone: a singular `type=` would keep the rows to it
+    // and not the set, which would name listings no page of the read answers.
     const nearby = ctx.query.nearby === '1' && switches.nearbyListings && (sync || !!updatedAfter)
         && !!ctx.state.actor && viewerTier(ctx) === 'member';
-    if (nearby && (id || ids || point || author || q || (category && category !== 'all') || ctx.query.audienceScope !== undefined
+    if (nearby && (id || ids || point || author || q || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
         || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true')) {
         ctx.status = 400;
         ctx.body = { error: 'nearby=1 reads your own set of listings: it takes types, limit, updatedAfter and the paging parameters only' };
@@ -476,10 +482,11 @@ router.get('/api/marketplace/posts', async (ctx) => {
     }
 
     if (types && types.length === 0) {
-        // Only unknown types asked for: nothing matches. An empty list must not fall through to "no filter".
+        // Only unknown types asked for: nothing matches. An empty list must not fall through to "no filter". A member's
+        // set is then empty, in its own shape.
         ctx.status = 200;
         ctx.type = 'application/json';
-        ctx.body = '[]';
+        ctx.body = nearby ? JSON.stringify({ posts: [], set: [], setHash: nearbySetHash([]) }) : '[]';
         return;
     }
     // A visitor's posts each go through guestPost below, so the read leaves out what guestPost would replace (`guest`):
@@ -534,7 +541,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const bodyStr = JSON.stringify(nearbySet ? {
         posts: shown,
         set: nearbySet.ids,
-        setHash: crypto.createHash('sha256').update(nearbySet.ids.join(',')).digest('hex').slice(0, 24),
+        setHash: nearbySetHash(nearbySet.ids),
     } : shown);
 
     if (syncPage?.next) ctx.set(POSTS_NEXT_HEADER, syncPage.next);

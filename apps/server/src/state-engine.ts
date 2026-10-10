@@ -306,6 +306,7 @@ import {
     isActingGroupConvenor as isActingGroupConvenorEngine,
     isGroupMember as isGroupMemberEngine,
     getGroupLead as getGroupLeadEngine,
+    reconcileGroupLead as reconcileGroupLeadEngine,
     isGroupLead as isGroupLeadEngine,
     handOverGroupLead as handOverGroupLeadEngine,
     getMemberGroupIds as getMemberGroupIdsEngine,
@@ -388,7 +389,7 @@ import {
     type GroupThreadView,
 } from './engine/group-thread.js';
 export { GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType, canReadGroupThread } from './engine/group-thread.js';
-import { withMembershipEpoch, markGroupEpochsStaleFor } from './engine/group-keys.js';
+import { withMembershipEpoch, markGroupEpochsStaleFor, markGroupEpochStale, groupKeyRoster } from './engine/group-keys.js';
 import {
     proposeGroupConvenor as proposeGroupConvenorEngine,
     voteGroupConvenor as voteGroupConvenorEngine,
@@ -9762,12 +9763,108 @@ function afterGroupMembershipChange(groupId: string, targetPubkey: string, wasAc
     } catch (e) { console.warn('[Groups] Could not update the group chat after a membership change:', e); }
 }
 
+/** Why a closed group takes nobody new and no new line (DESIGN-group-decisions §2.3, close_group). */
+export const GROUP_CLOSED = 'This group was closed by a vote of its members. It takes nobody new and no new messages.';
+
+/** When the group's members closed it by a vote (decisions-engine closeGroupByVote), or null. */
+export function groupClosedAt(groupId: string): string | null {
+    return (db.prepare('SELECT closed_at FROM group_closures WHERE group_id = ?').get(groupId) as { closed_at: string } | undefined)?.closed_at ?? null;
+}
+
+function assertGroupNotClosed(groupId: string): void {
+    if (groupClosedAt(groupId)) throw new Error(GROUP_CLOSED);
+}
+
+/**
+ * Leaving a group mid-vote (§2.6): the leaver chose to have no say, so they leave the roll of its open votes and their vote
+ * is dropped. A removal by a convenor or the lead writes nothing here: a removal must not be a way to swing a vote.
+ */
+function dropFromOpenGroupRolls(groupId: string, memberPubkey: string): void {
+    db.prepare(`
+        UPDATE decision_electors SET status = 'left', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE member_pubkey = ? AND status = 'on' AND decision_id IN (
+            SELECT id FROM decisions WHERE scope_kind = 'group' AND scope_id = ? AND status = 'open'
+        )
+    `).run(memberPubkey, groupId);
+}
+
+/**
+ * The row changes a chat group's passed vote makes (decisions-engine.ts, DESIGN-group-decisions §2.3), inside its
+ * transaction. No convenor acts, so no convenor's power is asked for: the vote is the authority, and the preflight has
+ * already checked the subject is where the vote left them. Nothing here touches money, trust or a node role.
+ */
+export function setGroupRoleByVote(groupId: string, subject: string, role: 'convenor' | 'member'): void {
+    const now = new Date().toISOString();
+    reconcileGroupLeadEngine(db, groupId);
+    db.prepare(
+        "UPDATE group_members SET role = ?, role_since = CASE WHEN role = ? THEN role_since ELSE ? END, updated_at = ? WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
+    ).run(role, role, now, now, groupId, subject);
+}
+
+export function replaceGroupLeadByVote(groupId: string, subject: string): void {
+    const now = new Date().toISOString();
+    db.prepare("UPDATE group_members SET role = 'convenor', role_since = CASE WHEN role = 'convenor' THEN role_since ELSE ? END, updated_at = ? WHERE group_id = ? AND member_pubkey = ? AND status = 'active'")
+        .run(now, now, groupId, subject);
+    db.prepare('UPDATE groups SET lead_pubkey = ?, updated_at = ? WHERE id = ?').run(subject, now, groupId);
+}
+
+/** The removal a convenor's removal writes (the 'removed' row, so it sticks); the chat's key goes stale, as with no epoch. */
+export function removeGroupMemberByVote(groupId: string, subject: string): void {
+    const before = groupKeyRoster(groupId).join(',');
+    const now = new Date().toISOString();
+    db.prepare("UPDATE group_members SET status = 'removed', role = 'member', role_since = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?")
+        .run(now, now, groupId, subject);
+    reconcileGroupLeadEngine(db, groupId);
+    if (groupKeyRoster(groupId).join(',') !== before) markGroupEpochStale(groupId);
+}
+
+export function setGroupJoinPolicyByVote(groupId: string, policy: JoinPolicy): void {
+    db.prepare('UPDATE groups SET join_policy = ?, updated_at = ? WHERE id = ?').run(policy, new Date().toISOString(), groupId);
+}
+
+/**
+ * close_group (§2.3): the row stays and is marked closed, so "Your groups" and its history stay honest; its posts are
+ * cancelled as the delete trigger cancels them, but they keep their group, so nobody outside it ever sees them.
+ */
+export function closeGroupByVote(groupId: string, decisionId: string): void {
+    const now = new Date().toISOString();
+    db.prepare('INSERT OR IGNORE INTO group_closures (group_id, decision_id, closed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+        .run(groupId, decisionId, now, now, now);
+    db.prepare("UPDATE posts SET active = 0, status = 'cancelled', updated_at = ? WHERE target_group_id = ? AND active = 1").run(now, groupId);
+    db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, groupId);
+}
+
+/** After a group's vote was carried out (after its commit): the chat follows, the group hears, a line says what changed. */
+export function afterGroupVote(groupId: string, change: { kind: 'role' | 'lead' | 'removed' | 'policy' | 'closed'; target?: string | null; text: string }): void {
+    const target = change.target || null;
+    try {
+        if (target) syncGroupThreadMembership(groupId, target);
+        const type = change.kind === 'role' ? GroupSystemType.ROLE_CHANGED
+            : change.kind === 'lead' ? GroupSystemType.LEAD_HANDED_OVER
+            : change.kind === 'removed' ? GroupSystemType.MEMBER_REMOVED : null;
+        if (type) {
+            postGroupSystemLine(getMessagingCb(), groupId, type, change.text, { targetPubkey: target, byVote: true },
+                change.kind === 'removed' && target ? [target] : []);
+        }
+    } catch (e) { console.warn('[Groups] Could not write the line for a group vote:', e); }
+    bumpGroupsVersion();
+    const recipients = getGroupActiveMemberRecipients(groupId, target ? [target] : []);
+    if (target && change.kind === 'removed') broadcast({ type: 'group_member_removed', groupId, memberPubkey: target }, recipients);
+    else if (target) {
+        const member = getGroupMemberEngine(db, groupId, target);
+        if (member) broadcast({ type: 'group_member_updated', groupId, member }, recipients);
+    }
+    const group = getGroupEngine(db, groupId);
+    if (group) broadcast({ type: 'group_updated', group: groupAsListed(group) }, recipients);
+}
+
 /**
  * Joining, and accepting an invitation, take the joiner's own epoch in the same transaction (group chat encryption design
  * §2.3, engine/group-keys.ts withMembershipEpoch): reason 'join' or 'invite', made by the joiner, wrapped to every active
  * member after the change. Without one (an old app) the join applies and the current epoch goes stale.
  */
 export function joinGroup(groupId: string, memberPubkey: string, epoch?: unknown): GroupMember {
+    assertGroupNotClosed(groupId);
     const wasActive = isGroupMemberEngine(db, groupId, memberPubkey);
     const res = withMembershipEpoch(groupId, memberPubkey, epoch, () => joinGroupEngine(db, groupId, memberPubkey),
         { allowed: ['join', 'invite'], subject: memberPubkey });
@@ -9807,6 +9904,8 @@ export function removeGroupMember(groupId: string, actorPubkey: string, targetPu
     const res = withMembershipEpoch(groupId, actorPubkey, epoch, () => removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey),
         { allowed: ['remove'], subject: targetPubkey });
     if (res) {
+        // Leaving drops their vote on the group's open votes; a removal by a convenor keeps it (§2.6).
+        if (actorPubkey === targetPubkey) dropFromOpenGroupRolls(groupId, targetPubkey);
         try {
             // Out of the chat at once (and out of its live updates and pushes).
             syncGroupThreadMembership(groupId, targetPubkey);
@@ -9858,6 +9957,7 @@ export function updateGroup(groupId: string, convenorPubkey: string, updates: Up
 
 export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, epoch?: unknown): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
+    assertGroupNotClosed(groupId);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
     // The approving convenor makes the new member's first epoch (§2.3), in the same transaction.
     const res = withMembershipEpoch(groupId, convenorPubkey, epoch, () => approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey),
@@ -9871,6 +9971,7 @@ export function approveGroupMember(groupId: string, convenorPubkey: string, targ
 
 export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member', epoch?: unknown): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
+    assertGroupNotClosed(groupId);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
     // An invitation lets nobody in, so it takes no epoch; inviting someone who had asked admits them, and then the
     // convenor's epoch is an approval's.
@@ -9892,6 +9993,7 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
 }
 
 export function postGroupThreadMessage(groupId: string, authorPubkey: string, line: GroupLineIn, clientId?: string): EventThreadMessage {
+    assertGroupNotClosed(groupId);
     return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, line, clientId);
 }
 

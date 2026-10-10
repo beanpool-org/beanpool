@@ -20,6 +20,11 @@ import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
 import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
+import { getCachedNodeProfile } from '../utils/node-profile';
+import { nearbyIdReads, nearbySetOf } from '../utils/posts-nearby';
+import {
+    nextNearbyAreaCopy, readNearbyAreaCopy, sameArea, storeNearbyAreaCopy, NEARBY_AREA_RECHECK_MS, type NearbyArea, type NearbyAreaCopy,
+} from '../utils/nearby-area';
 
 const SYNC_TIMEOUT_MS = 20_000;
 /**
@@ -251,6 +256,41 @@ function liveChangesSince(mark: number, dbName: string): { liveChanges?: LivePos
 }
 
 /**
+ * On a community that syncs listings by area (its profile's `nearbyListings`), what every write of its listings keeps
+ * (utils/db.ts applyDelta `postsNearby`): at most `max` others besides the member's own and tied ones, nearest the area
+ * this phone holds for them (utils/nearby-area.ts). Null anywhere else, and without the phone's key.
+ */
+async function nearbyKeepFor(anchorUrl: string, selfPubkey: string | null): Promise<{ area: NearbyArea | null; max: number } | null> {
+    const limits = (await getCachedNodeProfile(anchorUrl))?.features.nearbyListings;
+    if (!limits || !selfPubkey) return null;
+    return { area: (await readNearbyAreaCopy(anchorUrl, selfPubkey))?.area ?? null, max: limits.max };
+}
+
+/**
+ * The member's area on a by-area community, for this cycle: this phone's copy, asked again of the node once it is an hour
+ * old (or there is none). A copy that moved is marked whole (utils/nearby-area.ts): the posts read is then whole. Null
+ * when there is no copy and the node can't be asked: the read is as usual, and the prune keeps the newest.
+ */
+async function nearbyAreaForSync(
+    anchorUrl: string, pubKey: string, signer: { publicKey: string; privateKey: string } | null,
+): Promise<NearbyAreaCopy | null> {
+    let copy = await readNearbyAreaCopy(anchorUrl, pubKey);
+    const now = Date.now();
+    if (signer && (!copy || now - copy.checkedAt >= NEARBY_AREA_RECHECK_MS || copy.checkedAt > now)) {
+        // Loaded here, as the identity is: only a by-area community's cycle needs the signed read.
+        const { readMemberArea } = await import('../utils/member-area');
+        const said = await readMemberArea(anchorUrl, signer);
+        if (said !== undefined) {
+            copy = nextNearbyAreaCopy(copy, pubKey, said ? { lat: said.lat, lng: said.lng } : null, now);
+            try {
+                await storeNearbyAreaCopy(anchorUrl, copy);
+            } catch (e) {}
+        }
+    }
+    return copy;
+}
+
+/**
  * Write a pushed listing change into this phone's cache, through applyDelta. Returns false — and writes
  * nothing — when the change should go through the full catch-up sync as it always did:
  *   - the socket's node is no longer the active one (the cache belongs to another community now);
@@ -279,7 +319,9 @@ export async function applyLivePostChange(
 
     liveLog.push({ seq: ++liveSeq, dbName: expectedDbName, change });
     if (liveLog.length > LIVE_LOG_MAX) liveLog.splice(0, liveLog.length - LIVE_LOG_MAX);
-    await applyDelta({ liveChanges: [change] }, expectedDbName);
+    // On a by-area community a push adds a row between reads: the phone keeps itself to its `max` after it.
+    const nearby = await nearbyKeepFor(ctx.anchorUrl, self);
+    await applyDelta({ liveChanges: [change], ...(nearby ? { postsNearby: nearby } : {}) }, expectedDbName);
     return true;
 }
 
@@ -389,9 +431,13 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Step 2: Fetch Posts and Balance directly via standard REST APIs
         // Through the identity module, the one reader of the stored key (and a seam a test can stand in for).
         let pubKey = '';
+        // The key that signs the by-area community's area read (nearbyAreaForSync).
+        let signer: { publicKey: string; privateKey: string } | null = null;
         try {
             const { loadIdentity } = await import('../utils/identity');
-            pubKey = (await loadIdentity())?.publicKey || '';
+            const identity = await loadIdentity();
+            pubKey = identity?.publicKey || '';
+            signer = identity?.publicKey && identity?.privateKey ? { publicKey: identity.publicKey, privateKey: identity.privateKey } : null;
         } catch (e) {
             console.error('[Pillar Sync] Failed to get identity from SecureStore', e);
         }
@@ -500,6 +546,18 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             if (postsHeld.since === '') postsIsIncremental = false;
             postsHeld = null;
         }
+        // A community that syncs listings by area (utils/posts-nearby.ts, the node's profile `nearbyListings`): the posts
+        // read says `nearby=1` and gets its member's set. Anywhere else, and without the phone's key, every request below is
+        // as it always was.
+        const nearbyLimits = pubKey ? (await getCachedNodeProfile(anchorUrl))?.features.nearbyListings ?? null : null;
+        let nearbyArea: NearbyAreaCopy | null = null;
+        if (nearbyLimits) {
+            nearbyArea = await nearbyAreaForSync(anchorUrl, pubKey, signer);
+            // No held read: the set is a few pages, and each of them names all of it.
+            postsHeld = null;
+            // A first read by area, or an area that moved: the new neighbourhood, whole.
+            if (nearbyArea?.whole) postsIsIncremental = false;
+        }
         if (postsHeldRaw !== null && !postsHeld) await AsyncStorage.removeItem(kPostsHeld);
         if (postsHeld) postsIsIncremental = postsHeld.since !== '';
         let postsSyncParam = postsHeld
@@ -517,6 +575,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // The ids the take-over's catch-up read carried and its pull didn't: they count as the node's, never as part of
         // the pull's answer (utils/posts-replace.ts `sentOnly`).
         let postsSentOnly: string[] = [];
+        // A by-area read that stopped before its last page: what it read is written and reconciled, but the cursor stays.
+        let postsCursorStays = false;
 
         // Each request gets its own 30s budget (extended for heavy initial payloads), started when
         // THAT request starts. Two controllers armed at the top of the cycle used to be shared by
@@ -595,7 +655,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // `types=` opts in to events (docs/events-on-the-map.md §2.6). Without it the node leaves them out, which
             // is what keeps builds that predate events from ever caching one.
             // `paged=1` asks for the read paged by key (POSTS_NEXT_HEADER), `pageAfter` for the page below a key.
-            const pullPosts = (cursor: string, after: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
+            const pullPosts = (cursor: string, after: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? 'limit=200&sync=true&nearby=1' : 'limit=1000&sync=true'}&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: timeouts.signal(30000)
@@ -712,12 +772,91 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 result.errorMessage = viewRefusal;
                 return result;
             }
+            // A by-area community's answer carries its member's set (utils/posts-nearby.ts), read below on its own. One that
+            // doesn't (the node's switch went off since this phone heard its profile) is read as any other.
+            let nearbyFirst: { posts: any[]; set: string[] } | null = null;
+            let nearbyPlain: any;
+            if (nearbyLimits && postsRes.status !== 304) {
+                const body = JSON.parse(await postsRes.text());
+                nearbyFirst = nearbySetOf(body);
+                if (!nearbyFirst) nearbyPlain = body;
+            }
             if (postsRes.status === 304) {
                 // Nothing changed since the copy this URL last fetched. The read stops at its first page, and the cursor
                 // stays where it is, as a held read does.
                 postsNotModified = true;
+            } else if (nearbyLimits && nearbyFirst) {
+                // The member's set, paged by key until the node hands out no next key. Each page is written as it comes, and
+                // each names the whole set: the last one read is the set this phone keeps. Then what it holds outside the
+                // set goes (never the member's own or tied), what it lacks comes by `ids=`, and it keeps at most `max`
+                // others. After a take-over this is the replace: exact, where utils/posts-replace.ts's recency rule guesses.
+                const keep = { area: nearbyArea?.area ?? null, max: nearbyLimits.max };
+                const writeNear = async (delta: any): Promise<boolean> => {
+                    const wrote = await applyDelta({ ...delta, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName, copyGen);
+                    if (wrote === false) {
+                        postsUnwritten = true;
+                        forgetCycleFingerprints(anchorUrl, ['posts']);
+                    }
+                    return wrote !== false;
+                };
+                const changed = () => {
+                    try {
+                        const { DeviceEventEmitter } = require('react-native');
+                        DeviceEventEmitter.emit('sync_data_updated');
+                    } catch (e) {}
+                };
+                let set = nearbyFirst.set;
+                let rows = nearbyFirst.posts.length;
+                let complete = await writeNear({ posts: nearbyFirst.posts });
+                if (complete) changed();
+                let next = complete ? nextPageKeyOf(postsRes) : null;
+                let pages = 1;
+                while (complete && next) {
+                    const res = pages < POSTS_PAGE_CAP ? await pullPosts(postsSyncParam, next).catch(() => null) : null;
+                    const page = res && res.ok && epochOf(res) === epochNow && !(await postsViewRefusal(res, anchorUrl, pubKey))
+                        ? nearbySetOf(await res.json().catch(() => null)) : null;
+                    if (!res || !page || !(await writeNear({ posts: page.posts }))) {
+                        complete = false;
+                        break;
+                    }
+                    set = page.set;
+                    rows += page.posts.length;
+                    pages++;
+                    next = nextPageKeyOf(res);
+                }
+                let fetched = 0;
+                if (!postsUnwritten && await writeNear({ postsNearby: { set, ...keep } })) {
+                    // The set's listings this phone lacks: one that came into it without changing (a nearer one went), or one
+                    // on a page this read didn't reach. NEARBY_IDS_PER_READ a read, NEARBY_ID_READS_PER_CYCLE reads a cycle;
+                    // the rest come next cycle. One the node won't hand out is left out, and nothing else changes for it.
+                    const held = new Set((await (await getDb()).getAllAsync<{ id: string }>('SELECT id FROM posts')).map(r => r.id));
+                    const missing = [...new Set(set)].filter(id => !held.has(id));
+                    for (const ids of nearbyIdReads(missing)) {
+                        const res = await fetch(`${anchorUrl}/api/marketplace/posts?ids=${ids.map(encodeURIComponent).join(',')}&sync=true&${EVENT_TYPES_QUERY}`, {
+                            method: 'GET',
+                            headers: { 'Accept': 'application/json' },
+                            signal: timeouts.signal(30000),
+                        }).catch(() => null);
+                        const answer = res && res.ok && epochOf(res) === epochNow ? await res.json().catch(() => null) : null;
+                        if (!Array.isArray(answer)) break;
+                        const asked = new Set(ids);
+                        const theirs = answer.filter(p => asked.has(String(p?.id)));
+                        if (theirs.length > 0 && !(await writeNear({ posts: theirs, postsNearby: keep }))) break;
+                        fetched += theirs.length;
+                    }
+                    if (takenOver) postsReplaced = complete;
+                    // The whole read the area's move asked for has landed: the next ones are deltas again.
+                    if (complete && !postsIsIncremental && nearbyArea?.whole) {
+                        const now = await readNearbyAreaCopy(anchorUrl, pubKey);
+                        if (now && sameArea(now.area, nearbyArea.area)) await storeNearbyAreaCopy(anchorUrl, { ...now, whole: false }).catch(() => {});
+                    }
+                    changed();
+                }
+                if (!complete) postsCursorStays = true;
+                postsWrittenEarly = true;
+                console.log(`[Pillar Sync] Received ${rows} listing(s) of this member's set of ${set.length} in ${pages} page(s), ${fetched} more by id${complete ? '' : '; the read stopped, the cursor stays'}`);
             } else {
-                postsData = await parseIfChanged(postsRes, anchorUrl, 'posts', rawGated);
+                postsData = nearbyLimits ? nearbyPlain : await parseIfChanged(postsRes, anchorUrl, 'posts', rawGated);
                 // A whole read that isn't a take-over's is written as it comes (review of PR #1719, NB3): its first page
                 // now, so the Market draws it while the rest pages in, then each later page in its own write, so no write
                 // of up to POSTS_PAGE_CAP pages holds the sync lock. A take-over's needs every page before its replace
@@ -1040,6 +1179,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // applyDelta writes these after `posts`, so a push is never undone by the older copy this cycle carries.
         // Not a table: never fingerprinted, never a reason to tell the screens something changed.
         Object.assign(gatedDelta, liveChangesSince(liveMark, expectedDbName));
+        // On a by-area community those pushes added rows: the phone keeps itself to its `max` after them.
+        if (nearbyLimits && gatedDelta.liveChanges) gatedDelta.postsNearby = { area: nearbyArea?.area ?? null, max: nearbyLimits.max };
 
         onProgress?.(5, 5, 'Finalizing Local SQLite Database Cache...');
         // Apply physical updates to local Native device SQLite Matrix
@@ -1098,7 +1239,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
         // The posts cursor: held where a read cut short stopped (kPostsHeld), or, once a read reached its last page, moved
         // to when that read began. A 304 or a write that didn't land moves neither.
-        if (!postsUnwritten && !postsNotModified) {
+        if (!postsUnwritten && !postsNotModified && !postsCursorStays) {
             if (postsHoldAt) {
                 await storeForCopy(kPostsHeld, JSON.stringify(postsHoldAt));
             } else {

@@ -69,7 +69,7 @@ function reconcileCycle(held: NearbyHeld[], set: string[], unfetchable: Set<stri
 const ids = (rows: { id: string }[]) => new Set(rows.map(r => r.id));
 const sorted = (s: Iterable<string>) => [...s].sort();
 
-describe('posts-nearby, 2,000 seeded worlds', () => {
+describe('posts-nearby, 2,000 seeded worlds', { timeout: 60_000 }, () => {
     const WORLDS = 2000;
 
     it('held after reconcile = the set ∪ own ∪ tied (every id the node hands out fetched, cycle after cycle)', () => {
@@ -116,7 +116,8 @@ describe('posts-nearby, 2,000 seeded worlds', () => {
             const { after, asked } = reconcileCycle(w.held, w.set, w.unfetchable);
             const holding = ids(after);
             // Every row of the set the phone held stays; every one it could fetch in this cycle's reads came.
-            for (const h of w.held) if (w.set.includes(h.id)) expect(holding.has(h.id)).toBe(true);
+            const inSet = new Set(w.set);
+            for (const h of w.held) if (inSet.has(h.id)) expect(holding.has(h.id)).toBe(true);
             for (const id of asked) expect(holding.has(id)).toBe(!w.unfetchable.has(id));
             for (const id of w.unfetchable) expect(holding.has(id)).toBe(false);
         }

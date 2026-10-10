@@ -42,6 +42,7 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { lockedGroupLine } from './group-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -371,7 +372,7 @@ async function main(): Promise<void> {
         since(g2, [lead2, e1, e2, e3], daysAgo(60));
         quietSince(lead2, daysAgo(40));
         const opened2 = await call('POST', `/api/groups/${g2}/succession/propose`, e1, { candidatePubkey: e2.pk });
-        const back = await call('POST', `/api/groups/${g2}/chat/message`, lead2, { text: 'Sorry, I was away' });
+        const back = await call('POST', `/api/groups/${g2}/chat/message`, lead2, lockedGroupLine(db, g2)); // a sealed line: the lead is back
         const view = await call('GET', `/api/groups/${g2}/succession`, e1);
         const p2 = view.body?.proposals?.find((x: any) => x.id === opened2.body?.proposal?.id);
         assert(opened2.status === 200 && back.status === 201 && p2?.status === 'cancelled' && p2?.closedReason === 'convenor_returned',

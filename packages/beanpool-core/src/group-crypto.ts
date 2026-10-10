@@ -7,13 +7,19 @@
  * member whose action changed the membership makes the next one and locks ("wraps") it to every active member: an
  * ephemeral X25519 key agreed with the member's identity-derived X25519 key (dm-crypto.ts identityX25519Secret /
  * identityX25519Public, the one derivation direct messages use), HKDF-SHA256 salted with the ephemeral public key, info
- * 'beanpool-group-key/1', and XChaCha20-Poly1305 bound to [tag, group, epoch, recipient, wrapper]. A wrap moved to another
- * group, epoch or member, or claimed by another wrapper, doesn't open. The node stores the wraps and can open none.
+ * 'beanpool-group-key/1', and XChaCha20-Poly1305 bound to [tag, group, epoch, recipient, wrapper]. A wrap is bound to its
+ * group, epoch, recipient and claimed wrapper, and opens only to the key its epoch record commits to; the one-time key
+ * proves nothing about who made it (anyone can make a fresh wrap naming any wrapper). So every opener ends by checking the
+ * key against the record's commitment (DESIGN-group-chat-wrap-provenance-fable.md, Option C), and the raw opener, which
+ * checks nothing, is kept out of the core barrel. The node stores the wraps and can open none.
  *
- * The epoch record. Who made the epoch, why, whose membership changed, when, and every wrap, signed by the maker with
- * their Ed25519 identity over a canonical JSON array (groupEpochCanonical). A changed recipient list fails the signature;
- * a maker who could not have made the epoch (§2.3: not a member after the change, a joiner other than the one who
- * joined, a removed member) fails verifyGroupEpochRecord even with a good signature.
+ * The epoch record. Who made the epoch, why, whose membership changed, when, and three digests: a commitment to the key
+ * (sha256('beanpool-group-commit/1' ‖ key)), the sorted recipient set, and every wrap. Signed by the maker with their
+ * Ed25519 identity over a canonical JSON array (groupEpochCanonical). A changed recipient list or wrap no longer matches
+ * its digest; a changed digest fails the signature; a maker who could not have made the epoch (§2.3: not a member after
+ * the change, a joiner other than the one who joined, a removed member) fails verifyGroupEpochRecord even with a good
+ * signature. The node serves a member the record without its wraps, and that member's own wrap: a few hundred bytes
+ * whatever the group's size.
  *
  * Lines. Each message has its own key, mk = HKDF-SHA256(epoch key, salt = message id, info 'beanpool-group-line/1'), so a
  * member reporting one line can hand a moderator that line's key and nothing else (§7.1, §13). A line is
@@ -33,8 +39,8 @@
  * toEd25519Seed, at each entry point.
  *
  * Not covered, by design (§8): the node decides membership, so it could add a member of its own and the next epoch would
- * be wrapped to them (members see the join line). A maker could wrap different keys to different members; lines then
- * fail to open for some, which shows, but isn't prevented here.
+ * be wrapped to them (members see the join line). A maker who wraps different keys to different members is caught by
+ * the commitment: a member whose wrap holds another key refuses it when opening, before sealing anything.
  */
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
@@ -44,6 +50,7 @@ import { concatBytes, hexToBytes, randomBytes as cryptoRandomBytes, utf8ToBytes 
 import { Buffer } from 'buffer';
 import { toEd25519Seed } from './ed25519-key.js';
 import { dmPublicKeyOf, identityX25519Public, identityX25519Secret } from './dm-crypto.js';
+import { isGroupVectorRng } from './group-vector-rng.js';
 
 /** The nonce column's prefix for every encrypted group line. Not the DM's (see the header). */
 export const GROUP_NONCE_PREFIX = 'group-xc20p-v1:';
@@ -51,6 +58,8 @@ export const GROUP_NONCE_PREFIX = 'group-xc20p-v1:';
 export const GROUP_KEY_WRAP_TAG = 'beanpool-group-key/1';
 /** Epoch record: the first word of its canonical form. */
 export const GROUP_EPOCH_TAG = 'beanpool-group-epoch/1';
+/** Key commitment (provenance design §5.1): sha256(this tag ‖ the epoch key). */
+export const GROUP_KEY_COMMIT_TAG = 'beanpool-group-commit/1';
 /** Top-up wrap (§2.5): the first word of its canonical form. */
 export const GROUP_TOP_UP_TAG = 'beanpool-group-wrap/1';
 /** Line: the per-message key's HKDF info and the first word of the line's associated data. */
@@ -77,11 +86,12 @@ export type GroupLinePart = 'body' | 'attachment' | 'edit';
 const GROUP_LINE_PARTS: readonly GroupLinePart[] = ['body', 'attachment', 'edit'];
 
 /**
- * Where randomness comes from. The platform CSPRNG unless a test or the vectors hand in a fixed one: the apps and the node
- * never pass this.
+ * Where randomness comes from: always the platform CSPRNG, unless the frozen vectors or core's tests hand in a stream minted
+ * by group-vector-rng.ts (not in the core barrel). Any other function is refused, so an app or the node can't fix an epoch
+ * key, a one-time key or a nonce by mistake.
  */
 export interface GroupCryptoRandom {
-    randomBytes?: (n: number) => Uint8Array;
+    randomBytesForVectors?: (n: number) => Uint8Array;
 }
 
 /** One epoch key locked to one member (§2.2). Field names as the routes use them (Appendix A). */
@@ -96,7 +106,7 @@ export interface GroupKeyWrap {
     wrapped: string;
 }
 
-/** An epoch record, signed by its maker (§2.1, §7.3). */
+/** An epoch record, signed by its maker (§2.1, §7.3; provenance design §5.1). */
 export interface GroupEpochRecord {
     groupId: string;
     epoch: number;
@@ -107,7 +117,17 @@ export interface GroupEpochRecord {
     createdBy: string;
     /** When the maker made it, ISO 8601, as signed. */
     createdAt: string;
-    wraps: GroupKeyWrap[];
+    /** groupKeyCommit(the epoch key), base64: every wrap of this epoch must open to the key it names. */
+    keyCommit: string;
+    /** groupMembersDigest(the recipients), base64. */
+    membersDigest: string;
+    /** groupWrapsDigest(the wraps), base64. */
+    wrapsDigest: string;
+    /**
+     * Every wrap: present when a record is made and when the node checks one; absent when the node serves the record to a
+     * member, who gets only their own wrap beside it (GroupServedWrap).
+     */
+    wraps?: GroupKeyWrap[];
     /** The maker's Ed25519 signature over sha256(groupEpochCanonical(record)), base64 (64 bytes). */
     sig: string;
 }
@@ -119,6 +139,19 @@ export interface GroupTopUp extends GroupKeyWrap {
     wrapper: string;
     /** The wrapper's Ed25519 signature over sha256(groupTopUpCanonical(groupId, topUp)), base64. */
     sig: string;
+}
+
+/**
+ * My wrap for one epoch as the node serves it (GET …/keys myWraps, provenance design §5.3): a wrap that came in the epoch
+ * record (sig null, wrapper = the record's maker) or a top-up (sig = the wrapper's top-up signature).
+ */
+export interface GroupServedWrap {
+    epoch: number;
+    wrapper: string;
+    ephPub: string;
+    nonce: string;
+    wrapped: string;
+    sig: string | null;
 }
 
 /** A line as it goes to the node. */
@@ -183,7 +216,10 @@ function utf8(bytes: Uint8Array): string {
 }
 
 function rngOf(opts?: GroupCryptoRandom): (n: number) => Uint8Array {
-    return opts?.randomBytes ?? cryptoRandomBytes;
+    const fixed = opts?.randomBytesForVectors;
+    if (fixed === undefined) return cryptoRandomBytes;
+    if (!isGroupVectorRng(fixed)) throw new Error('Group keys and nonces come from the platform CSPRNG; a fixed stream is for the vectors and tests only.');
+    return fixed;
 }
 
 function isPubHex(s: unknown): s is string {
@@ -236,9 +272,12 @@ function checkWrapBinding(b: GroupWrapBinding): void {
  * Lock an epoch key to one member. RNG order (pinned by the vectors): the ephemeral secret (32), then the nonce (24).
  */
 export function wrapGroupKey(groupKey: Uint8Array, b: GroupWrapBinding, opts?: GroupCryptoRandom): GroupKeyWrap {
+    return wrapWith(groupKey, b, rngOf(opts));
+}
+
+function wrapWith(groupKey: Uint8Array, b: GroupWrapBinding, rng: (n: number) => Uint8Array): GroupKeyWrap {
     if (!(groupKey instanceof Uint8Array) || groupKey.length !== KEY_LEN) throw new Error('A group key is 32 bytes.');
     checkWrapBinding(b);
-    const rng = rngOf(opts);
     const recipientX = identityX25519Public(b.recipientPubHex);
     const eph = rng(KEY_LEN);
     const ephPub = x25519.getPublicKey(eph);
@@ -250,10 +289,12 @@ export function wrapGroupKey(groupKey: Uint8Array, b: GroupWrapBinding, opts?: G
 }
 
 /**
- * Open a wrap locked to me: the epoch key, 32 bytes. Throws GroupKeyNotVerifiedError if it isn't mine, or was made for
- * another group, epoch or wrapper, or was changed. The caller keeps the key in memory only (§4).
+ * Open a wrap locked to me, checking nothing about who made it or what is inside: the epoch key, 32 bytes. Throws
+ * GroupKeyNotVerifiedError if it isn't mine, or was sealed for another group, epoch or wrapper label, or was changed. A
+ * wrap made fresh by anyone, naming any wrapper, opens and gives the key its maker chose. Not in the core barrel: the apps
+ * use openGroupKeyWrap, which also checks the key against its epoch record's commitment.
  */
-export function openGroupKeyWrap(
+export function openGroupKeyWrapUnverified(
     wrap: GroupKeyWrap,
     b: Omit<GroupWrapBinding, 'recipientPubHex'>,
     myEdPrivHex: string,
@@ -276,18 +317,63 @@ export function openGroupKeyWrap(
     }
 }
 
-// ─── Epoch records (§2.3, §7.3) ─────────────────────────────────────────────────────────────
+/** What a wrap is opened against: where it belongs, who it claims made it, and the key its epoch record commits to. */
+export interface GroupWrapOpenBinding extends Omit<GroupWrapBinding, 'recipientPubHex'> {
+    /** The epoch record's keyCommit. Required: there is no way to open a wrap without naming the key you expect. */
+    keyCommit: string;
+}
+
+/**
+ * Open a wrap locked to me and check that it holds the key its epoch record commits to (provenance design §5.2): the
+ * epoch key. A wrap made by anyone, naming anyone as wrapper, opens here only if it holds that key; a wrap holding any
+ * other key throws GroupKeyNotVerifiedError before the app can seal a line under it.
+ */
+export function openGroupKeyWrap(wrap: GroupKeyWrap, b: GroupWrapOpenBinding, myEdPrivHex: string): Uint8Array {
+    if (!b || !strictB64(b.keyCommit, KEY_LEN)) throw new GroupKeyNotVerifiedError('A wrap is opened against the key its epoch record commits to.');
+    const key = openGroupKeyWrapUnverified(wrap, { groupId: b.groupId, epoch: b.epoch, wrapperPubHex: b.wrapperPubHex }, myEdPrivHex);
+    if (groupKeyCommit(key) !== b.keyCommit) throw new GroupKeyNotVerifiedError('This wrap does not hold the key the epoch record commits to.');
+    return key;
+}
+
+// ─── Digests (provenance design §5.1) ───────────────────────────────────────────────────────
+
+/** The commitment to an epoch key: base64(sha256(utf8('beanpool-group-commit/1') ‖ key)). Hides the key, binds it. */
+export function groupKeyCommit(groupKey: Uint8Array): string {
+    if (!(groupKey instanceof Uint8Array) || groupKey.length !== KEY_LEN) throw new Error('A group key is 32 bytes.');
+    return b64(sha256(concatBytes(utf8ToBytes(GROUP_KEY_COMMIT_TAG), groupKey)));
+}
+
+const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/** base64(sha256(utf8(JSON.stringify(the recipients, de-duplicated and sorted in code-unit order)))). */
+export function groupMembersDigest(recipients: readonly string[]): string {
+    return b64(sha256(utf8ToBytes(JSON.stringify([...new Set(recipients)].sort(byCodeUnit)))));
+}
+
+/** base64(sha256(utf8(JSON.stringify([[recipient, ephPub, nonce, wrapped] …] sorted by recipient)))). */
+export function groupWrapsDigest(wraps: readonly GroupKeyWrap[]): string {
+    const rows = wraps.map((w) => [w.recipient, w.ephPub, w.nonce, w.wrapped]).sort((a, b) => byCodeUnit(a[0], b[0]));
+    return b64(sha256(utf8ToBytes(JSON.stringify(rows))));
+}
+
+/**
+ * True if the record's recipients are exactly these active members (any order, duplicates ignored): what an app checks
+ * before sealing under an epoch (provenance design §7 rule 3) and the node before storing one.
+ */
+export function groupEpochCoversExactly(record: Pick<GroupEpochRecord, 'membersDigest'>, activeMembers: readonly string[]): boolean {
+    return !!record && typeof record.membersDigest === 'string' && record.membersDigest === groupMembersDigest(activeMembers);
+}
+
+// ─── Epoch records (§2.3, §7.3; provenance design §5) ────────────────────────────────────────
 
 /**
  * The canonical form an epoch record's signature covers: JSON.stringify of
- * [tag, group, String(epoch), reason, subject ?? '', createdBy, createdAt, [[recipient, ephPub, nonce, wrapped] …]], the
- * wraps sorted by recipient (code-unit order, which for lower-case hex is byte order, the same on every engine).
+ * [tag, group, String(epoch), reason, subject ?? '', createdBy, createdAt, keyCommit, membersDigest, wrapsDigest]. The
+ * wraps are not in it: wrapsDigest stands for them, so a member who holds only their own wrap still verifies the record.
  */
-export function groupEpochCanonical(r: Omit<GroupEpochRecord, 'sig'>): string {
-    const wraps = r.wraps
-        .map((w) => [w.recipient, w.ephPub, w.nonce, w.wrapped])
-        .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-    return JSON.stringify([GROUP_EPOCH_TAG, r.groupId, String(r.epoch), r.reason, r.subject ?? '', r.createdBy, r.createdAt, wraps]);
+export function groupEpochCanonical(r: Omit<GroupEpochRecord, 'sig' | 'wraps'>): string {
+    return JSON.stringify([GROUP_EPOCH_TAG, r.groupId, String(r.epoch), r.reason, r.subject ?? '', r.createdBy, r.createdAt,
+        r.keyCommit, r.membersDigest, r.wrapsDigest]);
 }
 
 /** What makeGroupEpochRecord needs. */
@@ -307,9 +393,9 @@ export interface MakeGroupEpochInput {
 }
 
 /**
- * Make the next epoch: a fresh key, wrapped to every recipient, signed. Refuses a record verifyGroupEpochRecord would
- * refuse. RNG order (pinned by the vectors): the epoch key (32), then per recipient in sorted order its ephemeral secret
- * (32) and nonce (24).
+ * Make the next epoch: a fresh key, wrapped to every recipient, the three digests, signed. Refuses a record
+ * verifyGroupEpochRecord would refuse. RNG order (pinned by the vectors): the epoch key (32), then per recipient in sorted
+ * order its ephemeral secret (32) and nonce (24).
  */
 export function makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCryptoRandom): { record: GroupEpochRecord; groupKey: Uint8Array } {
     const { seed, pubHex } = me(input.myEdPrivHex);
@@ -317,6 +403,8 @@ export function makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCry
     const rng = rngOf(opts);
     const groupKey = rng(KEY_LEN);
     if (groupKey.length !== KEY_LEN) throw new Error('A group key is 32 bytes.');
+    const wraps = recipients.map((recipientPubHex) =>
+        wrapWith(groupKey, { groupId: input.groupId, epoch: input.epoch, recipientPubHex, wrapperPubHex: pubHex }, rng));
     const unsigned: Omit<GroupEpochRecord, 'sig'> = {
         groupId: input.groupId,
         epoch: input.epoch,
@@ -324,8 +412,10 @@ export function makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCry
         subject: input.subject ?? null,
         createdBy: pubHex,
         createdAt: input.createdAt,
-        wraps: recipients.map((recipientPubHex) =>
-            wrapGroupKey(groupKey, { groupId: input.groupId, epoch: input.epoch, recipientPubHex, wrapperPubHex: pubHex }, { randomBytes: rng })),
+        keyCommit: groupKeyCommit(groupKey),
+        membersDigest: groupMembersDigest(recipients),
+        wrapsDigest: groupWrapsDigest(wraps),
+        wraps,
     };
     const problem = epochRecordProblem(unsigned);
     if (problem) throw new Error(`Not an epoch record this member can make: ${problem}`);
@@ -333,7 +423,10 @@ export function makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCry
     return { record: { ...unsigned, sig: b64(sig) }, groupKey };
 }
 
-/** Everything about a record that needs no signature check and no roster: its shape and §2.3's rules. */
+/**
+ * Everything about a record that needs no signature check and no roster: its shape, the §2.3 rules its header alone
+ * shows, and, when it carries its wraps, the rest of §2.3 and digests that match them.
+ */
 function epochRecordProblem(r: Omit<GroupEpochRecord, 'sig'>): string | null {
     if (!r || typeof r !== 'object') return 'not a record';
     if (!isGroupId(r.groupId)) return 'no group';
@@ -342,18 +435,25 @@ function epochRecordProblem(r: Omit<GroupEpochRecord, 'sig'>): string | null {
     if (!isPubHex(r.createdBy)) return 'no maker';
     if (r.subject !== null && !isPubHex(r.subject)) return 'the subject is not a member key';
     if (typeof r.createdAt !== 'string' || !Number.isFinite(Date.parse(r.createdAt))) return 'no time';
-    if (!Array.isArray(r.wraps) || r.wraps.length === 0) return 'no wraps';
-    const recipients = new Set<string>();
-    for (const w of r.wraps) {
-        if (!w || !isPubHex(w.recipient)) return 'a wrap names no member';
-        if (recipients.has(w.recipient)) return 'two wraps for one member';
-        recipients.add(w.recipient);
-        if (!strictB64(w.ephPub, KEY_LEN) || !strictB64(w.nonce, NONCE_LEN) || !strictB64(w.wrapped, KEY_LEN + TAG_LEN)) return 'a malformed wrap';
+    if (!strictB64(r.keyCommit, KEY_LEN) || !strictB64(r.membersDigest, KEY_LEN) || !strictB64(r.wrapsDigest, KEY_LEN)) return 'a malformed digest';
+    // With its wraps (made, or checked by the node): the digests must name exactly them, and §2.3 says the maker is an
+    // active member AFTER the change and every active member gets a wrap, so the maker is a recipient. A leaver, a removed
+    // member or an outsider never is. Served without them, the node applied these at write time.
+    let recipients: Set<string> | null = null;
+    if (r.wraps !== undefined) {
+        if (!Array.isArray(r.wraps) || r.wraps.length === 0) return 'no wraps';
+        recipients = new Set<string>();
+        for (const w of r.wraps) {
+            if (!w || !isPubHex(w.recipient)) return 'a wrap names no member';
+            if (recipients.has(w.recipient)) return 'two wraps for one member';
+            recipients.add(w.recipient);
+            if (!strictB64(w.ephPub, KEY_LEN) || !strictB64(w.nonce, NONCE_LEN) || !strictB64(w.wrapped, KEY_LEN + TAG_LEN)) return 'a malformed wrap';
+        }
+        if (groupMembersDigest([...recipients]) !== r.membersDigest) return 'its recipients are not the ones its digest names';
+        if (groupWrapsDigest(r.wraps) !== r.wrapsDigest) return 'its wraps are not the ones its digest names';
+        if (!recipients.has(r.createdBy)) return 'the maker is not a member after the change';
     }
-    // §2.3: the maker is an active member AFTER the change, and every active member gets a wrap, so the maker is a
-    // recipient. A leaver, a removed member or an outsider never is.
-    if (!recipients.has(r.createdBy)) return 'the maker is not a member after the change';
-    const subjectIn = r.subject !== null && recipients.has(r.subject);
+    const subjectIn = recipients !== null && r.subject !== null && recipients.has(r.subject);
     switch (r.reason) {
         case 'start':
             if (r.epoch !== 1) return "'start' is epoch 1 only";
@@ -368,7 +468,7 @@ function epochRecordProblem(r: Omit<GroupEpochRecord, 'sig'>): string | null {
             if (r.subject !== r.createdBy) return 'only the member who joined makes their join epoch';
             break;
         case 'approve':
-            if (r.subject === null || r.subject === r.createdBy || !subjectIn) return 'an approval names the approved member, who is a recipient';
+            if (r.subject === null || r.subject === r.createdBy || (recipients !== null && !subjectIn)) return 'an approval names the approved member, who is a recipient';
             break;
         case 'remove':
         case 'leave':
@@ -395,8 +495,10 @@ export interface GroupEpochCheck {
 }
 
 /**
- * Check an epoch record: its shape, the §2.3 rules on who may make it, its signature under its maker's key (strict RFC
- * 8032), and, when given, the group, the epoch and the roster. Throws GroupKeyNotVerifiedError saying why.
+ * Check an epoch record: its shape, the §2.3 rules on who may make it, its digests against its wraps when it carries them
+ * (a mismatch is refused before the signature is checked), its signature under its maker's key (strict RFC 8032), and,
+ * when given, the group, the epoch and the roster. A served record (no wraps) verifies from its header alone. Throws
+ * GroupKeyNotVerifiedError saying why.
  */
 export function verifyGroupEpochRecord(record: GroupEpochRecord, check: GroupEpochCheck): void {
     const problem = epochRecordProblem(record);
@@ -412,14 +514,34 @@ export function verifyGroupEpochRecord(record: GroupEpochRecord, check: GroupEpo
     }
 }
 
-/** Verify an epoch record, then open my wrap in it: the epoch key. */
+/** Verify a full epoch record (with its wraps), then open my wrap in it against its commitment: the epoch key. */
 export function openGroupEpochRecord(record: GroupEpochRecord, myEdPrivHex: string, check: GroupEpochCheck): Uint8Array {
     verifyGroupEpochRecord(record, check);
+    if (!record.wraps) throw new GroupKeyNotVerifiedError('This record carries no wraps; open the served wrap with openMyGroupKey.');
     let myPub: string;
     try { myPub = dmPublicKeyOf(myEdPrivHex); } catch { throw new GroupKeyNotVerifiedError('Not a private key this app can use.'); }
     const wrap = record.wraps.find((w) => w.recipient === myPub);
     if (!wrap) throw new GroupKeyNotVerifiedError('This epoch was not locked to me.');
-    return openGroupKeyWrap(wrap, { groupId: record.groupId, epoch: record.epoch, wrapperPubHex: record.createdBy }, myEdPrivHex);
+    return openGroupKeyWrap(wrap, { groupId: record.groupId, epoch: record.epoch, wrapperPubHex: record.createdBy, keyCommit: record.keyCommit }, myEdPrivHex);
+}
+
+/**
+ * The served shape (GET …/keys, provenance design §5.2): verify the record from its header, then open my wrap against its
+ * commitment. A wrap with no signature came in the record and must name its maker as wrapper; a signed one is a top-up and
+ * is checked as one, against the same roster. Throws GroupKeyNotVerifiedError.
+ */
+export function openMyGroupKey(record: GroupEpochRecord, myWrap: GroupServedWrap, myEdPrivHex: string, check: GroupEpochCheck): Uint8Array {
+    verifyGroupEpochRecord(record, check);
+    if (!myWrap || myWrap.epoch !== record.epoch) throw new GroupKeyNotVerifiedError('This wrap is for another epoch.');
+    let myPub: string;
+    try { myPub = dmPublicKeyOf(myEdPrivHex); } catch { throw new GroupKeyNotVerifiedError('Not a private key this app can use.'); }
+    const wrap: GroupKeyWrap = { recipient: myPub, ephPub: myWrap.ephPub, nonce: myWrap.nonce, wrapped: myWrap.wrapped };
+    if (myWrap.sig === null || myWrap.sig === undefined) {
+        if (myWrap.wrapper !== record.createdBy) throw new GroupKeyNotVerifiedError("An unsigned wrap is the record maker's, and this one names another.");
+        return openGroupKeyWrap(wrap, { groupId: record.groupId, epoch: record.epoch, wrapperPubHex: record.createdBy, keyCommit: record.keyCommit }, myEdPrivHex);
+    }
+    return openGroupTopUp(record.groupId, { ...wrap, epoch: myWrap.epoch, wrapper: myWrap.wrapper, sig: myWrap.sig }, myEdPrivHex, record.keyCommit,
+        { activeMembers: check.activeMembers });
 }
 
 // ─── Top-ups (§2.5) ─────────────────────────────────────────────────────────────────────────
@@ -446,22 +568,40 @@ export function makeGroupTopUp(
     return { ...unsigned, sig: b64(sig) };
 }
 
-/** Check a top-up's shape and its wrapper's signature (the node and the recipient both do). Throws GroupKeyNotVerifiedError. */
-export function verifyGroupTopUp(groupId: string, t: GroupTopUp): void {
+/** What verifyGroupTopUp checks a top-up against. */
+export interface GroupTopUpCheck {
+    /**
+     * The active members per the roster the caller holds (§2.5): the wrapper and the recipient must both be one, so a key
+     * signed by someone outside the group, or handed to someone no longer in it, is refused. Omit only where no roster is
+     * known.
+     */
+    activeMembers?: readonly string[];
+}
+
+/**
+ * Check a top-up's shape, its wrapper's signature (strict RFC 8032) and, when given, the roster (the node and the
+ * recipient both do: the app can't rely on the node's own checks). Throws GroupKeyNotVerifiedError.
+ */
+export function verifyGroupTopUp(groupId: string, t: GroupTopUp, check: GroupTopUpCheck = {}): void {
     if (!t || typeof t !== 'object' || !isGroupId(groupId) || !isEpoch(t.epoch) || !isPubHex(t.recipient) || !isPubHex(t.wrapper)
         || !strictB64(t.ephPub, KEY_LEN) || !strictB64(t.nonce, NONCE_LEN) || !strictB64(t.wrapped, KEY_LEN + TAG_LEN)) {
         throw new GroupKeyNotVerifiedError('Top-up refused: malformed.');
     }
+    if (check.activeMembers && !check.activeMembers.includes(t.wrapper)) throw new GroupKeyNotVerifiedError('Top-up refused: its wrapper is not an active member.');
+    if (check.activeMembers && !check.activeMembers.includes(t.recipient)) throw new GroupKeyNotVerifiedError('Top-up refused: its recipient is not an active member.');
     const sig = strictB64(t.sig, SIG_LEN);
     if (!sig || !verifySig(sig, sha256(utf8ToBytes(groupTopUpCanonical(groupId, t))), t.wrapper)) {
         throw new GroupKeyNotVerifiedError('Top-up refused: the signature does not verify.');
     }
 }
 
-/** Verify a top-up locked to me, then open it: the epoch key. */
-export function openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string): Uint8Array {
-    verifyGroupTopUp(groupId, t);
-    return openGroupKeyWrap(t, { groupId, epoch: t.epoch, wrapperPubHex: t.wrapper }, myEdPrivHex);
+/**
+ * Verify a top-up locked to me (against the roster, when given), then open it and check the key against its epoch
+ * record's commitment (provenance design §6): the epoch key. A top-up by a member holding another key is refused here.
+ */
+export function openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string, keyCommit: string, check: GroupTopUpCheck = {}): Uint8Array {
+    verifyGroupTopUp(groupId, t, check);
+    return openGroupKeyWrap(t, { groupId, epoch: t.epoch, wrapperPubHex: t.wrapper, keyCommit }, myEdPrivHex);
 }
 
 // ─── Lines (§7.1, §7.2) ─────────────────────────────────────────────────────────────────────

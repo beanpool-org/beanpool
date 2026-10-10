@@ -1,7 +1,7 @@
 /**
  * Home in one request (scratch/global-node/DESIGN-home-dashboard-fable.md §5, slices H0 and H0b).
  *
- *   GET /api/home?cards=needs,steps,…&lat=&lng=   → { generatedAt, profile, features, welcome?, me, layout, cards }
+ *   GET /api/home?cards=needs,steps,…&lat=&lng=&lands=enterprise   → { generatedAt, profile, features, welcome?, me, layout, cards }
  *
  * `welcome` (the visitors' Join card) only for a reader with no account here; `me` (with `firstOffer` and `standing`)
  * for a reader with their own cards, a suspended member included.
@@ -9,7 +9,9 @@
  * The whole Home screen from one signed read, assembled in-process (routes/home-answer.ts buildHome), never by fanning out
  * over HTTP. `cards` limits the work to the cards asked for (absent: every card but the ones the member's own layout
  * hides); unknown ids are dropped, never refused. `lat`/`lng` is the point "near you" is measured from; without one, a
- * member's own coarse area.
+ * member's own coarse area. `lands` names what this app can open beyond the first set (home-answer.ts parseLands): without
+ * `enterprise`, an enterprise's keepers' votes are left out of the Needs-you line and the Decide count, which would
+ * otherwise land on Commons → Decide, where they never show.
  *
  * ## Who is answered
  *
@@ -34,7 +36,7 @@
 import crypto from 'node:crypto';
 import Router from '@koa/router';
 import { parsePoint } from './distance-query.js';
-import { buildHome, homeReaderStanding, parseAskedCards } from './home-answer.js';
+import { buildHome, homeReaderStanding, parseAskedCards, parseLands } from './home-answer.js';
 import { VIEW_HEADER } from './viewer.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import type { RouteDeps } from './types.js';
@@ -70,7 +72,7 @@ export function createHomeRoutes(_deps: RouteDeps): Router {
             return;
         }
 
-        const body = buildHome({ actor, point: point.value, asked });
+        const body = buildHome({ actor, point: point.value, asked, lands: parseLands(ctx.query.lands) });
         const etag = homeEtag(actor, body);
         ctx.set('ETag', etag);
         // `private`: the answer is the reader's own, so no shared cache (a CDN or proxy in front of the node) may store it.

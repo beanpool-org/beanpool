@@ -79,6 +79,11 @@ services:
       # 512 MB heap below on a 1 GB server. A whole number above 0 to change it (raise it with the heap); anything else
       # is ignored, with a warning in the log.
       - HEAVY_READ_BUDGET_MB=${HEAVY_READ_BUDGET_MB:-}
+      # The server gzips its /api answers for apps and browsers that ask (apps/server/src/api-compression.ts), so members
+      # spend less of their data. EMPTY = it does. `off` = it never does: for a server behind an edge that compresses for
+      # the phones already (Cloudflare does, for a <name>.beanpool.org address) and short of CPU, one core say. Off, the
+      # edge still compresses for the phones; only the bytes between the server and the edge grow.
+      - API_GZIP=${API_GZIP:-}
       # The server asks GitHub (api.github.com) for the newest BeanPool release 30 s after it starts and every 6 hours,
       # so Settings can say whether an update is out. EMPTY = it does, as it always has. `true` = it never asks on its
       # own: nothing else depends on it, and Settings' "check now" button still asks when an owner or admin presses it.

@@ -7,12 +7,14 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 import * as gc from '../group-crypto.js';
 import {
     detectMentions, groupEpochCanonical, groupMessageKey, isGroupEncryptedNonce, isGroupEncryptedPayload, makeGroupEpochRecord,
-    makeGroupTopUp, openGroupEpochRecord, openGroupKeyWrap, openGroupLine, openGroupLineWithMessageKey, openGroupTopUp, sealGroupLine,
+    makeGroupTopUp, openGroupEpochRecord, openGroupKeyWrapUnverified, openGroupLine, openGroupLineWithMessageKey, openGroupTopUp, sealGroupLine,
     verifyGroupEpochRecord, verifyGroupTopUp, wrapGroupKey, GroupKeyNotVerifiedError, GroupLineNotVerifiedError, GROUP_NONCE_PREFIX,
+    groupEpochCoversExactly, groupKeyCommit, groupMembersDigest, groupWrapsDigest, openGroupKeyWrap, openMyGroupKey,
     type GroupEpochRecord, type GroupLineBinding, type GroupLinePayload,
 } from '../group-crypto.js';
 import { DM_NONCE_PREFIX, dmPublicKeyOf, identityX25519Secret, isDmEncryptedNonce } from '../dm-crypto.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
+import { mintGroupVectorRng } from '../group-vector-rng.js';
 import * as core from '../index.js';
 import {
     checkGroupCryptoVectors, groupVectorRandom, GROUP_LINE_VECTORS, GROUP_VECTOR_GROUP, GROUP_VECTOR_KEY_HEX, GROUP_VECTOR_PEOPLE,
@@ -54,7 +56,10 @@ function forgeRecord(unsigned: Omit<GroupEpochRecord, 'sig'>, signer: { seedHex:
 function recordBy(maker: typeof ana, reason: GroupEpochRecord['reason'], subject: string | null, recipients: string[], epoch = 2, signer = maker): GroupEpochRecord {
     const key = new Uint8Array(32).fill(7);
     const wraps = [...recipients].sort().map((r) => wrapGroupKey(key, { groupId: GROUP, epoch, recipientPubHex: r, wrapperPubHex: maker.publicKey }));
-    return forgeRecord({ groupId: GROUP, epoch, reason, subject, createdBy: maker.publicKey, createdAt: AT, wraps }, signer);
+    return forgeRecord({
+        groupId: GROUP, epoch, reason, subject, createdBy: maker.publicKey, createdAt: AT,
+        keyCommit: groupKeyCommit(key), membersDigest: groupMembersDigest(recipients), wrapsDigest: groupWrapsDigest(wraps), wraps,
+    }, signer);
 }
 
 const refOf = (sender: typeof ana, over: Partial<GroupLineBinding> = {}): GroupLineBinding =>
@@ -83,7 +88,7 @@ describe('the frozen vectors', () => {
 
     it('an epoch record wrap is what the design says, opened from the primitives without group-crypto.ts', () => {
         const a = GROUP_VECTOR_PEOPLE.ana;
-        const w = GROUP_VECTOR_RECORD.wraps.find((x) => x.recipient === a.publicKey)!;
+        const w = GROUP_VECTOR_RECORD.wraps!.find((x) => x.recipient === a.publicKey)!;
         const ephPub = new Uint8Array(Buffer.from(w.ephPub, 'base64'));
         const shared = x25519.getSharedSecret(ed25519.utils.toMontgomerySecret(hexToBytes(a.seedHex)), ephPub);
         const k = hkdf(sha256, shared, ephPub, utf8ToBytes('beanpool-group-key/1'), 32);
@@ -94,10 +99,15 @@ describe('the frozen vectors', () => {
         expect(bytesToHex(groupVectorRandom('epoch 3')(32))).toBe(GROUP_VECTOR_KEY_HEX);
     });
 
-    it("the record's signature is over the canonical array the design spells out", () => {
+    it("the record's signature is over the canonical array the provenance design spells out (§5.1), digests re-derived from noble alone", () => {
         const r = GROUP_VECTOR_RECORD;
-        const wraps = [...r.wraps].sort((x, y) => (x.recipient < y.recipient ? -1 : 1)).map((w) => [w.recipient, w.ephPub, w.nonce, w.wrapped]);
-        const canonical = JSON.stringify(['beanpool-group-epoch/1', r.groupId, '3', 'join', r.subject, r.createdBy, r.createdAt, wraps]);
+        const b64 = (u: Uint8Array) => Buffer.from(u).toString('base64');
+        const wraps = [...r.wraps!].sort((x, y) => (x.recipient < y.recipient ? -1 : 1)).map((w) => [w.recipient, w.ephPub, w.nonce, w.wrapped]);
+        const keyCommit = b64(sha256(concatBytes(utf8ToBytes('beanpool-group-commit/1'), hexToBytes(GROUP_VECTOR_KEY_HEX))));
+        const membersDigest = b64(sha256(utf8ToBytes(JSON.stringify(wraps.map((w) => w[0])))));
+        const wrapsDigest = b64(sha256(utf8ToBytes(JSON.stringify(wraps))));
+        expect([r.keyCommit, r.membersDigest, r.wrapsDigest]).toEqual([keyCommit, membersDigest, wrapsDigest]);
+        const canonical = JSON.stringify(['beanpool-group-epoch/1', r.groupId, '3', 'join', r.subject, r.createdBy, r.createdAt, keyCommit, membersDigest, wrapsDigest]);
         expect(groupEpochCanonical(r)).toBe(canonical);
         expect(ed25519.verify(Buffer.from(r.sig, 'base64'), sha256(utf8ToBytes(canonical)), hexToBytes(r.createdBy), { zip215: false })).toBe(true);
     });
@@ -118,6 +128,13 @@ describe('the frozen vectors', () => {
         const after = utf8ToBytes(v.after!);
         expect(bytesToHex(unsigned)).toBe(bytesToHex(new Uint8Array([1, after.length, ...after, ...utf8ToBytes(v.text)])));
         expect(ed25519.verify(sig, sha256(concatBytes(aad, nonce, unsigned)), hexToBytes(sender), { zip215: false })).toBe(true);
+    });
+
+    it('the wraps, the top-up and the four lines are byte-identical to the #1749 vectors: only the record changed (§5.4)', () => {
+        // SHA-256 of JSON.stringify({ wraps, topUp, lines: payloads }) as #1749 froze them (e3281754), 2,289 bytes.
+        const now = JSON.stringify({ wraps: GROUP_VECTOR_RECORD.wraps, topUp: GROUP_VECTOR_TOP_UP, lines: GROUP_LINE_VECTORS.map((l) => l.payload) });
+        expect(now.length).toBe(2289);
+        expect(bytesToHex(sha256(utf8ToBytes(now)))).toBe('eba76f3284a2fa6cd71cba424b401893d0378f3c24aafb4f9310abc57fa552e5');
     });
 
     it('the top-up is signed by its wrapper over its canonical array', () => {
@@ -141,8 +158,8 @@ describe('identity keys in either spelling', () => {
         expect(bytesToHex(openGroupEpochRecord(record, ben.pkcs8Hex, { groupId: GROUP }))).toBe(bytesToHex(groupKey));
         const line = sealGroupLine('hello', { myEdPrivHex: ben.pkcs8Hex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG });
         expect(openGroupLine(line, refOf(ben), groupKey).text).toBe('hello');
-        const line2 = sealGroupLine('hello', { myEdPrivHex: ben.seedHex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG }, { randomBytes: () => new Uint8Array(24).fill(1) });
-        const line3 = sealGroupLine('hello', { myEdPrivHex: ben.pkcs8Hex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG }, { randomBytes: () => new Uint8Array(24).fill(1) });
+        const line2 = sealGroupLine('hello', { myEdPrivHex: ben.seedHex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG }, { randomBytesForVectors: mintGroupVectorRng(() => new Uint8Array(24).fill(1)) });
+        const line3 = sealGroupLine('hello', { myEdPrivHex: ben.pkcs8Hex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG }, { randomBytesForVectors: mintGroupVectorRng(() => new Uint8Array(24).fill(1)) });
         expect(line3).toEqual(line2);
     });
 
@@ -154,7 +171,7 @@ describe('identity keys in either spelling', () => {
 
 describe('wraps', () => {
     const { record, groupKey } = epoch2();
-    const anaWrap = record.wraps.find((w) => w.recipient === ana.publicKey)!;
+    const anaWrap = record.wraps!.find((w) => w.recipient === ana.publicKey)!;
     const at = { groupId: GROUP, epoch: 2, wrapperPubHex: cat.publicKey };
 
     it('every recipient opens the same key; a non-recipient opens nothing', () => {
@@ -164,27 +181,27 @@ describe('wraps', () => {
 
     it('a wrap moved to another member does not open for them', () => {
         // Relabelled as Ben's: the X25519 agreement and the associated data both name Ana.
-        expect(() => openGroupKeyWrap({ ...anaWrap, recipient: ben.publicKey }, at, ben.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified({ ...anaWrap, recipient: ben.publicKey }, at, ben.seedHex)).toThrow(GroupKeyNotVerifiedError);
         // Left as Ana's and tried with Ben's key: not his.
-        expect(() => openGroupKeyWrap(anaWrap, at, ben.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(bytesToHex(openGroupKeyWrap(anaWrap, at, ana.seedHex))).toBe(bytesToHex(groupKey));
+        expect(() => openGroupKeyWrapUnverified(anaWrap, at, ben.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(bytesToHex(openGroupKeyWrapUnverified(anaWrap, at, ana.seedHex))).toBe(bytesToHex(groupKey));
     });
 
     it('a wrap does not open in another group, another epoch, or claimed by another wrapper', () => {
-        expect(() => openGroupKeyWrap(anaWrap, { ...at, groupId: 'another-group' }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(() => openGroupKeyWrap(anaWrap, { ...at, epoch: 3 }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(() => openGroupKeyWrap(anaWrap, { ...at, wrapperPubHex: ben.publicKey }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified(anaWrap, { ...at, groupId: 'another-group' }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified(anaWrap, { ...at, epoch: 3 }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified(anaWrap, { ...at, wrapperPubHex: ben.publicKey }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
     });
 
     it('a changed wrap does not open', () => {
-        expect(() => openGroupKeyWrap({ ...anaWrap, wrapped: flip(anaWrap.wrapped) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(() => openGroupKeyWrap({ ...anaWrap, nonce: flip(anaWrap.nonce) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(() => openGroupKeyWrap({ ...anaWrap, ephPub: flip(anaWrap.ephPub) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(() => openGroupKeyWrap({ ...anaWrap, ephPub: Buffer.alloc(32).toString('base64') }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified({ ...anaWrap, wrapped: flip(anaWrap.wrapped) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified({ ...anaWrap, nonce: flip(anaWrap.nonce) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified({ ...anaWrap, ephPub: flip(anaWrap.ephPub) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified({ ...anaWrap, ephPub: Buffer.alloc(32).toString('base64') }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
     });
 
     it('each wrap uses its own ephemeral key', () => {
-        expect(new Set(record.wraps.map((w) => w.ephPub)).size).toBe(3);
+        expect(new Set(record.wraps!.map((w) => w.ephPub)).size).toBe(3);
     });
 });
 
@@ -196,18 +213,19 @@ describe('epoch records', () => {
         expect(() => verifyGroupEpochRecord(record, { groupId: GROUP, epoch: 3 })).toThrow(/another epoch/);
     });
 
-    it('refuse a changed recipient list, wrap, reason, subject, time or epoch: the signature covers them', () => {
+    it('refuse a changed recipient list or wrap (its digest no longer matches), and a changed reason, subject, time or epoch (the signature)', () => {
         const { record } = epoch2();
+        const wraps = record.wraps!;
         const check = { groupId: GROUP };
         const extra = wrapGroupKey(new Uint8Array(32), { groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey, wrapperPubHex: cat.publicKey });
-        expect(() => verifyGroupEpochRecord({ ...record, wraps: [...record.wraps, extra] }, check)).toThrow(/signature/);
-        expect(() => verifyGroupEpochRecord({ ...record, wraps: record.wraps.filter((w) => w.recipient !== ben.publicKey) }, check)).toThrow(/signature/);
-        expect(() => verifyGroupEpochRecord({ ...record, wraps: record.wraps.map((w, i) => (i === 0 ? { ...w, wrapped: flip(w.wrapped) } : w)) }, check)).toThrow(/signature/);
+        expect(() => verifyGroupEpochRecord({ ...record, wraps: [...wraps, extra] }, check)).toThrow(/recipients are not the ones its digest names/);
+        expect(() => verifyGroupEpochRecord({ ...record, wraps: wraps.filter((w) => w.recipient !== ben.publicKey) }, check)).toThrow(/recipients are not the ones its digest names/);
+        expect(() => verifyGroupEpochRecord({ ...record, wraps: wraps.map((w, i) => (i === 0 ? { ...w, wrapped: flip(w.wrapped) } : w)) }, check)).toThrow(/wraps are not the ones its digest names/);
         expect(() => verifyGroupEpochRecord({ ...record, createdAt: '2026-10-10T10:00:01.000Z' }, check)).toThrow(/signature/);
         expect(() => verifyGroupEpochRecord({ ...record, epoch: 3 }, check)).toThrow(/signature/);
         expect(() => verifyGroupEpochRecord({ ...record, reason: 'invite' }, check)).toThrow(/signature/);
         // The node's own storage order of the wraps is not part of it.
-        expect(() => verifyGroupEpochRecord({ ...record, wraps: [...record.wraps].reverse() }, check)).not.toThrow();
+        expect(() => verifyGroupEpochRecord({ ...record, wraps: [...wraps].reverse() }, check)).not.toThrow();
     });
 
     it('refuse a signature by anyone but the named maker, and a non-canonical or cut one', () => {
@@ -260,10 +278,11 @@ describe('epoch records', () => {
 describe('top-ups', () => {
     const { groupKey } = epoch2();
     const topUp = makeGroupTopUp(groupKey, { myEdPrivHex: ana.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
+    const commit = groupKeyCommit(groupKey);
 
     it('the recipient opens the epoch key; nobody else does', () => {
-        expect(bytesToHex(openGroupTopUp(GROUP, topUp, dov.pkcs8Hex))).toBe(bytesToHex(groupKey));
-        expect(() => openGroupTopUp(GROUP, topUp, ben.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(bytesToHex(openGroupTopUp(GROUP, topUp, dov.pkcs8Hex, commit))).toBe(bytesToHex(groupKey));
+        expect(() => openGroupTopUp(GROUP, topUp, ben.seedHex, commit)).toThrow(GroupKeyNotVerifiedError);
     });
 
     it('refuses one moved to another member, group or epoch, or claimed by another wrapper', () => {
@@ -272,6 +291,104 @@ describe('top-ups', () => {
         expect(() => verifyGroupTopUp(GROUP, { ...topUp, epoch: 3 })).toThrow(/signature/);
         expect(() => verifyGroupTopUp(GROUP, { ...topUp, wrapper: ben.publicKey })).toThrow(/signature/);
         expect(() => verifyGroupTopUp(GROUP, { ...topUp, wrapped: flip(topUp.wrapped) })).toThrow(/signature/);
+    });
+
+    it('refuses a wrapper or a recipient outside the roster the app holds, though the signature is good (§2.5)', () => {
+        const roster = [ana.publicKey, ben.publicKey, cat.publicKey, dov.publicKey];
+        expect(() => verifyGroupTopUp(GROUP, topUp, { activeMembers: roster })).not.toThrow();
+        expect(bytesToHex(openGroupTopUp(GROUP, topUp, dov.seedHex, commit, { activeMembers: roster }))).toBe(bytesToHex(groupKey));
+        // Someone in no roster signs a top-up of a key of their own choosing: without the roster it would open for Dov.
+        const eve = person('Eve');
+        const eves = makeGroupTopUp(new Uint8Array(32).fill(9), { myEdPrivHex: eve.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
+        expect(() => openGroupTopUp(GROUP, eves, dov.seedHex, commit, { activeMembers: roster })).toThrow(/wrapper is not an active member/);
+        // A top-up to someone no longer in the group.
+        expect(() => verifyGroupTopUp(GROUP, topUp, { activeMembers: [ana.publicKey, ben.publicKey, cat.publicKey] })).toThrow(/recipient is not an active member/);
+    });
+});
+
+describe('wrap provenance: the record commits to the key (provenance design §5, §8)', () => {
+    const all = [ana.publicKey, ben.publicKey, cat.publicKey];
+    const { record, groupKey } = epoch2();
+    const anaWrap = record.wraps!.find((w) => w.recipient === ana.publicKey)!;
+    const served: GroupEpochRecord = { ...record, wraps: undefined };
+    delete served.wraps;
+    const servedOf = (w: { ephPub: string; nonce: string; wrapped: string }, wrapper = cat.publicKey, sig: string | null = null) =>
+        ({ epoch: 2, wrapper, ephPub: w.ephPub, nonce: w.nonce, wrapped: w.wrapped, sig });
+
+    it("finding 1: a fresh wrap for Ana naming Cat as wrapper, holding another key, with the right associated data, is refused by commitment", () => {
+        const rogueKey = new Uint8Array(32).fill(0x42);
+        const rogue = wrapGroupKey(rogueKey, { groupId: GROUP, epoch: 2, recipientPubHex: ana.publicKey, wrapperPubHex: cat.publicKey });
+        // The raw opener opens it: the box is well formed.
+        expect(bytesToHex(openGroupKeyWrapUnverified(rogue, { groupId: GROUP, epoch: 2, wrapperPubHex: cat.publicKey }, ana.seedHex))).toBe(bytesToHex(rogueKey));
+        const at = { groupId: GROUP, epoch: 2, wrapperPubHex: cat.publicKey, keyCommit: record.keyCommit };
+        expect(() => openGroupKeyWrap(rogue, at, ana.seedHex)).toThrow(/does not hold the key the epoch record commits to/);
+        expect(() => openMyGroupKey(served, servedOf(rogue), ana.seedHex, { groupId: GROUP, activeMembers: all })).toThrow(/commits to/);
+        // The same box made around the real key opens.
+        const honest = wrapGroupKey(groupKey, { groupId: GROUP, epoch: 2, recipientPubHex: ana.publicKey, wrapperPubHex: cat.publicKey });
+        expect(bytesToHex(openGroupKeyWrap(honest, at, ana.seedHex))).toBe(bytesToHex(groupKey));
+        expect(bytesToHex(openMyGroupKey(served, servedOf(honest), ana.seedHex, { groupId: GROUP, activeMembers: all }))).toBe(bytesToHex(groupKey));
+    });
+
+    it('a record with keyCommit, membersDigest or wrapsDigest changed fails its signature (served shape)', () => {
+        const other = Buffer.from(sha256(utf8ToBytes('other'))).toString('base64');
+        for (const field of ['keyCommit', 'membersDigest', 'wrapsDigest'] as const) {
+            expect(() => verifyGroupEpochRecord({ ...served, [field]: other }, { groupId: GROUP })).toThrow(/signature/);
+        }
+        expect(() => verifyGroupEpochRecord({ ...served, keyCommit: 'not base64' }, { groupId: GROUP })).toThrow(/malformed digest/);
+    });
+
+    it('a full record whose digests do not match its wraps is refused before the signature is checked', () => {
+        // Signed by Cat over the digests of three wraps, carrying only two: refused for the digest, not the signature.
+        const signedBad = forgeRecord({ ...served, membersDigest: groupMembersDigest([ana.publicKey, ben.publicKey, cat.publicKey, dov.publicKey]), wraps: record.wraps }, cat);
+        expect(() => verifyGroupEpochRecord(signedBad, { groupId: GROUP })).toThrow(/recipients are not the ones its digest names/);
+        const swapped = forgeRecord({ ...served, wraps: record.wraps!.map((w) => (w.recipient === ana.publicKey ? wrapGroupKey(groupKey, { groupId: GROUP, epoch: 2, recipientPubHex: ana.publicKey, wrapperPubHex: cat.publicKey }) : w)) }, cat);
+        expect(() => verifyGroupEpochRecord(swapped, { groupId: GROUP })).toThrow(/wraps are not the ones its digest names/);
+    });
+
+    it('the served shape (no wraps) verifies and opens for every recipient; an unsigned wrap must name the maker', () => {
+        expect(() => verifyGroupEpochRecord(served, { groupId: GROUP, epoch: 2, activeMembers: all })).not.toThrow();
+        for (const p of [ana, ben, cat]) {
+            const w = record.wraps!.find((x) => x.recipient === p.publicKey)!;
+            expect(bytesToHex(openMyGroupKey(served, servedOf(w), p.pkcs8Hex, { groupId: GROUP, activeMembers: all }))).toBe(bytesToHex(groupKey));
+        }
+        expect(() => openMyGroupKey(served, servedOf(anaWrap, ben.publicKey), ana.seedHex, { groupId: GROUP })).toThrow(/maker/);
+        expect(() => openMyGroupKey(served, { ...servedOf(anaWrap), epoch: 3 }, ana.seedHex, { groupId: GROUP })).toThrow(/another epoch/);
+        expect(() => openGroupEpochRecord(served, ana.seedHex, { groupId: GROUP })).toThrow(/no wraps/);
+    });
+
+    it('top-ups: by a key in no roster refused (roster given); by a member holding another key refused by commitment; the right key opens', () => {
+        const roster = [...all, dov.publicKey];
+        const eve = person('Eve');
+        const eves = makeGroupTopUp(groupKey, { myEdPrivHex: eve.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
+        expect(() => openGroupTopUp(GROUP, eves, dov.seedHex, record.keyCommit, { activeMembers: roster })).toThrow(/wrapper is not an active member/);
+        expect(() => openMyGroupKey(served, servedOf(eves, eve.publicKey, eves.sig), dov.seedHex, { groupId: GROUP, activeMembers: roster })).toThrow(/wrapper is not an active member/);
+        const bens = makeGroupTopUp(new Uint8Array(32).fill(5), { myEdPrivHex: ben.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
+        expect(() => openGroupTopUp(GROUP, bens, dov.seedHex, record.keyCommit, { activeMembers: roster })).toThrow(/commits to/);
+        expect(() => openMyGroupKey(served, servedOf(bens, ben.publicKey, bens.sig), dov.seedHex, { groupId: GROUP, activeMembers: roster })).toThrow(/commits to/);
+        const anas = makeGroupTopUp(groupKey, { myEdPrivHex: ana.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
+        expect(bytesToHex(openMyGroupKey(served, servedOf(anas, ana.publicKey, anas.sig), dov.seedHex, { groupId: GROUP, activeMembers: roster }))).toBe(bytesToHex(groupKey));
+    });
+
+    it('groupEpochCoversExactly: the exact set in any order with duplicates; not one extra, one missing, or a removed subject still present', () => {
+        expect(groupEpochCoversExactly(record, [cat.publicKey, ana.publicKey, ben.publicKey, ana.publicKey])).toBe(true);
+        expect(groupEpochCoversExactly(record, [...all, dov.publicKey])).toBe(false);
+        expect(groupEpochCoversExactly(record, [ana.publicKey, cat.publicKey])).toBe(false);
+        // Ben was removed but the current epoch still wraps to him: the roster without Ben does not match it.
+        const removedBen = [ana.publicKey, cat.publicKey];
+        expect(groupEpochCoversExactly(record, removedBen)).toBe(false);
+    });
+
+    it('a maker who wraps different keys to different members: the member holding the odd key refuses it', () => {
+        const k1 = new Uint8Array(32).fill(1);
+        const k2 = new Uint8Array(32).fill(2);
+        const wraps = [
+            wrapGroupKey(k1, { groupId: GROUP, epoch: 2, recipientPubHex: ana.publicKey, wrapperPubHex: cat.publicKey }),
+            wrapGroupKey(k2, { groupId: GROUP, epoch: 2, recipientPubHex: ben.publicKey, wrapperPubHex: cat.publicKey }),
+            wrapGroupKey(k1, { groupId: GROUP, epoch: 2, recipientPubHex: cat.publicKey, wrapperPubHex: cat.publicKey }),
+        ];
+        const split = forgeRecord({ ...served, keyCommit: groupKeyCommit(k1), wrapsDigest: groupWrapsDigest(wraps), wraps }, cat);
+        expect(bytesToHex(openGroupEpochRecord(split, ana.seedHex, { groupId: GROUP }))).toBe(bytesToHex(k1));
+        expect(() => openGroupEpochRecord(split, ben.seedHex, { groupId: GROUP })).toThrow(/commits to/);
     });
 });
 
@@ -375,11 +492,65 @@ describe('lines', () => {
         }
     });
 
+    // A frame Ben genuinely signed, with its unsigned bytes chosen freely, sealed under the key every member holds.
+    const signedBy = (who: typeof ana, unsigned: Uint8Array, nonce = new Uint8Array(24).fill(6)) => {
+        const sig = ed25519.sign(sha256(concatBytes(gc.groupLineAad(refOf(who)), nonce, unsigned)), hexToBytes(who.seedHex));
+        return resealFrame(concatBytes(unsigned.subarray(0, 1), sig, unsigned.subarray(1)), refOf(who), groupKey, nonce);
+    };
+    const words = utf8ToBytes('hello');
+
+    it('refuses a frame of another format, though signed by the sender it names', () => {
+        expect(openGroupLine(signedBy(ben, new Uint8Array([1, 0, ...words])), refOf(ben), groupKey).text).toBe('hello');
+        expect(() => openGroupLine(signedBy(ben, new Uint8Array([2, 0, ...words])), refOf(ben), groupKey)).toThrow(GroupLineNotVerifiedError);
+    });
+
+    it("refuses a frame whose 'after' length runs past its end, though signed by the sender it names", () => {
+        expect(() => openGroupLine(signedBy(ben, new Uint8Array([1, 200, ...words])), refOf(ben), groupKey)).toThrow(GroupLineNotVerifiedError);
+    });
+
+    it("refuses an epoch spelled as a string, though String('2') binds the same bytes as 2", () => {
+        const two = '2' as unknown as number;
+        expect(() => seal('x', { epoch: two })).toThrow();
+        expect(() => openGroupLine(seal('hi'), refOf(ben, { epoch: two }), groupKey)).toThrow(GroupLineNotVerifiedError);
+        expect(() => verifyGroupEpochRecord({ ...epoch2().record, epoch: two }, { groupId: GROUP })).toThrow(/epoch/);
+    });
+
+    it("refuses a reply to the empty id, which would bind the same bytes as a line that answers nothing", () => {
+        expect(() => seal('x', { replyToId: '' })).toThrow(/reply/);
+        expect(() => openGroupLine(seal('hi'), refOf(ben, { replyToId: '' }), groupKey)).toThrow(GroupLineNotVerifiedError);
+    });
+
     it('refuses to seal under an id the node would store differently', () => {
         expect(() => seal('x', { messageId: MSG.toUpperCase() })).toThrow(/UUID v4/);
         expect(() => seal('x', { messageId: 'not-a-uuid' })).toThrow(/UUID v4/);
         expect(() => seal('x', { groupKey: new Uint8Array(16) })).toThrow();
         expect(() => seal('x', { part: 'reaction' as unknown as 'body' })).toThrow();
+    });
+});
+
+describe('randomness', () => {
+    const start = { myEdPrivHex: ana.seedHex, groupId: GROUP, epoch: 1, reason: 'start' as const, createdAt: AT, recipients: [ana.publicKey] };
+    const zeros = (n: number) => new Uint8Array(n);
+
+    it('the app or the node cannot hand in its own: a stream not minted for the vectors or tests is refused', () => {
+        const key = new Uint8Array(32).fill(5);
+        const opts = { randomBytesForVectors: zeros };
+        expect(() => makeGroupEpochRecord(start, opts)).toThrow(/platform CSPRNG/);
+        expect(() => wrapGroupKey(key, { groupId: GROUP, epoch: 1, recipientPubHex: ben.publicKey, wrapperPubHex: ana.publicKey }, opts)).toThrow(/platform CSPRNG/);
+        expect(() => makeGroupTopUp(key, { myEdPrivHex: ana.seedHex, groupId: GROUP, epoch: 1, recipientPubHex: ben.publicKey }, opts)).toThrow(/platform CSPRNG/);
+        expect(() => sealGroupLine('x', { myEdPrivHex: ana.seedHex, groupKey: key, groupId: GROUP, epoch: 1, messageId: MSG }, opts)).toThrow(/platform CSPRNG/);
+    });
+
+    it("a stray option under the old name is ignored: the epoch key is fresh, never all zero", () => {
+        const { groupKey, record } = makeGroupEpochRecord(start, { randomBytes: zeros } as never);
+        expect(bytesToHex(groupKey)).not.toBe('00'.repeat(32));
+        expect(Buffer.from(record.wraps![0].nonce, 'base64').equals(Buffer.alloc(24))).toBe(false);
+    });
+
+    it('a stream minted for the vectors or tests is used exactly, in the pinned order', () => {
+        const { groupKey } = makeGroupEpochRecord(start, { randomBytesForVectors: mintGroupVectorRng(zeros) });
+        expect(bytesToHex(groupKey)).toBe('00'.repeat(32));
+        expect(bytesToHex(makeGroupEpochRecord(start, { randomBytesForVectors: groupVectorRandom('t') }).groupKey)).toBe(bytesToHex(groupVectorRandom('t')(32)));
     });
 });
 
@@ -426,5 +597,23 @@ describe('the core barrel', () => {
             expect(typeof (core as Record<string, unknown>)[name]).toBe('function');
         }
         expect(core.GROUP_NONCE_PREFIX).toBe('group-xc20p-v1:');
+    });
+
+    it('leaves out the raw wrap opener: a wrap alone proves nothing about who made it or what it holds', () => {
+        expect('openGroupKeyWrapUnverified' in core).toBe(false);
+    });
+
+    it('offers openGroupKeyWrap only with the key commitment required (provenance design §5.2)', () => {
+        expect(core.openGroupKeyWrap).toBe(gc.openGroupKeyWrap);
+        const { record } = epoch2();
+        const w = record.wraps!.find((x) => x.recipient === ana.publicKey)!;
+        expect(() => core.openGroupKeyWrap(w, { groupId: GROUP, epoch: 2, wrapperPubHex: cat.publicKey } as never, ana.seedHex)).toThrow(/commits to/);
+        for (const name of ['openMyGroupKey', 'groupKeyCommit', 'groupMembersDigest', 'groupWrapsDigest', 'groupEpochCoversExactly']) {
+            expect((core as Record<string, unknown>)[name]).toBe((gc as Record<string, unknown>)[name]);
+        }
+    });
+
+    it('leaves out the minting of fixed randomness: only the vectors and tests make a stream group-crypto takes', () => {
+        for (const name of ['mintGroupVectorRng', 'isGroupVectorRng', 'groupVectorRandom']) expect(name in core).toBe(false);
     });
 });

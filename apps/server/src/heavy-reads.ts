@@ -142,6 +142,14 @@ export function heavyReadStats(): { inFlightBytes: number; peakInFlightBytes: nu
     return { inFlightBytes, peakInFlightBytes, waiting: line.length, admitted: admittedCount, refused: refusedCount, cutOff: cutOffCount, sharedBodies: sharedHeld.size };
 }
 
+/**
+ * Did this request's answer go through heavyRead (let in, refused or left)? The /api gzip (api-compression.ts) leaves such
+ * an answer's bytes as they are, so the size the cap learns from its Content-Length stays the size of what it built.
+ */
+export function isHeavyRead(ctx: object): boolean {
+    return tickets.has(ctx);
+}
+
 /** What a send holding `body` would add to the bytes in flight now: nothing while another send in flight holds it. */
 export function sharedBodyCost(body: Buffer): number {
     return sharedHeld.has(body) ? 0 : body.length;

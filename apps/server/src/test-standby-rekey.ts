@@ -328,7 +328,10 @@ async function child(): Promise<void> {
             const { postEventThreadMessage, canReadEventThread, loadEventForThread } = await import('./engine/event-thread.js');
             const sent: { threadType?: string; recipients?: string[] }[] = [];
             const cb = { broadcast: (event: any, recipients?: string[]) => { sent.push({ threadType: event?.threadType, recipients }); }, dispatchPushNotification: () => {} };
-            postGroupThreadMessage(cb as any, a.group, a.author, 'Seedlings on Saturday');
+            // The group's chat takes sealed lines only (group chats step 2): one under the group's current epoch.
+            const { db } = await import('./db/db.js');
+            const { lockedGroupLine } = await import('./group-test-payload.js');
+            postGroupThreadMessage(cb as any, a.group, a.author, lockedGroupLine(db, a.group));
             postEventThreadMessage(cb as any, a.event, a.author, 'Gloves are in the shed');
             const event = loadEventForThread(a.event);
             return {

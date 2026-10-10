@@ -5,6 +5,7 @@
 // and the re-key share one list.
 
 import { db, deletePlainRows } from '../db/db.js';
+import { dropGroupWrapsOf } from './group-keys.js';
 import { refreshMemberAreas } from './member-area.js';
 
 // ── both ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -156,6 +157,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('groups', 'created_by');
     move('group_members', 'member_pubkey');
     move('group_members', 'invited_by');
+    // A group chat's wraps for the old key can never open again (group chat encryption design §6): they go, on each
+    // server, and the member shows in …/keys/missing under the new key, from their unchanged joined_at.
+    dropGroupWrapsOf(oldKey);
     move('group_convenor_proposals', 'convenor_pubkey');
     move('group_convenor_proposals', 'candidate_pubkey');
     move('group_convenor_proposals', 'proposer_pubkey');
@@ -216,11 +220,13 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('creator_channels', 'owner_pubkey');
     move('pulse_items', 'owner_pubkey');
 
-    // (y) decisions & votes - update subject for member proposals and pool hardship grants
+    // (y) decisions & votes - update subject for member proposals, pool hardship grants and a scoped vote's subject (a
+    //     keeper, or a pay-out's recipient)
     move('decisions', 'author_pubkey');
     move('decisions', 'admin_halted_by');
-    move('decisions', 'subject', "touches = 'member' OR touches = 'pool'");
+    move('decisions', 'subject', "touches = 'member' OR touches = 'pool' OR touches = 'scope'");
     move('decision_votes', 'voter_pubkey');
+    move('decision_electors', 'member_pubkey');
 
     // (z) enterprise_pledges
     move('enterprise_pledges', 'keeper');

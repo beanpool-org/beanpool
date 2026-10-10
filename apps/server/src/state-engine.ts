@@ -376,6 +376,8 @@ import {
 import {
     ensureGroupThread,
     backfillGroupThreads,
+    wipeReadableGroupLines,
+    type GroupLineIn,
     syncGroupThreadMembership,
     postGroupSystemLine,
     callsignOf,
@@ -386,6 +388,7 @@ import {
     type GroupThreadView,
 } from './engine/group-thread.js';
 export { GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType, canReadGroupThread } from './engine/group-thread.js';
+import { withMembershipEpoch, markGroupEpochsStaleFor } from './engine/group-keys.js';
 import {
     proposeGroupConvenor as proposeGroupConvenorEngine,
     voteGroupConvenor as voteGroupConvenorEngine,
@@ -888,6 +891,11 @@ function runMainServerMigrations(): void {
         const made = backfillGroupThreads();
         if (made > 0) console.log(`[Groups] Gave ${made} existing group(s) their chat.`);
     } catch (e) { console.warn('[Groups] Could not backfill group chats:', e); }
+    // Group chats step 2: the node keeps only locked lines. Every readable one goes, with a line in each chat saying so.
+    try {
+        const wiped = wipeReadableGroupLines(getMessagingCb());
+        if (wiped > 0) console.log(`[Groups] Removed ${wiped} readable group chat line(s): group chats are end-to-end encrypted now.`);
+    } catch (e) { console.warn('[Groups] Could not remove readable group chat lines:', e); }
 }
 
 /**
@@ -2335,7 +2343,7 @@ export function reconcileLedgerFromDb(): void {
 }
 
 
-export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean }): Transaction | null {
+export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean; decisionPayOut?: boolean }): Transaction | null {
     if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
     // Before every other guard: on a node whose `beans` switch is off nothing moves, whoever asks (a member's send,
     // an escrow, a settlement, a wizard's gift). Thrown, not null, so an enclosing transaction rolls back.
@@ -2384,7 +2392,12 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // trust profile, so the completed-trade gate would block every cross-node settlement.
     // Operator/admin-signed transfers for member offboarding wizard gifts are narrowly exempt via offboardOverride.
     const isOffboardOverride = Boolean(auth?.offboardOverride && auth?.signer && (auth.signer === 'owner:password' || isNodeAdmin(auth.signer) || isNodeOwner(auth.signer)));
-    if (!isEscrow && !isOffboardOverride && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
+    // A pay-out an enterprise's keepers voted for (decisions-engine.ts pay_out, DESIGN-group-decisions §2.3): a direct send
+    // at floor 0 like any other, so never into the enterprise's credit line, but with the 1.5% fee a Need's payment carries
+    // (Marty, 2026-10-10, §5 pick 2). The first-trade gate is for a fresh account forwarding Beans and vanishing; a vote
+    // of the keepers is not that. Only the engine's own signer can ask for it: no route passes `auth` from a body.
+    const isDecisionPayOut = Boolean(auth?.decisionPayOut && typeof auth.signer === 'string' && auth.signer.startsWith('system:decision:'));
+    if (!isEscrow && !isOffboardOverride && !isDecisionPayOut && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
         const { earnedCredit } = getMemberTrustProfile(from);
         if (earnedCredit <= 0) {
             console.log(`🚫 Send blocked (no completed trade yet): ${from.substring(0, 12)}`);
@@ -2421,7 +2434,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Fee policy: the 1.5% community fee applies ONLY to marketplace/escrow settlements. Direct
     // peer "send credits" gifts are fee-free — gifting a friend beans you hold shouldn't be taxed.
     // System moves (escrow holds, refunds, admin) stay exempt via the caller's isFeeExempt.
-    const feeExempt = isFeeExempt || !isEscrow;
+    const feeExempt = isFeeExempt || (!isEscrow && !isDecisionPayOut);
     // A note to someone who has blocked its sender is kept for the sender alone, never in the row the recipient reads
     // (engine/withheld-notes.ts). Decided here, before the transaction: it refuses nothing and moves nothing, and the
     // Beans go as any send's.
@@ -4433,6 +4446,65 @@ export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: numb
 }
 
 /**
+ * A keeper who steps down leaves the roll of every open Decision of this enterprise (DESIGN-group-decisions §2.6): they
+ * chose to have no say, so a vote they cast is no longer counted (decisions-engine.ts reads only electors still 'on').
+ * Only stepping down does this. One removed by the lead, an admin or a vote stays on the roll: a removal must not be a
+ * way to swing a vote. Runs in the caller's transaction.
+ */
+function dropFromOpenScopedRolls(enterprisePubkey: string, memberPubkey: string): void {
+    db.prepare(`
+        UPDATE decision_electors SET status = 'left', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE member_pubkey = ? AND status = 'on' AND decision_id IN (
+            SELECT id FROM decisions WHERE scope_kind = 'enterprise' AND scope_id = ? AND status = 'open'
+        )
+    `).run(memberPubkey, enterprisePubkey);
+}
+
+/**
+ * Why a keeper can't be removed from an enterprise by its keepers' vote now (decisions-engine.ts remove_keeper), or
+ * null: the rules stepping down obeys (stepDownAsKeeper). Never the lead (a vote replaces the lead instead), never the
+ * last keeper, and not while their pledge is part of what covers the enterprise's debt.
+ */
+export function keeperRemovalByVoteRefusal(enterprisePubkey: string, memberPubkey: string): string | null {
+    const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .get(enterprisePubkey, memberPubkey) as { role: string } | undefined;
+    if (!op) return 'They no longer keep this enterprise';
+    if (op.role === 'lead') return 'The lead keeper is replaced by a vote, not removed';
+    if (keeperBindingCount(enterprisePubkey) <= 1) return 'They are the only keeper left';
+    const pledge = activePledgeTotal(enterprisePubkey, memberPubkey);
+    const deficit = Math.max(0, -getBalance(enterprisePubkey).balance);
+    if (pledge > 0 && allowanceWithoutKeeper(enterprisePubkey, memberPubkey) < deficit) {
+        return 'Not yet: their pledge is part of what covers this enterprise\'s debt. They can be removed once the debt is '
+            + 'covered without it.';
+    }
+    return null;
+}
+
+/**
+ * Removes a keeper as their fellow keepers voted (decisions-engine.ts remove_keeper): the binding goes and their pledge
+ * is settled exactly as when the lead removes them (keeperLeaves). Runs in the caller's transaction; the caller clears
+ * the floor cache and broadcasts. `by` is the Decision's signer.
+ */
+export function removeKeeperByVote(enterprisePubkey: string, memberPubkey: string, by: string): void {
+    keeperLeaves(enterprisePubkey, memberPubkey, by);
+}
+
+/**
+ * Makes `memberPubkey`, a keeper, the lead of an ongoing enterprise as its keepers voted (decisions-engine.ts
+ * replace_lead): what a passed succession vote does (settleSuccession). The old lead becomes a keeper and keeps their
+ * backing. Runs in the caller's transaction.
+ */
+export function replaceLeadByVote(enterprisePubkey: string, memberPubkey: string): void {
+    db.prepare("UPDATE treasury_operators SET role = 'keeper', auto_promoted_at = NULL WHERE treasury_pubkey = ? AND role = 'lead'")
+        .run(enterprisePubkey);
+    db.prepare("UPDATE treasury_operators SET role = 'lead', auto_promoted_at = NULL WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .run(enterprisePubkey, memberPubkey);
+    db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'lead_changed'
+                WHERE enterprise_pubkey = ? AND status = 'active'`).run(enterprisePubkey);
+    engine.keepersChanged(db, enterprisePubkey);
+}
+
+/**
  * Any keeper may step down (answer M, 2026-09-19).
  * - The only keeper cannot: there would be nobody left to run or wind up the enterprise.
  * - A keeper whose pledge is still needed to cover the enterprise's debt cannot yet: the message says how much
@@ -4473,6 +4545,7 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
     let result = { promoted: null as string | null, paused: false };
     db.transaction(() => {
         result = keeperLeaves(enterprisePubkey, memberPubkey, memberPubkey);
+        dropFromOpenScopedRolls(enterprisePubkey, memberPubkey);
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
@@ -6348,8 +6421,8 @@ export function toggleMessageReaction(messageId: string, authorPubkey: string, e
     return toggleMessageReactionEngine(getMessagingCb(), messageId, authorPubkey, emoji);
 }
 
-export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string, beforeStore?: () => void): Message {
-    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce, beforeStore);
+export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string, beforeStore?: () => void, metadata?: unknown): Message {
+    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce, beforeStore, metadata);
 }
 
 export function deleteOwnMessage(messageId: string, authorPubkey: string): Message {
@@ -7870,6 +7943,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
+        // Their groups' chats are locked to a roster they are no longer in: the next line waits for a rotation (§2.3).
+        markGroupEpochsStaleFor(publicKey);
         // Their phones, with a tombstone each, so a standby drops them too (a plain table, design G4).
         deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         // A pruned account can't sign the request that removes a place watch (G5), and must hear nothing from one.
@@ -8067,6 +8142,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         deletePlainRows('chat_mutes', 'member_pubkey = ?', publicKey);
         deletePlainRows('thread_read_cursors', 'member_pubkey = ?', publicKey);
+        // Their groups' chats are locked to a roster they have left: the next line waits for a member to rotate (§2.3).
+        markGroupEpochsStaleFor(publicKey);
         // Channels are tombstoned rather than deleted, and their links are cleared with them: the
         // row has to survive so the removal replicates to the backup, but a member who has just
         // erased their profile should not leave their Instagram handle behind on a mirror.
@@ -9685,9 +9762,15 @@ function afterGroupMembershipChange(groupId: string, targetPubkey: string, wasAc
     } catch (e) { console.warn('[Groups] Could not update the group chat after a membership change:', e); }
 }
 
-export function joinGroup(groupId: string, memberPubkey: string): GroupMember {
+/**
+ * Joining, and accepting an invitation, take the joiner's own epoch in the same transaction (group chat encryption design
+ * §2.3, engine/group-keys.ts withMembershipEpoch): reason 'join' or 'invite', made by the joiner, wrapped to every active
+ * member after the change. Without one (an old app) the join applies and the current epoch goes stale.
+ */
+export function joinGroup(groupId: string, memberPubkey: string, epoch?: unknown): GroupMember {
     const wasActive = isGroupMemberEngine(db, groupId, memberPubkey);
-    const res = joinGroupEngine(db, groupId, memberPubkey);
+    const res = withMembershipEpoch(groupId, memberPubkey, epoch, () => joinGroupEngine(db, groupId, memberPubkey),
+        { allowed: ['join', 'invite'], subject: memberPubkey });
     afterGroupMembershipChange(groupId, memberPubkey, wasActive);
     bumpGroupsVersion();
     const recipients = getGroupActiveMemberRecipients(groupId, [memberPubkey]);
@@ -9715,11 +9798,14 @@ export function setMemberRole(groupId: string, convenorPubkey: string, targetPub
     return res;
 }
 
-export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string): boolean {
+export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string, epoch?: unknown): boolean {
     // Leaving is anyone's own business; removing someone else is a convenor's.
     if (actorPubkey !== targetPubkey) assertGroupActorIsMember(actorPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
-    const res = removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey);
+    // A removal is the rotation (§2.4): the convenor's epoch, wrapped to everyone but the removed member, in the same
+    // transaction. Leaving carries none (the leaver would know the key): the current epoch goes stale instead.
+    const res = withMembershipEpoch(groupId, actorPubkey, epoch, () => removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey),
+        { allowed: ['remove'], subject: targetPubkey });
     if (res) {
         try {
             // Out of the chat at once (and out of its live updates and pushes).
@@ -9770,10 +9856,12 @@ export function updateGroup(groupId: string, convenorPubkey: string, updates: Up
     return res;
 }
 
-export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
+export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, epoch?: unknown): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
-    const res = approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey);
+    // The approving convenor makes the new member's first epoch (§2.3), in the same transaction.
+    const res = withMembershipEpoch(groupId, convenorPubkey, epoch, () => approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey),
+        { allowed: ['approve'], subject: targetPubkey });
     afterGroupMembershipChange(groupId, targetPubkey, wasActive, { approvedBy: convenorPubkey });
     bumpGroupsVersion();
     const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
@@ -9781,10 +9869,13 @@ export function approveGroupMember(groupId: string, convenorPubkey: string, targ
     return res;
 }
 
-export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member'): GroupMember {
+export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member', epoch?: unknown): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
-    const res = inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role);
+    // An invitation lets nobody in, so it takes no epoch; inviting someone who had asked admits them, and then the
+    // convenor's epoch is an approval's.
+    const res = withMembershipEpoch(groupId, convenorPubkey, epoch, () => inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role),
+        { allowed: ['approve'], subject: targetPubkey });
     // Inviting someone who had asked to join admits them at once.
     afterGroupMembershipChange(groupId, targetPubkey, wasActive, { approvedBy: convenorPubkey });
     bumpGroupsVersion();
@@ -9800,8 +9891,8 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
     return getGroupThreadEngine(groupId, viewerPubkey, limit, offset);
 }
 
-export function postGroupThreadMessage(groupId: string, authorPubkey: string, text: string, clientId?: string, replyToId?: string): EventThreadMessage {
-    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, text, clientId, replyToId);
+export function postGroupThreadMessage(groupId: string, authorPubkey: string, line: GroupLineIn, clientId?: string): EventThreadMessage {
+    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, line, clientId);
 }
 
 export function removeGroupThreadMessage(groupId: string, messageId: string, actorPubkey: string): EventThreadMessage {

@@ -38,6 +38,10 @@ import {
     listYourChats,
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
+import {
+    GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rotateGroupEpoch,
+    storeGroupTopUp,
+} from '../engine/group-keys.js';
 import { CONVENOR_POWERS_PAUSED } from '@beanpool/engine';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
@@ -99,6 +103,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { error: GROUP_NOT_FOUND };
         }
         return group;
+    }
+
+    /** A refusal from the group keys (engine/group-keys.ts): its status, its code, and for a 409 the epoch and roster. True if it was one. */
+    function respondGroupKeyError(ctx: any, e: unknown): boolean {
+        if (!(e instanceof GroupKeyError)) return false;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code, ...e.extra };
+        return true;
     }
 
     /** Refusals from the group chat and succession engines, as statuses. */
@@ -258,11 +270,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         if (!requireVisibleGroup(ctx, actor)) return;
 
+        const body = (ctx as any).requestBody || {};
         try {
-            const member = joinGroup(ctx.params.id, actor);
+            // The joiner's own epoch, applied with the join in one transaction (group chat encryption design §2.3).
+            const member = joinGroup(ctx.params.id, actor, body.epoch);
             ctx.status = 200;
             ctx.body = { success: true, member };
         } catch (e: any) {
+            if (respondGroupKeyError(ctx, e)) return;
             // A suspended member joins nothing until it ends (engine joinGroup): 403, like every refusal of who they are.
             ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.body = { error: memberErrorText(e, 'Failed to join group') };
@@ -357,18 +372,19 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         try {
             if (action === 'approve') {
-                const member = approveGroupMember(ctx.params.id, actor, memberPubkey);
+                const member = approveGroupMember(ctx.params.id, actor, memberPubkey, body.epoch);
                 ctx.status = 200;
                 ctx.body = { success: true, member };
             } else {
                 // An invitation reaches someone new, as starting a DM does, so a muted convenor (G3) sends none.
                 // Approving someone who asked to join writes nothing anyone reads, and stays open.
                 assertNotMuted(actor);
-                const member = inviteGroupMember(ctx.params.id, actor, memberPubkey, role || 'member');
+                const member = inviteGroupMember(ctx.params.id, actor, memberPubkey, role || 'member', body.epoch);
                 ctx.status = 200;
                 ctx.body = { success: true, member };
             }
         } catch (e: any) {
+            if (respondGroupKeyError(ctx, e)) return;
             if (respondProfileRefusal(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
@@ -408,11 +424,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         if (!requireVisibleGroup(ctx, actor)) return;
 
+        const body = (ctx as any).requestBody || {};
         try {
-            const removed = removeGroupMember(ctx.params.id, actor, ctx.params.pubkey);
+            // A convenor's removal carries the epoch that leaves the removed member out (§2.4); leaving carries none.
+            const removed = removeGroupMember(ctx.params.id, actor, ctx.params.pubkey, body.epoch);
             ctx.status = 200;
             ctx.body = { success: removed };
         } catch (e: any) {
+            if (respondGroupKeyError(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
             ctx.body = { error: memberErrorText(e, 'Failed to remove member') };
@@ -497,7 +516,12 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (!chatRateLimit(ctx, actor)) return;
         if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
         const body = (ctx as any).requestBody || {};
-        const text = typeof body.text === 'string' ? body.text : '';
+        // An app from before group chats were locked sends { text }: told to update, nothing stored (§14.2).
+        if (body.text !== undefined && body.ciphertext === undefined) {
+            ctx.status = 400;
+            ctx.body = { error: GROUP_CHAT_UPDATE_APP, code: 'not_encrypted' };
+            return;
+        }
         let clientId: string | undefined;
         if (body.clientId !== undefined && body.clientId !== null) {
             if (typeof body.clientId !== 'string' || !UUID_V4.test(body.clientId)) {
@@ -507,33 +531,95 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             }
             clientId = body.clientId.toLowerCase();
         }
-        // A reply quotes a message in THIS chat (chat parity, 2026-09-23). Any message id, not only a UUID v4:
-        // the engine checks it is in this conversation and is not a system line, which is the real rule.
-        let replyToId: string | undefined;
-        if (body.replyToId !== undefined && body.replyToId !== null) {
-            if (typeof body.replyToId !== 'string' || !body.replyToId.trim()) {
-                ctx.status = 400;
-                ctx.body = { error: 'replyToId must be a message id' };
-                return;
-            }
-            replyToId = body.replyToId;
-        }
-        if (!text.trim()) {
-            ctx.status = 400;
-            ctx.body = { error: 'Message text cannot be empty' };
-            return;
-        }
+        // A reply quotes a message in THIS chat (chat parity, 2026-09-23), named in the metadata and bound into the sealed
+        // line; the engine checks it is in this conversation and is not a system line.
         try {
             // A muted member (G3) sends nothing anyone else reads.
             assertNotMuted(actor);
-            const message = postGroupThreadMessage(ctx.params.id, actor, text, clientId, replyToId);
+            const message = postGroupThreadMessage(ctx.params.id, actor, { ciphertext: body.ciphertext, nonce: body.nonce, metadata: body.metadata }, clientId);
             ctx.status = 201;
             ctx.body = { success: true, message };
         } catch (e: any) {
+            if (respondGroupKeyError(ctx, e)) return;
             if (respondProfileRefusal(ctx, e)) return;
             const msg = memberErrorText(e, 'Could not post the message');
             ctx.status = e?.code === 'ID_CONFLICT' ? 409 : groupChatStatus(msg);
             ctx.body = { error: msg };
+        }
+    });
+
+    // 11b. The chat's keys (group chats step 2; group chat encryption design Appendix A, provenance design §5.3). Every
+    // route is a signed member's, the group in the path, refused to anyone who is not an active member exactly as the
+    // chat is (requireGroupMember: an invite-only group answers an outsider 404). Observers hold the key: they read.
+    router.get('/api/groups/:id/keys', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const after = typeof ctx.query.after === 'string' && /^\d{1,9}$/.test(ctx.query.after) ? Number(ctx.query.after) : undefined;
+        let epochs: number[] | undefined;
+        if (typeof ctx.query.epochs === 'string' && ctx.query.epochs) {
+            const list = ctx.query.epochs.split(',');
+            if (list.length > GROUP_KEYS_PAGE || !list.every((e) => /^\d{1,9}$/.test(e))) {
+                ctx.status = 400;
+                ctx.body = { error: `epochs is a comma-separated list of at most ${GROUP_KEYS_PAGE} epoch numbers` };
+                return;
+            }
+            epochs = list.map(Number);
+        }
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = getGroupKeys(ctx.params.id, actor, { after, epochs });
+    });
+
+    router.get('/api/groups/:id/keys/missing', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = getMissingGroupWraps(ctx.params.id);
+    });
+
+    router.get('/api/groups/:id/keys/:epoch/wraps', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        if (!/^\d{1,9}$/.test(ctx.params.epoch)) {
+            ctx.status = 400;
+            ctx.body = { error: 'An epoch is a whole number' };
+            return;
+        }
+        try {
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.body = getGroupEpochWraps(ctx.params.id, actor, Number(ctx.params.epoch));
+        } catch (e) {
+            if (!respondGroupKeyError(ctx, e)) throw e;
+        }
+    });
+
+    router.post('/api/groups/:id/keys/epoch', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!chatRateLimit(ctx, actor)) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const body = (ctx as any).requestBody || {};
+        try {
+            ctx.status = 201;
+            ctx.body = { success: true, ...rotateGroupEpoch(ctx.params.id, actor, body.epoch) };
+        } catch (e) {
+            if (!respondGroupKeyError(ctx, e)) throw e;
+        }
+    });
+
+    router.post('/api/groups/:id/keys/wrap', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!chatRateLimit(ctx, actor)) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const body = (ctx as any).requestBody || {};
+        try {
+            ctx.status = 201;
+            ctx.body = { success: true, ...storeGroupTopUp(ctx.params.id, actor, body) };
+        } catch (e) {
+            if (!respondGroupKeyError(ctx, e)) throw e;
         }
     });
 

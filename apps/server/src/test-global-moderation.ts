@@ -75,6 +75,7 @@ import { REMOVALS_SINCE_SQL } from './engine/auto-moderation.js';
 import { knockRefusal } from './engine/probation.js';
 import { setMemberArea } from './engine/member-area.js';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -921,7 +922,7 @@ async function main(): Promise<void> {
     const metaBefore = zedLineMeta();
     const tries: [string, Res][] = [
         ['a line in an enterprise\'s thread', await call('POST', max, `/api/enterprise/${hub.pk}/thread/message`, { text: 'Buy now' })],
-        ['a line in the group chat', await call('POST', max, `/api/groups/${openClub.id}/chat/message`, { text: 'Buy now' })],
+        ['a line in the group chat', await call('POST', max, `/api/groups/${openClub.id}/chat/message`, lockedGroupLine(db, openClub.id))], // sealed, so the mute is what refuses it
         ['a line in the event chat', await call('POST', max, `/api/marketplace/posts/${kimEvent}/chat/message`, { text: 'Buy now' })],
         ['a reaction', await call('POST', max, '/api/messages/react', { messageId: zedLine, emoji: 'Buy now at spam.example' })],
         ['starting a group', await call('POST', max, '/api/groups', { name: 'Spam club', description: 'Buy now' })],

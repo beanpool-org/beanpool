@@ -28,6 +28,7 @@ import { emptyCopiedTables } from './engine/copied-tables.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { lockedGroupLine } from './group-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -74,7 +75,7 @@ async function main(): Promise<void> {
     joinGroup(g.id, carol);
     joinGroup(g.id, dave);
     setMemberRole(g.id, alice, carol, 'observer');
-    postGroupThreadMessage(g.id, bob, 'Tomato seeds are in');
+    postGroupThreadMessage(g.id, bob, lockedGroupLine(db, g.id)); // a sealed line: the node keeps it as sent
     removeGroupMember(g.id, alice, dave);
 
     const expectedParts = parts(g.id);

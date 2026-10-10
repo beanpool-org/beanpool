@@ -1208,6 +1208,10 @@ async function main(): Promise<void> {
             'POST /api/names/health/settings': { debtLinePct: 90, quietDays: 30 },
             'POST /api/names/consent': { version: '1:50:60' },
             'POST /api/local/admin/community-health': { debtLinePct: 90 },
+            // An enterprise's keepers' vote: paying Alice out of the enterprise, and a yes on a vote.
+            'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
+                params: { to: alice.pk, amount: 1 } },
+            'POST /api/enterprise/:treasury/decisions/:id/vote': { support: true },
         };
         /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
         const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
@@ -1244,6 +1248,9 @@ async function main(): Promise<void> {
             'POST /api/enterprise/:treasury/resume', 'GET /api/enterprise/:treasury/succession',
             'POST /api/enterprise/:treasury/succession/:proposalId/vote', 'POST /api/enterprise/:treasury/succession/propose',
             'GET /api/enterprise/:treasury/thread', 'POST /api/enterprise/:treasury/thread/message',
+            // An enterprise's keepers' votes (routes/enterprise-decisions.ts): its keepers only, everyone else 404.
+            'GET /api/enterprise/:treasury/decisions', 'POST /api/enterprise/:treasury/decisions',
+            'GET /api/enterprise/:treasury/decisions/:id', 'POST /api/enterprise/:treasury/decisions/:id/vote',
             'DELETE /api/enterprise/:treasury/thread/message/:messageId', 'POST /api/enterprise/:treasury/thread/remove',
             'POST /api/enterprise/:treasury/wind-up/cancel', 'POST /api/enterprise/:treasury/wind-up/finalise',
             'POST /api/enterprise/:treasury/wind-up/initiate',
@@ -1258,7 +1265,9 @@ async function main(): Promise<void> {
             'GET /api/global/communities', 'GET /api/global/home', 'GET /api/global/watches', 'POST /api/global/watches',
             'DELETE /api/global/watches/:id',
             'GET /api/groups', 'POST /api/groups', 'GET /api/groups/:id', 'PATCH /api/groups/:id', 'GET /api/groups/:id/chat',
-            'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/join', 'POST /api/groups/:id/lead',
+            'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/join',
+            'GET /api/groups/:id/keys', 'GET /api/groups/:id/keys/:epoch/wraps', 'GET /api/groups/:id/keys/missing', 'POST /api/groups/:id/keys/epoch',
+            'POST /api/groups/:id/keys/wrap', 'POST /api/groups/:id/lead',
             'GET /api/groups/:id/members', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
             'PATCH /api/groups/:id/members/:pubkey', 'GET /api/groups/:id/picture', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',

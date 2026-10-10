@@ -2180,7 +2180,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     author_pubkey        TEXT NOT NULL REFERENCES members(public_key),
     title                TEXT NOT NULL,
     description          TEXT NOT NULL,
-    touches              TEXT NOT NULL CHECK (touches IN ('member', 'pool')),
+    touches              TEXT NOT NULL CHECK (touches IN ('member', 'pool', 'scope')),
     effect               TEXT NOT NULL,
     subject              TEXT,
     params               TEXT,
@@ -2207,7 +2207,13 @@ CREATE TABLE IF NOT EXISTS decisions (
     admin_halted_at      DATETIME,
     admin_halted_by      TEXT REFERENCES members(public_key) ON DELETE SET NULL,
     admin_halt_reason    TEXT,
-    updated_at           DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at           DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Whose Decision it is (DESIGN-group-decisions §2.1): the whole community, or one enterprise's keepers (scope_id = the
+    -- enterprise's pubkey). A scoped Decision touches only its own scope ('scope') and its roll is frozen in decision_electors.
+    scope_kind           TEXT NOT NULL DEFAULT 'community' CHECK (scope_kind IN ('community', 'enterprise')),
+    scope_id             TEXT,
+    CHECK ((scope_kind = 'community') = (scope_id IS NULL)),
+    CHECK ((scope_kind = 'community') = (touches != 'scope'))
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);
 CREATE INDEX IF NOT EXISTS idx_decisions_closes_at ON decisions(closes_at);
@@ -2215,9 +2221,8 @@ CREATE INDEX IF NOT EXISTS idx_decisions_author ON decisions(author_pubkey);
 CREATE INDEX IF NOT EXISTS idx_decisions_created_at ON decisions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_decisions_tick_open ON decisions(status, closes_at ASC);
 CREATE INDEX IF NOT EXISTS idx_decisions_tick_grace ON decisions(status, grace_period_ends_at ASC);
--- One open Decision per member author. The node itself (SYSTEM) opens one "Keep this suspension?" vote per
--- emergency suspension, so its own Decisions are exempt.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_member_author_open ON decisions(author_pubkey) WHERE status = 'open' AND author_pubkey != 'SYSTEM';
+-- One open Decision per member author per scope (idx_decisions_member_author_open) is made in db.ts after the scope columns
+-- exist on an older table (decision-scope-migration.ts). The node itself (SYSTEM) is exempt.
 CREATE INDEX IF NOT EXISTS idx_decisions_status_created ON decisions(status, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS decision_votes (
@@ -2233,6 +2238,20 @@ CREATE TABLE IF NOT EXISTS decision_votes (
 );
 CREATE INDEX IF NOT EXISTS idx_decision_votes_voter ON decision_votes(voter_pubkey);
 -- idx_decision_votes_decision dropped: redundant with PRIMARY KEY (decision_id, voter_pubkey) prefix
+
+-- The roll of a scoped Decision, frozen when it opens (DESIGN-group-decisions §2.2, §2.6). Written only by the engine:
+-- every keeper on the roll at opening is 'on'; one who leaves (steps down, or is suspended) is 'left' and their vote is
+-- dropped; one removed by the lead stays 'on'. A community Decision has no rows here.
+CREATE TABLE IF NOT EXISTS decision_electors (
+    decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    role_at_open  TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left')),
+    created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (decision_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_decision_electors_member ON decision_electors(member_pubkey);
 
 -- 24. Enterprise Backing Pledges (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4)
 -- A keeper pledges a portion of their own earned credit to back an enterprise's credit floor.
@@ -2372,6 +2391,51 @@ CREATE TABLE IF NOT EXISTS thread_read_cursors (
     PRIMARY KEY (conversation_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_thread_read_cursors_member ON thread_read_cursors(member_pubkey);
+
+-- A group chat's keys (group chats step 2; scratch/global-node/DESIGN-group-chat-encryption-fable.md §2 and
+-- DESIGN-group-chat-wrap-provenance-fable.md §5.3). Each membership state of a group is an epoch with a random key made
+-- on a member's phone; the node holds each epoch's signed record (who made it, why, and three digests: a commitment to
+-- the key, the recipients, the wraps) and one wrap of the key per member. It can open none. No secret here: a wrap opens
+-- only with its recipient's private key. Copied to a standby verbatim (plain tables, engine/replication-manifest.ts).
+-- No foreign keys: a standby's copy may bring a wrap before its member's row, and a re-key deletes the old key's wraps
+-- itself (engine/key-move.ts).
+CREATE TABLE IF NOT EXISTS group_key_epochs (
+    group_id        TEXT NOT NULL,
+    epoch           INTEGER NOT NULL,
+    created_by      TEXT NOT NULL,
+    reason          TEXT NOT NULL CHECK (reason IN ('start', 'join', 'approve', 'invite', 'remove', 'leave', 'rekey', 'rotate')),
+    -- Whose membership changed; NULL for 'start' and 'rotate'.
+    subject_pubkey  TEXT,
+    -- The maker's own time, exactly as signed.
+    created_at      TEXT NOT NULL,
+    key_commit      TEXT NOT NULL,
+    members_digest  TEXT NOT NULL,
+    wraps_digest    TEXT NOT NULL,
+    sig             TEXT NOT NULL,
+    -- When this node stored it: a member reads, and is topped up with, only epochs stored at or after their
+    -- group_members.joined_at (their fromEpoch).
+    stored_at       TEXT NOT NULL,
+    -- Set on the current epoch when the membership changed without a new one (a leaver, a prune, an app that sent none):
+    -- the next line refused until a member rotates.
+    stale_since     TEXT,
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (group_id, epoch)
+);
+CREATE TABLE IF NOT EXISTS group_key_wraps (
+    group_id         TEXT NOT NULL,
+    epoch            INTEGER NOT NULL,
+    recipient_pubkey TEXT NOT NULL,
+    wrapper_pubkey   TEXT NOT NULL,
+    eph_pub          TEXT NOT NULL,
+    nonce            TEXT NOT NULL,
+    wrapped          TEXT NOT NULL,
+    -- A top-up's signature by its wrapper; NULL for a wrap that came in its epoch's record (the record's maker made it).
+    sig              TEXT,
+    created_at       TEXT NOT NULL,
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (group_id, epoch, recipient_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_group_key_wraps_recipient ON group_key_wraps(recipient_pubkey);
 
 -- Convenor succession (answer B): when a group's only convenor has shown no node activity for 30 days, any
 -- member may propose a member as convenor. Members vote yes or no for 14 days; more than half of those who

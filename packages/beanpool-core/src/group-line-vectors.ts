@@ -3,8 +3,13 @@
  * the PWA's when slices 3 and 4 wire them in, each handing in ITS OWN e2e-crypto module, so all three prove the same
  * bytes seal and open the same way.
  *
- * The record, the top-up and the lines below were made once and are frozen. If a change to group-crypto.ts stops any of
- * them matching or opening, that change has broken every group line already sent: fix the change, never regenerate.
+ * Frozen from the first release that sends a group line (none yet). Until then, a design change regenerates these in the
+ * PR that makes it, and says so here. Once a release sends group lines, a change to group-crypto.ts that stops any of
+ * them matching or opening has broken every group line already sent: fix the change.
+ *
+ * Regenerated once, in group chats step 2 (DESIGN-group-chat-wrap-provenance-fable.md §5.4, Option C): the record gained
+ * keyCommit, membersDigest and wrapsDigest, and its canonical form and signature changed. The wraps, the top-up and the
+ * four lines are byte-identical to #1749's (core's group-crypto.test.ts pins that).
  *
  * Kept out of the main index (import `@beanpool/core/group-line-vectors`) so no app bundle carries it. The checks throw a
  * plain Error and depend on no test framework.
@@ -20,9 +25,10 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Pkcs8 } from './ed25519-key.js';
+import { mintGroupVectorRng } from './group-vector-rng.js';
 import type {
-    GroupCryptoRandom, GroupEpochCheck, GroupEpochRecord, GroupLineBinding, GroupLinePart, GroupLinePayload, GroupTopUp,
-    MakeGroupEpochInput, OpenedGroupLine, SealGroupLineInput,
+    GroupCryptoRandom, GroupEpochCheck, GroupEpochRecord, GroupLineBinding, GroupLinePart, GroupLinePayload, GroupServedWrap, GroupTopUp,
+    GroupTopUpCheck, MakeGroupEpochInput, OpenedGroupLine, SealGroupLineInput,
 } from './group-crypto.js';
 
 const seedOf = (name: string) => sha256(utf8ToBytes(`beanpool group-line vector: ${name}`));
@@ -30,10 +36,10 @@ const seedOf = (name: string) => sha256(utf8ToBytes(`beanpool group-line vector:
 /** The fixed randomness stream `label`: call i gives the first n bytes of SHA-256("… rng <label> <i>"). Vectors only. */
 export function groupVectorRandom(label: string): (n: number) => Uint8Array {
     let i = 0;
-    return (n: number) => {
+    return mintGroupVectorRng((n: number) => {
         if (n > 32) throw new Error('group-line vectors: a stream call gives at most 32 bytes');
         return sha256(utf8ToBytes(`beanpool group-line vector: rng ${label} ${i++}`)).slice(0, n);
-    };
+    });
 }
 
 type Who = 'ana' | 'ben' | 'cat' | 'dov';
@@ -70,12 +76,15 @@ export const GROUP_VECTOR_RECORD: GroupEpochRecord = {
     subject: '35b3cd6637a22624ba7e7ab2cfe2375b13fa59f1541b05fd36a5387412200060',
     createdBy: '35b3cd6637a22624ba7e7ab2cfe2375b13fa59f1541b05fd36a5387412200060',
     createdAt: '2026-10-10T09:30:00.000Z',
+    keyCommit: '92d0+VuS1iJBlE7JDfyZg/u13eC8R9sv6ScgCb5yKP0=',
+    membersDigest: 'q8A+79vFQ0cxPll/w0wu8lfXOM3OO3Xh892KZZTCUa0=',
+    wrapsDigest: 'X4loZUuyn3YhyWNnOvhcntdSYNyytjif2ExNM05ivh8=',
     wraps: [
         { recipient: '35b3cd6637a22624ba7e7ab2cfe2375b13fa59f1541b05fd36a5387412200060', ephPub: 'kr6eeGVxSvCf7W7h230BMEeeQLjzdkGv+vWXI4GPSV8=', nonce: 'YGga18NbayCBxCO6Ro3MqU+3YlgepouT', wrapped: 'rulIWnhxN+eE/y+7gF8RF62JlH4HZrcTqsiBl2x7dVgsU/qgz3nzhKBD4EzIGJqL' },
         { recipient: '4d3d8823dbd855a591a6f44cd2d5b5b14b37c2ed66347bd6392ca6746fe41c8a', ephPub: 'y5XG6SfQDS5PsfL5f73fPTZGfO04xV21Ql8XH8sVJ0g=', nonce: 'DiS5PrG++yhwhOA18wa9IeTBF1TQiFYK', wrapped: '0mKuerTizbuxEu73+a4HYLVTYBUiTBNlLD9dojUQcYObi2I+HHbOpBIKjkM4YzTT' },
         { recipient: '82a778ab7cfc4f3b95b0ebbc8759d72263437a8fbf752ce3b0d08843dc20be18', ephPub: 'Dta+Q+NyJvmMh4KT6z3byVecvcj5YZTJSv4BYEzo8R4=', nonce: '5AD1K1faSo1kCuFksOHuoAWFnSI8i3TL', wrapped: '7u46HZwCaD6bSHaX1CBkv09X3qCf+6RJzspIRHgutsHszFKWKA5hTSZZADAgrYXC' },
     ],
-    sig: 'RHsUnAxdp/Y62dw49mCvCr59rtT4ezv+iHhAdgGtnOA+FwlznSeSYi/1XJeE4XFfppwJWMrMN62lC7P+MbmfCQ==',
+    sig: 'c5Q8ghoheUDTE2wzB967jfTSWt0WlfC3B+1DhUy/sdA8PIBmsJLPOdzFWv2pkrz4nY14/U45CDf9rRtAGv4LBw==',
 };
 
 /** The epoch key Cat made for epoch 3 (the first 32 bytes of the record's fixed RNG). */
@@ -143,8 +152,9 @@ export const GROUP_LINE_VECTORS: GroupLineVector[] = [
 export interface GroupCryptoApi {
     makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCryptoRandom): { record: GroupEpochRecord; groupKey: Uint8Array };
     openGroupEpochRecord(record: GroupEpochRecord, myEdPrivHex: string, check: GroupEpochCheck): Uint8Array;
+    openMyGroupKey(record: GroupEpochRecord, myWrap: GroupServedWrap, myEdPrivHex: string, check: GroupEpochCheck): Uint8Array;
     makeGroupTopUp(groupKey: Uint8Array, input: { myEdPrivHex: string; groupId: string; epoch: number; recipientPubHex: string }, opts?: GroupCryptoRandom): GroupTopUp;
-    openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string): Uint8Array;
+    openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string, keyCommit: string, check?: GroupTopUpCheck): Uint8Array;
     groupMessageKey(groupKey: Uint8Array, messageId: string): Uint8Array;
     sealGroupLine(text: string, input: SealGroupLineInput, opts?: GroupCryptoRandom): GroupLinePayload;
     openGroupLine(payload: GroupLinePayload, ref: GroupLineBinding, groupKey: Uint8Array): OpenedGroupLine;
@@ -182,24 +192,43 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
         const made = api.makeGroupEpochRecord({
             myEdPrivHex: keyOf('cat', pkcs8), groupId: GROUP_VECTOR_GROUP, epoch: 3, reason: 'join', subject: people.cat.publicKey,
             createdAt: GROUP_VECTOR_CREATED_AT, recipients: [people.ana.publicKey, people.ben.publicKey, people.cat.publicKey],
-        }, { randomBytes: groupVectorRandom('epoch 3') });
+        }, { randomBytesForVectors: groupVectorRandom('epoch 3') });
         if (JSON.stringify(made.record) !== JSON.stringify(GROUP_VECTOR_RECORD)) fail(`epoch record made with ${pkcs8 ? 'a PKCS8' : 'a bare-seed'} key differs from the frozen one`);
         if (bytesToHex(made.groupKey) !== GROUP_VECTOR_KEY_HEX) fail('the epoch key differs');
         const topUp = api.makeGroupTopUp(key, { myEdPrivHex: keyOf('ana', pkcs8), groupId: GROUP_VECTOR_GROUP, epoch: 3, recipientPubHex: people.dov.publicKey },
-            { randomBytes: groupVectorRandom('top-up') });
+            { randomBytesForVectors: groupVectorRandom('top-up') });
         if (JSON.stringify(topUp) !== JSON.stringify(GROUP_VECTOR_TOP_UP)) fail(`top-up made with ${pkcs8 ? 'a PKCS8' : 'a bare-seed'} key differs from the frozen one`);
         for (const who of MEMBERS) {
             const opened = api.openGroupEpochRecord(GROUP_VECTOR_RECORD, keyOf(who, pkcs8), { groupId: GROUP_VECTOR_GROUP, epoch: 3 });
             if (bytesToHex(opened) !== GROUP_VECTOR_KEY_HEX) fail(`${who} opened another key from the record`);
         }
-        if (bytesToHex(api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, keyOf('dov', pkcs8))) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from the top-up');
+        const commit = GROUP_VECTOR_RECORD.keyCommit;
+        if (bytesToHex(api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, keyOf('dov', pkcs8), commit)) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from the top-up');
+        const roster = [people.ana.publicKey, people.ben.publicKey, people.cat.publicKey, people.dov.publicKey];
+        if (bytesToHex(api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, keyOf('dov', pkcs8), commit, { activeMembers: roster })) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from the top-up, roster given');
+        // The served shape (GET …/keys): the record without its wraps, and my own wrap beside it.
+        const { wraps, ...served } = GROUP_VECTOR_RECORD;
+        for (const who of MEMBERS) {
+            const w = wraps!.find((x) => x.recipient === people[who].publicKey)!;
+            const mine: GroupServedWrap = { epoch: 3, wrapper: GROUP_VECTOR_RECORD.createdBy, ephPub: w.ephPub, nonce: w.nonce, wrapped: w.wrapped, sig: null };
+            if (bytesToHex(api.openMyGroupKey(served, mine, keyOf(who, pkcs8), { groupId: GROUP_VECTOR_GROUP, epoch: 3, activeMembers: roster })) !== GROUP_VECTOR_KEY_HEX) fail(`${who} opened another key from the served record`);
+        }
+        const t = GROUP_VECTOR_TOP_UP;
+        const dovServed: GroupServedWrap = { epoch: t.epoch, wrapper: t.wrapper, ephPub: t.ephPub, nonce: t.nonce, wrapped: t.wrapped, sig: t.sig };
+        if (bytesToHex(api.openMyGroupKey(served, dovServed, keyOf('dov', pkcs8), { groupId: GROUP_VECTOR_GROUP, activeMembers: roster })) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from his served top-up');
     }
+    let otherCommit = false;
+    try { api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, people.dov.seedHex, GROUP_VECTOR_RECORD.membersDigest); otherCommit = true; } catch { /* as it should */ }
+    if (otherCommit) fail('the top-up opened against another key commitment');
     let dovInRecord = false;
     try { api.openGroupEpochRecord(GROUP_VECTOR_RECORD, people.dov.seedHex, { groupId: GROUP_VECTOR_GROUP }); dovInRecord = true; } catch { /* as it should */ }
     if (dovInRecord) fail('Dov, who has no wrap in the record, opened it');
     let otherGroup = false;
     try { api.openGroupEpochRecord(GROUP_VECTOR_RECORD, people.ana.seedHex, { groupId: '00000000-0000-4000-8000-000000000000' }); otherGroup = true; } catch { /* as it should */ }
     if (otherGroup) fail('the record opened as another group\'s');
+    let outsideRoster = false;
+    try { api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, people.dov.seedHex, GROUP_VECTOR_RECORD.keyCommit, { activeMembers: [people.ben.publicKey, people.cat.publicKey, people.dov.publicKey] }); outsideRoster = true; } catch { /* as it should */ }
+    if (outsideRoster) fail('the top-up opened though its wrapper is in no roster given');
 
     for (const v of GROUP_LINE_VECTORS) {
         if (bytesToHex(api.groupMessageKey(key, v.messageId)) !== v.messageKeyHex) fail(`${v.label}: the message key differs`);
@@ -207,7 +236,7 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
             const sealed = api.sealGroupLine(v.text, {
                 myEdPrivHex: keyOf(v.from, pkcs8), groupKey: key, groupId: GROUP_VECTOR_GROUP, epoch: 3, messageId: v.messageId,
                 part: v.part, after: v.after, replyToId: v.replyToId,
-            }, { randomBytes: groupVectorRandom(v.rng) });
+            }, { randomBytesForVectors: groupVectorRandom(v.rng) });
             if (sealed.ciphertext !== v.payload.ciphertext || sealed.nonce !== v.payload.nonce) {
                 fail(`${v.label}: sealed with ${pkcs8 ? 'a PKCS8' : 'a bare-seed'} key, the bytes differ from the frozen line`);
             }

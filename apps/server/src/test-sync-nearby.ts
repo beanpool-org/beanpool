@@ -22,7 +22,8 @@
  *   7. `ids=` answers exactly what `id=` answers for each id (a group listing the reader isn't in, a hidden one);
  *   8. every nearby answer carries the identity epoch header, the 304 included;
  *   9. a member with no area gets the newest 100 listings; a listing posted with no place takes its author's area (Q4):
- *      an offer, and a poll (which never keeps a pin of its own, so one sent with a pin takes the area too);
+ *      an offer, and a poll (which never keeps a pin of its own, so one sent with a pin takes the area too); an edit
+ *      that takes a listing's pin away puts it back at its author's area;
  *  10. a member's set leaves out the authors she blocked: blocking the author of her 60 nearest listings fills it with
  *      the next nearest.
  *
@@ -459,6 +460,14 @@ async function main() {
         `a listing posted with no place takes its author's area (${posted.status}, ${stored?.lat},${stored?.lng} vs ${area7.area_lat},${area7.area_lng})`);
     const inHerSet = (await get(`${SYNC}&nearby=1`, members[7].id)).set.includes(posted.id ?? '');
     assert(inHerSet, 'and is in the set of a member at that area');
+    // An edit that takes the pin away: at the author's area again, as a new listing with no place is.
+    const pinned = await signedPost('/api/marketplace/posts/update', members[7].id, { id: posted.id, authorPublicKey: members[7].id.pubKeyHex, lat: -33.0, lng: 151.0 });
+    const atPin = db.prepare('SELECT lat, lng FROM posts WHERE id = ?').get(posted.id ?? '') as { lat: number | null; lng: number | null };
+    const unpinned = await signedPost('/api/marketplace/posts/update', members[7].id, { id: posted.id, authorPublicKey: members[7].id.pubKeyHex, lat: null, lng: null });
+    const afterUnpin = db.prepare('SELECT lat, lng FROM posts WHERE id = ?').get(posted.id ?? '') as { lat: number | null; lng: number | null };
+    assert(pinned.status === 200 && atPin.lat === -33 && atPin.lng === 151 && unpinned.status === 200
+        && afterUnpin.lat === area7.area_lat && afterUnpin.lng === area7.area_lng,
+        `an edit moves its pin (${pinned.status}, ${atPin.lat},${atPin.lng}), and one that takes the pin away puts it back at its author's area (${unpinned.status}, ${afterUnpin.lat},${afterUnpin.lng})`);
     // A poll has no place of its own (the engine's poll isolation drops any pin), so on a by-area node the engine gives
     // it its author's area too: the polls a member sees are the ones made near them (§3.4).
     const POLL = { type: 'poll', title: 'Market day?', description: 'Saturday or Sunday', pollOptions: ['Saturday', 'Sunday'], durationDays: 7 };
@@ -496,6 +505,14 @@ async function main() {
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ A member\'s phone gets exactly the listings near them.');
+
+    async function signedPost(path: string, id: Id, fields: Record<string, unknown>): Promise<{ status: number }> {
+        const body = JSON.stringify(fields);
+        const res = await localFetch(`${BASE}${path}`, { method: 'POST', body, headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', path, body, id) } });
+        if (res.status >= 300) console.error(`  ${path}:`, res.status, (await res.text()).slice(0, 200));
+        else await res.arrayBuffer();
+        return { status: res.status };
+    }
 
     async function postPlaceless(id: Id, fields: Record<string, unknown> = {}): Promise<{ status: number; id?: string; error?: string }> {
         db.prepare("UPDATE members SET avatar_ref = 'seeded-face' WHERE public_key = ?").run(id.pubKeyHex);

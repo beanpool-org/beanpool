@@ -907,6 +907,13 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         validatePostPhotos(updates.photos);
     }
 
+    // An edit that takes the pin away, on a node that syncs by area, puts the listing at its author's area, as a new one
+    // with no place is (placelessListingArea). An event can't lose its pin (assertEventPin); a poll's place is never edited.
+    if (existingPost.type !== 'event' && (updates.lat === null || updates.lng === null)) {
+        const area = placelessListingArea(existingPost.authorPublicKey);
+        if (area) { updates.lat = area.lat; updates.lng = area.lng; }
+    }
+
     const fields: string[] = [];
     const values: any[] = [];
 

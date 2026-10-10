@@ -957,6 +957,21 @@ describe('the global node\'s Home (H4)', () => {
         expect(firstSteps(answer({ me: { ...answer().me!, probation: words }, cards: { steps: steps() } }), { interests: [] }).note).toBeNull();
     });
 
+    it('First steps stays for a global member\'s first 14 days, every line done and the limits over, as the web and the node keep it (#1517)', () => {
+        const posted = (days: number) => member(days, { cards: { steps: steps({ firstPost: true, joinedAt: iso(NOW - days * DAY) }), find: find(), community: { name: 'G', members: 9 } } });
+        // Day 3: the post made, no limits left, a knock remembered: the node still sends the card, and the phone keeps it.
+        expect(firstSteps(posted(3), { interests: ['food'], knocked: true, now: NOW })).toEqual({ lines: [{ id: 'post', text: 'Post something free or for swap', done: true }], note: null, show: true });
+        expect(draw(posted(3), EVERY, ctx({ interests: ['food'], knocked: true, now: NOW }))).toContain('steps');
+        expect(firstSteps(posted(13.9), { interests: ['food'], knocked: true, now: NOW }).show).toBe(true);
+        // Day 14 on: the node's own edge (`now - joined < 14 days`), and the card goes once nothing is left to do.
+        expect(firstSteps(posted(14), { interests: ['food'], knocked: true, now: NOW }).show).toBe(false);
+        expect(draw(posted(14), EVERY, ctx({ interests: ['food'], knocked: true, now: NOW }))).not.toContain('steps');
+        // A join date the node didn't send is not "new": the lines decide, as on the node.
+        expect(firstSteps(member(null, { cards: { steps: steps({ firstPost: true, joinedAt: null }) } }), { interests: ['food'], knocked: true, now: NOW }).show).toBe(false);
+        // The phone's clock decides when none is given (cardsToDraw passes its own).
+        expect(firstSteps(member(0, { me: { ...member(0).me!, joinedAt: iso(Date.now() - DAY) }, cards: { steps: steps({ firstPost: true }) } }), { interests: ['food'], knocked: true }).show).toBe(true);
+    });
+
     it('Who joined on the global node: a count by area, never a name or a face, whatever an answer holds', () => {
         const withNames = { count7d: 14, radiusKm: 50, names: [{ callsign: 'Ana', avatarUrl: '/api/avatars/a' }, { callsign: 'Kofi', avatarUrl: null }] };
         expect(joinedNames(withNames, 'global')).toEqual([]);

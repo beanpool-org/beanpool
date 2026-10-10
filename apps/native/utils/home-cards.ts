@@ -57,6 +57,11 @@ export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
 
 /** Find your community is pinned for a member's first 30 days on the global node, then it can be removed (§4.1, §7, §13 Q5). */
 export const FIND_PINNED_DAYS = 30;
+/**
+ * A member is new for this long: the global First steps stays while they are, even with every line done (§3.1 "member
+ * < 14 days or any line undone"; the node's routes/home-answer.ts `stepsCard`, the web app's `STEPS_NEW_DAYS`).
+ */
+export const STEPS_NEW_DAYS = 14;
 const DAY_MS = 86_400_000;
 
 /** A type's name: its caption, its row in the picker and Edit home, and the screen reader's words for its menu. */
@@ -756,10 +761,12 @@ export function probationSentence(p: HomeProbation | null | undefined): string |
 
 /**
  * First steps as this node says it: a local community's lines (H2's, unchanged), or the global node's lines and the
- * new-account limits. `show`: a line it can tick is undone, or (global) the limits still apply.
+ * new-account limits. `show`: a line it can tick is undone, or (global) the member is in their first 14 days or the
+ * limits still apply (the node's rule and the web app's, #1517). The join date is the account's (`me.joinedAt`, as the
+ * 30-day pin reads it; the node fills it and `steps.joinedAt` from the same row); none is not new.
  */
 export function firstSteps(
-    answer: HomeAnswer, ctx: Pick<HomeDrawContext, 'interests' | 'role' | 'knocked'>,
+    answer: HomeAnswer, ctx: Pick<HomeDrawContext, 'interests' | 'role' | 'knocked' | 'now'>,
 ): { lines: StepLine[]; note: string | null; show: boolean } {
     const s = answer.cards.steps;
     if (!s) return { lines: [], note: null, show: false };
@@ -769,7 +776,9 @@ export function firstSteps(
     }
     const lines = globalStepLines(s, answer.cards.find, !!ctx.knocked);
     const note = probationSentence(answer.me?.probation);
-    return { lines, note, show: lines.some(l => !l.done && !l.suggestion) || note !== null };
+    const joined = Date.parse(answer.me?.joinedAt ?? s.joinedAt ?? '');
+    const young = Number.isFinite(joined) && (ctx.now ?? Date.now()) - joined < STEPS_NEW_DAYS * DAY_MS;
+    return { lines, note, show: young || lines.some(l => !l.done && !l.suggestion) || note !== null };
 }
 
 /**

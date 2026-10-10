@@ -174,3 +174,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-11-28 - Add dynamic accessibilityLabel to ReviewModal submit button
 **Learning:** Action buttons in rating or review flows whose text child is replaced by an `ActivityIndicator` during submission leave screen readers without explicit loading state feedback unless provided with a dynamic `accessibilityLabel` that reflects the in-progress state.
 **Action:** Provide dynamic `accessibilityLabel` (`submitting ? (isExisting ? 'Updating rating...' : 'Submitting rating...') : (isExisting ? 'Update Rating' : 'Submit Rating')`) on review submit buttons rendering `ActivityIndicator` when submitting.
+
+## 2026-12-05 - Add dynamic accessibilityLabel and busy state to welcome flow action buttons
+**Learning:** Action buttons in welcome and onboarding flows whose text child is conditionally replaced by an `ActivityIndicator` during loading leave screen readers without accessible text during async operations unless dynamic `accessibilityLabel` and `accessibilityState={{ disabled: loading, busy: loading }}` attributes are provided.
+**Action:** Supply dynamic `accessibilityLabel` and `accessibilityState={{ disabled: loading, busy: loading }}` on primary action buttons that conditionally render an `ActivityIndicator` in place of text when loading.

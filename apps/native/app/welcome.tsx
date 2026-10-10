@@ -2495,7 +2495,14 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
-                        <Pressable style={styles.primaryBtn} onPress={handleCreate} disabled={loading} accessibilityRole="button">
+                        <Pressable
+                            style={styles.primaryBtn}
+                            onPress={handleCreate}
+                            disabled={loading}
+                            accessibilityRole="button"
+                            accessibilityLabel={loading ? "Joining network..." : "Next"}
+                            accessibilityState={{ disabled: loading, busy: loading }}
+                        >
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Next →</Text>}
                         </Pressable>
 
@@ -2716,7 +2723,8 @@ export default function WelcomeScreen() {
                                         onPress={wordsWay ? handleWordsJoin : handleGlobalJoin}
                                         disabled={loading}
                                         accessibilityRole="button"
-                                        accessibilityLabel="Join"
+                                        accessibilityLabel={loading ? "Joining global community..." : "Join"}
+                                        accessibilityState={{ disabled: loading, busy: loading }}
                                     >
                                         {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Join →</Text>}
                                     </Pressable>
@@ -2896,7 +2904,9 @@ export default function WelcomeScreen() {
                                 disabled={loading || replaceConfirmText !== 'WIPE'}
                                 onPress={handleReplaceAccount}
                                 accessibilityRole="button"
+                                accessibilityLabel={loading ? "Replacing account..." : "Replace Account"}
                                 accessibilityHint="Replaces the account currently stored on this phone"
+                                accessibilityState={{ disabled: loading || replaceConfirmText !== 'WIPE', busy: loading }}
                             >
                                 {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.dangerBtnText}>Replace Account</Text>}
                             </Pressable>
@@ -3008,7 +3018,14 @@ export default function WelcomeScreen() {
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
-                        <Pressable style={styles.primaryBtn} onPress={handleRecover} disabled={loading} accessibilityRole="button">
+                        <Pressable
+                            style={styles.primaryBtn}
+                            onPress={handleRecover}
+                            disabled={loading}
+                            accessibilityRole="button"
+                            accessibilityLabel={loading ? "Recovering identity..." : "Recover Identity"}
+                            accessibilityState={{ disabled: loading, busy: loading }}
+                        >
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Recover Identity</Text>}
                         </Pressable>
 
@@ -3254,7 +3271,14 @@ export default function WelcomeScreen() {
                                         The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.
                                     </Text>
                                     {error && <Text style={styles.error}>{error}</Text>}
-                                    <Pressable style={styles.primaryBtn} onPress={handleSsoFinish} disabled={loading} accessibilityRole="button">
+                                    <Pressable
+                                        style={styles.primaryBtn}
+                                        onPress={handleSsoFinish}
+                                        disabled={loading}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={loading ? "Finishing recovery..." : "Continue"}
+                                        accessibilityState={{ disabled: loading, busy: loading }}
+                                    >
                                         {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Continue</Text>}
                                     </Pressable>
                                 </>
@@ -3275,6 +3299,7 @@ export default function WelcomeScreen() {
                                         onPress={() => checkSsoWaiting(false)}
                                         disabled={ssoChecking}
                                         accessibilityRole="button"
+                                        accessibilityLabel={ssoChecking ? "Checking now..." : "Check now"}
                                         accessibilityState={{ busy: ssoChecking, disabled: ssoChecking }}
                                     >
                                         {ssoChecking ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Check now</Text>}

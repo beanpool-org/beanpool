@@ -276,6 +276,7 @@ export const SUITES = [
     'test-members-contact-visibility',
     'test-heavy-read-cap',
     'test-heavy-read-keys',
+    'test-api-compression',
     'test-members-snapshot',
     'test-roster-snapshots',
     'test-members-directory-cost',

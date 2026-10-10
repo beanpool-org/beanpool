@@ -17,7 +17,7 @@ import { noteMainServerOpenJoinKeyId, recordedOpenJoinKeyId } from '../services/
 import { recoverySealEpoch } from '../services/recovery-seal-key.js';
 import { isLockedPushTombstone } from '../services/push-token-seal.js';
 import { deleteTombstonedCopies } from './recovery-shares.js';
-import { importedArea } from './member-area.js';
+import { importedArea, refreshMemberAreas } from './member-area.js';
 import { importPlainTables, deletePlainRow, plainRowStamp } from './plain-tables.js';
 import { PLAIN_TABLES, plainTableTriggers } from './replication-manifest.js';
 import type { CopyPageHeader, CopyRowCounts } from './copy-pages.js';
@@ -1818,6 +1818,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             }
 
             memberRules?.close();
+            // The areas the rows above brought, into the listing pushes' map (member-area.ts): a standby that takes over
+            // pushes each listing to the members near it as its main server did.
+            refreshMemberAreas((remote.members ?? []).flatMap((rm) => typeof rm?.publicKey === 'string' ? [rm.publicKey] : []));
             if (valuesLeftOut.length > 0) {
                 console.warn(`[Sync] ${valuesLeftOut.length} value(s) in the main server's members rows this table's rules refuse, left out `
                     + `(the row keeps its own, or the default): ${valuesLeftOut.slice(0, 5).map(valueLeftOutName).join(', ')}`);

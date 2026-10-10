@@ -4,15 +4,15 @@
  * the phone's (@beanpool/core AREA_STEP_WORDS).
  *
  * Use my location takes one low-accuracy reading and rounds it to 0.1° before the request is built (lib/member-area.ts);
- * Type a town is the Map's AddressSearch, rounded the same way. Skip writes nothing. A refusal or a failed save says so
- * in one line and never blocks: Skip is always there, even while the reading or the save waits, and leaving (Skip, Back,
- * the step closing) drops whatever answers later. The reading (20 s) and the save (lib/member-area.ts) have time limits
- * that end in the same one line.
+ * Type a town is the Map's AddressSearch in the step's own words (no map, no pin; a town or suburb), rounded the same
+ * way. Skip writes nothing. A refusal or a failed save says so in one line and never blocks: Skip is always there, even
+ * while the reading or the save waits, and leaving (Skip, Back, the step closing) drops whatever answers later. The
+ * reading (20 s) and the save (lib/member-area.ts) have time limits that end in the same one line.
  *
  * Small screens: three stacked full-width controls, each at least 44px tall; holds at 320px and 130% text.
  */
 import { useEffect, useRef, useState } from 'react';
-import { AREA_STEP_WORDS, areaWhyLine, type AddressResult } from '@beanpool/core';
+import { AREA_STEP_WORDS, AREA_TOWN_SEARCH_WORDS, areaWhyLine, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from './AddressSearch';
 import { readBrowserPosition, writeArea, type AreaSender, type MemberArea } from '../lib/member-area';
 
@@ -110,7 +110,7 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
             </button>
             {showTown && (
                 <div style={{ marginBottom: '0.6rem', textAlign: 'left' }}>
-                    <AddressSearch onPick={pickTown} />
+                    <AddressSearch onPick={pickTown} words={AREA_TOWN_SEARCH_WORDS} />
                     {busy === 'town' && <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Saving your area…</p>}
                 </div>
             )}

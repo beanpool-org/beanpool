@@ -17,6 +17,33 @@ export const AREA_STEP_WORDS = {
     notSet: 'Not set',
 } as const;
 
+/** What an address search says, so a form that reuses the event form's search can say it in its own words. */
+export interface AddressSearchWords {
+    /** The box's label (a screen reader's, on the phone). */
+    label: string;
+    placeholder: string;
+    /** The search itself is down. */
+    unavailable: string;
+    noMatches: string;
+    /** Where the matches come from, and that what is typed is sent there. */
+    source: string;
+    /** A match, to a screen reader. */
+    pickLabel?: (place: string) => string;
+}
+
+/**
+ * The area step's town search (deciding review of #1766, N3): there is no map on the step, so no map or pin; it asks for
+ * a town or suburb, not a street address, since only a 10 km area is kept and Nominatim gets whatever is typed.
+ */
+export const AREA_TOWN_SEARCH_WORDS: AddressSearchWords = {
+    label: 'Find your town or suburb',
+    placeholder: 'Town or suburb',
+    unavailable: "Town search isn't working right now. Use my location instead, or skip for now.",
+    noMatches: 'No matches. Try the name of a town or suburb nearby.',
+    source: 'Places from OpenStreetMap. What you type here is sent to them.',
+    pickLabel: (place) => `Choose ${place}`,
+};
+
 /** The why line, with the node's own numbers when it says them (`features.nearbyListings`), else the decided 500 / 250 km. */
 export function areaWhyLine(limits?: { radiusKm: number; max: number } | null): string {
     const max = limits?.max ?? 500;

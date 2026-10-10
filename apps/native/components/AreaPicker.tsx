@@ -3,7 +3,8 @@
  * that syncs listings by area (app/profile-setup.tsx), and Settings → Your area (app/your-area.tsx).
  *
  * Use my location takes ONE reading, at low accuracy, and rounds it to its 0.1° area before the request is built
- * (utils/member-area.ts). Type a town is the event form's AddressSearch; the pick is rounded the same way. Skip writes
+ * (utils/member-area.ts). Type a town is the event form's AddressSearch in the step's own words (no map, no pin; a
+ * town or suburb); the pick is rounded the same way. Skip writes
  * nothing. A refusal or a failed save says so in one line and never blocks: Skip is always there, even while a reading
  * or the save waits, and leaving (Skip, Cancel, ← Back) drops whatever answers later. The reading and the save each
  * have a time limit (utils/member-area.ts) that ends in the same one line.
@@ -13,7 +14,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
-import type { AddressResult } from '@beanpool/core';
+import { AREA_TOWN_SEARCH_WORDS, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from './AddressSearch';
 import { AREA_READING_TIMEOUT_MS, AREA_WORDS, areaWhyLine, withTimeLimit, writeMemberArea, type MemberArea } from '../utils/member-area';
 import type { NodeFeatures } from '../utils/node-profile';
@@ -126,7 +127,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
             </Pressable>
             {showTown && (
                 <View style={styles.townBox} testID="area-town-search">
-                    <AddressSearch onPick={pickTown} accent={palette.blue600} />
+                    <AddressSearch onPick={pickTown} accent={palette.blue600} words={AREA_TOWN_SEARCH_WORDS} />
                     {busy === 'town' && <ActivityIndicator style={styles.townSpinner} color={palette.blue600} accessibilityLabel="Saving your area" />}
                 </View>
             )}

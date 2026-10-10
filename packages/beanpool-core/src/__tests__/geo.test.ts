@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { roundToArea, roundPointToArea } from '../geo.js';
 import * as barrel from '../index.js';
-import { areaWhyLine, describeArea, placelessListingNote, PLACELESS_NO_AREA_NOTE, PLACELESS_AT_AREA_NOTE, AREA_STEP_WORDS } from '../member-area-words.js';
+import { areaWhyLine, describeArea, placelessListingNote, PLACELESS_NO_AREA_NOTE, PLACELESS_AT_AREA_NOTE, AREA_STEP_WORDS, AREA_TOWN_SEARCH_WORDS } from '../member-area-words.js';
 
 // The apps round a position to its 0.1° area with this function BEFORE it leaves the device (signup's area step,
 // Settings → Your area); the node rounds again with the engine's roundToArea, which is this same function re-exported
@@ -66,6 +66,14 @@ describe('the area step\'s words, shared by both apps', () => {
         expect(PLACELESS_AT_AREA_NOTE).toBe('This poll is shown at your area (about 10 km around it) to everyone who can read it.');
         expect(placelessListingNote(false, null)).toBeNull();
         expect(placelessListingNote(false, { lat: 1, lng: 2 })).toBeNull();
+    });
+
+    it("the town search's words: a town or suburb, never a map or a pin (review N3)", () => {
+        expect(AREA_TOWN_SEARCH_WORDS.placeholder).toBe('Town or suburb');
+        expect(AREA_TOWN_SEARCH_WORDS.pickLabel?.('Byron Bay')).toBe('Choose Byron Bay');
+        const all = [AREA_TOWN_SEARCH_WORDS.label, AREA_TOWN_SEARCH_WORDS.placeholder, AREA_TOWN_SEARCH_WORDS.unavailable,
+            AREA_TOWN_SEARCH_WORDS.noMatches, AREA_TOWN_SEARCH_WORDS.source, AREA_TOWN_SEARCH_WORDS.pickLabel?.('X')].join(' ');
+        expect(all).not.toMatch(/\b(map|pin|street)\b/i);
     });
 
     it('the privacy line says a poll is shown at the area, never that a distance is all others see (review B1)', () => {

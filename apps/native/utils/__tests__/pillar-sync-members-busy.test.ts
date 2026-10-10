@@ -84,6 +84,8 @@ const DB = 'beanpool_a.beanpool.org.db';
 const KEY = (id: string) => `pillar_sync_${DB}_${id}`;
 const LAST_SYNC_KEY = KEY('last-sync');
 const MEMBERS_LAST_SYNC_KEY = KEY('members_last_sync');
+/** When the last cycle completed, for display only (pillar-sync getLastSyncTime): written by every cycle that lands. */
+const LAST_CYCLE_KEY = KEY('last-cycle');
 const ANN = 'a'.repeat(64);
 const BOB = 'b'.repeat(64);
 const OPEN_FACE = (pk: string) => `/api/avatar/${pk}?v=1790000000000`;
@@ -231,7 +233,7 @@ describe('a members delta the node answered busy', () => {
         await performSync();
         expect(node.membersDeltas).toEqual([cursorOf(t0), cursorOf(t0), cursorOf(landedAt)]);
         expect([...store.keys()].filter(k => k.startsWith(`pillar_sync_${DB}_`)).sort())
-            .toEqual([LAST_SYNC_KEY, MEMBERS_LAST_SYNC_KEY].sort());
+            .toEqual([LAST_SYNC_KEY, MEMBERS_LAST_SYNC_KEY, LAST_CYCLE_KEY].sort());
     });
 });
 
@@ -293,10 +295,10 @@ describe('a members read that lands, as on main', () => {
         expect(moved).toBeGreaterThanOrEqual(before);
         expect(moved).toBeLessThanOrEqual(after);
         expect(faceOf(ANN)).toBe(KEYED_FACE(ANN));
-        // What the cycle wrote and removed in AsyncStorage: the cursor and the checkpoint, as on main.
+        // What the cycle wrote and removed in AsyncStorage: the cursor and the checkpoint, as on main, and the time shown.
         const written = vi.mocked(AsyncStorage.setItem).mock.calls.map(([k]) => k).filter(k => k.startsWith('pillar_sync_'));
         const removed = vi.mocked(AsyncStorage.removeItem).mock.calls.map(([k]) => k).filter(k => k.startsWith('pillar_sync_'));
-        expect(written).toEqual([LAST_SYNC_KEY]);
+        expect(written).toEqual([LAST_SYNC_KEY, LAST_CYCLE_KEY]);
         expect(removed).toEqual([KEY('checkpoint')]);
 
         await performSync();

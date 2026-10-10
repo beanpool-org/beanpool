@@ -42,7 +42,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { withheldAttachmentFor } from '../engine/withheld-lines.js';
-import { guestPost, isTradeParty, withoutTradeParty, ONE_PASS_MAX_MEASURED, type MarketplacePost } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 
@@ -261,6 +261,13 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
 
 const KNOWN_POST_TYPES = ['offer', 'need', 'poll', 'event'] as const;
 
+/**
+ * On a sync read paged by key (`paged=1`, then `pageAfter=<key>`), the key the next page starts below, while this one
+ * came back full (engine SyncPage). No header: the read is complete. A read without either parameter gets none and is
+ * answered as it always was, so an older phone's sync is unchanged.
+ */
+const POSTS_NEXT_HEADER = 'X-Posts-Next';
+
 router.get('/api/marketplace/posts', async (ctx) => {
     // Distance search (G4, design §3.2), on every profile: `lat`, `lng`, `radiusKm`, `sort=distance|recent`. Checked
     // first, so garbage is a 400 and never a 304. Without these parameters nothing below changes.
@@ -288,17 +295,27 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const audienceScope = ctx.query.audienceScope as string | undefined;
     const targetGroupId = ctx.query.targetGroupId as string | undefined;
     const assignedTo = ctx.query.assignedTo as string | undefined;
+    // A phone's sync paged by key (POSTS_NEXT_HEADER): only a sync read of the listings, not one by id or from a point.
+    const pageAfter = typeof ctx.query.pageAfter === 'string' && ctx.query.pageAfter !== '' ? ctx.query.pageAfter : null;
+    const syncPage: SyncPage | undefined = (ctx.query.paged === '1' || pageAfter !== null) && (sync || !!updatedAfter) && !id && !point
+        ? { after: pageAfter, next: null } : undefined;
+    if (pageAfter !== null && syncPage && !parsePageKey(pageAfter)) {
+        ctx.status = 400;
+        ctx.body = { error: 'pageAfter is not a page key this node handed out' };
+        return;
+    }
     // A delta from before this node's listing-photo URLs last changed (keys switched on or off, a new secret:
     // engine/photo-keys.ts) is answered whole: the phone keeps the URLs it was handed, and a listing that didn't change
     // since would never be sent again with the URL that now opens its photo. So is each later sync of a key whose heal
     // didn't fit one answer (photoHealFor). Not a read with a point: no phone's sync has one.
-    const heal = point ? null : photoHealFor(updatedAfter, ctx.state.actor as string | undefined);
+    // A later page of a paged sync is the rest of the delta only: the heal's page went with its first.
+    const heal = point || syncPage?.after ? null : photoHealFor(updatedAfter, ctx.state.actor as string | undefined);
     // A whole sync read right after a heal page to the key (a take-over's, after the pull the phone threw away) starts
     // the key's heal again from the first page: the phone keeps what the pull doesn't carry, and the page the key's row
     // counts went to the pull it threw away (review of fe4c27ce, finding 1). A later one (a new install, an emptied
     // cache) doesn't: it holds no old URL (restartPhotoHealFor; review of 1bc39eb0, finding 2). Here, not in photoHealFor: the
     // phone's read of one listing by id (refreshCachedPost, `?id=…&sync=true`) has no cursor either.
-    if (!point && sync && !updatedAfter && !id && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo) {
+    if (!point && sync && !updatedAfter && !pageAfter && !id && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo) {
         restartPhotoHealFor(ctx.state.actor as string | undefined);
     }
 
@@ -419,7 +436,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // the delta's rows, and at least PHOTO_HEAL_MIN_PAGE_ROWS, so an answer is about as large as main's largest (a
         // first sync) and a phone on a slow link still gets it inside its 30 s; a node with more listings heals over the
         // key's next syncs.
-        const delta = getPosts({ ...listing, limit, offset, updatedAfter, sync });
+        const delta = getPosts({ ...listing, limit, offset, updatedAfter, sync, syncPage });
         const pageRows = Math.max(PHOTO_HEAL_MIN_PAGE_ROWS, PHOTO_HEAL_PAGE_ROWS - delta.length);
         const read = { after: heal.after, limit: Math.min(limit, pageRows), next: null as string | null };
         const inDelta = new Set(delta.map(p => p.id));
@@ -432,7 +449,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // That bounds the whole read only with no radius and no filter; with either, the scan and sort before the bound
         // still grow with the posts (engine PostFilter.measureAtMost): F5 is still open for those reads.
         posts = getPosts({
-            ...listing, limit, offset, updatedAfter, sync,
+            ...listing, limit, offset, updatedAfter, sync, syncPage,
             near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,
             measureAtMost: point ? ONE_PASS_MAX_MEASURED : undefined,
         });
@@ -445,6 +462,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const bodyStr = JSON.stringify(guestView ? posts.map(guestPost)
         : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p));
 
+    if (syncPage?.next) ctx.set(POSTS_NEXT_HEADER, syncPage.next);
     ctx.status = 200;
     ctx.type = 'application/json';
     ctx.body = bodyStr;

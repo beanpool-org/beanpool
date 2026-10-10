@@ -1263,6 +1263,9 @@ export default function SettingsScreen() {
                                 for (const p of paths) {
                                     await FileSystem.deleteAsync(p, { idempotent: true });
                                 }
+                                // Its cursors go with its copy, so a rejoin reads it whole.
+                                const { syncCursorKeysOf } = await import('../../services/pillar-sync');
+                                await AsyncStorage.multiRemove(syncCursorKeysOf(filename));
                             } catch(e) {}
                             
                             // Automatically pivot to the next available node
@@ -1292,6 +1295,9 @@ export default function SettingsScreen() {
                             for (const p of paths) {
                                     await FileSystem.deleteAsync(p, { idempotent: true });
                             }
+                            // Its cursors go with its copy, so a rejoin reads it whole.
+                            const { syncCursorKeysOf } = await import('../../services/pillar-sync');
+                            await AsyncStorage.multiRemove(syncCursorKeysOf(filename));
                         } catch(e) {}
                     }
                 }
@@ -1332,21 +1338,19 @@ export default function SettingsScreen() {
                             ];
                             // Each community caches its own minimum-app-version floor.
                             keysToRemove.push(...(await AsyncStorage.getAllKeys()).filter(k => k.startsWith('beanpool_min_app_version')));
-                            for (const u of urlsToClear) {
-                                const filename = getDatabaseFilenameForNode(u);
-                                keysToRemove.push(`pillar_sync_${filename}_last-sync`);
-                                keysToRemove.push(`pillar_sync_${filename}_checkpoint`);
-                                keysToRemove.push(`pillar_sync_${filename}_members_last_sync`);
-                                keysToRemove.push(`pillar_sync_${filename}_members_held_since`);
-                            }
-                            await AsyncStorage.multiRemove(keysToRemove);
+                            // Every sync cursor of each copy, a held posts read among them: carried on, a whole read
+                            // would resume below its key and never re-download the newest listings.
+                            const { syncCursorKeysOf, performSyncWhenFree, forceResyncNotice } = await import('../../services/pillar-sync');
+                            for (const u of urlsToClear) keysToRemove.push(...syncCursorKeysOf(getDatabaseFilenameForNode(u)));
+                            // The copy first, then its cursors, as the wipes do: a sync running now stores nothing once the
+                            // copy is cleared (pillar-sync copyGeneration), and one it stored before goes with the rest.
                             const { clearDB, initDB } = await import('../../utils/db');
                             await clearDB();
                             await initDB();
-                            
-                            // Perform full sync with live progress updates
-                            const { performSync } = await import('../../services/pillar-sync');
-                            const syncRes = await performSync((step, total, stage) => {
+                            await AsyncStorage.multiRemove(keysToRemove);
+
+                            // Perform full sync with live progress updates: after a sync already running, never instead of it.
+                            const syncRes = await performSyncWhenFree((step, total, stage) => {
                                 setResyncProgressStep(step);
                                 setResyncTotalSteps(total);
                                 setResyncProgressStage(stage);
@@ -1369,7 +1373,9 @@ export default function SettingsScreen() {
                             if (mode === 'diagnostics') {
                                 await loadDiagnostics({ skipSync: true });
                             }
-                            Alert.alert("Success", "Local database rebuilt, ratings restored, and re-synced from the node.");
+                            // "Success" only when its own sync re-read the copy; otherwise, plainly, that it will.
+                            const notice = forceResyncNotice(syncRes);
+                            Alert.alert(notice.title, notice.message);
                         } catch (e: any) {
                             setResyncModalVisible(false);
                             setResyncing(false);

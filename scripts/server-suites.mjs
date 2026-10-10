@@ -197,6 +197,8 @@ export const SUITES = [
     'test-takeover-split-brain',
     'test-takeover-two-standbys',
     'test-sync-reads-carry-epoch',
+    'test-posts-sync-paged',
+    'test-posts-sync-paged-cost',
     'test-takeover-keeps-listing-times',
     'test-profile-takeover',
     'test-open-join-failover',
@@ -533,6 +535,8 @@ export const SERIAL = {
     // Times each read against the version before it in the same process and fails past 2x: a neighbour's burst of CPU
     // during one of the pair and not the other is a failure that says nothing about the code.
     'test-distance-search-perf': 'relative timings, 2x slack',
+    // Times a sync page paged by key against the read an older phone makes, in the same process, and fails past 2x.
+    'test-posts-sync-paged-cost': 'relative timings, 2x slack',
     // Times adding a source to a full map against adding one with room (5x slack), the #944 regression it guards.
     'test-password-brake-fairness': 'relative timings, 5x slack',
     // Waits a fixed 100-150 ms for each pong (or its absence) on a live socket; a loaded machine answers later.

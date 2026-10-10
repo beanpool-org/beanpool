@@ -31,6 +31,9 @@ import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext'
 import { useIdentity } from '../app/IdentityContext';
 import { createPost } from '../utils/db';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
+import { placelessListingNote } from '@beanpool/core';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { nearbyListingsOn, useMyArea } from '../utils/member-area';
 
 const HEADER_PAD_TOP = 14;
 
@@ -56,6 +59,11 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
     const [durationDays, setDurationDays] = useState<3 | 7 | 14>(7);
     const [openVote, setOpenVote] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4): the form says the
+    // poll is shown there, or, to an author with none, that members nearby won't see it in their list.
+    const nodeProfile = useNodeProfile();
+    const byArea = nearbyListingsOn(nodeProfile?.features);
+    const placelessNote = placelessListingNote(byArea, useMyArea(visible && byArea, identity));
 
     const handleAddOption = () => {
         if (options.length < 4) {
@@ -310,6 +318,9 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                 </Text>
                             </View>
                         </Pressable>
+                        {placelessNote && (
+                            <Text style={styles.openVoteHint} testID="poll-placeless-note" accessibilityLiveRegion="polite">📍 {placelessNote}</Text>
+                        )}
                     </ScrollView>
                 </View>
             </KeyboardAvoidingView>

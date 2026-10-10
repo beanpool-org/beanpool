@@ -29,6 +29,7 @@ export * from './channels.js';
 export * from './groups.js';
 export * from './text-limits.js';
 export * from './geo.js';
+export * from './member-area-words.js';
 export * from './address-lookup.js';
 export * from './feedback.js';
 export * from './member-guide.js';

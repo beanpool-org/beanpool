@@ -19,9 +19,10 @@ import { buildSignedHeaders } from '../utils/crypto';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
 import { colors, palette } from '../constants/colors';
+import { AreaPicker } from '../components/AreaPicker';
+import { profileSteps, rememberAreaPlace, type ProfileStep } from '../utils/member-area';
 
-type Step = 'name' | 'avatar' | 'guide';
-const STEP_ORDER: Step[] = ['name', 'avatar', 'guide'];
+type Step = ProfileStep;
 
 /**
  * Re-runnable profile setup. The 12-word key is the identity; this is where the
@@ -48,6 +49,13 @@ export default function ProfileSetupScreen() {
     const [step, setStep] = useState<Step>('name');
     // The guide step: on a community with Beans off (the worldwide one) it says so, in place of the cards about Beans.
     const nodeProfile = useNodeProfile();
+    // On a community that syncs listings by area (the worldwide one), "Roughly where are you?" comes after the photo
+    // (utils/member-area.ts); a local community's wizard is unchanged.
+    const stepOrder = profileSteps(nodeProfile?.features);
+    const [anchorUrl, setAnchorUrl] = useState<string | null>(null);
+    useEffect(() => {
+        AsyncStorage.getItem('beanpool_anchor_url').then(setAnchorUrl).catch(() => setAnchorUrl(null));
+    }, []);
     const [callsign, setCallsign] = useState(joinedAs ?? identity?.callsign ?? '');
     // Three separate things, deliberately not one `avatar` state:
     //  - `pendingAvatar`  the photo picked in THIS session, and the only thing an explicit edit
@@ -95,7 +103,8 @@ export default function ProfileSetupScreen() {
     }, [identity]);
 
     const nameOk = callsign.trim().length >= 2;
-    const stepIndex = STEP_ORDER.indexOf(step);
+    const stepIndex = stepOrder.indexOf(step);
+    const nextStep = () => { setError(null); setStep(stepOrder[stepIndex + 1] ?? 'guide'); };
 
     // What the wizard SHOWS: this session's pick, else the node's current photo, else — only
     // when the node has none — the canonical copy. It is also what "do you have an avatar yet?"
@@ -133,7 +142,7 @@ export default function ProfileSetupScreen() {
     const goBackStep = () => {
         if (stepIndex <= 0) { router.back(); return; }
         setError(null);
-        setStep(STEP_ORDER[stepIndex - 1]);
+        setStep(stepOrder[stepIndex - 1]);
     };
 
     async function handleFinish() {
@@ -225,10 +234,10 @@ export default function ProfileSetupScreen() {
             <ScrollView contentContainerStyle={styles.scroll}>
                 {/* Step indicator */}
                 <View style={styles.steps}>
-                    {STEP_ORDER.map((s, i) => (
+                    {stepOrder.map((s, i) => (
                         <View key={s} style={[styles.stepDot, i <= stepIndex && styles.stepDotActive]} />
                     ))}
-                    <Text style={styles.stepLabel}>Step {stepIndex + 1} of {STEP_ORDER.length}</Text>
+                    <Text style={styles.stepLabel}>Step {stepIndex + 1} of {stepOrder.length}</Text>
                 </View>
 
                 <View style={styles.card}>
@@ -322,11 +331,29 @@ export default function ProfileSetupScreen() {
                             <Pressable
                                 style={[styles.primaryBtn, !displayAvatar && styles.disabledBtn]}
                                 disabled={!displayAvatar}
-                                onPress={() => { setError(null); setStep('guide'); }}
+                                onPress={nextStep}
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.primaryBtnText}>Next →</Text>
                             </Pressable>
+                            <Pressable style={styles.backBtn} onPress={goBackStep} accessibilityRole="button" accessibilityLabel="Back">
+                                <Text style={styles.backBtnText}>← Back</Text>
+                            </Pressable>
+                        </>
+                    )}
+
+                    {step === 'area' && (
+                        <>
+                            <AreaPicker
+                                url={anchorUrl}
+                                identity={identity}
+                                features={nodeProfile?.features}
+                                onSaved={(_area, placeName) => {
+                                    if (anchorUrl) void rememberAreaPlace(anchorUrl, placeName);
+                                    nextStep();
+                                }}
+                                onSkip={nextStep}
+                            />
                             <Pressable style={styles.backBtn} onPress={goBackStep} accessibilityRole="button" accessibilityLabel="Back">
                                 <Text style={styles.backBtnText}>← Back</Text>
                             </Pressable>

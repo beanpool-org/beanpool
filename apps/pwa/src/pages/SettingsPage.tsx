@@ -3,6 +3,9 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
+import { AREA_STEP_WORDS, describeArea } from '@beanpool/core';
+import { AreaStep } from '../components/AreaStep';
+import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { clearAccountStorage } from '../lib/device-prefs';
@@ -104,7 +107,29 @@ function ToggleSwitch({
 }
 
 export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, initialGuidePage, onReRunSetup, nodeVersion, openOwnerWordsCheck, linkResult }: Props) {
-    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide'>(initialMode || 'menu');
+    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide' | 'area'>(initialMode || 'menu');
+    // Your area (design DESIGN-global-sync-by-area §3.5): only on a community that gives each member the listings near
+    // their area. The line is the node's value (GET /api/community/me), with the town typed in this browser.
+    const areaLimits = useNearbyLimits();
+    const [myArea, setMyArea] = useState<MemberArea | null | undefined>(undefined);
+    const [areaLoaded, setAreaLoaded] = useState(false);
+    const [areaError, setAreaError] = useState<string | null>(null);
+    const [areaClearing, setAreaClearing] = useState(false);
+    const loadMyArea = () => {
+        setAreaLoaded(false);
+        readMyArea().then((a) => { setMyArea(a); setAreaLoaded(true); });
+    };
+    useEffect(() => { if (areaLimits) loadMyArea(); }, [areaLimits]);
+    const areaLine = !areaLoaded ? 'Checking…' : myArea === undefined ? "Couldn't check right now" : describeArea(myArea, recallAreaPlace());
+    const clearMyArea = async () => {
+        setAreaClearing(true);
+        setAreaError(null);
+        const result = await writeArea(senderForMe, null);
+        setAreaClearing(false);
+        if (!result.ok) { setAreaError(result.error); return; }
+        rememberAreaPlace(null);
+        setMyArea(null);
+    };
 
     useEffect(() => {
         if (initialMode) {
@@ -894,6 +919,22 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
 
+                                {/* Your area: a community that syncs listings by area */}
+                                {areaLimits && (
+                                    <button
+                                        data-testid="settings-your-area"
+                                        onClick={() => { setAreaError(null); setMode('area'); }}
+                                        className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
+                                    >
+                                        <span className="text-xl">📍</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-[15px] font-bold">{AREA_STEP_WORDS.settingsRow}</div>
+                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-400 break-words">{areaLine}</div>
+                                        </div>
+                                        <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    </button>
+                                )}
+
                                 {/* Modern Map Pins */}
                                 <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
                                     <div className="flex items-center gap-3">
@@ -1367,6 +1408,33 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         >
                             ← Back to Settings
                         </button>
+                    </div>
+                )}
+
+                {/* ─── MODE: YOUR AREA ─── */}
+                {mode === 'area' && areaLimits && (
+                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800" data-testid="settings-area">
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-1">📍 {AREA_STEP_WORDS.settingsRow}</h3>
+                        <p className="text-[15px] font-semibold text-nature-900 dark:text-white mb-3 break-words" data-testid="settings-area-current">{areaLine}</p>
+                        {myArea && (
+                            <button
+                                data-testid="settings-area-clear"
+                                onClick={clearMyArea}
+                                disabled={areaClearing}
+                                className="w-full min-h-[44px] mb-3 rounded-xl font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 bg-transparent cursor-pointer text-sm disabled:opacity-50"
+                            >
+                                {areaClearing ? 'Clearing…' : 'Clear'}
+                            </button>
+                        )}
+                        {areaError && <p role="alert" className="text-sm text-red-600 dark:text-red-300 mb-3">{areaError}</p>}
+                        <AreaStep
+                            send={senderForMe}
+                            limits={areaLimits}
+                            hideTitle
+                            skipLabel="← Back to Settings"
+                            onSkip={() => setMode('menu')}
+                            onSaved={(a, placeName) => { rememberAreaPlace(placeName); setMyArea(a); setAreaLoaded(true); setMode('menu'); }}
+                        />
                     </div>
                 )}
 

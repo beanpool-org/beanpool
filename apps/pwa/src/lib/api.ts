@@ -265,7 +265,7 @@ export interface CommunityInfo {
      */
     features?: {
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
-        /** Present only where the node keeps each member to the listings near their area (the worldwide community). */
+        /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
     };
     /** This community's own names, published (apps/server engine/own-addresses.ts). */

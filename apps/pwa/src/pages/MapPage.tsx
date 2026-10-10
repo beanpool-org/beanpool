@@ -9,6 +9,8 @@
  *  - User location marker (pulsing purple dot)
  */
 
+import { placelessListingNote } from '@beanpool/core';
+import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import L from 'leaflet';
@@ -179,6 +181,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
     // Polls are anonymous unless their creator makes them an open vote, fixed once someone votes (2026-09-28).
     const [pollOpenVote, setPollOpenVote] = useState(false);
+    // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4): the form says the
+    // poll is shown there, or, to an author with none, that members nearby won't see it in their list.
+    const nearbyLimits = useNearbyLimits(!!identity && showNewPost && newPostType === 'poll');
+    const pollAuthorArea = useMyArea(showNewPost && newPostType === 'poll' && nearbyLimits !== null);
+    const pollPlacelessNote = placelessListingNote(nearbyLimits !== null, pollAuthorArea);
     const [newPostCategory, setNewPostCategory] = useState('general');
     const [newPostTitle, setNewPostTitle] = useState('');
     const [newPostDescription, setNewPostDescription] = useState('');
@@ -2362,6 +2369,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 </span>
                             </span>
                         </label>
+                        {pollPlacelessNote && (
+                            <p data-testid="poll-placeless-note" role="status" className="text-xs leading-relaxed text-nature-700 dark:text-nature-300" style={{ overflowWrap: 'anywhere' }}>
+                                📍 {pollPlacelessNote}
+                            </p>
+                        )}
                     </div>
                 ) : (
                     <>

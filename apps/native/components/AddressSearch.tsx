@@ -13,18 +13,30 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, StyleSheet, Keyboard, Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { createAddressLookup, type AddressLookup, type AddressLookupState, type AddressResult } from '@beanpool/core';
+import { createAddressLookup, type AddressLookup, type AddressLookupState, type AddressResult, type AddressSearchWords } from '@beanpool/core';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { nominatimHeaders } from '../utils/address-search';
+
+/** The event form's words: it has a map to tap and a pin to place. */
+const EVENT_WORDS: AddressSearchWords = {
+    label: 'Find an address',
+    placeholder: 'Street and town, or a place',
+    unavailable: "Address search isn't working right now. Tap the map or use your location.",
+    noMatches: 'No matches. Try a street and town, or tap the map.',
+    source: 'Addresses from OpenStreetMap. What you type here is sent to them.',
+    pickLabel: (place) => `Put the pin at ${place}`,
+};
 
 interface AddressSearchProps {
     onPick: (result: AddressResult) => void;
     /** Matches (or a message) just appeared: the parent scrolls this box to the top, clear of the keyboard. */
     onResultsShown?: () => void;
     accent: string;
+    /** A form with no map says it in its own words (the area step: @beanpool/core AREA_TOWN_SEARCH_WORDS). */
+    words?: AddressSearchWords;
 }
 
-export function AddressSearch({ onPick, onResultsShown, accent }: AddressSearchProps) {
+export function AddressSearch({ onPick, onResultsShown, accent, words = EVENT_WORDS }: AddressSearchProps) {
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     const [query, setQuery] = useState('');
@@ -66,7 +78,7 @@ export function AddressSearch({ onPick, onResultsShown, accent }: AddressSearchP
             <View style={styles.inputRow}>
                 <TextInput
                     style={styles.input}
-                    placeholder="Street and town, or a place"
+                    placeholder={words.placeholder}
                     placeholderTextColor={colors.text.muted}
                     value={query}
                     onChangeText={(text) => {
@@ -78,7 +90,7 @@ export function AddressSearch({ onPick, onResultsShown, accent }: AddressSearchP
                     returnKeyType="search"
                     autoCorrect={false}
                     autoComplete="off"
-                    accessibilityLabel="Find an address"
+                    accessibilityLabel={words.label}
                 />
                 {state.status === 'searching' && (
                     <ActivityIndicator style={styles.spinner} size="small" color={accent} accessibilityLabel="Searching" />
@@ -86,11 +98,11 @@ export function AddressSearch({ onPick, onResultsShown, accent }: AddressSearchP
             </View>
             {open && state.status === 'error' && (
                 <Text style={styles.error} accessibilityLiveRegion="polite">
-                    Address search isn't working right now. Tap the map or use your location.
+                    {words.unavailable}
                 </Text>
             )}
             {open && state.status === 'done' && results.length === 0 && (
-                <Text style={styles.helper} accessibilityLiveRegion="polite">No matches. Try a street and town, or tap the map.</Text>
+                <Text style={styles.helper} accessibilityLiveRegion="polite">{words.noMatches}</Text>
             )}
             {open && results.length > 0 && (
                 <ScrollView style={styles.list} nestedScrollEnabled keyboardShouldPersistTaps="handled">
@@ -100,7 +112,7 @@ export function AddressSearch({ onPick, onResultsShown, accent }: AddressSearchP
                             onPress={() => pick(item)}
                             style={({ pressed }) => [styles.row, idx > 0 && styles.rowDivider, pressed && styles.rowPressed]}
                             accessibilityRole="button"
-                            accessibilityLabel={`Put the pin at ${item.displayName}`}
+                            accessibilityLabel={(words.pickLabel ?? EVENT_WORDS.pickLabel!)(item.displayName)}
                         >
                             <Text style={styles.rowTitle} numberOfLines={1}>{item.shortName || item.displayName}</Text>
                             <Text style={styles.rowSub} numberOfLines={1}>{item.displayName}</Text>
@@ -108,7 +120,7 @@ export function AddressSearch({ onPick, onResultsShown, accent }: AddressSearchP
                     ))}
                 </ScrollView>
             )}
-            <Text style={styles.helper}>Addresses from OpenStreetMap. What you type here is sent to them.</Text>
+            <Text style={styles.helper}>{words.source}</Text>
         </View>
     );
 }

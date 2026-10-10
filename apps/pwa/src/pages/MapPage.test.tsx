@@ -1272,6 +1272,68 @@ describe("MapPage: the node's refusal in the post form (G11-e, design G11 §6)",
     });
 });
 
+// A poll has no place: on a community that syncs by area it takes its author's area, and an author with none is told
+// members nearby won't see it in their list, only by searching (design DESIGN-global-sync-by-area §3.4, slice S4).
+describe("the poll form's note for a placeless listing (S4)", () => {
+    const BY_AREA = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, nearbyListings: { radiusKm: 250, max: 500 } } };
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        resetCommunityInfoOnce();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+    afterEach(() => resetCommunityInfoOnce());
+
+    async function openPoll(info: unknown, area: unknown) {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info as any);
+        const me = vi.spyOn(api, 'request').mockImplementation((async (method: string, path: string) => {
+            if (method === 'GET' && path === '/api/community/me') {
+                if (area instanceof Error) throw area;
+                return { publicKey: mockIdentity.publicKey, area };
+            }
+            return {};
+        }) as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Poll' })); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        return { panel, me };
+    }
+
+    it('by area, no area set: the note says so', async () => {
+        const { panel } = await openPoll(BY_AREA, null);
+        await waitFor(() => expect(within(panel).getByTestId('poll-placeless-note').textContent).toBe(
+            "📍 You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you."));
+    });
+
+    it('by area with an area: the note says the poll is shown at that area (review B1)', async () => {
+        const { panel } = await openPoll(BY_AREA, { lat: -28.6, lng: 153.6 });
+        await waitFor(() => expect(within(panel).getByTestId('poll-placeless-note').textContent).toBe(
+            '📍 This poll is shown at your area (about 10 km around it) to everyone who can read it.'));
+    });
+
+    it('by area, a node that cannot be asked: no note', async () => {
+        const { panel } = await openPoll(BY_AREA, new Error('offline'));
+        await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+        expect(within(panel).queryByTestId('poll-placeless-note')).toBeNull();
+    });
+
+    it('a local community: no note, and the member is never asked for an area', async () => {
+        const { panel, me } = await openPoll({ ...BY_AREA, profile: 'local', features: { openJoin: false } }, null);
+        await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+        expect(within(panel).queryByTestId('poll-placeless-note')).toBeNull();
+        expect(me).not.toHaveBeenCalledWith('GET', '/api/community/me');
+    });
+});
+
 // The web Map on a node that reads by area (DESIGN-global-sync-by-area §5, S5): the nearest 200 within the Market's
 // distance setting, else within the node's radius of the member's stored area; a local node reads as before.
 describe('MapPage: where the pins are read from (S5)', () => {

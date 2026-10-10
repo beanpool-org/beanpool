@@ -64,6 +64,7 @@ import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_L
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
 import { beansOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 import { doorOfferedToAccount, globalStandingOnPhone, type GlobalStanding } from '../../utils/global-join-existing';
@@ -365,6 +366,18 @@ export default function SettingsScreen() {
     // The pricing guide is estimates in Beans: not offered on a community with Beans off (the worldwide one).
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
+    // Your area (design DESIGN-global-sync-by-area §3.5): only on a community that gives each member the listings near
+    // their area. The line is the node's value, read each time Settings comes into view (app/your-area.tsx changes it).
+    const byArea = nearbyListingsOn(nodeProfile?.features);
+    const [areaLine, setAreaLine] = useState('Checking…');
+    useFocusEffect(
+        React.useCallback(() => {
+            if (!byArea) return;
+            let cancelled = false;
+            areaRowLine(identity).then((line) => { if (!cancelled) setAreaLine(line); });
+            return () => { cancelled = true; };
+        }, [byArea, identity?.publicKey]),
+    );
 
     /**
      * Account Protection's words, put away: Hide, a second tap, or the member leaving the section or the tab (the tab
@@ -1913,6 +1926,22 @@ export default function SettingsScreen() {
                             <View style={[styles.toggleThumb, locationEnabled && styles.toggleThumbOn]} />
                         </Pressable>
                     </View>
+                    {byArea && (
+                        <Pressable
+                            style={styles.menuBtn}
+                            onPress={() => router.push('/your-area' as any)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Your area: ${areaLine}`}
+                            testID="settings-your-area"
+                        >
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🗺️</Text></View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.menuText}>Your area</Text>
+                                <Text style={styles.menuSub}>{areaLine}</Text>
+                            </View>
+                            <Text style={styles.menuChevron}>›</Text>
+                        </Pressable>
+                    )}
                     {/* Holiday Mode — pause your presence; hides your offers, stops new requests */}
                     <View style={[styles.menuBtn, styles.menuBtnLast]}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌴</Text></View>

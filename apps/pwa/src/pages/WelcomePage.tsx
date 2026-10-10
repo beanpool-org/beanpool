@@ -37,6 +37,8 @@ import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
+import { AreaStep } from '../components/AreaStep';
+import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -181,21 +183,31 @@ const BUNDLED_AVATARS = [
  * Four equal columns that may shrink, with labels that wrap. The old row gave each step a fixed
  * 4.5rem with unwrappable labels — 18rem plus connectors, which at 1.3x text pushed the first
  * screen a new member sees out to 376px on a 320px phone.
+ *
+ * Five on a community that syncs listings by area (`area`, the node's `features.nearbyListings`): Your Area after Your
+ * Photo. `step` names the same step either way (3 is Safety Backup, 4 How it Works), and `'area'` is the new one.
+ *
+ * Below 360px the columns are too narrow for whole words: at 320px and 130% text, inside this page's two 2rem paddings,
+ * five columns are 29px and four 36px, which broke "Phot/o" and "Back/up" (deciding review of #1766, N5). There each
+ * column keeps only its dot, and the current step is named whole under them.
  */
-export function OnboardingStepper({ step, firstLabel = 'Your Name' }: { step: 1 | 2 | 3 | 4; firstLabel?: string }) {
-    const steps = [firstLabel, 'Your Photo', 'Safety Backup', 'How it Works'];
+export function OnboardingStepper({ step, firstLabel = 'Your Name', area = false }: { step: 1 | 2 | 3 | 4 | 'area'; firstLabel?: string; area?: boolean }) {
+    const steps = area
+        ? [firstLabel, 'Your Photo', 'Your Area', 'Safety Backup', 'How it Works']
+        : [firstLabel, 'Your Photo', 'Safety Backup', 'How it Works'];
+    const position = step === 'area' ? 3 : area && step >= 3 ? step + 1 : step;
     return (
+        <div style={{ marginBottom: '1.5rem', width: '100%' }}>
         <div data-testid="onboarding-stepper" style={{
             display: 'grid',
             gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
             columnGap: '2px',
-            marginBottom: '1.5rem',
             width: '100%',
         }}>
             {steps.map((label, i) => {
                 const stepNum = i + 1;
-                const isActive = stepNum === step;
-                const isCompleted = stepNum < step;
+                const isActive = stepNum === position;
+                const isCompleted = stepNum < position;
                 return (
                     <div key={i} style={{
                         display: 'flex',
@@ -230,7 +242,7 @@ export function OnboardingStepper({ step, firstLabel = 'Your Name' }: { step: 1 
                                 <span style={{ color: '#fff', fontSize: '8px', fontWeight: '800' }}>✓</span>
                             )}
                         </div>
-                        <span style={{
+                        <span className="max-[359px]:hidden" style={{
                             fontSize: '10px',
                             lineHeight: 1.2,
                             color: isActive ? 'var(--text-primary)' : '#6b7280',
@@ -246,6 +258,18 @@ export function OnboardingStepper({ step, firstLabel = 'Your Name' }: { step: 1 
                     </div>
                 );
             })}
+        </div>
+        <p data-testid="onboarding-stepper-current" className="hidden max-[359px]:block" style={{
+            margin: '6px 0 0',
+            fontSize: '12px',
+            lineHeight: 1.3,
+            fontWeight: 700,
+            textAlign: 'center',
+            color: 'var(--text-primary)',
+        }}>
+            {/* The space stays outside the span: a line too narrow for both breaks before the dot, never inside the count (review N10). */}
+            {steps[position - 1]}{' '}<span style={{ fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>· Step {position} of {steps.length}</span>
+        </p>
         </div>
     );
 }
@@ -293,6 +317,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A private preview (the node's `features.privatePreview`): an owner's or admin's invite is the only way in, and the
     // page says so in the node's words.
     const [privatePreview, setPrivatePreview] = useState(() => privatePreviewOn(initialInfo));
+    // A community that gives each member the listings near their area (`features.nearbyListings`, the worldwide one):
+    // signup asks "Roughly where are you?" as a step of its own after the photo (components/AreaStep.tsx), and the
+    // browser is not asked for its position at the end, as it is on a local community.
+    const [nearbyLimits, setNearbyLimits] = useState(() => (nearbyListingsOn(initialInfo) ? initialInfo!.features!.nearbyListings! : null));
+    const byArea = nearbyLimits !== null;
+    const [showAreaStep, setShowAreaStep] = useState(false);
     const [doorCheck, setDoorCheck] = useState(0);
     useEffect(() => {
         // The lobby read it a moment ago: asked again only on Try again.
@@ -300,7 +330,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         let cancelled = false;
         setDoor('checking');
         getCommunityInfo()
-            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setWordsDoor(info?.features?.wordsDoor === true); setPrivatePreview(privatePreviewOn(info)); } })
+            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setWordsDoor(info?.features?.wordsDoor === true); setPrivatePreview(privatePreviewOn(info)); setNearbyLimits(nearbyListingsOn(info) ? info.features!.nearbyListings! : null); } })
             .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
         return () => { cancelled = true; };
     }, [doorCheck]);
@@ -713,11 +743,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // showed those states is gone with it — so it was recording one constant forever.
     const protectionShownRef = useRef(false);
     useEffect(() => {
-        const onBackupStep = hasMnemonic(pendingIdentity) && !showAvatarSetup && !showOnboardingGuide;
+        const onBackupStep = hasMnemonic(pendingIdentity) && !showAvatarSetup && !showAreaStep && !showOnboardingGuide;
         if (!onBackupStep || protectionShownRef.current) return;
         protectionShownRef.current = true;
         recordOnboardingEvent('protection_shown');
-    }, [pendingIdentity, showAvatarSetup, showOnboardingGuide]);
+    }, [pendingIdentity, showAvatarSetup, showAreaStep, showOnboardingGuide]);
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1161,8 +1191,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // again each time they retried.
             const counted = recordOnboardingEvent('guide_complete');
 
-            // Onboarding complete — explicitly ask for location once
-            if (!leaving && 'geolocation' in navigator) {
+            // Onboarding complete — explicitly ask for location once. Not on a community that syncs by area: its Your Area
+            // step asked already, and a member who skipped it is not asked again behind their back.
+            if (!leaving && !byArea && 'geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
             }
             // A browser member's key lives only in this site's storage: ask the browser to keep it (design G11 §4.2).
@@ -1475,7 +1506,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                            The name alone: the invite is spent, and no way off leads to another account from here. Next
                            goes back to the photo, with the same name or a new one. */
                         <>
-                            <OnboardingStepper step={1} />
+                            <OnboardingStepper area={byArea} step={1} />
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
                                 ✏️ Your name
                             </h3>
@@ -1552,7 +1583,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : hasMnemonic(pendingIdentity) && showAvatarSetup ? (
                         /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
                         <>
-                            <OnboardingStepper step={2} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
+                            <OnboardingStepper area={byArea} step={2} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>
                                 📸 Choose your look
                             </h3>
@@ -1747,6 +1778,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 onClick={() => {
                                     if (pendingAvatar) {
                                         setShowAvatarSetup(false);
+                                        if (byArea) setShowAreaStep(true);
                                         setError(null);
                                     }
                                 }}
@@ -1788,10 +1820,28 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             </button>
                             )}
                         </>
+                    ) : hasMnemonic(pendingIdentity) && showAreaStep ? (
+                        /* ===== YOUR AREA (a community that syncs by area) ===== */
+                        <>
+                            <OnboardingStepper step="area" area firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
+                            <AreaStep
+                                send={senderForKey(pendingIdentity.privateKey, pendingIdentity.publicKey)}
+                                limits={nearbyLimits}
+                                onSaved={(_area, placeName) => { rememberAreaPlace(placeName); setShowAreaStep(false); setError(null); }}
+                                onSkip={() => { setShowAreaStep(false); setError(null); }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => { setShowAreaStep(false); setShowAvatarSetup(true); }}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', marginTop: '0.5rem', minHeight: '44px', fontFamily: 'inherit' }}
+                            >
+                                ← Back
+                            </button>
+                        </>
                     ) : hasMnemonic(pendingIdentity) && showOnboardingGuide ? (
                         /* ===== ONBOARDING GUIDE (Step 4) ===== */
                         <>
-                            <OnboardingStepper step={4} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
+                            <OnboardingStepper area={byArea} step={4} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
                             <h3 className="text-xl font-bold mb-2 text-nature-950 dark:text-oat-50">🫘 Welcome to BeanPool</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
                                 Let's look at how this community economy works.
@@ -1953,7 +2003,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : hasMnemonic(pendingIdentity) ? (
                         /* ===== SAFETY BACKUP (Step 3) ===== */
                         <>
-                            <OnboardingStepper step={3} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
+                            <OnboardingStepper area={byArea} step={3} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>🔑 Your Safety Backup</h3>
                             {joinedByWords && !signInRecovery ? (
                                 /* Joined with 12 words alone (two-doors design §2.5): said first and plainly, never a gate.
@@ -2493,7 +2543,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */
                         <>
-                            <OnboardingStepper step={1} />
+                            <OnboardingStepper area={byArea} step={1} />
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
                                 🎟️ Join with Invite Code
                             </h3>

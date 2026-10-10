@@ -6,6 +6,7 @@ import {
     HIDDEN_AUTHOR, type MarketplacePost, type PostFilter,
 } from '../posts.js';
 import { areaBox, boundingBox, haversineKm, registerGeoFunctions, roundToArea, MAX_RADIUS_KM } from '../geo.js';
+import { roundToArea as coreRoundToArea } from '@beanpool/core';
 
 describe('Posts Search Keyword Expansion', () => {
     const synonymMap: Record<string, string[]> = {
@@ -296,6 +297,8 @@ describe('The listings, not the people (G9a)', () => {
         assert.strictEqual(roundToArea(179.97), 180);
         assert.strictEqual(roundToArea(-179.97), -180);
         for (const x of [-89.96, 0.3, 12.34, -45.55]) assert.strictEqual(roundToArea(roundToArea(x)), roundToArea(x));
+        // One implementation: the apps round with core's before a position leaves the device; the node with this one.
+        assert.strictEqual(roundToArea, coreRoundToArea);
     });
 
     it('area_km is haversine_km from the area of the place, and NULL for a missing place', () => {

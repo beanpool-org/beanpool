@@ -614,8 +614,9 @@ async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_M
  */
 async function stalledAcrossVersions(dir: string, readers: Key[], BURST: number, HEAP_MB: number): Promise<void> {
     const BUDGET_MB = 48;
-    // A send's window over what its weight said before it was built (heavy-reads.ts: a build is weighed at its last size).
-    const WINDOW_MB = 0.125;
+    // A send's window over what its weight said before it was built (heavy-reads.ts: a build is weighed at its last size):
+    // members-snapshot.ts SNAPSHOT_SEND_WEIGHT.
+    const WINDOW_MB = 0.1875;
     // What the connections themselves cost: TLS sockets held open, about 0.17 MB each (the deciding review of #1526: 192
     // readers of one snapshot grew RSS as much as 192 connections with nothing to send).
     const PER_CONNECTION_MB = 0.25;

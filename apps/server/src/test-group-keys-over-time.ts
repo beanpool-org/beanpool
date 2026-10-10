@@ -20,6 +20,9 @@
  *   Re-key lines. Ana's line under epoch 2, then completeRekey: metadata.sender is her old key, author_pubkey her new
  *         one; Ben opens it with metadata.sender (not with author_pubkey; not with a wrong sender); Ana opens it on her new
  *         key after a top-up
+ *   F5.   an edit stays under its line's own epoch (Marty's pick 1): Ana's line under 2, Dov joins (3), Ana edits under 2:
+ *         200, metadata.epoch still 2, Dov served nothing of it; an edit naming 3 is 409 epoch_not_lines; an edit under 2
+ *         while 2 is current and stale is 200; the edit opens under 2 for a member, and its sender is the editor
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-group-keys-over-time node scripts/run-server-suites.mjs
  */
@@ -409,6 +412,46 @@ async function main(): Promise<void> {
         assert((await call('POST', b, `${kp}/wrap`, makeGroupTopUp(bKey2, { myEdPrivHex: b.seedHex, groupId: g, epoch: 2, recipientPubHex: newA.pk }))).status === 201, 'Bo tops Amy up for epoch 2');
         const aKey2 = openFrom(await keysOf(newA, g), newA, g, 2);
         assert(openAs(servedMeta.sender, aKey2) === words, 'and Amy, on her new key, opens her own old line');
+    }
+
+    // ── F5. an edit across a join ────────────────────────────────────────────────────────────────────
+    console.log('\n── F5. an edit is sealed under its line\'s own epoch: a newcomer never holds that key ──');
+    {
+        const [a, b, c, d] = [member('Ada'), member('Bea'), member('Cal'), member('Del')];
+        const g = createGroup({ name: 'Edits', joinPolicy: 'open', createdBy: a.pk }).id;
+        const kp = `/api/groups/${g}/keys`;
+        assert((await call('POST', b, `/api/groups/${g}/join`, {})).status === 200, 'Bea joins');
+        assert((await call('POST', a, `${kp}/epoch`, { epoch: epochBy(a, g, 1, 'start', [a, b]).record })).status === 201, 'Ada starts epoch 1');
+        const e2 = epochBy(b, g, 2, 'rotate', [a, b]);
+        assert((await call('POST', b, `${kp}/epoch`, { epoch: e2.record })).status === 201, 'Bea rotates to epoch 2');
+        const line = await send(a, g, e2.groupKey, 2, 'the hall is booked for 6');
+        assert(line.status === 201, 'Ada writes a line under epoch 2');
+        const editAs = (who: Id, key: Uint8Array, epoch: number, text: string) => call('POST', who, '/api/messages/edit', {
+            messageId: line.id, ...sealGroupLine(text, { myEdPrivHex: who.seedHex, groupKey: key, groupId: g, epoch, messageId: line.id, part: 'edit' }), metadata: { epoch } });
+        const epochOf = () => JSON.parse((db.prepare('SELECT metadata FROM messages WHERE id = ?').get(line.id) as any).metadata).epoch;
+
+        // Cal joins with no epoch: 2 is still current, and stale.
+        assert((await call('POST', c, `/api/groups/${g}/join`, {})).status === 200 && (await keysOf(a, g)).stale === true, 'Cal joins with no epoch: epoch 2 is current and stale');
+        const whileStale = await editAs(a, e2.groupKey, 2, 'the hall is booked for 6:30');
+        assert(whileStale.status === 200 && epochOf() === 2, `an edit under 2 while 2 is current and stale: 200, epoch 2 (got ${whileStale.status} ${whileStale.body?.code ?? ''})`);
+        const e3 = epochBy(d, g, 3, 'join', [a, b, c, d], d);
+        assert((await call('POST', d, `/api/groups/${g}/join`, { epoch: e3.record })).status === 200, 'Del joins with his own epoch 3');
+        const under3 = await editAs(a, e3.groupKey, 3, 'EDITED after Del joined: the hall is booked for 7');
+        assert(under3.status === 409 && under3.body?.code === 'epoch_not_lines' && under3.body?.epoch === 2 && epochOf() === 2,
+            `an edit naming epoch 3 is 409 epoch_not_lines, { epoch: 2 }, nothing written (got ${under3.status} ${under3.body?.code} ${under3.body?.epoch})`);
+        const under2 = await editAs(a, e2.groupKey, 2, 'EDITED after Del joined: the hall is booked for 7');
+        assert(under2.status === 200 && epochOf() === 2, `Ada edits under 2, the line's own epoch: 200, metadata.epoch still 2 (got ${under2.status} ${under2.body?.code ?? ''}, epoch ${epochOf()})`);
+        assert(!(await chatIds(d, g)).includes(line.id), 'Del is served nothing of it: the line and its edit are under an epoch he never holds');
+        const delK = await keysOf(d, g);
+        assert(delK.fromEpoch === 3 && !delK.myWraps.some((w: any) => w.epoch === 2), 'and he holds no key for epoch 2');
+        const row = db.prepare('SELECT ciphertext, nonce, metadata FROM messages WHERE id = ?').get(line.id) as any;
+        const meta = JSON.parse(row.metadata);
+        let text = '';
+        try {
+            text = openGroupLine({ ciphertext: row.ciphertext, nonce: row.nonce }, { groupId: g, epoch: meta.epoch, senderPubHex: meta.sender, messageId: line.id, part: 'edit' },
+                openFrom(await keysOf(b, g), b, g, 2)).text;
+        } catch { /* refused */ }
+        assert(text === 'EDITED after Del joined: the hall is booked for 7' && meta.sender === a.pk, `Bea opens the edit under the epoch the row names, from its sender (got "${text}")`);
     }
 
     console.log(`\n${passed}/${run} passed`);

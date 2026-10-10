@@ -475,22 +475,29 @@ async function main(): Promise<void> {
     const pointless = await call('POST', ben, `/api/groups/${clock.id}/join`, { epoch: epochBy(ben, clock.id, 4, 'join', [ana, ben], ben).record });
     assert(pointless.status === 400 && pointless.body.code === 'epoch_not_applicable' && count('SELECT MAX(epoch) AS n FROM group_key_epochs WHERE group_id = ?', clock.id) === 3,
         `joining again while active, with an epoch: 400 epoch_not_applicable, and no epoch 4 is stored (got ${pointless.status} ${pointless.body?.code})`);
-    // An edit re-seals under the current epoch and moves the row's epoch with it (§7.4), or nobody could open it.
+    // An edit re-seals under the line's OWN epoch and the row's epoch never moves (§7.4 as step 2b decided it, Marty's
+    // pick 1): a member who joined since never holds that key. Flipped from step 2, where the edit moved to the current one.
     const clockLine = crypto.randomUUID();
     const sentE3 = await call('POST', ana, `/api/groups/${clock.id}/chat/message`, {
         ...sealGroupLine('the gate code is 4417', { myEdPrivHex: ana.seedHex, groupKey: rejoin3.groupKey, groupId: clock.id, epoch: 3, messageId: clockLine }), metadata: { epoch: 3 }, clientId: clockLine });
     assert(sentE3.status === 201, 'Ana writes a line under epoch 3');
     const rot4 = epochBy(ben, clock.id, 4, 'rotate', [ana, ben]);
     assert((await call('POST', ben, `${clockKeys}/epoch`, { epoch: rot4.record })).status === 201, 'Ben rotates to epoch 4');
-    const edited = sealGroupLine('the gate code is 5528', { myEdPrivHex: ana.seedHex, groupKey: rot4.groupKey, groupId: clock.id, epoch: 4, messageId: clockLine, part: 'edit' });
-    const editRes = await call('POST', ana, '/api/messages/edit', { messageId: clockLine, ...edited, metadata: { epoch: 4 } });
+    const underCurrent = sealGroupLine('the gate code is 5528', { myEdPrivHex: ana.seedHex, groupKey: rot4.groupKey, groupId: clock.id, epoch: 4, messageId: clockLine, part: 'edit' });
+    const refusedEdit = await call('POST', ana, '/api/messages/edit', { messageId: clockLine, ...underCurrent, metadata: { epoch: 4 } });
+    const unchanged = db.prepare('SELECT ciphertext, metadata FROM messages WHERE id = ?').get(clockLine) as any;
+    assert(refusedEdit.status === 409 && refusedEdit.body?.code === 'epoch_not_lines' && refusedEdit.body?.epoch === 3 && JSON.parse(unchanged.metadata).epoch === 3
+        && unchanged.ciphertext === sentE3.body.message.ciphertext,
+        `an edit sealed under the current epoch 4 is refused 409 epoch_not_lines, naming the line's epoch 3, nothing written (got ${refusedEdit.status} ${refusedEdit.body?.code})`);
+    const edited = sealGroupLine('the gate code is 5528', { myEdPrivHex: ana.seedHex, groupKey: rejoin3.groupKey, groupId: clock.id, epoch: 3, messageId: clockLine, part: 'edit' });
+    const editRes = await call('POST', ana, '/api/messages/edit', { messageId: clockLine, ...edited, metadata: { epoch: 3 } });
     const editedRow = db.prepare('SELECT ciphertext, nonce, metadata FROM messages WHERE id = ?').get(clockLine) as any;
     const editedEpoch = JSON.parse(editedRow.metadata).epoch;
-    assert(editRes.status === 200 && editedEpoch === 4, `Ana edits it under epoch 4, and the row's epoch moves to 4 (got ${editRes.status}, epoch ${editedEpoch})`);
+    assert(editRes.status === 200 && editedEpoch === 3, `Ana edits it under its own epoch 3, and the row's epoch stays 3 (got ${editRes.status}, epoch ${editedEpoch})`);
     let editedText = '';
     try {
         editedText = openGroupLine({ ciphertext: editedRow.ciphertext, nonce: editedRow.nonce },
-            { groupId: clock.id, epoch: editedEpoch, senderPubHex: ana.pk, messageId: clockLine, part: 'edit' }, editedEpoch === 4 ? rot4.groupKey : rejoin3.groupKey).text;
+            { groupId: clock.id, epoch: editedEpoch, senderPubHex: ana.pk, messageId: clockLine, part: 'edit' }, editedEpoch === 3 ? rejoin3.groupKey : rot4.groupKey).text;
     } catch { /* the epoch the row names does not open it */ }
     assert(editedText === 'the gate code is 5528', `so Ben opens the edit under the epoch the row names (got "${editedText}")`);
 

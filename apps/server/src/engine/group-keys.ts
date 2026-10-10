@@ -26,7 +26,7 @@ export const GROUP_KEYS_PAGE = 100;
 export const GROUP_MENTIONS_MAX = 20;
 
 export type GroupKeyErrorCode =
-    | 'epoch_needed' | 'epoch_stale' | 'epoch_not_current' | 'epoch_conflict' | 'epoch_refused' | 'epoch_not_applicable'
+    | 'epoch_needed' | 'epoch_stale' | 'epoch_not_current' | 'epoch_conflict' | 'epoch_refused' | 'epoch_not_applicable' | 'epoch_not_lines'
     | 'wrap_exists' | 'wrap_below_membership' | 'wrap_refused' | 'wrap_rejected' | 'not_encrypted';
 
 /** A refusal the routes answer with its status, its code and, for a 409, the epoch and roster the app should use. */

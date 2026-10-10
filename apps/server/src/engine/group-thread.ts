@@ -376,15 +376,20 @@ function metadataObject(metadata: unknown): Record<string, unknown> {
 }
 
 /**
- * The node's keyless check of a sealed line (Appendix B), for a send and an edit alike: the group prefix with a 24-byte
- * nonce and a ciphertext at least a sealed line long and no longer than GROUP_LINE_MAX_BYTES, under the current epoch,
- * not stale. A readable line, or any other form, is refused with the words an old app shows. Returns the epoch.
+ * The node's keyless check of a sealed line's form (Appendix B), for a send and an edit alike: the group prefix with a
+ * 24-byte nonce and a ciphertext at least a sealed line long and no longer than GROUP_LINE_MAX_BYTES. A readable line, or
+ * any other form, is refused with the words an old app shows.
  */
-export function assertSealedGroupLine(groupId: string, ciphertext: unknown, nonce: unknown, meta: Record<string, unknown>): number {
+function assertSealedGroupLineForm(ciphertext: unknown, nonce: unknown): void {
     if (!isGroupEncryptedPayload({ ciphertext, nonce })) throw new GroupKeyError(400, 'not_encrypted', GROUP_CHAT_UPDATE_APP);
     if (Buffer.byteLength(String(ciphertext), 'base64') > GROUP_LINE_MAX_BYTES) {
         throw new Error(`Message is too long (maximum ${GROUP_THREAD_MESSAGE_MAX} characters)`);
     }
+}
+
+/** A new line's keyless check: sealed (assertSealedGroupLineForm), under the current epoch, not stale. Returns the epoch. */
+export function assertSealedGroupLine(groupId: string, ciphertext: unknown, nonce: unknown, meta: Record<string, unknown>): number {
+    assertSealedGroupLineForm(ciphertext, nonce);
     return assertLineEpochIsCurrent(groupId, meta.epoch);
 }
 
@@ -527,17 +532,25 @@ export function assertCanWriteInGroupChat(groupId: string, actorPubkey: string):
 }
 
 /**
- * An edited group chat line (§7.4), checked exactly as a new one is: sealed, bounded, under the current non-stale epoch,
- * which the edit re-seals under. Returns what to store: the line as sent, and the row's metadata with its epoch moved
- * to the current one (the reply and the mentions stay the original's) and `sender` the editor, who sealed the bytes
- * stored now: the author, under the key they hold today (postGroupThreadMessage).
+ * An edited group chat line (§7.4 as step 2b decided it: DESIGN-group-chat-epochs-over-time-fable.md §3, Marty's pick 1).
+ * An edit is part of its line and has its line's audience: it is re-sealed under the line's OWN epoch, never the current
+ * one, so a member who joined since never holds its key, whatever the read filter does. Sealed and bounded as a new line
+ * is, and naming the row's epoch, else 409 epoch_not_lines with that epoch; no current or stale check (the line's epoch
+ * is older by nature). Returns what to store: the line as sent, and the row's metadata with its epoch unchanged (the
+ * reply and the mentions stay the original's) and `sender` the editor, who sealed the bytes stored now: the author,
+ * under the key they hold today (postGroupThreadMessage).
  */
-export function groupChatEdit(groupId: string, row: { metadata?: string | null }, ciphertext: string, nonce: string, metadata: unknown, editor: string): { ciphertext: string; nonce: string; metadata: string } {
-    const epoch = assertSealedGroupLine(groupId, ciphertext, nonce, metadataObject(metadata));
+export function groupChatEdit(row: { metadata?: string | null }, ciphertext: string, nonce: string, metadata: unknown, editor: string): { ciphertext: string; nonce: string; metadata: string } {
+    assertSealedGroupLineForm(ciphertext, nonce);
     let kept: Record<string, unknown> = {};
     try { kept = row.metadata ? JSON.parse(row.metadata) : {}; } catch { kept = {}; }
     if (!kept || typeof kept !== 'object' || Array.isArray(kept)) kept = {};
-    return { ciphertext, nonce, metadata: JSON.stringify({ ...kept, epoch, sender: editor }) };
+    const own = typeof kept.epoch === 'number' && Number.isSafeInteger(kept.epoch) ? kept.epoch : null;
+    if (own === null || metadataObject(metadata).epoch !== own) {
+        throw new GroupKeyError(409, 'epoch_not_lines', own === null ? 'This line was sealed under no epoch, so it cannot be edited.'
+            : `An edit is sealed under its line's own epoch, ${own}.`, { epoch: own });
+    }
+    return { ciphertext, nonce, metadata: JSON.stringify({ ...kept, epoch: own, sender: editor }) };
 }
 
 /** A message this group chat may be replied to: in this chat, and not a system line. */

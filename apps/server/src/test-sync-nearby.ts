@@ -21,7 +21,8 @@
  *      a node with the switch off;
  *   7. `ids=` answers exactly what `id=` answers for each id (a group listing the reader isn't in, a hidden one);
  *   8. every nearby answer carries the identity epoch header, the 304 included;
- *   9. a member with no area gets the newest 100 listings; a listing posted with no place takes its author's area (Q4).
+ *   9. a member with no area gets the newest 100 listings; a listing posted with no place takes its author's area (Q4):
+ *      an offer, and a poll (which never keeps a pin of its own, so one sent with a pin takes the area too).
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-sync-nearby)
  */
@@ -455,15 +456,27 @@ async function main() {
         `a listing posted with no place takes its author's area (${posted.status}, ${stored?.lat},${stored?.lng} vs ${area7.area_lat},${area7.area_lng})`);
     const inHerSet = (await get(`${SYNC}&nearby=1`, members[7].id)).set.includes(posted.id ?? '');
     assert(inHerSet, 'and is in the set of a member at that area');
+    // A poll has no place of its own (the engine's poll isolation drops any pin), so on a by-area node the engine gives
+    // it its author's area too: the polls a member sees are the ones made near them (§3.4).
+    const POLL = { type: 'poll', title: 'Market day?', description: 'Saturday or Sunday', pollOptions: ['Saturday', 'Sunday'], durationDays: 7 };
+    for (const [k, [what, who, extra]] of ([['a poll posted with no place', members[7].id, {}], ['a poll posted with a pin far away', members[8].id, { lat: 51.5, lng: -0.1 }]] as const).entries()) {
+        const poll = await postPlaceless(who, { ...POLL, ...extra });
+        const at = db.prepare('SELECT lat, lng FROM posts WHERE id = ?').get(poll.id ?? '') as { lat: number | null; lng: number | null } | undefined;
+        const area = db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?').get(who.pubKeyHex) as { area_lat: number; area_lng: number };
+        assert((poll.status === 200 || poll.status === 201) && at?.lat === area.area_lat && at?.lng === area.area_lng,
+            `${what} takes its author's area (${poll.status}, ${at?.lat},${at?.lng} vs ${area.area_lat},${area.area_lng})`);
+        const neighbour = memberAt(`PollNear${k}`, { lat: area.area_lat, lng: area.area_lng });
+        assert((await get(`${SYNC}&nearby=1`, neighbour)).set.includes(poll.id ?? ''), `and is in the set of another member in that area (${what})`);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ A member\'s phone gets exactly the listings near them.');
 
-    async function postPlaceless(id: Id): Promise<{ status: number; id?: string; error?: string }> {
+    async function postPlaceless(id: Id, fields: Record<string, unknown> = {}): Promise<{ status: number; id?: string; error?: string }> {
         db.prepare("UPDATE members SET avatar_ref = 'seeded-face' WHERE public_key = ?").run(id.pubKeyHex);
         const path = '/api/marketplace/posts';
-        const body = JSON.stringify({ type: 'offer', category: 'food', title: 'Eggs, no pin', description: 'A dozen', credits: 0, authorPublicKey: id.pubKeyHex });
+        const body = JSON.stringify({ type: 'offer', category: 'food', title: 'Eggs, no pin', description: 'A dozen', credits: 0, ...fields, authorPublicKey: id.pubKeyHex });
         const res = await localFetch(`${BASE}${path}`, { method: 'POST', body, headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', path, body, id) } });
         const out = await res.json().catch(() => ({})) as any;
         if (res.status >= 300) console.error('  POST:', res.status, JSON.stringify(out).slice(0, 200));

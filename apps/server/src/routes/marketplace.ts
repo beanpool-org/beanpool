@@ -583,10 +583,6 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // runs it once every refusal of the post itself has passed (an unfinished profile, a group the author is not in),
         // so a limit never answers for a post that may not be made at all.
         const underDailyPosts = () => assertMayPostToday(authorPublicKey);
-        // A listing with no place on a node that syncs by area takes its author's area (DESIGN-global-sync-by-area §3.4,
-        // Q4): rounded, so visibly rough, and otherwise in nobody's set but its author's. With no area it goes as sent.
-        const area = type !== 'event' && getProfileSwitches().nearbyListings && (lat == null || lng == null)
-            ? readMemberArea(authorPublicKey) : null;
         // Events go through the shared builder, so this route and the enterprise's own cannot drift on
         // what an event is (routes/event-post.ts).
         const post = type === 'event'
@@ -594,8 +590,9 @@ router.post('/api/marketplace/posts', async (ctx) => {
             : createPost(
             type, category || 'other', title, description || '',
             Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
-            area ? area.lat : lat != null ? Number(lat) : undefined,
-            area ? area.lng : lng != null ? Number(lng) : undefined,
+            // With no place, on a node that syncs by area, the engine gives the listing its author's area (Q4).
+            lat != null ? Number(lat) : undefined,
+            lng != null ? Number(lng) : undefined,
             photos,
             repeatable === true || repeatable === 'true',
             id,

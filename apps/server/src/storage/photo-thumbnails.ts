@@ -33,7 +33,7 @@
 
 import type { Readable } from 'node:stream';
 import sharp from 'sharp';
-import { openObject, readObject, writeObject, type ImageStore } from './image-store.js';
+import { deleteObjectUnless, headObject, openObject, readObject, writeObject, type ImageStore } from './image-store.js';
 
 /** The longest side of a small copy, in pixels. Lists draw photos at 56-120 dp; 200 px is sharp at 1.5-2× density. */
 export const THUMB_MAX_SIDE = 200;
@@ -99,10 +99,16 @@ function oneAtATime<T>(work: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Make the small copy of a photo whose bytes are `photo`, kept under `thumbKey`, and keep it. Its bytes, or null when
- * it can't be made; a store that refuses the write still gets the bytes served this once.
+ * Make the small copy of the photo whose object is `photoKey` and whose bytes are `photo`, and keep it. Its bytes, or
+ * null when it can't be made; a store that refuses the write still gets the bytes served this once.
+ *
+ * Its photo can be deleted while it is being made: a listing removed the moment after it was posted, an edit that
+ * replaced the photo. The delete paths remove the photo's object and then its small copy (image-columns.ts
+ * deleteStoredObjects), so a small copy written after that would outlive its photo until the orphan sweep. So once it
+ * is written, the photo is looked for again, and a small copy whose photo has gone is removed: whichever order the two
+ * land in, none is left behind.
  */
-function makeAndKeep(store: ImageStore, thumbKey: string, photo: () => Promise<Buffer | null>): Promise<Buffer | null> {
+function makeAndKeep(store: ImageStore, photoKey: string, thumbKey: string, photo: () => Promise<Buffer | null>): Promise<Buffer | null> {
     const pending = inFlight.get(thumbKey);
     if (pending) return pending;
     const made = oneAtATime(async () => {
@@ -112,6 +118,10 @@ function makeAndKeep(store: ImageStore, thumbKey: string, photo: () => Promise<B
         if (!thumb) return null;
         try {
             await writeObject(store, thumbKey, thumb, { mime: mimeOfKey(thumbKey) });
+            if (!(await headObject(store, photoKey))) {
+                await deleteObjectUnless(store, thumbKey, () => false);
+                return null;
+            }
         } catch (e) {
             console.warn(`[Thumbnails] Could not keep ${thumbKey}:`, e);
         }
@@ -128,7 +138,7 @@ function makeAndKeep(store: ImageStore, thumbKey: string, photo: () => Promise<B
 export function queueThumbnail(store: ImageStore, photoKey: string, photo: Buffer): void {
     const thumbKey = thumbnailKeyOf(photoKey);
     if (!thumbKey) return;
-    void makeAndKeep(store, thumbKey, async () => photo).catch(() => undefined);
+    void makeAndKeep(store, photoKey, thumbKey, async () => photo).catch(() => undefined);
 }
 
 /**
@@ -143,7 +153,7 @@ export async function openThumbnailOf(store: ImageStore, photoKey: string | null
     const contentType = mimeOfKey(thumbKey);
     const kept = await openObject(store, thumbKey);
     if (kept) return { body: kept.stream, contentType, bytes: kept.bytes };
-    const made = await makeAndKeep(store, thumbKey, () => readObject(store, photoKey!));
+    const made = await makeAndKeep(store, photoKey!, thumbKey, () => readObject(store, photoKey!));
     return made ? { body: made, contentType, bytes: made.length } : null;
 }
 

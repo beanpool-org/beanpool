@@ -125,15 +125,22 @@ async function child(): Promise<void> {
                 conversations: db.prepare('SELECT id, type, post_id, name, created_by, created_at FROM conversations ORDER BY id').all(),
             };
         },
-        /** Rhea's posts, the objects of their photos, and the tombstones written for them. */
+        /**
+         * Rhea's posts, the objects of their photos, and the tombstones written for them. `objects` is every object under
+         * the post's prefix, its photos' small copies (storage/photo-thumbnails.ts) too; `photoObjects` the photos alone.
+         * A small copy is made off the upload, so the count waits for the ones being made.
+         */
         posts: async (a: { ids: string[] }) => {
             const { db } = await import('./db/db.js');
             const { getImageStore } = await import('./storage/image-store.js');
+            const { thumbnailsSettled } = await import('./storage/photo-thumbnails.js');
+            await thumbnailsSettled();
             const store = getImageStore();
             return a.ids.map((id) => ({
                 row: db.prepare('SELECT * FROM posts WHERE id = ?').get(id) as Record<string, any> | undefined,
                 photos: (db.prepare('SELECT COUNT(*) AS n FROM post_photos WHERE post_id = ?').get(id) as { n: number }).n,
                 objects: store.list(`posts/${id}/`).length,
+                photoObjects: store.list(`posts/${id}/`).filter((k) => !/-t\.[a-z]+$/.test(k)).length,
                 photoTombstones: (db.prepare(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'post_photos' AND row_key LIKE ?`).get(`${id}|%`) as { n: number }).n,
                 rsvps: (db.prepare('SELECT COUNT(*) AS n FROM event_rsvps WHERE post_id = ?').get(id) as { n: number }).n,
                 rsvpTombstones: (db.prepare(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'event_rsvps' AND row_key LIKE ?`).get(`${id}|%`) as { n: number }).n,
@@ -395,8 +402,10 @@ async function main(): Promise<void> {
             api(base, 'GET', photoUrls.get(`${id}/${n}`) ?? `/api/marketplace/posts/${id}/photos/${n}`, { as });
         require_((await photoRoute(m, up.id, 1, cy)).status === 200, 'M: her listing\'s second photo is served');
         const m1 = await main.send('posts', { ids: [...wiped, poll.id] });
-        require_(m1[0].objects === 2 && m1[4].objects === 1 && m1[4].rsvps === 1 && m1[4].chat === WORDS.eventTitle,
-            `M: the photos are in the image store, Bo is going, the event's chat bears its title (${JSON.stringify(m1.map((p: any) => [p.objects, p.rsvps, p.chat]))})`);
+        require_(m1[0].photoObjects === 2 && m1[4].photoObjects === 1 && m1[4].rsvps === 1 && m1[4].chat === WORDS.eventTitle,
+            `M: the photos are in the image store, Bo is going, the event's chat bears its title (${JSON.stringify(m1.map((p: any) => [p.photoObjects, p.rsvps, p.chat]))})`);
+        require_(m1[0].objects === 4 && m1[4].objects === 2,
+            `M: and each photo's small copy beside it (${JSON.stringify(m1.map((p: any) => p.objects))})`);
         const index1 = await main.send('search-index', { words: TITLE_WORDS });
         require_(index1.matches.Quorvex === 1 && index1.bytes.Quorvex > 0, `M: search finds her words (${JSON.stringify(index1.matches)})`);
         const ledgerBefore = (await main.send('trades', { ids: wiped })).ledger;
@@ -412,8 +421,8 @@ async function main(): Promise<void> {
         require_(firstPull.ok === true, `S: the first pull lands (${firstPull.ok ? firstPull.mode : firstPull.error})`);
         const s1 = await standby.send('posts', { ids: wiped });
         const sIndex1 = await standby.send('search-index', { words: TITLE_WORDS });
-        require_(s1[0].objects === 2 && s1[0].row?.title === WORDS.upTitle && sIndex1.matches.Quorvex === 1,
-            `S: holds her words and photos too (${s1[0].objects} objects; ${s1[0].row?.title})`);
+        require_(s1[0].photoObjects === 2 && s1[0].row?.title === WORDS.upTitle && sIndex1.matches.Quorvex === 1,
+            `S: holds her words and photos too (${s1[0].photoObjects} photo objects; ${s1[0].row?.title})`);
 
         // ── 3. She deletes ──
         console.log('\n— 3. Rhea deletes her account —');
@@ -426,7 +435,7 @@ async function main(): Promise<void> {
         assert(rowsOf(m3).every((p: any) => p.row.lat === null && p.row.lng === null && p.row.event_place_name === null && p.row.event_private_note === null),
             'none has a pin, a place name or a note for the people going');
         assert(rowsOf(m3).every((p: any) => p.photos === 0 && p.objects === 0),
-            `none has a photo, in the database or the image store (${JSON.stringify(rowsOf(m3).map((p: any) => [p.photos, p.objects]))})`);
+            `none has a photo, in the database or the image store, nor a photo's small copy (${JSON.stringify(rowsOf(m3).map((p: any) => [p.photos, p.objects]))})`);
         assert(rowsOf(m3).map((p: any) => p.photoTombstones).join() === '2,1,1,1,1',
             `a tombstone for each photo slot, so a standby deletes them too (${rowsOf(m3).map((p: any) => p.photoTombstones).join()})`);
         const statuses = rowsOf(m3).map((p: any) => p.row.status);

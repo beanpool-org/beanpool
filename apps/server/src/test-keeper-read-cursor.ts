@@ -12,7 +12,8 @@
  *  3. The same for an ex-keeper, whose mark-read is refused.
  *  4. The same after wind-up, and for a frozen keeper.
  *  5. Even a stray participant row (from a build that made one) gives no right to send or react.
- *  6. A DM and a group chat still send through /api/messages/send.
+ *  6. A DM and a group chat still send through /api/messages/send: a DM and a group line in their encrypted forms go through, and
+ *     the readable form a store app up to 1.2.37 sent to a group chat is refused 400 with the words that tell it to update.
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -28,6 +29,7 @@ import { postEnterpriseThreadMessage } from './engine/enterprise-thread.js';
 import { createGroupRoutes } from './routes/groups.js';
 import { createMessagingRoutes } from './routes/messaging.js';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -176,8 +178,14 @@ async function main(): Promise<void> {
     assert(statusOf(dmSend) !== 400 && dmSend.body?.success === true, 'a DM still sends');
     const garden = createGroup({ name: 'Garden Crew', joinPolicy: 'open', createdBy: bob });
     joinGroup(garden.id, erin);
-    const gSend = await mpost('/api/messages/send', erin, { conversationId: garden.id, authorPubkey: erin, ciphertext: b64('hi all'), nonce: 'plaintext-v1' });
-    assert(gSend.body?.success === true, 'a group chat line still sends the way store apps up to 1.2.37 send it');
+    // A group chat is end-to-end encrypted (group chats step 2): the readable form store apps up to 1.2.37 send is refused, in the words
+    // that tell the app to update, and writes nothing; the sealed form through the same route goes.
+    const gBefore = messageCount(garden.id);
+    const gOld = await mpost('/api/messages/send', erin, { conversationId: garden.id, authorPubkey: erin, ciphertext: b64('hi all'), nonce: 'plaintext-v1' });
+    assert(statusOf(gOld) === 400 && /Update BeanPool/.test(gOld.body?.error || '') && messageCount(garden.id) === gBefore,
+        `a readable group chat line, as store apps up to 1.2.37 send it, is refused 400 with the update words and writes nothing (got ${statusOf(gOld)} ${gOld.body?.error ?? ''})`);
+    const gSend = await mpost('/api/messages/send', erin, { conversationId: garden.id, authorPubkey: erin, ...lockedGroupLine(db, garden.id) });
+    assert(gSend.body?.success === true && messageCount(garden.id) === gBefore + 1, 'a sealed group chat line sends through /api/messages/send');
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

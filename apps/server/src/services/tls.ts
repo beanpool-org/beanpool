@@ -22,18 +22,15 @@ import crypto from 'node:crypto';
 import * as acme from 'acme-client';
 import selfsigned from 'selfsigned';
 
-function getTlsDir(): string {
-    const dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-    return path.join(dataDir, 'tls');
-}
-
-const getCaCertPath = () => path.join(getTlsDir(), 'ca.pem');
-const getCaKeyPath = () => path.join(getTlsDir(), 'ca-key.pem');
-const getServerCertPath = () => path.join(getTlsDir(), 'server.pem');
-const getServerKeyPath = () => path.join(getTlsDir(), 'server-key.pem');
-const getLeCertPath = () => path.join(getTlsDir(), 'le-cert.pem');
-const getLeKeyPath = () => path.join(getTlsDir(), 'le-key.pem');
-const getLeAccountPath = () => path.join(getTlsDir(), 'acme-account.json');
+const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
+const TLS_DIR = path.join(DATA_DIR, 'tls');
+const CA_CERT_PATH = path.join(TLS_DIR, 'ca.pem');
+const CA_KEY_PATH = path.join(TLS_DIR, 'ca-key.pem');
+const SERVER_CERT_PATH = path.join(TLS_DIR, 'server.pem');
+const SERVER_KEY_PATH = path.join(TLS_DIR, 'server-key.pem');
+const LE_CERT_PATH = path.join(TLS_DIR, 'le-cert.pem');
+const LE_KEY_PATH = path.join(TLS_DIR, 'le-key.pem');
+const LE_ACCOUNT_PATH = path.join(TLS_DIR, 'acme-account.json');
 
 // Cloudflare config — if CF_RECORD_NAME exists, we're a public node
 const CF_API_TOKEN = process.env.CF_API_TOKEN ?? '';
@@ -57,7 +54,7 @@ export function isUsingLetsEncrypt(): boolean { return usingLetsEncrypt; }
  * falls back to self-signed for LAN or on failure.
  */
 export async function initTls(): Promise<void> {
-    fs.mkdirSync(getTlsDir(), { recursive: true });
+    fs.mkdirSync(TLS_DIR, { recursive: true });
 
     const isPublicNode = CF_RECORD_NAME && CF_API_TOKEN && CF_ZONE_ID;
 
@@ -94,7 +91,7 @@ export function startRenewalScheduler(): void {
                 usingLetsEncrypt = true;
             } else if (!success && usingLetsEncrypt) {
                 // LE cert expired and can't renew — fall back
-                if (isCertExpired(getLeCertPath())) {
+                if (isCertExpired(LE_CERT_PATH)) {
                     console.log('⚠️  LE cert expired, can\'t renew — falling back to self-signed');
                     generateSelfSigned();
                     usingLetsEncrypt = false;
@@ -112,16 +109,11 @@ export function startRenewalScheduler(): void {
 
 async function tryLetsEncrypt(): Promise<boolean> {
     try {
-        const leCertPath = getLeCertPath();
-        const leKeyPath = getLeKeyPath();
         // If valid LE cert exists and not expiring soon, just load it
-        if (
-            fs.existsSync(leCertPath) && fs.statSync(leCertPath).size > 0 &&
-            fs.existsSync(leKeyPath) && fs.statSync(leKeyPath).size > 0
-        ) {
-            if (!isCertExpiringSoon(leCertPath, 30)) {
-                serverCertPem = fs.readFileSync(leCertPath, 'utf-8');
-                serverKeyPem = fs.readFileSync(leKeyPath, 'utf-8');
+        if (fs.existsSync(LE_CERT_PATH) && fs.existsSync(LE_KEY_PATH)) {
+            if (!isCertExpiringSoon(LE_CERT_PATH, 30)) {
+                serverCertPem = fs.readFileSync(LE_CERT_PATH, 'utf-8');
+                serverKeyPem = fs.readFileSync(LE_KEY_PATH, 'utf-8');
                 return true;
             }
             console.log('🔄 LE cert expiring soon, renewing...');
@@ -150,14 +142,10 @@ async function requestLetsEncryptCert(): Promise<boolean> {
     }, ACME_TIMEOUT_MS);
 
     const certPromise = (async () => {
-        const leAccountPath = getLeAccountPath();
-        const leCertPath = getLeCertPath();
-        const leKeyPath = getLeKeyPath();
-
         // Create or load ACME account key
         let accountKey: string;
-        if (fs.existsSync(leAccountPath) && fs.statSync(leAccountPath).size > 0) {
-            const saved = JSON.parse(fs.readFileSync(leAccountPath, 'utf-8'));
+        if (fs.existsSync(LE_ACCOUNT_PATH)) {
+            const saved = JSON.parse(fs.readFileSync(LE_ACCOUNT_PATH, 'utf-8'));
             accountKey = saved.key;
             console.log('   Loaded existing ACME account key');
         } else {
@@ -168,7 +156,7 @@ async function requestLetsEncryptCert(): Promise<boolean> {
                 privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
             });
             accountKey = privateKey;
-            writeFileAtomic(leAccountPath, JSON.stringify({ key: accountKey }), { mode: 0o600 });
+            writeFileAtomic(LE_ACCOUNT_PATH, JSON.stringify({ key: accountKey }), { mode: 0o600 });
             console.log('   ACME account key generated');
         }
 
@@ -262,8 +250,8 @@ async function requestLetsEncryptCert(): Promise<boolean> {
         // Save cert + key
         serverCertPem = cert;
         serverKeyPem = serverKeyPemStr;
-        writeFileAtomic(leCertPath, serverCertPem);
-        writeFileAtomic(leKeyPath, serverKeyPem, { mode: 0o600 });
+        writeFileAtomic(LE_CERT_PATH, serverCertPem);
+        writeFileAtomic(LE_KEY_PATH, serverKeyPem, { mode: 0o600 });
 
         console.log(`✅ Let's Encrypt cert obtained for ${CF_RECORD_NAME}`);
         return true;
@@ -341,21 +329,11 @@ async function cfDeleteTxtRecord(recordId: string): Promise<void> {
 // --- Self-Signed Certs (LAN / Fallback) ---
 
 function generateSelfSigned(): void {
-    const caCertPath = getCaCertPath();
-    const caKeyPath = getCaKeyPath();
-    const serverCertPath = getServerCertPath();
-    const serverKeyPath = getServerKeyPath();
-
-    // Check if self-signed certs already exist and are all non-empty
-    if (
-        fs.existsSync(caCertPath) && fs.statSync(caCertPath).size > 0 &&
-        fs.existsSync(caKeyPath) && fs.statSync(caKeyPath).size > 0 &&
-        fs.existsSync(serverCertPath) && fs.statSync(serverCertPath).size > 0 &&
-        fs.existsSync(serverKeyPath) && fs.statSync(serverKeyPath).size > 0
-    ) {
-        caCertPem = fs.readFileSync(caCertPath, 'utf-8');
-        serverCertPem = fs.readFileSync(serverCertPath, 'utf-8');
-        serverKeyPem = fs.readFileSync(serverKeyPath, 'utf-8');
+    // Check if self-signed certs already exist
+    if (fs.existsSync(CA_CERT_PATH) && fs.existsSync(SERVER_CERT_PATH)) {
+        caCertPem = fs.readFileSync(CA_CERT_PATH, 'utf-8');
+        serverCertPem = fs.readFileSync(SERVER_CERT_PATH, 'utf-8');
+        serverKeyPem = fs.readFileSync(SERVER_KEY_PATH, 'utf-8');
         console.log('🔐 Self-signed certificates loaded from disk');
         return;
     }
@@ -404,10 +382,10 @@ function generateSelfSigned(): void {
     serverKeyPem = serverResult.private;
 
     // Persist
-    writeFileAtomic(caCertPath, caCertPem);
-    writeFileAtomic(caKeyPath, caKeyPem, { mode: 0o600 });
-    writeFileAtomic(serverCertPath, serverCertPem);
-    writeFileAtomic(serverKeyPath, serverKeyPem, { mode: 0o600 });
+    writeFileAtomic(CA_CERT_PATH, caCertPem);
+    writeFileAtomic(CA_KEY_PATH, caKeyPem, { mode: 0o600 });
+    writeFileAtomic(SERVER_CERT_PATH, serverCertPem);
+    writeFileAtomic(SERVER_KEY_PATH, serverKeyPem, { mode: 0o600 });
 
     console.log('🔐 Certificates generated and saved to data/tls/');
 }

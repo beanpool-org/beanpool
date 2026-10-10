@@ -12,6 +12,7 @@
 import { useState, useEffect, useRef, useMemo, type KeyboardEvent } from 'react';
 import type { MarketplacePost } from '../lib/api';
 import { ImageLightbox } from './ImageLightbox';
+import { listPhotoUrl } from '@beanpool/core';
 
 interface MarketplaceTransaction {
     id: string;
@@ -346,7 +347,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                         aria-label={`View enlarged photo: ${item.postTitle}`}
                                                         className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                     >
-                                                        <img src={item.coverImage} alt="Cover" className="w-full h-full object-cover" />
+                                                        <img src={listPhotoUrl(item.coverImage)} alt="Cover" className="w-full h-full object-cover" />
                                                     </button>
                                                 ) : (
                                                     <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
@@ -444,7 +445,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                     aria-label={`View enlarged photo: ${item.title}`}
                                                     className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                 >
-                                                    <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
+                                                    <img src={listPhotoUrl(coverImage)} alt="Cover" className="w-full h-full object-cover" />
                                                 </button>
                                             ) : (
                                                 <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">

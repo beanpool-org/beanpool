@@ -21,6 +21,7 @@ import { unreadLabel, groupsUnreadTotal, yourGroupsPaneState } from '../../utils
 import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, FindGroupsButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
+import { listPhotoUrl } from '@beanpool/core';
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
@@ -477,7 +478,7 @@ export default function ChatsScreen() {
                 {item.postId && item.postPhoto && typeof item.postPhoto === 'string' && item.postPhoto.trim() !== '' && item.postPhoto !== 'null' && item.postPhoto !== 'undefined' ? (
                     <View style={styles.avatarComposite}>
                         {/* Post photo as primary (rounded square) */}
-                        <Image source={{ uri: item.postPhoto }} style={styles.postPhotoAvatar} accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" />
+                        <Image source={{ uri: listPhotoUrl(item.postPhoto) }} style={styles.postPhotoAvatar} accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" />
                         {/* Peer profile overlay (small circle) */}
                         <View style={styles.overlayAvatarWrap}>
                             <MemberAvatar avatarUrl={item.peerAvatar} pubkey={item.peerPubkey || ''} callsign={item.peer} size={20} />

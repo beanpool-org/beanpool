@@ -11,6 +11,7 @@
 
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
+import { listPhotoUrl } from '@beanpool/core';
 
 interface Props {
     post: MarketplacePost;
@@ -153,7 +154,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                             }`}
                         >
-                            <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                            <img src={listPhotoUrl(post.photos![0])} alt={post.title} className="w-full h-full object-cover" />
                         </button>
                     ) : (
                         <div className="w-full h-full bg-oat-50 dark:bg-nature-800 flex justify-center items-center">
@@ -315,7 +316,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                         }`}
                     >
-                        <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                        <img src={listPhotoUrl(post.photos![0])} alt={post.title} className="w-full h-full object-cover" />
                     </button>
 
                     {/* Status Overlays */}

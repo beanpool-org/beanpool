@@ -36,7 +36,7 @@ import {
 } from '../lib/live-posts';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { EventCard } from '../components/EventCard';
-import { approximateLocation, tierForCredit, type AddressResult } from '@beanpool/core';
+import { approximateLocation, listPhotoUrl, tierForCredit, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
 import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
@@ -1764,7 +1764,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     </button>
                     <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                         {previewPost.photos && previewPost.photos.length > 0
-                            ? <img src={previewPost.photos[0]} alt="" className="w-full h-full object-cover" />
+                            ? <img src={listPhotoUrl(previewPost.photos[0])} alt="" className="w-full h-full object-cover" />
                             : <span className="text-3xl" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col justify-center pr-6">
@@ -1807,7 +1807,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             aria-label={`View enlarged photo: ${previewPost.title}`}
                             className="w-[90px] h-[90px] rounded-2xl overflow-hidden cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 shrink-0"
                         >
-                            <img src={previewPost.photos[0]} alt="thumb" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
+                            <img src={listPhotoUrl(previewPost.photos[0])} alt="thumb" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
                         </button>
                     ) : (
                         <div className="w-[90px] h-[90px] rounded-2xl bg-gray-100 dark:bg-nature-800 flex items-center justify-center transition-colors">

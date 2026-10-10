@@ -15,7 +15,7 @@ import {
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, readSearchSettings, tipsNextLabel, type SkyToday, type TipsView } from '@beanpool/core';
+import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, listPhotoUrl, readSearchSettings, tipsNextLabel, type SkyToday, type TipsView } from '@beanpool/core';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
 
@@ -209,7 +209,7 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
             sub={facts || categoryLabel(p.category)}
             a11y={`${p.type === 'need' ? 'Need' : 'Offer'}: ${sentence(p.title)} ${facts ? `${facts}. ` : ''}${categoryLabel(p.category)}. Opens the listing.`}
             onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
-            left={<Thumb uri={onNode(nodeUrl, p.photoUrl)} emoji={categoryEmoji(p.category)} colors={colors} />}
+            left={<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl))} emoji={categoryEmoji(p.category)} colors={colors} />}
             subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
             testID={testID}
         />

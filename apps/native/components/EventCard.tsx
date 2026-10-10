@@ -13,6 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { Image } from 'expo-image';
+import { listPhotoUrl } from '@beanpool/core';
 import { router } from 'expo-router';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 import { rsvpEvent } from '../utils/db';
@@ -136,7 +137,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
             <View style={photo ? styles.photoRow : undefined}>
                 {photo && (
                     <Image
-                        source={{ uri: photo }}
+                        source={{ uri: listPhotoUrl(photo) }}
                         style={styles.photo}
                         accessibilityLabel={post.title}
                         contentFit="cover"

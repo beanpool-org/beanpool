@@ -23,6 +23,7 @@ import { assertNotMuted } from '../engine/auto-moderation.js';
 import { photoKeyMatches, photoKeyRequiredFor, photoHealFor, notePhotoHealServed, notePhotoHealAnsweredAgain, restartPhotoHealFor, PHOTO_HEAL_PAGE_ROWS, PHOTO_HEAL_MIN_PAGE_ROWS } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
+import { openThumbnailOf } from '../storage/photo-thumbnails.js';
 import {
     MissingObjectError, attachmentDataOfAsync, openPhotoOf, type AttachmentRow, type PostPhotoRow,
 } from '../storage/image-columns.js';
@@ -139,37 +140,54 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
         }
     }
 
-    // A row that has not been evacuated yet is served from the row, exactly as it always was; an evacuated
-    // one is served from the store. The two produce identical bytes and an identical content type — that is
-    // the whole contract of storage/image-columns.ts, and what lets a photo be evacuated under a client's
-    // immutable cache entry without invalidating it.
-    //
-    // From the store it is STREAMED, through the store's non-blocking read: on an S3 node the bytes come from
-    // the bucket, and neither the node's event loop nor its memory is held for the whole photo on the way.
-    let served: Awaited<ReturnType<typeof openPhotoOf>>;
-    try {
-        served = await openPhotoOf(photo, getImageStore());
-    } catch (e) {
-        // The read is async, so the row can have been deleted while it was in flight — and the delete paths
-        // remove the object right after the row. That is a photo that no longer exists, not an outage. So is
-        // one REPLACED in flight: an edit writes a new row at the same (post, order) with a new key and removes
-        // the old object, so the question is whether the row still names the object this request read.
-        if (e instanceof MissingObjectError) {
-            const still = db.prepare(`SELECT 1 FROM post_photos WHERE post_id = ? AND order_num = ? AND storage_key = ?`)
-                .get(id, Number(orderNum), photo.storage_key);
-            if (!still) {
-                ctx.status = 404;
-                ctx.body = { error: 'Photo not found' };
-                return;
-            }
+    // The small copy for the lists (`size=thumb`, storage/photo-thumbnails.ts): asked only here, after every gate above,
+    // so it goes to exactly whoever the photo goes to, under the same cache header. A photo with none (one kept in its
+    // row, one it can't read) is answered with the photo itself, as is one whose small copy the store can't give now:
+    // the photo's own path below says what a missing or unreachable photo means. That photo is cached for 5 minutes, not
+    // the year below: a copy the store can't give now (a bucket hiccup) would otherwise leave the 800 px bytes under the
+    // list's URL, on the phone and for a public listing in a shared cache, until the photo changed (review opus-1742 #5).
+    let served: Awaited<ReturnType<typeof openPhotoOf>> = null;
+    let thumbNotServed = false;
+    if (ctx.query.size === 'thumb') {
+        try {
+            served = await openThumbnailOf(getImageStore(), photo.photo_data ? null : photo.storage_key);
+        } catch (e) {
+            console.warn(`[Photos] ${id}/${orderNum}: no small copy, serving the photo:`, e);
         }
-        // The row says the bytes are in the store and they are not — a lost or unmounted images directory —
-        // or the bucket did not answer. 404 would tell the member their photo never existed and tell the
-        // operator nothing.
-        console.error(`[Photos] ${id}/${orderNum}:`, e);
-        ctx.status = 503;
-        ctx.body = { error: 'This photo is temporarily unavailable' };
-        return;
+        thumbNotServed = !served;
+    }
+    if (!served) {
+        // A row that has not been evacuated yet is served from the row, exactly as it always was; an evacuated
+        // one is served from the store. The two produce identical bytes and an identical content type — that is
+        // the whole contract of storage/image-columns.ts, and what lets a photo be evacuated under a client's
+        // immutable cache entry without invalidating it.
+        //
+        // From the store it is STREAMED, through the store's non-blocking read: on an S3 node the bytes come from
+        // the bucket, and neither the node's event loop nor its memory is held for the whole photo on the way.
+        try {
+            served = await openPhotoOf(photo, getImageStore());
+        } catch (e) {
+            // The read is async, so the row can have been deleted while it was in flight — and the delete paths
+            // remove the object right after the row. That is a photo that no longer exists, not an outage. So is
+            // one REPLACED in flight: an edit writes a new row at the same (post, order) with a new key and removes
+            // the old object, so the question is whether the row still names the object this request read.
+            if (e instanceof MissingObjectError) {
+                const still = db.prepare(`SELECT 1 FROM post_photos WHERE post_id = ? AND order_num = ? AND storage_key = ?`)
+                    .get(id, Number(orderNum), photo.storage_key);
+                if (!still) {
+                    ctx.status = 404;
+                    ctx.body = { error: 'Photo not found' };
+                    return;
+                }
+            }
+            // The row says the bytes are in the store and they are not — a lost or unmounted images directory —
+            // or the bucket did not answer. 404 would tell the member their photo never existed and tell the
+            // operator nothing.
+            console.error(`[Photos] ${id}/${orderNum}:`, e);
+            ctx.status = 503;
+            ctx.body = { error: 'This photo is temporarily unavailable' };
+            return;
+        }
     }
     if (!served) {
         ctx.status = 404;
@@ -186,7 +204,8 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // member removed. A shared cache's copy would outlive that for the year (review FABLE-sec-images, MEDIUM). `private`
     // keeps it cached as long in the browser or app that fetched it, which has already been shown those bytes. No Vary:
     // the bytes a URL is answered with differ by who asks only for a hidden or taken-off listing's, which no cache keeps.
-    ctx.set('Cache-Control', hidden || off ? 'private, no-store' : keyed ? 'private, max-age=31536000, immutable' : 'public, max-age=31536000, immutable');
+    const lifetime = thumbNotServed ? 'max-age=300' : 'max-age=31536000, immutable';
+    ctx.set('Cache-Control', hidden || off ? 'private, no-store' : keyed ? `private, ${lifetime}` : `public, ${lifetime}`);
     ctx.type = served.contentType;
     ctx.body = served.body;
     if (served.bytes !== null) ctx.length = served.bytes;

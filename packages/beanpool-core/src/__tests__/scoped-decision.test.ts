@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    beansAmount, beansHeld, payOutSplit, payOutFeeWords, checkPayOutAmount, scopedEffectsFor, scopedEffectLabel, rollChoices,
+    beansAmount, beansHeld, wageNoteWords, payOutSplit, payOutFeeWords, checkPayOutAmount, scopedEffectsFor, scopedEffectLabel, rollChoices,
     scopedEffectWords, scopedTallyWords, scopedOutcomeWords, scopedClosesWords, type RollPerson,
 } from '../scoped-decision';
 
@@ -50,6 +50,21 @@ describe("an enterprise's keepers' vote, as the apps show it", () => {
         expect(beansHeld(39.999)).toBe('39.99');
         expect(beansHeld(-5)).toBe('0');
         expect(checkPayOutAmount('113', 112.3125)).toEqual({ error: "The enterprise holds 112.31 Beans, so it can't pay more than that." });
+    });
+
+    it("a keeper's pay-out is a wage: capped at what it has earned above its costs, in the node's words (review opus-1767 N5)", () => {
+        const wage = "Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): 10 Beans now.";
+        expect(checkPayOutAmount('50', 100, 10)).toEqual({ error: wage });
+        expect(checkPayOutAmount('10.01', 100, 10.009)).toEqual({ error: wage });
+        expect(checkPayOutAmount('10', 100, 10)).toEqual({ amount: 10 });
+        // Held is the lower cap: its words.
+        expect(checkPayOutAmount('50', 40, 100)).toEqual({ error: "The enterprise holds 40 Beans, so it can't pay more than that." });
+        expect(checkPayOutAmount('5', 100, -3)).toEqual({ error: wage.replace('10 Beans', '0 Beans') });
+        // Surplus not known: the node checks it.
+        expect(checkPayOutAmount('50', 100, null)).toEqual({ amount: 50 });
+        expect(checkPayOutAmount('50', 100)).toEqual({ amount: 50 });
+        expect(wageNoteWords(12.345, 'ongoing')).toBe('Paying a keeper is a wage: only out of what the enterprise has earned above its costs, 12.34 Beans now.');
+        expect(wageNoteWords(null, 'bounded')).toBe('Paying a keeper is a wage: only out of what the project has earned.');
     });
 
     it("a project's collaborators can't vote the leader out; an enterprise's keepers can choose a new lead", () => {

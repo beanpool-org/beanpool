@@ -1128,7 +1128,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         )}
 
                         {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
-                        <EnterpriseDecisions treasuryKey={pubkey} myPubkey={myPubkey} keepers={keeperList} balance={balance} lifecycle={detail?.lifecycle} />
+                        <EnterpriseDecisions treasuryKey={pubkey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
+                            earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null} lifecycle={detail?.lifecycle} />
 
                         {/* Operator Controls Panel */}
                         {isKeeperOfThis && (

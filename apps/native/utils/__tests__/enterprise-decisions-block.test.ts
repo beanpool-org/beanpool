@@ -22,8 +22,8 @@ describe("an enterprise's Decisions block", () => {
         expect(block).not.toMatch(/tally\.yes|tally\.no\b/);
     });
 
-    it('the form checks the amount against what it holds and shows the fee; the pickers come from the roll', () => {
-        expect(block).toContain('checkPayOutAmount(amountText, balance)');
+    it('the form checks the amount against what it holds (and, every recipient being a keeper, its earned surplus) and shows the fee; the pickers come from the roll', () => {
+        expect(block).toContain('checkPayOutAmount(amountText, balance, wageSurplus)');
         expect(block).toContain('payOutFeeWords(amount.amount, person.name)');
         expect(block).toContain('rollChoices(effect, roll, me)');
         expect(block).toContain('scopedEffectsFor(lifecycle)');

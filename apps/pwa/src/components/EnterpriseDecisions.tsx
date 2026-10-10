@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
-    scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE,
+    scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE, wageNoteWords,
     type RollPerson, type ScopedDecisionCard, type ScopedDecisionList, type ScopedEffect,
 } from '@beanpool/core';
 import { getEnterpriseDecisions, proposeEnterpriseDecision, voteEnterpriseDecision } from '../lib/api';
@@ -21,6 +21,8 @@ export interface EnterpriseDecisionsProps {
     keepers: Array<{ publicKey: string; callsign?: string; role?: string; suspended?: boolean }>;
     /** What it holds now, in Beans. */
     balance: number;
+    /** What it has earned above its costs (the detail's earnedSurplus): the most it can pay a keeper. Null when not known. */
+    earnedSurplus?: number | null;
     lifecycle?: string | null;
 }
 
@@ -28,7 +30,7 @@ const btn = 'min-h-[44px] px-4 rounded-xl font-bold text-sm';
 const btnYes = `${btn} bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50`;
 const btnNo = `${btn} border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-nature-100 disabled:opacity-50`;
 
-export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, lifecycle }: EnterpriseDecisionsProps) {
+export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, earnedSurplus, lifecycle }: EnterpriseDecisionsProps) {
     const [list, setList] = useState<ScopedDecisionList | null>(null);
     const [busyId, setBusyId] = useState<string | null>(null);
     const [voteError, setVoteError] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, l
                 <button type="button" className={`${btnNo} w-full`} onClick={() => setProposing(true)}>Propose a vote</button>
             )}
             {proposing && myPubkey && (
-                <ProposeScopedDecision treasuryKey={treasuryKey} me={myPubkey} roll={roll} balance={balance} lifecycle={lifecycle}
+                <ProposeScopedDecision treasuryKey={treasuryKey} me={myPubkey} roll={roll} balance={balance} earnedSurplus={earnedSurplus} lifecycle={lifecycle}
                     onClose={() => setProposing(false)} onDone={() => { setProposing(false); void load(); }} />
             )}
         </section>
@@ -111,8 +113,9 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, l
 }
 
 /** The propose form: the three effects (two in a project), the person from the roll, and for a pay-out the amount and its fee. */
-export function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycle, onClose, onDone }: {
-    treasuryKey: string; me: string; roll: RollPerson[]; balance: number; lifecycle?: string | null; onClose: () => void; onDone: () => void;
+export function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, lifecycle, onClose, onDone }: {
+    treasuryKey: string; me: string; roll: RollPerson[]; balance: number; earnedSurplus?: number | null; lifecycle?: string | null;
+    onClose: () => void; onDone: () => void;
 }) {
     const effects = scopedEffectsFor(lifecycle);
     const [effect, setEffect] = useState<ScopedEffect>('pay_out');
@@ -125,7 +128,9 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycl
 
     const choices = rollChoices(effect, roll, me);
     const person = choices.find(p => p.pubkey === who) ?? null;
-    const amount = effect === 'pay_out' ? checkPayOutAmount(amountText, balance) : null;
+    // Everyone the form offers is a keeper on the roll, so every pay-out is a wage: capped at the earned surplus too.
+    const wageSurplus = typeof earnedSurplus === 'number' && Number.isFinite(earnedSurplus) ? earnedSurplus : null;
+    const amount = effect === 'pay_out' ? checkPayOutAmount(amountText, balance, wageSurplus) : null;
     const amountError = amount && 'error' in amount && amountText.trim() ? amount.error : null;
     const ready = !!person && title.trim().length > 0 && why.trim().length >= 10 && (effect !== 'pay_out' || (!!amount && 'amount' in amount));
 
@@ -188,9 +193,7 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycl
                     {amount && 'amount' in amount && person && (
                         <p className="m-0 mt-1 text-sm text-nature-900 dark:text-nature-100 break-words" data-testid="scoped-fee">{payOutFeeWords(amount.amount, person.name)}</p>
                     )}
-                    <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 break-words">
-                        Paying a keeper is a wage: only out of what the {lifecycle === 'bounded' ? 'project' : 'enterprise'} has earned.
-                    </p>
+                    <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 break-words">{wageNoteWords(wageSurplus, lifecycle)}</p>
                 </>
             )}
             <label className={label} htmlFor="scoped-title">Title</label>

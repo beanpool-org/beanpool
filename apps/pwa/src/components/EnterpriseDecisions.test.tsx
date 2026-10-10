@@ -81,6 +81,23 @@ describe("an enterprise's Decisions block (DESIGN-group-decisions S2)", () => {
         expect(screen.getByText('It holds 112.31 Beans now.')).toBeInTheDocument();
     });
 
+    it("every recipient is a keeper, so a pay-out is capped at the earned surplus, in the node's words (review opus-1767 N5)", async () => {
+        vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 3 });
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={100} earnedSurplus={10} lifecycle="ongoing" />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Propose a vote' }));
+        expect(screen.getByText('Paying a keeper is a wage: only out of what the enterprise has earned above its costs, 10 Beans now.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('radio', { name: 'Cat' }));
+        fireEvent.change(screen.getByLabelText('How many Beans?'), { target: { value: '50' } });
+        expect(screen.getByText('Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): 10 Beans now.')).toBeInTheDocument();
+        expect(screen.queryByTestId('scoped-fee')).toBeNull();
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Pay Cat for the oven' } });
+        fireEvent.change(screen.getByLabelText('Why?'), { target: { value: 'Cat fixed the oven door last week.' } });
+        expect(screen.getByRole('button', { name: 'Open the vote' })).toBeDisabled();
+        fireEvent.change(screen.getByLabelText('How many Beans?'), { target: { value: '10' } });
+        expect(screen.getByTestId('scoped-fee')).toHaveTextContent('Cat receives 9.85 Beans.');
+        expect(screen.getByRole('button', { name: 'Open the vote' })).toBeEnabled();
+    });
+
     it("a project: no vote takes it off its leader; the words are a project's", async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 3 });
         render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="bounded" />);

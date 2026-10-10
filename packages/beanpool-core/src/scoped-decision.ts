@@ -59,7 +59,6 @@ export function beansHeld(balance: number): string {
     return beansAmount(heldCents(balance) / 100);
 }
 
-
 /** What a pay-out of `amount` gives: the recipient's share and the Commons' 1.5%, in cents so they add up. */
 export function payOutSplit(amount: number): { receives: number; fee: number } {
     const cents = Math.floor(amount * 100 + 1e-6);
@@ -73,17 +72,33 @@ export function payOutFeeWords(amount: number, recipient: string): string {
     return `${recipient} receives ${beansAmount(receives)} Beans. The 1.5% trade fee (${beansAmount(fee)} Beans) goes to the Commons.`;
 }
 
+/** The node's words for a wage above the earned surplus (apps/server decisions-engine WAGE_NEEDS_SURPLUS). */
+export const PAY_OUT_WAGE_WORDS = 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus)';
+
 /**
  * The amount as typed, checked against what the enterprise holds now: a number of Beans above 0, cents at most, and no
- * more than it holds. Returns the amount, or the words to show under the field.
+ * more than it holds. For a keeper (`wageSurplus`: its earned surplus), no more than that either: paying a keeper is a
+ * wage, and a wage comes only out of what it has earned above its costs (Rules 5 and 6), as the node checks it. A
+ * surplus not known (null) is left to the node. Returns the amount, or the words to show under the field.
  */
-export function checkPayOutAmount(typed: string, held: number): { amount: number } | { error: string } {
+export function checkPayOutAmount(typed: string, held: number, wageSurplus?: number | null): { amount: number } | { error: string } {
     const t = typed.trim().replace(',', '.');
     if (!/^\d+(\.\d{1,2})?$/.test(t)) return { error: 'Enter an amount in Beans, like 40 or 12.50.' };
     const amount = Number(t);
     if (!(amount > 0)) return { error: 'The amount must be more than 0 Beans.' };
     if (Math.round(amount * 100) > heldCents(held)) return { error: `The enterprise holds ${beansHeld(held)} Beans, so it can't pay more than that.` };
+    if (typeof wageSurplus === 'number' && Math.round(amount * 100) > heldCents(wageSurplus)) {
+        return { error: `${PAY_OUT_WAGE_WORDS}: ${beansHeld(wageSurplus)} Beans now.` };
+    }
     return { amount };
+}
+
+/** The line under the amount: a pay-out to a keeper is a wage, with the earned surplus it may come out of when known. */
+export function wageNoteWords(earnedSurplus: number | null | undefined, lifecycle: string | null | undefined): string {
+    const kind = lifecycle === 'bounded' ? 'project' : 'enterprise';
+    return typeof earnedSurplus === 'number'
+        ? `Paying a keeper is a wage: only out of what the ${kind} has earned above its costs, ${beansHeld(earnedSurplus)} Beans now.`
+        : `Paying a keeper is a wage: only out of what the ${kind} has earned.`;
 }
 
 /** The effects a keeper may propose here: making another keeper the lead only in an ongoing enterprise (§2.4, pick 1). */

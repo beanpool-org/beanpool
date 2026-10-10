@@ -162,6 +162,23 @@ describe('the pay-out form', () => {
     });
 });
 
+describe("a keeper's pay-out is a wage (review opus-1767 N5)", () => {
+    it('capped at the earned surplus, in the node\'s words; the button waits until the amount fits', async () => {
+        await render({ balance: 100, earnedSurplus: 10 });
+        await press(button(/^Propose a vote$/));
+        expect(textEl(/^Paying a keeper is a wage: only out of what the enterprise has earned above its costs, 10 Beans now\.$/)).toBeTruthy();
+        await press(radio(/^Catherine-Rose$/));
+        await type('Amount in Beans', '50');
+        await type('Title', 'Pay Catherine-Rose');
+        await type('Why', 'She fixed the oven door last week.');
+        expect(textEl(/^Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs \(its earned surplus\): 10 Beans now\.$/)).toBeTruthy();
+        expect(button(/^Open the vote$/)?.getAttribute('aria-disabled')).toBe('true');
+        await type('Amount in Beans', '10');
+        expect(textEl(/^Catherine-Rose receives 9\.85 Beans\./)).toBeTruthy();
+        expect(button(/^Open the vote$/)?.getAttribute('aria-disabled')).toBeNull();
+    });
+});
+
 describe('the propose sheet and the keyboard', () => {
     // components/useModalKeyboardLift.ts: a KeyboardAvoidingView inside an RN Modal collapsed a sheet to its title at
     // 320 dp; the sheet is lifted by the keyboard's height from the root provider's state instead.

@@ -11,7 +11,7 @@ import { View, Text, Pressable, TextInput, Modal, ScrollView, ActivityIndicator,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
-    scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE,
+    scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE, wageNoteWords,
     type RollPerson, type ScopedDecisionCard, type ScopedDecisionList, type ScopedEffect,
 } from '@beanpool/core';
 import { getEnterpriseDecisions, proposeEnterpriseDecision, voteEnterpriseDecision } from '../utils/db';
@@ -25,12 +25,14 @@ export interface EnterpriseDecisionsProps {
     keepers: Array<{ publicKey: string; callsign?: string; role?: string; suspended?: boolean }>;
     /** What it holds now, in Beans. */
     balance: number;
+    /** What it has earned above its costs (the detail's earnedSurplus): the most it can pay a keeper. Null when not known. */
+    earnedSurplus?: number | null;
     lifecycle?: string | null;
     /** Bumped by the screen on focus or a pull, to read again. */
     refreshKey?: number;
 }
 
-export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, lifecycle, refreshKey }: EnterpriseDecisionsProps) {
+export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, earnedSurplus, lifecycle, refreshKey }: EnterpriseDecisionsProps) {
     const { colors } = useTheme();
     const [list, setList] = useState<ScopedDecisionList | null>(null);
     const [busyId, setBusyId] = useState<string | null>(null);
@@ -110,7 +112,7 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, l
             )}
             {proposing && myPubkey && (
                 <ProposeScopedDecision
-                    treasuryKey={treasuryKey} me={myPubkey} roll={roll} balance={balance} lifecycle={lifecycle}
+                    treasuryKey={treasuryKey} me={myPubkey} roll={roll} balance={balance} earnedSurplus={earnedSurplus} lifecycle={lifecycle}
                     onClose={() => setProposing(false)} onDone={() => { setProposing(false); void load(); }}
                 />
             )}
@@ -119,8 +121,9 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, l
 }
 
 /** The propose form: the three effects (two in a project), the person from the roll, and for a pay-out the amount and its fee. */
-function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycle, onClose, onDone }: {
-    treasuryKey: string; me: string; roll: RollPerson[]; balance: number; lifecycle?: string | null; onClose: () => void; onDone: () => void;
+function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, lifecycle, onClose, onDone }: {
+    treasuryKey: string; me: string; roll: RollPerson[]; balance: number; earnedSurplus?: number | null; lifecycle?: string | null;
+    onClose: () => void; onDone: () => void;
 }) {
     const { colors } = useTheme();
     const s = styles(colors);
@@ -138,7 +141,9 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycle, onCl
 
     const choices = rollChoices(effect, roll, me);
     const person = choices.find(p => p.pubkey === who) ?? null;
-    const amount = effect === 'pay_out' ? checkPayOutAmount(amountText, balance) : null;
+    // Everyone the form offers is a keeper on the roll, so every pay-out is a wage: capped at the earned surplus too.
+    const wageSurplus = typeof earnedSurplus === 'number' && Number.isFinite(earnedSurplus) ? earnedSurplus : null;
+    const amount = effect === 'pay_out' ? checkPayOutAmount(amountText, balance, wageSurplus) : null;
     const amountError = amount && 'error' in amount && amountText.trim() ? amount.error : null;
     const ready = !!person && title.trim().length > 0 && why.trim().length >= 10 && (effect !== 'pay_out' || (!!amount && 'amount' in amount));
 
@@ -197,7 +202,7 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycle, onCl
                                 <Text style={s.note}>It holds {beansHeld(balance)} Beans now.</Text>
                                 {amountError && <Text style={s.error}>{amountError}</Text>}
                                 {amount && 'amount' in amount && person && <Text style={s.fee}>{payOutFeeWords(amount.amount, person.name)}</Text>}
-                                <Text style={s.note}>Paying a keeper is a wage: only out of what the {lifecycle === 'bounded' ? 'project' : 'enterprise'} has earned.</Text>
+                                <Text style={s.note}>{wageNoteWords(wageSurplus, lifecycle)}</Text>
                             </>
                         )}
                         <Text style={s.fieldLabel}>Title</Text>

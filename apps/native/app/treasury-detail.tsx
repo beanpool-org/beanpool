@@ -1312,6 +1312,7 @@ export default function TreasuryDetailScreen() {
                         {treasuryKey && (
                             <EnterpriseDecisions
                                 treasuryKey={treasuryKey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
+                                earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null}
                                 lifecycle={detail?.lifecycle} refreshKey={decisionsRefresh}
                             />
                         )}

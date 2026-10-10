@@ -2704,7 +2704,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">Show everywhere</button>
                             </>
                         ) : near ? (
-                            <span>{`Nearest first, within ${formatDistance(near.radiusKm)} of ${radiusSettings?.label || 'the place you picked'}.`}</span>
+                            // Not the setting's label: the picker sets it to "<n>km radius", never a place's name.
+                            <span>{`Nearest first, within ${formatDistance(near.radiusKm)} of the place you picked.`}</span>
                         ) : everywhere && memberArea ? (
                             <>
                                 <span>Newest from everywhere.</span>

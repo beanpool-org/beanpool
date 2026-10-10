@@ -70,11 +70,12 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
 
     it('the member\'s distance setting wins over their area', async () => {
         info.current = GLOBAL;
-        vi.mocked(loadRadiusSettings).mockReturnValue({ lat: -37.1, lng: 144.2, radiusKm: 30, label: 'Castlemaine' });
+        // The label the picker sets (RadiusPickerPage): never a place name, so the line does not use it.
+        vi.mocked(loadRadiusSettings).mockReturnValue({ lat: -37.1, lng: 144.2, radiusKm: 30, label: '30km radius' });
         render(<MarketplacePage identity={identity} />);
         await screen.findByText('Bicycle Repair');
         expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -37.1, lng: 144.2, radiusKm: 30, sort: 'distance' }]);
-        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest first, within 30 km of Castlemaine.');
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest first, within 30 km of the place you picked.');
     });
 
     it('a member with no area and no distance setting reads the newest, with a way to what is near', async () => {

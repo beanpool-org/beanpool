@@ -6,7 +6,8 @@ import { sendMail, SmtpError } from './smtp.js';
 /**
  * Alerts to the custodians (key vault design §3, §4): when the vault is locked (or its keyholder unreachable) for five
  * minutes, when backups fail twice in a row or the newest is more than two hours old, the same for the off-box copy,
- * and when a day's signed report was not made. Each goes to the configured channels (shared/settings.ts: an email
+ * when tidying the off-box store (removing copies past 30 days) has failed a day running, and when a day's signed
+ * report was not made. Each goes to the configured channels (shared/settings.ts: an email
  * through an SMTP server, a webhook), once when it starts, again every 24 hours while it lasts, and once when it ends.
  *
  * What an alert says is the vault's own words: which condition, since when, a count, and an error in a few words. It
@@ -22,7 +23,7 @@ export const ALERT_RETRY_MS = 5 * 60 * 1000;
 const MAX_WAITING = 50;
 const WEBHOOK_TIMEOUT_MS = 15_000;
 
-export type AlertKey = 'locked' | 'unreachable' | 'backup' | 'offsite' | 'report';
+export type AlertKey = 'locked' | 'unreachable' | 'backup' | 'offsite' | 'offsite-prune' | 'report';
 
 export interface Condition {
     key: AlertKey;
@@ -52,6 +53,7 @@ const TITLES: Record<AlertKey, string> = {
     unreachable: 'unreachable',
     backup: 'backups failing',
     offsite: 'off-box backups failing',
+    'offsite-prune': 'off-box tidy-up failing',
     report: 'daily report missing',
 };
 

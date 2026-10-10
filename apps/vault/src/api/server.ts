@@ -88,6 +88,11 @@ export const LOCKED_ALERT_MS = 5 * 60 * 1000;
 export const BACKUP_STALE_MS = 2 * 60 * 60 * 1000 + 10 * 60 * 1000;
 /** A failure this many times in a row is an alert too. */
 export const BACKUP_FAILURES_ALERT = 2;
+/**
+ * Tidying the off-box store failing this many times in a row (a day of hourly copies, each landing) is an alert: copies
+ * past 30 days are piling up there. Fewer is no news, as the next tidy-up removes whatever an earlier one left.
+ */
+export const OFFSITE_PRUNE_FAILURES_ALERT = 24;
 /** An off-box upload that fails is tried once more this long after, before the copy counts as failed. */
 export const OFFSITE_RETRY_MS = 30 * 1000;
 /** A day's signed report is made at the first check after midnight UTC; by this long after, its absence is an alert. */
@@ -1490,6 +1495,17 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 : offsiteFailing ? `${offsiteStatus.failuresInARow} off-box copies in a row failed (${offsiteStatus.step ?? 'put'}: ${offsiteStatus.error ?? 'failed'}): the backups are on the vault's own disk only.`
                     : offsiteStale ? 'no backup has gone off the box for over two hours: the newest are on the vault\'s own disk only.'
                         : `backups go off the box again${offsiteStatus.lastOkAt ? ` (the newest at ${minute(offsiteStatus.lastOkAt)})` : ''}.`,
+        });
+
+        // Its own condition: the copies still go up, but the store's budget, and the 30 days a deleted copy may stay
+        // in a backup (§1.7), are only kept while the old ones go.
+        const prune = offsiteStatus.prune;
+        const pruneFailing = !!offsite && prune.failuresInARow >= OFFSITE_PRUNE_FAILURES_ALERT;
+        conditions.push({
+            key: 'offsite-prune', active: pruneFailing, since: prune.lastOkAt ?? undefined,
+            detail: pruneFailing
+                ? `${prune.failuresInARow} tidy-ups of the off-box store in a row failed (${prune.step ?? 'list'}: ${prune.error ?? 'failed'}): copies past 30 days are not being removed there. The copies themselves go up.`
+                : 'the off-box store is tidied again: copies past 30 days are removed.',
         });
 
         const midnight = Date.parse(`${dayOf(now)}T00:00:00Z`);

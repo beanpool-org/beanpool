@@ -177,7 +177,7 @@ describe('profile setup: the area step (S4)', () => {
         await toAreaStep();
         const t = text();
         expect(t).toContain("The worldwide community shows you what's on offer near you: the nearest 500 listings within 250 km.");
-        expect(t).toContain('We keep your area to about 10 km, never your exact spot. Other members see only a distance in km.');
+        expect(t).toContain('We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.');
         for (const w of [AREA_WORDS.useLocation, AREA_WORDS.typeTown, AREA_WORDS.skip, AREA_WORDS.later]) expect(t).toContain(w);
         expect(t).not.toMatch(/Ʀ|Beans/);
     });
@@ -299,11 +299,14 @@ describe("a poll's form: the note for a placeless listing (§3.4)", () => {
             "📍 You haven't set your area, so other members find this only by searching. Set it in Settings → Your area to show it near you.");
     });
 
-    it('with an area, on a local community, or when the node cannot be asked: no note', async () => {
+    it('a by-area community with an area: the note says the poll is shown at that area (review B1)', async () => {
         answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: { lat: -28.6, lng: 153.6 } } };
         await render(GLOBAL_FEATURES, pollModal);
-        expect(document.querySelector('[data-testid="poll-placeless-note"]')).toBeNull();
-        act(() => root!.unmount()); host!.remove(); root = null;
+        expect(document.querySelector('[data-testid="poll-placeless-note"]')?.textContent).toBe(
+            '📍 This poll is shown at your area (about 10 km around it) to everyone who can read it.');
+    });
+
+    it('on a local community, or when the node cannot be asked: no note', async () => {
         requests = [];
         await render(LOCAL_FEATURES, pollModal);
         expect(document.querySelector('[data-testid="poll-placeless-note"]')).toBeNull();

@@ -59,8 +59,8 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
     const [durationDays, setDurationDays] = useState<3 | 7 | 14>(7);
     const [openVote, setOpenVote] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4); an author with
-    // none is told the poll reaches others only through search.
+    // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4): the form says the
+    // poll is shown there, or, to an author with none, that it reaches others only through search.
     const nodeProfile = useNodeProfile();
     const byArea = nearbyListingsOn(nodeProfile?.features);
     const placelessNote = placelessListingNote(byArea, useMyArea(visible && byArea, identity));

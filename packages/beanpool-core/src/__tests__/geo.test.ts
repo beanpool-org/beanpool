@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { roundToArea, roundPointToArea } from '../geo.js';
 import * as barrel from '../index.js';
-import { areaWhyLine, describeArea, placelessListingNote, PLACELESS_NO_AREA_NOTE, AREA_STEP_WORDS } from '../member-area-words.js';
+import { areaWhyLine, describeArea, placelessListingNote, PLACELESS_NO_AREA_NOTE, PLACELESS_AT_AREA_NOTE, AREA_STEP_WORDS } from '../member-area-words.js';
 
 // The apps round a position to its 0.1° area with this function BEFORE it leaves the device (signup's area step,
 // Settings → Your area); the node rounds again with the engine's roundToArea, which is this same function re-exported
@@ -57,10 +57,17 @@ describe('the area step\'s words, shared by both apps', () => {
         expect(describeArea({ lat: 51.5, lng: -0.1 })).toBe('About 10 km around 51.5, -0.1');
     });
 
-    it('the placeless note: only on a by-area community, only when the area is known to be unset', () => {
+    it('the placeless note: only on a by-area community; says the poll is shown at the area when the author has one', () => {
         expect(placelessListingNote(true, null)).toBe(PLACELESS_NO_AREA_NOTE);
         expect(placelessListingNote(true, undefined)).toBeNull(); // couldn't ask: say nothing rather than something false
-        expect(placelessListingNote(true, { lat: 1, lng: 2 })).toBeNull();
+        expect(placelessListingNote(true, { lat: 1, lng: 2 })).toBe(PLACELESS_AT_AREA_NOTE);
+        expect(PLACELESS_AT_AREA_NOTE).toBe('This poll is shown at your area (about 10 km around it) to everyone who can read it.');
         expect(placelessListingNote(false, null)).toBeNull();
+        expect(placelessListingNote(false, { lat: 1, lng: 2 })).toBeNull();
+    });
+
+    it('the privacy line says a poll is shown at the area, never that a distance is all others see (review B1)', () => {
+        expect(AREA_STEP_WORDS.privacy).toBe('We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.');
+        expect(AREA_STEP_WORDS.privacy).not.toMatch(/only a distance/);
     });
 });

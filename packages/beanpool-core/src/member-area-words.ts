@@ -6,7 +6,9 @@
  */
 export const AREA_STEP_WORDS = {
     title: 'Roughly where are you?',
-    privacy: 'We keep your area to about 10 km, never your exact spot. Other members see only a distance in km.',
+    // A poll has no place of its own and is shown at its author's area (§3.4, Q4), to every reader of it, so this line
+    // says so rather than "only a distance" (deciding review of #1766, B1; wording: director, 2026-10-11).
+    privacy: 'We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.',
     useLocation: 'Use my location',
     typeTown: 'Type a town or suburb',
     skip: 'Skip for now',
@@ -31,13 +33,24 @@ export function describeArea(area: { lat: number; lng: number } | null | undefin
 
 /**
  * A listing with no place (a poll) on a community that syncs by area takes its author's area as its place (design §3.4,
- * Q4). An author with no area: the listing is still accepted, but it reaches only their own phone and the search, and
- * the form says so with this line.
+ * Q4): the node stores the area as the poll's lat/lng, and every reader of the poll gets it (apps/server
+ * engine/member-area.ts). The form says so, before the member posts.
+ */
+export const PLACELESS_AT_AREA_NOTE = 'This poll is shown at your area (about 10 km around it) to everyone who can read it.';
+
+/**
+ * An author with no area: the listing is still accepted, but it reaches only their own phone and the search, and the
+ * form says so with this line.
  */
 export const PLACELESS_NO_AREA_NOTE =
     "You haven't set your area, so other members find this only by searching. Set it in Settings → Your area to show it near you.";
 
-/** The note for a placeless listing's form: only on a by-area community, and only when the author's area is known to be unset. */
+/**
+ * The note for a placeless listing's form, only on a by-area community: where it is shown when the author has an area,
+ * the no-area line when the area is known to be unset, and nothing when the node couldn't be asked (rather than
+ * something false).
+ */
 export function placelessListingNote(byArea: boolean, area: { lat: number; lng: number } | null | undefined): string | null {
-    return byArea && area === null ? PLACELESS_NO_AREA_NOTE : null;
+    if (!byArea || area === undefined) return null;
+    return area === null ? PLACELESS_NO_AREA_NOTE : PLACELESS_AT_AREA_NOTE;
 }

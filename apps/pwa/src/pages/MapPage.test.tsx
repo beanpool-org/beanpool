@@ -1313,8 +1313,14 @@ describe("the poll form's note for a placeless listing (S4)", () => {
             "📍 You haven't set your area, so other members find this only by searching. Set it in Settings → Your area to show it near you."));
     });
 
-    it('by area with an area, or a node that cannot be asked: no note', async () => {
+    it('by area with an area: the note says the poll is shown at that area (review B1)', async () => {
         const { panel } = await openPoll(BY_AREA, { lat: -28.6, lng: 153.6 });
+        await waitFor(() => expect(within(panel).getByTestId('poll-placeless-note').textContent).toBe(
+            '📍 This poll is shown at your area (about 10 km around it) to everyone who can read it.'));
+    });
+
+    it('by area, a node that cannot be asked: no note', async () => {
+        const { panel } = await openPoll(BY_AREA, new Error('offline'));
         await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
         expect(within(panel).queryByTestId('poll-placeless-note')).toBeNull();
     });

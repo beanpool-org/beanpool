@@ -176,8 +176,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
     // Polls are anonymous unless their creator makes them an open vote, fixed once someone votes (2026-09-28).
     const [pollOpenVote, setPollOpenVote] = useState(false);
-    // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4); an author with
-    // none is told it reaches others only through search.
+    // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4): the form says the
+    // poll is shown there, or, to an author with none, that it reaches others only through search.
     const nearbyLimits = useNearbyLimits(!!identity && showNewPost && newPostType === 'poll');
     const pollAuthorArea = useMyArea(showNewPost && newPostType === 'poll' && nearbyLimits !== null);
     const pollPlacelessNote = placelessListingNote(nearbyLimits !== null, pollAuthorArea);

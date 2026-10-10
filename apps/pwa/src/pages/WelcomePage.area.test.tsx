@@ -109,7 +109,7 @@ describe('Your Area at signup (S4)', () => {
         expect(await screen.findByText(/Roughly where are you\?/)).toBeInTheDocument();
         const step = screen.getByTestId('area-step');
         expect(step).toHaveTextContent("The worldwide community shows you what's on offer near you: the nearest 500 listings within 250 km.");
-        expect(step).toHaveTextContent('We keep your area to about 10 km, never your exact spot. Other members see only a distance in km.');
+        expect(step).toHaveTextContent('We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.');
         expect(step).toHaveTextContent('You can change or clear this any time in Settings → Your area.');
         expect(step.textContent).not.toMatch(/Ʀ|Beans/);
         expect(screen.getByRole('button', { name: /Use my location/ })).toBeInTheDocument();

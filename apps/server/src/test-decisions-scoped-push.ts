@@ -100,7 +100,11 @@ async function main(): Promise<void> {
     assert(c?.kind === 'decision.open' && 'decision.open' in PUSH_NOTICE_KINDS, 'kind decision.open, one of the fixed kinds');
     assert(PUSH_NOTICE_KINDS['decision.open'].body === 'A vote opened in one of your groups.', "the lock screen's fixed words name nobody");
     assert(c?.category === 'chat', "it goes on the chat category, so the member's notify_chat setting applies");
-    const words = JSON.stringify({ title: c?.title, body: c?.body, data: c?.data });
+    // The details name the enterprise's screen by its key, random hex that section 5 holds to exactly the enterprise's: left
+    // out of the search for names and amounts here (a key holds "40" now and then), as test-push-notices leaves out its
+    // opaque fields.
+    const { publicKey: _enterpriseKey, ...details } = c?.data ?? {};
+    const words = JSON.stringify({ title: c?.title, body: c?.body, data: details });
     assert(words.includes('Corner Bakery'), `the details say which enterprise (${words})`);
     assert(!/secretname/i.test(words), 'no member is named: not the proposer, the keepers, or the member it pays');
     assert(![ann, bob, cat, dee, stranger].some(pk => words.includes(pk) || words.includes(pk.slice(0, 12))), 'and no key');

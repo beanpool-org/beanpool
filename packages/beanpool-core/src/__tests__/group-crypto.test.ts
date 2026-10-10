@@ -273,6 +273,18 @@ describe('top-ups', () => {
         expect(() => verifyGroupTopUp(GROUP, { ...topUp, wrapper: ben.publicKey })).toThrow(/signature/);
         expect(() => verifyGroupTopUp(GROUP, { ...topUp, wrapped: flip(topUp.wrapped) })).toThrow(/signature/);
     });
+
+    it('refuses a wrapper or a recipient outside the roster the app holds, though the signature is good (§2.5)', () => {
+        const roster = [ana.publicKey, ben.publicKey, cat.publicKey, dov.publicKey];
+        expect(() => verifyGroupTopUp(GROUP, topUp, { activeMembers: roster })).not.toThrow();
+        expect(bytesToHex(openGroupTopUp(GROUP, topUp, dov.seedHex, { activeMembers: roster }))).toBe(bytesToHex(groupKey));
+        // Someone in no roster signs a top-up of a key of their own choosing: without the roster it would open for Dov.
+        const eve = person('Eve');
+        const eves = makeGroupTopUp(new Uint8Array(32).fill(9), { myEdPrivHex: eve.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
+        expect(() => openGroupTopUp(GROUP, eves, dov.seedHex, { activeMembers: roster })).toThrow(/wrapper is not an active member/);
+        // A top-up to someone no longer in the group.
+        expect(() => verifyGroupTopUp(GROUP, topUp, { activeMembers: [ana.publicKey, ben.publicKey, cat.publicKey] })).toThrow(/recipient is not an active member/);
+    });
 });
 
 describe('lines', () => {

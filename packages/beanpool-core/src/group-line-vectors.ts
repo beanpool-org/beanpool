@@ -22,7 +22,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Pkcs8 } from './ed25519-key.js';
 import type {
     GroupCryptoRandom, GroupEpochCheck, GroupEpochRecord, GroupLineBinding, GroupLinePart, GroupLinePayload, GroupTopUp,
-    MakeGroupEpochInput, OpenedGroupLine, SealGroupLineInput,
+    GroupTopUpCheck, MakeGroupEpochInput, OpenedGroupLine, SealGroupLineInput,
 } from './group-crypto.js';
 
 const seedOf = (name: string) => sha256(utf8ToBytes(`beanpool group-line vector: ${name}`));
@@ -144,7 +144,7 @@ export interface GroupCryptoApi {
     makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCryptoRandom): { record: GroupEpochRecord; groupKey: Uint8Array };
     openGroupEpochRecord(record: GroupEpochRecord, myEdPrivHex: string, check: GroupEpochCheck): Uint8Array;
     makeGroupTopUp(groupKey: Uint8Array, input: { myEdPrivHex: string; groupId: string; epoch: number; recipientPubHex: string }, opts?: GroupCryptoRandom): GroupTopUp;
-    openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string): Uint8Array;
+    openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string, check?: GroupTopUpCheck): Uint8Array;
     groupMessageKey(groupKey: Uint8Array, messageId: string): Uint8Array;
     sealGroupLine(text: string, input: SealGroupLineInput, opts?: GroupCryptoRandom): GroupLinePayload;
     openGroupLine(payload: GroupLinePayload, ref: GroupLineBinding, groupKey: Uint8Array): OpenedGroupLine;
@@ -193,6 +193,8 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
             if (bytesToHex(opened) !== GROUP_VECTOR_KEY_HEX) fail(`${who} opened another key from the record`);
         }
         if (bytesToHex(api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, keyOf('dov', pkcs8))) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from the top-up');
+        const roster = [people.ana.publicKey, people.ben.publicKey, people.cat.publicKey, people.dov.publicKey];
+        if (bytesToHex(api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, keyOf('dov', pkcs8), { activeMembers: roster })) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from the top-up, roster given');
     }
     let dovInRecord = false;
     try { api.openGroupEpochRecord(GROUP_VECTOR_RECORD, people.dov.seedHex, { groupId: GROUP_VECTOR_GROUP }); dovInRecord = true; } catch { /* as it should */ }
@@ -200,6 +202,9 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
     let otherGroup = false;
     try { api.openGroupEpochRecord(GROUP_VECTOR_RECORD, people.ana.seedHex, { groupId: '00000000-0000-4000-8000-000000000000' }); otherGroup = true; } catch { /* as it should */ }
     if (otherGroup) fail('the record opened as another group\'s');
+    let outsideRoster = false;
+    try { api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, people.dov.seedHex, { activeMembers: [people.ben.publicKey, people.cat.publicKey, people.dov.publicKey] }); outsideRoster = true; } catch { /* as it should */ }
+    if (outsideRoster) fail('the top-up opened though its wrapper is in no roster given');
 
     for (const v of GROUP_LINE_VECTORS) {
         if (bytesToHex(api.groupMessageKey(key, v.messageId)) !== v.messageKeyHex) fail(`${v.label}: the message key differs`);

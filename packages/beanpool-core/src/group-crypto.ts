@@ -452,21 +452,36 @@ export function makeGroupTopUp(
     return { ...unsigned, sig: b64(sig) };
 }
 
-/** Check a top-up's shape and its wrapper's signature (the node and the recipient both do). Throws GroupKeyNotVerifiedError. */
-export function verifyGroupTopUp(groupId: string, t: GroupTopUp): void {
+/** What verifyGroupTopUp checks a top-up against. */
+export interface GroupTopUpCheck {
+    /**
+     * The active members per the roster the caller holds (§2.5): the wrapper and the recipient must both be one, so a key
+     * signed by someone outside the group, or handed to someone no longer in it, is refused. Omit only where no roster is
+     * known.
+     */
+    activeMembers?: readonly string[];
+}
+
+/**
+ * Check a top-up's shape, its wrapper's signature (strict RFC 8032) and, when given, the roster (the node and the
+ * recipient both do: the app can't rely on the node's own checks). Throws GroupKeyNotVerifiedError.
+ */
+export function verifyGroupTopUp(groupId: string, t: GroupTopUp, check: GroupTopUpCheck = {}): void {
     if (!t || typeof t !== 'object' || !isGroupId(groupId) || !isEpoch(t.epoch) || !isPubHex(t.recipient) || !isPubHex(t.wrapper)
         || !strictB64(t.ephPub, KEY_LEN) || !strictB64(t.nonce, NONCE_LEN) || !strictB64(t.wrapped, KEY_LEN + TAG_LEN)) {
         throw new GroupKeyNotVerifiedError('Top-up refused: malformed.');
     }
+    if (check.activeMembers && !check.activeMembers.includes(t.wrapper)) throw new GroupKeyNotVerifiedError('Top-up refused: its wrapper is not an active member.');
+    if (check.activeMembers && !check.activeMembers.includes(t.recipient)) throw new GroupKeyNotVerifiedError('Top-up refused: its recipient is not an active member.');
     const sig = strictB64(t.sig, SIG_LEN);
     if (!sig || !verifySig(sig, sha256(utf8ToBytes(groupTopUpCanonical(groupId, t))), t.wrapper)) {
         throw new GroupKeyNotVerifiedError('Top-up refused: the signature does not verify.');
     }
 }
 
-/** Verify a top-up locked to me, then open it: the epoch key. */
-export function openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string): Uint8Array {
-    verifyGroupTopUp(groupId, t);
+/** Verify a top-up locked to me (against the roster, when given), then open it: the epoch key. */
+export function openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string, check: GroupTopUpCheck = {}): Uint8Array {
+    verifyGroupTopUp(groupId, t, check);
     return openGroupKeyWrapUnverified(t, { groupId, epoch: t.epoch, wrapperPubHex: t.wrapper }, myEdPrivHex);
 }
 

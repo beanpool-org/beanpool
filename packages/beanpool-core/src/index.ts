@@ -64,5 +64,5 @@ export {
 } from './group-crypto.js';
 export type {
     GroupEpochReason, GroupLinePart, GroupCryptoRandom, GroupKeyWrap, GroupEpochRecord, GroupTopUp, GroupLinePayload, GroupLineBinding,
-    OpenedGroupLine, GroupWrapBinding, MakeGroupEpochInput, GroupEpochCheck, SealGroupLineInput,
+    OpenedGroupLine, GroupWrapBinding, MakeGroupEpochInput, GroupEpochCheck, GroupTopUpCheck, SealGroupLineInput,
 } from './group-crypto.js';

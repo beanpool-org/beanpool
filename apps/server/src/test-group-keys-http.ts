@@ -184,6 +184,13 @@ async function main(): Promise<void> {
         const ok = r.status === status && (typeof why === 'string' ? r.body?.code === why : why.test(r.body?.error ?? ''));
         assert(ok && epochRows(G) === 0 && wrapRows(G) === 0, `refused, nothing written: ${what} (got ${r.status} ${r.body?.code} ${r.body?.error})`);
     }
+    // The body is { epoch: <record> } and nothing else: a record sent flat is never read as one (review of #1762, finding 8).
+    const flat = await call('POST', ana, `${keysPath}/epoch`, start.record);
+    assert(flat.status === 400 && flat.body?.code === 'epoch_refused' && epochRows(G) === 0, `the record flat in the body is refused 400 (got ${flat.status} ${flat.body?.code})`);
+    const { epoch: _number, ...unnumbered } = start.record;
+    const flatNoNumber = await call('POST', ana, `${keysPath}/epoch`, unnumbered);
+    assert(flatNoNumber.status === 400 && flatNoNumber.body?.code === 'epoch_refused' && epochRows(G) === 0,
+        `and so is one flat with no epoch field: never read as the record (got ${flatNoNumber.status} ${flatNoNumber.body?.code})`);
     // Ben (not yet a member) carries Ana's record: refused before anything reads it.
     const notMine = await call('POST', ben, `${keysPath}/epoch`, { epoch: start.record });
     assert(notMine.status === 403 && epochRows(G) === 0, `a non-member posting a record is refused 403 (got ${notMine.status})`);

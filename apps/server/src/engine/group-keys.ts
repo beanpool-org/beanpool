@@ -163,7 +163,7 @@ export function storeGroupEpoch(
     return { epoch: record.epoch };
 }
 
-/** POST …/keys/epoch: a member rotates (reason 'rotate'), or starts a group's first epoch ('start'). */
+/** POST …/keys/epoch, body `{ epoch: <record> }`: a member rotates (reason 'rotate'), or starts a group's first epoch ('start'). */
 export function rotateGroupEpoch(groupId: string, actor: string, raw: unknown): { epoch: number } {
     return db.transaction(() => storeGroupEpoch(groupId, actor, raw, { allowed: ['rotate', 'start'], subject: null }))();
 }

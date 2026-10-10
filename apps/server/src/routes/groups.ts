@@ -603,7 +603,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         const body = (ctx as any).requestBody || {};
         try {
             ctx.status = 201;
-            ctx.body = { success: true, ...rotateGroupEpoch(ctx.params.id, actor, body.epoch ?? body) };
+            ctx.body = { success: true, ...rotateGroupEpoch(ctx.params.id, actor, body.epoch) };
         } catch (e) {
             if (!respondGroupKeyError(ctx, e)) throw e;
         }

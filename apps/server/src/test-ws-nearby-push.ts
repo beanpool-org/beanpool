@@ -16,7 +16,8 @@
  *   3. an event that carries only the listing's id (a moderation doorbell) is measured the same way
  *   4. Fay moves next to the listings and Nia moves away, over HTTP, in this process: the next listing crosses sides
  *   5. a listing with no place (by Noel, who has no area): it reaches Noel alone
- *   6. the member who took a listing hears it from anywhere, as its author does, and so does an enterprise's keeper
+ *   6. the member who took a listing hears it from anywhere, as its author does, and so does an enterprise's keeper and
+ *      a member with an open deal on it: its edit, its hide and restore, its removal by the author or a moderator
  *   7. a bare doorbell for many listings, state_synced, a transfer, a message: as before
  *   8. a standby's copy in this process: an import of a member row whose area moved updates who hears a listing
  *   9. a member who re-keys: their area follows them to the new key, and their new phone hears the listings near it
@@ -307,6 +308,62 @@ async function main(): Promise<void> {
     assert(got(kaySock).some(e => e.type === 'post_updated' && e.id === entPost), `Kay, the enterprise's keeper, 400 km away, hears its listing (${JSON.stringify(got(kaySock)).slice(0, 120)})`);
     reachIs("the enterprise's listing", 'post_updated', entPost, BY_AREA ? { ana: false, nia: false, fay: true, noel: false, unsigned: false } : { ...everyone, unsigned: false });
     kaySock.ws.close();
+    // Tia, 400 km away, has asked for two listings at the place (deals 'requested'; the request's own steps go to its
+    // parties by `recipients` already). Every event of each reaches her, and the removals, which close her requests
+    // before they go out, too.
+    const tia = member('NearbyTia');
+    await setArea(tia, 'Tia, 400 km away', FAR);
+    const tiaSock = await openSocket(`${wsBase}?${signedWsQuery(tia)}`);
+    const listAt = async (title: string) => {
+        const r = await call(ana, '/api/marketplace/posts', { type: 'offer', category: 'other', title, description: `${title}, asked for`, authorPublicKey: ana.pk, lat: PLACE.lat, lng: PLACE.lng });
+        assert(r.status === 200 && !!r.body?.post?.id, `Ana posts "${title}" at the place (got ${r.status})`);
+        return r.body?.post?.id as string;
+    };
+    const ask = (post: string) => {
+        const deal = `nearby-deal-${crypto.randomBytes(4).toString('hex')}`;
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 1, 'requested')").run(deal, post, tia.pk, ana.pk);
+        return deal;
+    };
+    const dealStatus = (deal: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(deal) as { status: string }).status;
+    const post5 = await listAt('Asked-for offer');
+    const deal5 = ask(post5);
+    const post6 = await listAt('Asked-for offer two');
+    const deal6 = ask(post6);
+    const tiaHears = (type: string, id: string) => got(tiaSock).some(e => e.type === type && (e.post?.id === id || e.id === id));
+    const farNoDeal = BY_AREA ? { ana: true, nia: false, fay: true, noel: false, unsigned: false } : { ...everyone, unsigned: false };
+    const step = async (what: string, type: string, id: string, act: () => Promise<void> | void) => {
+        await sleep(100);
+        tiaSock.raw.length = 0;
+        clear();
+        await act();
+        await until(S.ana, type);
+        await until(tiaSock, type);
+        assert(tiaHears(type, id), `Tia, 400 km away with a requested deal, hears ${what} (${JSON.stringify(got(tiaSock)).slice(0, 120)})`);
+        reachIs(`${what}, everyone else`, type, id, farNoDeal);
+    };
+    await step('its edit', 'post_updated', post5, async () => {
+        const r = await call(ana, '/api/marketplace/posts/update', { id: post5, authorPublicKey: ana.pk, description: 'Asked-for offer, edited' });
+        assert(r.status === 200, `Ana edits the asked-for listing (got ${r.status})`);
+    });
+    await step('its hide (the moderation doorbell)', 'post_updated', post5, () => {
+        const at = new Date().toISOString();
+        db.prepare('UPDATE posts SET hidden_by_reports_at = ?, updated_at = ? WHERE id = ?').run(at, at, post5);
+        se.broadcast({ type: 'post_updated', id: post5 });
+    });
+    await step('its restore', 'post_updated', post5, () => {
+        const r = se.restoreHiddenPost(post5);
+        assert(r === 'restored', `a moderator restores it (${r})`);
+    });
+    await step("its removal by its author, which rejects her request", 'post_removed', post5, async () => {
+        const r = await call(ana, '/api/marketplace/posts/remove', { id: post5, authorPublicKey: ana.pk });
+        assert(r.status === 200 && r.body?.success === true, `Ana takes the asked-for listing down (got ${r.status})`);
+    });
+    assert(dealStatus(deal5) === 'rejected', `her request was closed before the removal went out (${dealStatus(deal5)})`);
+    await step("a moderator's takedown, which cancels her request", 'post_removed', post6, () => {
+        assert(se.adminDeletePost(post6) === true, 'a moderator takes the second asked-for listing down');
+    });
+    assert(dealStatus(deal6) === 'cancelled', `her request was closed before the takedown went out (${dealStatus(deal6)})`);
+    tiaSock.ws.close();
 
     // ── 7. what stays as before ─────────────────────────────────────────────────────────────────
     console.log('\n── 7. a bare listing doorbell, state_synced, a transfer, a message ──');

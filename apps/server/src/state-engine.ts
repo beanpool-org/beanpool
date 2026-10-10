@@ -1423,8 +1423,12 @@ export function ringListingDoorbell(type: ListingDoorbell): void {
 // are not announced (node-profile.ts announceProfiles, off on the global node) it goes only to that member's own sockets
 // and to the members who share a conversation with them (cardCircle); the versions move all the same.
 //
+// `listingParties`: members a public listing's own event reaches wherever they are on a node that syncs listings by area,
+// besides those its rows name (listingReach): the sides of the deals a removal closed just before it (engine/posts.ts
+// removePost, adminDeletePost). Never sent.
+//
 // Returns how many open sockets it was written to.
-export interface BroadcastOptions { othersGetDoorbell?: boolean; ownCard?: boolean }
+export interface BroadcastOptions { othersGetDoorbell?: boolean; ownCard?: boolean; listingParties?: string[] }
 export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     // A post hidden by reports (engine/auto-moderation.ts) goes in full to its author only, whatever sent it (an
     // edit, a vote, an RSVP); everyone else gets `{ type, id }`, which no app applies as a listing, so each one's
@@ -1518,16 +1522,18 @@ function keepersOf(treasuries: string[]): Set<string> {
  * Who a public listing's own event (new_post, post_updated, post_removed, sent to no `recipients`) reaches on a node that
  * syncs by area (the profile's `nearbyListings`; DESIGN-global-sync-by-area §2.5): a socket whose member's area
  * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it), and the
- * listing's parties always: its author, the member who took it, and an enterprise's keepers for either side. Every
- * other socket gets nothing, not even a doorbell (a doorbell sends an app back for every listing): one with no area, or
- * with no member's key, among them. Their apps have the newest listings and the poll. A listing with no place reaches
+ * listing's parties always: its author, the member who took it, both sides of each open deal on it (asked for, or taken
+ * and not yet done: a member's set ties them to it, getNearbySet) or of one a removal just closed (`extraParties`,
+ * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. Every other socket gets nothing, not
+ * even a doorbell (a doorbell sends an app back for every listing): one with no area, or with no member's key, among
+ * them. Their apps have the newest listings and the poll. A listing with no place reaches
  * its parties alone. The place and the parties are the stored row's, so an event carrying only an id is measured as one
  * carrying the post. Everything is read once for the event; each socket is then a lookup and a distance, no read.
  *
  * Null for an event that names no listing, or one not on this node: it goes as before. That is a bare doorbell for many
  * listings at once (a burst's hide, engine/burst-cleanup.ts), rare and about no one place.
  */
-function listingReach(event: any): ((pubkey: string | null | undefined) => boolean) | null {
+function listingReach(event: any, extraParties: string[] = []): ((pubkey: string | null | undefined) => boolean) | null {
     const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
     if (!id) return null;
     const row = db.prepare('SELECT author_pubkey, accepted_by, lat, lng FROM posts WHERE id = ?').get(id) as
@@ -1535,7 +1541,10 @@ function listingReach(event: any): ((pubkey: string | null | undefined) => boole
     if (!row) return null;
     const { radiusKm } = nearbyListingsLimits();
     const placed = row.lat != null && row.lng != null;
-    const sides = [row.author_pubkey, row.accepted_by].filter((k): k is string => !!k);
+    const deals = db.prepare("SELECT buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending')")
+        .all(id) as { buyer_pubkey: string; seller_pubkey: string }[];
+    const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
+        .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
     return (pubkey) => {
         if (!pubkey) return false;
@@ -1634,7 +1643,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     let withoutParty: string | null = null;
     let withoutPartyNorVoters: string | null = null;
     // Where listings sync by area, a public listing's own event reaches only the sockets near it and its parties.
-    const reach = !recipients && LISTING_WS_EVENTS.has(event?.type) && getProfileSwitches().nearbyListings ? listingReach(event) : null;
+    const reach = !recipients && LISTING_WS_EVENTS.has(event?.type) && getProfileSwitches().nearbyListings ? listingReach(event, opts?.listingParties) : null;
     // The joined key's standing, asked once, and only if some socket holds that key.
     let joined: SocketStanding | undefined;
     // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.

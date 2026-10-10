@@ -36,6 +36,15 @@ import {
     getAppAddresses,
     confirmAppAddress,
     removeAppAddress,
+    signOutEverywhere,
+    emergencySuspendMember,
+    haltDecision,
+    liftMemberSuspension,
+    acknowledgeShutdownStatus,
+    fetchDiskHealth,
+    fetchStorageCleanPreview,
+    cleanStorageAndCompressLogs,
+    fetchAlertsSummary,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -168,6 +177,169 @@ describe('resolveNodeApiUrl', () => {
         expect(url).toBe('/proxy/https/node.beanpool.org/api/local/admin/onboarding-funnel?days=30');
 
         vi.unstubAllGlobals();
+    });
+});
+
+describe('signOutEverywhere and session revocation', () => {
+    it('returns ok: true when /api/local/admin/auth/revoke-all succeeds', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ success: true, breakGlassCodeRetired: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await signOutEverywhere();
+        expect(res).toEqual({ ok: true, breakGlassCodeRetired: true });
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/local/admin/auth/revoke-all',
+            expect.objectContaining({
+                method: 'POST',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                body: '{}',
+            })
+        );
+        vi.unstubAllGlobals();
+    });
+
+    it('returns network failure message when fetch rejects', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')));
+        const res = await signOutEverywhere();
+        expect(res).toEqual({
+            ok: false,
+            message: expect.stringContaining('Could not reach the node'),
+        });
+        vi.unstubAllGlobals();
+    });
+
+    it('handles HTTP 401 unauthorized response with custom or fallback message', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+            json: async () => ({ error: 'Session expired' }),
+        }));
+        const res1 = await signOutEverywhere();
+        expect(res1).toEqual({
+            ok: false,
+            message: expect.stringContaining('Session expired. Sign in again, then try once more.'),
+        });
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+            json: async () => ({}),
+        }));
+        const res2 = await signOutEverywhere();
+        expect(res2).toEqual({
+            ok: false,
+            message: expect.stringContaining('Your sign-in here has already ended.'),
+        });
+        vi.unstubAllGlobals();
+    });
+});
+
+describe('node admin decisions and suspensions', () => {
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => ({ success: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+    });
+
+    it('emergencySuspendMember sends POST to suspend user with reason', async () => {
+        await emergencySuspendMember('https://node.test', 'pubkey-123', 'Repeated policy violations', 'adminpw', 'tfa-1');
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/users/pubkey-123/suspend');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-Password']).toBe('adminpw');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
+        expect(JSON.parse(init.body)).toEqual({ reason: 'Repeated policy violations', password: 'adminpw' });
+    });
+
+    it('haltDecision sends POST to halt decision with reason', async () => {
+        await haltDecision('https://node.test', 'dec-456', 'Quorum error identified', 'adminpw');
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/decisions/dec-456/halt');
+        expect(init.method).toBe('POST');
+        expect(JSON.parse(init.body)).toEqual({ reason: 'Quorum error identified', password: 'adminpw' });
+    });
+
+    it('liftMemberSuspension sends POST to reactivate member', async () => {
+        await liftMemberSuspension('https://node.test', 'pubkey-123', 'adminpw');
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/users/pubkey-123/status');
+        expect(init.method).toBe('POST');
+        expect(JSON.parse(init.body)).toEqual({ status: 'active', password: 'adminpw' });
+    });
+});
+
+describe('shutdown, storage, and health helpers', () => {
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+    });
+
+    it('acknowledgeShutdownStatus posts acknowledgement and returns status', async () => {
+        const mockStatus = { uncleanShutdown: false, acknowledged: true };
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ success: true, shutdownStatus: mockStatus }),
+        });
+
+        const res = await acknowledgeShutdownStatus('https://node.test', 'pw123', 'tfa-sess');
+        expect(res).toEqual({ success: true, shutdownStatus: mockStatus });
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/shutdown-status/acknowledge');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-sess');
+    });
+
+    it('fetchDiskHealth, fetchStorageCleanPreview, and cleanStorageAndCompressLogs handle disk/storage ops', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ success: true, diskHealth: { usedPercent: 45 } }),
+        });
+        const diskRes = await fetchDiskHealth('https://node.test', 'pw123');
+        expect(diskRes.diskHealth.usedPercent).toBe(45);
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ success: true, preview: { totalReclaimableBytes: 1024 } }),
+        });
+        const prevRes = await fetchStorageCleanPreview('https://node.test', 'pw123');
+        expect(prevRes.preview.totalReclaimableBytes).toBe(1024);
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ success: true, totalReclaimedBytes: 2048 }),
+        });
+        const cleanRes = await cleanStorageAndCompressLogs('https://node.test', 'pw123');
+        expect(cleanRes.totalReclaimedBytes).toBe(2048);
+    });
+
+    it('fetchAlertsSummary posts and returns flags and report counts', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ flags: [{ id: 'flag1', severity: 'warning' }], reportCount: 3, reportIds: ['r1', 'r2', 'r3'] }),
+        });
+
+        const alerts = await fetchAlertsSummary('https://node.test', 'pw123');
+        expect(alerts).toEqual({
+            flags: [{ id: 'flag1', severity: 'warning' }],
+            reportCount: 3,
+            reportIds: ['r1', 'r2', 'r3'],
+        });
     });
 });
 

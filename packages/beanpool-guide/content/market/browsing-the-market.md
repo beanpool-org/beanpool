@@ -11,6 +11,8 @@ Tap **Market** in the row of tabs. You see what people in your community are off
 
 Pull the list down to refresh it.
 
+On the global community, the web app shows the listings near you first: the nearest within your **Distance**, or within 250 km of your area, each with how far it is. A line above the list says which, with **Show everywhere** for the newest from everywhere. See "Finding things near you".
+
 On the global community, while there are only a few listings, the Market also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened or answered. They go once there are enough real listings.
 
 The search and filters slide away as you scroll down, so you see more posts. Scroll up a little and they come back. To jump back to the top, tap **Market** again.

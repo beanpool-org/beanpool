@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import worker, { attestSweep } from '../src/index.js';
 import * as alerts from '../src/alerts.js';
-import { world, liveName, makeKey, attestsAs } from './harness.js';
+import { world, liveName, makeKey, attestsAs, migration } from './harness.js';
 
 const SECRET = 's3cr3t';
 const TOPIC = `https://ntfy.test/bp-control-room-${SECRET}-topic`;
@@ -373,6 +373,44 @@ test('words: a resume the re-attest refused, a release, a content-swap pause —
     assert.match(m.body, /"東京コモンズ", direct/);
     assert.match(m.title, /^[\x20-\x7e]+$/, 'a header is printable ASCII');
     assert.doesNotThrow(() => new Headers({ Title: m.title }));
+});
+
+const BEFORE_0008 = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql'];
+
+test('migration 0008: four tables and the categories, all on; re-running changes nothing, the admin\'s choices included', async () => {
+    const w = await world({ migrations: BEFORE_0008 });
+    try {
+        const dump = () => JSON.stringify(['alert_settings', 'alert_state', 'alert_outbox', 'alert_channel'].map((t) => w.sqlite.prepare(`SELECT * FROM ${t}`).all()));
+        const schema = () => JSON.stringify(w.sqlite.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all());
+        w.sqlite.exec(migration('0008_alerts.sql'));
+        assert.deepEqual(w.sqlite.prepare('SELECT category, mode FROM alert_settings ORDER BY category').all().map((r) => ({ ...r })),
+            [{ category: 'admin', mode: 'on' }, { category: 'health', mode: 'on' }, { category: 'names', mode: 'on' }, { category: 'uptake', mode: 'on' }]);
+        w.sqlite.exec("UPDATE alert_settings SET mode='off' WHERE category='uptake'");
+        w.sqlite.exec("INSERT INTO alert_state (key, since, last_told_at, detail) VALUES ('sweep-suspended', 1, 1, 'x')");
+        const [before, shape] = [dump(), schema()];
+        w.sqlite.exec(migration('0008_alerts.sql'));
+        assert.equal(dump(), before, 'rows as they were');
+        assert.equal(schema(), shape, 'schema as it was');
+        assert.throws(() => w.sqlite.exec("UPDATE alert_settings SET mode='loud' WHERE category='names'"), /CHECK constraint/);
+    } finally { w.restore(); }
+});
+
+test('a database without 0008 (the Worker deployed first): every request works, nothing is sent, the log says why', async () => {
+    const r = await room();
+    r.w.restore();
+    const w = await world({ migrations: BEFORE_0008, env: WITH_NTFY });
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => (new URL(typeof input === 'string' ? input : input.url).hostname === 'ntfy.test'
+        ? (r.sent.push(input), new Response('{}')) : inner(input, init));
+    try {
+        const [k1, k2] = await Promise.all([makeKey(), makeKey()]);
+        assert.equal((await w.claim(k1, { name: 'sydney', community_name: 'Sydney Commons' })).body.status, 'pending');
+        assert.equal((await w.claim(k2, { name: 'yarrabank' })).body.status, 'live');
+        assert.equal((await w.admin('sydney', 'approve')).body.status, 'live');
+        await attestSweep(w.env);
+        assert.equal(r.sent.length, 0);
+        assert.ok(r.lines.some((l) => l.startsWith('[ALERT]') && l.includes('no such table')), 'logged');
+    } finally { w.restore(); r.done(); }
 });
 
 // The served page's script against a stub DOM (as holder.test.js runs it): a row carries its name's id, and a tap on

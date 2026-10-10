@@ -14,7 +14,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   `GET /api/local/admin/registrar/events[?name=]` · `POST /api/local/admin/registrar/:name/`
   `approve | pause | resume | block | release` (`revoke` is block's old name; `release` takes
   `{"free_now": true}`, below). Every action is logged in `name_events`. Alerts (below):
-  `GET /api/local/admin/registrar/alerts` · `POST …/alerts/settings {category, mode}` · `POST …/alerts/test`
+  `GET /api/local/admin/registrar/alerts` · `POST …/alerts/settings {category, mode}` · `POST …/alerts/test` ·
+  `GET …/servers` (the outside checks of our servers)
 - **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only. `?n=<name>` (or
   `?n=<name>.beanpool.org`) names the node to join, and is answered only for a name this registrar holds **live**;
   anything else is the "not found" page, never a link to another host (before 2026-10-01 any host was linked)
@@ -74,8 +75,8 @@ which scrolls to and lights that row; there is no approve-from-the-notification 
 again every 5 minutes (the cron) with everything waiting — at most 50, and at most 3,900 bytes ("… and N more, see
 /admin") — in one message. At most 20 messages an hour: past them one line, "muted: N more this hour, see /admin", and
 nothing more that hour — except high and urgent messages, which still go, up to 40 in the hour; a condition the cap
-muted is told in the next hour. A heal refused is told once per pause. Each category is `on`, `digest` (held for the
-daily summary, which slice S2 will send; until then held events are only shown on `/admin`) or `off`: the toggles on
+muted is told in the next hour. A heal refused is told once per pause. Each category is `on`, `digest` (held, and
+sent in the daily summary at 08:00 Brisbane, below) or `off`: the toggles on
 `/admin`, which also shows the channel (set or not, last good send, waiting, failures), what is raised and the last
 50 alerts, and has a "send a test alert" button.
 
@@ -84,6 +85,32 @@ status code): `NTFY_URL`, the full topic URL (the topic name is the secret), and
 access token sent as `Authorization: Bearer`. With no `NTFY_URL` nothing is sent, the events wait for the first
 channel that is set, and `/admin` says so. Rotating the topic: `wrangler secret put NTFY_URL`, then subscribe the
 phone to the new one.
+
+### Our servers, from outside (slice S2)
+
+Every 5 minutes, beside the sweep, the Worker looks at our own servers — `WATCH_TARGETS` in `wrangler.toml`: global,
+the vault, mullum, castlemaine, test; public names and addresses only — from here, never from the server itself
+(`src/watch.js`, state in D1: migration 0009). Each look is one GET of 15 s that never follows a redirect: a node's
+`/api/version` and `/api/community/health`, the vault's `/v1/health` and, when it answers open, its signed `/v1/report`.
+
+| Condition | Rule | Priority |
+|---|---|---|
+| `<server> down` | no 2xx (a 3xx, a 5xx, a timeout, unreachable) two looks in a row; cleared at the first 2xx | urgent |
+| `vault locked` | answers locked two looks in a row | urgent |
+| `vault report` | its report missing, not signed by the ticket key ("report unverifiable"), unreadable, or not from now ("stale") two looks in a row; or its own report says a day's report was not made | high |
+| `vault backups`, `vault off-box copy` | its verified report says they fail, or the newest is over 2 h 10 min old | high |
+| `<server> now runs …` | the version or commit changed since the last look; told once | default (the vault: high) |
+| `<server> restarted by its watchdog` | its health's `watchdog.recoveries` rose; told once | high |
+| `Our nodes run different releases` | our nodes (not the vault) on different versions for over a day; then daily while it lasts | default |
+| `Daily: …` | once a day in the 08:00 Brisbane hour (22:00 UTC all year: Queensland keeps no daylight saving): how each server answers and what it runs, names live, what is raised, and every event the digest held since the last one. A day whose 08:00 hour had no tick gets none: its absence says the cron, the Worker or ntfy is broken | min |
+
+The vault's report is believed only under `VAULT_TICKET_KEYS` (a var, not a secret: the ticket PUBLIC key(s) the apps
+are built with, 64 hex each, newest first, two at most), with strict Ed25519 (RFC 8032; a ZIP-215-only signature is
+refused). Without it the report is "not checked" — never "fine" — and `/admin` and the daily line say so. A condition
+of a vault that is locked or gone stays as it was (nothing is known of its report). Every look is a row in `watch_log`,
+kept 30 days; `/admin`'s "Our servers" panel (`GET /api/local/admin/registrar/servers`) shows each server's newest
+look and its last day. These reproduce the Mac vault watcher (`apps/vault/src/custodian/watch.ts`), which retires
+after a week of the two agreeing (design §2.5, Marty 2026-10-10).
 
 ## Limits on what a key may do (the 2026-10-01 review)
 

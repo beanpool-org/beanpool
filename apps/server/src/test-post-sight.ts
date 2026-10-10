@@ -126,7 +126,7 @@ function main() {
     const authorVisible = queryInSight(author);
     assert(authorVisible.length === 3, 'Author sees all 3 posts via postInSightSql');
 
-    console.log(`\nPassed ${passed}/${run} assertions.`);
+    console.log(`\n${passed}/${run} assertions passed`);
     process.exit(run === passed ? 0 : 1);
 }
 

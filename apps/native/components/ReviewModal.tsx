@@ -124,7 +124,7 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
                             <Pressable
                                 style={[styles.submitBtn, submitting && styles.btnDisabled]}
                                 accessibilityRole="button"
-                                accessibilityLabel={isExisting ? 'Update Rating' : 'Submit Rating'}
+                                accessibilityLabel={submitting ? (isExisting ? 'Updating rating...' : 'Submitting rating...') : (isExisting ? 'Update Rating' : 'Submit Rating')}
                                 accessibilityState={{ disabled: submitting, busy: submitting }}
                                 onPress={handleSubmit}
                                 disabled={submitting}

@@ -94,6 +94,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
         .badge-tunnel { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
         .badge-direct { background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.3); }
+        .scroll-x { overflow-x: auto; }
+        .alert-modes { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin: 0.75rem 0; }
+        .alert-mode { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; }
+        .alert-mode button { background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.12); padding: 0.25rem 0.6rem; border-radius: 8px; cursor: pointer; font-size: 0.75rem; }
+        .alert-mode button.on { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-color: rgba(245, 158, 11, 0.5); font-weight: 700; }
+        tr.lit td { background: rgba(245, 158, 11, 0.12); }
     </style>
 </head>
 <body>
@@ -134,6 +140,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #10b981; margin-bottom: 1rem;">🌐 Names (live, paused, blocked, released)</h2>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">A name belongs to its node's key. Pause and Block stop routing but never free a name; only Release frees one: held 30 days for its key (which can take it back), then free to anyone — or at once, with "free now". A name you blocked or paused is held 30 days from every key, its own included.</p>
             <div id="activeTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading active allocations...</p></div>
+        </div>
+
+        <div class="admin-card">
+            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #f59e0b; margin-bottom: 0.5rem;">📣 Alerts to your phone</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">Name requests, new communities, paused names, a suspended sweep and your own actions, sent to one ntfy topic. Each says a name, its community name and counts — never a contact address. At most 20 messages an hour.</p>
+            <div id="alertsContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading alerts...</p></div>
         </div>
 
         <div class="admin-card">
@@ -181,6 +193,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             updateAuthUI();
             document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171;">Logged out. Please enter your ADMIN_SECRET key above.</p>';
             document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
+            document.getElementById('alertsContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
         }
 
         logoutBtn.addEventListener('click', performLogout);
@@ -240,7 +253,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
                 renderPending(pending);
                 renderActive(active);
+                showFragment();
                 loadEvents(secret);
+                loadAlerts(secret);
             } catch (err) {
                 console.error(err);
                 document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading allocations.</p>';
@@ -264,7 +279,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 const comm = claim.community_name ? esc(claim.community_name) : '—';
                 const contactInfo = claim.contact ? ' (' + esc(claim.contact) + ')' : '';
 
-                html += '<tr>' +
+                html += '<tr id="row-' + esc(claim.name) + '">' +
                     '<td style="font-weight: 700; color: #fbbf24; font-family: monospace;">' + domain + '</td>' +
                     '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
@@ -316,7 +331,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 // Released after you blocked or paused it, the name is held from its own key too (the Worker's rule).
                 const fromAll = alloc.status === 'blocked' || (alloc.status === 'paused' && alloc.pause_reason === 'admin');
 
-                html += '<tr>' +
+                html += '<tr id="row-' + esc(alloc.name) + '">' +
                     '<td style="font-weight: 700; color: ' + look[1] + '; font-family: monospace;">' + domain + '</td>' +
                     '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
@@ -391,6 +406,107 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading events.</p>';
             }
         }
+
+        // A tap on an alert opens /admin#<name>: once the tables are drawn, that name's row is scrolled to and lit.
+        function showFragment() {
+            const hash = typeof location !== 'undefined' ? location.hash : '';
+            let name = '';
+            try { name = decodeURIComponent(String(hash || '').replace(/^#/, '')).toLowerCase(); } catch (e) { return; }
+            if (!/^[a-z0-9-]{3,32}$/.test(name)) return;
+            const row = document.getElementById('row-' + name);
+            if (!row || typeof row.scrollIntoView !== 'function') return;
+            row.className = 'lit';
+            row.scrollIntoView({ block: 'center' });
+        }
+        if (typeof window !== 'undefined') window.addEventListener('hashchange', showFragment);
+
+        const CATEGORY_WORDS = {
+            names: 'Names (requests, new communities, pauses)', health: 'Registrar health (suspended sweep, refused deletions)',
+            uptake: 'Uptake', admin: 'Your own actions',
+        };
+        const MODE_WORDS = { on: 'on', digest: 'digest', off: 'off' };
+        const when = function(s) { return s ? new Date(s * 1000).toLocaleString() : 'never'; };
+
+        function renderAlerts(st) {
+            const container = document.getElementById('alertsContainer');
+            const ch = st.channel || {};
+            let html = '';
+            if (!ch.set) {
+                html += '<p style="color: #f87171; font-size: 0.85rem;">Not set: NTFY_URL is not a Worker secret, so nothing is sent' + (ch.waiting ? ' (' + ch.waiting + ' waiting for it)' : '') + '. Set it with <code>wrangler secret put NTFY_URL</code> (the full topic URL), and NTFY_TOKEN for an ntfy access token.</p>';
+            } else {
+                html += '<p style="font-size: 0.85rem;">ntfy: <b style="color: #10b981;">set</b>' + (ch.token ? ', with a token' : ', no token') +
+                    ' · last sent ' + esc(when(ch.last_ok_at)) + ' · ' + esc(ch.waiting) + ' waiting' +
+                    (ch.failed_in_a_row ? ' · <span style="color: #f87171;">failing: ' + esc(ch.last_status) + ' (' + esc(ch.failed_in_a_row) + ' in a row), next try ' + esc(when(ch.next_try_at)) + '</span>' : '') +
+                    (ch.dropped ? ' · ' + esc(ch.dropped) + ' dropped (over 50 waiting)' : '') + '</p>';
+            }
+            const cap = st.cap || {};
+            html += '<p style="font-size: 0.8rem; color: var(--text-muted);">This hour: ' + esc(cap.sent || 0) + ' sent (cap ' + esc(cap.per_hour || 20) + ', then one "muted" line; high and urgent still go, to 40)' + (cap.muted ? ', ' + esc(cap.muted) + ' muted' : '') + '.' +
+                (st.held_for_digest ? ' ' + esc(st.held_for_digest) + ' held: shown below, not sent (no daily summary yet).' : '') + '</p>';
+            html += '<div class="alert-modes">' + Object.keys(CATEGORY_WORDS).map(function(c) {
+                const mode = (st.settings || {})[c] || 'on';
+                return '<span class="alert-mode">' + esc(CATEGORY_WORDS[c]) + ': ' + Object.keys(MODE_WORDS).map(function(m) {
+                    return '<button data-alert-category="' + c + '" data-alert-mode="' + m + '"' + (m === mode ? ' class="on"' : '') + '>' + MODE_WORDS[m] + '</button>';
+                }).join('') + '</span>';
+            }).join('') + '</div>';
+            html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">on = sent at once · digest = held and shown here, not sent (no daily summary yet) · off = nothing</p>';
+            html += '<button data-alert-test="1" class="btn-approve">Send a test alert</button> <span id="alertTestResult" style="font-size: 0.8rem; color: var(--text-muted);"></span>';
+            const active = st.active || [];
+            if (active.length) {
+                html += '<p style="font-size: 0.85rem; color: #fbbf24; margin-top: 1rem;">Raised now:</p><ul style="font-size: 0.8rem; margin-left: 1.25rem;">' + active.map(function(a) {
+                    return '<li>' + esc(a.detail) + ' <span style="color: var(--text-muted);">(since ' + esc(when(a.since)) + ')</span></li>';
+                }).join('') + '</ul>';
+            }
+            const recent = st.recent || [];
+            if (recent.length) {
+                html += '<div class="scroll-x" style="margin-top: 1rem;"><table class="admin-table"><thead><tr><th>When</th><th>Alert</th><th>State</th></tr></thead><tbody>' + recent.map(function(r) {
+                    const state = r.sent_at ? 'sent' : r.muted ? 'muted (over the hourly cap)' : r.held ? 'held (digest)' : 'waiting';
+                    return '<tr><td style="font-family: monospace; font-size: 0.75rem; white-space: nowrap;">' + esc(when(r.at)) + '</td>' +
+                        '<td><b style="color: #fff;">' + esc(r.title) + '</b><br><span style="font-size: 0.8rem;">' + esc(r.body) + '</span></td>' +
+                        '<td style="font-size: 0.75rem;">' + esc(state) + '</td></tr>';
+                }).join('') + '</tbody></table></div>';
+            }
+            container.innerHTML = html;
+        }
+
+        async function loadAlerts(secret) {
+            const container = document.getElementById('alertsContainer');
+            try {
+                const res = await fetch('/api/local/admin/registrar/alerts', { headers: { 'x-admin-secret': secret } });
+                if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load alerts.</p>'; return; }
+                renderAlerts(await res.json());
+            } catch (err) {
+                container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading alerts.</p>';
+            }
+        }
+
+        async function setAlertMode(category, mode) {
+            const secret = secretInput.value.trim();
+            const res = await fetch('/api/local/admin/registrar/alerts/settings', {
+                method: 'POST', headers: { 'x-admin-secret': secret, 'content-type': 'application/json' }, body: JSON.stringify({ category: category, mode: mode }),
+            });
+            if (res.ok) renderAlerts(await res.json());
+            else alert('Could not change it: ' + ((await res.json()).error || res.status));
+        }
+
+        async function sendTestAlert() {
+            const secret = secretInput.value.trim();
+            const out = document.getElementById('alertTestResult');
+            out.textContent = 'Sending...';
+            try {
+                const res = await fetch('/api/local/admin/registrar/alerts/test', { method: 'POST', headers: { 'x-admin-secret': secret } });
+                const data = await res.json();
+                out.textContent = data.sent ? 'Sent (' + data.status + '): check your phone.' : (data.error || 'Not sent.');
+                loadAlerts(secret);
+            } catch (err) {
+                out.textContent = 'Network error: ' + err.message;
+            }
+        }
+
+        document.addEventListener('click', function(e) {
+            const mode = e.target.closest('[data-alert-mode]');
+            if (mode) setAlertMode(mode.getAttribute('data-alert-category'), mode.getAttribute('data-alert-mode'));
+            if (e.target.closest('[data-alert-test]')) sendTestAlert();
+        });
 
         updateAuthUI();
         if (sessionStorage.getItem('bp_registrar_admin_secret')) loadRegistrarData();

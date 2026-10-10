@@ -63,3 +63,7 @@ zone_name = "beanpool.org"
 #   CF_ACCOUNT_ID    151a28c4fd1e6ee09768f4226be76b4d
 #   CF_ZONE_ID       060a99ae34e53b26dcf3be6578722b31
 #   ADMIN_SECRET     shared secret for the admin endpoints (approve/pause/resume/block/release/events)
+#   NTFY_URL         the control room's ntfy topic, as a full URL (https://ntfy.sh/<topic>): the topic name IS the
+#                    secret. Unset = no alerts are sent, and /admin says so (src/alerts.js).
+#   NTFY_TOKEN       optional ntfy access token, sent as `Authorization: Bearer` (limits then follow the account,
+#                    not Cloudflare's shared egress address)

@@ -18,7 +18,7 @@ export const migration = (m) => readFileSync(new URL(`../migrations/${m}`, impor
 // once, just before the first run() whose SQL matches `re` writes, `run` runs to completion — a request landing
 // between another request's last Cloudflare call and its write. `atWrite(n, run)`: the same, just before the n-th run()
 // from now; `writes()` counts the run() calls so far.
-export function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql']) {
+export function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql']) {
     const sqlite = new DatabaseSync(':memory:');
     for (const m of migrations) sqlite.exec(migration(m));
     const readHooks = [];
@@ -151,6 +151,13 @@ export const attestsAs = (key) => async (nonce) => {
     return Response.json({ pubkey: key.pubHex, nonce, timestamp, signature: await sign(key, `beanpool-node-attest/v1\n${nonce}\n${timestamp}`) });
 };
 
+// What the Workers runtime's fetch refuses and Node's accepts, refused here too, so a test fails where workerd would:
+// `redirect` must be 'follow' or 'manual' (workerd throws "Invalid redirect value … 'error' won't be implemented").
+export function workerdFetchInit(init = {}) {
+    if (init.redirect !== undefined && !['follow', 'manual'].includes(init.redirect))
+        throw new TypeError(`Invalid redirect value, must be one of "follow" or "manual" (got "${init.redirect}")`);
+}
+
 // One world per test: D1, fake Cloudflare, and nodes answering at hostnames — but only while Cloudflare routes the
 // hostname (a DNS record exists), so an edge attest can only pass once the registrar has routing back up.
 export async function world({ migrations, env: extra } = {}) {
@@ -163,6 +170,7 @@ export async function world({ migrations, env: extra } = {}) {
     };
     const original = globalThis.fetch;
     globalThis.fetch = async (input, init = {}) => {
+        workerdFetchInit(init);
         const url = new URL(typeof input === 'string' ? input : input.url);
         if (url.hostname === 'api.cloudflare.com') return cf.handle(init.method || 'GET', url, init.body ? JSON.parse(init.body) : null);
         if (url.pathname !== '/api/attest' || !nodes[url.hostname]) throw new Error(`test network: no route to ${url}`);

@@ -6,7 +6,9 @@
  *   1. a member with an area: the Market's one list read carries lat/lng/radiusKm=250/sort=distance, the node answers
  *      the listing near Byron with its distance and leaves out the one in Oslo; the line says where from; no sideways
  *      scroll; Show everywhere reads the newest (Oslo comes back) and Near your area goes back;
- *   2. the Map: one list read with the same point and limit=200;
+ *   2. the Map: one list read with the same point and limit=200; a member far from every listing (Lagos) taps Show
+ *      everywhere with the fixture's Seed swap event loaded, and a real tap on Near your area lands: the note sits under
+ *      the event chips, not behind them (#1770);
  *   3. a local node: the Market's list read has no point, as before.
  * In the List, Compact and Card layouts every distance tag is whole: no box that hides its overflow cuts it off.
  *
@@ -30,6 +32,7 @@ const SERVER_DIR = path.resolve(PWA_DIR, '../server');
 process.chdir(PWA_DIR);
 const VIEW = { width: 320, height: 720 };
 const BYRON = { lat: -28.6, lng: 153.6 };
+const LAGOS = { lat: 6.5, lng: 3.4 };
 
 const failures = [];
 function check(ok, what) {
@@ -157,9 +160,11 @@ const tab = (page, name) => page.locator('[data-testid="mobile-bottom-nav"] butt
 async function globalMember(browser, root) {
     console.log('A member with an area on the global node:');
     const me = memberIdentity('Ana');
-    const node = await startNode(root, 'global', [{ publicKey: me.publicKey, callsign: 'Ana', joinedDaysAgo: 5 }]);
+    const ade = memberIdentity('Ade');
+    const node = await startNode(root, 'global', [{ publicKey: me.publicKey, callsign: 'Ana', joinedDaysAgo: 5 }, { publicKey: ade.publicKey, callsign: 'Ade', joinedDaysAgo: 5 }]);
     try {
         await node.ask({ op: 'sql', sql: 'UPDATE members SET area_lat = ?, area_lng = ? WHERE public_key = ?', params: [BYRON.lat, BYRON.lng, me.publicKey] });
+        await node.ask({ op: 'sql', sql: 'UPDATE members SET area_lat = ?, area_lng = ? WHERE public_key = ?', params: [LAGOS.lat, LAGOS.lng, ade.publicKey] });
         const far = await node.ask({ op: 'post', title: 'Oslo bicycle', category: 'other' });
         await node.ask({ op: 'sql', sql: 'UPDATE posts SET lat = ?, lng = ? WHERE id = ?', params: [59.9, 10.7, far.id] });
         await node.ask({ op: 'post', title: 'Byron honey', category: 'food' });
@@ -221,6 +226,43 @@ async function globalMember(browser, root) {
         const others = [...m.otherHosts].filter((h) => !/(^|\.)tile\.openstreetmap\.org$/.test(h) && h !== 'fonts.googleapis.com');
         check(others.length === 0, `no request to any other host but the map tiles and the font (${others.join(', ') || 'none'})`);
         await m.context.close();
+
+        // #1770: after Show everywhere the newest from everywhere holds the Seed swap event, so the event chips show, in
+        // the spot the note used to take. Playwright's click is a real tap: it waits until the button itself would get it.
+        console.log('The Map, a member far from every listing (Lagos), with an upcoming event loaded:');
+        const a = await openMember(browser, node.origin, ade);
+        await tab(a.page, 'Map').click();
+        const empty = a.page.getByTestId('map-near-empty');
+        await empty.waitFor({ timeout: 20_000 });
+        await empty.getByRole('button', { name: 'Show everywhere' }).click();
+        const chips = a.page.getByTestId('event-window-chips');
+        await chips.waitFor({ timeout: 20_000 });
+        const note = a.page.getByTestId('map-near-again');
+        const again = note.getByRole('button', { name: 'Near your area' });
+        await again.waitFor({ timeout: 20_000 });
+        await wait(500);
+        const cb = await chips.boundingBox();
+        const nb = await note.boundingBox();
+        check(!!cb && !!nb && nb.y >= cb.y + cb.height, `the note (y ${nb?.y}–${nb ? nb.y + nb.height : '?'}) is under the event chips (y ${cb?.y}–${cb ? cb.y + cb.height : '?'})`);
+        const onTop = await again.evaluate((b) => {
+            const r = b.getBoundingClientRect();
+            const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return !!el && b.contains(el);
+        });
+        check(onTop, 'nothing covers the middle of Near your area');
+        const ha = (await again.boundingBox())?.height ?? 0;
+        check(ha >= 44, `Near your area is at least 44 px tall (${ha})`);
+        check((await sideways(a.page)) <= 0, 'no sideways scroll on the Map after Show everywhere');
+        await a.page.screenshot({ path: path.join(os.tmpdir(), 'bp-near-shots', 'map-everywhere-event.png') });
+        const n1 = a.reads.length;
+        const tapped = await again.click({ timeout: 5_000 }).then(() => true, () => false);
+        check(tapped, 'a real tap on Near your area lands');
+        await until(() => listReads(a.reads.slice(n1)).length > 0, 10_000);
+        const backRead = listReads(a.reads.slice(n1)).at(-1);
+        check(backRead?.get('lat') === String(LAGOS.lat) && backRead?.get('lng') === String(LAGOS.lng) && backRead?.get('radiusKm') === '250',
+            `Near your area reads from the area again (?${backRead?.toString()})`);
+        check(await empty.waitFor({ timeout: 10_000 }).then(() => true, () => false), 'and the note about nothing near comes back');
+        await a.context.close();
     } finally {
         await node.stop();
     }

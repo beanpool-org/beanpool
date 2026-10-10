@@ -1423,4 +1423,49 @@ describe('MapPage: where the pins are read from (S5)', () => {
         await waitFor(() => expect(listReads().at(-1)).toMatchObject({ types: TYPES, radiusKm: 250, sort: 'distance', limit: 200 }));
         await waitFor(() => expect(view!.queryByTestId('map-near-again')).toBeNull());
     });
+
+    // #1770: the event chips sat over the note (same spot, same layer, later in the page), so Near your area could not be
+    // tapped whenever the newest from everywhere held an upcoming event. jsdom has no layout; e2e/market-near-check.mjs
+    // makes the real tap.
+    it('after Show everywhere with an upcoming event loaded, the note sits under the event chips', async () => {
+        const event = {
+            ...post, id: 'ev-seed', type: 'event', category: 'community', title: 'Seed swap', credits: 0, repeatable: false,
+            eventStartAt: new Date(Date.now() + 48 * 3600_000).toISOString(), eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null,
+        };
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author ? [] : [post, event]) as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        const note = await view!.findByTestId('map-near-empty');
+        expect(note.className).toContain('top-[4.25rem]');
+        fireEvent.click(within(note).getByRole('button', { name: 'Show everywhere' }));
+        await view!.findByTestId('event-window-chips');
+        const back = await view!.findByTestId('map-near-again');
+        expect(back.className).toContain('top-[calc(5rem+48px)]');
+        expect(back.className).toContain('md:top-[calc(1.5rem+48px)]');
+        expect(back.className).not.toContain('top-[4.25rem]');
+    });
+
+    it('a failed read of the member\'s area says so on the Map, with Try again, as the Market does', async () => {
+        vi.mocked(api.getCommunityMe).mockRejectedValueOnce(new Error('503'));
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        const note = await view!.findByTestId('map-area-failed');
+        expect(note).toHaveTextContent("Couldn't check your area just now, so this is the newest from everywhere.");
+        expect(listReads()).toEqual([{ types: TYPES }]);
+        fireEvent.click(within(note).getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(listReads().at(-1)).toEqual({ types: TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'distance', limit: 200 }));
+        await waitFor(() => expect(view!.queryByTestId('map-area-failed')).toBeNull());
+    });
+
+    it('a failed read of the area says nothing when the Market\'s distance setting picks the place anyway', async () => {
+        const geo = await import('../lib/geo');
+        vi.mocked(geo.loadRadiusSettings).mockReturnValue({ lat: -37.1, lng: 144.2, radiusKm: 30, label: 'Castlemaine' });
+        vi.mocked(api.getCommunityMe).mockRejectedValueOnce(new Error('503'));
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(listReads().length).toBe(1));
+        expect(listReads()).toEqual([{ types: TYPES, lat: -37.1, lng: 144.2, radiusKm: 30, sort: 'distance', limit: 200 }]);
+        expect(view!.queryByTestId('map-area-failed')).toBeNull();
+    });
 });

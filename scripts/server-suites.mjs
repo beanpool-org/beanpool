@@ -345,6 +345,7 @@ export const SUITES = [
     'test-photo-keys-audience',
     'test-photo-off-listing',
     'test-photo-off-listing-urls',
+    'test-photo-thumbnails',
     'test-photo-key-collision',
     'test-api-headers-and-feed-etag',
     'test-directory-publisher',

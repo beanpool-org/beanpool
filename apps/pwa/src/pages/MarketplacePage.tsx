@@ -6,7 +6,7 @@
  * Tapping a post opens a full detail view.
  */
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MarketplaceCard } from '../components/MarketplaceCard';
@@ -14,7 +14,7 @@ import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/Members
 import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
 import { YourEvents } from '../components/YourEvents';
-import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, isEventOpen, type EventWindow } from '../lib/events';
+import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -24,6 +24,7 @@ import { ExampleListings } from '../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../lib/example-listings';
 import { pollsInformal } from '../lib/informal-polls';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
@@ -45,7 +46,7 @@ import {
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     getMembers, getTreasuries, getTreasury, getEnterpriseStatuses,
-    getCommissionCapacity, commissionListing,
+    getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
     type CommissionCapacity,
@@ -150,6 +151,9 @@ function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter
     return filter;
 }
 
+/** How long the first read waits to learn whether this node reads by area, before it reads as before. */
+const NEAR_WAIT_MS = 1500;
+
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, openSearch, onSearchOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
@@ -249,13 +253,47 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Unknown, or a read that fails, draws no examples and no label.
     const [examplesOn, setExamplesOn] = useState(false);
     const [informalPolls, setInformalPolls] = useState(false);
+    // Where the list is read from on a node that keeps each member to the listings near their area (lib/listings-near,
+    // DESIGN-global-sync-by-area §5): the node's radius, and this member's stored area. The first read waits until both
+    // are known, or NEAR_WAIT_MS has passed, so it is made once, from the right place; a node without the switch, a
+    // visitor, and a read that fails all read as before.
+    const [nearbyListings, setNearbyListings] = useState<{ radiusKm: number } | null>(null);
+    const [memberArea, setMemberArea] = useState<{ lat: number; lng: number } | null>(null);
+    const [nearKnown, setNearKnown] = useState(false);
+    // "Show everywhere" under the area line: this visit reads the node's newest, as a node without the switch does.
+    const [everywhere, setEverywhere] = useState(false);
     useEffect(() => {
         let cancelled = false;
+        const known = () => { if (!cancelled) setNearKnown(true); };
+        const timer = setTimeout(known, NEAR_WAIT_MS);
         communityInfoOnce()
-            .then(info => { if (!cancelled) { setExamplesOn(exampleListingsOn(info)); setInformalPolls(pollsInformal(info)); } })
-            .catch(() => {});
-        return () => { cancelled = true; };
-    }, []);
+            .then(async info => {
+                if (cancelled) return;
+                setExamplesOn(exampleListingsOn(info));
+                setInformalPolls(pollsInformal(info));
+                const nearby = info?.features?.nearbyListings ?? null;
+                setNearbyListings(nearby);
+                if (nearby && identity?.publicKey && !isVisitor) {
+                    const me = await getCommunityMe().catch(() => null);
+                    if (!cancelled) setMemberArea(me?.area ? { lat: me.area.lat, lng: me.area.lng } : null);
+                }
+            })
+            .catch(() => {})
+            .finally(() => { clearTimeout(timer); known(); });
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [identity?.publicKey, isVisitor]);
+    const near = useMemo(
+        () => nearKnown ? nearRead({ nearbyListings, setting: radiusSettings, area: memberArea, visitor: isVisitor, everywhere }) : null,
+        [nearKnown, nearbyListings, radiusSettings, memberArea, isVisitor, everywhere],
+    );
+    // How far a listing is: the node's word when it measured from `near`, else from the picked centre in the browser.
+    const measureFrom = near ?? radiusSettings;
+    const distanceOf = (p: MarketplacePost): number | null => listingDistanceKm(
+        p, measureFrom ? (lat, lng) => haversineDistance(measureFrom.lat, measureFrom.lng, lat, lng) : null,
+    );
+    // A listing pushed over the live feed joins the list only inside the radius the list was read with.
+    const fitsNear = useCallback((p: MarketplacePost): boolean => !near
+        || (p.lat != null && p.lng != null && haversineDistance(near.lat, near.lng, p.lat, p.lng) <= near.radiusKm), [near]);
 
     // Layout configuration — default to 'grid' (Card View)
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>(() => {
@@ -470,7 +508,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     }, [identity]);
 
     const refresh = useCallback(async () => {
-        const refreshKey = `${typeFilter}|${categoryFilter}|${groupFilter}`;
+        // Not before this node's way of reading is known (NEAR_WAIT_MS at most), so the first read is made once.
+        if (!nearKnown) return;
+        const refreshKey = `${typeFilter}|${categoryFilter}|${groupFilter}|${near ? `${near.lat},${near.lng},${near.radiusKm}` : ''}`;
         if (refreshPromiseRef.current && refreshKeyRef.current === refreshKey) {
             return refreshPromiseRef.current;
         }
@@ -486,7 +526,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // A visitor has no enterprises to hide: on the global node they are off, and their reads are members' only.
                 const statusesPromise = isVisitor ? Promise.resolve(null) : getEnterpriseStatuses().catch(() => null);
                 const [homeData, myOwnPosts, statusesData, fallbackTreasuries] = await Promise.all([
-                    getMarketplacePosts(filter),
+                    // Nearest first within the radius where the node reads by area (lib/listings-near); the viewer's own
+                    // listings wherever they are.
+                    getMarketplacePosts({ ...filter, ...nearParams(near) }),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
                     statusesPromise,
                     // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock)
@@ -529,7 +571,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     }
                 }
 
-                setPosts(replayLiveChanges(liveMark, allPosts, post => postFitsList(post, filter)));
+                setPosts(replayLiveChanges(liveMark, allPosts, post => postFitsList(post, filter) && fitsNear(post)));
                 setError(null);
                 setMembersOnly(false);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
@@ -551,7 +593,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, [typeFilter, categoryFilter, groupFilter, beansOnly, enabledPeers, identity, isVisitor]);
+    }, [typeFilter, categoryFilter, groupFilter, beansOnly, enabledPeers, identity, isVisitor, nearKnown, near, fitsNear]);
 
     // Fetch peer nodes on mount
     useEffect(() => {
@@ -633,11 +675,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     useLayoutEffect(() => { postsRef.current = posts; }, [posts]);
     useEffect(() => {
         const filter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
-        const fits = (p: MarketplacePost) => postFitsList(p, filter);
+        const fits = (p: MarketplacePost) => postFitsList(p, filter) && fitsNear(p);
         const offView = onLivePostChange(change => setPosts(prev => applyLivePostChange(prev, change, fits)));
         const offTie = registerLivePostTie(heldPostTie(() => postsRef.current, identity?.publicKey));
         return () => { offView(); offTie(); };
-    }, [typeFilter, categoryFilter, beansOnly, groupFilter, identity?.publicKey]);
+    }, [typeFilter, categoryFilter, beansOnly, groupFilter, identity?.publicKey, fitsNear]);
 
     // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll
     useEffect(() => {
@@ -862,9 +904,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             <VisitorPostDetail
                 post={selectedPost}
                 beans={visitor.beans}
-                distanceKm={radiusSettings && selectedPost.lat != null && selectedPost.lng != null
-                    ? haversineDistance(radiusSettings.lat, radiusSettings.lng, selectedPost.lat, selectedPost.lng)
-                    : null}
+                distanceKm={distanceOf(selectedPost)}
                 onBack={() => setSelectedPost(null)}
                 onJoin={visitor.onJoin}
                 pollsInformal={informalPolls}
@@ -889,9 +929,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <EventDetail
                         post={selectedPost}
                         identity={identity}
-                        distanceKm={radiusSettings && selectedPost.lat != null && selectedPost.lng != null
-                            ? haversineDistance(radiusSettings.lat, radiusSettings.lng, selectedPost.lat, selectedPost.lng)
-                            : null}
+                        distanceKm={distanceOf(selectedPost)}
                         onShowOnMap={(p) => onNavigate?.('map-event', p.id)}
                         onOpenChat={(p) => onNavigate?.('messages', p.id)}
                         onCopyToNewDate={(p) => onNavigate?.('map-copy-event', p.id)}
@@ -2633,11 +2671,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     return 0;
                 });
 
-                // Distance on an event card, from the centre the viewer picked for "near me" (§3).
-                const eventDistance = (p: MarketplacePost): number | null =>
-                    radiusSettings && p.lat != null && p.lng != null
-                        ? haversineDistance(radiusSettings.lat, radiusSettings.lng, p.lat, p.lng)
-                        : null;
+                // Distance on a card: the node's, where it read from a point, else from the centre the viewer picked for
+                // "near me" (§3).
+                const eventDistance = distanceOf;
 
                 // Listings posted today — the local calendar day, not the last 24 hours (a post from 11 pm last
                 // night is not "today" at 9 am). Events are not listings; their cards carry their own date.
@@ -2652,6 +2688,31 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // A few example cards while the Market is nearly empty, where the node asks for them
                 // (lib/example-listings.ts): never under a search or a filter, and never in the posts themselves, so
                 // nothing counts them, opens them or pins them. Before the empty state, or after the real listings.
+                // Where the list was read from, on a node that reads by area (lib/listings-near): one line, and always a
+                // way to the rest (DESIGN-global-sync-by-area §5, never a dead end). Under Events the list is not cut.
+                const nearLine = !isVisitor && nearbyListings && nearKnown && typeFilter !== 'event' ? (
+                    <p data-testid="market-near-line" className="m-0 mb-2 px-1 text-sm text-nature-600 dark:text-nature-300 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {near?.from === 'area' ? (
+                            <>
+                                <span>{`Nearest to your area first, within ${formatDistance(near.radiusKm)}.`}</span>
+                                <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">Show everywhere</button>
+                            </>
+                        ) : near ? (
+                            <span>{`Nearest first, within ${formatDistance(near.radiusKm)} of ${radiusSettings?.label || 'the place you picked'}.`}</span>
+                        ) : everywhere && memberArea ? (
+                            <>
+                                <span>Newest from everywhere.</span>
+                                <button type="button" onClick={() => setEverywhere(false)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">Near your area</button>
+                            </>
+                        ) : (
+                            <>
+                                <span>Newest from everywhere.</span>
+                                <button type="button" onClick={() => setShowRadiusPicker(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">See what's near you</button>
+                            </>
+                        )}
+                    </p>
+                ) : null;
+
                 const narrowed = !!searchQuery.trim() || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
                     || groupFilter !== 'all' || beansOnly || foundingOnly;
                 const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: filtered.length })
@@ -2817,6 +2878,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             />
                         )}
 
+                        {nearLine}
                         {filtered.length === 0 && examples}
                         {filtered.length === 0 ? (
                             (searchQuery.trim() || radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all' || beansOnly || foundingOnly || posts.length > 0) ? (
@@ -2908,6 +2970,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                                    distanceKm={near ? distanceOf(post) : null}
                                                     onPhotoClick={(photos, idx, e) => {
                                                         setLightboxState({
                                                             isOpen: true,
@@ -3008,6 +3071,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                                    distanceKm={near ? distanceOf(post) : null}
                                                     onPhotoClick={(photos, idx, e) => {
                                                         setLightboxState({
                                                             isOpen: true,

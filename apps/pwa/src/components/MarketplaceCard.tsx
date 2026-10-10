@@ -12,6 +12,7 @@
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
 import { listPhotoUrl } from '@beanpool/core';
+import { formatDistance } from '../lib/events';
 
 interface Props {
     post: MarketplacePost;
@@ -24,9 +25,11 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
     isOwnPost?: boolean;
     onPhotoClick?: (photos: string[], initialIndex: number, e: React.MouseEvent) => void;
+    /** How far the listing is (km), as the node measured it from the point the Market read from; none, no distance. */
+    distanceKm?: number | null;
 }
 
-export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick }: Props) {
+export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick, distanceKm }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
     const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
@@ -182,6 +185,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 <span className="text-[10px] font-black text-nature-500 dark:text-nature-450 flex items-center gap-1">
                                     <span>{categoryConfig.emoji}</span>
                                     <span>{categoryConfig.label}</span>
+                                </span>
+                            )}
+                            {typeof distanceKm === 'number' && Number.isFinite(distanceKm) && (
+                                <span data-testid="card-distance" className="text-[10px] font-black text-nature-500 dark:text-nature-450 flex items-center gap-1">
+                                    <span aria-hidden="true">📍</span>
+                                    <span>{formatDistance(distanceKm)}</span>
                                 </span>
                             )}
                             {post.repeatable && (

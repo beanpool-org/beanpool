@@ -42,6 +42,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const hasPhoto = post.photos && post.photos.length > 0;
 
     const isGrid = viewMode === 'grid';
+    // How far, as the node measured it (S5): one tag for every layout, nothing without a number.
+    const distanceTag = typeof distanceKm === 'number' && Number.isFinite(distanceKm) ? (
+        <span data-testid="card-distance" className="text-[10px] font-black text-nature-500 dark:text-nature-450 inline-flex items-center gap-1 shrink-0">
+            <span aria-hidden="true">📍</span>
+            <span>{formatDistance(distanceKm)}</span>
+        </span>
+    ) : null;
 
     // Paused Offers show only to their author (server viewer-aware) — mark them so they're
     // distinguishable in "My Posts" from live listings.
@@ -84,6 +91,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         </h3>
                         <span className="text-[10px] text-nature-500 truncate flex items-center gap-1 flex-wrap">
                             by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 font-bold">👤 (You)</span>}
+                            {distanceTag}
                             {post.authorFoundingNeeded && (
                                 <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300/30 shrink-0">
                                     🌱 FOUNDING
@@ -187,12 +195,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     <span>{categoryConfig.label}</span>
                                 </span>
                             )}
-                            {typeof distanceKm === 'number' && Number.isFinite(distanceKm) && (
-                                <span data-testid="card-distance" className="text-[10px] font-black text-nature-500 dark:text-nature-450 flex items-center gap-1">
-                                    <span aria-hidden="true">📍</span>
-                                    <span>{formatDistance(distanceKm)}</span>
-                                </span>
-                            )}
+                            {distanceTag}
                             {post.repeatable && (
                                 <span className={`text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400`}>
                                     ↻ RECURRING
@@ -285,6 +288,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <span className={`font-bold text-nature-950 dark:text-white truncate text-xs mt-0.5`}>
                         {post.title}
                     </span>
+                    {distanceTag && <div className="mt-0.5">{distanceTag}</div>}
                     {pulsePill && <div className="mt-1">{pulsePill}</div>}
                     {youPill && <div className="mt-1">{youPill}</div>}
                     {pausedPill && <div className="mt-1">{pausedPill}</div>}

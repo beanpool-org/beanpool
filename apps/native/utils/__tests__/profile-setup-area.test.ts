@@ -82,6 +82,7 @@ vi.mock('expo-location', () => ({
 }));
 
 import ProfileSetupScreen from '../../app/profile-setup';
+import YourAreaScreen from '../../app/your-area';
 import { profileSteps, areaOf, describeArea, AREA_WORDS, writeMemberArea } from '../member-area';
 import { readNodeProfile } from '../node-profile';
 import { roundToArea } from '@beanpool/core';
@@ -119,12 +120,12 @@ afterEach(() => {
 async function settle(rounds = 6) {
     for (let i = 0; i < rounds; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)); });
 }
-async function render(features: unknown) {
+async function render(features: unknown, screen: () => unknown = ProfileSetupScreen as () => unknown) {
     prof.value = features ? { profile: 'global', features, checkedAt: new Date().toISOString() } : null;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    await act(async () => { root!.render(createElement(ProfileSetupScreen) as unknown as Parameters<Root['render']>[0]); });
+    await act(async () => { root!.render(createElement(screen as any) as unknown as Parameters<Root['render']>[0]); });
     await settle();
 }
 const text = () => document.body.textContent ?? '';
@@ -240,6 +241,42 @@ describe('profile setup: the area step (S4)', () => {
             expect(style.width ?? 'auto', id).not.toMatch(/^\d/); // no fixed width that could overflow 320 dp
             expect(style.position, id).toBeUndefined();
         }
+    });
+});
+
+describe('Settings → Your area (§3.5)', () => {
+    it("shows the node's value with the town typed on this phone, and Clear writes both null and forgets the town", async () => {
+        mem.store.set(`beanpool_area_place:${NODE}`, 'Byron Bay');
+        answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: { lat: -28.6, lng: 153.6, updatedAt: '2026-10-11T00:00:00.000Z' } } };
+        await render(GLOBAL_FEATURES, YourAreaScreen as () => unknown);
+        expect(requests[0]).toMatchObject({ url: `${NODE}/api/community/me`, method: 'GET' });
+        expect(document.querySelector('[data-testid="your-area-current"]')?.textContent).toBe('About 10 km around Byron Bay');
+        answer = { status: 200, body: { success: true, area: null } };
+        await press('[data-testid="your-area-clear"]');
+        expect(requests[1]).toEqual({ url: `${NODE}/api/community/me/area`, method: 'POST', body: '{"lat":null,"lng":null}' });
+        expect(document.querySelector('[data-testid="your-area-current"]')?.textContent).toBe('Not set');
+        expect(mem.store.has(`beanpool_area_place:${NODE}`)).toBe(false);
+        expect(document.querySelector('[data-testid="your-area-clear"]')).toBeNull();
+    });
+
+    it('Not set: no Clear; Change is the same step, its Cancel writes nothing and goes back', async () => {
+        answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: null } };
+        await render(GLOBAL_FEATURES, YourAreaScreen as () => unknown);
+        expect(document.querySelector('[data-testid="your-area-current"]')?.textContent).toBe('Not set');
+        expect(document.querySelector('[data-testid="your-area-clear"]')).toBeNull();
+        expect(text()).toContain(AREA_WORDS.title);
+        const before = requests.length;
+        nav.router.back.mockClear();
+        await press('[data-testid="area-skip"]');
+        expect(document.querySelector('[data-testid="area-skip"]')?.textContent).toBe('Cancel');
+        expect(requests.length).toBe(before);
+        expect(nav.router.back).toHaveBeenCalledTimes(1);
+    });
+
+    it("a node that can't be asked: says so, never 'Not set'", async () => {
+        answer = { status: 503, body: {} };
+        await render(GLOBAL_FEATURES, YourAreaScreen as () => unknown);
+        expect(document.querySelector('[data-testid="your-area-current"]')?.textContent).toBe("Couldn't check right now.");
     });
 });
 

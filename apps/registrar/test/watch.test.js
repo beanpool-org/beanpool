@@ -599,6 +599,11 @@ test('the daily line says what is down, what is raised, and that the vault repor
 test('each cron runs only its own job: the sweep on */5, the watch on 2-57/5; a database without 0009 leaves the sweep untouched', async () => {
     const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
     assert.match(toml, /^crons = \["\*\/5 \* \* \* \*", "2-57\/5 \* \* \* \*"\]$/m, 'wrangler.toml has the two entries scheduled() knows');
+    assert.equal(watch.WATCH_CRON, '2-57/5 * * * *');
+    // workerd reads every named export of the main module as an entrypoint and refuses to start on anything that is not
+    // a function ("Incorrect type for map entry …"): the Worker's constants live elsewhere.
+    const notFunctions = Object.entries(await import('../src/index.js')).filter(([k, v]) => k !== 'default' && typeof v !== 'function').map(([k]) => k);
+    assert.deepEqual(notFunctions, [], 'src/index.js exports functions only');
     const r = await room();
     const sweeps = () => r.w.sqlite.prepare('SELECT COUNT(*) AS n FROM sweep_log').get().n;
     const looks = () => r.w.sqlite.prepare('SELECT COUNT(*) AS n FROM watch_log').get().n;

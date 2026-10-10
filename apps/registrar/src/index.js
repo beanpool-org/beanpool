@@ -18,7 +18,7 @@ import * as db from './db.js';
 import { verifySignedRequest, signedQuery, verifyEd25519, requestProto, requestNonce, protoOf, PROTOCOLS, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
 import * as alerts from './alerts.js';
-import { watchOurServers, serversStatus, watchTargets } from './watch.js';
+import { watchOurServers, serversStatus, watchTargets, WATCH_CRON } from './watch.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
 const json = (obj, status = 200) =>
@@ -1570,10 +1570,6 @@ const withWaitUntil = (workerEnv, ctx) => (typeof ctx?.waitUntil === 'function'
 // /admin's alerts panel: the alert book, and whether a daily summary is sent at all (it goes with the outside checks of
 // our servers, src/watch.js, so not while WATCH_TARGETS is unset).
 const alertPanel = async (env) => ({ ...await alerts.alertStatus(env), daily_line: watchTargets(env).length > 0 });
-
-// The cron entries in wrangler.toml [triggers]: the attest sweep every 5 minutes, the watch 2 minutes after each.
-export const SWEEP_CRON = '*/5 * * * *';
-export const WATCH_CRON = '2-57/5 * * * *';
 
 export default {
     async fetch(request, workerEnv, ctx) {

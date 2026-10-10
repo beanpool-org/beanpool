@@ -22,6 +22,10 @@ import * as alerts from './alerts.js';
 import * as db from './db.js';
 import { verifyEd25519 } from './sign.js';
 
+// The watch's own cron entry (wrangler.toml [triggers]; the sweep keeps '*/5 * * * *'): 2 minutes after each sweep, in an
+// invocation of its own (index.js scheduled). Here, not in index.js: workerd takes every named export of the main module
+// for an entrypoint and refuses to start on a string.
+export const WATCH_CRON = '2-57/5 * * * *';
 export const WATCH_TIMEOUT_MS = 15_000;
 export const LOOKS_TO_RAISE = 2;               // two failed looks in a row (5 min apart) before anything is said
 export const FLEET_DIFFERS_S = 24 * 3600;

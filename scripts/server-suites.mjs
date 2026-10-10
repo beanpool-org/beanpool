@@ -437,6 +437,7 @@ export const SUITES = [
     'test-groups-chat',
     'test-chat-parity',
     'test-dm-never-plaintext',
+    'test-group-keys-http',
     'test-dm-line-relay',
     'test-dm-standby-order',
     'test-keeper-read-cursor',

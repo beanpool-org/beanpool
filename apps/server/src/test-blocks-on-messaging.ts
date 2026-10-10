@@ -57,6 +57,7 @@ import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { registerVisitor } from './engine/members.js';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { getFirstNodeAdminPubkey } from './engine/node-roles.js';
 import { getImageStore, readObject } from './storage/image-store.js';
 import { sweepOrphanedImageObjects } from './engine/storage-health.js';
@@ -492,13 +493,14 @@ async function main(): Promise<void> {
     joinGroup(g.id, cy.pk);
     await call('POST', ann, '/api/blocks', { targetPubkey: bo.pk });
     pushes.length = 0;
-    const gm = await call('POST', bo, `/api/groups/${g.id}/chat/message`, { text: '@Ann look at this' });
-    const gl = await call('POST', bo, `/api/groups/${g.id}/chat/message`, { text: 'and this' });
+    // A group line is sealed, so the node cannot see an @mention in it: the sending app declares who it names.
+    const gm = await call('POST', bo, `/api/groups/${g.id}/chat/message`, lockedGroupLine(db, g.id, { mentions: [ann.pk] }));
+    const gl = await call('POST', bo, `/api/groups/${g.id}/chat/message`, lockedGroupLine(db, g.id));
     await sleep(50);
     assert(gm.status === 201 && gl.status === 201, `Bo's lines go into the room, as the room's are shared (${show(gm)})`);
     assert(pushesTo(ann).length === 0, `his @mention of Ann, and his line, push her nothing (${JSON.stringify(pushesTo(ann))})`);
     assert(pushesTo(cy).length === 2, `Cy hears both (${pushesTo(cy).length})`);
-    const cm = await call('POST', cy, `/api/groups/${g.id}/chat/message`, { text: 'hi @Ann' });
+    const cm = await call('POST', cy, `/api/groups/${g.id}/chat/message`, lockedGroupLine(db, g.id, { mentions: [ann.pk] }));
     await sleep(50);
     assert(cm.status === 201 && pushesTo(ann).length === 1 && pushesTo(ann)[0]?.data?.k === 'chat.mention', "Cy's @mention of Ann pushes her");
 
@@ -645,7 +647,7 @@ async function main(): Promise<void> {
         `Cy's line to Dee is answered before Dee's push goes (answer #${sendAnswered?.seq}, push #${deePushed?.seq})`);
     // A group's line too: a blocked author's line pushes the blocker nothing, so the work for them must not be in the answer.
     const mark2 = seq;
-    const cyGroupLine = await call('POST', cy, `/api/groups/${g.id}/chat/message`, { text: 'seeds are in' });
+    const cyGroupLine = await call('POST', cy, `/api/groups/${g.id}/chat/message`, lockedGroupLine(db, g.id));
     await sleep(100);
     const groupAnswered = answered.find(a => a.seq > mark2 && a.url.startsWith(`/api/groups/${g.id}/chat/message`));
     const annPushed = pushedAt.find(p => p.seq > mark2 && p.to === tokenOf(ann));

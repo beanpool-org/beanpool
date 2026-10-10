@@ -22,8 +22,9 @@ import {
 import {
     GROUP_THREAD_TYPE, GROUP_CHAT_FORBIDDEN, GROUP_CHAT_OBSERVER, GROUP_CHAT_SYSTEM_REACT_ERROR,
     GROUP_NOT_FOUND, GROUP_THREAD_DELETED_TEXT, postGroupThreadMessageFromSendRoute,
-    assertCanWriteInGroupChat, groupChatEditedCiphertext, groupChatRefusal, broadcastGroupChatUpdate,
+    assertCanWriteInGroupChat, groupChatEdit, groupChatRefusal, broadcastGroupChatUpdate,
 } from './group-thread.js';
+import { GroupKeyError } from './group-keys.js';
 import { writeMessageTombstone, tombstoneFields } from './message-tombstone.js';
 import { eventChatUnknownTo } from './event-thread.js';
 import { unmutedRecipients } from './chat-mutes.js';
@@ -59,11 +60,14 @@ export interface MessagingCallbacks {
 export class MessagingError extends Error {
     status: number;
     code?: string;
-    constructor(message: string, status = 400, code?: string) {
+    /** More for the app beside the words (a group chat's 409: its current epoch and roster, engine/group-keys.ts). */
+    extra?: Record<string, unknown>;
+    constructor(message: string, status = 400, code?: string, extra?: Record<string, unknown>) {
         super(message);
         this.name = 'MessagingError';
         this.status = status;
         this.code = code;
+        this.extra = extra;
     }
 }
 
@@ -804,7 +808,9 @@ export function editMessage(
      * (a thread or event chat's line, someone else's, a removed one, past the 15 minutes) and just before the row is
      * changed, so a limit never answers for a caller who may not edit this message at all.
      */
-    beforeStore?: () => void
+    beforeStore?: () => void,
+    /** A group chat edit's { epoch } (engine/group-thread.ts groupChatEdit); nothing else reads it. */
+    metadata?: unknown,
 ): Message {
     assertMemberActive(authorPubkey);
     refuseVisitorOutsideItsDirectConversations(messageId, authorPubkey);
@@ -873,11 +879,15 @@ export function editMessage(
     // rule (an observer reads but does not post) on top of the read rule checked above:
     let storedCiphertext = ciphertext;
     let storedNonce = nonce;
+    let storedMetadata: string | null = row.metadata ?? null;
     if (isGroupChat) {
         try {
             assertCanWriteInGroupChat(row.conversation_id, authorPubkey);
-            storedCiphertext = groupChatEditedCiphertext(ciphertext, nonce);
-            storedNonce = 'plaintext-v1';
+            // Sealed again under the current epoch (group chat encryption design §7.4): the row's epoch moves with it.
+            const edited = groupChatEdit(row.conversation_id, row, ciphertext, nonce, metadata);
+            storedCiphertext = edited.ciphertext;
+            storedNonce = edited.nonce;
+            storedMetadata = edited.metadata;
         } catch (e: any) {
             throw toGroupChatMessagingError(e);
         }
@@ -898,7 +908,11 @@ export function editMessage(
     if (withheld) {
         setOverlayEdit(messageId, authorPubkey, storedCiphertext, storedNonce, editedAt);
     } else {
-        db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, editedAt, messageId);
+        if (isGroupChat) {
+            db.prepare("UPDATE messages SET ciphertext=?, nonce=?, metadata=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, storedMetadata, editedAt, messageId);
+        } else {
+            db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, editedAt, messageId);
+        }
         // An edit from while they were blocked, still over their own read, gives way to this one.
         if (!isGroupChat) clearOverlayEdit(messageId, authorPubkey);
     }
@@ -911,7 +925,7 @@ export function editMessage(
         nonce: storedNonce,
         type: row.type,
         systemType: row.system_type,
-        metadata: row.metadata,
+        metadata: storedMetadata ?? undefined,
         timestamp: row.timestamp,
         editedAt
     };
@@ -1119,14 +1133,15 @@ export function injectSystemMessage(
 /** Map a group-chat refusal onto the status the ordinary messaging routes answer with. */
 function toGroupChatMessagingError(e: any): Error {
     if (e instanceof MessagingError) return e;
+    if (e instanceof GroupKeyError) return new MessagingError(e.message, e.status, e.code, e.extra);
     const msg: string = e?.message || 'Could not send the message';
     if (e?.code === 'ID_CONFLICT') return new MessagingError(msg, 409, 'ID_CONFLICT');
     if (msg === GROUP_NOT_FOUND) return new MessagingError(msg, 404);
     if (msg === GROUP_CHAT_FORBIDDEN || msg === GROUP_CHAT_OBSERVER
         || /disabled|suspended|pruned|closed|Frozen|invalidated|Member not found/.test(msg)) return new MessagingError(msg, 403);
-    // Bad input from the caller, not a refusal of who they are: an empty or oversized edit, a nonce that is not
-    // plaintext-v1, a reply that names a message in another chat or a system line.
-    if (/empty|too long|plain text|Only text|not in this chat|system line/.test(msg)) return new MessagingError(msg, 400);
+    // Bad input from the caller, not a refusal of who they are: an oversized line, a photo, metadata that is not JSON, a
+    // reply that names a message in another chat or a system line.
+    if (/empty|too long|Only text|is JSON|sealed under|must be a message id|not in this chat|system line/.test(msg)) return new MessagingError(msg, 400);
     return e;
 }
 

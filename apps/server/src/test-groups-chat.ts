@@ -6,6 +6,7 @@
  *     the group, with the convenor in it. Category order and the Social Circle default.
  *  2. Membership follows the group: joining (open, approved, invitation accepted) puts you in; a pending request
  *     or an open invitation does not; leaving and removal take you out at once and write a tombstone.
+ *     Since group chats step 2 every line is sealed (group-test-payload.ts lockedGroupLine): a readable one is refused.
  *  3. Who reads and who posts, re-checked against group_members every time — through the group chat routes AND
  *     the ordinary messaging routes every store app uses: member and convenor read and post; an observer reads
  *     only; an outsider, a removed member, someone who left, a pending request, an invitee and a node admin who
@@ -46,6 +47,8 @@ import { createGroupRoutes } from './routes/groups.js';
 import { createMessagingRoutes } from './routes/messaging.js';
 import { chatRateLimit, resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
+import { GROUP_LINE_MAX_BYTES } from './engine/group-thread.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -206,26 +209,31 @@ async function main(): Promise<void> {
     }
     assert(await read(undefined) === 401, 'an unsigned request is 401');
     const view = (await get(chatPath, bob)).body;
-    assert(view.notice === GROUP_THREAD_NOTICE && /operator/.test(view.notice), 'the chat carries its honest node-readable notice');
+    assert(view.notice === GROUP_THREAD_NOTICE && /^End-to-end encrypted/.test(view.notice) && !/operator/.test(view.notice), 'the chat carries its notice: end-to-end encrypted');
     assert(view.canPost === true && view.role === 'member', 'a member may post');
     assert((await get(chatPath, carol)).body.canPost === false, 'an observer may not');
     const genericOk = await mget(`/api/messages/${garden.id}`, bob);
     assert(genericOk.status === undefined || genericOk.status === 200, 'a member reads through the ordinary route old apps use');
 
-    const first = await post(`${chatPath}/message`, bob, { text: 'Seedlings on Saturday?' });
-    assert(first.status === 201 && decode(first.body.message.ciphertext) === 'Seedlings on Saturday?', 'a member posts');
-    assert(first.body.message.nonce === 'plaintext-v1', 'stored node-readable, plaintext-v1');
-    assert((await post(`${chatPath}/message`, carol, { text: 'me too' })).status === 403, 'an observer cannot post');
-    assert((await post(`${chatPath}/message`, dave, { text: 'let me back' })).status === 403, 'a removed member cannot post');
-    assert((await post(`${chatPath}/message`, erin, { text: 'hi' })).status === 403, 'an outsider cannot post');
-    assert((await post(`${chatPath}/message`, bob, { text: 'x'.repeat(GROUP_THREAD_MESSAGE_MAX + 1) })).status === 400, 'the 2000-character cap holds');
+    const sealed = lockedGroupLine(db, garden.id);
+    const first = await post(`${chatPath}/message`, bob, sealed);
+    assert(first.status === 201 && first.body.message.ciphertext === sealed.ciphertext, 'a member posts a sealed line');
+    assert(first.body.message.nonce === sealed.nonce && first.body.message.nonce.startsWith('group-xc20p-v1:'), 'stored as sealed, never readable');
+    const readable = await post(`${chatPath}/message`, bob, { text: 'Seedlings on Saturday?' });
+    assert(readable.status === 400 && readable.body.code === 'not_encrypted' && /Update BeanPool/.test(readable.body.error), 'a readable line (an old app) is refused and told to update');
+    assert((await post(`${chatPath}/message`, carol, lockedGroupLine(db, garden.id))).status === 403, 'an observer cannot post');
+    assert((await post(`${chatPath}/message`, dave, lockedGroupLine(db, garden.id))).status === 403, 'a removed member cannot post');
+    assert((await post(`${chatPath}/message`, erin, lockedGroupLine(db, garden.id))).status === 403, 'an outsider cannot post');
+    assert((await post(`${chatPath}/message`, bob, lockedGroupLine(db, garden.id, { bytes: GROUP_LINE_MAX_BYTES + 1 }))).status === 400, 'the 2000-character cap holds, as sealed bytes');
+    assert((await post(`${chatPath}/message`, bob, lockedGroupLine(db, garden.id, { bytes: GROUP_LINE_MAX_BYTES }))).status === 201, 'a line at the cap goes');
     const cid = crypto.randomUUID();
-    const once = await post(`${chatPath}/message`, bob, { text: 'once', clientId: cid });
-    const twice = await post(`${chatPath}/message`, bob, { text: 'once', clientId: cid });
+    const onceLine = lockedGroupLine(db, garden.id);
+    const once = await post(`${chatPath}/message`, bob, { ...onceLine, clientId: cid });
+    const twice = await post(`${chatPath}/message`, bob, { ...onceLine, clientId: cid });
     assert(once.body.message.id === cid && twice.body.message.id === cid
         && (db.prepare('SELECT COUNT(*) c FROM messages WHERE id = ?').get(cid) as any).c === 1, 'a client id makes a resend idempotent');
     db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(bob);
-    assert((await post(`${chatPath}/message`, bob, { text: 'frozen' })).status === 403, 'a credit-frozen member cannot post (same rule as every node-readable thread)');
+    assert((await post(`${chatPath}/message`, bob, lockedGroupLine(db, garden.id))).status === 403, 'a credit-frozen member cannot post (same rule as every thread)');
     db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(bob);
 
     // Invite-only: hidden from outsiders, including here.
@@ -246,7 +254,7 @@ async function main(): Promise<void> {
     assert(hiddenMute.status === 404 && same(hiddenMute, await mpost('/api/messages/mute', erin, muteBody(nowhere))), 'mute: the same');
     const hiddenRead = await mpost('/api/messages/mark-read', erin, { conversationId: secret.id });
     assert(hiddenRead.status === 404 && same(hiddenRead, await mpost('/api/messages/mark-read', erin, { conversationId: nowhere })), 'mark-read: the same');
-    const sendBody = (id: string) => ({ conversationId: id, authorPubkey: erin, ciphertext: b64('hi'), nonce: 'plaintext-v1' });
+    const sendBody = (id: string) => ({ conversationId: id, authorPubkey: erin, ...lockedGroupLine(db, secret.id) });
     assert(same(await mpost('/api/messages/send', erin, sendBody(secret.id)), await mpost('/api/messages/send', erin, sendBody(nowhere))),
         'send: the same answer as an unknown id');
     assert((await mget(`/api/messages/${secret.id}`, hugo)).status === 403, 'the invitee, who knows it exists, gets 403 there as on the group routes');
@@ -257,32 +265,43 @@ async function main(): Promise<void> {
 
     // ── 4. The ordinary routes every store app uses ─────────────────────────────────────────
     console.log('\n--- 4. The ordinary send route, edits and reactions ---');
-    const viaOld = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ciphertext: b64('from an old app'), nonce: 'plaintext-v1' });
-    assert(viaOld.body?.success === true, `an old app's send to the group chat is accepted (got ${viaOld.status} ${viaOld.body?.error ?? ''})`);
+    const before4 = (db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id = ?').get(garden.id) as any).c;
+    const oldPlain = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ciphertext: b64('from an old app'), nonce: 'plaintext-v1' });
+    assert(oldPlain.status === 400 && /Update BeanPool/.test(oldPlain.body?.error ?? ''), `an old app's readable send to the group chat is refused, told to update (got ${oldPlain.status})`);
+    assert((db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id = ?').get(garden.id) as any).c === before4, 'and nothing is stored');
+    const viaSend = lockedGroupLine(db, garden.id);
+    const viaOld = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ...viaSend });
+    assert(viaOld.body?.success === true, `a sealed line through the ordinary send route is accepted (got ${viaOld.status} ${viaOld.body?.error ?? ''})`);
     const stored = db.prepare('SELECT * FROM messages WHERE id = ?').get(viaOld.body?.message?.id) as any;
-    assert(stored?.conversation_id === garden.id && decode(stored.ciphertext) === 'from an old app', 'stored in the group chat, readable');
-    const oldObserver = await mpost('/api/messages/send', carol, { conversationId: garden.id, authorPubkey: carol, ciphertext: b64('hi'), nonce: 'plaintext-v1' });
+    assert(stored?.conversation_id === garden.id && stored.ciphertext === viaSend.ciphertext && stored.nonce === viaSend.nonce, 'stored in the group chat, as sealed');
+    const oldObserver = await mpost('/api/messages/send', carol, { conversationId: garden.id, authorPubkey: carol, ...lockedGroupLine(db, garden.id) });
     assert(oldObserver.status === 403, `an observer is refused through the old route too (got ${oldObserver.status})`);
-    const oldRemoved = await mpost('/api/messages/send', dave, { conversationId: garden.id, authorPubkey: dave, ciphertext: b64('hi'), nonce: 'plaintext-v1' });
+    const oldRemoved = await mpost('/api/messages/send', dave, { conversationId: garden.id, authorPubkey: dave, ...lockedGroupLine(db, garden.id) });
     assert(oldRemoved.status === 403, `a removed member is refused through the old route (got ${oldRemoved.status})`);
     const oldEncrypted = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ciphertext: 'xx', nonce: 'somenonce' });
-    assert(oldEncrypted.status === 400, 'anything but plaintext-v1 is refused (a group chat is node-readable)');
-    const oldImage = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ciphertext: b64('pic'), nonce: 'plaintext-v1', type: 'image', attachment: { data: 'x', nonce: 'y' } });
+    assert(oldEncrypted.status === 400, 'anything but a sealed group line is refused');
+    const oldDm = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ...lockedDm(), metadata: viaSend.metadata });
+    assert(oldDm.status === 400, "a DM's sealed form is refused in a group chat too (another prefix)");
+    const oldImage = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ...lockedGroupLine(db, garden.id), type: 'image', attachment: { data: 'x', nonce: 'y' } });
     assert(oldImage.status === 400, 'no photos in a group chat through the old route');
-    const oldLong = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ciphertext: b64('y'.repeat(GROUP_THREAD_MESSAGE_MAX + 1)), nonce: 'plaintext-v1' });
+    const oldLong = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ...lockedGroupLine(db, garden.id, { bytes: GROUP_LINE_MAX_BYTES + 1 }) });
     assert(oldLong.status === 400, 'the 2000-character cap holds through the old route');
     // Chat parity (2026-09-23): slice 1 refused an edit and a reaction on a group chat message here, because
     // this route had no size bound and no membership re-check. It has both now, from the same engine the group
     // send uses, so the old store apps' DM-style window works on a group chat as it always looked like it did.
     // The two assertions this replaces were "edits are refused in a group chat" and "reactions are refused in a
     // group chat (not in this slice)". The full rule matrix is test-chat-parity.
-    const edit = await mpost('/api/messages/edit', bob, { messageId: first.body.message.id, ciphertext: b64('edited'), nonce: 'plaintext-v1' });
-    assert(edit.body?.success === true && decode(edit.body.message.ciphertext) === 'edited' && !!edit.body.message.editedAt,
-        `a member edits their own group chat message through the old route (got ${edit.status} ${edit.body?.error ?? ''})`);
-    const editedRow = db.prepare('SELECT ciphertext, nonce, edited_at FROM messages WHERE id = ?').get(first.body.message.id) as any;
-    assert(decode(editedRow.ciphertext) === 'edited' && editedRow.nonce === 'plaintext-v1' && !!editedRow.edited_at,
-        'the edit is stored node-readable, with editedAt');
-    assert((await mpost('/api/messages/edit', carol, { messageId: first.body.message.id, ciphertext: b64('mine now'), nonce: 'plaintext-v1' })).status === 400,
+    const plainEdit = await mpost('/api/messages/edit', bob, { messageId: first.body.message.id, ciphertext: b64('edited'), nonce: 'plaintext-v1' });
+    assert(plainEdit.status === 400 && /Update BeanPool/.test(plainEdit.body?.error ?? ''), 'a readable edit of a group line is refused');
+    const editLine = lockedGroupLine(db, garden.id);
+    const edit = await mpost('/api/messages/edit', bob, { messageId: first.body.message.id, ...editLine });
+    assert(edit.body?.success === true && edit.body.message.ciphertext === editLine.ciphertext && !!edit.body.message.editedAt,
+        `a member edits their own group chat message through the old route, sealed (got ${edit.status} ${edit.body?.error ?? ''})`);
+    const editedRow = db.prepare('SELECT ciphertext, nonce, metadata, edited_at FROM messages WHERE id = ?').get(first.body.message.id) as any;
+    assert(editedRow.ciphertext === editLine.ciphertext && editedRow.nonce === editLine.nonce && !!editedRow.edited_at
+        && JSON.parse(editedRow.metadata).epoch === JSON.parse(editLine.metadata).epoch,
+        'the edit is stored sealed, with editedAt, under the current epoch');
+    assert((await mpost('/api/messages/edit', carol, { messageId: first.body.message.id, ...lockedGroupLine(db, garden.id) })).status === 400,
         'an observer editing somebody elses message is still refused (not the author)');
     const react = await mpost('/api/messages/react', bob, { messageId: first.body.message.id, emoji: '👍' });
     assert(react.body?.success === true && JSON.parse(react.body.metadata).reactions[0].emoji === '👍',
@@ -320,13 +339,14 @@ async function main(): Promise<void> {
     // ── 6. Pushes, mutes and mentions ───────────────────────────────────────────────────────
     console.log('\n--- 6. Pushes, mutes and @mentions ---');
     pushes.length = 0; broadcasts.length = 0;
-    postGroupThreadMessage(cb, garden.id, bob, 'Rain tomorrow');
+    const b0Line = lockedGroupLine(db, garden.id);
+    postGroupThreadMessage(cb, garden.id, bob, b0Line);
     await pushesSent();
     const all = pushes.flatMap(p => p.targets);
     assert(all.includes(alice) && all.includes(carol) && all.includes(frank), 'every other member (observer included) gets a push by default');
     assert(!all.includes(bob), 'never the author');
     assert(!all.includes(dave) && !all.includes(erin) && !all.includes(gina), 'never someone removed, gone or outside');
-    assert(pushes.every(p => !/Rain/.test(p.body) && !/Rain/.test(p.title)), 'no message text leaves the node in a push');
+    assert(pushes.every(p => !p.body.includes(b0Line.ciphertext.slice(0, 12)) && !p.title.includes(b0Line.ciphertext.slice(0, 12))), 'nothing of the line leaves the node in a push');
     assert(pushes[0].data?.conversationId === garden.id, 'the push opens the group chat');
     const b0 = broadcasts.find(b => b.event.type === 'new_message');
     assert(!!b0?.recipients && !b0.recipients.includes(dave) && !b0.recipients.includes(erin) && b0.recipients.includes(carol),
@@ -335,26 +355,37 @@ async function main(): Promise<void> {
     setChatMute(garden.id, alice, '8h');
     setChatMute(garden.id, carol, 'always');
     pushes.length = 0;
-    postGroupThreadMessage(cb, garden.id, bob, 'Anyone got a spade?');
+    postGroupThreadMessage(cb, garden.id, bob, lockedGroupLine(db, garden.id));
     await pushesSent();
     const afterMute = pushes.flatMap(p => p.targets);
     assert(!afterMute.includes(alice) && !afterMute.includes(carol), 'muted members get no push');
     assert(afterMute.includes(frank), 'the others still do');
     pushes.length = 0;
-    postGroupThreadMessage(cb, garden.id, bob, 'Thanks @alice, and @Carol!');
+    // The node can't read the words: the sending app runs detectMentions on them and declares who it named (§9). The node
+    // keeps only active members of the group, never the author, and drops anyone else.
+    const named = detectMentions('Thanks @alice, and @Carol!', [{ pubkey: alice, callsign: 'Alice' }, { pubkey: carol, callsign: 'Carol' }, { pubkey: bob, callsign: 'Bob' }]);
+    postGroupThreadMessage(cb, garden.id, bob, lockedGroupLine(db, garden.id, { mentions: [...named, bob, erin, dave, 'not-a-key'] }));
     await pushesSent();
     const mention = pushes.find(p => /mentioned you/.test(p.body));
     assert(!!mention && mention.targets.includes(alice) && mention.targets.includes(carol), 'an @mention gets through a mute (any case)');
+    assert(!pushes.some(p => p.targets.includes(erin) || p.targets.includes(dave)), 'a declared mention of an outsider or a removed member reaches nobody');
     const mentionMsg = db.prepare("SELECT metadata FROM messages WHERE conversation_id = ? ORDER BY rowid DESC LIMIT 1").get(garden.id) as any;
     const mentioned = JSON.parse(mentionMsg.metadata).mentions as string[];
-    assert(mentioned.includes(alice) && mentioned.includes(carol) && !mentioned.includes(bob), 'the message records who it mentions, for the apps to highlight');
+    assert(mentioned.includes(alice) && mentioned.includes(carol) && !mentioned.includes(bob) && !mentioned.includes(erin) && !mentioned.includes(dave) && mentioned.length === 2,
+        'the message records who it mentions, cut to active members other than the author');
+    const many = Array.from({ length: 30 }, (_, i) => makeMember(`Crowd${i}`));
+    for (const pk of many) { joinGroup(garden.id, pk); approveGroupMember(garden.id, alice, pk); }
+    postGroupThreadMessage(cb, garden.id, bob, lockedGroupLine(db, garden.id, { mentions: many }));
+    const crowdMsg = db.prepare("SELECT metadata FROM messages WHERE conversation_id = ? ORDER BY rowid DESC LIMIT 1").get(garden.id) as any;
+    assert(JSON.parse(crowdMsg.metadata).mentions.length === 20, 'at most 20 mentions are kept');
+    for (const pk of many) removeGroupMember(garden.id, pk, pk);
     assert(detectMentions('email@alice.com', [{ pubkey: alice, callsign: 'alice' }]).length === 0, 'an @ inside a word is not a mention');
     assert(detectMentions('hi @Alicette', [{ pubkey: alice, callsign: 'Alice' }]).length === 0, 'a longer name is not a mention of a shorter one');
     assert(detectMentions('ping @Mary Jane!', [{ pubkey: bob, callsign: 'Mary Jane' }]).length === 1, 'a callsign with a space can be mentioned');
     db.prepare("UPDATE chat_mutes SET muted_until = ? WHERE conversation_id = ? AND member_pubkey = ?")
         .run(new Date(Date.now() - 1000).toISOString(), garden.id, alice);
     pushes.length = 0;
-    postGroupThreadMessage(cb, garden.id, bob, 'Mute over?');
+    postGroupThreadMessage(cb, garden.id, bob, lockedGroupLine(db, garden.id));
     await pushesSent();
     assert(pushes.flatMap(p => p.targets).includes(alice), 'an expired 8-hour mute is no mute');
 
@@ -382,7 +413,7 @@ async function main(): Promise<void> {
     assert((await post(`${chatPath}/remove`, bob, { messageId: first.body.message.id })).status === 403, 'a member cannot remove a message');
     assert((await post(`${chatPath}/remove`, admin, { messageId: first.body.message.id })).status === 403, 'a node admin who is not a member cannot either');
     const removed = await post(`${chatPath}/remove`, alice, { messageId: first.body.message.id });
-    assert(removed.body?.success === true && decode(removed.body.message.ciphertext) === 'removed by a convenor', 'the convenor removes it: "removed by a convenor"');
+    assert(removed.body?.success === true && decode(removed.body.message.ciphertext) === 'removed by a convenor', 'the convenor removes it by id, unread: "removed by a convenor"');
     const sysId = (db.prepare("SELECT id FROM messages WHERE conversation_id = ? AND type = 'system' LIMIT 1").get(garden.id) as any).id;
     assert((await post(`${chatPath}/remove`, alice, { messageId: sysId })).status === 400, 'a system line cannot be removed');
     assertThrows(() => removeGroupThreadMessage(cb, garden.id, 'nope', alice), /not found/, 'an unknown message is not found');
@@ -399,12 +430,15 @@ async function main(): Promise<void> {
     rsvpEvent(() => { }, quiz.id, bob, 'interested');
     markConversationRead(bob, garden.id);
     await new Promise(r => setTimeout(r, 5));
-    postGroupThreadMessage(cb, garden.id, alice, 'See you all Saturday');
+    const latest = lockedGroupLine(db, garden.id);
+    postGroupThreadMessage(cb, garden.id, alice, latest);
     const yours = await get('/api/your-groups', bob);
     const items = yours.body.items as any[];
     const g = items.find(i => i.id === garden.id);
     assert(!!g && g.kind === 'group' && g.badge === null && g.conversationId === garden.id && g.role === 'member', 'the group is listed, no badge');
-    assert(g?.lastMessage?.text === 'See you all Saturday' && g.lastMessage.authorCallsign === 'Alice', 'with its latest message, decoded');
+    assert(g?.lastMessage?.text === '🔒 Message' && g.lastMessage.authorCallsign === 'Alice', 'with its latest message, which the node cannot read');
+    assert(g?.lastMessage?.locked?.ciphertext === latest.ciphertext && g.lastMessage.locked.nonce === latest.nonce
+        && JSON.parse(g.lastMessage.locked.metadata).epoch === JSON.parse(latest.metadata).epoch, 'passed through as stored, for the app to open itself');
     assert(g?.unreadCount === 1, `and Bob's unread count, computed for him (got ${g?.unreadCount})`);
     const e = items.find(i => i.id === bakery);
     assert(!!e && e.kind === 'enterprise' && e.badge === '🥖' && e.role === 'keeper', 'the enterprise he keeps is listed with 🥖');
@@ -439,13 +473,13 @@ async function main(): Promise<void> {
     // the list has to read it the same way: a member who deleted their own message was seeing the chat call it
     // "This message was deleted" while Talk called the same message "removed by a convenor".
     console.log('\n--- 8a. What a tombstone previews as in "Your groups" ---');
-    const ownLine = postGroupThreadMessage(cb, garden.id, alice, 'A line of my own');
+    const ownLine = postGroupThreadMessage(cb, garden.id, alice, lockedGroupLine(db, garden.id));
     assert((await post(`${chatPath}/remove`, alice, { messageId: ownLine.id })).body?.success === true,
         'Alice removes a message of her own');
     assert(listYourChats(alice).items.find(i => i.id === garden.id)?.lastMessage?.text === 'This message was deleted',
         'her own delete previews as "This message was deleted"');
     await new Promise(r => setTimeout(r, 5));
-    const bobsLine = postGroupThreadMessage(cb, garden.id, bob, "Bob's line");
+    const bobsLine = postGroupThreadMessage(cb, garden.id, bob, lockedGroupLine(db, garden.id));
     assert((await post(`${chatPath}/remove`, alice, { messageId: bobsLine.id })).body?.success === true,
         "the convenor removes Bob's message");
     assert(listYourChats(alice).items.find(i => i.id === garden.id)?.lastMessage?.text === 'removed by a convenor',
@@ -480,7 +514,7 @@ async function main(): Promise<void> {
     for (let i = 0; i < CHAT_LINES_PER_MINUTE; i++) chatRateLimit({} as any, bob); // Bob has used his minute
     const before8b = (db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id = ?').get(garden.id) as any).c;
     const throttled = await dispatch(limited, 'POST', '/api/messages/send',
-        ctxFor(bob, { conversationId: garden.id, authorPubkey: bob, ciphertext: b64('spam'), nonce: 'plaintext-v1' }));
+        ctxFor(bob, { conversationId: garden.id, authorPubkey: bob, ...lockedGroupLine(db, garden.id) }));
     assert(throttled.status === 429, 'a group chat line through /api/messages/send goes through the chat limiter and is refused when it trips');
     assert(authLimiterCalls === 0, 'and the per-IP auth limiter never sees it');
     assert((db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id = ?').get(garden.id) as any).c === before8b, 'and nothing is written');

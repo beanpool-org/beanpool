@@ -26,6 +26,7 @@ delete process.env.ENFORCE_WS_AUTH;
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -172,8 +173,10 @@ async function main() {
     const group = se.createGroup({ name: 'Quiet Room', joinPolicy: 'request_to_join', createdBy: A.pubKeyHex } as any);
     se.joinGroup(group.id, B.pubKeyHex);
     se.approveGroupMember(group.id, A.pubKeyHex, B.pubKeyHex);
-    const GTEXT = 'group-line-' + crypto.randomBytes(4).toString('hex');
-    se.postGroupThreadMessage(group.id, B.pubKeyHex, GTEXT);
+    // The group's line is sealed: its random ciphertext is the marker the checks look for, as a DM's is.
+    const gLine = lockedGroupLine(db, group.id);
+    const GTEXT = gLine.ciphertext;
+    se.postGroupThreadMessage(group.id, B.pubKeyHex, gLine);
 
     const ev = se.createPost('event', 'social', 'Street picnic', 'Bring a plate', 0, 'fixed', A.pubKeyHex, -28.55, 153.5,
         undefined, undefined, undefined, undefined, { eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), eventPlaceName: 'The park' })!;

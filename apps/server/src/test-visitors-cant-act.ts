@@ -106,6 +106,7 @@ import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
@@ -357,7 +358,7 @@ async function main(): Promise<void> {
         veraTrade = t.id;
         joinGroup(group.id, vera.pk);
         rsvpEvent(event.id, vera.pk, 'going');
-        veraGroupLine = postGroupThreadMessage(group.id, vera.pk, 'Vera was here').id;
+        veraGroupLine = postGroupThreadMessage(group.id, vera.pk, lockedGroupLine(db, group.id)).id; // a group chat line is sealed
         veraEventLine = postEventThreadMessage(event.id, vera.pk, 'Vera is coming').id;
         // And keeping enterprises (4111054995): a keeper's row on the seed bank, with 5 Beans of backing pledged, and on the
         // orchard; a lead's row on an apiary of her own, where as lead she approved Quinn's request to keep it, which is
@@ -410,7 +411,7 @@ async function main(): Promise<void> {
         { name: 'accept an offer (row 8)', method: 'POST', path: () => '/api/marketplace/posts/accept', body: a => ({ postId: aliceOffer2.id, buyerPublicKey: a.pk }) },
         { name: 'join a group (row 9)', method: 'POST', path: () => `/api/groups/${group.id}/join` },
         { name: 'start a group (row 9)', method: 'POST', path: () => '/api/groups', body: a => ({ name: `Choir of ${a.name}`, joinPolicy: 'open' }) },
-        { name: "write in a group's chat (row 9)", method: 'POST', path: () => `/api/groups/${group.id}/chat/message`, body: () => ({ text: 'Seedlings are in' }) },
+        { name: "write in a group's chat (row 9)", method: 'POST', path: () => `/api/groups/${group.id}/chat/message`, body: () => lockedGroupLine(db, group.id) }, // a sealed line, the only form a group chat takes
         { name: 'RSVP Going to an event (row 10)', method: 'POST', path: () => `/api/marketplace/posts/${event.id}/rsvp`, body: () => ({ status: 'going' }),
             memberOk: r => ok(r) && r.body?.post?.eventPrivateNote === NOTE },
         { name: "write in an event's chat (row 10)", method: 'POST', path: () => `/api/marketplace/posts/${event.id}/chat/message`, body: () => ({ text: 'I can bring a ladder' }) },
@@ -906,8 +907,10 @@ async function main(): Promise<void> {
         // Outside a DM it is in, a line is answered as for a key with no row, and nothing changes: its own lines in the group's chat
         // and the event's chat, from before this rule.
         for (const [where, lineId] of [["the group's chat", veraGroupLine], ["the event's chat", veraEventLine]] as const) {
+            // The new words in the form that chat takes (a group chat's is sealed), so that only who may edit decides the answer.
+            const editWords = where === "the group's chat" ? lockedGroupLine(db, group.id) : { ciphertext: 'ZWRpdGVk', nonce: 'bjc=' };
             for (const [what, path, body] of [
-                ['edit', '/api/messages/edit', { messageId: lineId, ciphertext: 'ZWRpdGVk', nonce: 'bjc=' }],
+                ['edit', '/api/messages/edit', { messageId: lineId, ...editWords }],
                 ['delete', '/api/messages/delete', { messageId: lineId }],
                 ['react to', '/api/messages/react', { messageId: lineId, emoji: '👍' }],
             ] as const) {
@@ -988,7 +991,9 @@ async function main(): Promise<void> {
         const bs = await socket(bob);
         await settle();
         vs.events.length = 0; bs.events.length = 0;
-        const groupLine = await call('POST', alice, `/api/groups/${group.id}/chat/message`, { text: 'Group secret: the key is under the pot' });
+        // The group's line is sealed: what stands for its words is the ciphertext, which must not reach the visitor's socket either.
+        const groupSecret = lockedGroupLine(db, group.id);
+        const groupLine = await call('POST', alice, `/api/groups/${group.id}/chat/message`, groupSecret);
         const eventLine = await call('POST', bob, `/api/marketplace/posts/${event.id}/chat/message`, { text: 'Event secret: park by the shed' });
         const noteEdit = await call('POST', alice, '/api/marketplace/posts/update', { id: event.id, authorPublicKey: alice.pk, eventPrivateNote: `${NOTE}, new code 9902` });
         const dmLine = await call('POST', alice, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: alice.pk, ...lockedDm() });
@@ -999,7 +1004,7 @@ async function main(): Promise<void> {
         const text = (s: Sock) => JSON.stringify(s.events);
         assert(vs.events.some(e => e.type === 'new_message' && e.conversationId === veraDm.id) && vs.events.some(e => e.type === 'transaction'),
             `the visitor's socket gets its DM line and its Beans (${vs.events.map(e => e.type).join(', ')})`);
-        assert(!vs.events.some(e => e.conversationId === group.id || e.conversationId === event.id) && !/Group secret|Event secret/.test(text(vs)) && !holdsNote(text(vs))
+        assert(!vs.events.some(e => e.conversationId === group.id || e.conversationId === event.id) && !text(vs).includes(groupSecret.ciphertext) && !/Event secret/.test(text(vs)) && !holdsNote(text(vs))
             && !vs.events.some(e => e.type === 'post_updated' && e.post),
             "and not the group's chat, the event's chat, or the event's note, though a seat and a Going RSVP from before still name it");
         assert(bs.events.some(e => e.conversationId === group.id) && bs.events.some(e => e.conversationId === event.id),

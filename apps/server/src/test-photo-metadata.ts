@@ -41,6 +41,7 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
 import { getMemberPhoto, postPhotoUrl, setMemberPhoto } from '@beanpool/engine';
 
@@ -962,7 +963,7 @@ async function partTwo(): Promise<void> {
     if (openId) {
         const join = await signed('POST', `/api/groups/${openId}/join`, {}, reader);
         assert(join.status === 200, `the reader joins the open group (${join.status} ${join.json?.error ?? ''})`);
-        const line = await signed('POST', `/api/groups/${openId}/chat/message`, { text: 'The lemons are ripe' }, member);
+        const line = await signed('POST', `/api/groups/${openId}/chat/message`, lockedGroupLine(db, openId), member); // a group chat line is sealed
         assert(line.status === 200 || line.status === 201, `the member writes in the group chat (${line.status} ${line.json?.error ?? ''})`);
     }
     if (invitedId) {

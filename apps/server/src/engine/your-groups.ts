@@ -18,7 +18,7 @@ import {
 } from './event-thread.js';
 import { blankedWithAccount } from './message-tombstone.js';
 import { getChatMutesFor, type ChatMute } from './chat-mutes.js';
-import { avatarUrlOf, groupPictureUrlOf } from '@beanpool/core';
+import { avatarUrlOf, groupPictureUrlOf, isGroupEncryptedNonce } from '@beanpool/core';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
 
@@ -34,10 +34,15 @@ export interface YourChatLastMessage {
     authorCallsign: string | null;
     type: string;
     systemType: string | null;
-    /** Plain text for display: decoded plaintext-v1, a system line as written, or the removal notice. */
+    /** Plain text for display: decoded plaintext-v1, a system line as written, the removal notice, or LOCKED_PREVIEW. */
     text: string;
     timestamp: string;
+    /** A locked group line as stored, which the app opens for its own preview (group chat encryption design §9). */
+    locked?: { ciphertext: string; nonce: string; metadata: string | null };
 }
+
+/** What a locked group line reads as to an app that does not open it (the PWA until the thread is opened, §9). */
+export const LOCKED_PREVIEW = '🔒 Message';
 
 export interface YourChat {
     kind: YourChatKind;
@@ -102,6 +107,8 @@ function tombstonePreview(row: any, removedText: string, authorDeleteText: strin
 function previewText(row: any, removedText: string, authorDeleteText: string | null): string {
     if (row.type === 'removed') return tombstonePreview(row, removedText, authorDeleteText);
     if (row.type === 'system') return String(row.ciphertext ?? '');
+    // A locked group line (group chats step 2): the node can't read it, so an app opens the preview itself from `locked`.
+    if (isGroupEncryptedNonce(row.nonce)) return LOCKED_PREVIEW;
     let text = String(row.ciphertext ?? '');
     if (row.nonce === 'plaintext-v1') {
         try { text = Buffer.from(text, 'base64').toString('utf8'); } catch { /* keep as stored */ }
@@ -124,6 +131,8 @@ function lastMessageOf(conversationId: string, removedText: string, authorDelete
         type: r.type,
         systemType: r.system_type || null,
         text: previewText(r, removedText, authorDeleteText),
+        // The line as stored, for the app to open (§9): only for a locked line.
+        ...(isGroupEncryptedNonce(r.nonce) ? { locked: { ciphertext: r.ciphertext, nonce: r.nonce, metadata: r.metadata ?? null } } : {}),
         timestamp: r.timestamp,
     };
 }

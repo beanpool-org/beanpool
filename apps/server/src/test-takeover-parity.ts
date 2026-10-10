@@ -47,6 +47,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, copyDir, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
+import { makeGroupEpochRecord, sealGroupLine } from '@beanpool/core';
 import {
     diffDatabases, diffSettings, normaliseAnswer, idsIn, firstDifferences, checkKnownGaps,
     type DbDump, type SettingsDump, type Differences, type KnownGap,
@@ -388,6 +389,15 @@ async function main(): Promise<void> {
         const group = built('Ann starts a group', await S_(ann, '/api/groups', { name: 'Gardeners', description: 'People who grow things' }));
         const groupId = group.group?.id ?? group.id;
         built('Bo joins it', await S_(bo, `/api/groups/${groupId}/join`));
+        // The group chat's keys (group chats step 2): an epoch and its wraps, then a sealed line under it, all copied as rows.
+        const pkcs8 = (who: Id) => (who.priv.export({ format: 'der', type: 'pkcs8' }) as Buffer).toString('hex');
+        const gardenEpoch = makeGroupEpochRecord({ myEdPrivHex: pkcs8(ann), groupId, epoch: 1, reason: 'start', createdAt: new Date().toISOString(), recipients: [ann.pk, bo.pk] });
+        built("Ann makes the Gardeners chat's first epoch, wrapped to her and Bo", await S_(ann, `/api/groups/${groupId}/keys/epoch`, { epoch: gardenEpoch.record }));
+        const gardenLineId = crypto.randomUUID();
+        built('Bo sends a sealed line under it', await S_(bo, `/api/groups/${groupId}/chat/message`, {
+            ...sealGroupLine('Seedlings by the gate', { myEdPrivHex: pkcs8(bo), groupKey: gardenEpoch.groupKey, groupId, epoch: 1, messageId: gardenLineId }),
+            metadata: { epoch: 1 }, clientId: gardenLineId,
+        }));
         const start = new Date(Date.now() + 3 * 86400_000);
         const event = built('Cy hosts an event', await S_(cy, '/api/marketplace/posts', {
             type: 'event', title: 'Street picnic', description: 'Bring a plate', authorPublicKey: cy.pk, lat: -28.55, lng: 153.5,
@@ -556,6 +566,15 @@ async function main(): Promise<void> {
         const dumpT = await twin.send('dump') as DbDump;
         const dumpS = await standby.send('dump') as DbDump;
         diffDatabases(dumpT, dumpS, differences);
+        // messages.metadata is a known gap ('' against null), so the dump leaves it out; but a group line's epoch is its
+        // metadata, and an app opens the line by it. Compared here, as each server serves it (review of #1762, finding 7).
+        const gardenEpochOn = async (base: string): Promise<unknown> => {
+            const line = ((await api(base, 'GET', `/api/groups/${groupId}/chat`, { as: bo })).body?.messages ?? []).find((x: any) => x.id === gardenLineId);
+            const meta = typeof line?.metadata === 'string' ? JSON.parse(line.metadata) : line?.metadata;
+            return meta?.epoch;
+        };
+        const [epochT, epochS] = [await gardenEpochOn(t), await gardenEpochOn(s)];
+        assert(epochT === 1 && epochS === 1, `the sealed group line's epoch (its metadata) is the same on the promoted standby (${epochT} on the twin, ${epochS} on the standby)`);
         const manifest = await import('./engine/replication-manifest.js');
         diffSettings(await twin.send('settings'), await standby.send('settings'), {
             localConfig: (f) => manifest.LOCAL_CONFIG_FIELDS[f],

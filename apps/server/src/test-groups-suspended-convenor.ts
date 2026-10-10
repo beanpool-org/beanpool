@@ -42,6 +42,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { lockedGroupLine } from './group-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -139,7 +140,7 @@ async function main(): Promise<void> {
     const event = createPost('event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', reporter.pk,
         -28.55, 153.5, [], false, undefined, false,
         { audienceScope: 'group', targetGroupId: ga.id, eventStartAt: inHours(24), eventPlaceName: 'The hall' })!;
-    const chatLine = postGroupThreadMessage(ga.id, reporter.pk, 'I reported SuspSC to the moderators');
+    const chatLine = postGroupThreadMessage(ga.id, reporter.pk, lockedGroupLine(db, ga.id)); // a sealed line: the node never reads what it says
     const eventLine = postEventThreadMessage(event.id, reporter.pk, 'See you at the hall');
 
     // Group B: open, run by SuspSC alone. FriendSC and ReporterSC have been in it 50 days; SuspSC last did anything 40
@@ -245,7 +246,7 @@ async function main(): Promise<void> {
     // ── 2. The group they lead alone still works for its members ───────────────────────────────────────────────────
     console.log('\n— The group a suspended lead runs alone carries on —');
     assert(lastActive(susp.pk) === fortyDaysAgo, `none of those signed calls counted as the lead being active (${lastActive(susp.pk)})`);
-    r = await call('POST', `${B}/chat/message`, friend, { text: 'Carrying on without our convenor for now' });
+    r = await call('POST', `${B}/chat/message`, friend, lockedGroupLine(db, gb.id)); // a sealed line, as a member's app sends one
     assert(r.status === 201, `a member chats in the group (${show(r)})`);
     r = await call('POST', `${B}/join`, newcomer);
     assert(r.status === 200 && membership(gb.id, newcomer.pk)?.status === 'active', `a newcomer joins the open group (${show(r)})`);

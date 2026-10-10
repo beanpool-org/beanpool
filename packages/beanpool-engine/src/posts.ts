@@ -1077,10 +1077,10 @@ export interface NearbySet {
     /** near(M): nearest first (NEAREST_ORDER), or the newest first for a member with no area. */
     near: string[];
     /** Each row of S with its updated_at, each of its authors whose standing ever moved with their
-     *  board_standing_changed_at (an author's holiday moves no listing row), and the newest members.updated_at of its
-     *  authors (a rename moves no listing row either), in one string: with `ids`, what a read of S
-     *  answers depends on (the route's ETag). Every row's own time, not the newest: a row edited to a time below another's (a clock behind, an imported row)
-     *  still changes it. */
+     *  board_standing_changed_at (an author's holiday moves no listing row), and each of its authors as
+     *  public_key@members.updated_at (a rename moves no listing row either), in one string: with `ids`, what a read of S
+     *  answers depends on (the route's ETag). Every row's and every author's own time, not the newest: a row or an author
+     *  edited to a time below another's (a clock behind, an imported row) still changes it. */
     stamp: string;
 }
 

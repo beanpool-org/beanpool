@@ -11,7 +11,7 @@
  * listings worldwide (§3.4); nothing here may block the wizard or pretend a save worked.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { roundToArea } from '@beanpool/core';
+import { roundToArea, AREA_STEP_WORDS, areaWhyLine as coreWhyLine, describeArea } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import type { NodeFeatures } from './node-profile';
 
@@ -27,22 +27,12 @@ export function nearbyListingsOn(features: NodeFeatures | null | undefined): boo
     return !!features?.nearbyListings;
 }
 
-/** One wording for both apps (design §3.2). No currency, five short lines, three stacked controls. */
-export const AREA_WORDS = {
-    title: 'Roughly where are you?',
-    why: "The worldwide community shows you what's on offer near you: the nearest 500 listings within 250 km.",
-    privacy: 'We keep your area to about 10 km, never your exact spot. Other members see only a distance in km.',
-    useLocation: 'Use my location',
-    typeTown: 'Type a town or suburb',
-    skip: 'Skip for now',
-    later: 'You can change or clear this any time in Settings → Your area.',
-} as const;
+/** One wording for both apps (design §3.2), from @beanpool/core so the web's step says exactly the same. */
+export const AREA_WORDS = { ...AREA_STEP_WORDS, why: coreWhyLine(null) } as const;
 
 /** The why line with the node's own numbers, when it says them (`features.nearbyListings`). */
 export function areaWhyLine(features: NodeFeatures | null | undefined): string {
-    const n = features?.nearbyListings;
-    if (!n) return AREA_WORDS.why;
-    return `The worldwide community shows you what's on offer near you: the nearest ${n.max} listings within ${n.radiusKm} km.`;
+    return coreWhyLine(features?.nearbyListings ?? null);
 }
 
 export interface MemberArea {
@@ -51,12 +41,7 @@ export interface MemberArea {
     updatedAt?: string | null;
 }
 
-/** "About 10 km around <place or lat, lng>", or "Not set". */
-export function describeArea(area: MemberArea | null | undefined, placeName?: string | null): string {
-    if (!area) return 'Not set';
-    const where = placeName?.trim() || `${area.lat.toFixed(1)}, ${area.lng.toFixed(1)}`;
-    return `About 10 km around ${where}`;
-}
+export { describeArea };
 
 /** A position as it may leave this phone: its 0.1° area, never finer. */
 export function areaOf(lat: number, lng: number): { lat: number; lng: number } {

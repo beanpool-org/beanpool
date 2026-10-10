@@ -263,7 +263,11 @@ export interface CommunityInfo {
      * `privatePreview`: only the node's members, and people its owner or an admin invites, get in; a visitor reads nothing
      * (absent when off).
      */
-    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean };
+    features?: {
+        openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
+        /** Each member is given the listings near their area: the nearest `max` within `radiusKm` (the worldwide one). */
+        nearbyListings?: { radiusKm: number; max: number };
+    };
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
     addresses?: string[];
     /**

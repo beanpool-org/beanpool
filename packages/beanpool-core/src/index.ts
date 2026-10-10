@@ -53,4 +53,17 @@ export * from './recovery-kit.js';
 export * from './home-tips.js';
 export * from './home-frame.js';
 export * from './sky.js';
-export * from './group-crypto.js';
+// Group locks: named, not `export *`, so the raw wrap opener (openGroupKeyWrapUnverified, which proves nothing about who
+// made a wrap) stays out of the apps' reach. A new export from group-crypto.ts is added here on purpose or not at all.
+export {
+    GROUP_NONCE_PREFIX, GROUP_KEY_WRAP_TAG, GROUP_EPOCH_TAG, GROUP_TOP_UP_TAG, GROUP_LINE_TAG, GROUP_LINE_FORMAT, GROUP_EPOCH_REASONS,
+    GroupKeyNotVerifiedError, GroupLineNotVerifiedError,
+    groupKeyWrapAad, wrapGroupKey, groupEpochCanonical, makeGroupEpochRecord, verifyGroupEpochRecord, openGroupEpochRecord,
+    groupTopUpCanonical, makeGroupTopUp, verifyGroupTopUp, openGroupTopUp,
+    groupMessageKey, groupLineAad, isGroupEncryptedNonce, isGroupEncryptedPayload, sealGroupLine, openGroupLineWithMessageKey, openGroupLine,
+    detectMentions,
+} from './group-crypto.js';
+export type {
+    GroupEpochReason, GroupLinePart, GroupCryptoRandom, GroupKeyWrap, GroupEpochRecord, GroupTopUp, GroupLinePayload, GroupLineBinding,
+    OpenedGroupLine, GroupWrapBinding, MakeGroupEpochInput, GroupEpochCheck, GroupTopUpCheck, SealGroupLineInput,
+} from './group-crypto.js';

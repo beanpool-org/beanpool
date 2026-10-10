@@ -265,7 +265,7 @@ export interface CommunityInfo {
      */
     features?: {
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
-        /** Each member is given the listings near their area: the nearest `max` within `radiusKm` (the worldwide one). */
+        /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
     };
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
@@ -365,6 +365,8 @@ export interface CommunityStanding {
         rules?: 'words' | 'ordinary';
     };
     mute: { muted: boolean; until: string | null };
+    /** The member's own coarse area (0.1°), or null when they have set none. Absent on a node from before it. */
+    area?: { lat: number; lng: number; updatedAt?: string | null } | null;
 }
 
 /** The signer's own standing: members only, and only ever their own (the node reads the signature, not a parameter). */
@@ -994,6 +996,8 @@ export interface MarketplacePost {
     completedAt?: string;
     lat?: number;
     lng?: number;
+    /** How far from the point a read gave (`lat`/`lng`), as the node measured it: km, null for a listing with no place. */
+    distanceKm?: number | null;
     photos?: string[];
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
@@ -1061,6 +1065,11 @@ export async function getMarketplacePosts(filter?: {
     q?: string;
     limit?: number;
     offset?: number;
+    /** Distance search (routes/distance-query.ts): a point, a radius around it, nearest first. Each post then carries `distanceKm`. */
+    lat?: number;
+    lng?: number;
+    radiusKm?: number;
+    sort?: 'distance' | 'recent';
 }): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
@@ -1075,6 +1084,12 @@ export async function getMarketplacePosts(filter?: {
     if (filter?.q) params.set('q', filter.q);
     if (filter?.limit) params.set('limit', String(filter.limit));
     if (filter?.offset) params.set('offset', String(filter.offset));
+    if (filter?.lat != null && filter?.lng != null) {
+        params.set('lat', String(filter.lat));
+        params.set('lng', String(filter.lng));
+        if (filter.radiusKm != null) params.set('radiusKm', String(filter.radiusKm));
+    }
+    if (filter?.sort) params.set('sort', filter.sort);
     return request('GET', `/api/marketplace/posts?${params}`);
 }
 

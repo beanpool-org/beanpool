@@ -83,6 +83,7 @@ vi.mock('../lib/sync', () => ({
 
 vi.mock('../lib/geo', () => ({
     haversineDistance: vi.fn(() => 0),
+    loadRadiusSettings: vi.fn(() => null),
 }));
 
 vi.mock('../lib/profile-status', () => ({
@@ -1330,5 +1331,96 @@ describe("the poll form's note for a placeless listing (S4)", () => {
         await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
         expect(within(panel).queryByTestId('poll-placeless-note')).toBeNull();
         expect(me).not.toHaveBeenCalledWith('GET', '/api/community/me');
+    });
+});
+
+// The web Map on a node that reads by area (DESIGN-global-sync-by-area §5, S5): the nearest 200 within the Market's
+// distance setting, else within the node's radius of the member's stored area; a local node reads as before.
+describe('MapPage: where the pins are read from (S5)', () => {
+    const post = {
+        id: 'post-eggs', type: 'offer', category: 'food', title: 'A dozen eggs', description: 'Fresh',
+        credits: 12, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
+        createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: true,
+        lat: -28.5495, lng: 153.5005,
+    };
+    const NEARBY = { radiusKm: 250, max: 500 };
+    const TYPES = 'offer,need,poll,event';
+    const listReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !f?.author && !f?.id);
+    const ownReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.author);
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetCommunityInfoOnce();
+        const geo = await import('../lib/geo');
+        vi.mocked(geo.loadRadiusSettings).mockReturnValue(null);
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (f) => (f?.author ? [] : [post]) as any);
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ profile: 'global', features: { nearbyListings: NEARBY } } as any);
+        vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ publicKey: mockIdentity.publicKey, area: { lat: -28.5, lng: 153.5 } } as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    it('on a by-area node, reads the nearest 200 within the node\'s radius of the member\'s area, once, and the viewer\'s own anywhere', async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(listReads().length).toBe(1));
+        expect(listReads()).toEqual([{ types: TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'distance', limit: 200 }]);
+        expect(ownReads()).toEqual([{ types: TYPES, author: mockIdentity.publicKey, limit: 200 }]);
+    });
+
+    it('the Market\'s distance setting wins over the area', async () => {
+        const geo = await import('../lib/geo');
+        vi.mocked(geo.loadRadiusSettings).mockReturnValue({ lat: -37.1, lng: 144.2, radiusKm: 30, label: 'Castlemaine' });
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(listReads().length).toBe(1));
+        expect(listReads()).toEqual([{ types: TYPES, lat: -37.1, lng: 144.2, radiusKm: 30, sort: 'distance', limit: 200 }]);
+    });
+
+    it('a member with no area reads as before', async () => {
+        vi.mocked(api.getCommunityMe).mockResolvedValue({ publicKey: mockIdentity.publicKey, area: null } as any);
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(listReads().length).toBe(1));
+        expect(listReads()).toEqual([{ types: TYPES }]);
+        expect(ownReads()).toEqual([]);
+    });
+
+    it('a local node reads exactly as before and asks for no area', async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue({ profile: 'local', features: { beans: true } } as any);
+        const geo = await import('../lib/geo');
+        vi.mocked(geo.loadRadiusSettings).mockReturnValue({ lat: -37.1, lng: 144.2, radiusKm: 30, label: 'Castlemaine' });
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(listReads().length).toBe(1));
+        expect(listReads()).toEqual([{ types: TYPES }]);
+        expect(ownReads()).toEqual([]);
+        expect(api.getCommunityMe).not.toHaveBeenCalled();
+    });
+
+    it('nothing near the area is never a dead end: Show everywhere reads the newest', async () => {
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author ? [] : [post]) as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        const note = await view!.findByTestId('map-near-empty');
+        expect(note).toHaveTextContent('Nothing within 250 km of your area yet.');
+        fireEvent.click(within(note).getByRole('button', { name: 'Show everywhere' }));
+        await waitFor(() => expect(listReads().at(-1)).toEqual({ types: TYPES }));
+        await waitFor(() => expect(view!.queryByTestId('map-near-empty')).toBeNull());
+    });
+
+    it('after Show everywhere, Near your area reads from the area again', async () => {
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author ? [] : [post]) as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        const note = await view!.findByTestId('map-near-empty');
+        fireEvent.click(within(note).getByRole('button', { name: 'Show everywhere' }));
+        await waitFor(() => expect(listReads().at(-1)).toEqual({ types: TYPES }));
+        const back = await view!.findByTestId('map-near-again');
+        fireEvent.click(within(back).getByRole('button', { name: 'Near your area' }));
+        await waitFor(() => expect(listReads().at(-1)).toMatchObject({ types: TYPES, radiusKm: 250, sort: 'distance', limit: 200 }));
+        await waitFor(() => expect(view!.queryByTestId('map-near-again')).toBeNull());
     });
 });

@@ -119,6 +119,7 @@ import { createFederationCommissionRoutes } from './routes/federation-commission
 import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
+import { createEnterpriseDecisionRoutes } from './routes/enterprise-decisions.js';
 import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate.js';
 import { privatePreviewGate, privatePreviewEarlyGate, isPrivatePreview, type KeyedImageChecks } from './config/private-preview.js';
 import { avatarKeyMatches, groupPictureKeyMatches } from './engine/avatar-keys.js';
@@ -1798,6 +1799,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createMessagingRoutes(deps),
         createCommonsRoutes(deps),
         createTreasuryRoutes(deps),
+        createEnterpriseDecisionRoutes(deps),
         createPublicAddressRoutes(deps),
         createAppAddressesRoutes(deps),
         createKeeperRoutes(deps),

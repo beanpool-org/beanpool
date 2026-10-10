@@ -764,3 +764,18 @@ intentional; do not open PRs or issues attempting to alter them:
 
 Note (#1729, Scout): closed as a bundle (an unrelated tls.ts rewrite rode with the test). The missing test of `engine/probation.ts` is
 still WANTED: re-file `test-probation.ts` and its `scripts/server-suites.mjs` line on their own.
+
+### 2026-10-11 — Watchman: raise the test-door-work timing bound again, 2 → 5 ms (#1759) — MERGED IN ERROR, REVERTED
+- **Category:** CLAIM FALSE (no reproduction on main) — a re-file of #1730
+- **Why not to re-file:** no CI run in the last 60 failed runs (any branch) shows this assertion failing. File only with a failing CI
+  log from main, quoted in the PR body.
+
+### 2026-10-11 — Bolt: O(1) peer pubkey lookup in getConversationsByMember (#1754) — CLOSED, WRONG ANSWER
+- **Category:** BEHAVIOUR CHANGE for no gain
+- **Why not to re-file:** `parts.find()` returns the FIRST other participant; a Map filled in a loop keeps the LAST, so a group
+  conversation's listed peer changes. Conversations have a handful of participants; there is nothing to speed up.
+
+### 2026-10-11 — Expo: take the first of repeated search params in claim-community.tsx (#1753) — CLOSED, DECIDED
+- **Category:** DELIBERATE BEHAVIOUR
+- **Why not to re-file:** a claim link that repeats node/code/id is ambiguous and is refused on purpose (an array gives no value).
+  Taking the first of two differing server addresses in a claim link is the wrong answer.

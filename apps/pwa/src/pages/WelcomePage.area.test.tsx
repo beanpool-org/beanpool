@@ -117,6 +117,21 @@ describe('Your Area at signup (S4)', () => {
         expect(screen.getByRole('button', { name: 'Skip for now' })).toBeInTheDocument();
     });
 
+    it('below 360px wide, each column drops its label and the current step is named whole under the dots (review N5)', async () => {
+        await toThePhoto(GLOBAL_BY_AREA);
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByText(/Roughly where are you\?/);
+        const stepper = screen.getByTestId('onboarding-stepper');
+        // Measured at 320px and 130% text in WelcomePage's wrappers: five columns of 29px break "Phot/o" and "Back/up".
+        for (const col of Array.from(stepper.children)) {
+            const label = col.querySelector(':scope > span') as HTMLElement;
+            expect(label.className.split(' ')).toContain('max-[359px]:hidden');
+        }
+        const current = screen.getByTestId('onboarding-stepper-current');
+        expect(current.className.split(' ')).toEqual(expect.arrayContaining(['hidden', 'max-[359px]:block']));
+        expect(current.textContent).toBe('Your Area · Step 3 of 5');
+    });
+
     it('four columns without the feature: the photo goes straight to the words, and the browser is asked once at the end, as today', async () => {
         const { calls, onComplete } = await toThePhoto(GLOBAL_OPEN);
         expect(columns()).toEqual(['Sign in', 'Your Photo', 'Safety Backup', 'How it Works']);

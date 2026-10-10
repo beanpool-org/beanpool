@@ -186,6 +186,10 @@ const BUNDLED_AVATARS = [
  *
  * Five on a community that syncs listings by area (`area`, the node's `features.nearbyListings`): Your Area after Your
  * Photo. `step` names the same step either way (3 is Safety Backup, 4 How it Works), and `'area'` is the new one.
+ *
+ * Below 360px the columns are too narrow for whole words: at 320px and 130% text, inside this page's two 2rem paddings,
+ * five columns are 29px and four 36px, which broke "Phot/o" and "Back/up" (deciding review of #1766, N5). There each
+ * column keeps only its dot, and the current step is named whole under them.
  */
 export function OnboardingStepper({ step, firstLabel = 'Your Name', area = false }: { step: 1 | 2 | 3 | 4 | 'area'; firstLabel?: string; area?: boolean }) {
     const steps = area
@@ -193,11 +197,11 @@ export function OnboardingStepper({ step, firstLabel = 'Your Name', area = false
         : [firstLabel, 'Your Photo', 'Safety Backup', 'How it Works'];
     const position = step === 'area' ? 3 : area && step >= 3 ? step + 1 : step;
     return (
+        <div style={{ marginBottom: '1.5rem', width: '100%' }}>
         <div data-testid="onboarding-stepper" style={{
             display: 'grid',
             gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
             columnGap: '2px',
-            marginBottom: '1.5rem',
             width: '100%',
         }}>
             {steps.map((label, i) => {
@@ -238,7 +242,7 @@ export function OnboardingStepper({ step, firstLabel = 'Your Name', area = false
                                 <span style={{ color: '#fff', fontSize: '8px', fontWeight: '800' }}>✓</span>
                             )}
                         </div>
-                        <span style={{
+                        <span className="max-[359px]:hidden" style={{
                             fontSize: '10px',
                             lineHeight: 1.2,
                             color: isActive ? 'var(--text-primary)' : '#6b7280',
@@ -254,6 +258,17 @@ export function OnboardingStepper({ step, firstLabel = 'Your Name', area = false
                     </div>
                 );
             })}
+        </div>
+        <p data-testid="onboarding-stepper-current" className="hidden max-[359px]:block" style={{
+            margin: '6px 0 0',
+            fontSize: '12px',
+            lineHeight: 1.3,
+            fontWeight: 700,
+            textAlign: 'center',
+            color: 'var(--text-primary)',
+        }}>
+            {steps[position - 1]}<span style={{ fontWeight: 500, color: 'var(--text-muted)' }}> · Step {position} of {steps.length}</span>
+        </p>
         </div>
     );
 }

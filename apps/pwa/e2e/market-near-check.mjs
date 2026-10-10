@@ -8,12 +8,13 @@
  *      scroll; Show everywhere reads the newest (Oslo comes back) and Near your area goes back;
  *   2. the Map: one list read with the same point and limit=200;
  *   3. a local node: the Market's list read has no point, as before.
+ * In the List, Compact and Card layouts every distance tag is whole: no box that hides its overflow cuts it off.
  *
  * Fails on any sideways scroll, a control in the line under 44 px, or a request to any host but this machine.
  *
  * Run: node e2e/market-near-check.mjs (in apps/pwa; @beanpool/core, engine and signin built)
  */
-/* global URL, console, process, setTimeout, document, indexedDB, localStorage -- Node, and the page's side of evaluate() */
+/* global URL, console, process, setTimeout, document, indexedDB, localStorage, getComputedStyle -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -138,6 +139,19 @@ async function until(test, ms = 20_000) {
 }
 const listReads = (reads) => reads.filter((p) => !p.get('author') && !p.get('id'));
 const sideways = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+// Each distance tag on a card, and whether a box that hides its overflow cuts it off (the List row did at 320 px / 1.3x:
+// "138 km" read "📍 1").
+const clippedTags = (page) => page.evaluate(() => [...document.querySelectorAll('[data-testid="card-distance"]')]
+    .filter((t) => t.getClientRects().length > 0)
+    .map((t) => {
+        const r = t.getBoundingClientRect();
+        let clip = null;
+        for (let a = t.parentElement; a && !clip; a = a.parentElement) {
+            if (getComputedStyle(a).overflowX !== 'visible') clip = a.getBoundingClientRect();
+        }
+        const cut = !!clip && (r.right > clip.right + 0.5 || r.left < clip.left - 0.5);
+        return { text: t.textContent.trim(), cut };
+    }));
 const tab = (page, name) => page.locator('[data-testid="mobile-bottom-nav"] button').filter({ hasText: new RegExp(`${name}$`) });
 
 async function globalMember(browser, root) {
@@ -173,6 +187,16 @@ async function globalMember(browser, root) {
         check(h >= 44, `Show everywhere is at least 44 px tall (${h})`);
         fs.mkdirSync(path.join(os.tmpdir(), 'bp-near-shots'), { recursive: true });
         await m.page.screenshot({ path: path.join(os.tmpdir(), 'bp-near-shots', 'market-area.png') });
+        // Every layout: the distance tag whole on every card, never cut off by the card's edge.
+        for (const [toggle, layout] of [['Switch to List View', 'List'], ['Switch to Compact View', 'Compact'], ['Switch to Card View', 'Card']]) {
+            await m.page.getByRole('button', { name: toggle }).click();
+            await wait(500);
+            const tags = await clippedTags(m.page);
+            check(tags.length > 0 && tags.every((t) => !t.cut), `${layout} layout: ${tags.length} distance tag(s), none cut off (${tags.map((t) => `"${t.text}"${t.cut ? ' CUT' : ''}`).join(', ')})`);
+            const swl = await sideways(m.page);
+            check(swl <= 0, `${layout} layout: no sideways scroll (${swl})`);
+            if (layout === 'List') await m.page.screenshot({ path: path.join(os.tmpdir(), 'bp-near-shots', 'market-area-list.png') });
+        }
         const n0 = m.reads.length;
         await btn.click();
         await until(() => listReads(m.reads.slice(n0)).length > 0);

@@ -177,7 +177,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 {/* Right Content */}
                 <div className="flex-1 flex flex-col justify-center min-w-0">
                     <div className="flex justify-between items-center mb-1">
-                        <div className="flex gap-2 items-center">
+                        {/* Wraps, so at 320 px / 130% the distance tag drops to a second line rather than past the card edge. */}
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 items-center min-w-0">
                             {!isPulse && (
                                 <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                     post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'

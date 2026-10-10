@@ -14,7 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanpool/core';
-import { applyDelta, communityCachesRenamed, fetchFriendsFromServer, getDb, localPostTies } from '../utils/db';
+import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration } from '../utils/db';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
@@ -286,6 +286,50 @@ export async function applyLivePostChange(
 /** DeviceEventEmitter event fired when a performSync cycle ends, with `{ success: boolean }`. */
 export const PILLAR_SYNC_ENDED = 'pillar_sync_ended';
 
+/** performSync's answer while another cycle is running: it ran nothing. */
+export const ALREADY_SYNCING = 'Already syncing';
+/** performSync's answer when the copy it was writing was cleared under it (copyGeneration): it stored nothing. */
+export const COPY_CLEARED = 'The local copy was cleared during the sync';
+/** How long a Force Resync waits for a cycle already running to end before it runs its own (performSyncWhenFree). */
+export const RESYNC_WAIT_MS = 90_000;
+
+// Resolved as the running cycle ends, when PILLAR_SYNC_ENDED is emitted; null while none runs.
+let cycleEnd: Promise<void> | null = null;
+
+/**
+ * performSync for a reset that needs a cycle of its own on the copy it has just cleared (Force Resync). A cycle already
+ * running answered 'Already syncing', and Force Resync said "Success" over a copy nothing was refilling: the running
+ * cycle writes nothing into a cleared copy (copyGeneration). So that cycle is waited out, up to `waitMs`, and this one
+ * runs after it. Still refused after that, the answer stays ALREADY_SYNCING, never a success.
+ */
+export async function performSyncWhenFree(
+    onProgress?: (step: number, total: number, stage: string) => void,
+    waitMs = RESYNC_WAIT_MS,
+): Promise<SyncResult> {
+    const until = Date.now() + waitMs;
+    for (;;) {
+        const result = await performSync(onProgress);
+        const left = until - Date.now();
+        if (result.errorMessage !== ALREADY_SYNCING || left <= 0) return result;
+        onProgress?.(1, 5, 'Waiting for the sync already running to finish...');
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([cycleEnd ?? Promise.resolve(), new Promise<void>(resolve => { timer = setTimeout(resolve, left); })]);
+        clearTimeout(timer);
+    }
+}
+
+/**
+ * What Force Resync tells the member once its own sync has answered (performSyncWhenFree): "Success" only when the copy
+ * it cleared was read again; otherwise that it was cleared and will fill with the next sync, and why not yet.
+ */
+export function forceResyncNotice(result: Pick<SyncResult, 'success' | 'errorMessage'>): { title: string; message: string } {
+    if (result.success) return { title: 'Success', message: 'Local database rebuilt, ratings restored, and re-synced from the node.' };
+    const why = result.errorMessage === ALREADY_SYNCING
+        ? 'A sync that was already running has not finished yet.'
+        : `The download did not finish${result.errorMessage ? ` (${result.errorMessage})` : ''}.`;
+    return { title: 'Local copy cleared', message: `${why} Your community downloads again with the next sync, which the app runs on its own.` };
+}
+
 /**
  * True while a sync is queued (debounce window) or running. The market uses it so a sync that is
  * still downloading on a slow connection is not reported as "trouble connecting".
@@ -299,8 +343,15 @@ export function isPillarSyncActive(): boolean {
  * Returns immediately if hashes match (0 bytes transferred).
  */
 export async function performSync(onProgress?: (step: number, total: number, stage: string) => void): Promise<SyncResult> {
-    if (isSyncing) return { success: false, merkleRoot: null, deltaCount: 0, durationMs: 0, aborted: true, errorMessage: 'Already syncing' };
+    if (isSyncing) return { success: false, merkleRoot: null, deltaCount: 0, durationMs: 0, aborted: true, errorMessage: ALREADY_SYNCING };
+    // The copy this cycle writes to (utils/db.ts copyGeneration). Cleared under it, the cycle writes and stores nothing
+    // more; a cursor, hold, epoch or cycle time is stored only if the copy is still this one as the write is made.
+    const copyGen = copyGenerationNow();
+    const sameCopy = () => copyGenerationNow() === copyGen;
+    const storeForCopy = (key: string, value: string): Promise<void> => (sameCopy() ? AsyncStorage.setItem(key, value) : Promise.resolve());
     isSyncing = true;
+    let endCycle = () => {};
+    cycleEnd = new Promise<void>(resolve => { endCycle = resolve; });
     const startTime = Date.now();
     const deadline = startTime + SYNC_TIMEOUT_MS;
     // Pushed listing changes applied after this point are replayed over this cycle's writes (liveChangesSince).
@@ -490,6 +541,17 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         let postsUnwritten = false;
         // Whether the posts this read carries were written by the early write, not the cycle's batch.
         let postsWrittenEarly = false;
+        // The end of a cycle whose copy was cleared under it (copyGeneration): what it recorded as applied is forgotten
+        // and nothing is stored, so the next cycle reads the fresh copy whole.
+        const copyCleared = (tables: string[] = []): SyncResult => {
+            console.warn(`[Pillar Sync] The local copy of ${anchorUrl} was cleared during the sync; nothing more is written or stored.`);
+            timeouts.clear();
+            forgetCycleFingerprints(anchorUrl, [...tables, ...rawGated, 'posts', 'membersDelta', ...earlyApplied]);
+            result.aborted = true;
+            result.errorMessage = COPY_CLEARED;
+            result.durationMs = Date.now() - startTime;
+            return result;
+        };
         // Fast first paint: on the FIRST (full) sync for this node the marketplace is
         // still showing its loading spinner, and the remaining pillars below (balance,
         // members, crowdfund, transactions, ratings) can add several seconds on a slow
@@ -502,9 +564,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const writePostsEarly = async (posts: any[]): Promise<boolean> => {
             let done = false;
             try {
-                const wrote = await applyDelta({ posts, ...(takenOver && postsReplaceSafe ? { postsReplace: true, postsSentOnly } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
-                // Not written (the member switched community while this batch waited for the sync lock): the epoch
-                // stays as held, so the next cycle replaces the cache again.
+                const wrote = await applyDelta({ posts, ...(takenOver && postsReplaceSafe ? { postsReplace: true, postsSentOnly } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName, copyGen);
+                // Not written (the member switched community while this batch waited for the sync lock, or the copy was
+                // cleared): the epoch stays as held, so the next cycle replaces the cache again.
                 postsReplaced = takenOver && postsReplaceSafe && wrote;
                 if (wrote === false) {
                     postsUnwritten = true;
@@ -513,8 +575,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 earlyApplied.add('posts');
                 rawGated.delete('posts');
                 done = true;
-                const { DeviceEventEmitter } = require('react-native');
-                DeviceEventEmitter.emit('sync_data_updated');
+                if (wrote !== false) {
+                    const { DeviceEventEmitter } = require('react-native');
+                    DeviceEventEmitter.emit('sync_data_updated');
+                }
             } catch (e) {
                 console.warn('[Pillar Sync] Early posts apply failed (will apply in batch):', e);
             }
@@ -565,7 +629,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // the answer ends counts too.
             if (postsHeld) {
                 postsHeld = { ...postsHeld, tries: postsHeld.tries + 1 };
-                await AsyncStorage.setItem(kPostsHeld, JSON.stringify(postsHeld));
+                await storeForCopy(kPostsHeld, JSON.stringify(postsHeld));
             }
             epochNow = epochOf(postsRes);
             epochHeld = epochNow === null ? null : await AsyncStorage.getItem(kEpoch);
@@ -659,7 +723,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 let laterWritten = 0;
                 const writePage = async (rows: any[]): Promise<boolean> => {
                     try {
-                        const wrote = await applyDelta({ posts: rows, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
+                        const wrote = await applyDelta({ posts: rows, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName, copyGen);
                         if (wrote === false) {
                             postsUnwritten = true;
                             forgetCycleFingerprints(anchorUrl, ['posts']);
@@ -707,6 +771,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             result.errorMessage = `Posts fetch exception: ${e.message || e}`;
             return result;
         }
+        // Cleared while the posts were read (a Force Resync, a wipe): the read stopped at the first page it couldn't
+        // write, and nothing else of this cycle is fetched for a copy that is gone.
+        if (!sameCopy()) return copyCleared();
 
         // Tables are added to the delta ONLY when their payload actually changed —
         // applyDelta skips absent tables, so an unchanged fetch costs no parse, no
@@ -762,7 +829,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                         delta.membersComplete = true;
                     }
                     // An unchanged directory still counts as a completed hourly check.
-                    await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
+                    await storeForCopy(kLastMembersSync, String(Date.now()));
                     // Every member as they are now: no held delta needs to ask again.
                     if (dirData === undefined || Array.isArray(dirData)) membersLanded = true;
                 }
@@ -932,6 +999,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             result.durationMs = Date.now() - startTime;
             return result;
         }
+        if (!sameCopy()) return copyCleared();
 
         // Gate applyDelta per table: skip any table whose fetched payload is identical
         // to what we last applied. applyDelta rewrites every row it's given inside one
@@ -972,7 +1040,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         let landed = true;
         if (Object.keys(gatedDelta).length > 0) {
             try {
-                const wrote = await applyDelta(gatedDelta, expectedDbName);
+                const wrote = await applyDelta(gatedDelta, expectedDbName, copyGen);
                 if (gatedDelta.postsReplace && wrote) postsReplaced = true;
                 if (wrote === false) landed = false;
             } catch (applyErr) {
@@ -988,6 +1056,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 throw applyErr;
             }
         }
+        // Cleared before the batch took the lock, or after it wrote into the copy that is gone now.
+        if (!sameCopy()) return copyCleared(Object.keys(gatedDelta));
         if (!landed) {
             // As a switch found above: nothing counts as applied, and the cursor stays, so the next cycle on this
             // community asks again and writes what it is sent.
@@ -1015,7 +1085,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // members read lands. A cycle that never gets here moves neither cursor. Written before kLastSync, so a phone killed
         // between the two writes never has kLastSync moved past a hold it didn't store.
         if (membersHoldAt) {
-            if (membersHoldAt !== membersHeld) await AsyncStorage.setItem(kMembersHeld, membersHoldAt);
+            if (membersHoldAt !== membersHeld) await storeForCopy(kMembersHeld, membersHoldAt);
         } else if (membersLanded && membersHeld !== null) {
             await AsyncStorage.removeItem(kMembersHeld);
         }
@@ -1023,20 +1093,20 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // to when that read began. A 304 or a write that didn't land moves neither.
         if (!postsUnwritten && !postsNotModified) {
             if (postsHoldAt) {
-                await AsyncStorage.setItem(kPostsHeld, JSON.stringify(postsHoldAt));
+                await storeForCopy(kPostsHeld, JSON.stringify(postsHoldAt));
             } else {
                 if (postsHeld) await AsyncStorage.removeItem(kPostsHeld);
-                await AsyncStorage.setItem(kLastSync, String(postsReadStartedAt));
+                await storeForCopy(kLastSync, String(postsReadStartedAt));
             }
         }
         await AsyncStorage.removeItem(kCheckpoint);
         // The cycle completed (getLastSyncTime): whether its read finished, was held or was a 304. Not when its posts
         // went unwritten (the member switched community), as the cursor before it.
-        if (!postsUnwritten) await AsyncStorage.setItem(await getSyncCursorKey(StorageKeysConfig.LAST_CYCLE), String(Date.now()));
+        if (!postsUnwritten) await storeForCopy(await getSyncCursorKey(StorageKeysConfig.LAST_CYCLE), String(Date.now()));
         // The epoch this phone now holds the node as: the first one it sees, or the new one once the whole sync after
         // a take-over has replaced the cache. Until then the next cycle sees the change again and does it again.
         if (epochNow !== null && epochNow !== epochHeld && (!takenOver || postsReplaced)) {
-            await AsyncStorage.setItem(kEpoch, epochNow);
+            await storeForCopy(kEpoch, epochNow);
         }
 
         // A completed pillar cycle means the marketplace posts have actually been fetched
@@ -1062,6 +1132,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         return result;
     } finally {
         isSyncing = false;
+        cycleEnd = null;
+        endCycle();
         // Every finished cycle, success or not, so a screen waiting on the first sync can tell
         // "still working on a slow connection" from "this cycle failed". Emitted after isSyncing
         // is cleared.
@@ -1108,10 +1180,12 @@ export async function getCachedTransactions(): Promise<any[]> {
 const _lastAppliedFingerprints: Record<string, number> = {};
 
 /**
- * Reset all in-memory payload fingerprints. Must be called when clearing or resetting
+ * Reset all in-memory payload fingerprints, and start a new copy generation (utils/db.ts copyGeneration): a cycle in
+ * flight writes and stores nothing more. Must be called when clearing or resetting
  * the local SQLite database so the subsequent sync doesn't skip applying payloads.
  */
 export function resetSyncFingerprints() {
+    newCopyGeneration();
     for (const key of Object.keys(_lastAppliedFingerprints)) {
         delete _lastAppliedFingerprints[key];
     }

@@ -51,8 +51,11 @@ vi.mock('../nodes', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
-import { getDb } from '../db';
-import { forgetSyncCursors, getLastSyncTime, performSync, POSTS_HELD_TRIES, POSTS_PAGE_CAP, resetSyncFingerprints, syncCursorKeysOf } from '../../services/pillar-sync';
+import { clearDB, getDb, initDB } from '../db';
+import {
+    ALREADY_SYNCING, forceResyncNotice, forgetSyncCursors, getLastSyncTime, performSync, performSyncWhenFree, POSTS_HELD_TRIES, POSTS_PAGE_CAP,
+    resetSyncFingerprints, syncCursorKeysOf,
+} from '../../services/pillar-sync';
 
 const ANN = 'a'.repeat(64);
 const KEY = (id: string) => `pillar_sync_beanpool_test.beanpool.org.db_${id}`;
@@ -613,5 +616,203 @@ describe('a held page that never comes', () => {
         } finally {
             (globalThis as any).fetch = fetchMock;
         }
+    });
+});
+
+// A reset of the copy while a whole read is paging in (review of PR #1719 fix round 1, B-1: R7). Its pages are written as
+// they come, so a Force Resync tapped between two pages cleared the ones already written; the running cycle wrote the
+// rest into the fresh copy and stored its cursor, and every later cycle was a delta: the newest listings never came back.
+// Every clear starts a new copy generation (pillar-sync copyGeneration): the running cycle writes and stores nothing
+// more, and the next cycle reads the fresh copy whole. These run the app's own clear (utils/db.ts clearDB).
+describe('a reset while a whole read is paging in', () => {
+    const FILE = 'beanpool_test.beanpool.org.db';
+    /** app/(tabs)/settings.tsx Force Resync now: the copy, then every cursor of it. */
+    const forceResync = async () => { await clearDB(); await initDB(); for (const k of syncCursorKeysOf(FILE)) store.delete(k); };
+    /** As Force Resync was at 75e0f43b: the cursors first, then the copy. */
+    const forceResyncCursorsFirst = async () => { for (const k of syncCursorKeysOf(FILE)) store.delete(k); await clearDB(); await initDB(); };
+    /** "Wipe & Join Fresh" / "Wipe Connection": clearDB, then forgetSyncCursors. */
+    const wipe = async () => { await clearDB(); await forgetSyncCursors(); };
+    /** Sign Out's first step, or any clear that leaves the cursors to someone else: clearDB alone. */
+    const clearOnly = async () => { await clearDB(); };
+
+    /** Runs `reset` once, as the cycle's posts read number `n` (1 = its second) is about to be answered. */
+    function resetBeforeRead(n: number, reset: () => Promise<void>) {
+        let done = false;
+        (globalThis as any).fetch = async (url: string) => {
+            if (!done && url.includes('/api/marketplace/posts') && postsReadsThisCycle === n) { done = true; await reset(); }
+            return fetchMock(url);
+        };
+    }
+    const missingOf = (all: Listing[]) => { const t = heldTitles(); return all.filter(p => !t.has(p.id)).map(p => p.id); };
+    const firstAsks = () => { const q = new URL(postsReads()[0]).searchParams; return q.has('pageAfter') ? 'held' : q.has('updatedAfter') ? 'delta' : 'page 1'; };
+
+    beforeEach(() => {
+        // initDB's one-off trust migration would remove cursors and start a sync of its own while these run.
+        store.set('bp_trust_sync_v3', 'true');
+    });
+
+    for (const [name, reset] of [['Force Resync', forceResync], ['Force Resync, cursors first', forceResyncCursorsFirst], ['a wipe', wipe], ['clearDB alone', clearOnly]] as const) {
+        it(`R7 ${name} before page 2 of a first whole read of 450: the running cycle stores nothing, and the next reads all 450 from page 1`, async () => {
+            const all = many('all', 450, Date.parse('2026-09-01T00:00:00.000Z'));
+            node.posts = [...all];
+            resetBeforeRead(1, reset);
+            try {
+                await sync(false);
+            } finally {
+                (globalThis as any).fetch = fetchMock;
+            }
+            // The page read after the clear was not written, and the read went no further.
+            expect(postsReads()).toHaveLength(2);
+            expect(held()).toHaveLength(0);
+            expect(store.has(LAST_SYNC_KEY)).toBe(false);
+            expect(store.has(HELD_KEY)).toBe(false);
+            await sync();
+            expect(firstAsks()).toBe('page 1');
+            expect(missingOf(all)).toEqual([]);
+            await sync(); await sync();
+            expect(missingOf(all)).toEqual([]);
+            expect(held()).toHaveLength(450);
+        });
+    }
+
+    it('R7b Force Resync before page 3 of a first whole read of 650: none of the 650 is lost', async () => {
+        const all = many('all', 650, Date.parse('2026-09-01T00:00:00.000Z'));
+        node.posts = [...all];
+        resetBeforeRead(2, forceResync);
+        try {
+            await sync(false);
+        } finally {
+            (globalThis as any).fetch = fetchMock;
+        }
+        expect(store.has(LAST_SYNC_KEY)).toBe(false);
+        await sync();
+        expect(firstAsks()).toBe('page 1');
+        await sync(); await sync();
+        expect(missingOf(all)).toEqual([]);
+        expect(held()).toHaveLength(650);
+    });
+
+    it('R7c Force Resync while a held whole read carries on (its page 2 failed the cycle before): none of the 650 is lost', async () => {
+        const all = many('all', 650, Date.parse('2026-09-01T00:00:00.000Z'));
+        node.posts = [...all];
+        node.broken = { read: 1, status: 500, body: '{"error":"busy"}' };
+        await sync();
+        expect(held()).toHaveLength(PAGE);
+        expect(JSON.parse(store.get(HELD_KEY)!).since).toBe('');
+        node.broken = null;
+        resetBeforeRead(1, forceResync);
+        try {
+            await sync(false);
+        } finally {
+            (globalThis as any).fetch = fetchMock;
+        }
+        expect(store.has(LAST_SYNC_KEY)).toBe(false);
+        expect(store.has(HELD_KEY)).toBe(false);
+        await sync();
+        expect(firstAsks()).toBe('page 1');
+        await sync(); await sync();
+        expect(missingOf(all)).toEqual([]);
+        expect(held()).toHaveLength(650);
+    });
+
+    it('a delta in flight across a clear stores no cursor: the next cycle reads the fresh copy whole', async () => {
+        await phoneWithACursor();
+        const cursor = store.get(LAST_SYNC_KEY);
+        node.posts.push(...many('chg', 450, Date.now()));
+        resetBeforeRead(1, clearOnly);
+        try {
+            await sync(false);
+        } finally {
+            (globalThis as any).fetch = fetchMock;
+        }
+        // clearDB alone leaves the old cursor: the cycle did not move it, and the empty copy makes the next read whole.
+        expect(store.get(LAST_SYNC_KEY)).toBe(cursor);
+        expect(held()).toHaveLength(0);
+        await sync();
+        expect(firstAsks()).toBe('page 1');
+        expect(held()).toHaveLength(451);
+    });
+});
+
+// Force Resync's own sync ran into the cycle already running and was refused ('Already syncing'), and the modal said
+// "Success" over a copy nothing was refilling (review of PR #1719 fix round 1, B-1). It now waits that cycle out
+// (performSyncWhenFree, bounded) and runs its own; refused even so, it says plainly that the copy refills later.
+describe('Force Resync after a sync already running', () => {
+    const FILE = 'beanpool_test.beanpool.org.db';
+    const stubScreens = () => {
+        const nodeLoad = (Module as any)._load;
+        (Module as any)._load = function (request: string, ...rest: unknown[]) {
+            return request === 'react-native' ? { DeviceEventEmitter: { emit: (e: string) => { told.push(e); } } } : nodeLoad.call(this, request, ...rest);
+        };
+        return () => { (Module as any)._load = nodeLoad; };
+    };
+    beforeEach(() => { store.set('bp_trust_sync_v3', 'true'); });
+
+    it('tapped while a whole read pages in: the running cycle stores nothing, then Force Resync\'s own reads all 450 and says Success', async () => {
+        const all = many('all', 450, Date.parse('2026-09-01T00:00:00.000Z'));
+        node.posts = [...all];
+        requests = [];
+        postsReadsThisCycle = 0;
+        const restore = stubScreens();
+        let own: ReturnType<typeof performSyncWhenFree> | null = null;
+        let tapped = false;
+        (globalThis as any).fetch = async (url: string) => {
+            if (!tapped && url.includes('/api/marketplace/posts') && postsReadsThisCycle === 1) {
+                tapped = true;
+                // settings.tsx handleForceResync: the copy, its cursors, then its own sync.
+                await clearDB(); await initDB();
+                for (const k of syncCursorKeysOf(FILE)) store.delete(k);
+                own = performSyncWhenFree(undefined, 10_000);
+            }
+            return fetchMock(url);
+        };
+        try {
+            const running = await performSync();
+            expect(running.success).toBe(false);
+            expect(running.errorMessage).not.toBe(ALREADY_SYNCING);
+            const ownResult = await own!;
+            expect(ownResult.success).toBe(true);
+            expect(forceResyncNotice(ownResult).title).toBe('Success');
+            // The running cycle's two reads (page 2 not written), then Force Resync's own: three pages from page 1.
+            const asked = postsReads().map(u => new URL(u).searchParams.has('pageAfter') ? 'next' : 'page 1');
+            expect(asked).toEqual(['page 1', 'next', 'page 1', 'next', 'next']);
+            const t = heldTitles();
+            expect(all.filter(p => !t.has(p.id))).toEqual([]);
+            expect(store.get(LAST_SYNC_KEY)).toBeTruthy();
+        } finally {
+            (globalThis as any).fetch = fetchMock;
+            restore();
+        }
+    });
+
+    it('a running cycle that outlasts the wait: Force Resync\'s own sync answers "already syncing", and the notice is no success', async () => {
+        node.posts = many('all', 10, Date.parse('2026-09-01T00:00:00.000Z'));
+        const restore = stubScreens();
+        let release: () => void = () => {};
+        const slow = new Promise<void>(r => { release = r; });
+        (globalThis as any).fetch = async (url: string) => {
+            if (url.includes('/api/marketplace/posts')) await slow;
+            return fetchMock(url);
+        };
+        try {
+            const running = performSync();
+            const own = await performSyncWhenFree(undefined, 50);
+            expect(own.success).toBe(false);
+            expect(own.errorMessage).toBe(ALREADY_SYNCING);
+            const notice = forceResyncNotice(own);
+            expect(notice.title).not.toBe('Success');
+            expect(notice.message).toMatch(/next sync/);
+            release();
+            expect((await running).success).toBe(true);
+        } finally {
+            (globalThis as any).fetch = fetchMock;
+            restore();
+        }
+    });
+
+    it('the notice says Success only for a sync that succeeded', () => {
+        expect(forceResyncNotice({ success: true }).title).toBe('Success');
+        expect(forceResyncNotice({ success: false, errorMessage: 'Posts fetch failed with status: 500' }).title).toBe('Local copy cleared');
+        expect(forceResyncNotice({ success: false, errorMessage: 'Posts fetch failed with status: 500' }).message).toContain('status: 500');
     });
 });

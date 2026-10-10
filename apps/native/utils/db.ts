@@ -645,9 +645,30 @@ async function _doInitDB() {
 }
 
 /**
+ * The copies' generation: one more each time the copies the sync writes to are cleared or taken off the phone (clearDB,
+ * and services/pillar-sync.ts resetSyncFingerprints, which removeCommunityCaches calls). A sync cycle takes it as it
+ * starts and hands it to each of its writes (applyDelta's `generation`); once it has moved, the cycle writes nothing more
+ * and stores no cursor, hold, epoch or cycle time, since what it read belongs to the copy that was cleared, and the next
+ * cycle reads the fresh copy whole. Without it, a Force Resync tapped while a whole read paged in cleared the pages
+ * already written, the running cycle wrote the rest into the fresh copy and stored its cursor, and every later cycle was
+ * a delta: the newest listings never came back (review of PR #1719 fix round 1, B-1: R7). In memory: a cycle never
+ * outlives the app.
+ */
+let copyGeneration = 0;
+export function copyGenerationNow(): number {
+    return copyGeneration;
+}
+/** A new copy generation: every sync cycle in flight writes and stores nothing more (copyGeneration). */
+export function newCopyGeneration(): void {
+    copyGeneration++;
+}
+
+/**
  * Simple Drop util if the User needs to wipe memory
  */
 export async function clearDB() {
+    // First, before anything awaits: from here no sync cycle that began before stores a cursor for this copy.
+    newCopyGeneration();
     try {
         const { resetSyncFingerprints } = require('../services/pillar-sync');
         resetSyncFingerprints();
@@ -655,8 +676,15 @@ export async function clearDB() {
         console.warn('[DB] Failed to reset sync fingerprints during clearDB', e);
     }
     const database = await getDb();
-    await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps;');
-    
+    // Under the sync lock: a write in flight (a sync's page, a member's action) commits before the tables go, never into
+    // the middle of the drop; one waiting for the lock after it finds the copy cleared (applyDelta `generation`).
+    await acquireSyncLock({ urgent: true });
+    try {
+        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps;');
+    } finally {
+        releaseSyncLock();
+    }
+
     // Reset flags to force schema recreation
     dbInitialized = false;
     dbInitPromise = null;
@@ -2969,8 +2997,10 @@ export async function localPostTies(postId: string): Promise<{ authorPubkey: str
  * Writes a sync's delta to this node's cache. True once it has committed; false when it wrote nothing because the
  * member switched community while the delta was on its way (the guard below): a caller that must know the write
  * landed (a take-over's replace, services/pillar-sync.ts) reads this, since that case does not throw.
+ * `generation`: the copy generation (copyGeneration) the delta was read under; when the copy has been cleared since, it
+ * writes nothing and answers false, as for a switch.
  */
-export async function applyDelta(delta: any, expectedDbName?: string): Promise<boolean> {
+export async function applyDelta(delta: any, expectedDbName?: string, generation?: number): Promise<boolean> {
     await acquireSyncLock();
     try {
         const database = await getDb();
@@ -2982,6 +3012,12 @@ export async function applyDelta(delta: any, expectedDbName?: string): Promise<b
         // Skip the write; the newly-active node syncs cleanly on its own cycle.
         if (expectedDbName && currentDbName !== expectedDbName) {
             console.warn(`[DB] applyDelta: skipping write — active DB '${currentDbName}' != fetch-time DB '${expectedDbName}' (node switched mid-sync)`);
+            return false;
+        }
+        // Read for a copy that has been cleared since (a Force Resync, a wipe): written now, it would land in the fresh
+        // copy as if that copy had read it. Checked under the lock, which clearDB takes to drop the tables.
+        if (generation !== undefined && generation !== copyGeneration) {
+            console.warn('[DB] applyDelta: skipping write — the copy it was read for was cleared');
             return false;
         }
         // Read the identity OUTSIDE the transaction: it is an AsyncStorage/SecureStore read,

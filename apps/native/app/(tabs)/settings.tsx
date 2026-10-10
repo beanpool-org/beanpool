@@ -1340,16 +1340,17 @@ export default function SettingsScreen() {
                             keysToRemove.push(...(await AsyncStorage.getAllKeys()).filter(k => k.startsWith('beanpool_min_app_version')));
                             // Every sync cursor of each copy, a held posts read among them: carried on, a whole read
                             // would resume below its key and never re-download the newest listings.
-                            const { syncCursorKeysOf } = await import('../../services/pillar-sync');
+                            const { syncCursorKeysOf, performSyncWhenFree, forceResyncNotice } = await import('../../services/pillar-sync');
                             for (const u of urlsToClear) keysToRemove.push(...syncCursorKeysOf(getDatabaseFilenameForNode(u)));
-                            await AsyncStorage.multiRemove(keysToRemove);
+                            // The copy first, then its cursors, as the wipes do: a sync running now stores nothing once the
+                            // copy is cleared (pillar-sync copyGeneration), and one it stored before goes with the rest.
                             const { clearDB, initDB } = await import('../../utils/db');
                             await clearDB();
                             await initDB();
-                            
-                            // Perform full sync with live progress updates
-                            const { performSync } = await import('../../services/pillar-sync');
-                            const syncRes = await performSync((step, total, stage) => {
+                            await AsyncStorage.multiRemove(keysToRemove);
+
+                            // Perform full sync with live progress updates: after a sync already running, never instead of it.
+                            const syncRes = await performSyncWhenFree((step, total, stage) => {
                                 setResyncProgressStep(step);
                                 setResyncTotalSteps(total);
                                 setResyncProgressStage(stage);
@@ -1372,7 +1373,9 @@ export default function SettingsScreen() {
                             if (mode === 'diagnostics') {
                                 await loadDiagnostics({ skipSync: true });
                             }
-                            Alert.alert("Success", "Local database rebuilt, ratings restored, and re-synced from the node.");
+                            // "Success" only when its own sync re-read the copy; otherwise, plainly, that it will.
+                            const notice = forceResyncNotice(syncRes);
+                            Alert.alert(notice.title, notice.message);
                         } catch (e: any) {
                             setResyncModalVisible(false);
                             setResyncing(false);

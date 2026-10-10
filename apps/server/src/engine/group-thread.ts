@@ -355,7 +355,13 @@ export interface GroupLineIn {
     nonce: string;
     /** { epoch, replyToId?, mentions? }, as an object or its JSON. Nothing else in it is kept. */
     metadata?: unknown;
+    /** The id the line was sealed under, if not passed beside it. */
+    clientId?: string;
 }
+
+/** A sealed line is bound to its message id (core group-crypto.ts): the node stores it under that id or not at all. */
+export const GROUP_LINE_NEEDS_ID = 'A sealed group line is sent with the id it was sealed under (a lower-case UUID v4).';
+const SEALED_LINE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function metadataObject(metadata: unknown): Record<string, unknown> {
     if (metadata === undefined || metadata === null || metadata === '') return {};
@@ -399,6 +405,8 @@ export function postGroupThreadMessage(
 
     const declared = metadataObject(line?.metadata);
     const epoch = assertSealedGroupLine(groupId, line?.ciphertext, line?.nonce, declared);
+    clientId = clientId ?? line?.clientId;
+    if (typeof clientId !== 'string' || !SEALED_LINE_ID.test(clientId)) throw new Error(GROUP_LINE_NEEDS_ID);
     const replyToId = typeof declared.replyToId === 'string' && declared.replyToId.trim() ? declared.replyToId : undefined;
     // A reply quotes a message in THIS chat, never one from another chat and never a system line.
     if (replyToId) assertGroupChatReplyTarget(groupId, replyToId);
@@ -418,7 +426,7 @@ export function postGroupThreadMessage(
     }
 
     const mentions = filterDeclaredMentions(groupId, authorPubkey, declared.mentions);
-    const msgId = clientId || crypto.randomUUID();
+    const msgId = clientId;
     const ciphertext = line.ciphertext;
     const nonce = line.nonce;
     const timestamp = new Date().toISOString();

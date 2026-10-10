@@ -1141,7 +1141,7 @@ function toGroupChatMessagingError(e: any): Error {
         || /disabled|suspended|pruned|closed|Frozen|invalidated|Member not found/.test(msg)) return new MessagingError(msg, 403);
     // Bad input from the caller, not a refusal of who they are: an oversized line, a photo, metadata that is not JSON, a
     // reply that names a message in another chat or a system line.
-    if (/empty|too long|Only text|is JSON|not in this chat|system line/.test(msg)) return new MessagingError(msg, 400);
+    if (/empty|too long|Only text|is JSON|sealed under|not in this chat|system line/.test(msg)) return new MessagingError(msg, 400);
     return e;
 }
 

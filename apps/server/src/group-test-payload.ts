@@ -49,10 +49,14 @@ export function freshGroupEpoch(db: Db, groupId: string): number {
     return epoch;
 }
 
-/** A sealed line under the group's current (fresh) epoch, as POST /api/groups/:id/chat/message and /api/messages/send take it. */
-export function lockedGroupLine(db: Db, groupId: string, extra: { replyToId?: string; mentions?: string[]; bytes?: number } = {}): { ciphertext: string; nonce: string; metadata: string } {
+/**
+ * A sealed line under the group's current (fresh) epoch, with the id it was sealed under: `clientId` as
+ * POST /api/groups/:id/chat/message and the engine take it, the same as `id` for POST /api/messages/send.
+ */
+export function lockedGroupLine(db: Db, groupId: string, extra: { replyToId?: string; mentions?: string[]; bytes?: number } = {}): { ciphertext: string; nonce: string; metadata: string; clientId: string; id: string } {
     const meta: Record<string, unknown> = { epoch: freshGroupEpoch(db, groupId) };
     if (extra.replyToId) meta.replyToId = extra.replyToId;
     if (extra.mentions) meta.mentions = extra.mentions;
-    return { ...lockedGroupBytes(extra.bytes), metadata: JSON.stringify(meta) };
+    const id = crypto.randomUUID();
+    return { ...lockedGroupBytes(extra.bytes), metadata: JSON.stringify(meta), clientId: id, id };
 }

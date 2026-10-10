@@ -326,6 +326,7 @@ export const SUITES = [
     'test-funnel-event',
     'test-handshake',
     'test-post-pause-resume',
+    'test-post-sight',
     'test-cancel-post-request',
     'test-non-members-cant-act',
     'test-marketplace-auth',

@@ -7,9 +7,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import { Picker } from '@react-native-picker/picker';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
-import { useFocusEffect, router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
-
-export { ErrorBoundary };
+import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getPosts, createPost, getBalance, getMemberProfile, getReachablePeers } from '../../utils/db';

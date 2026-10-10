@@ -2,8 +2,8 @@
 // 2026-10-10): every 5 minutes, 2 minutes after the sweep and in an invocation of its own, the Worker looks at our servers
 // from outside — never from the server it watches — and tells the admin's phone through the alert book (src/alerts.js)
 // what it sees:
-//   - a server that does not answer 2xx two looks in a row (15 s each, a redirect is not followed): urgent, cleared at
-//     its first 2xx;
+//   - a server that does not answer as ours two looks in a row (15 s each, a redirect is not followed; a 2xx counts only
+//     with a node's JSON version or the vault's open/locked): urgent, cleared at its first such answer;
 //   - the vault answering locked two looks in a row: urgent;
 //   - the vault's daily signed report, believed only under the ticket public key the apps pin (VAULT_TICKET_KEYS): one
 //     that is missing, not signed by that key ("unverifiable"), unreadable or not from now ("stale") two looks in a
@@ -93,15 +93,21 @@ async function look(url) {
     }
 }
 
-// A node: /api/version (version, commit) and /api/community/health (its host watchdog). It answers if either does.
+// A 2xx that is not what our server says (a parked page, a captive portal, someone else's server at the address).
+const notOurs = (x) => `not a BeanPool answer (${x.status})`;
+
+// A node: /api/version (version, commit) and /api/community/health (its host watchdog). It is up if either answers as
+// a node does: JSON with its version (both carry it). Any other 2xx is no answer.
 async function lookAtNode(t) {
     const [v, h] = await Promise.all([look(`${t.url}/api/version`), look(`${t.url}/api/community/health`)]);
-    const answered = v.ok ? v : h.ok ? h : v;
-    const rec = h.ok ? h.body?.watchdog?.recoveries : undefined;
+    const vOk = v.ok && !!word(v.body?.version);
+    const hOk = h.ok && !!word(h.body?.version);
+    const answered = vOk ? v : hOk ? h : v;
+    const rec = hOk ? h.body?.watchdog?.recoveries : undefined;
     return {
-        ok: v.ok || h.ok, ms: answered.ms, status: answered.status,
-        version: word(v.ok ? v.body?.version : null) ?? word(h.ok ? h.body?.version : null),
-        commit: word(v.ok ? v.body?.commit : null),
+        ok: vOk || hOk, ms: answered.ms, status: vOk || hOk || !v.ok ? answered.status : notOurs(v),
+        version: word(vOk ? v.body.version : null) ?? word(hOk ? h.body.version : null),
+        commit: word(vOk ? v.body?.commit : null),
         recoveries: Number.isSafeInteger(rec) && rec >= 0 ? rec : null,
     };
 }
@@ -152,12 +158,14 @@ function backupsFrom(report, nowMs) {
     };
 }
 
-// The vault: /v1/health ({ state, release, since }) and, when it answers open, /v1/report.
+// The vault: /v1/health ({ state, release, since }) and, when it answers open, /v1/report. It is up only if it says
+// open or locked, the two states it tells the outside (apps/vault server.ts): any other 2xx is no answer, never "locked".
 async function lookAtVault(env, t, nowMs) {
     const h = await look(`${t.url}/v1/health`);
-    const out = { ok: h.ok, ms: h.ms, status: h.status, version: null, commit: null, state: null, report: null, recoveries: null };
-    if (!h.ok) return out;
-    out.state = h.body?.state === 'open' ? 'open' : 'locked';   // anything but open is locked, as watch.ts reads it
+    const state = h.ok && ['open', 'locked'].includes(h.body?.state) ? h.body.state : null;
+    const out = { ok: !!state, ms: h.ms, status: h.ok && !state ? notOurs(h) : h.status, version: null, commit: null, state: null, report: null, recoveries: null };
+    if (!state) return out;
+    out.state = state;
     out.version = word(h.body?.release);
     if (out.state !== 'open') return out;
     const keys = ticketKeys(env);

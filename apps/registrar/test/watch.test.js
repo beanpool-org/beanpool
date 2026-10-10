@@ -38,6 +38,8 @@ function nodeServer({ version = '1.2.30', commit = 'aaaaaaa1111111', recoveries 
         if (fail === 'timeout') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
         if (fail === '302') return new Response(null, { status: 302, headers: { location: 'https://elsewhere.watch.test/landing' } });
         if (typeof fail === 'number') return new Response('no', { status: fail });
+        if (fail === 'html') return new Response('<html><body>Welcome</body></html>', { headers: { 'content-type': 'text/html' } });   // a parked page
+        if (fail === 'foreign') return Response.json({ status: 'ok', uptime: 5 });   // some other server's JSON
         if (path === '/api/version') return Response.json({ version: s.version, commit: s.commit, buildTime: 'x', node: 'n', extra: { added: 1 } });
         if (path === '/api/community/health') return Response.json({ nodeName: 'X', version: s.version, watchdog: { present: true, recoveries: s.recoveries, healthy: true } });
         return new Response('not found', { status: 404 });
@@ -62,6 +64,8 @@ async function vaultServer() {
     s.handle = async (path) => {
         s.hits.push(path);
         if (s.fail === 'unreachable') throw new TypeError('fetch failed');
+        if (s.fail === 'html') return new Response('<html><body>Captive portal</body></html>', { headers: { 'content-type': 'text/html' } });
+        if (s.fail === 'foreign') return Response.json({ state: 'sealed', ok: true });
         if (path === '/v1/health') return Response.json({ state: s.state, release: s.release, since: new Date(Date.now() - 86400_000).toISOString(), added: true });
         if (path === '/v1/report') {
             const text = s.text();
@@ -184,6 +188,40 @@ test('a 3xx is a failed look and its redirect is never followed; a timeout is a 
         assert.equal(g.last.status, 'HTTP 302');
         assert.equal(g.day.looks, 2);
         assert.equal((await r.admin('servers', { secret: 'wrong' })).status, 401, 'the panel needs the admin secret');
+    } finally { r.done(); }
+});
+
+test('a 200 that is not a BeanPool answer is down: a node needs JSON with its version, the vault a state of open or locked', async () => {
+    const r = await room();
+    try {
+        r.global.fail = 'html';
+        r.mullum.fail = 'foreign';
+        r.vault.fail = 'html';
+        await r.tick();
+        assert.deepEqual(r.titles(), []);
+        await r.tick();
+        assert.deepEqual(r.titles(), ['global down (+2 more)'], 'down, never "vault locked"');
+        assert.match(r.sent[0].body, /global \(global\.watch\.test\) does not answer from outside: not a BeanPool answer \(HTTP 200\), 2 looks in a row/);
+        assert.match(r.sent[0].body, /mullum \(mullum\.watch\.test\) does not answer from outside: not a BeanPool answer \(HTTP 200\), 2 looks in a row/);
+        assert.match(r.sent[0].body, /vault \(vault\.watch\.test\) does not answer from outside: not a BeanPool answer \(HTTP 200\), 2 looks in a row/);
+        assert.ok(!r.sent[0].body.includes('locked'));
+        const s = (await r.admin('servers')).body.targets;
+        assert.deepEqual(s.map((t) => [t.name, t.last.ok, t.last.status, t.last.state ?? null, t.last.version ?? null]), [
+            ['global', false, 'not a BeanPool answer (HTTP 200)', null, null],
+            ['vault', false, 'not a BeanPool answer (HTTP 200)', null, null],
+            ['mullum', false, 'not a BeanPool answer (HTTP 200)', null, null],
+        ]);
+        // A vault answering some other state (no vault says it) is not a BeanPool answer either.
+        r.vault.fail = 'foreign';
+        await r.tick();
+        assert.equal((await r.admin('servers')).body.targets.find((t) => t.name === 'vault').last.status, 'not a BeanPool answer (HTTP 200)');
+        // A node whose /api/version is not one but whose health is: up, on health's version.
+        r.global.fail = null; r.mullum.fail = null; r.vault.fail = null;
+        r.global.versionFail = 'html';
+        await r.tick();
+        assert.deepEqual(r.titles().slice(1), ['Resolved: global down (+2 more)']);
+        const g = (await r.admin('servers')).body.targets.find((t) => t.name === 'global');
+        assert.deepEqual([g.last.ok, g.last.version, g.last.commit], [true, '1.2.30', null]);
     } finally { r.done(); }
 });
 

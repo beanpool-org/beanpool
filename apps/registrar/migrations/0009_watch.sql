@@ -19,9 +19,9 @@ CREATE TABLE IF NOT EXISTS watch_log (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     ran_at     INTEGER NOT NULL,             -- the look (unix s)
     target     TEXT NOT NULL,                -- its name in WATCH_TARGETS
-    ok         INTEGER NOT NULL,             -- 1 = it answered 2xx
+    ok         INTEGER NOT NULL,             -- 1 = it answered as ours: 2xx with a node's JSON version, the vault's open|locked
     ms         INTEGER,                      -- how long the answer took
-    status     TEXT,                         -- 'HTTP 200', 'HTTP 302', 'timed out', 'unreachable'
+    status     TEXT,                         -- 'HTTP 200', 'HTTP 302', 'timed out', 'unreachable', 'not a BeanPool answer (HTTP 200)'
     version    TEXT,                         -- what it runs, as it says (a node's /api/version; the vault's release)
     commit_sha TEXT,                         -- a node's commit
     state      TEXT,                         -- the vault: open | locked

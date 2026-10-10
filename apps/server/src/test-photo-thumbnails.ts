@@ -12,6 +12,10 @@
  *     photo's small copy is in the store beside it, its longest side 200 px, the same format, the PNG's transparency
  *     kept, each at most 10 KB; served at the URL the listing read hands out with `&size=thumb`, the same type and the
  *     same cache header as the photo, the photo itself unchanged at its own URL.
+ *     Two hostile shapes the node's photo check accepts (review opus-1742 #1): a ~130 KB PNG of 16,777,216×1 px (16-bit
+ *     RGBA), which a decoder would need over a gigabyte for, and the same with its image data stopping early (its chunks
+ *     whole), which can never give a copy. No small copy, the photo itself served, the process alive with its peak
+ *     memory barely moved, and each read at most once however often it is asked for.
  *  2. Made on first request, then kept: a photo stored before this (its small copy not there) is answered with one,
  *     which is then in the store, and the next request is served from the store (its bytes, marked, come back).
  *  3. A photo kept in its row (not in the store) has no small copy: `size=thumb` serves the photo itself.
@@ -40,6 +44,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -84,6 +90,33 @@ async function get(p: string, id?: Id): Promise<Res> {
     let body: any;
     try { body = JSON.parse(bytes.toString('utf8')); } catch { /* an image */ }
     return { status: res.status, bytes, body, cache: res.headers.get('cache-control'), type: res.headers.get('content-type') };
+}
+/**
+ * A PNG of zeros, 16-bit RGBA, `width`×1 px, its chunks whole; `keep` < 1 deflates only that share of its image data. Made
+ * in 1 MB pieces, so the suite's own memory isn't what moves.
+ */
+async function longRowPng(width: number, keep: number): Promise<Buffer> {
+    const table = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+    const crc = (b: Buffer): number => { let c = 0xffffffff; for (const x of b) c = table[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+    const chunk = (type: string, data: Buffer): Buffer => {
+        const typed = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+        const head = Buffer.alloc(4); head.writeUInt32BE(data.length);
+        const tail = Buffer.alloc(4); tail.writeUInt32BE(crc(typed));
+        return Buffer.concat([head, typed, tail]);
+    };
+    const z = zlib.createDeflate();
+    const parts: Buffer[] = [];
+    z.on('data', (c: Buffer) => parts.push(c));
+    const ended = once(z, 'end');
+    const zeros = Buffer.alloc(1 << 20);
+    for (let left = Math.floor((1 + width * 8) * keep); left > 0; left -= zeros.length) {
+        if (!z.write(zeros.subarray(0, Math.min(left, zeros.length)))) await once(z, 'drain');
+    }
+    z.end();
+    await ended;
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(1, 4); ihdr[8] = 16; ihdr[9] = 6;
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', Buffer.concat(parts)), chunk('IEND', Buffer.alloc(0))]);
 }
 const thumbOf = (url: string): string => `${url}${url.includes('?') ? '&' : '?'}size=thumb`;
 
@@ -183,6 +216,29 @@ async function main(): Promise<void> {
             `the photo's own URL still serves the 800 px photo, unchanged (${full.bytes.length} B)`);
     }
     console.log(`   sizes: ${sizes.join('; ')}`);
+    {
+        const wide = await longRowPng(16_777_216, 1);
+        const cut = await longRowPng(16_777_216, 0.5);
+        const peakBefore = process.resourceUsage().maxRSS;
+        const readsBefore = thumbs?.thumbnailReads?.() ?? NaN;
+        const ribbon = make('Thumb ribbon, a hostile shape', [dataUrl('image/png', wide), dataUrl('image/png', cut)]);
+        await settled();
+        const urls = await urlsOf(ribbon);
+        for (const [i, [name, bytes]] of ([['a 16,777,216×1 PNG', wide], ['the same, its image data cut short', cut]] as const).entries()) {
+            const row = rowOf(ribbon, i);
+            assert(!!row.storage_key && !(await headObject(store, thumbKeyOf(row.storage_key))), `${name} (${bytes.length} B): no small copy in the store`);
+            for (const n of [1, 2]) {
+                const r = await get(thumbOf(urls[i]), carol);
+                assert(r.status === 200 && r.bytes.equals(bytes) && r.type === 'image/png',
+                    `${name}: &size=thumb serves the photo itself (ask ${n}: ${r.status} ${r.bytes.length} B)`);
+            }
+        }
+        await settled();
+        const grewMB = Math.round((process.resourceUsage().maxRSS - peakBefore) / 1024);
+        assert(grewMB < 200, `the process alive, its peak memory up ${grewMB} MB for both (under 200)`);
+        const reads = (thumbs?.thumbnailReads?.() ?? NaN) - readsBefore;
+        assert(reads <= 2, `each read at most once for its stored copy and two asks each (${reads} reads, at most 2)`);
+    }
 
     // ── 2. made on first request, then kept ─────────────────────────────────────────────────────
     console.log('\n── 2. a photo stored before this: made on its first request, then served from the store ──');

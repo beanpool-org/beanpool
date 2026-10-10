@@ -29,6 +29,15 @@
  * its own. A photo already that small, or one whose small copy would be no smaller, is its own small copy: the same
  * bytes, under the small copy's key. A photo it cannot read (not an image, a format it doesn't make, a decoder bomb)
  * has none, and the route serves the photo itself.
+ *
+ * ## What it will not read
+ *
+ * The node's photo check (engine/avatar.ts) looks at a photo's bytes, not its size in pixels, and a ~130 KB PNG can be
+ * 16,777,216×1 px: a decoder needs over a gigabyte for that, and a 1 GB node is killed (review opus-1742 #1, measured
+ * OOM in a 1 GB container). So the header is read first and a photo with a side over {@link MAX_INPUT_SIDE} is never
+ * decoded. And a photo that gives no copy is remembered ({@link unmakeable}), so it is read at most once per process
+ * however often the lists ask for it: a copy that can't be made is never kept, and would otherwise be tried again on
+ * every request.
  */
 
 import type { Readable } from 'node:stream';
@@ -38,8 +47,25 @@ import { deleteObjectUnless, headObject, openObject, readObject, writeObject, ty
 /** The longest side of a small copy, in pixels. Lists draw photos at 56-120 dp; 200 px is sharp at 1.5-2× density. */
 export const THUMB_MAX_SIDE = 200;
 
-/** The decoder's ceiling: an 800 px photo is 0.64 MP; a row from a peer or a backup claiming more is not decoded. */
-const MAX_INPUT_PIXELS = 4096 * 4096;
+/**
+ * The decoder's ceiling, a side and the pixels it allows: photos are stored at most 800 px on a side (Marty, photos stay
+ * 800 px), so this is 2.5× room; a row from a peer or a backup claiming more is not decoded.
+ */
+const MAX_INPUT_SIDE = 2048;
+const MAX_INPUT_PIXELS = MAX_INPUT_SIDE * MAX_INPUT_SIDE;
+
+/**
+ * The small copies that could not be made, by key, so their photos are not read again in this process. Keys are
+ * content-addressed (a photo replaced is a new key), so a copy that couldn't be made from a key's bytes never can be.
+ * Bounded: past {@link UNMAKEABLE_MAX} the oldest is forgotten, and is read once more if it is asked for again.
+ */
+const unmakeable = new Set<string>();
+const UNMAKEABLE_MAX = 10_000;
+/** How many photos have been read to make a small copy, header or more, in this process. For the suites. */
+let reads = 0;
+export function thumbnailReads(): number {
+    return reads;
+}
 
 // One resize at a time, on one thread, and nothing kept in libvips' operation cache: a small node's memory and CPU
 // belong to its members' requests.
@@ -72,7 +98,11 @@ function mimeOfKey(key: string): string {
 export async function makeThumbnail(photo: Buffer, thumbKey: string): Promise<Buffer | null> {
     const ext = thumbKey.slice(thumbKey.lastIndexOf('.') + 1);
     let image: sharp.Sharp;
+    reads++;
     try {
+        // The header alone first: a side the decoder would need gigabytes for is refused before any pixel is read.
+        const head = await sharp(photo, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+        if (!head.width || !head.height || head.width > MAX_INPUT_SIDE || head.height > MAX_INPUT_SIDE) return null;
         image = sharp(photo, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' })
             .rotate()
             .resize({ width: THUMB_MAX_SIDE, height: THUMB_MAX_SIDE, fit: 'inside', withoutEnlargement: true });
@@ -109,13 +139,18 @@ function oneAtATime<T>(work: () => Promise<T>): Promise<T> {
  * land in, none is left behind.
  */
 function makeAndKeep(store: ImageStore, photoKey: string, thumbKey: string, photo: () => Promise<Buffer | null>): Promise<Buffer | null> {
+    if (unmakeable.has(thumbKey)) return Promise.resolve(null);
     const pending = inFlight.get(thumbKey);
     if (pending) return pending;
     const made = oneAtATime(async () => {
         const bytes = await photo();
         if (!bytes) return null;
         const thumb = await makeThumbnail(bytes, thumbKey);
-        if (!thumb) return null;
+        if (!thumb) {
+            if (unmakeable.size >= UNMAKEABLE_MAX) unmakeable.delete(unmakeable.values().next().value!);
+            unmakeable.add(thumbKey);
+            return null;
+        }
         try {
             await writeObject(store, thumbKey, thumb, { mime: mimeOfKey(thumbKey) });
             if (!(await headObject(store, photoKey))) {
@@ -149,7 +184,7 @@ export function queueThumbnail(store: ImageStore, photoKey: string, photo: Buffe
 export async function openThumbnailOf(store: ImageStore, photoKey: string | null | undefined):
     Promise<{ body: Buffer | Readable; contentType: string; bytes: number | null } | null> {
     const thumbKey = thumbnailKeyOf(photoKey);
-    if (!thumbKey) return null;
+    if (!thumbKey || unmakeable.has(thumbKey)) return null;
     const contentType = mimeOfKey(thumbKey);
     const kept = await openObject(store, thumbKey);
     if (kept) return { body: kept.stream, contentType, bytes: kept.bytes };

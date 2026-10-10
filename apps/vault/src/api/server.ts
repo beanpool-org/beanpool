@@ -1413,8 +1413,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             console.error(`vault-api: tidying the off-box store failed (${what}: ${failed.error}); the copy itself is there`);
             return;
         }
-        if (target !== offsite) return;
-        offsiteStatus.prune = { lastOkAt: clock(), failuresInARow: 0, step: null, error: null };
+        offsiteStatus.prune ={ lastOkAt: clock(), failuresInARow: 0, step: null, error: null };
     }
 
     async function maintenance(): Promise<void> {

@@ -144,7 +144,9 @@ export type NeedsTarget =
     | { to: 'decide' }
     | { to: 'chat'; conversationId: string; event?: boolean; thread?: 'group' | 'enterprise' }
     | { to: 'unread-messages' }
-    | { to: 'your-groups' };
+    | { to: 'your-groups' }
+    /** An enterprise's own screen, for its keepers' votes (DESIGN-group-decisions §2.8): only to an app that says it opens it. */
+    | { to: 'enterprise'; id: string };
 /** One line of "Needs you", the shape apps/native utils/needs-you.ts builds. `closesAt` on a vote, so an app words it in the member's own time. */
 export interface NeedsItem { kind: NeedsKind; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
@@ -232,7 +234,22 @@ export interface HomeReader {
      * id is built as today; any other id only when it names an instance in the member's stored version-2 layout.
      */
     asked: string[] | undefined;
+    /**
+     * `lands=` as sent (parseLands): the landings beyond the first set this app can open. An app that names none is given
+     * nothing that would land nowhere in it: no line or count for an enterprise's keepers' votes (`enterprise`).
+     */
+    lands?: ReadonlySet<HomeLanding>;
     now?: number;
+}
+
+/** The landings an app may say it opens (`lands=`), beyond the ones every app has. */
+export type HomeLanding = 'enterprise';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise']);
+
+/** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
+export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
+    const sent = (Array.isArray(raw) ? raw : [raw]).filter((v): v is string => typeof v === 'string');
+    return new Set(sent.flatMap(v => v.split(',')).map(v => v.trim()).filter((v): v is HomeLanding => HOME_LANDINGS.has(v)));
 }
 
 interface Ctx {
@@ -250,6 +267,8 @@ interface Ctx {
     switches: ProfileSwitches;
     features: NodeFeatures;
     interests: string[];
+    /** HomeReader.lands: what this app can open beyond the first set. */
+    lands: ReadonlySet<HomeLanding>;
     /** Read once per answer, for `needs` and `groups`. */
     chats?: ReturnType<typeof listYourChats>;
     /** Read once per answer, for `steps` and `me`. */
@@ -382,6 +401,13 @@ function openDeals(me: string) {
 const waitsOn = (t: { status: string; buyerPublicKey: string; sellerPublicKey: string }, me: string) =>
     (t.status === 'requested' && t.sellerPublicKey === me) || (t.status === 'pending' && (t.buyerPublicKey === me || t.sellerPublicKey === me));
 
+/**
+ * The enterprise keepers' votes the member is on the roll of (decisions-engine openScopedDecisionsFor), never counted for
+ * anyone off it. Only for an app that opens an enterprise's own screen (lands=enterprise): an older app's vote line and
+ * Decide card land on Commons → Decide, which never lists them.
+ */
+const scopedVotesFor = (c: Ctx) => (c.me && c.lands.has('enterprise') ? openScopedDecisionsFor(c.me) : []);
+
 // ── the cards ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 function needsCard(c: Ctx): HomeCards['needs'] | undefined {
@@ -423,9 +449,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     if (c.member && decisionsOn()) {
         const mine = getOwnDecisionVotes(me);
         const blocked = !hasCompletedTrade(me) && getVoiceCredits(me) <= 0;
-        // And an enterprise's keepers' votes the member is on the roll of (decisions-engine openScopedDecisionsFor): never
-        // counted for anyone off it.
-        const votes = [...getOpenDecisions(), ...openScopedDecisionsFor(me)]
+        const votes = [...getOpenDecisions(), ...scopedVotesFor(c)]
             .filter(d => !madeWithoutVote(d) && !mine.has(d.id)
                 && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now
                 && !(d.franchise === 'quadratic_trade' && blocked))
@@ -436,7 +460,9 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             items.push({
                 kind: 'vote', count: votes.length, accent: Date.parse(soonest) - c.now <= VOTE_ACCENT_WINDOW_MS,
                 label: votes.length === 1 ? `Vote ${when}: ${clip(votes[0].title, TITLE_CHARS)}` : `${votes.length} votes to cast, the first ${when}`,
-                target: { to: 'decide' }, closesAt: soonest,
+                // Where the first one is: an enterprise's own screen for its keepers' vote, else Commons → Decide.
+                target: votes[0].scopeKind === 'enterprise' && votes[0].scopeId ? { to: 'enterprise', id: votes[0].scopeId } : { to: 'decide' },
+                closesAt: soonest,
             });
         }
     }
@@ -635,7 +661,7 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
 function decideCard(c: Ctx): HomeCards['decide'] | undefined {
     built('decide');
     const open = decisionsOn()
-        ? [...getOpenDecisions(), ...openScopedDecisionsFor(c.me!)]
+        ? [...getOpenDecisions(), ...scopedVotesFor(c)]
             .filter(d => !madeWithoutVote(d) && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now)
         : [];
     const soonest = open.map(d => d.closesAt).sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
@@ -809,7 +835,10 @@ export function buildHome(reader: HomeReader): HomeAnswer {
     const area = own ? readMemberArea(me!) : null;
     const point = reader.point ?? (member && area ? { lat: area.lat, lng: area.lng } : null);
     const features = getNodeFeatures();
-    const c: Ctx = { me, own, member, guestView: !member && switches.guestListingsOnly, point, askedPoint: reader.point, now, switches, features, interests };
+    const c: Ctx = {
+        me, own, member, guestView: !member && switches.guestListingsOnly, point, askedPoint: reader.point, now, switches, features, interests,
+        lands: reader.lands ?? new Set(),
+    };
 
     const cards: HomeCards = {};
     for (const instance of cardsToBuild(c, reader.asked, layout, row?.joinedAt ?? null)) {

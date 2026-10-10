@@ -76,7 +76,7 @@ function makeEnterprise(name: string, keepers: Id[], balance: number, opts: { pa
 
 type Signed = { status: number; body: any; error?: string; replay: () => Promise<{ status: number; body: any }> };
 
-/** The replay-proof scheme the real middleware requires: method + path + timestamp + nonce + body. */
+/** The replay-proof scheme the real middleware requires: method + path (without its query) + timestamp + nonce + body. */
 async function signedFetch(method: 'GET' | 'POST', path: string, body: unknown, id: Id | null): Promise<Signed> {
     const bodyString = method === 'GET' ? '' : JSON.stringify(body ?? {});
     const headers: Record<string, string> = {};
@@ -84,7 +84,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body: unknown, 
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
         headers['X-Public-Key'] = id.pubKeyHex;
         headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
         headers['X-Timestamp'] = String(ts);
@@ -237,6 +237,20 @@ async function main(): Promise<void> {
         `a keeper with an open enterprise vote can still propose a community Decision (got ${byKeeper.status} ${byKeeper.error ?? ''})`);
     const secondCommunity = await signedFetch('POST', '/api/commons/decisions', { ...freeze, subject: ali.pubKeyHex }, k2);
     assert(secondCommunity.status === 400, `and a second open community Decision is still refused (got ${secondCommunity.status} ${secondCommunity.error ?? ''})`);
+    // Closed, so the bakery vote is the only one Kai has to cast in the Home checks below.
+    db.prepare("UPDATE decisions SET status = 'failed' WHERE id = ?").run(byKeeper.body?.decision?.id);
+
+    // Home's Needs-you line and Decide count (§2.8): a keepers' vote only for an app that says it can open the enterprise's
+    // own screen (lands=enterprise), and then the line lands there; an older app gets no line or count that lands nowhere.
+    const voteLine = (h: Signed) => (h.body?.cards?.needs?.items ?? []).find((i: any) => i.kind === 'vote');
+    const homeOld = await signedFetch('GET', '/api/home?cards=needs,decide', null, k1);
+    assert(homeOld.status === 200 && !voteLine(homeOld) && (homeOld.body?.cards?.decide?.open ?? 0) === 0,
+        `an app that names no landing gets no keepers' vote line or count (got ${JSON.stringify(voteLine(homeOld))}, decide ${JSON.stringify(homeOld.body?.cards?.decide)})`);
+    const homeNew = await signedFetch('GET', '/api/home?cards=needs,decide&lands=enterprise', null, k1);
+    assert(homeNew.status === 200 && voteLine(homeNew)?.target?.to === 'enterprise' && voteLine(homeNew)?.target?.id === e1 && homeNew.body.cards.decide?.open === 1,
+        `one that can lands the line on the enterprise (got ${JSON.stringify(voteLine(homeNew))}, decide ${JSON.stringify(homeNew.body?.cards?.decide)})`);
+    const homeOutsider = await signedFetch('GET', '/api/home?cards=needs,decide&lands=enterprise', null, outsider);
+    assert(homeOutsider.status === 200 && !voteLine(homeOutsider), 'a member off the roll gets no line for it');
 
     // ── 5. Mid-vote changes: stepping down drops, a removal stands ────────────────────────────────────
     const [m1, m2, m3] = [makeMember('Mo'), makeMember('Mia'), makeMember('Max')];

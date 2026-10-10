@@ -142,7 +142,7 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycl
         }
     };
 
-    const chip = (on: boolean) => `min-h-[40px] px-3 rounded-full border text-sm max-w-full break-words text-left ${on
+    const chip = (on: boolean) => `min-h-[40px] px-3 py-1 rounded-2xl border text-sm max-w-full break-words text-left ${on
         ? 'bg-emerald-600 border-emerald-600 text-white font-bold'
         : 'border-nature-300 dark:border-nature-600 text-nature-900 dark:text-nature-100 bg-white dark:bg-nature-900'}`;
     const label = 'block text-sm font-bold text-nature-900 dark:text-nature-100 mt-3 mb-1';

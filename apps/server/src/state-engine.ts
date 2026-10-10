@@ -1502,6 +1502,19 @@ function isTreasuryKey(pk: string): boolean {
 }
 
 /**
+ * Everyone who may drive any of these enterprises, in one read: canOperateTreasury's rule for every keeper at once (a
+ * bound keeper whose row is active and no visitor's, holding the switch, members.can_operate, or a node admin).
+ */
+function keepersOf(treasuries: string[]): Set<string> {
+    if (treasuries.length === 0) return new Set();
+    const rows = db.prepare(`SELECT DISTINCT o.member_pubkey AS pk, m.can_operate FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey IN (${treasuries.map(() => '?').join(', ')}) AND m.status = 'active' AND m.is_visitor = 0`)
+        .all(...treasuries) as { pk: string; can_operate: number | null }[];
+    return new Set(rows.filter(r => !!r.can_operate || isAdminPubkey(r.pk)).map(r => r.pk));
+}
+
+/**
  * Who a public listing's own event (new_post, post_updated, post_removed, sent to no `recipients`) reaches on a node that
  * syncs by area (the profile's `nearbyListings`; DESIGN-global-sync-by-area §2.5): a socket whose member's area
  * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it), and the
@@ -1509,7 +1522,7 @@ function isTreasuryKey(pk: string): boolean {
  * other socket gets nothing, not even a doorbell (a doorbell sends an app back for every listing): one with no area, or
  * with no member's key, among them. Their apps have the newest listings and the poll. A listing with no place reaches
  * its parties alone. The place and the parties are the stored row's, so an event carrying only an id is measured as one
- * carrying the post.
+ * carrying the post. Everything is read once for the event; each socket is then a lookup and a distance, no read.
  *
  * Null for an event that names no listing, or one not on this node: it goes as before. That is a bare doorbell for many
  * listings at once (a burst's hide, engine/burst-cleanup.ts), rare and about no one place.
@@ -1523,10 +1536,10 @@ function listingReach(event: any): ((pubkey: string | null | undefined) => boole
     const { radiusKm } = nearbyListingsLimits();
     const placed = row.lat != null && row.lng != null;
     const sides = [row.author_pubkey, row.accepted_by].filter((k): k is string => !!k);
-    const keeperSides = sides.filter(isTreasuryKey);
+    const keepers = keepersOf(sides.filter(isTreasuryKey));
     return (pubkey) => {
         if (!pubkey) return false;
-        if (sides.includes(pubkey) || keeperSides.some(side => canOperateTreasury(pubkey, side))) return true;
+        if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
         if (!placed) return false;
         const area = memberAreaFor(pubkey);
         return !!area && engine.haversineKm(area.lat, area.lng, row.lat!, row.lng!) <= radiusKm;

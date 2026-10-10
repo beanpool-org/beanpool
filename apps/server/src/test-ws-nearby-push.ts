@@ -16,12 +16,13 @@
  *   3. an event that carries only the listing's id (a moderation doorbell) is measured the same way
  *   4. Fay moves next to the listings and Nia moves away, over HTTP, in this process: the next listing crosses sides
  *   5. a listing with no place (by Noel, who has no area): it reaches Noel alone
- *   6. the member who took a listing hears it from anywhere, as its author does
+ *   6. the member who took a listing hears it from anywhere, as its author does, and so does an enterprise's keeper
  *   7. a bare doorbell for many listings, state_synced, a transfer, a message: as before
  *   8. a standby's copy in this process: an import of a member row whose area moved updates who hears a listing
  *   9. a member who re-keys: their area follows them to the new key, and their new phone hears the listings near it
  *  10. a member removed: their area leaves the map
- *  11. the cost: 3,500 sockets, the filter on against off, interleaved, with the load printed
+ *  11. the cost: 3,500 sockets, the filter on against off, interleaved, with the load printed: a member's listing and an
+ *      enterprise's, whose keepers are read once an event, never once a socket
  *  12. the local profile, in its own process: every member socket still gets every listing in full
  *
  * Run: pnpm exec node scripts/run-server-suites.mjs with SERVER_SUITES_ONLY=test-ws-nearby-push.
@@ -286,6 +287,26 @@ async function main(): Promise<void> {
     reachIs('a taken listing\'s post_updated', 'post_updated', post2, BY_AREA ? { ana: true, nia: true, fay: true, noel: false, unsigned: false } : { ...everyone, unsigned: false });
     assert(got(S.nia).some(e => e.type === 'post_updated' && e.post?.acceptedBy === nia.pk), 'Nia, who took it, 400 km away, gets it with the deal on it');
     if (BY_AREA) assert(got(S.fay).some(e => e.type === 'post_updated' && e.post?.id === post2 && !e.post.acceptedBy), 'Fay, near it, gets it without the deal, as before');
+    // An enterprise's listing at the place, and its keeper Kay 400 km away (the row as an enterprise's post makes it:
+    // enterprises are off on the global profile, so not over HTTP).
+    const ent = member('NearbyEnterprise');
+    db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(ent.pk);
+    const kay = member('NearbyKay');
+    db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(kay.pk);
+    db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role) VALUES (?, ?, 'keeper')").run(ent.pk, kay.pk);
+    await setArea(kay, 'Kay, the enterprise\'s keeper, 400 km away', FAR);
+    const entPost = `nearby-enterprise-${crypto.randomBytes(4).toString('hex')}`;
+    db.prepare("INSERT INTO posts (id, type, category, title, description, author_pubkey, lat, lng) VALUES (?, 'offer', 'other', 'Enterprise offer', 'An offer by an enterprise', ?, ?, ?)")
+        .run(entPost, ent.pk, PLACE.lat, PLACE.lng);
+    const kaySock = await openSocket(`${wsBase}?${signedWsQuery(kay)}`);
+    await sleep(200);
+    kaySock.raw.length = 0;
+    clear();
+    se.broadcast({ type: 'post_updated', id: entPost });
+    await until(kaySock, 'post_updated');
+    assert(got(kaySock).some(e => e.type === 'post_updated' && e.id === entPost), `Kay, the enterprise's keeper, 400 km away, hears its listing (${JSON.stringify(got(kaySock)).slice(0, 120)})`);
+    reachIs("the enterprise's listing", 'post_updated', entPost, BY_AREA ? { ana: false, nia: false, fay: true, noel: false, unsigned: false } : { ...everyone, unsigned: false });
+    kaySock.ws.close();
 
     // ── 7. what stays as before ─────────────────────────────────────────────────────────────────
     console.log('\n── 7. a bare listing doorbell, state_synced, a transfer, a message ──');
@@ -400,31 +421,34 @@ async function main(): Promise<void> {
             fakes.push(f);
             se.addWsClient(f);
         }
-        const event = { type: 'post_updated', post: { id: post2, authorPublicKey: ana.pk, title: 'Nearby offer two', lat: PLACE.lat, lng: PLACE.lng } };
         const setSwitch = (on: boolean) => db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('nodeProfile.nearbyListings', ?)").run(on ? 'true' : 'false');
-        const timesOn: number[] = [], timesOff: number[] = [];
-        let sentOn = 0, sentOff = 0;
-        for (let i = 0; i < 31; i++) {
-            for (const on of i % 2 === 0 ? [true, false] : [false, true]) {
-                setSwitch(on);
-                sends = 0;
-                const t0 = process.hrtime.bigint();
-                se.broadcast(event);
-                const ms = Number(process.hrtime.bigint() - t0) / 1e6;
-                (on ? timesOn : timesOff).push(ms);
-                if (on) sentOn = sends; else sentOff = sends;
+        const nearCount = keys.filter(pk => { const a = area.memberAreaFor?.(pk); return a && haversineKm(a.lat, a.lng, PLACE.lat, PLACE.lng) <= radiusKm; }).length;
+        const costOf = (what: string, event: unknown) => {
+            const timesOn: number[] = [], timesOff: number[] = [];
+            let sentOn = 0, sentOff = 0;
+            for (let i = 0; i < 31; i++) {
+                for (const on of i % 2 === 0 ? [true, false] : [false, true]) {
+                    setSwitch(on);
+                    sends = 0;
+                    const t0 = process.hrtime.bigint();
+                    se.broadcast(event);
+                    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+                    (on ? timesOn : timesOff).push(ms);
+                    if (on) sentOn = sends; else sentOff = sends;
+                }
             }
-        }
+            const load = os.loadavg()[0].toFixed(1);
+            const on = median(timesOn), off = median(timesOff);
+            console.log(`   ${what}: 3,500 sockets, ${nearCount} within ${radiusKm} km: on ${on.toFixed(2)} ms an event (sent ${sentOn}), off ${off.toFixed(2)} ms (sent ${sentOff}); medians of 31, interleaved; load ${load}`);
+            assert(sentOff === 3500, `${what}, the switch off: every one of the 3,500 sockets gets it (${sentOff})`);
+            assert(sentOn === nearCount, `${what}, the switch on: exactly the ${nearCount} within ${radiusKm} km get it (${sentOn})`);
+            // The design's estimate is 2 ms an event (§2.5); a bound that load can't trip, and that a read per socket would.
+            assert(on < 25, `${what}: the filter costs ${on.toFixed(2)} ms an event at 3,500 sockets (bound 25 ms; off ${off.toFixed(2)} ms; load ${load})`);
+        };
+        costOf("a member's listing", { type: 'post_updated', post: { id: post2, authorPublicKey: ana.pk, title: 'Nearby offer two', lat: PLACE.lat, lng: PLACE.lng } });
+        costOf("an enterprise's listing", { type: 'post_updated', id: entPost });
         db.prepare("DELETE FROM node_config WHERE key = 'nodeProfile.nearbyListings'").run();
         for (const f of fakes) se.removeWsClient(f);
-        const nearCount = keys.filter(pk => { const a = area.memberAreaFor?.(pk); return a && haversineKm(a.lat, a.lng, PLACE.lat, PLACE.lng) <= radiusKm; }).length;
-        const load = os.loadavg()[0].toFixed(1);
-        const on = median(timesOn), off = median(timesOff);
-        console.log(`   3,500 sockets, ${nearCount} within ${radiusKm} km: on ${on.toFixed(2)} ms an event (sent ${sentOn}), off ${off.toFixed(2)} ms (sent ${sentOff}); medians of 31, interleaved; load ${load}`);
-        assert(sentOff === 3500, `the switch off: every one of the 3,500 sockets gets it (${sentOff})`);
-        assert(sentOn === nearCount, `the switch on: exactly the ${nearCount} within ${radiusKm} km get it (${sentOn})`);
-        // The design's estimate is 2 ms an event (§2.5); a bound that load can't trip, and that a read per socket would.
-        assert(on < 25, `the filter costs ${on.toFixed(2)} ms an event at 3,500 sockets (bound 25 ms; off ${off.toFixed(2)} ms; load ${load})`);
     } else {
         for (const s of Object.values(S)) s.ws.close();
     }

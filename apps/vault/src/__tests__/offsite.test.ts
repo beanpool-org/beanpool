@@ -147,7 +147,7 @@ describe('every backup goes off the box', () => {
         expect(stub.objects.get(`vault/${firstName}`)?.equals(readFileSync(path.join(v.storeDir, firstName)))).toBe(true);
         const { body } = await report(v);
         expect(body.offsite).toEqual({
-            lastOkAt: v.clock.now(), lastName: firstName, failuresInARow: 0, error: null,
+            lastOkAt: v.clock.now(), lastName: firstName, failuresInARow: 0, error: null, step: null,
             prune: { lastOkAt: v.clock.now(), failuresInARow: 0, step: null, error: null },
         });
         expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0, offsitePruneFailed: 0 });
@@ -199,7 +199,7 @@ describe('every backup goes off the box', () => {
         const { body } = await report(v);
         expect(body.backups).toMatchObject({ failuresInARow: 0, error: null });
         expect(body.offsite).toEqual({
-            lastOkAt: null, lastName: null, failuresInARow: 1, error: 'HTTP 503 InternalError',
+            lastOkAt: null, lastName: null, failuresInARow: 1, error: 'HTTP 503 InternalError', step: 'put',
             // No copy went up: nothing was tidied, and nothing failed there.
             prune: { lastOkAt: null, failuresInARow: 0, step: null, error: null },
         });
@@ -242,6 +242,27 @@ describe('a copy that reached the store counts as done; tidying old ones is its 
         expect(body.offsite.prune).toEqual({ lastOkAt: v.clock.now(), failuresInARow: 0, step: null, error: null });
         expect(stub.objects.size).toBe(3);
     });
+
+    it('a delete that fails is named, the other old copies still go, and the next tidy-up takes what was left', async () => {
+        const v = await vault();
+        await doGenesis(v);
+        const stub = await s3();
+        await setSettings(v, { v: 1, offsite: stub.settings() });
+        // Two copies from well over 30 days ago, as a tidy-up that kept failing would leave them.
+        const old = ['vault/bv-20200101T000000Z.bin', 'vault/bv-20200101T010000Z.bin'];
+        for (const k of old) stub.objects.set(k, Buffer.from('old'));
+        stub.failNext.delete = [403];
+        const name = await v.api.runBackup();
+        let { body } = await report(v);
+        expect(body.offsite).toMatchObject({ lastName: name, failuresInARow: 0, step: null, error: null });
+        expect(body.offsite.prune).toEqual({ lastOkAt: null, failuresInARow: 1, step: 'delete', error: 'HTTP 403 InternalError' });
+        expect([...stub.objects.keys()].sort()).toEqual([old[0], `vault/${name}`]);
+        v.clock.advance(60 * 60 * 1000);
+        const next = await v.api.runBackup();
+        ({ body } = await report(v));
+        expect(body.offsite.prune).toMatchObject({ failuresInARow: 0, step: null, error: null });
+        expect([...stub.objects.keys()].sort()).toEqual([`vault/${name}`, `vault/${next}`]);
+    });
 });
 
 describe('an upload that fails is tried once more', () => {
@@ -272,7 +293,7 @@ describe('an upload that fails is tried once more', () => {
         expect(stub.requests.filter(r => r.method === 'PUT')).toHaveLength(2);
         expect(stub.objects.size).toBe(0);
         const { body } = await report(v);
-        expect(body.offsite).toMatchObject({ lastOkAt: null, failuresInARow: 1, error: 'HTTP 500 InternalError' });
+        expect(body.offsite).toMatchObject({ lastOkAt: null, failuresInARow: 1, step: 'put', error: 'HTTP 500 InternalError' });
         expect(body.counts).toMatchObject({ offsiteOk: 0, offsiteFailed: 1, offsiteRetried: 1 });
         // Nothing went up: nothing listed or removed either.
         expect(stub.requests.filter(r => r.method !== 'PUT')).toHaveLength(0);

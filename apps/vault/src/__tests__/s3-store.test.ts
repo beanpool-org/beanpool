@@ -87,8 +87,19 @@ describe('the store', () => {
         stubs.length = 0;
         const e = await s3.put('bv-20261001T120000Z.bin', Buffer.from('x')).catch(err => err as OffsiteError);
         expect(e).toBeInstanceOf(OffsiteError);
-        expect((e as OffsiteError).short).toBe('unreachable');
+        expect((e as OffsiteError).short).toBe('unreachable (ECONNREFUSED)');
         expect((e as OffsiteError).message).not.toMatch(/127\.0\.0\.1|stub-secret|AKID/);
+    });
+
+    it('a connection that fails says its code (ECONNRESET), never its message; a code that is not a plain word is left out', async () => {
+        const { stub } = await store();
+        const settings = parseSettings({ v: 1, offsite: stub.settings() }).offsite!;
+        const failing = (cause: unknown) => new S3Store(settings, { fetch: async () => { throw Object.assign(new TypeError('fetch failed'), { cause }); } });
+        const reset = Object.assign(new Error(`read ECONNRESET ${stub.endpoint}`), { code: 'ECONNRESET' });
+        await expect(failing(reset).put('bv-20261001T120000Z.bin', Buffer.from('x'))).rejects.toMatchObject({ short: 'unreachable (ECONNRESET)' });
+        await expect(failing({ code: 'UND_ERR_SOCKET' }).list()).rejects.toMatchObject({ short: 'unreachable (UND_ERR_SOCKET)' });
+        await expect(failing({ code: `ENOTFOUND ${stub.endpoint}` }).delete('bv-20261001T120000Z.bin')).rejects.toMatchObject({ short: 'unreachable' });
+        await expect(failing(undefined).get('bv-20261001T120000Z.bin')).rejects.toMatchObject({ short: 'unreachable' });
     });
 
     it('takes only backup names', async () => {

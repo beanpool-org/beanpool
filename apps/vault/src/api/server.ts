@@ -326,6 +326,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     let offsiteSince = clock();
     const offsiteStatus = {
         lastOkAt: null as number | null, lastName: null as string | null, failuresInARow: 0, error: null as string | null,
+        /** The call the last copy failed at (only ever `put`: the upload), beside `error`, its cause. */
+        step: null as 'put' | null,
         /** Removing the copies there past 30 days, after a copy went up: which call failed (`list`, `delete`) and why. */
         prune: { lastOkAt: null as number | null, failuresInARow: 0, step: null as 'list' | 'delete' | null, error: null as string | null },
     };
@@ -357,6 +359,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         offsiteSince = clock();
         offsiteStatus.failuresInARow = 0;
         offsiteStatus.error = null;
+        offsiteStatus.step = null;
         offsiteStatus.prune = { lastOkAt: null, failuresInARow: 0, step: null, error: null };
     }
 
@@ -1355,9 +1358,10 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         } catch (e) {
             if (target !== offsite) return;
             offsiteStatus.failuresInARow++;
+            offsiteStatus.step = 'put';
             offsiteStatus.error = e instanceof OffsiteError ? e.short : 'failed';
             counters.counts.offsiteFailed++;
-            console.error(`vault-api: the off-box copy of a backup failed: ${offsiteStatus.error}`);
+            console.error(`vault-api: the off-box copy of a backup failed (put: ${offsiteStatus.error})`);
             return;
         }
         // Settings changed meanwhile: this store's result says nothing about the one in force now.
@@ -1365,26 +1369,43 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         offsiteStatus.lastOkAt = clock();
         offsiteStatus.lastName = name;
         offsiteStatus.failuresInARow = 0;
+        offsiteStatus.step = null;
         offsiteStatus.error = null;
         counters.counts.offsiteOk++;
         await pruneOffsite(target, now);
     }
 
-    /** The off-box store's copies older than 30 days removed. The next copy's tidy-up tries again whatever this one left. */
+    /**
+     * The off-box store's copies older than 30 days removed. A delete that fails doesn't stop the others; the next
+     * copy's tidy-up tries again whatever this one left.
+     */
     async function pruneOffsite(target: BackupStore, now: number): Promise<void> {
-        let step: 'list' | 'delete' = 'list';
+        let failed: { step: 'list' | 'delete'; error: string } | null = null;
+        const short = (e: unknown) => (e instanceof OffsiteError ? e.short : 'failed');
+        let old: string[] = [];
         try {
-            const old = (await target.list()).filter(n => backupTimeOf(n) < now - BACKUP_RETENTION_MS);
-            step = 'delete';
-            for (const n of old) await target.delete(n);
+            old = (await target.list()).filter(n => backupTimeOf(n) < now - BACKUP_RETENTION_MS);
         } catch (e) {
-            if (target !== offsite) return;
+            failed = { step: 'list', error: short(e) };
+        }
+        let left = 0;
+        for (const n of old) {
+            try {
+                await target.delete(n);
+            } catch (e) {
+                left++;
+                failed ??= { step: 'delete', error: short(e) };
+            }
+        }
+        if (target !== offsite) return;
+        if (failed) {
             const p = offsiteStatus.prune;
             p.failuresInARow++;
-            p.step = step;
-            p.error = e instanceof OffsiteError ? e.short : 'failed';
+            p.step = failed.step;
+            p.error = failed.error;
             counters.counts.offsitePruneFailed++;
-            console.error(`vault-api: tidying the off-box store failed (${step}: ${p.error}); the copy itself is there`);
+            const what = failed.step === 'list' ? 'list' : `delete, ${left} of ${old.length} old copies left`;
+            console.error(`vault-api: tidying the off-box store failed (${what}: ${failed.error}); the copy itself is there`);
             return;
         }
         if (target !== offsite) return;
@@ -1466,7 +1487,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         conditions.push({
             key: 'offsite', active: offsiteFailing || offsiteStale, since: offsiteStatus.lastOkAt ?? offsiteBase ?? undefined,
             detail: !offsite ? 'no off-box store is set now.'
-                : offsiteFailing ? `${offsiteStatus.failuresInARow} off-box copies in a row failed (${offsiteStatus.error ?? 'failed'}): the backups are on the vault's own disk only.`
+                : offsiteFailing ? `${offsiteStatus.failuresInARow} off-box copies in a row failed (${offsiteStatus.step ?? 'put'}: ${offsiteStatus.error ?? 'failed'}): the backups are on the vault's own disk only.`
                     : offsiteStale ? 'no backup has gone off the box for over two hours: the newest are on the vault\'s own disk only.'
                         : `backups go off the box again${offsiteStatus.lastOkAt ? ` (the newest at ${minute(offsiteStatus.lastOkAt)})` : ''}.`,
         });

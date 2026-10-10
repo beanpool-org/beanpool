@@ -52,7 +52,7 @@ interface SignedReport {
     /** When the vault opened, as its API saw it: no backup is taken while it is locked, so staleness counts from here. */
     openSince?: number;
     backups?: { lastOkAt?: number | null; failuresInARow?: number };
-    offsite?: { lastOkAt?: number | null; failuresInARow?: number; error?: string | null } | null;
+    offsite?: { lastOkAt?: number | null; failuresInARow?: number; step?: string | null; error?: string | null } | null;
     alerts?: { active?: string[] };
 }
 
@@ -188,7 +188,7 @@ export class VaultWatcher {
                     {
                         key: 'offsite', active: offsiteBad, since: off?.lastOkAt ?? undefined,
                         detail: offsiteBad
-                            ? `its signed report says the off-box copy is failing (${off?.failuresInARow ?? 0} in a row${off?.error ? `, ${off.error}` : ''}).`
+                            ? `its signed report says the off-box copy is failing (${off?.failuresInARow ?? 0} in a row${off?.error ? `, ${off.step ? `${off.step}: ` : ''}${off.error}` : ''}).`
                             : 'its signed report says backups go off the box again.',
                     },
                 );

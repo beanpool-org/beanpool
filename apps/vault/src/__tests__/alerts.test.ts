@@ -172,11 +172,11 @@ describe('when backups stop', () => {
         await v.api.runBackup();
         await v.api.checkAlerts();
         expect(smtp.mails).toHaveLength(1);
-        expect(smtp.mails[0].data).toMatch(/OFF-BOX BACKUPS FAILING since .*: 2 off-box copies in a row failed \(HTTP 403 InternalError\): the backups are on the vault's own disk only\./);
+        expect(smtp.mails[0].data).toMatch(/OFF-BOX BACKUPS FAILING since .*: 2 off-box copies in a row failed \(put: HTTP 403 InternalError\): the backups are on the vault's own disk only\./);
         expect(JSON.parse(hook.posts[0].body).events).toEqual([expect.objectContaining({ condition: 'offsite', state: 'raised' })]);
         const report = await reportOf(v);
         expect(report.alerts.active).toEqual(['offsite']);
-        expect(report.offsite).toMatchObject({ failuresInARow: 2, error: 'HTTP 403 InternalError' });
+        expect(report.offsite).toMatchObject({ failuresInARow: 2, step: 'put', error: 'HTTP 403 InternalError' });
     });
 });
 

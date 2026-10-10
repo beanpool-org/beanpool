@@ -15,7 +15,8 @@
  *   2. a whole read in pages (paged=1, X-Posts-Next) brings exactly the rows of S, each once;
  *   3. after random writes, moves and removals, and one member moving their area, a delta from the old cursor plus the
  *      `set` (drop what is held outside it, fetch what is missing by `ids=`) gives the phone exactly the new S;
- *   4. the 304 holds while listings 300 km away change, and ends on a nearby change, an author's holiday, an area change;
+ *   4. the 304 holds while listings 300 km away change, and ends on a nearby change, an author's holiday, an area change,
+ *      and an author in the set renamed (every row of theirs carries the name);
  *   5. own and tied are kept: a paused own listing far away, an open deal far away, a conversation about one far away;
  *   6. a visitor's and an unsigned read with nearby=1 are answered byte for byte as without it; so is a member's read on
  *      a node with the switch off;
@@ -72,7 +73,7 @@ const TYPES = 'offer,need,poll,event';
 const SYNC = `/api/marketplace/posts?limit=200&sync=true&types=${TYPES}`;
 const EPOCH = 'x-beanpool-epoch';
 
-type Row = { id: string; title: string; status: string; lat: number | null; lng: number | null };
+type Row = { id: string; title: string; status: string; lat: number | null; lng: number | null; authorPublicKey: string; authorCallsign: string };
 type Answer = { status: number; next: string | null; etag: string | null; epoch: string | null; text: string; posts: Row[]; set: string[]; setHash: string };
 
 async function get(path: string, id: Id | null, headers: Record<string, string> = {}): Promise<Answer> {
@@ -303,8 +304,8 @@ async function main() {
         const uses = (index: string) => plan.some(d => d.includes(index));
         const wholeTable = plan.filter(d => /^SCAN (members|member_preferences|member_blocks|m|cp)\b/.test(d) && !/USING (COVERING )?INDEX/.test(d));
         assert(uses('idx_posts_lat_lng') && uses('idx_members_off_board') && uses('idx_member_preferences_on_holiday')
-            && uses('idx_members_standing_by_key') && wholeTable.length === 0,
-            `each statement of a set reads an index: the box, the authors off the board, on holiday, whose standing moved; no table of people (${wholeTable.join('; ') || 'none read whole'})`);
+            && uses('idx_members_standing_by_key') && uses('sqlite_autoindex_members_1') && !uses('idx_members_updated_at') && wholeTable.length === 0,
+            `each statement of a set reads an index: the box, the authors off the board, on holiday, whose standing moved, their rows' change times by key; no table of people (${wholeTable.join('; ') || 'none read whole'})`);
     }
     // The bound below the listings in the box: the engine measures the newest that many, and the set is the nearest of
     // them. Once with the box holding more than the bound (the pass again, newest first), once with it holding fewer.
@@ -412,6 +413,15 @@ async function main() {
     db.prepare('UPDATE members SET area_lat = ?, area_lng = ? WHERE public_key = ?').run(SMALL.lat, SMALL.lng, bea.pubKeyHex);
     const afterMove = await tagged(back);
     assert(afterMove.status === 200 && afterMove.etag !== back.etag, `she moves her area: 200 with a new tag (${afterMove.status})`);
+    // An author of a row in her set renames themselves (as engine/members.ts does: no listing row moves).
+    const renamedAuthor = afterMove.posts.find(r => r.authorPublicKey !== bea.pubKeyHex)!;
+    db.prepare('UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?').run('Renamed', iso(Date.now()), renamedAuthor.authorPublicKey);
+    const afterRename = await tagged(afterMove);
+    const renamedRow = afterRename.posts.find(r => r.id === renamedAuthor.id);
+    assert(afterRename.status === 200 && afterRename.etag !== afterMove.etag && renamedRow?.authorCallsign === 'Renamed',
+        `an author in her set is renamed: 200 with a new tag, the row carrying the new name (${afterRename.status}, ${renamedRow?.authorCallsign})`);
+    const heldRename = await tagged(afterRename);
+    assert(heldRename.status === 304, `and asked again with that tag: 304 (${heldRename.status})`);
 
     // ── 6. a visitor's, an unsigned and a switched-off read unchanged ──
     console.log('\n── 6. reads that aren\'t a member\'s by-area sync are answered as before ──');

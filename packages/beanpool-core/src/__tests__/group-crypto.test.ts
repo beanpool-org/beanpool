@@ -7,7 +7,7 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 import * as gc from '../group-crypto.js';
 import {
     detectMentions, groupEpochCanonical, groupMessageKey, isGroupEncryptedNonce, isGroupEncryptedPayload, makeGroupEpochRecord,
-    makeGroupTopUp, openGroupEpochRecord, openGroupKeyWrap, openGroupLine, openGroupLineWithMessageKey, openGroupTopUp, sealGroupLine,
+    makeGroupTopUp, openGroupEpochRecord, openGroupKeyWrapUnverified, openGroupLine, openGroupLineWithMessageKey, openGroupTopUp, sealGroupLine,
     verifyGroupEpochRecord, verifyGroupTopUp, wrapGroupKey, GroupKeyNotVerifiedError, GroupLineNotVerifiedError, GROUP_NONCE_PREFIX,
     type GroupEpochRecord, type GroupLineBinding, type GroupLinePayload,
 } from '../group-crypto.js';
@@ -164,23 +164,23 @@ describe('wraps', () => {
 
     it('a wrap moved to another member does not open for them', () => {
         // Relabelled as Ben's: the X25519 agreement and the associated data both name Ana.
-        expect(() => openGroupKeyWrap({ ...anaWrap, recipient: ben.publicKey }, at, ben.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified({ ...anaWrap, recipient: ben.publicKey }, at, ben.seedHex)).toThrow(GroupKeyNotVerifiedError);
         // Left as Ana's and tried with Ben's key: not his.
-        expect(() => openGroupKeyWrap(anaWrap, at, ben.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(bytesToHex(openGroupKeyWrap(anaWrap, at, ana.seedHex))).toBe(bytesToHex(groupKey));
+        expect(() => openGroupKeyWrapUnverified(anaWrap, at, ben.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(bytesToHex(openGroupKeyWrapUnverified(anaWrap, at, ana.seedHex))).toBe(bytesToHex(groupKey));
     });
 
     it('a wrap does not open in another group, another epoch, or claimed by another wrapper', () => {
-        expect(() => openGroupKeyWrap(anaWrap, { ...at, groupId: 'another-group' }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(() => openGroupKeyWrap(anaWrap, { ...at, epoch: 3 }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(() => openGroupKeyWrap(anaWrap, { ...at, wrapperPubHex: ben.publicKey }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified(anaWrap, { ...at, groupId: 'another-group' }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified(anaWrap, { ...at, epoch: 3 }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified(anaWrap, { ...at, wrapperPubHex: ben.publicKey }, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
     });
 
     it('a changed wrap does not open', () => {
-        expect(() => openGroupKeyWrap({ ...anaWrap, wrapped: flip(anaWrap.wrapped) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(() => openGroupKeyWrap({ ...anaWrap, nonce: flip(anaWrap.nonce) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(() => openGroupKeyWrap({ ...anaWrap, ephPub: flip(anaWrap.ephPub) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
-        expect(() => openGroupKeyWrap({ ...anaWrap, ephPub: Buffer.alloc(32).toString('base64') }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified({ ...anaWrap, wrapped: flip(anaWrap.wrapped) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified({ ...anaWrap, nonce: flip(anaWrap.nonce) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified({ ...anaWrap, ephPub: flip(anaWrap.ephPub) }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
+        expect(() => openGroupKeyWrapUnverified({ ...anaWrap, ephPub: Buffer.alloc(32).toString('base64') }, at, ana.seedHex)).toThrow(GroupKeyNotVerifiedError);
     });
 
     it('each wrap uses its own ephemeral key', () => {
@@ -426,5 +426,9 @@ describe('the core barrel', () => {
             expect(typeof (core as Record<string, unknown>)[name]).toBe('function');
         }
         expect(core.GROUP_NONCE_PREFIX).toBe('group-xc20p-v1:');
+    });
+
+    it('leaves out the raw wrap opener: a wrap alone proves nothing about who made it, only a signed record or top-up does', () => {
+        for (const name of ['openGroupKeyWrap', 'openGroupKeyWrapUnverified']) expect(name in core).toBe(false);
     });
 });

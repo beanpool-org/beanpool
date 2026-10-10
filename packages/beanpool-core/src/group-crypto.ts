@@ -7,8 +7,12 @@
  * member whose action changed the membership makes the next one and locks ("wraps") it to every active member: an
  * ephemeral X25519 key agreed with the member's identity-derived X25519 key (dm-crypto.ts identityX25519Secret /
  * identityX25519Public, the one derivation direct messages use), HKDF-SHA256 salted with the ephemeral public key, info
- * 'beanpool-group-key/1', and XChaCha20-Poly1305 bound to [tag, group, epoch, recipient, wrapper]. A wrap moved to another
- * group, epoch or member, or claimed by another wrapper, doesn't open. The node stores the wraps and can open none.
+ * 'beanpool-group-key/1', and XChaCha20-Poly1305 bound to [tag, group, epoch, recipient, wrapper]. An existing wrap moved to
+ * another group, epoch or member, or relabelled to another wrapper, doesn't open. A wrap on its own proves nothing about
+ * who made it: anyone can make a fresh one naming any wrapper, since the one-time X25519 key authenticates nobody. Only the
+ * maker's signature over the epoch record, or the wrapper's over a top-up, proves that; so the apps open wraps only through
+ * openGroupEpochRecord and openGroupTopUp, and the raw opener is kept out of the core barrel. The node stores the wraps and
+ * can open none.
  *
  * The epoch record. Who made the epoch, why, whose membership changed, when, and every wrap, signed by the maker with
  * their Ed25519 identity over a canonical JSON array (groupEpochCanonical). A changed recipient list fails the signature;
@@ -250,10 +254,12 @@ export function wrapGroupKey(groupKey: Uint8Array, b: GroupWrapBinding, opts?: G
 }
 
 /**
- * Open a wrap locked to me: the epoch key, 32 bytes. Throws GroupKeyNotVerifiedError if it isn't mine, or was made for
- * another group, epoch or wrapper, or was changed. The caller keeps the key in memory only (§4).
+ * Open a wrap locked to me, checking nothing about who made it: the epoch key, 32 bytes. Throws GroupKeyNotVerifiedError
+ * if it isn't mine, or was sealed for another group, epoch or wrapper label, or was changed. A wrap made fresh by anyone,
+ * naming any wrapper, opens and gives the key its maker chose; only openGroupEpochRecord and openGroupTopUp, which check a
+ * signature first, prove the wrapper. Not in the core barrel: for those two and core's tests only.
  */
-export function openGroupKeyWrap(
+export function openGroupKeyWrapUnverified(
     wrap: GroupKeyWrap,
     b: Omit<GroupWrapBinding, 'recipientPubHex'>,
     myEdPrivHex: string,
@@ -419,7 +425,7 @@ export function openGroupEpochRecord(record: GroupEpochRecord, myEdPrivHex: stri
     try { myPub = dmPublicKeyOf(myEdPrivHex); } catch { throw new GroupKeyNotVerifiedError('Not a private key this app can use.'); }
     const wrap = record.wraps.find((w) => w.recipient === myPub);
     if (!wrap) throw new GroupKeyNotVerifiedError('This epoch was not locked to me.');
-    return openGroupKeyWrap(wrap, { groupId: record.groupId, epoch: record.epoch, wrapperPubHex: record.createdBy }, myEdPrivHex);
+    return openGroupKeyWrapUnverified(wrap, { groupId: record.groupId, epoch: record.epoch, wrapperPubHex: record.createdBy }, myEdPrivHex);
 }
 
 // ─── Top-ups (§2.5) ─────────────────────────────────────────────────────────────────────────
@@ -461,7 +467,7 @@ export function verifyGroupTopUp(groupId: string, t: GroupTopUp): void {
 /** Verify a top-up locked to me, then open it: the epoch key. */
 export function openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string): Uint8Array {
     verifyGroupTopUp(groupId, t);
-    return openGroupKeyWrap(t, { groupId, epoch: t.epoch, wrapperPubHex: t.wrapper }, myEdPrivHex);
+    return openGroupKeyWrapUnverified(t, { groupId, epoch: t.epoch, wrapperPubHex: t.wrapper }, myEdPrivHex);
 }
 
 // ─── Lines (§7.1, §7.2) ─────────────────────────────────────────────────────────────────────

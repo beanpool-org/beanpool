@@ -6902,7 +6902,7 @@ export interface CommunityHealth { nodeName: string; version: string; minAppVers
 // whose heartbeat is older than WATCHDOG_STALE_MS means a watchdog was running
 // and has since died — worth surfacing so the fleet knows a node lost its guard.
 const WATCHDOG_STALE_MS = 5 * 60 * 1000;
-function readWatchdogStatus(): WatchdogStatus {
+export function readWatchdogStatus(): WatchdogStatus {
     const empty: WatchdogStatus = { present: false, lastSeenAt: null, status: null, recoveries: 0, lastRecoveryAt: null, healthy: false };
     try {
         const dataDir = process.env.BEANPOOL_DATA_DIR || join(process.cwd(), 'data');

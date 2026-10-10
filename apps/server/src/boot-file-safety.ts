@@ -25,6 +25,7 @@ export const SECRET_FILES = [
     'tls/server-key.pem',
     'tls/le-key.pem',
     'tls/acme-account.json',
+    'alerts.json',
 ];
 
 export function secureDataDirAtBoot(dataDir: string): void {

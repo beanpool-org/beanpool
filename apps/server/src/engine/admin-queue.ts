@@ -12,6 +12,7 @@ import { db } from '../db/db.js';
 import { getShutdownStatus } from './shutdown-recovery.js';
 import { decisionsOn } from '../decisions-engine.js';
 import { standbyIncidentOpen } from '../services/standby-health.js';
+import { serverAlertCount } from '../services/alerts.js';
 
 /**
  * Where an item is handled in /settings. The manager maps each id to a tab (and sub-tab); the id is
@@ -20,7 +21,7 @@ import { standbyIncidentOpen } from '../services/standby-health.js';
 export const ADMIN_SETTINGS_SECTIONS = ['home', 'moderation', 'disputes', 'decisions'] as const;
 export type AdminSettingsSection = typeof ADMIN_SETTINGS_SECTIONS[number];
 
-export type AdminQueueKind = 'reports' | 'disputes' | 'suspensions' | 'removals' | 'unclean_shutdown' | 'standby';
+export type AdminQueueKind = 'reports' | 'disputes' | 'suspensions' | 'removals' | 'unclean_shutdown' | 'standby' | 'server_alert';
 
 export interface AdminQueueItem {
     kind: AdminQueueKind;
@@ -50,7 +51,7 @@ function count(sql: string, ...params: unknown[]): number {
 const MODERATOR_QUEUE_KINDS: ReadonlySet<AdminQueueKind> = new Set(['reports']);
 
 /** Told to the community's owners only (design G8, Marty's answer 3: "nobody else is told"). */
-const OWNER_QUEUE_KINDS: ReadonlySet<AdminQueueKind> = new Set(['standby']);
+const OWNER_QUEUE_KINDS: ReadonlySet<AdminQueueKind> = new Set(['standby', 'server_alert']);
 
 /**
  * `forModerator`: only what a moderator can act on, so their badge never counts work they cannot open. `forOwner`: the
@@ -100,6 +101,13 @@ export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean
             // One while an incident is open: its standby stopped copying this server, or copies it wrongly.
             count: opts.forOwner && standbyIncidentOpen() ? 1 : 0,
             label: 'Your standby server needs attention',
+            section: 'home',
+        },
+        {
+            kind: 'server_alert',
+            // How many of this server's alerts are active (services/alerts.ts): the disk, backups, restarts, its certificate.
+            count: opts.forOwner ? serverAlertCount() : 0,
+            label: 'This server has alerts',
             section: 'home',
         },
     ];

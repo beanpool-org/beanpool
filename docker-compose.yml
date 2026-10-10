@@ -113,6 +113,14 @@ services:
       - BACKUP_OFFBOX_2_NAME=${BACKUP_OFFBOX_2_NAME:-}
       - BACKUP_OFFBOX_INTERVAL_HOURS=${BACKUP_OFFBOX_INTERVAL_HOURS:-}
       - BACKUP_OFFBOX_RETENTION_DAYS=${BACKUP_OFFBOX_RETENTION_DAYS:-}
+      # Where this server's alerts go (optional): an ntfy topic URL (ALERTS_WEBHOOK_FORMAT=ntfy, the default) or any URL
+      # that takes a JSON POST (json), with an optional bearer token. EMPTY = none, as every node starts: the owners still
+      # get a push and a banner in Settings. Your channel, never BeanPool's. From .env only: never stored in node_config,
+      # never put in a backup or a standby's copy, never logged. Can be set in Settings instead (data/alerts.json, mode 600).
+      # See apps/server/src/services/alerts.ts.
+      - ALERTS_WEBHOOK_URL=${ALERTS_WEBHOOK_URL:-}
+      - ALERTS_WEBHOOK_FORMAT=${ALERTS_WEBHOOK_FORMAT:-}
+      - ALERTS_WEBHOOK_TOKEN=${ALERTS_WEBHOOK_TOKEN:-}
       # The Expo access token this server's push notifications go with (Authorization: Bearer). EMPTY = pushes go
       # without one, as they always have. Once BeanPool's Expo project asks for it, a phone's push token alone can no
       # longer send that phone a notice. From .env only: never stored in node_config, never put in a backup, never logged.

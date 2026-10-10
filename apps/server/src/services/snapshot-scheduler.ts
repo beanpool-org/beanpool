@@ -124,6 +124,12 @@ let snapshotTimer: ReturnType<typeof setInterval> | null = null;
 /** The interval the running timer was armed with, in hours. */
 let armedHours: number | null = null;
 let creating = false;
+/** Scheduled snapshots that failed since the last one that worked (services/alerts.ts tells the owners at two). */
+let failuresInARow = 0;
+
+export function snapshotFailuresInARow(): number {
+    return failuresInARow;
+}
 /** The hourly expiry, on every role ({@link expireSnapshots}). */
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
 /** Set by initSnapshotScheduler: from then on a role change re-arms. */
@@ -443,8 +449,8 @@ function arm(): void {
     snapshotTimer = setInterval(() => {
         // A role that changed without setNodeRole's announcement still stops it here, before a snapshot is taken.
         if (getNodeRole() !== 'primary') { arm(); return; }
-        try { createSnapshot(); }
-        catch (e) { logger.warn('SYS', `[Snapshots] Scheduled snapshot failed: ${(e as any)?.message || e}`); }
+        try { createSnapshot(); failuresInARow = 0; }
+        catch (e) { failuresInARow++; logger.warn('SYS', `[Snapshots] Scheduled snapshot failed: ${(e as any)?.message || e}`); }
     }, intervalMs);
     armedHours = cfg.intervalHours;
 }

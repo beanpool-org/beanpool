@@ -73,6 +73,7 @@ export const PUSH_NOTICE_KINDS = {
     'account.recovery-started': { body: "Someone is trying to recover your account. If this isn't you, open BeanPool and stop it.", tab: 'settings' },
     'account.restored': { body: "Your account was just restored on another device. If that wasn't you, open BeanPool now.", tab: 'settings' },
     'owner.standby': { body: "Your community's standby server needs you.", tab: 'settings' },
+    'owner.alert': { body: "Your community's server needs you.", tab: 'settings' },
 } as const satisfies Record<string, { body: string; tab: PushNoticeTab }>;
 
 export type PushNoticeKind = keyof typeof PUSH_NOTICE_KINDS;

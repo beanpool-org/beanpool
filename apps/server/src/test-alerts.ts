@@ -169,7 +169,7 @@ async function main(): Promise<void> {
         throw new Error(`this suite reaches nothing off this machine (${url.hostname})`);
     }) as typeof fetch;
 
-    const { initStateEngine, seedGenesisMember, grantNodeRole } = await import('./state-engine.js');
+    const { initStateEngine, seedGenesisMember, grantNodeRole, dispatchPushNotification } = await import('./state-engine.js');
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
@@ -542,7 +542,12 @@ async function main(): Promise<void> {
     advance(20 * MIN);
     await tick();
     assert(alerts.getAlertsStatus().active.length === 0, `10. (nothing active to start: ${alerts.getAlertsStatus().active.map((a) => a.key)})`);
+    // The owner turned off "Marketplace Activity" (requests and approvals): the server's own notices still reach them.
+    db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'notify_marketplace', 'false')`).run(owner);
     pushes.length = 0;
+    dispatchPushNotification([owner], 'SYSTEM', 't', 'b', { section: 'home' }, 'marketplace', 'market.listing');
+    await new Promise((r) => setTimeout(r, 50));
+    assert(pushes.length === 0, '10. (with Marketplace Activity off, a marketplace push is not sent to the owner)');
     setSimulatedDiskUsageForTesting(92);
     for (let day = 0; day < 3; day++) {
         for (let i = 0; i < 3; i++) { await tick(); advance(MIN); }
@@ -550,7 +555,7 @@ async function main(): Promise<void> {
     }
     told = await pushedKeys();
     assert(told.length === 3 && told.every((p) => p.alert === 'disk.90'),
-        `10. three days at 92 %: one push a day, naming 90 only (${told.length}: ${told.map((p) => p.alert)})`);
+        `10. three days at 92 %, Marketplace Activity off: one push a day, naming 90 only (${told.length}: ${told.map((p) => p.alert)})`);
 
     alerts.stopServerAlerts();
     await ntfy.close();

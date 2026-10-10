@@ -9160,6 +9160,13 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
 /** A push's category: the member's preference that gates it (`notify_<category>`), and its Android channel. */
 export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery';
 
+/**
+ * Notices to a node's owners about the server itself (services/alerts.ts, services/standby-health.ts): sent whatever the
+ * owner's category toggles say. They ride the marketplace category only for its Android channel; turning off
+ * "Marketplace Activity" is about requests and approvals, not the server (#1738 review).
+ */
+const OWNER_SERVER_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['owner.alert', 'owner.standby']);
+
 /** The kinds of push that carry a member's own line, which nobody who has blocked them gets (dispatchPushNotification). */
 const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['chat.group', 'chat.mention']);
 
@@ -9236,7 +9243,7 @@ export function dispatchPushNotification(
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
-        const pref = getMemberPreference(pk, prefKey);
+        const pref = OWNER_SERVER_KINDS.has(kind) ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
             console.log(`[Push] Skipped ${pk.slice(0, 8)} — ${prefKey} disabled`);
             continue;

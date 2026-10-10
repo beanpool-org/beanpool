@@ -29,7 +29,7 @@
  * 10. The owners' pushes: one per minute at most, the disk's levels as one; three days at 92 % is three pushes, with
  *     "Marketplace Activity" turned off.
  * 11. An end is told after 15 minutes, and not at all if the condition is back before that: a disk swinging 81 % ↔ 76 %
- *     every 5 minutes for a day is one message.
+ *     every 5 minutes for a day is one message. While the end is held, the banner and the panel no longer count it.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts.ts
@@ -481,7 +481,7 @@ async function main(): Promise<void> {
     active = alerts.getAlertsStatus().active.map((a) => a.key);
     assert(active.includes('backups.offbox') && !active.includes('backups.none'), `7. two failed tries: off-box backups raised; the nudge cleared (${active})`);
     hits = await ntfyHits();
-    const offMsg = hits.slice(before7).find((h) => /off-box backups failing/i.test(h.body));
+    const offMsg = hits.slice(before7).find((h) => /off-box backups not leaving/i.test(h.body));
     assert(!!offMsg && offMsg.headers.priority === '4' && /1 of 1 off-box destination is failing/.test(offMsg.body), '7. told as high, with counts only');
     assert(!offMsg!.body.includes('Fixture store') && !offMsg!.body.includes('AKIA') && !offMsg!.body.includes('fixture-bucket'), "7. no destination's name, key or bucket");
     fixture(0, Date.now());
@@ -603,6 +603,10 @@ async function main(): Promise<void> {
     assert(!day11.some((h) => /RESOLVED/.test(h.body)), '11. no resolved line while it keeps coming back');
     setSimulatedDiskUsageForTesting(50);
     await tick();
+    // While its end is held (not yet told), the condition is over for the owner: no banner, not shown as active.
+    const { serverAlertCount } = await import('./services/alerts.js');
+    assert(serverAlertCount() === 0, `11. an end being held counts in no banner (${serverAlertCount()})`);
+    assert(!alerts.getAlertsStatus().active.some((a) => a.key === 'disk.80'), '11. an end being held is not shown as active');
     advance(15 * MIN);
     await tick();
     hits = await ntfyHits();

@@ -14,8 +14,9 @@
  *
  * A condition that starts is told once (raised), again every 24 hours while it lasts (still), and once when it has been
  * over for 15 minutes (resolved). Back within those 15 minutes, nothing is told: the condition just goes on. One that
- * starts again within 6 hours of a told end is told as `still`, not as new. So a condition swinging on and off sends two
- * lines a day at most, with the disk's hysteresis besides.
+ * starts again within 6 hours of a told end is told as `still`, not as new. So a condition that swings back within 15
+ * minutes sends nothing more; one that stays off longer than that is told each time it ends (under the hourly cap). While
+ * an end is being held, the condition no longer counts in the banner or shows as active: the owner already fixed it.
  *
  * ## Who is told, and how
  *
@@ -122,7 +123,7 @@ const ROWS: Record<AlertKey, Row> = {
     'disk.80': { title: 'disk 80% full', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
     'disk.90': { title: 'disk 90% full', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
     'disk.95': { title: 'disk 95% full', priority: 5, webhook: true, pushEveryMs: DAY, banner: true },
-    'backups.offbox': { title: 'off-box backups failing', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
+    'backups.offbox': { title: 'off-box backups not leaving', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
     'backups.none': { title: 'backups stay on this server', priority: 2, webhook: false, pushEveryMs: 7 * DAY, banner: true },
     'snapshots.failed': { title: 'snapshots failing', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
     'boot.crashloop': { title: 'restarting again and again', priority: 5, webhook: true, pushEveryMs: DAY, banner: true },
@@ -813,7 +814,7 @@ export function stopServerAlerts(): void {
 export function serverAlertCount(): number {
     try {
         const s = readState();
-        return (Object.keys(s.raised) as AlertKey[]).filter((k) => ROWS[k]?.banner).length;
+        return (Object.keys(s.raised) as AlertKey[]).filter((k) => ROWS[k]?.banner && s.raised[k]?.endedAt === undefined).length;
     } catch {
         return 0;
     }
@@ -846,7 +847,7 @@ export function getAlertsStatus(): AlertsStatus {
         nextTryAt: s.waiting.length && s.channel.nextTryAt > t ? s.channel.nextTryAt : null,
         waiting: c ? s.waiting.length : 0, dropped: s.dropped,
         sentLastHour: sentThisHour(s, t), hourlyCap: ALERT_HOURLY_CAP,
-        active: (Object.entries(s.raised) as Array<[AlertKey, Raised]>).map(([key, r]) => ({ key, title: ROWS[key].title, priority: r.priority, since: r.since, detail: r.detail })),
+        active: (Object.entries(s.raised) as Array<[AlertKey, Raised]>).filter(([, r]) => r.endedAt === undefined).map(([key, r]) => ({ key, title: ROWS[key].title, priority: r.priority, since: r.since, detail: r.detail })),
         history: s.history.slice().reverse().map((e) => ({ ...e, title: ROWS[e.key].title })),
     };
 }

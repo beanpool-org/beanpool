@@ -71,10 +71,13 @@ The Worker tells its admin, through one [ntfy](https://ntfy.sh) topic, what only
 A message says a name, the community name its operator published, and counts — **never the `contact` column** (a
 person's address) or a key. Its `Click` (and one `view` action, "Open control room") opens `https://beanpool.org/admin#<name>`,
 which scrolls to and lights that row; there is no approve-from-the-notification button. A send that fails is tried
-again every 5 minutes (the cron) with everything waiting — at most 50 — in one message. At most 20 messages an hour:
-the 21st is one line, "muted: N more this hour, see /admin". Each category is `on`, `digest` (held for the daily
-summary, which slice S2 sends) or `off`: the toggles on `/admin`, which also shows the channel (set or not, last good
-send, waiting, failures), what is raised and the last 50 alerts, and has a "send a test alert" button.
+again every 5 minutes (the cron) with everything waiting — at most 50, and at most 3,900 bytes ("… and N more, see
+/admin") — in one message. At most 20 messages an hour: past them one line, "muted: N more this hour, see /admin", and
+nothing more that hour — except high and urgent messages, which still go, up to 40 in the hour; a condition the cap
+muted is told in the next hour. A heal refused is told once per pause. Each category is `on`, `digest` (held for the
+daily summary, which slice S2 will send; until then held events are only shown on `/admin`) or `off`: the toggles on
+`/admin`, which also shows the channel (set or not, last good send, waiting, failures), what is raised and the last
+50 alerts, and has a "send a test alert" button.
 
 Secrets, as Worker secrets only (never `wrangler.toml`, never the repo, never a log line — a failed send logs its
 status code): `NTFY_URL`, the full topic URL (the topic name is the secret), and optionally `NTFY_TOKEN`, an ntfy

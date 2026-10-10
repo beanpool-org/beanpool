@@ -440,15 +440,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     (ch.dropped ? ' · ' + esc(ch.dropped) + ' dropped (over 50 waiting)' : '') + '</p>';
             }
             const cap = st.cap || {};
-            html += '<p style="font-size: 0.8rem; color: var(--text-muted);">This hour: ' + esc(cap.sent || 0) + ' sent (cap ' + esc(cap.per_hour || 20) + ', then one "muted" line)' + (cap.muted ? ', ' + esc(cap.muted) + ' muted' : '') + '.' +
-                (st.held_for_digest ? ' ' + esc(st.held_for_digest) + ' held for the daily summary.' : '') + '</p>';
+            html += '<p style="font-size: 0.8rem; color: var(--text-muted);">This hour: ' + esc(cap.sent || 0) + ' sent (cap ' + esc(cap.per_hour || 20) + ', then one "muted" line; high and urgent still go, to 40)' + (cap.muted ? ', ' + esc(cap.muted) + ' muted' : '') + '.' +
+                (st.held_for_digest ? ' ' + esc(st.held_for_digest) + ' held: shown below, not sent (no daily summary yet).' : '') + '</p>';
             html += '<div class="alert-modes">' + Object.keys(CATEGORY_WORDS).map(function(c) {
                 const mode = (st.settings || {})[c] || 'on';
                 return '<span class="alert-mode">' + esc(CATEGORY_WORDS[c]) + ': ' + Object.keys(MODE_WORDS).map(function(m) {
                     return '<button data-alert-category="' + c + '" data-alert-mode="' + m + '"' + (m === mode ? ' class="on"' : '') + '>' + MODE_WORDS[m] + '</button>';
                 }).join('') + '</span>';
             }).join('') + '</div>';
-            html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">on = sent at once · digest = held for the daily summary · off = nothing</p>';
+            html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">on = sent at once · digest = held and shown here, not sent (no daily summary yet) · off = nothing</p>';
             html += '<button data-alert-test="1" class="btn-approve">Send a test alert</button> <span id="alertTestResult" style="font-size: 0.8rem; color: var(--text-muted);"></span>';
             const active = st.active || [];
             if (active.length) {

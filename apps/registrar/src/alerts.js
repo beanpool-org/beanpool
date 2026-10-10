@@ -13,7 +13,7 @@
 //     still go, up to 40 messages in the hour, so a loop can't flood the phone. A condition whose telling was muted is
 //     told again in the next hour.
 // Each category (names, health, uptake, admin) is on (sent at once), digest (held for the daily summary, which the S2
-// slice sends) or off (alert_settings, /admin's toggles).
+// slice will send; until then held events are only shown on /admin) or off (alert_settings, /admin's toggles).
 // What a message says: a name, the community name its operator published, and counts. Never the `contact` column (a
 // person's address), a key, or anything a member wrote. The topic URL and token are secrets: they go in the request
 // and nowhere else — a failed send logs its status code, never the address.

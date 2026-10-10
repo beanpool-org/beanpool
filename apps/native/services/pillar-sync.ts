@@ -491,6 +491,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         if (postsHeld && (localPostsCount === 0 || (postsHeld.since !== '' && !postsIsIncremental))) postsHeld = null;
         if (postsHeld && postsHeld.tries >= POSTS_HELD_TRIES) {
             console.warn(`[Pillar Sync] The posts read has been held at one page for ${postsHeld.tries} syncs; reading it again from its first page.`);
+            // A whole read starts again whole. A kLastSync stored beside it (one left with an emptied copy, which is why
+            // the read was whole) made it a delta from that cursor, and the listings below the held key never came
+            // (review of PR #1719 fix round 1, NB-2: R8). A held delta starts again from kLastSync, where it began.
+            if (postsHeld.since === '') postsIsIncremental = false;
             postsHeld = null;
         }
         if (postsHeldRaw !== null && !postsHeld) await AsyncStorage.removeItem(kPostsHeld);

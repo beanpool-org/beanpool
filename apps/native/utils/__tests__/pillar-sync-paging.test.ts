@@ -619,6 +619,59 @@ describe('a held page that never comes', () => {
     });
 });
 
+// The restart after POSTS_HELD_TRIES of a WHOLE read held at one page, with a kLastSync stored beside it (one left behind
+// with an emptied copy: the case the empty-copy rule above names). The restart was a delta from that cursor, and the
+// listings below the held key never came, even once the node's bad row was fixed (review of PR #1719 fix round 1,
+// NB-2: R8). R8b is the normal fresh install, with no cursor.
+describe('a held whole read that starts again', () => {
+    /** Each read of the key below page 1 fails while `bad.on`: one bad row on page 2. */
+    function badSecondPage(all: Listing[]) {
+        const K1 = keyOf([...all].sort(order)[PAGE - 1]);
+        const bad = { on: true };
+        (globalThis as any).fetch = async (url: string) => {
+            if (bad.on && url.includes('/api/marketplace/posts') && new URL(url).searchParams.get('pageAfter') === K1) {
+                requests.push(url);
+                postsReadsThisCycle++;
+                return answer(500, '{"error":"a bad row"}');
+            }
+            return fetchMock(url);
+        };
+        return bad;
+    }
+    const firstAsks = () => { const q = new URL(postsReads()[0]).searchParams; return q.has('pageAfter') ? 'held' : q.has('updatedAfter') ? 'delta' : 'page 1'; };
+    const missingOf = (all: Listing[]) => { const t = heldTitles(); return all.filter(p => !t.has(p.id)).map(p => p.id); };
+
+    for (const [name, staleCursor] of [['R8 with a kLastSync left from before the copy was emptied', true], ['R8b with no cursor (a fresh install)', false]] as const) {
+        it(`${name}: after ${POSTS_HELD_TRIES} cycles at the held page the read starts again whole, and once the row is fixed none is missing`, async () => {
+            const all = many('all', 450, Date.parse('2026-09-01T00:00:00.000Z'));
+            node.posts = [...all];
+            if (staleCursor) store.set(LAST_SYNC_KEY, String(Date.now() - 86_400_000));
+            const bad = badSecondPage(all);
+            try {
+                await sync();
+                expect(firstAsks()).toBe('page 1');
+                expect(held()).toHaveLength(PAGE);
+                expect(JSON.parse(store.get(HELD_KEY)!).since).toBe('');
+                for (let i = 0; i < POSTS_HELD_TRIES; i++) {
+                    await sync(false);
+                    expect(firstAsks()).toBe('held');
+                }
+                // The restart: page 1 of a whole read, not a delta from the cursor.
+                await sync(false);
+                expect(firstAsks()).toBe('page 1');
+                expect(JSON.parse(store.get(HELD_KEY)!).since).toBe('');
+                bad.on = false;
+                await sync();
+                await sync();
+                expect(missingOf(all)).toEqual([]);
+                expect(store.has(HELD_KEY)).toBe(false);
+            } finally {
+                (globalThis as any).fetch = fetchMock;
+            }
+        });
+    }
+});
+
 // A reset of the copy while a whole read is paging in (review of PR #1719 fix round 1, B-1: R7). Its pages are written as
 // they come, so a Force Resync tapped between two pages cleared the ones already written; the running cycle wrote the
 // rest into the fresh copy and stored its cursor, and every later cycle was a delta: the newest listings never came back.

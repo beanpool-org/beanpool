@@ -1361,7 +1361,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             .filter(e => e.lat != null && e.lng != null && e.status !== 'completed')
             .map(e => [e.lat!, e.lng!] as [number, number]),
     ], [posts, enterprises, blockedSet]);
-    const showLocationHint = nodeLocation === 'unset' && pinsLoaded && ownPinPoints.length === 0;
+    // Read by area and nothing near (lib/listings-near): its own line, never a dead end (DESIGN-global-sync-by-area §5).
+    const nearEmpty = !!near && pinsLoaded && posts.length === 0;
+    const showLocationHint = nodeLocation === 'unset' && pinsLoaded && ownPinPoints.length === 0 && !nearEmpty;
     useEffect(() => {
         if (centredRef.current || !mapRef.current) return;
         if (nodeLocation !== 'unset' && nodeLocation !== 'unknown') return;
@@ -1665,8 +1667,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 </p>
             )}
 
-            {/* Read by area and nothing near (lib/listings-near): never a dead end (DESIGN-global-sync-by-area §5). */}
-            {near && pinsLoaded && posts.length === 0 && !showLocationHint && !showNewPost && (
+            {near && nearEmpty && !showNewPost && (
                 <p
                     role="status"
                     data-testid="map-near-empty"

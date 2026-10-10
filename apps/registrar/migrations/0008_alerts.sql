@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS alert_state (
     since          INTEGER NOT NULL,   -- when it was raised (unix s)
     last_told_at   INTEGER NOT NULL,   -- when it was last told (raised, or a 24 h reminder)
     detail         TEXT,               -- its words as last seen
-    last_seen_json TEXT                -- the condition as last evaluated (category, priority, title)
+    last_seen_json TEXT,               -- the condition as last evaluated (category, priority, title)
+    told_id        INTEGER             -- the alert_outbox row that last told it (muted: told again in the next hour)
 );
 
 CREATE TABLE IF NOT EXISTS alert_outbox (

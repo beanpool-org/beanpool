@@ -8,8 +8,10 @@
 //   - what is not yet told waits in alert_outbox. A send that fails is tried again every 5 minutes (the cron runs flush),
 //     with everything waiting — at most 50; older ones are dropped and counted — in one message;
 //   - with no NTFY_URL set nothing is sent: the events wait for the first channel that is, and /admin says so;
-//   - at most 20 messages an hour: the 21st is one line, "muted: N more this hour, see /admin", and the rest of that
-//     hour is kept for /admin only.
+//   - at most 20 messages an hour: past them, a message with nothing high or urgent in it is muted — the first is one
+//     line, "muted: N more this hour, see /admin", the rest of that hour is kept for /admin only. High and urgent ones
+//     still go, up to 40 messages in the hour, so a loop can't flood the phone. A condition whose telling was muted is
+//     told again in the next hour.
 // Each category (names, health, uptake, admin) is on (sent at once), digest (held for the daily summary, which the S2
 // slice sends) or off (alert_settings, /admin's toggles).
 // What a message says: a name, the community name its operator published, and counts. Never the `contact` column (a
@@ -20,6 +22,7 @@ export const ALERT_REMIND_S = 24 * 3600;
 export const ALERT_RETRY_S = 5 * 60;
 export const MAX_WAITING = 50;
 export const HOURLY_CAP = 20;
+export const HOURLY_CEILING = 40;   // high and urgent go past the cap, never past this
 export const CATEGORIES = ['names', 'health', 'uptake', 'admin'];
 export const MODES = ['on', 'digest', 'off'];
 const SEND_TIMEOUT_MS = 15_000;
@@ -166,13 +169,14 @@ export async function categoryMode(env, category) {
     return MODES.includes(r?.mode) ? r.mode : 'on';
 }
 
-// Into the outbox, as the category says: false when it is off (nothing kept), else whether it waits to be sent now.
+// Into the outbox, as the category says: the row's id when it waits to be sent now, else 0 (off: nothing kept; digest:
+// held).
 async function enqueue(env, ev, at) {
     const mode = ev.category === 'test' ? 'on' : await categoryMode(env, ev.category);
-    if (mode === 'off') return false;
+    if (mode === 'off') return 0;
     const held = mode === 'digest' ? 1 : 0;
-    await env.DB.prepare('INSERT INTO alert_outbox (at, category, priority, tag, title, body, name, held) VALUES (?,?,?,?,?,?,?,?)')
-        .bind(at, ev.category, ev.priority, ev.tag || null, ev.title, ev.body, ev.name || null, held).run();
+    const row = await env.DB.prepare('INSERT INTO alert_outbox (at, category, priority, tag, title, body, name, held) VALUES (?,?,?,?,?,?,?,?) RETURNING id')
+        .bind(at, ev.category, ev.priority, ev.tag || null, ev.title, ev.body, ev.name || null, held).first();
     if (!held) {
         // At most MAX_WAITING wait; the oldest beyond go, and are counted.
         const r = await env.DB.prepare(`DELETE FROM alert_outbox WHERE id IN (SELECT id FROM alert_outbox
@@ -184,7 +188,7 @@ async function enqueue(env, ev, at) {
         }
     }
     await env.DB.prepare('DELETE FROM alert_outbox WHERE at < ? AND (sent_at IS NOT NULL OR muted=1 OR held=1)').bind(at - KEEP_S).run();
-    return !held;
+    return held ? 0 : Number(row?.id) || 0;
 }
 
 // Tell the admin of one event (A1–A3, A5, A6). Like logEvent, it never undoes what it reports: a failure is logged,
@@ -201,14 +205,16 @@ export async function notify(env, ev) {
 }
 
 // Every condition as it is now (each sweep): raised, still (24 h on), cleared — each told once, even with two sweeps at
-// the same time (a conditional write decides who tells). Then whatever waits is sent, if a try is due.
+// the same time (a conditional write decides who tells). A raised or still the hourly cap muted is told again in the
+// next hour (alert_state.told_id: the row that told it). Then whatever waits is sent, if a try is due.
 export async function updateConditions(env, conditions) {
     const now = nowS();
     for (const c of conditions) {
         try {
             const r = await env.DB.prepare('SELECT * FROM alert_state WHERE key=?').bind(c.key).first();
             const seen = JSON.stringify({ category: c.category, priority: c.priority, title: c.title });
-            const tell = (kind, since) => enqueue(env, {
+            const tell = async (kind, since) => {
+                const id = await enqueue(env, {
                 category: c.category, name: null,
                 priority: kind === 'cleared' ? PRIORITY.low : c.priority,
                 tag: kind === 'cleared' ? TAG.resolved : c.tag,
@@ -216,16 +222,20 @@ export async function updateConditions(env, conditions) {
                 body: kind === 'raised' ? `${c.detail} Since ${when(since)}.`
                     : kind === 'still' ? `Still, since ${when(since)}: ${c.detail}`
                         : `Resolved (since ${when(since)}): ${c.detail}`,
-            }, now);
+                }, now);
+                if (kind !== 'cleared') await env.DB.prepare('UPDATE alert_state SET told_id=? WHERE key=? AND since=?').bind(id || null, c.key, since).run();
+            };
             if (c.active && !r) {
                 const w = await env.DB.prepare('INSERT OR IGNORE INTO alert_state (key, since, last_told_at, detail, last_seen_json) VALUES (?,?,?,?,?)')
                     .bind(c.key, now, now, c.detail, seen).run();
                 if (w?.meta?.changes) await tell('raised', now);
             } else if (c.active && r) {
-                const due = now - r.last_told_at >= ALERT_REMIND_S;
+                const muted = r.told_id ? await env.DB.prepare('SELECT title FROM alert_outbox WHERE id=? AND muted=1 AND at < ?')
+                    .bind(r.told_id, now - (now % 3600)).first() : null;
+                const due = !!muted || now - r.last_told_at >= ALERT_REMIND_S;
                 const w = await env.DB.prepare('UPDATE alert_state SET detail=?, last_seen_json=?, last_told_at=? WHERE key=? AND last_told_at=?')
                     .bind(c.detail, seen, due ? now : r.last_told_at, c.key, r.last_told_at).run();
-                if (due && w?.meta?.changes) await tell('still', r.since);
+                if (due && w?.meta?.changes) await tell(muted && !muted.title.startsWith('Still: ') ? 'raised' : 'still', r.since);
             } else if (!c.active && r) {
                 const w = await env.DB.prepare('DELETE FROM alert_state WHERE key=? AND since=?').bind(c.key, r.since).run();
                 if (w?.meta?.changes) await tell('cleared', r.since);
@@ -238,7 +248,8 @@ export async function updateConditions(env, conditions) {
 }
 
 // Send what waits, if a channel is set and a try is due: one message with every waiting event (at most 50), or, at the
-// hour's cap, the one "muted" line and then nothing until the next hour. `force`: try now even inside the 5 minutes
+// hour's cap, the one "muted" line and then nothing until the next hour — unless something high or urgent waits, which
+// goes (with the rest) up to the hour's ceiling. `force`: try now even inside the 5 minutes
 // after a failure (the admin's test button). Returns what happened: { sent, muted, status? }. Never throws.
 export async function flush(env, { force = false } = {}) {
     try {
@@ -254,13 +265,16 @@ export async function flush(env, { force = false } = {}) {
         if (!events.length) return { sent: 0, muted: 0 };
 
         // The hour's cap, held even by two senders at once: a message is sent only once it has reserved its place in the
-        // hour (one of HOURLY_CAP, or the one place after them for the "muted" line), and a send that fails gives it back.
+        // hour (one of HOURLY_CAP; past them, one of HOURLY_CEILING when something high or urgent is in it; or the one
+        // "muted" line, which also counts what it mutes), and a send that fails gives it back.
         const hour = now - (now % 3600);
-        const reserve = async (limit) => ((await env.DB.prepare(`UPDATE alert_channel
-            SET hour_sent = CASE WHEN hour_start=? THEN hour_sent ELSE 0 END + 1, hour_muted = CASE WHEN hour_start=? THEN hour_muted ELSE 0 END, hour_start=?
-            WHERE channel='ntfy' AND CASE WHEN hour_start=? THEN hour_sent ELSE 0 END < ?`).bind(hour, hour, hour, hour, limit).run())?.meta?.changes ?? 0) > 0;
-        const mutedLine = !(await reserve(HOURLY_CAP));
-        if (mutedLine && !(await reserve(HOURLY_CAP + 1))) {
+        const cur = (col) => `CASE WHEN hour_start=${hour} THEN ${col} ELSE 0 END`;
+        const reserve = async (limit, line = 0) => ((await env.DB.prepare(`UPDATE alert_channel
+            SET hour_sent = ${cur('hour_sent')} + 1, hour_muted = ${cur('hour_muted')} + ?, hour_start=?
+            WHERE channel='ntfy' AND ${cur('hour_sent')} < ?${line ? ` AND ${cur('hour_muted')} = 0` : ''}`).bind(line, hour, limit).run())?.meta?.changes ?? 0) > 0;
+        const loud = events.some((e) => e.priority >= PRIORITY.high);
+        const mutedLine = !(await reserve(HOURLY_CAP)) && !(loud && await reserve(HOURLY_CEILING));
+        if (mutedLine && !(await reserve(HOURLY_CEILING + 1, events.length))) {
             // Muted for the rest of the hour: kept for /admin, never sent.
             await env.DB.prepare('UPDATE alert_outbox SET muted=1, claim=NULL WHERE claim=?').bind(claim).run();
             await env.DB.prepare("UPDATE alert_channel SET hour_muted = hour_muted + ? WHERE channel='ntfy' AND hour_start=?").bind(events.length, hour).run();
@@ -274,12 +288,13 @@ export async function flush(env, { force = false } = {}) {
         if (r.ok) {
             await env.DB.prepare(`UPDATE alert_outbox SET ${mutedLine ? 'muted=1' : 'sent_at=?'}, claim=NULL WHERE claim=?`)
                 .bind(...(mutedLine ? [claim] : [now, claim])).run();
-            await env.DB.prepare("UPDATE alert_channel SET last_ok_at=?, last_try_at=?, last_status=?, failed_in_a_row=0, next_try_at=0, hour_muted = hour_muted + ? WHERE channel='ntfy'")
-                .bind(now, now, r.status, mutedLine ? events.length : 0).run();
+            await env.DB.prepare("UPDATE alert_channel SET last_ok_at=?, last_try_at=?, last_status=?, failed_in_a_row=0, next_try_at=0 WHERE channel='ntfy'")
+                .bind(now, now, r.status).run();
             return { sent: 1, muted: mutedLine ? events.length : 0, status: r.status };
         }
         await env.DB.prepare('UPDATE alert_outbox SET claim=NULL WHERE claim=?').bind(claim).run();
-        await env.DB.prepare("UPDATE alert_channel SET hour_sent = hour_sent - 1 WHERE channel='ntfy' AND hour_start=? AND hour_sent > 0").bind(hour).run();
+        await env.DB.prepare("UPDATE alert_channel SET hour_sent = MAX(0, hour_sent - 1), hour_muted = MAX(0, hour_muted - ?) WHERE channel='ntfy' AND hour_start=?")
+            .bind(mutedLine ? events.length : 0, hour).run();
         await env.DB.prepare("UPDATE alert_channel SET last_try_at=?, last_status=?, failed_in_a_row=failed_in_a_row+1, next_try_at=? WHERE channel='ntfy'")
             .bind(now, r.status, now + ALERT_RETRY_S).run();
         console.error('[ALERT_SEND]', `ntfy: ${r.status}; ${plural(events.length, 'event')} waiting, tried again in ${ALERT_RETRY_S / 60} min`);

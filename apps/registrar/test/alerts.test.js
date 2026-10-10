@@ -224,6 +224,60 @@ test('the hourly cap: 20 messages, the 21st is one "muted" line, then nothing un
     } finally { r.done(); }
 });
 
+test('over the hourly cap, high and urgent still go: the 22-claim loop by one key, then the sweep suspends itself', async () => {
+    const r = await room();
+    try {
+        r.toNextHour();
+        const [B, C, X] = await Promise.all([makeKey(), makeKey(), makeKey()]);
+        await liveName(r.w, 'riverbend', B); await liveName(r.w, 'yarrabank', C);
+        for (let i = 0; i < 22; i++) {
+            r.step(60);
+            assert.equal((await r.w.claim(X, { name: 'sydney' })).body.status, 'pending');
+            await r.w.release(X, { name: 'sydney' });
+        }
+        assert.ok(r.sent.some((m) => m.headers.title.startsWith('Muted')), 'the loop used the hour');
+        const n = r.sent.length;
+        r.w.nodes['riverbend.beanpool.org'] = attestsAs(X); r.w.nodes['yarrabank.beanpool.org'] = attestsAs(X);
+        r.step(60);
+        assert.equal((await attestSweep(r.w.env)).action, 'suspended:mass');
+        assert.equal(r.sent.length, n + 1, 'the urgent one is sent, the same hour');
+        assert.equal(r.sent.at(-1).headers.title, 'Attest sweep suspended');
+        assert.equal(r.sent.at(-1).headers.priority, '5');
+    } finally { r.done(); }
+});
+
+test('the ceiling: past 40 an hour even urgent ones are muted, with one "muted" line', async () => {
+    const r = await room();
+    try {
+        r.toNextHour();
+        for (let i = 1; i <= 45; i++) await alerts.notify(r.w.env, { category: 'health', priority: 5, tag: 'red_circle', name: null, title: `Urgent ${i}`, body: `Urgent ${i}.` });
+        assert.equal(r.sent.length, 41);
+        assert.deepEqual(r.sent.slice(0, 40).map((m) => m.headers.title), Array.from({ length: 40 }, (_, i) => `Urgent ${i + 1}`));
+        assert.equal(r.sent[40].headers.title, 'Muted: 1 more this hour');
+        assert.deepEqual((await r.admin('alerts')).body.cap, { per_hour: 20, sent: 41, muted: 5 });
+    } finally { r.done(); }
+});
+
+test('a condition raised while the cap muted it is told in the next hour, once', async () => {
+    const r = await room();
+    try {
+        r.toNextHour();
+        for (let i = 1; i <= 21; i++) await alerts.notify(r.w.env, { category: 'names', priority: 3, tag: 'seedling', name: null, title: `Event ${i}`, body: `Event ${i}.` });
+        assert.equal(r.sent.length, 21);
+        const cond = { key: 'teardown-owed', category: 'health', priority: 3, tag: 'warning', title: 'Thing', active: true, detail: 'Thing is on.' };
+        await alerts.updateConditions(r.w.env, [cond]);
+        assert.equal(r.sent.length, 21, 'muted this hour');
+        r.step(300); await alerts.updateConditions(r.w.env, [cond]);
+        assert.equal(r.sent.length, 21, 'and not tried again inside it');
+        r.toNextHour(); await alerts.updateConditions(r.w.env, [cond]);
+        assert.equal(r.sent.length, 22, 'told in the next hour');
+        assert.equal(r.sent[21].headers.title, 'Thing');
+        assert.match(r.sent[21].body, /^Thing is on\. Since \d{4}-\d\d-\d\d \d\d:\d\d UTC\.$/);
+        r.step(300); await alerts.updateConditions(r.w.env, [cond]);
+        assert.equal(r.sent.length, 22, 'once');
+    } finally { r.done(); }
+});
+
 test('the cap holds with senders racing, and more than 50 waiting keeps the newest 50, the rest counted', async () => {
     const r = await room();
     try {

@@ -262,6 +262,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [nearKnown, setNearKnown] = useState(false);
     // "Show everywhere" under the area line: this visit reads the node's newest, as a node without the switch does.
     const [everywhere, setEverywhere] = useState(false);
+    // The member's area could not be read (the node busy or down): the line says so, with Try again, rather than
+    // pointing at the picker as if they had no area.
+    const [areaFailed, setAreaFailed] = useState(false);
+    const [areaTry, setAreaTry] = useState(0);
     useEffect(() => {
         let cancelled = false;
         const known = () => { if (!cancelled) setNearKnown(true); };
@@ -274,14 +278,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const nearby = info?.features?.nearbyListings ?? null;
                 setNearbyListings(nearby);
                 if (nearby && identity?.publicKey && !isVisitor) {
-                    const me = await getCommunityMe().catch(() => null);
-                    if (!cancelled) setMemberArea(me?.area ? { lat: me.area.lat, lng: me.area.lng } : null);
+                    let failed = false;
+                    const me = await getCommunityMe().catch(() => { failed = true; return null; });
+                    if (!cancelled) {
+                        setAreaFailed(failed);
+                        setMemberArea(me?.area ? { lat: me.area.lat, lng: me.area.lng } : null);
+                    }
                 }
             })
             .catch(() => {})
             .finally(() => { clearTimeout(timer); known(); });
         return () => { cancelled = true; clearTimeout(timer); };
-    }, [identity?.publicKey, isVisitor]);
+    }, [identity?.publicKey, isVisitor, areaTry]);
     // Under Events the list is not cut, as on a local node: no point on the read and none on a pushed listing. The
     // Distance chip is off screen there, so nothing on that screen could undo the cut.
     const near = useMemo(
@@ -2706,6 +2714,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         ) : near ? (
                             // Not the setting's label: the picker sets it to "<n>km radius", never a place's name.
                             <span>{`Nearest first, within ${formatDistance(near.radiusKm)} of the place you picked.`}</span>
+                        ) : areaFailed && !everywhere ? (
+                            <>
+                                <span>Couldn't check your area just now, so this is the newest from everywhere.</span>
+                                <button type="button" onClick={() => setAreaTry(n => n + 1)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">Try again</button>
+                            </>
                         ) : everywhere && memberArea ? (
                             <>
                                 <span>Newest from everywhere.</span>

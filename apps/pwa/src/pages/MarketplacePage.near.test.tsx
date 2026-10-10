@@ -156,6 +156,19 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         }
     });
 
+    it('when the member\'s area cannot be read, the line says so and offers to try again, not the picker', async () => {
+        info.current = GLOBAL;
+        vi.mocked(api.getCommunityMe).mockRejectedValueOnce(new Error('429'));
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES }]);
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent("Couldn't check your area just now, so this is the newest from everywhere.");
+        expect(screen.queryByRole('button', { name: "See what's near you" })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(feedReads().at(-1)).toEqual({ types: CLIENT_POST_TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'distance' }));
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest to your area first, within 250 km.');
+    });
+
     it('a node that never answers its info still gets a list, read as before', async () => {
         info.current = GLOBAL;
         const gate = await import('../lib/visitor-lobby-gate');

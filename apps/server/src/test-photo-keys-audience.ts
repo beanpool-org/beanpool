@@ -101,6 +101,15 @@ async function call(method: 'GET' | 'HEAD', p: string, id?: Id): Promise<Res> {
     const text = method === 'HEAD' ? '' : await res.text();
     let body: any;
     try { body = JSON.parse(text); } catch { /* not JSON */ }
+    // Every photo asked for is asked for its list-sized copy too (`size=thumb`, storage/photo-thumbnails.ts), by the same
+    // reader: refused exactly when the photo is, under the same cache header.
+    if (/^\/api\/marketplace\/posts\/[^/]+\/photos\/\d+/.test(p) && !/[?&]size=thumb/.test(p)) {
+        beforeCall();
+        const small = await fetch(`${BASE}${p}${p.includes('?') ? '&' : '?'}size=thumb`, { method, headers: id ? signedHeaders(method, p, '', id) : {} });
+        await small.arrayBuffer();
+        assert(small.status === res.status && small.headers.get('cache-control') === res.headers.get('cache-control'),
+            `…its small copy too: ${small.status} "${small.headers.get('cache-control')}" (the photo ${res.status} "${res.headers.get('cache-control')}")`);
+    }
     return { status: res.status, text, body };
 }
 const get = (p: string, id?: Id) => call('GET', p, id);

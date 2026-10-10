@@ -30,6 +30,13 @@
  * 4 is the knee: 11% fewer bytes than level 1, while level 6 saves 4% more for 60% more CPU. A sync page (200 listings,
  * ~263 KB) is then about 2 ms of CPU here, 5 on the global droplet. The compression runs on libuv's pool (zlib's async
  * gzip), not on the event loop.
+ *
+ * The operator's switch, API_GZIP in .env (apiGzipFromEnv). Empty = on. `off` = this middleware isn't registered at all:
+ * every /api answer goes out as the route made it, with no Vary of ours. For a node behind an edge that compresses for
+ * the phones already: global, test and mullum sit behind Cloudflare, which answered phones with `Content-Encoding: br`
+ * (the director, 11 Oct). There this saves only the node→edge bytes and costs the node's CPU, which on one vCPU shares
+ * its core with the event loop (the #1764 review, F2). The directory's and rosters' snapshots keep their own gzip copy
+ * either way: made once, for every reader.
  */
 import { promisify } from 'node:util';
 import { gzip as gzipCallback, constants as zlibConstants } from 'node:zlib';
@@ -43,6 +50,20 @@ const gzipAsync = promisify(gzipCallback);
 export const MIN_BYTES = 1024;
 /** zlib's level, chosen by measurement (see above). */
 export const GZIP_LEVEL = 4;
+/** The .env line that turns the /api gzip off. */
+export const API_GZIP_ENV = 'API_GZIP';
+
+/**
+ * Is the /api gzip on? `off` (or 0, false, no; any case) turns it off. Empty, or on/1/true/yes, leave it on. Anything
+ * else leaves it on too, with a warning in the log: on is what a node without an edge in front needs.
+ */
+export function apiGzipFromEnv(raw: string | undefined = process.env[API_GZIP_ENV]): boolean {
+    const value = (raw ?? '').trim().toLowerCase();
+    if (['off', '0', 'false', 'no'].includes(value)) return false;
+    if (['', 'on', '1', 'true', 'yes'].includes(value)) return true;
+    console.warn(`⚠️  ${API_GZIP_ENV}=${JSON.stringify(raw)} is neither on nor off, so this node gzips /api answers for readers that ask. Set ${API_GZIP_ENV}=off to stop it.`);
+    return true;
+}
 
 /** A content type worth compressing: text of every kind but an event stream (SSE goes out a frame at a time). */
 const COMPRESSIBLE = /^(?:text\/(?!event-stream)|application\/(?:json|javascript|xml|x-ndjson|[\w.+-]+\+(?:json|xml))\b)/i;

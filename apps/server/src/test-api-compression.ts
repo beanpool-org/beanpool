@@ -14,8 +14,11 @@
  *      as before this change
  *   5. a member's photo: its bytes as stored, never encoded, though they compress to nothing
  *   6. HEAD, a range request and a small answer: never encoded
+ * With API_GZIP=off (the operator's switch; its own run in scripts/server-suites.mjs), sections 1-6 give way to: every
+ * answer as the route made it, no Vary of the middleware's, the route's own ETag; the snapshots' own gzip copy stays.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-api-compression.ts
+ *      (and again with API_GZIP=off)
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -81,6 +84,7 @@ async function main() {
     const { db } = await import('./db/db.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
     const heavy = await import('./heavy-reads.js');
+    const { apiGzipFromEnv } = await import('./api-compression.js');
 
     await initTls();
     se.initStateEngine();
@@ -101,7 +105,16 @@ async function main() {
     }
 
     const SYNC = '/api/marketplace/posts?sync=1';
-    console.log('── 1. the listings sync read ──');
+    console.log('── 0. the operator\'s switch, API_GZIP ──');
+    for (const [raw, on] of [['', true], [' on ', true], ['1', true], ['yes', true], ['off', false], ['OFF', false], [' off ', false], ['0', false], ['false', false], ['no', false], ['maybe', true]] as const) {
+        assert(apiGzipFromEnv(raw) === on, `API_GZIP=${JSON.stringify(raw)} reads as ${on ? 'on' : 'off'}`);
+    }
+    if (process.env.API_GZIP === 'off') {
+        await switchedOff(alice, SYNC);
+        finish();
+    }
+
+    console.log('\n── 1. the listings sync read ──');
     const zipped = await ask(SYNC, alice, { 'Accept-Encoding': 'gzip, deflate, br' });
     const plain = await ask(SYNC, alice);
     assert(zipped.status === 200 && plain.status === 200, `both reads are 200 (got ${zipped.status}, ${plain.status})`);
@@ -163,6 +176,37 @@ async function main() {
     assert(small.status === 200 && small.bytes.length < 1024 && encoding(small) === undefined,
         `a small answer stays plain (${small.status}, ${small.bytes.length} bytes, ${encoding(small)})`);
 
+    finish();
+}
+
+/** API_GZIP=off (the variant run): the middleware isn't there, so every answer is the route's own, as before #1764. */
+async function switchedOff(alice: Id, SYNC: string): Promise<void> {
+    console.log('\n── API_GZIP=off: answers go out as the routes made them ──');
+    for (const path of [SYNC, '/api/activity/feed', '/api/home']) {
+        const zipped = await ask(path, alice, { 'Accept-Encoding': 'gzip, deflate, br' });
+        const plain = await ask(path, alice);
+        assert(zipped.status === 200 && plain.status === 200 && zipped.bytes.length > 1024,
+            `${path}: both reads 200, over the floor (got ${zipped.status}, ${plain.status}; ${zipped.bytes.length} bytes)`);
+        // Home's answer says when it was made (generatedAt), so two reads match as JSON without it; the others byte for byte.
+        const same = path === '/api/home'
+            ? withoutGeneratedAt(zipped.bytes) === withoutGeneratedAt(plain.bytes)
+            : zipped.bytes.equals(plain.bytes);
+        assert(encoding(zipped) === undefined && same,
+            `${path}: asked with gzip, it is the plain answer (Content-Encoding: ${encoding(zipped)}; ${zipped.bytes.length} and ${plain.bytes.length} bytes)`);
+        assert(!varies(zipped) && !varies(plain), `${path}: no Vary: Accept-Encoding (got "${zipped.headers.vary}", "${plain.headers.vary}")`);
+        assert(zipped.headers.etag === plain.headers.etag, `${path}: the route's own ETag, not made weak (${zipped.headers.etag} = ${plain.headers.etag})`);
+    }
+    // The shared snapshots' gzip copy is the route's, made once for every reader: the switch leaves it.
+    const dir = await ask('/api/members', alice, { 'Accept-Encoding': 'gzip' });
+    assert(dir.status === 200 && encoding(dir) === 'gzip' && dir.bytes[0] === 0x1f,
+        `the directory snapshot still sends its own gzip copy (${dir.status}, Content-Encoding: ${encoding(dir)})`);
+}
+
+function withoutGeneratedAt(bytes: Buffer): string {
+    try { const { generatedAt: _, ...rest } = JSON.parse(bytes.toString()); return JSON.stringify(rest); } catch { return 'not JSON'; }
+}
+
+function finish(): never {
     console.log(`\n${passed}/${run} checks passed.`);
     process.exit(passed === run ? 0 : 1);
 }

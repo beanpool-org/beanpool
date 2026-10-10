@@ -29,6 +29,7 @@ import { initStateEngine, tickDecisions, reconcileLedgerFromDb, stepDownAsKeeper
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { getCommonsBalanceExact } from './state-engine.js';
+import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { ROLL_OF_ONE, WAGE_NEEDS_SURPLUS, WINDING_UP_VOID, SCOPED_ALREADY_VOTED, SUBJECT_OFF_ROLL, RECIPIENT_WOUND_UP } from './decisions-engine.js';
 
 let BASE = '';
@@ -352,6 +353,18 @@ async function main(): Promise<void> {
     tickDecisions();
     assert(row(dC).status === 'execution_void' && row(dC).execution_reason === RECIPIENT_WOUND_UP && near(balanceOf(eC), 30) && near(totalSupply(), supplyC),
         `one that wound up mid-vote is void before any transfer, nothing moved (got ${row(dC).status} ${row(dC).execution_reason ?? row(dC).execution_error ?? ''})`);
+
+    // ── 11. The recipient re-keys mid-vote (a lost phone): the pay-out follows them to the new key ──
+    const [g1, g2] = [makeMember('Gus'), makeMember('Gia')];
+    const eG = makeEnterprise('Granary', [g1, g2], 30);
+    const payee = makeMember('Pip', 0);
+    const dG = (await propose(eG, g1, { effect: 'pay_out', params: { to: payee.pubKeyHex, amount: 5 } })).body?.decision?.id as string;
+    await vote(eG, dG, g1, true); await vote(eG, dG, g2, true);
+    const payeeNew = keypair();
+    completeRekey(payee.pubKeyHex, payeeNew.pubKeyHex, issueRekeyCode(payee.pubKeyHex, 'owner:password').code, 'owner:password');
+    tickDecisions();
+    assert(row(dG).status === 'executed' && near(balanceOf(payeeNew.pubKeyHex), 5 * 0.985) && near(balanceOf(eG), 25),
+        `a recipient who re-keys mid-vote is paid on the new key (got ${row(dG).status} ${row(dG).execution_reason ?? ''}, new key holds ${balanceOf(payeeNew.pubKeyHex)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

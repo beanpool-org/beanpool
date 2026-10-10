@@ -211,7 +211,8 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('creator_channels', 'owner_pubkey');
     move('pulse_items', 'owner_pubkey');
 
-    // (y) decisions & votes - update subject for member proposals and pool hardship grants
+    // (y) decisions & votes - update subject for member proposals, pool hardship grants and a scoped vote's subject (a
+    //     keeper, or a pay-out's recipient)
     move('decisions', 'author_pubkey');
     move('decisions', 'admin_halted_by');
     move('decisions', 'subject', "touches = 'member' OR touches = 'pool' OR touches = 'scope'");

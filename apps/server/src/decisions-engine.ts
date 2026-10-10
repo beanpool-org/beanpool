@@ -1503,7 +1503,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     // Out of the enterprise's own account only, through transfer() at floor 0 (a direct send never
                     // reaches its credit line), with the trade fee; the ledger line carries this Decision's signer.
                     const ent = decision.scopeId!;
-                    const to = String(decision.params.to);
+                    const to = decision.subject!;
                     const amount = floorCents(Number(decision.params.amount)) / 100;
                     const wage = isEnterpriseKeeper(ent, to);
                     const txn = transfer(ent, to, amount, decision.title, 'direct', false, { signer: authSigner, decisionPayOut: true });
@@ -2466,7 +2466,9 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions): Decisio
             throw new Error(`${WAGE_NEEDS_SURPLUS}: ${beansText(floorCents(Math.max(0, Number(ent.earned_surplus) || 0)))} Beans now.`);
         }
         const memo = typeof opts.params?.memo === 'string' ? replaceLoneSurrogates(opts.params.memo).slice(0, 280) : '';
-        params = { to, amount: cents / 100, ...(memo ? { memo } : {}) };
+        // The recipient is the subject, so a re-key mid-vote moves it with every other subject (engine/key-move.ts).
+        subject = to;
+        params = { amount: cents / 100, ...(memo ? { memo } : {}) };
     } else {
         subject = typeof opts.subject === 'string' ? opts.subject : null;
         if (!subject || !roll.some(k => k.pubkey === subject)) throw new Error('Name a keeper on this enterprise’s roll.');
@@ -2556,7 +2558,7 @@ function preflightScoped(decision: Decision): { status: 'ok' | 'void' | 'blocked
         return { status: 'wait', reason: 'Waiting: an admin has paused this enterprise’s account, so this is carried out once it is back' };
     }
     if (decision.effect === 'pay_out') {
-        const to = String(decision.params?.to || '');
+        const to = decision.subject || '';
         const recipient = to ? getMember(to) : null;
         // A suspended recipient is paid: their balance is theirs (as a hardship grant behaves).
         if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) return { status: 'void', reason: 'The member to be paid no longer has an account here' };

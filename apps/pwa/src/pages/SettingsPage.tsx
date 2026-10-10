@@ -1421,15 +1421,16 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 data-testid="settings-area-clear"
                                 onClick={clearMyArea}
                                 disabled={areaClearing}
-                                className="w-full min-h-[44px] mb-3 rounded-xl font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 bg-transparent cursor-pointer text-sm disabled:opacity-50"
+                                className="w-full min-h-[44px] mb-3 rounded-xl font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 bg-transparent cursor-pointer text-sm disabled:opacity-50"
                             >
                                 {areaClearing ? 'Clearing…' : 'Clear'}
                             </button>
                         )}
-                        {areaError && <p role="alert" className="text-sm text-red-600 dark:text-red-400 mb-3">{areaError}</p>}
+                        {areaError && <p role="alert" className="text-sm text-red-600 dark:text-red-300 mb-3">{areaError}</p>}
                         <AreaStep
                             send={senderForMe}
                             limits={areaLimits}
+                            hideTitle
                             skipLabel="← Back to Settings"
                             onSkip={() => setMode('menu')}
                             onSaved={(a, placeName) => { rememberAreaPlace(placeName); setMyArea(a); setAreaLoaded(true); setMode('menu'); }}

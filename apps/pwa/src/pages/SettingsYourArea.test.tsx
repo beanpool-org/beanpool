@@ -120,6 +120,21 @@ describe('Settings → Your area (S4)', () => {
         expect(screen.queryByTestId('settings-area')).toBeNull();
     });
 
+    it('one heading, and a Clear that holds 4.5:1 in dark mode (review N6)', async () => {
+        stored = { lat: -28.6, lng: 153.6 };
+        open();
+        const row = await screen.findByTestId('settings-your-area');
+        await waitFor(() => expect(row).toHaveTextContent('About 10 km around -28.6, 153.6'));
+        fireEvent.click(row);
+        const panel = screen.getByTestId('settings-area');
+        expect(Array.from(panel.querySelectorAll('h1, h2, h3, h4')).map((h) => h.textContent)).toEqual(['📍 Your area']);
+        // red-400 on nature-900 is 3.88:1; red-300 is 5.65:1 (#fca5a5 on #384038). Light stays red-600 on white, 4.83:1.
+        const clear = screen.getByTestId('settings-area-clear').className.split(' ');
+        expect(clear).toContain('dark:text-red-300');
+        expect(clear).not.toContain('dark:text-red-400');
+        expect(clear).toContain('text-red-600');
+    });
+
     it("a node that can't be asked: says so, never 'Not set'", async () => {
         vi.mocked(api.request).mockImplementation((async () => { throw new Error('offline'); }) as any);
         open();

@@ -1,0 +1,150 @@
+/**
+ * An enterprise's keepers' vote as both apps show it (DESIGN-group-decisions §2.4–§2.5, slice S2): the card's words, its
+ * two tally states, and the propose form's checks. Pure, so the apps share one copy and one test
+ * (src/__tests__/scoped-decision.test.ts). The node is the judge (apps/server decisions-engine createScopedDecision): these
+ * checks only keep a member from sending what it would refuse.
+ *
+ * While a vote is open the card shows turnout only ("2 of 4 have voted"); Yes and No once it has closed (Marty's pick 3,
+ * 2026-10-10). A pay-out carries the 1.5% trade fee (pick 2): it comes out of the amount, as a Need's payment's does.
+ */
+import { TRANSACTION_FEE_RATE } from './ledger.js';
+
+export type ScopedEffect = 'pay_out' | 'remove_keeper' | 'replace_lead';
+
+/** One vote, as GET /api/enterprise/:x/decisions sends it (routes/enterprise-decisions.ts `card`). */
+export interface ScopedDecisionCard {
+    id: string;
+    authorPubkey: string;
+    title: string;
+    description: string;
+    effect: ScopedEffect | string;
+    subject: string | null;
+    params: { amount?: number; memo?: string } | null;
+    status: string;
+    opensAt: string;
+    closesAt: string;
+    executionReason?: string | null;
+    scopeKind?: string;
+    scopeId?: string | null;
+    /** Yes and No only once it has closed. */
+    tally: { voted: number; roll: number; quorumRequired: number; thresholdRequired: number; yes?: number; no?: number };
+    myVote: { support: number | boolean; updatedAt: string } | null;
+}
+
+export interface ScopedDecisionList {
+    decisions: ScopedDecisionCard[];
+    /** A keeper on a roll of two or more, on a node with Decisions. */
+    canPropose: boolean;
+    rollSize: number;
+}
+
+/** A person on the roll, for the pickers. */
+export interface RollPerson { pubkey: string; name: string; role?: string }
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** Beans to two places at most, never a trailing ".00" ("40", "39.4", "0.6"). */
+export function beansAmount(n: number): string {
+    const cents = Math.round(n * 100);
+    return cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2).replace(/0$/, '');
+}
+
+/** What a pay-out of `amount` gives: the recipient's share and the Commons' 1.5%, in cents so they add up. */
+export function payOutSplit(amount: number): { receives: number; fee: number } {
+    const cents = Math.floor(amount * 100 + 1e-6);
+    const fee = Math.round(cents * TRANSACTION_FEE_RATE);
+    return { receives: (cents - fee) / 100, fee: fee / 100 };
+}
+
+/** The line under the amount: who gets what, and where the fee goes. */
+export function payOutFeeWords(amount: number, recipient: string): string {
+    const { receives, fee } = payOutSplit(amount);
+    return `${recipient} receives ${beansAmount(receives)} Beans. The 1.5% trade fee (${beansAmount(fee)} Beans) goes to the Commons.`;
+}
+
+/**
+ * The amount as typed, checked against what the enterprise holds now: a number of Beans above 0, cents at most, and no
+ * more than it holds. Returns the amount, or the words to show under the field.
+ */
+export function checkPayOutAmount(typed: string, held: number): { amount: number } | { error: string } {
+    const t = typed.trim().replace(',', '.');
+    if (!/^\d+(\.\d{1,2})?$/.test(t)) return { error: 'Enter an amount in Beans, like 40 or 12.50.' };
+    const amount = Number(t);
+    if (!(amount > 0)) return { error: 'The amount must be more than 0 Beans.' };
+    const heldCents = Math.floor(Math.max(0, held) * 100 + 1e-6);
+    if (Math.round(amount * 100) > heldCents) return { error: `The enterprise holds ${beansAmount(heldCents / 100)} Beans, so it can't pay more than that.` };
+    return { amount };
+}
+
+/** The effects a keeper may propose here: making another keeper the lead only in an ongoing enterprise (§2.4, pick 1). */
+export function scopedEffectsFor(lifecycle: string | null | undefined): ScopedEffect[] {
+    return lifecycle === 'bounded' ? ['pay_out', 'remove_keeper'] : ['pay_out', 'remove_keeper', 'replace_lead'];
+}
+
+/** The choice's label in the form, in the kind's own words (a project has a leader and collaborators, pick 8). */
+export function scopedEffectLabel(effect: ScopedEffect, lifecycle: string | null | undefined): string {
+    const project = lifecycle === 'bounded';
+    switch (effect) {
+        case 'pay_out': return 'Pay Beans out';
+        case 'remove_keeper': return project ? 'Remove a collaborator' : 'Remove a keeper';
+        case 'replace_lead': return 'Make another keeper the lead';
+    }
+}
+
+/**
+ * Who the pickers offer from the roll: never the proposer for a pay-out (a keeper can't vote themselves paid) or a
+ * new lead; never the lead for a removal (the lead is replaced, not removed); never the lead as the new lead.
+ */
+export function rollChoices(effect: ScopedEffect, roll: readonly RollPerson[], me: string): RollPerson[] {
+    switch (effect) {
+        case 'pay_out': return roll.filter(p => p.pubkey !== me);
+        case 'remove_keeper': return roll.filter(p => p.role !== 'lead');
+        case 'replace_lead': return roll.filter(p => p.role !== 'lead');
+    }
+}
+
+/** What the vote does, in one line, naming the person from the roll (the card is the keepers' own). */
+export function scopedEffectWords(d: Pick<ScopedDecisionCard, 'effect' | 'subject' | 'params'>, nameOf: (pubkey: string) => string, lifecycle?: string | null): string {
+    const who = d.subject ? nameOf(d.subject) : 'someone';
+    switch (d.effect) {
+        case 'pay_out': return `Pay ${beansAmount(Number(d.params?.amount) || 0)} Beans to ${who}`;
+        case 'remove_keeper': return lifecycle === 'bounded' ? `Remove ${who} as a collaborator` : `Remove ${who} as a keeper`;
+        case 'replace_lead': return `Make ${who} the lead keeper`;
+        default: return 'A vote';
+    }
+}
+
+/** The tally line: turnout while open, the split once closed (pick 3). */
+export function scopedTallyWords(d: Pick<ScopedDecisionCard, 'status' | 'tally'>): string {
+    const t = d.tally;
+    const turnout = `${t.voted} of ${t.roll} ${t.voted === 1 && t.roll === 1 ? 'has' : 'have'} voted`;
+    if (d.status === 'open') return `${turnout}. ${t.quorumRequired} must vote. Yes and No show when it closes.`;
+    return `Yes ${t.yes ?? 0} · No ${t.no ?? 0}. ${t.voted} of ${t.roll} voted.`;
+}
+
+/** The outcome, in plain words, for a vote that has closed. */
+export function scopedOutcomeWords(d: Pick<ScopedDecisionCard, 'status' | 'executionReason'>): string {
+    switch (d.status) {
+        case 'open': return 'Open';
+        case 'executed': return 'Passed and carried out';
+        case 'passed': case 'passed_queued_for_funds': case 'execution_pending_grace': return 'Passed';
+        case 'failed': return 'Did not pass';
+        case 'unresolved': return d.executionReason || 'Not enough keepers voted';
+        case 'execution_blocked': return `Passed, but not carried out${d.executionReason ? `: ${d.executionReason}` : ''}`;
+        case 'execution_void': return `Passed, but there was nothing to do${d.executionReason ? `: ${d.executionReason}` : ''}`;
+        default: return 'Closed';
+    }
+}
+
+/** When it closes, in the reader's own time ("closes in 3 days", "closes in 5 hours", "closes within the hour"). */
+export function scopedClosesWords(closesAt: string, now: number): string {
+    const ms = Date.parse(closesAt) - now;
+    if (!(ms > 0)) return 'closing now';
+    const hours = Math.floor(ms / 3600_000);
+    if (hours >= 48) return `closes in ${plural(Math.floor(hours / 24), 'day', 'days')}`;
+    if (hours >= 1) return `closes in ${plural(hours, 'hour', 'hours')}`;
+    return 'closes within the hour';
+}
+
+/** The one honest line (§2.5): in a very small roll, early close plus turnout can show the split. */
+export const SMALL_ROLL_BALLOT_NOTE = 'Nobody sees who voted how. In a very small group, though, the result and who has voted can show it.';

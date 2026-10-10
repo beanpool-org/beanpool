@@ -52,6 +52,7 @@ export * from './recovery-kit.js';
 export * from './home-tips.js';
 export * from './home-frame.js';
 export * from './sky.js';
+export * from './scoped-decision.js';
 // Group locks: named, not `export *`, so the raw wrap opener (openGroupKeyWrapUnverified, which proves nothing about who
 // made a wrap) stays out of the apps' reach. A new export from group-crypto.ts is added here on purpose or not at all.
 export {

@@ -16,6 +16,7 @@ import * as cf from './cf.js';
 import * as db from './db.js';
 import { verifySignedRequest, signedQuery, verifyEd25519, requestProto, requestNonce, protoOf, PROTOCOLS, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
+import * as alerts from './alerts.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
 const json = (obj, status = 200) =>
@@ -120,6 +121,13 @@ const sinceOf = (a) => ({ paused: a.paused_at, blocked: a.paused_at, released: a
 async function logEvent(env, name, event, detail) {
     try { await db.insertEvent(env, name, event, detail); }
     catch (e) { console.error('[NAME_EVENT]', name, event, e.message || e); }
+}
+
+// The admin's phone hears of it too (src/alerts.js, design §2.2): `make` builds the message — a name, its community
+// name and counts, never its contact. Like logEvent, it never undoes what it reports.
+async function tell(env, make) {
+    try { await alerts.notify(env, await make()); }
+    catch (e) { console.error('[ALERT]', e.message || e); }
 }
 
 // --- Cloudflare resources ---
@@ -410,6 +418,7 @@ async function repairLive(env, name) {
             console.warn('[REPAIRED]', name, what);
             await logEvent(env, name, 'repaired', `live, but not routed as its row says: ${what} by the registrar`
                 + (ids.changed.includes('tunnel') ? ' (a new tunnel: its node gets the token from /status)' : ''));
+            await tell(env, () => alerts.repaired(env, name, ids.changed.length ? `re-made its ${ids.changed.join(' and ')}` : 'recorded the record at its hostname'));
             return { ...row, ...made };
         }
         await undoOnly(env, name, ids);
@@ -646,6 +655,7 @@ async function heal(env, cur, b, now, tries = 3) {
         // An auto name whose first provisioning failed: this is that claim, finished.
         if (!(await db.updateIfUnchanged(env, cur.name, res, { ...LIVE, decided_at: now, decided_by: 'auto' }, { withIds: true }))) return missed();
         await logEvent(env, cur.name, 'healed', `pending (provisioning had failed) → live: ${ids.changed.join(', ') || 'nothing'} made`);
+        await tell(env, async () => alerts.newCommunity(env, a, await db.countLive(env)));
         return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id });
     }
     const was = `paused (${cur.pause_reason || 'no reason'})`;
@@ -657,6 +667,7 @@ async function heal(env, cur, b, now, tries = 3) {
     }
     if (!(await db.updateIfUnchanged(env, cur.name, res, { dns_record_id: g.dns_record_id }, { withIds: true }))) return missed();
     await logEvent(env, cur.name, 'heal-refused', `stays ${was}: edge re-attest ${g.verdict} (${g.why})`);
+    await tell(env, () => alerts.healRefused(env, cur.name, g.verdict));
     return reply({ status: cur.status, reason: reasonOf(cur), since: sinceOf(cur), changed: ids.changed, attest: g.verdict, why: g.why });
 }
 
@@ -734,7 +745,10 @@ async function takeName(env, existing, pubkey, b, now) {
             : `claimed by key ${key16(pubkey)}; it was ${existing.status}, last held by ${key16(existing.node_pubkey)}`);
     }
 
-    if (!approved) return json({ status: 'pending', hostname: fields.hostname, note: 'awaiting approval' });
+    if (!approved) {
+        await tell(env, async () => alerts.nameRequest(env, { name, ...fields }, await db.countAwaitingApproval(env)));
+        return json({ status: 'pending', hostname: fields.hostname, note: 'awaiting approval' });
+    }
     const a = { name, ...fields };
     // From here every write holds only while the row is this tenure as written (`a`), then as this claim last wrote it,
     // ids and all; if it changed, the claim is undone. A failure leaves the row held by this key ('pending', or a
@@ -758,6 +772,8 @@ async function takeName(env, existing, pubkey, b, now) {
         if (g.attest) out.attest = g.attest;
     } else if (!(await db.updateIfUnchanged(env, name, a, { ...made, status: 'live', ...decided }, { withIds: true }))) {
         return missed();
+    } else {
+        await tell(env, async () => alerts.newCommunity(env, a, await db.countLive(env)));
     }
     const token = await tunnelTokenOrNothing(env, { ...a, ...made });
     if (token !== undefined) out.tunnelToken = token;
@@ -1152,8 +1168,11 @@ async function adminGoLive(env, a, event, detail, extra = {}) {
 
 // Pause, block and release write the row first, and only while it is as read: if it changed in between, the action
 // is decided again on the row as it now is (onFreshRow). `opts.freeNow`: release frees the name at once.
+// What the admin did reaches the admin's phone too, as the Worker answered it (A5; a resume whose re-attest failed says so).
 async function handleAdmin(env, name, action, opts = {}) {
-    return onFreshRow(() => db.getAllocation(env, name), (a) => (a ? adminAction(env, a, action, nowS(), opts) : json({ error: 'unknown name' }, 404)));
+    const res = await onFreshRow(() => db.getAllocation(env, name), (a) => (a ? adminAction(env, a, action, nowS(), opts) : json({ error: 'unknown name' }, 404)));
+    if (res.status === 200) await tell(env, async () => alerts.adminDid(env, name, action, await res.clone().json()));
+    return res;
 }
 
 async function adminAction(env, a, action, now, { freeNow = false } = {}) {
@@ -1439,6 +1458,7 @@ async function applyVerdict(env, r, limits, verified) {
         : `content swap: something other than its node answered at ${cur.hostname} in ${swaps} sweeps in a row, the last ${why} — no attest`;
     console.warn(`[ATTEST_PAUSE] ${a.name}: ${seen} — routing off, name kept for its key`);
     await logEvent(env, a.name, 'paused', `${seen}: tunnel and DNS removed; name kept for ${key16(cur.node_pubkey)}, whose heal resumes it`);
+    await tell(env, () => alerts.routingPaused(env, a.name, reason, reason === 'impostor' ? fails : swaps));
 }
 
 // Two phases: classify every live name while writing nothing, judge the sweep as a whole, and only then act.
@@ -1469,7 +1489,24 @@ export async function attestSweep(env) {
         }
     }
     await upkeep(env, results, BATCH);
+    await alertConditions(env, s);
     return s;
+}
+
+// What the sweep sees of the registrar itself reaches the admin's phone (src/alerts.js; A4, A7): a suspended sweep
+// (urgent: the registrar distrusts itself), deletions Cloudflare has refused for over a day, the nonce table missing.
+// Each is told when it starts, every 24 h while it lasts, and when it ends; this run also sends whatever still waits
+// from a failed send (a try every 5 minutes, with the cron).
+async function alertConditions(env, s) {
+    try {
+        const now = nowS();
+        const conditions = [alerts.sweepCondition(env, s), alerts.nonceCondition(!(await nonceTableExists(env)))];
+        try {
+            const owed = await db.owedSince(env, now - 86400);
+            conditions.push(alerts.teardownCondition(owed.n, owed.oldest, now));
+        } catch (e) { console.error('[ALERT_CONDITION]', 'teardown-owed', e.message || e); }
+        await alerts.updateConditions(env, conditions);
+    } catch (e) { console.error('[ALERT_CONDITION]', e.message || e); }
 }
 
 // Upkeep, every sweep, applied or suspended alike: none of it is a verdict on a node, and none of it takes routing
@@ -1553,6 +1590,22 @@ export default {
                 const name = (url.searchParams.get('name') || '').toLowerCase();
                 const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 1), 1000);
                 return json({ events: await db.listEvents(env, NAME_RE.test(name) ? name : null, limit) });
+            }
+            // The control room's alerts (src/alerts.js): their state, the category toggles, and a test message.
+            if (p === '/api/local/admin/registrar/alerts' && method === 'GET') {
+                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                return json(await alerts.alertStatus(env));
+            }
+            if (p === '/api/local/admin/registrar/alerts/settings' && method === 'POST') {
+                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                let b; try { b = JSON.parse((await request.text()) || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+                if (!(await alerts.setCategoryMode(env, b?.category, b?.mode)))
+                    return json({ error: `category must be one of ${alerts.CATEGORIES.join(', ')}, and mode one of ${alerts.MODES.join(', ')}` }, 400);
+                return json(await alerts.alertStatus(env));
+            }
+            if (p === '/api/local/admin/registrar/alerts/test' && method === 'POST') {
+                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                return json(await alerts.sendTest(env));
             }
             const m = p.match(/^\/api\/local\/admin\/registrar\/([a-z0-9-]{3,32})\/(approve|pause|resume|block|release|revoke)$/);
             if (m && method === 'POST') {

@@ -182,6 +182,19 @@ export const dropTeardownIfUnchanged = async (env, kind, cfId, name, expected) =
 export const teardownRefused = (env, kind, cfId, error) =>
     env.DB.prepare('UPDATE teardown SET tries = tries + 1, last_error=? WHERE kind=? AND cf_id=?').bind(error, kind, cfId).run();
 
+// For the admin's alerts (src/alerts.js): claims waiting for the admin (pending on a name that is not auto-approved, as
+// index.js awaitingApproval decides), and live names.
+export const countAwaitingApproval = async (env) => Number((await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM name_allocations a JOIN name_policy p ON p.pattern = a.name WHERE a.status = 'pending' AND p.tier <> 'auto'"
+).first())?.n) || 0;
+export const countLive = async (env) =>
+    Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM name_allocations WHERE status = 'live'").first())?.n) || 0;
+// Deletions Cloudflare has refused since before `before` (unix s): how many, and the oldest's time.
+export const owedSince = async (env, before) => {
+    const r = await env.DB.prepare('SELECT COUNT(*) AS n, MIN(since) AS oldest FROM teardown WHERE since < ?').bind(before).first();
+    return { n: Number(r?.n) || 0, oldest: r?.oldest ?? null };
+};
+
 // One row per sweep; rows older than 90 days go (288 sweeps a day).
 export const insertSweepLog = async (env, s, now) => {
     await env.DB.prepare(

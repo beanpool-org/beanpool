@@ -17,7 +17,9 @@
  *     whole), which can never give a copy. No small copy, the photo itself served, the process alive with its peak
  *     memory barely moved, and each read at most once however often it is asked for.
  *  2. Made on first request, then kept: a photo stored before this (its small copy not there) is answered with one,
- *     which is then in the store, and the next request is served from the store (its bytes, marked, come back).
+ *     which is then in the store, and the next request is served from the store (its bytes, marked, come back). On a
+ *     bucket, a page of them asked at once waits on one resize at a time, not on each other's bucket requests (review
+ *     opus-1742 #4): six, every request to the bucket slowed to 200 ms, are all answered within 1.5 s.
  *  3. A photo kept in its row (not in the store) has no small copy: `size=thumb` serves the photo itself.
  *  4. The gates: for each case the photo route refuses or allows (no key, a wrong key, a listing taken off, one hidden by
  *     reports, its rows gone), the small copy gets the same status and the same cache header, for every reader.
@@ -299,6 +301,29 @@ async function main(): Promise<void> {
         await writeObject(store, thumbKey, marked, { mime: 'image/jpeg' });
         const second = await get(thumbOf(url), carol);
         assert(second.status === 200 && second.bytes.equals(marked), 'the next request is served from the store, not made again');
+    }
+    if (fake) {
+        const page: string[] = [];
+        for (let i = 0; i < 6; i++) {
+            const old = make(`Thumb jar ${i}, from before`, [TINY_PNG]);
+            const bytes = Buffer.concat([fixture('listing-800.jpg'), Buffer.from(`jar ${i}`)]);
+            const key = postPhotoKey(old, 0, sha256Hex(bytes), 'image/jpeg');
+            await writeObject(store, key, bytes, { mime: 'image/jpeg' });
+            db.prepare('UPDATE post_photos SET photo_data = NULL, storage_key = ?, sha256 = ?, bytes = ?, mime = ? WHERE post_id = ? AND order_num = 0')
+                .run(key, sha256Hex(bytes), bytes.length, 'image/jpeg', old);
+            page.push(thumbOf((await urlsOf(old))[0]));
+        }
+        await fake.fault({ prefix: `/${fake.bucket}/posts/`, delayMs: 200, count: 6 * 4 });
+        const t0 = performance.now();
+        const answered = await Promise.all(page.map(async u => {
+            const r = await get(u, carol);
+            return { ok: r.status === 200 && r.bytes.length <= THUMB_MAX_BYTES, ms: Math.round(performance.now() - t0) };
+        }));
+        await fake.clearFaults();
+        const lastMs = Math.max(...answered.map(a => a.ms));
+        assert(answered.every(a => a.ok) && lastMs < 1500,
+            `six photos from before, asked at once on a slow bucket: all answered with small copies, the last at ${lastMs} ms (under 1500)`);
+        await settled();
     }
 
     // ── 3. a photo kept in its row ──────────────────────────────────────────────────────────────

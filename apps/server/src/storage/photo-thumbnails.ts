@@ -19,8 +19,10 @@
  * ## When it is made
  *
  * When a member's photo is stored ({@link queueThumbnail}, after the put, off the request), and for a photo stored
- * before this (no boot migration) on the first request for it ({@link openThumbnailOf}), which keeps it. One at a
- * time, and one per key however many ask at once: a 1 vCPU node is never asked to resize a page of photos together.
+ * before this (no boot migration) on the first request for it ({@link openThumbnailOf}), which keeps it. One resize at
+ * a time, and one per key however many ask at once: a 1 vCPU node is never asked to resize a page of photos together.
+ * Only the resize waits its turn: reading the photo and keeping its copy are the store's requests, and on a bucket a
+ * page of photos waiting on each other's round trips took seconds (review opus-1742 #4).
  *
  * ## What it is
  *
@@ -160,10 +162,10 @@ function makeAndKeep(store: ImageStore, photoKey: string, thumbKey: string, phot
     if (unmakeable.has(thumbKey)) return Promise.resolve(null);
     const pending = inFlight.get(thumbKey);
     if (pending) return pending;
-    const made = oneAtATime(async () => {
+    const made = (async () => {
         const bytes = await photo();
         if (!bytes) return null;
-        const thumb = await makeThumbnail(bytes, thumbKey);
+        const thumb = await oneAtATime(() => makeThumbnail(bytes, thumbKey));
         if (!thumb) {
             if (unmakeable.size >= UNMAKEABLE_MAX) unmakeable.delete(unmakeable.values().next().value!);
             unmakeable.add(thumbKey);
@@ -179,7 +181,7 @@ function makeAndKeep(store: ImageStore, photoKey: string, thumbKey: string, phot
             console.warn(`[Thumbnails] Could not keep ${thumbKey}:`, e);
         }
         return thumb;
-    }).finally(() => inFlight.delete(thumbKey));
+    })().finally(() => inFlight.delete(thumbKey));
     inFlight.set(thumbKey, made);
     return made;
 }

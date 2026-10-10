@@ -125,6 +125,7 @@ async function main() {
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
+    const { bumpPostsVersion } = await import('./engine/versions.js');
 
     await initTls();
     se.initStateEngine();
@@ -363,7 +364,7 @@ async function main() {
     }
     db.prepare('UPDATE members SET area_lat = ?, area_lng = ? WHERE public_key = ?').run(SMALL.lat, SMALL.lng, members[4].id.pubKeyHex);
     se.setHolidayMode(authors[8].pubKeyHex, true);
-    let rebuilt = 0, fetched = 0;
+    let rebuilt = 0, fetched = 0, staleRows = 0;
     for (const m of phones) {
         const h = held.get(m.id.pubKeyHex)!;
         const delta = await readNearby(m.id, cursor);
@@ -385,8 +386,10 @@ async function main() {
             return now.title !== r.title;
         });
         if (stale.length > 0) console.error(`  ${m.kind}: ${stale.length} stale rows`);
+        staleRows += stale.length;
     }
     assert(rebuilt === phones.length, `each of ${phones.length} phones holds exactly the new S after one delta, its set and ${fetched} fetched by ids= (${rebuilt}/${phones.length})`);
+    assert(staleRows === 0, `and every row each phone holds is the node's row as it is now (${staleRows} stale)`);
 
     // ── 4. the 304 ──
     console.log('\n── 4. the ETag describes the set ──');
@@ -398,6 +401,9 @@ async function main() {
         .find(p => haversineKm(beaArea.area_lat, beaArea.area_lng, p.lat, p.lng) > 300)!;
     db.prepare(`UPDATE posts SET title = 'Far change', updated_at = ? WHERE id = ?`).run(iso(Date.now() + 5000), far.id);
     post({ lat: 51.5, lng: -0.1 });
+    // As the engine's own writes do: every listing read but a member's set answers 200 after this (a whole read's tag is
+    // the posts version), so the 304 below is the set's own tag at work.
+    bumpPostsVersion();
     const held304 = await tagged(first);
     assert(held304.status === 304, `a listing 300 km+ away edited and a new one in London: still 304 (${held304.status})`);
     const nearOne = first.set.find(id => !id.startsWith('tie-') && (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(id) as any)?.author_pubkey !== ana.pubKeyHex)!;

@@ -229,6 +229,13 @@ async function main(): Promise<void> {
     assert((await signedFetch('GET', `/api/commons/decisions/${d4}`, null, k1)).status === 404, 'the community detail answers it as missing');
     assert((await signedFetch('POST', `/api/commons/decisions/${d4}/vote`, { support: true }, k1)).status === 404, 'and the community vote route too');
     assert((await signedFetch('GET', `/api/enterprise/${e1}/decisions`, null, null)).status === 401, 'an unsigned read is refused by the middleware');
+    // The community's one-open-Decision rule is unchanged by a keepers' vote (§2.1): Kim's bakery vote is still open.
+    const freeze = { title: 'Freeze a credit line', description: 'A community proposal from a keeper with a bakery vote open', touches: 'member', effect: 'freeze_credit', subject: outsider.pubKeyHex };
+    const byKeeper = await signedFetch('POST', '/api/commons/decisions', freeze, k2);
+    assert(row(d4).status === 'open' && byKeeper.status === 200,
+        `a keeper with an open enterprise vote can still propose a community Decision (got ${byKeeper.status} ${byKeeper.error ?? ''})`);
+    const secondCommunity = await signedFetch('POST', '/api/commons/decisions', { ...freeze, subject: ali.pubKeyHex }, k2);
+    assert(secondCommunity.status === 400, `and a second open community Decision is still refused (got ${secondCommunity.status} ${secondCommunity.error ?? ''})`);
 
     // ── 5. Mid-vote changes: stepping down drops, a removal stands ────────────────────────────────────
     const [m1, m2, m3] = [makeMember('Mo'), makeMember('Mia'), makeMember('Max')];

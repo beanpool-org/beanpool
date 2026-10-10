@@ -566,14 +566,14 @@ export function getQuorumRequired(decision: Decision | { effect: DecisionEffect;
  * Check if a member is eligible to author a decision (§3.2, §10):
  * - Active member, not frozen, not treasury.
  * - earnedCredit > 0 (or qualified trade value > 0, or node admin).
- * - Max 1 open decision per author.
+ * - Max 1 open community decision per author; an enterprise's keepers' vote is that enterprise's, not this (§2.1).
  */
 export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; error?: string } {
     const standing = checkProposalStanding(authorPubkey);
     if (!standing.ok) return standing;
 
     const openCount = (db.prepare(
-        "SELECT COUNT(*) AS c FROM decisions WHERE author_pubkey = ? AND status = 'open'"
+        "SELECT COUNT(*) AS c FROM decisions WHERE author_pubkey = ? AND status = 'open' AND scope_kind = 'community'"
     ).get(authorPubkey) as any)?.c || 0;
     if (openCount >= 1) {
         return { ok: false, error: 'Member already has an open decision (limit 1)' };

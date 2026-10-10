@@ -48,8 +48,9 @@ import {
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
-import { wipeReadableGroupLines, GroupSystemType, GROUP_CHAT_LOCKED_TEXT } from './engine/group-thread.js';
-import { dropGroupWrapsOf } from './engine/group-keys.js';
+// Loaded at run time, so on a server without them (origin/main, the fail-first run) the suite reports a count, not a crash.
+const groupThread: any = await import('./engine/group-thread.js');
+const groupKeys: any = await import('./engine/group-keys.js').catch(() => null);
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -108,7 +109,8 @@ async function call(method: 'GET' | 'POST' | 'DELETE', signer: Id, path: string,
     return { status: res.status, body: parsed };
 }
 
-const count = (sql: string, ...a: unknown[]) => (db.prepare(sql).get(...a) as { n: number }).n;
+/** -1 where the table isn't there (origin/main, the fail-first run). */
+const count = (sql: string, ...a: unknown[]) => { try { return (db.prepare(sql).get(...a) as { n: number }).n; } catch { return -1; } };
 const epochRows = (g: string) => count('SELECT COUNT(*) AS n FROM group_key_epochs WHERE group_id = ?', g);
 const wrapRows = (g: string) => count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE group_id = ?', g);
 const isActive = (g: string, pk: string) => !!db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(g, pk);
@@ -404,21 +406,22 @@ async function main(): Promise<void> {
                 VALUES (?, ?, ?, ?, 'plaintext-v1', 'text', ?, ?)`).run(legacy, other.id, dov.pk, Buffer.from('the shed key is under the pot').toString('base64'),
         JSON.stringify({ mentions: [ana.pk], reactions: [{ emoji: '👍', author: ana.pk }] }), new Date().toISOString());
     const cb = { broadcast: () => { }, dispatchPushNotification: () => { }, registerVisitor: () => { } } as any;
-    const wiped = wipeReadableGroupLines(cb);
+    const wipe = (c: unknown): number => (typeof groupThread.wipeReadableGroupLines === 'function' ? groupThread.wipeReadableGroupLines(c) : -1);
+    const wiped = wipe(cb);
     const legacyRow = db.prepare('SELECT * FROM messages WHERE id = ?').get(legacy) as any;
     assert(wiped >= 1 && legacyRow.type === 'removed' && !Buffer.from(legacyRow.ciphertext, 'base64').toString().includes('shed key')
         && !JSON.parse(legacyRow.metadata).mentions && !JSON.parse(legacyRow.metadata).reactions, 'a readable group line becomes a tombstone: words, mentions and reactions gone');
-    const lockedLine = db.prepare("SELECT * FROM messages WHERE conversation_id = ? AND system_type = ? ORDER BY rowid DESC LIMIT 1").get(other.id, GroupSystemType.CHAT_LOCKED) as any;
-    assert(lockedLine?.ciphertext === GROUP_CHAT_LOCKED_TEXT, 'and the group gets one line saying its chat is now end-to-end encrypted');
-    assert(!db.prepare("SELECT 1 FROM messages WHERE conversation_id = ? AND system_type = ?").get(G, GroupSystemType.CHAT_LOCKED), 'a group with nothing readable gets no such line');
-    assert(wipeReadableGroupLines(cb) === 0, 'a second run finds nothing: idempotent');
+    const lockedLine = db.prepare("SELECT * FROM messages WHERE conversation_id = ? AND system_type = 'GROUP_CHAT_LOCKED' ORDER BY rowid DESC LIMIT 1").get(other.id) as any;
+    assert(!!lockedLine && lockedLine.ciphertext === groupThread.GROUP_CHAT_LOCKED_TEXT, 'and the group gets one line saying its chat is now end-to-end encrypted');
+    assert(!db.prepare("SELECT 1 FROM messages WHERE conversation_id = ? AND system_type = 'GROUP_CHAT_LOCKED'").get(G), 'a group with nothing readable gets no such line');
+    assert(wipe(cb) === 0, 'a second run finds nothing: idempotent');
     assert(count("SELECT COUNT(*) AS n FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.type = 'group_thread' AND m.type = 'text' AND m.nonce NOT LIKE 'group-xc20p-v1:%'") === 0,
         'no readable group line is left on the node');
 
     // ── 9. re-key ───────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 9. a re-key drops the old key\'s wraps ──');
     const anaWraps = count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ana.pk);
-    dropGroupWrapsOf(ana.pk);
+    groupKeys?.dropGroupWrapsOf(ana.pk);
     assert(anaWraps > 0 && count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ana.pk) === 0, `the old key's ${anaWraps} wraps are gone`);
     const missingAna = (await call('GET', ana, `${keysPath}/missing`)).body.missing.find((m: any) => m.pubkey === ana.pk);
     assert(missingAna?.fromEpoch === 1 && missingAna.epochs.includes(4), 'and the member shows in …/keys/missing from their first epoch');
@@ -434,4 +437,8 @@ function myKeySync(who: Id, groupId: string, epoch: number, served: any, activeM
     return openMyGroupKey({ groupId, ...rec }, wrap, who.seedHex, { groupId, activeMembers });
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+    console.error(e);
+    console.log(`\n${passed}/${run + 1} passed (stopped: ${e?.message ?? e})`);
+    process.exit(1);
+});

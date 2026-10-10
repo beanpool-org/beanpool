@@ -31,7 +31,7 @@ import {
     getImageStore, openObject, readObject, sha256Hex, writeObject, type ImageStore, type StoredObject,
 } from './image-store.js';
 import { stripImageValue } from './image-metadata.js';
-import { queueThumbnail, thumbnailKeyOf } from './photo-thumbnails.js';
+import { queueThumbnail, removeThumbnailOf } from './photo-thumbnails.js';
 
 /**
  * The route's own parse, deliberately duplicated rather than imported: `^data:([^;]+);base64,(.*)$` with no
@@ -357,11 +357,9 @@ export function deleteStoredObjects(handle: ReadableDb, keys: Iterable<string>, 
         } catch (e) {
             console.warn(`[ImageStore] Could not delete ${key}:`, e);
         }
-        // A listing photo's small copy (storage/photo-thumbnails.ts) goes with it; one never made is already gone.
-        const thumb = thumbnailKeyOf(key);
-        if (thumb) {
-            try { s.delete(thumb); } catch (e) { console.warn(`[ImageStore] Could not delete ${thumb}:`, e); }
-        }
+        // A listing photo's small copy (storage/photo-thumbnails.ts) goes with it, off the event loop; one never made is
+        // already gone.
+        removeThumbnailOf(s, key);
     }
     return removed;
 }

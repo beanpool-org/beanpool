@@ -26,7 +26,8 @@
  *     the node boots, a listing with a photo is posted, its `size=thumb` is the photo itself, and the failure is logged
  *     once.
  *  6. The orphan sweep keeps a small copy while its photo is named and removes one whose photo no row names; replacing a
- *     listing's photos removes the old photos' small copies with them.
+ *     listing's photos removes the old photos' small copies with them. On a bucket, removing a small copy is off the event
+ *     loop (review opus-1742 #3): its requests slowed to 400 ms, deleting the photo holds the loop under that.
  *
  * Run: node scripts/run-server-suites.mjs with SERVER_SUITES_ONLY=test-photo-thumbnails
  */
@@ -149,6 +150,7 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { getImageStore, readObject, writeObject, headObject, postPhotoKey, sha256Hex, imagesDir } = await import('./storage/image-store.js');
     const { sweepOrphanedImageObjects } = await import('./engine/storage-health.js');
+    const { deleteStoredObjects } = await import('./storage/image-columns.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     // Absent on a build without small copies (the fail-first run): the checks then fail rather than the suite crashing.
@@ -392,6 +394,21 @@ async function main(): Promise<void> {
         assert(after !== null && thumbKeyOf(after) !== before && !!(await headObject(store, thumbKeyOf(after))),
             `a replaced photo has its own small copy (${thumbKeyOf(after)})`);
         assert(!(await headObject(store, before)), "and the old photo's small copy went with the old photo");
+    }
+    if (fake) {
+        const basket = make('Thumb basket, deleted on a slow bucket', [dataUrl('image/jpeg', jpg)]);
+        await settled();
+        const key = rowOf(basket, 0).storage_key!;
+        const thumbKey = thumbKeyOf(key);
+        assert(!!(await headObject(store, thumbKey)), 'setup: its small copy is in the bucket');
+        await fake.fault({ prefix: `/${fake.bucket}/${thumbKey}`, delayMs: 400, count: 4 });
+        db.prepare('DELETE FROM post_photos WHERE post_id = ?').run(basket);
+        const t0 = performance.now();
+        deleteStoredObjects(db, [key], store);
+        const heldMs = Math.round(performance.now() - t0);
+        assert(heldMs < 400, `deleting the photo holds the event loop ${heldMs} ms, not its small copy's slow requests (under 400)`);
+        await settled();
+        assert(!(await headObject(store, key)) && !(await headObject(store, thumbKey)), 'and the photo and its small copy are both gone');
     }
 
     // ── 7. a 20-row Market page ─────────────────────────────────────────────────────────────────

@@ -210,7 +210,25 @@ export async function openThumbnailOf(store: ImageStore, photoKey: string | null
     return made ? { body: made, contentType, bytes: made.length } : null;
 }
 
-/** For the suites: resolves once every small copy queued so far is made and kept. */
+/** Small copies being removed now. */
+const removing = new Set<Promise<unknown>>();
+
+/**
+ * Remove the small copy of the photo whose object is `photoKey`, with its photo (image-columns.ts deleteStoredObjects).
+ * Off the event loop: on a bucket the store's own delete blocks for a HEAD and a DELETE, and a listing's delete held the
+ * loop half as long again for them (review opus-1742 #3). Never throws and is never waited on; one it fails to remove
+ * is an orphan the storage-health sweep collects.
+ */
+export function removeThumbnailOf(store: ImageStore, photoKey: string): void {
+    const thumbKey = thumbnailKeyOf(photoKey);
+    if (!thumbKey) return;
+    const done: Promise<unknown> = deleteObjectUnless(store, thumbKey, () => false)
+        .catch(e => console.warn(`[ImageStore] Could not delete ${thumbKey}:`, e))
+        .finally(() => removing.delete(done));
+    removing.add(done);
+}
+
+/** For the suites: resolves once every small copy queued so far is made and kept, and every one being removed is gone. */
 export async function thumbnailsSettled(): Promise<void> {
-    while (inFlight.size > 0) await Promise.allSettled([...inFlight.values()]);
+    while (inFlight.size > 0 || removing.size > 0) await Promise.allSettled([...inFlight.values(), ...removing]);
 }

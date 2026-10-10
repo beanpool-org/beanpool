@@ -188,7 +188,8 @@
             "usesCleartextTraffic": true,
             "minSdkVersion": 26,
             "enableMinifyInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "# expo-modules-core finds its headless-task loader by the class name in the manifest's meta-data (org.unimodules.core.AppLoader#react-native-headless) and Class.forName; R8 cannot see that use and stripped RNHeadlessAppLoader (ClassNotFoundException on emulator, 2026-10-10).\n-keep class * implements expo.modules.apploader.HeadlessAppLoader { <init>(); }"
           }
         }
       ],

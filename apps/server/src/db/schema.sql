@@ -2180,7 +2180,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     author_pubkey        TEXT NOT NULL REFERENCES members(public_key),
     title                TEXT NOT NULL,
     description          TEXT NOT NULL,
-    touches              TEXT NOT NULL CHECK (touches IN ('member', 'pool')),
+    touches              TEXT NOT NULL CHECK (touches IN ('member', 'pool', 'scope')),
     effect               TEXT NOT NULL,
     subject              TEXT,
     params               TEXT,
@@ -2207,7 +2207,13 @@ CREATE TABLE IF NOT EXISTS decisions (
     admin_halted_at      DATETIME,
     admin_halted_by      TEXT REFERENCES members(public_key) ON DELETE SET NULL,
     admin_halt_reason    TEXT,
-    updated_at           DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at           DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Whose Decision it is (DESIGN-group-decisions §2.1): the whole community, or one enterprise's keepers (scope_id = the
+    -- enterprise's pubkey). A scoped Decision touches only its own scope ('scope') and its roll is frozen in decision_electors.
+    scope_kind           TEXT NOT NULL DEFAULT 'community' CHECK (scope_kind IN ('community', 'enterprise')),
+    scope_id             TEXT,
+    CHECK ((scope_kind = 'community') = (scope_id IS NULL)),
+    CHECK ((scope_kind = 'community') = (touches != 'scope'))
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);
 CREATE INDEX IF NOT EXISTS idx_decisions_closes_at ON decisions(closes_at);
@@ -2215,9 +2221,8 @@ CREATE INDEX IF NOT EXISTS idx_decisions_author ON decisions(author_pubkey);
 CREATE INDEX IF NOT EXISTS idx_decisions_created_at ON decisions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_decisions_tick_open ON decisions(status, closes_at ASC);
 CREATE INDEX IF NOT EXISTS idx_decisions_tick_grace ON decisions(status, grace_period_ends_at ASC);
--- One open Decision per member author. The node itself (SYSTEM) opens one "Keep this suspension?" vote per
--- emergency suspension, so its own Decisions are exempt.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_member_author_open ON decisions(author_pubkey) WHERE status = 'open' AND author_pubkey != 'SYSTEM';
+-- One open Decision per member author per scope (idx_decisions_member_author_open) is made in db.ts after the scope columns
+-- exist on an older table (decision-scope-migration.ts). The node itself (SYSTEM) is exempt.
 CREATE INDEX IF NOT EXISTS idx_decisions_status_created ON decisions(status, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS decision_votes (
@@ -2233,6 +2238,20 @@ CREATE TABLE IF NOT EXISTS decision_votes (
 );
 CREATE INDEX IF NOT EXISTS idx_decision_votes_voter ON decision_votes(voter_pubkey);
 -- idx_decision_votes_decision dropped: redundant with PRIMARY KEY (decision_id, voter_pubkey) prefix
+
+-- The roll of a scoped Decision, frozen when it opens (DESIGN-group-decisions §2.2, §2.6). Written only by the engine:
+-- every keeper on the roll at opening is 'on'; one who leaves (steps down, or is suspended) is 'left' and their vote is
+-- dropped; one removed by the lead stays 'on'. A community Decision has no rows here.
+CREATE TABLE IF NOT EXISTS decision_electors (
+    decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    role_at_open  TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left')),
+    created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (decision_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_decision_electors_member ON decision_electors(member_pubkey);
 
 -- 24. Enterprise Backing Pledges (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4)
 -- A keeper pledges a portion of their own earned credit to back an enterprise's credit floor.

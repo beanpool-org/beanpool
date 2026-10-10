@@ -41,7 +41,8 @@
 import { debtRecord, forgiveDebt } from './engine/names-debts.js';
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
-import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
+import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
+import { isNameableAccount } from './engine/member-key.js';
 import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
@@ -74,9 +75,20 @@ import {
     clearEnterpriseFloorCache,
     isDeletedByOwner,
     OWNER_DELETED_REFUSAL,
+    transfer,
+    keeperRemovalByVoteRefusal,
+    removeKeeperByVote,
+    replaceLeadByVote,
 } from './state-engine.js';
 
-export type DecisionTouch = 'member' | 'pool';
+/** What a Decision touches: a member, the Commons pool, or only its own scope's things (an enterprise's account and keepers). */
+export type DecisionTouch = 'member' | 'pool' | 'scope';
+
+/**
+ * Whose Decision it is (DESIGN-group-decisions §2.1): the whole community, or one enterprise's keepers (`scopeId` = the
+ * enterprise's pubkey). A scoped Decision's roll is frozen when it opens (decision_electors).
+ */
+export type DecisionScopeKind = 'community' | 'enterprise';
 
 export type DecisionFranchise = '1m1v' | 'quadratic_trade';
 
@@ -111,7 +123,12 @@ export type DecisionEffect =
     | 'grant_hardship'
     | 'write_off_deficit'
     // A departed member's debt (engine/names-debts.ts), written off: no Beans move (the Commons took it when they left)
-    | 'forgive_debt';
+    | 'forgive_debt'
+    // An enterprise's keepers only (scope 'enterprise', DESIGN-group-decisions §2.3): pay Beans out of its own account,
+    // remove a keeper, make another keeper the lead (an ongoing enterprise only, never a project)
+    | 'pay_out'
+    | 'remove_keeper'
+    | 'replace_lead';
 
 /**
  * The effects that move Beans, all of them out of the Commons pot. Only these need the pot to be a finite number: while
@@ -142,7 +159,7 @@ function waitForPot(decision: { id: string; effect: string; executionReason?: st
     db.prepare('UPDATE decisions SET execution_reason = ?, updated_at = ? WHERE id = ?').run(WAITING_FOR_POT, now, decision.id);
     console.warn(`[Decisions] ${decision.id} (${decision.effect}) waits: the Commons pot is not a number. It is carried out on the first `
         + 'tick after the COMMONS_POOL row is mended.');
-    broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decision.id)!) });
+    announceDecisionUpdated(decision.id);
 }
 
 /**
@@ -187,6 +204,9 @@ export interface Decision {
     adminHaltedBy: string | null;
     adminHaltReason: string | null;
     updatedAt: string;
+    scopeKind: DecisionScopeKind;
+    /** The enterprise's pubkey for scope 'enterprise'; null for the community. */
+    scopeId: string | null;
 }
 
 export interface DecisionVote {
@@ -251,6 +271,8 @@ function rowToDecision(r: any): Decision {
         adminHaltedBy: r.admin_halted_by || null,
         adminHaltReason: r.admin_halt_reason || null,
         updatedAt: r.updated_at,
+        scopeKind: (r.scope_kind || 'community') as DecisionScopeKind,
+        scopeId: r.scope_id || null,
     };
 }
 
@@ -338,7 +360,13 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
     revoke_voucher: 'member',
     remove_lead_keeper: 'member',
     keep_suspension: 'member',
+    pay_out: 'scope',
+    remove_keeper: 'scope',
+    replace_lead: 'scope',
 };
+
+/** The effects only a scoped Decision carries out (TOUCHES_FOR_EFFECT 'scope'); a community Decision never does. */
+export const SCOPED_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['pay_out', 'remove_keeper', 'replace_lead']);
 
 /** Effects the node opens by itself; a member can never propose one. */
 const SYSTEM_ONLY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['keep_suspension']);
@@ -363,8 +391,8 @@ export const NODE_OPERATOR_VOTE_REFUSAL = "A community vote can't remove or susp
 function switchOffFor(effect: DecisionEffect): ProfileSwitch | null {
     const s = getProfileSwitches();
     if (!s.decisions) return 'decisions';
-    if (TOUCHES_FOR_EFFECT[effect] === 'pool' && !s.beans) return 'beans';
-    if (effect === 'remove_lead_keeper' && !(s.enterprises && s.treasuries)) return 'enterprises';
+    if ((TOUCHES_FOR_EFFECT[effect] === 'pool' || effect === 'pay_out') && !s.beans) return 'beans';
+    if ((effect === 'remove_lead_keeper' || SCOPED_EFFECTS.has(effect)) && !(s.enterprises && s.treasuries)) return 'enterprises';
     return null;
 }
 
@@ -404,7 +432,11 @@ export function madeWithoutVote(decision: Pick<Decision, 'effect' | 'params'>): 
 
 function assertEffectAllowedHere(effect: DecisionEffect): void {
     const off = switchOffFor(effect);
-    if (off === 'beans') throw new BeansOffError('Beans are switched off on this node, so the Commons has nothing to grant or write off.');
+    if (off === 'beans') {
+        throw new BeansOffError(effect === 'pay_out'
+            ? 'Beans are switched off on this node, so an enterprise has nothing to pay out.'
+            : 'Beans are switched off on this node, so the Commons has nothing to grant or write off.');
+    }
     if (off) throw new FeatureOffError(off);
 }
 
@@ -786,6 +818,8 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     if (SYSTEM_ONLY_EFFECTS.has(opts.effect)) {
         throw new Error(`'${opts.effect}' Decisions are opened by the node when an admin suspends someone, not proposed`);
     }
+    // An enterprise's own vote is opened in that enterprise (createScopedDecision), never as a community Decision.
+    if (SCOPED_EFFECTS.has(opts.effect)) throw new Error(SCOPED_EFFECT_NOT_COMMUNITY);
 
     if (opts.touches !== TOUCHES_FOR_EFFECT[opts.effect]) {
         throw new Error(`Invalid touch '${opts.touches}' for effect '${opts.effect}'. Expected '${TOUCHES_FOR_EFFECT[opts.effect]}'.`);
@@ -865,12 +899,16 @@ export function getDecision(id: string): Decision | null {
     return row ? rowToDecision(row) : null;
 }
 
+/**
+ * The community's Decisions, newest first. A scoped one (an enterprise's keepers' vote) is never here: its readers are
+ * its keepers (getScopedDecisions), and an app from before scopes shows nothing it can't place.
+ */
 export function getAllDecisions(status?: DecisionStatus): Decision[] {
     if (status) {
-        const rows = db.prepare('SELECT * FROM decisions WHERE status = ? ORDER BY created_at DESC').all(status);
+        const rows = db.prepare("SELECT * FROM decisions WHERE status = ? AND scope_kind = 'community' ORDER BY created_at DESC").all(status);
         return rows.map(rowToDecision);
     }
-    const rows = db.prepare('SELECT * FROM decisions ORDER BY created_at DESC').all();
+    const rows = db.prepare("SELECT * FROM decisions WHERE scope_kind = 'community' ORDER BY created_at DESC").all();
     return rows.map(rowToDecision);
 }
 
@@ -907,6 +945,8 @@ export function castDecisionVote(
     if (parseDbTime(decision.closesAt) <= Date.now()) {
         return { success: false, creditsUsed: 0, error: 'Voting window has closed' };
     }
+
+    if (decision.scopeKind !== 'community') return castScopedVote(decision, voterPubkey, support, signature);
 
     const elig = checkVoterEligibility(voterPubkey, decision);
     if (!elig.ok) return { success: false, creditsUsed: 0, error: elig.error };
@@ -1014,6 +1054,7 @@ export function getDecisionVotes(decisionId: string): DecisionVote[] {
 export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTally {
     const decision = getDecision(decisionId);
     if (!decision) throw new Error(`Decision ${decisionId} not found`);
+    if (decision.scopeKind !== 'community') return tallyScopedDecision(decision);
 
     const votes = getDecisionVotes(decisionId);
     const totalVoters = votes.length;
@@ -1063,9 +1104,10 @@ export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTa
  * - 'blocked': invalid state/parameters -> transition to execution_blocked.
  */
 export function preflightAssert(decision: Decision): {
-    status: 'ok' | 'void' | 'insufficient_funds' | 'blocked';
+    status: 'ok' | 'void' | 'insufficient_funds' | 'blocked' | 'wait';
     reason?: string;
 } {
+    if (decision.scopeKind !== 'community') return preflightScoped(decision);
     // 0. A switch this node runs with off: nothing to execute (config/node-profile.ts).
     const off = switchOffFor(decision.effect);
     if (off === 'decisions') return { status: 'blocked', reason: DECISIONS_OFF_NOT_CARRIED_OUT };
@@ -1183,7 +1225,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
 
     // Needs the pot, and the pot is unknown: waits in its status, before the preflight (which reads the pot) and before
     // anything is written. Retried by the tick. A Decision that moves no Beans goes on below whatever the pot is.
-    if (POT_EFFECTS.has(decision.effect) && potIsUnknown()) {
+    if ((POT_EFFECTS.has(decision.effect) || decision.effect === 'pay_out') && potIsUnknown()) {
         waitForPot(decision, now);
         return { success: false, status: decision.status, error: WAITING_FOR_POT };
     }
@@ -1194,7 +1236,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         db.prepare(
             "UPDATE decisions SET status = 'execution_void', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?"
         ).run(now, preflight.reason || 'Subject dead', now, decisionId);
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: false, status: 'execution_void', error: preflight.reason };
     }
 
@@ -1207,22 +1249,39 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             db.prepare(
                 "UPDATE decisions SET status = 'execution_blocked', execution_error = 'Funding queue full: maximum 1 queued grant permitted per §3.7', updated_at = ? WHERE id = ?"
             ).run(now, decisionId);
-            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+            announceDecisionUpdated(decisionId);
             return { success: false, status: 'execution_blocked', error: 'Funding queue is full (max 1 queued grant per §3.7)' };
         }
 
         db.prepare(
             "UPDATE decisions SET status = 'passed_queued_for_funds', execution_reason = ?, updated_at = ? WHERE id = ?"
         ).run(preflight.reason || 'Queued for pool funds', now, decisionId);
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: true, status: 'passed_queued_for_funds' };
+    }
+
+    // An enterprise an admin suspended or disabled: a keepers' vote outlives a temporary brake (§2.6). It stays passed and
+    // the tick retries it, until 90 days after it closed.
+    if (preflight.status === 'wait') {
+        if (Date.now() - parseDbTime(decision.closesAt) > SCOPED_WAIT_DAYS * DAY_MS) {
+            db.prepare(
+                "UPDATE decisions SET status = 'execution_void', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?"
+            ).run(now, `${preflight.reason}. It waited ${SCOPED_WAIT_DAYS} days, so it is not carried out.`, now, decisionId);
+            announceDecisionUpdated(decisionId);
+            return { success: false, status: 'execution_void', error: preflight.reason };
+        }
+        if (decision.executionReason !== preflight.reason) {
+            db.prepare("UPDATE decisions SET execution_reason = ?, updated_at = ? WHERE id = ?").run(preflight.reason, now, decisionId);
+            announceDecisionUpdated(decisionId);
+        }
+        return { success: false, status: decision.status, error: preflight.reason };
     }
 
     if (preflight.status === 'blocked') {
         db.prepare(
             "UPDATE decisions SET status = 'execution_blocked', execution_error = ?, updated_at = ? WHERE id = ?"
         ).run(preflight.reason || 'Preflight blocked', now, decisionId);
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: false, status: 'execution_blocked', error: preflight.reason };
     }
 
@@ -1253,7 +1312,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 `).run(graceEndsAt, now, decisionId);
             })();
             broadcast({ type: 'profile_updated', publicKey: decision.subject! });
-            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+            announceDecisionUpdated(decisionId);
             return { success: true, status: 'execution_pending_grace' };
         } catch (e: any) {
             db.prepare(
@@ -1272,7 +1331,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
 
         // Beans move only for POT_EFFECTS, which need the pot's pre-flush and the in-memory unwind. Every other effect is
         // row changes alone, so it runs in a plain transaction and is carried out whatever the pot is (#1465 review, NB-1).
-        const inTransaction = POT_EFFECTS.has(decision.effect)
+        const inTransaction = POT_EFFECTS.has(decision.effect) || decision.effect === 'pay_out'
             ? (fn: () => void) => conservingTransaction(fn)
             : (fn: () => void) => db.transaction(fn)();
         inTransaction(() => {
@@ -1440,6 +1499,35 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     }
                     break;
                 }
+                case 'pay_out': {
+                    // Out of the enterprise's own account only, through transfer() at floor 0 (a direct send never
+                    // reaches its credit line), with the trade fee; the ledger line carries this Decision's signer.
+                    const ent = decision.scopeId!;
+                    const to = String(decision.params.to);
+                    const amount = floorCents(Number(decision.params.amount)) / 100;
+                    const wage = isEnterpriseKeeper(ent, to);
+                    const txn = transfer(ent, to, amount, decision.title, 'direct', false, { signer: authSigner, decisionPayOut: true });
+                    if (!txn) throw new Error(`The enterprise could not pay ${beansText(amount * 100)} Beans now`);
+                    // A wage comes out of earned surplus (Rules 5 and 6), as a deferred wage claim's does.
+                    if (wage) {
+                        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?').run(amount, ent);
+                    }
+                    touchedEnterprises.push(ent);
+                    touchedProfiles.push(to);
+                    break;
+                }
+                case 'remove_keeper': {
+                    const ent = decision.scopeId!;
+                    removeKeeperByVote(ent, decision.subject!, authSigner);
+                    touchedEnterprises.push(ent);
+                    break;
+                }
+                case 'replace_lead': {
+                    const ent = decision.scopeId!;
+                    replaceLeadByVote(ent, decision.subject!);
+                    touchedEnterprises.push(ent);
+                    break;
+                }
                 default:
                     throw new Error(`Unsupported effect: ${decision.effect}`);
             }
@@ -1466,19 +1554,19 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         }
         for (const pk of touchedProfiles) broadcast({ type: 'profile_updated', publicKey: pk });
         for (const cid of cancelledDecisionIds) {
-            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(cid)!) });
+            announceDecisionUpdated(cid);
         }
 
         if (decision.subject) {
             broadcast({ type: 'profile_updated', publicKey: decision.subject });
         }
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: true, status: 'executed' };
     } catch (e: any) {
         db.prepare(
             "UPDATE decisions SET status = 'execution_blocked', execution_error = ?, updated_at = ? WHERE id = ?"
         ).run(e?.message || String(e), now, decisionId);
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: false, status: 'execution_blocked', error: e?.message };
     }
 }
@@ -1491,6 +1579,9 @@ export function executeDecision(decisionId: string): { success: boolean; status:
  */
 export function adminHaltDecision(decisionId: string, adminPubkey: string, reason: string): { success: boolean; error?: string; status?: number } {
     assertPlainTablesWritable();
+    if (getDecision(decisionId)?.scopeKind === 'enterprise') {
+        return { success: false, status: 403, error: SCOPED_NO_ADMIN_HALT };
+    }
     if (!isAdminActor(adminPubkey)) {
         return { success: false, status: 403, error: 'Unauthorized: admin required to halt decision' };
     }
@@ -1552,6 +1643,9 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
  */
 export function adminAccelerateDecision(decisionId: string, adminPubkey: string): { success: boolean; error?: string; status?: number } {
     assertPlainTablesWritable();
+    if (getDecision(decisionId)?.scopeKind === 'enterprise') {
+        return { success: false, status: 403, error: SCOPED_NO_ADMIN_HALT };
+    }
     if (!isAdminActor(adminPubkey)) {
         return { success: false, status: 403, error: 'Unauthorized: admin required to accelerate decision' };
     }
@@ -1591,7 +1685,7 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
                 updated_at = ?
             WHERE id = ?
         `).run(now, now, decisionId);
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e?.message || String(e) };
@@ -1749,7 +1843,7 @@ function closeUnkeptSuspension(decision: Decision, status: 'failed' | 'unresolve
         `).run(status, `${why}. ${lifted ? 'The suspension has been lifted.' : 'The member was already restored or is held by another Decision.'}`, nowIso, decision.id);
     })();
     if (lifted && decision.subject) broadcast({ type: 'profile_updated', publicKey: decision.subject });
-    broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decision.id)!) });
+    announceDecisionUpdated(decision.id);
 }
 
 export interface EmergencySuspendResult {
@@ -1903,7 +1997,7 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
         }
     })();
     broadcast({ type: 'profile_updated', publicKey: subjectPubkey });
-    for (const k of openKeeps) broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(k.id)!) });
+    for (const k of openKeeps) announceDecisionUpdated(k.id);
     return { success: true };
 }
 
@@ -1925,6 +2019,9 @@ export function tickDecisions(asOfTime?: number): {
     let executed = 0;
     let graceExpired = 0;
     let queuedEvaluated = 0;
+
+    // 0. A keepers' vote closes early the moment its result can no longer change, and is void once its enterprise winds up.
+    settleOpenScopedDecisions(nowIso);
 
     // 1. Close open decisions whose window expired, or retry stranded passed decisions
     const openExpired = db.prepare(
@@ -1971,7 +2068,7 @@ export function tickDecisions(asOfTime?: number): {
                         updated_at = ?
                     WHERE id = ?
                 `).run(`Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`, now, r.id);
-                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+                announceDecisionUpdated(r.id);
                 continue;
             }
 
@@ -1987,7 +2084,7 @@ export function tickDecisions(asOfTime?: number): {
                     now,
                     r.id
                 );
-                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+                announceDecisionUpdated(r.id);
                 continue;
             }
 
@@ -2007,7 +2104,7 @@ export function tickDecisions(asOfTime?: number): {
                     updated_at = ?
                 WHERE id = ?
             `).run(err?.message || String(err), now, r.id);
-            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+            announceDecisionUpdated(r.id);
         }
     }
 
@@ -2051,7 +2148,7 @@ export function tickDecisions(asOfTime?: number): {
                     .run(endsAt, REOPENED_GRACE, now, r.id);
                 console.log(`[Decisions] ${r.id} (remove_member): payments work again; the grace window reopens until ${endsAt} so an admin `
                     + 'can still halt it.');
-                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+                announceDecisionUpdated(r.id);
                 continue;
             }
             try {
@@ -2065,7 +2162,7 @@ export function tickDecisions(asOfTime?: number): {
                         updated_at = ?
                     WHERE id = ?
                 `).run(now, now, r.id);
-                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+                announceDecisionUpdated(r.id);
             } catch (e: any) {
                 db.prepare(`
                     UPDATE decisions SET
@@ -2074,7 +2171,7 @@ export function tickDecisions(asOfTime?: number): {
                         updated_at = ?
                     WHERE id = ?
                 `).run(e?.message || String(e), now, r.id);
-                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+                announceDecisionUpdated(r.id);
             }
         }
     }
@@ -2134,9 +2231,387 @@ export function tickDecisions(asOfTime?: number): {
                     updated_at = ?
                 WHERE id = ?
             `).run(nowIso, top.id);
-            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(top.id)!) });
+            announceDecisionUpdated(top.id);
         }
     }
 
     return { evaluated, executed, graceExpired, queuedEvaluated };
+}
+
+// ── Scoped Decisions: an enterprise's keepers (DESIGN-group-decisions §2, slice S1) ─────────────────
+
+/** Why a scoped effect is refused as a community Decision. */
+export const SCOPED_EFFECT_NOT_COMMUNITY = "That is decided by an enterprise's keepers, in that enterprise, not by the whole community.";
+/** A roll of one holds no vote (§2.2): arithmetic, not a gate. */
+export const ROLL_OF_ONE = 'Nobody else keeps this enterprise, so there is nobody to vote.';
+export const NOT_ENOUGH_LEFT = 'Not enough people left to decide';
+export const WINDING_UP_VOID = 'The enterprise is winding up';
+export const SCOPED_ALREADY_VOTED = "You have already voted on this. A keepers' vote can't be changed.";
+export const NOT_ON_ROLL = "Only the keepers on this vote's roll can vote on it.";
+export const SCOPED_NO_ADMIN_HALT = "An enterprise's keepers' vote has no admin halt: an admin may pause the enterprise or unbind a keeper instead.";
+export const PROJECT_LEADER_STAYS = "A project's leader can't be voted out by its collaborators: the project is the leader's goal.";
+export const PAY_SELF_REFUSAL = "You can't propose paying yourself. Another keeper can propose it.";
+export const SCOPED_ONE_OPEN = 'You already have an open vote in this enterprise. Wait for it to close first.';
+export const WAGE_NEEDS_SURPLUS = 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus)';
+/** How long a passed vote waits on an enterprise an admin suspended or disabled before it is void (§2.6). */
+export const SCOPED_WAIT_DAYS = 90;
+
+/** A thrown refusal the routes answer as missing (404): the reader may not know the enterprise or the vote exists. */
+export class ScopedNotFoundError extends Error {
+    status = 404;
+    constructor() { super('Not found'); }
+}
+
+interface EnterpriseRow { public_key: string; is_treasury: number; status: string; lifecycle: string | null; earned_surplus: number | null }
+
+function enterpriseRow(pubkey: string): EnterpriseRow | null {
+    const r = db.prepare('SELECT public_key, is_treasury, status, lifecycle, earned_surplus FROM members WHERE public_key = ?').get(pubkey) as EnterpriseRow | undefined;
+    return r && r.is_treasury ? r : null;
+}
+
+function isEnterpriseKeeper(enterprisePubkey: string, memberPubkey: string): boolean {
+    return !!db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(enterprisePubkey, memberPubkey);
+}
+
+/**
+ * An enterprise's roll now (§2.2): its keepers, the lead included, whose account is active, who may operate, and who is
+ * no visitor (the isActiveKeeperOf test). The enterprise itself never votes; a keeper votes once as a person.
+ */
+export function enterpriseRollNow(enterprisePubkey: string): Array<{ pubkey: string; role: string }> {
+    return (db.prepare(`
+        SELECT o.member_pubkey AS pubkey, o.role AS role FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active' AND m.is_visitor = 0
+          AND COALESCE(m.is_treasury, 0) = 0
+        ORDER BY o.granted_at ASC
+    `).all(enterprisePubkey) as Array<{ pubkey: string; role: string }>);
+}
+
+/**
+ * The roll of a scoped Decision as it stands: the electors frozen at opening who are still 'on' and whose account is
+ * active. One who stepped down is 'left' (state-engine dropFromOpenScopedRolls); one whose account is suspended counts
+ * as gone while it is (settleOpenScopedDecisions writes it down). One removed by the lead or a vote stays on.
+ */
+function liveRoll(decisionId: string): Set<string> {
+    const rows = db.prepare(`
+        SELECT e.member_pubkey AS pubkey FROM decision_electors e
+        JOIN members m ON m.public_key = e.member_pubkey
+        WHERE e.decision_id = ? AND e.status = 'on' AND m.status = 'active'
+    `).all(decisionId) as Array<{ pubkey: string }>;
+    return new Set(rows.map(r => r.pubkey));
+}
+
+/** Whether `reader` may see an enterprise's votes: a keeper of it now, or on the roll of one of its votes. */
+export function canReadEnterpriseDecisions(enterprisePubkey: string, reader: string | null | undefined): boolean {
+    if (!reader || !enterpriseRow(enterprisePubkey)) return false;
+    if (enterpriseRollNow(enterprisePubkey).some(k => k.pubkey === reader)) return true;
+    return !!db.prepare(`
+        SELECT 1 FROM decision_electors e JOIN decisions d ON d.id = e.decision_id
+        WHERE e.member_pubkey = ? AND d.scope_kind = 'enterprise' AND d.scope_id = ? LIMIT 1
+    `).get(reader, enterprisePubkey);
+}
+
+/** An enterprise's votes, newest first, as `reader` may see them; a reader who may not gets ScopedNotFoundError. */
+export function getScopedDecisions(enterprisePubkey: string, reader: string | null | undefined): Decision[] {
+    if (!canReadEnterpriseDecisions(enterprisePubkey, reader)) throw new ScopedNotFoundError();
+    return (db.prepare("SELECT * FROM decisions WHERE scope_kind = 'enterprise' AND scope_id = ? ORDER BY created_at DESC")
+        .all(enterprisePubkey) as any[]).map(rowToDecision);
+}
+
+/** One of an enterprise's votes, as `reader` may see it; anything else is ScopedNotFoundError (never a refusal). */
+export function getScopedDecision(enterprisePubkey: string, decisionId: string, reader: string | null | undefined): Decision {
+    const d = getDecision(decisionId);
+    if (!d || d.scopeKind !== 'enterprise' || d.scopeId !== enterprisePubkey) throw new ScopedNotFoundError();
+    if (!canReadEnterpriseDecisions(enterprisePubkey, reader)) throw new ScopedNotFoundError();
+    return d;
+}
+
+/**
+ * The pass rule for a roll of 2–10 (§2.4): more than half the roll must vote, floor 2; 60% yes for money and a removal,
+ * a simple majority to replace the lead; ties fail. One member, one vote.
+ */
+export function scopedQuorum(rollSize: number): number {
+    return Math.max(2, Math.floor(rollSize / 2) + 1);
+}
+
+export function scopedThreshold(effect: DecisionEffect): number {
+    return effect === 'replace_lead' ? 0.50 : 0.60;
+}
+
+function scopedCounts(decision: Decision): { roll: Set<string>; yes: number; no: number; voters: number } {
+    const roll = liveRoll(decision.id);
+    let yes = 0;
+    let no = 0;
+    for (const v of getDecisionVotes(decision.id)) {
+        if (!roll.has(v.voterPubkey)) continue; // left the roll: their vote is dropped
+        if (v.support === 1) yes++;
+        else no++;
+    }
+    return { roll, yes, no, voters: yes + no };
+}
+
+function passes(yes: number, no: number, voters: number, quorum: number, threshold: number): boolean {
+    const total = yes + no;
+    return voters >= quorum && total > 0 && yes / total >= threshold && yes > no;
+}
+
+function tallyScopedDecision(decision: Decision): DecisionTally {
+    const { roll, yes, no, voters } = scopedCounts(decision);
+    const quorumRequired = scopedQuorum(roll.size);
+    const thresholdRequired = scopedThreshold(decision.effect);
+    const total = yes + no;
+    return {
+        decisionId: decision.id,
+        status: decision.status,
+        totalVoters: voters,
+        electorate: roll.size,
+        quorumRatio: 0.5,
+        quorumRequired,
+        quorumMet: voters >= quorumRequired,
+        yesWeight: yes,
+        noWeight: no,
+        totalWeight: total,
+        supportRatio: total > 0 ? yes / total : 0,
+        thresholdRequired,
+        passed: roll.size >= 2 && passes(yes, no, voters, quorumRequired, thresholdRequired),
+    };
+}
+
+/**
+ * Whether a scoped vote's result can no longer change (§2.4, the group-succession rule): it passes even if everyone yet
+ * to vote says no, or it can't pass even if they all say yes. A roll that has all voted is decided.
+ */
+export function scopedOutcomeSettled(decision: Decision): boolean {
+    const { roll, yes, no, voters } = scopedCounts(decision);
+    const outstanding = Math.max(0, roll.size - voters);
+    const quorum = scopedQuorum(roll.size);
+    const threshold = scopedThreshold(decision.effect);
+    if (passes(yes, no + outstanding, voters, quorum, threshold)) return true;
+    return !passes(yes + outstanding, no, voters + outstanding, quorum, threshold);
+}
+
+/**
+ * What a member's turnout card may show while a scoped vote is open (§2.5, Marty's pick 3): how many of the roll have
+ * voted, never the split; Yes and No once it has closed. A closed vote's split is the tally's.
+ */
+export function scopedTallyForReader(decision: Decision): { voted: number; roll: number; quorumRequired: number; yes?: number; no?: number; thresholdRequired: number } {
+    const t = tallyScopedDecision(decision);
+    const base = { voted: t.totalVoters, roll: t.electorate, quorumRequired: t.quorumRequired, thresholdRequired: t.thresholdRequired };
+    return decision.status === 'open' ? base : { ...base, yes: t.yesWeight, no: t.noWeight };
+}
+
+export interface CreateScopedDecisionOptions {
+    scopeKind: 'enterprise';
+    scopeId: string;
+    authorPubkey: string;
+    title: string;
+    description: string;
+    effect: DecisionEffect;
+    subject?: string | null;
+    params?: any;
+}
+
+/**
+ * Opens an enterprise's keepers' vote (§2.1–§2.4). The proposer is a keeper on its roll (no earned-standing gate inside a
+ * scope); the roll, frozen now, needs two people; one open vote per proposer per enterprise; 7 days, closing early.
+ * A refusal a non-keeper could learn from is ScopedNotFoundError.
+ */
+export function createScopedDecision(opts: CreateScopedDecisionOptions): Decision {
+    assertPlainTablesWritable();
+    assertDecisionsOn();
+    if (opts.scopeKind !== 'enterprise') throw new Error('Unknown scope');
+    const ent = enterpriseRow(opts.scopeId);
+    if (!ent) throw new ScopedNotFoundError();
+    const roll = enterpriseRollNow(opts.scopeId);
+    if (!roll.some(k => k.pubkey === opts.authorPubkey)) throw new ScopedNotFoundError();
+    if (!SCOPED_EFFECTS.has(opts.effect)) throw new Error(`Unknown decision effect '${opts.effect}'`);
+    assertEffectAllowedHere(opts.effect);
+    if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error(`${WINDING_UP_VOID}, so it takes no new votes.`);
+    if (ent.status !== 'active') throw new Error('This enterprise is not active, so it takes no new votes.');
+    if (roll.length < 2) throw new Error(ROLL_OF_ONE);
+
+    const title = typeof opts.title === 'string' ? replaceLoneSurrogates(opts.title).trim() : '';
+    const description = typeof opts.description === 'string' ? replaceLoneSurrogates(opts.description).trim() : '';
+    if (!title) throw new Error('A vote needs a title.');
+    if (description.length < 10) throw new Error('Say why, in at least 10 characters.');
+    if (!fitsTextLimit(title, DECISION_TITLE_LIMIT)) throw new Error(DECISION_TITLE_TOO_LONG);
+    if (!fitsTextLimit(description, DECISION_DESCRIPTION_LIMIT)) throw new Error(DECISION_DESCRIPTION_TOO_LONG);
+
+    let subject: string | null = null;
+    let params: Record<string, unknown> | null = null;
+    if (opts.effect === 'pay_out') {
+        const to = typeof opts.params?.to === 'string' ? opts.params.to : '';
+        const cents = floorCents(Number(opts.params?.amount));
+        if (!Number.isFinite(cents) || cents <= 0) throw new Error('A pay-out needs an amount in Beans above 0.');
+        if (!to || isSyntheticAccount(to) || !isNameableAccount(to) || to === opts.scopeId) throw new Error('Name a member or an enterprise of this community to pay.');
+        const recipient = getMember(to);
+        if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) throw new Error('Name a member or an enterprise of this community to pay.');
+        if (to === opts.authorPubkey) throw new Error(PAY_SELF_REFUSAL);
+        const held = floorCents(getBalance(opts.scopeId).balance);
+        if (cents > held) throw new Error(`The enterprise holds ${beansText(Math.max(0, held))} Beans, so it can't pay ${beansText(cents)}.`);
+        if (isEnterpriseKeeper(opts.scopeId, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) {
+            throw new Error(`${WAGE_NEEDS_SURPLUS}: ${beansText(floorCents(Math.max(0, Number(ent.earned_surplus) || 0)))} Beans now.`);
+        }
+        const memo = typeof opts.params?.memo === 'string' ? replaceLoneSurrogates(opts.params.memo).slice(0, 280) : '';
+        params = { to, amount: cents / 100, ...(memo ? { memo } : {}) };
+    } else {
+        subject = typeof opts.subject === 'string' ? opts.subject : null;
+        if (!subject || !roll.some(k => k.pubkey === subject)) throw new Error('Name a keeper on this enterprise’s roll.');
+        if (opts.effect === 'remove_keeper') {
+            if (subject === opts.authorPubkey) throw new Error('To leave, step down instead.');
+            const why = keeperRemovalByVoteRefusal(opts.scopeId, subject);
+            if (why) throw new Error(why);
+        } else {
+            if (ent.lifecycle === 'bounded') throw new Error(PROJECT_LEADER_STAYS);
+            if (roll.find(k => k.pubkey === subject)!.role === 'lead') throw new Error('They are already the lead keeper.');
+        }
+    }
+
+    if (db.prepare("SELECT 1 FROM decisions WHERE author_pubkey = ? AND status = 'open' AND scope_kind = 'enterprise' AND scope_id = ?")
+        .get(opts.authorPubkey, opts.scopeId)) {
+        throw new Error(SCOPED_ONE_OPEN);
+    }
+
+    const id = crypto.randomUUID();
+    const opensAt = new Date().toISOString();
+    const closesAt = new Date(Date.now() + 7 * DAY_MS).toISOString();
+    db.transaction(() => {
+        db.prepare(`
+            INSERT INTO decisions (
+                id, author_pubkey, title, description, touches, effect, subject, params,
+                franchise, status, opens_at, closes_at, created_at, updated_at, scope_kind, scope_id
+            ) VALUES (?, ?, ?, ?, 'scope', ?, ?, ?, '1m1v', 'open', ?, ?, ?, ?, 'enterprise', ?)
+        `).run(id, opts.authorPubkey, title, description, opts.effect, subject, params ? JSON.stringify(params) : null,
+            opensAt, closesAt, opensAt, opensAt, opts.scopeId);
+        const elector = db.prepare(
+            "INSERT INTO decision_electors (decision_id, member_pubkey, role_at_open, status, created_at, updated_at) VALUES (?, ?, ?, 'on', ?, ?)"
+        );
+        for (const k of roll) elector.run(id, k.pubkey, k.role, opensAt, opensAt);
+    })();
+
+    const decision = getDecision(id)!;
+    broadcast({ type: 'decision_created', decision: publicDecision(decision), scopeKind: 'enterprise', scopeId: opts.scopeId }, roll.map(k => k.pubkey));
+    return decision;
+}
+
+/**
+ * A keeper's vote on their enterprise's open vote: only from someone on its roll (frozen at opening; a keeper who stepped
+ * down or whose account is suspended is off it), one vote each, and final. A replay of the same vote counts once.
+ */
+function castScopedVote(decision: Decision, voterPubkey: string, support: boolean, signature?: string): { success: boolean; creditsUsed: number; error?: string } {
+    if (!liveRoll(decision.id).has(voterPubkey)) return { success: false, creditsUsed: 0, error: NOT_ON_ROLL };
+    const now = new Date().toISOString();
+    const wrote = db.prepare(`
+        INSERT INTO decision_votes (decision_id, voter_pubkey, support, weight, credits_used, signature, created_at, updated_at)
+        VALUES (?, ?, ?, 1, 0, ?, ?, ?)
+        ON CONFLICT(decision_id, voter_pubkey) DO NOTHING
+    `).run(decision.id, voterPubkey, support ? 1 : 0, signature || null, now, now);
+    if (wrote.changes === 0) return { success: false, creditsUsed: 0, error: SCOPED_ALREADY_VOTED };
+    broadcast({ type: 'decision_vote_cast', decisionId: decision.id }, electorsOf(decision.id));
+    return { success: true, creditsUsed: 0 };
+}
+
+function electorsOf(decisionId: string): string[] {
+    return (db.prepare('SELECT member_pubkey FROM decision_electors WHERE decision_id = ?').all(decisionId) as Array<{ member_pubkey: string }>)
+        .map(r => r.member_pubkey);
+}
+
+/**
+ * A Decision's change, announced: a community one to everyone, as before; a scoped one only to its roll (§2.5), so
+ * nobody else learns it exists.
+ */
+function announceDecisionUpdated(decisionId: string): void {
+    const d = getDecision(decisionId);
+    if (!d) return;
+    if (d.scopeKind === 'community') broadcast({ type: 'decision_updated', decision: publicDecision(d) });
+    else broadcast({ type: 'decision_updated', decision: publicDecision(d), scopeKind: d.scopeKind, scopeId: d.scopeId }, electorsOf(d.id));
+}
+
+/**
+ * Before a scoped Decision is carried out (§2.3, §2.6): only its own enterprise's account and keepers, never past them.
+ * 'wait' while an admin has the enterprise suspended or disabled.
+ */
+function preflightScoped(decision: Decision): { status: 'ok' | 'void' | 'blocked' | 'wait'; reason?: string } {
+    const off = switchOffFor(decision.effect);
+    if (off === 'decisions') return { status: 'blocked', reason: DECISIONS_OFF_NOT_CARRIED_OUT };
+    if (off) return { status: 'blocked', reason: `${off} is switched off on this node` };
+    const ent = decision.scopeId ? enterpriseRow(decision.scopeId) : null;
+    if (!ent || ent.status === 'pruned' || ent.status === 'deleted') return { status: 'void', reason: 'The enterprise no longer exists' };
+    if (ent.status === 'winding_up' || ent.status === 'completed') return { status: 'void', reason: WINDING_UP_VOID };
+    if (ent.status === 'suspended' || ent.status === 'disabled') {
+        return { status: 'wait', reason: 'Waiting: an admin has paused this enterprise’s account, so this is carried out once it is back' };
+    }
+    if (decision.effect === 'pay_out') {
+        const to = String(decision.params?.to || '');
+        const recipient = to ? getMember(to) : null;
+        // A suspended recipient is paid: their balance is theirs (as a hardship grant behaves).
+        if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) return { status: 'void', reason: 'The member to be paid no longer has an account here' };
+        if (to === decision.authorPubkey) return { status: 'blocked', reason: PAY_SELF_REFUSAL };
+        const cents = floorCents(Number(decision.params?.amount));
+        if (!Number.isFinite(cents) || cents <= 0) return { status: 'blocked', reason: 'Invalid pay-out amount' };
+        const held = floorCents(getBalance(decision.scopeId!).balance);
+        if (held < cents) return { status: 'blocked', reason: `The enterprise holds ${beansText(Math.max(0, held))} Beans now, less than the ${beansText(cents)} voted` };
+        if (isEnterpriseKeeper(decision.scopeId!, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) {
+            return { status: 'blocked', reason: WAGE_NEEDS_SURPLUS };
+        }
+        return { status: 'ok' };
+    }
+    const subject = decision.subject || '';
+    if (!isEnterpriseKeeper(decision.scopeId!, subject)) return { status: 'void', reason: 'They no longer keep this enterprise' };
+    if (decision.effect === 'remove_keeper') {
+        const why = keeperRemovalByVoteRefusal(decision.scopeId!, subject);
+        if (why) return { status: why.startsWith('Not yet') ? 'blocked' : 'void', reason: why };
+        return { status: 'ok' };
+    }
+    if (ent.lifecycle === 'bounded') return { status: 'blocked', reason: PROJECT_LEADER_STAYS };
+    const role = (db.prepare('SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(decision.scopeId!, subject) as any)?.role;
+    if (role === 'lead') return { status: 'void', reason: 'They are already the lead keeper' };
+    return { status: 'ok' };
+}
+
+/**
+ * The tick's first step for scoped votes (§2.4, §2.6): a member whose account is suspended leaves the roll and their vote
+ * is dropped; a vote on an enterprise winding up is void; a roll below two closes unresolved; a vote whose result can no
+ * longer change closes now (its closes_at is brought forward, and step 1 tallies and carries it out).
+ */
+function settleOpenScopedDecisions(nowIso: string): void {
+    const open = db.prepare("SELECT * FROM decisions WHERE status = 'open' AND scope_kind != 'community'").all() as any[];
+    for (const r of open) {
+        const d = rowToDecision(r);
+        db.prepare(`
+            UPDATE decision_electors SET status = 'left', updated_at = ?
+            WHERE decision_id = ? AND status = 'on'
+              AND member_pubkey NOT IN (SELECT public_key FROM members WHERE status = 'active')
+        `).run(nowIso, d.id);
+        const ent = d.scopeId ? enterpriseRow(d.scopeId) : null;
+        if (!ent || ent.status === 'winding_up' || ent.status === 'completed' || ent.status === 'pruned' || ent.status === 'deleted') {
+            db.prepare("UPDATE decisions SET status = 'execution_void', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?")
+                .run(nowIso, ent ? WINDING_UP_VOID : 'The enterprise no longer exists', nowIso, d.id);
+            announceDecisionUpdated(d.id);
+            continue;
+        }
+        if (liveRoll(d.id).size < 2) {
+            db.prepare("UPDATE decisions SET status = 'unresolved', execution_reason = ?, updated_at = ? WHERE id = ?")
+                .run(NOT_ENOUGH_LEFT, nowIso, d.id);
+            announceDecisionUpdated(d.id);
+            continue;
+        }
+        if (parseDbTime(d.closesAt) > parseDbTime(nowIso) && scopedOutcomeSettled(d)) {
+            db.prepare('UPDATE decisions SET closes_at = ?, updated_at = ? WHERE id = ?').run(nowIso, nowIso, d.id);
+        }
+    }
+}
+
+/**
+ * The open scoped votes `member` is on the live roll of (home's Needs-you line and Decide card, routes/home-answer.ts):
+ * nobody off the roll ever has one counted, so the count tells them nothing about an enterprise they don't keep.
+ */
+export function openScopedDecisionsFor(member: string): Decision[] {
+    return (db.prepare(`
+        SELECT d.* FROM decisions d
+        JOIN decision_electors e ON e.decision_id = d.id AND e.member_pubkey = ? AND e.status = 'on'
+        JOIN members m ON m.public_key = e.member_pubkey AND m.status = 'active'
+        WHERE d.status = 'open' AND d.scope_kind != 'community'
+        ORDER BY d.closes_at ASC
+    `).all(member) as any[]).map(rowToDecision);
 }

@@ -207,7 +207,8 @@ router.get('/api/commons/decisions', async (ctx) => {
 
 router.get('/api/commons/decisions/:id', async (ctx) => {
     const decision = getDecision(ctx.params.id);
-    if (!decision) {
+    // An enterprise's keepers' vote is read in that enterprise (routes/enterprise-decisions.ts), by its keepers only.
+    if (!decision || decision.scopeKind !== 'community') {
         ctx.status = 404;
         ctx.body = { error: 'Decision not found' };
         return;
@@ -275,6 +276,12 @@ router.post('/api/commons/decisions/:id/vote', async (ctx) => {
     if (support === undefined) {
         ctx.status = 400;
         ctx.body = { error: 'support (boolean) is required' };
+        return;
+    }
+    // An enterprise's keepers' vote is cast in that enterprise, never here: answered as missing.
+    if (getDecision(ctx.params.id)?.scopeKind === 'enterprise') {
+        ctx.status = 404;
+        ctx.body = { error: 'Decision not found' };
         return;
     }
     const result = castDecisionVote(ctx.params.id, actor, Boolean(support), Number(voteCount || 1), signature);

@@ -75,10 +75,10 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
 // (test-guest-view). Formal Decisions: on for a local community, off on the lobby (test-decisions-off). The example
 // cards on a nearly empty Market: global only (drawn by the apps, nothing stored). Invites: on for a local community,
 // off on the lobby, whose door is the only way in (test-invites-off). The 12-words door: open beside the sign-in on the
-// lobby only (test-door-work). The PR that builds one of these changes its line here, with the test that proves it.
+// lobby only (test-door-work). A member's set of nearby listings: global only, 250 km and 500 (test-sync-nearby). The PR that builds one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
     local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, door: 'members' },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, door: 'open' },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, door: 'open' },
 };
 
 async function main() {

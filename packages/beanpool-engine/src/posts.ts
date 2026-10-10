@@ -150,6 +150,11 @@ export interface MarketplacePost {
 
 export interface PostFilter {
     id?: string;
+    /**
+     * These listings only, read as `id` reads one: by id, under the same rules for each (the route's `ids=`, at most
+     * 100), or, with `sync` or `updatedAfter`, a sync read kept to them (a member's set, getNearbySet).
+     */
+    ids?: string[];
     type?: string;
     category?: string;
     status?: string;
@@ -898,7 +903,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
     upcomingUntil: null,
-    id: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
+    id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
     includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
 
@@ -1039,6 +1044,124 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     return getPostsRankedBy(db, filter, postRowsNear);
 }
 
+/** What a member's set is worked out from (getNearbySet). */
+export interface NearbySetQuery {
+    /** The member's stored coarse area (members.area_lat / area_lng), or null when they have none. */
+    area: { lat: number; lng: number } | null;
+    /** The radius and the cap (the node's NEARBY_LISTINGS_RADIUS_KM / NEARBY_LISTINGS_MAX). */
+    radiusKm: number;
+    max: number;
+    /** With no area: the newest this many listings on the node, wherever they are (design §9 Q3: 100). */
+    newestWithoutArea: number;
+    /** The read's own filters, as the phone's sync sends them (`types=`, events left out for an app that doesn't ask). */
+    types?: string[];
+    excludeEvents?: boolean;
+    /** A moderator's read keeps posts hidden by reports (PostFilter.includeHidden). */
+    includeHidden?: boolean;
+    /** The DoS bound of the one pass (PostFilter.measureAtMost). */
+    measureAtMost?: number;
+}
+
+/** A member's set S (getNearbySet). */
+export interface NearbySet {
+    /** Every listing of S, once: `near` in its order, then the own and tied ones not in it, by id. */
+    ids: string[];
+    /** near(M): nearest first (NEAREST_ORDER), or the newest first for a member with no area. */
+    near: string[];
+    /** The newest change of S: its rows' updated_at and their authors' board_standing_changed_at (an author's holiday
+     *  moves no listing row). With `ids`, what a read of S answers depends on (the route's ETag). */
+    stamp: string;
+}
+
+/**
+ * A member's set on a node that syncs by area (DESIGN-global-sync-by-area §2.2), as ids, without reading a listing in
+ * full:
+ * - near(M): the nearest `max` listings within `radiusKm` of the member's area, under the listing's own rules for this
+ *   reader (getPosts with no `sync`: on the board, open, an event not ended, the author not on holiday nor a paused
+ *   enterprise, a group's or a person's listing they may read, hidden by reports out but their own), ordered by
+ *   NEAREST_ORDER, a total order. One lean pass on the radius's box (idx_posts_lat_lng), as postRowsNear's bounded pass:
+ *   at most `measureAtMost` of the matching posts in the box are measured. A post with no place is never in it. With
+ *   no area: the newest `newestWithoutArea` listings under the same rules, wherever they are.
+ * - own(M): every listing the member wrote here, whatever its place or state.
+ * - ties(M): the listings they have an open deal on (asked for, or taken and not yet done) or a conversation about,
+ *   the node's side of the phone's keep rule (apps/native utils/db.ts localPostTies).
+ * own and ties are kept to what a sync read gives this reader (getPosts with `sync`: the audience rules), so every id
+ * of S is a row that a sync read kept to `ids` hands back, and nothing the reader may not read is named.
+ */
+export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbySet {
+    const own = (db.prepare('SELECT id FROM posts WHERE author_pubkey = ? AND origin_node IS NULL').all(member) as Array<{ id: string }>).map(r => r.id);
+    let tied: string[] = [];
+    try {
+        tied = (db.prepare(`
+            SELECT post_id AS id FROM marketplace_transactions WHERE buyer_pubkey = @m AND status IN ('requested', 'pending') AND post_id IS NOT NULL
+            UNION
+            SELECT post_id FROM marketplace_transactions WHERE seller_pubkey = @m AND status IN ('requested', 'pending') AND post_id IS NOT NULL
+            UNION
+            SELECT c.post_id FROM conversation_participants cp JOIN conversations c ON c.id = cp.conversation_id
+            WHERE cp.public_key = @m AND c.post_id IS NOT NULL`).all({ m: member }) as Array<{ id: string }>).map(r => r.id);
+    } catch {
+        // No conversations table: an engine-only database.
+    }
+    const base: PostFilter = { viewerPubkey: member, types: q.types, excludeEvents: q.excludeEvents, includeHidden: q.includeHidden };
+
+    // near(M): the rows are never read in full; the hook keeps what the lean pass ranked.
+    let ranked: Array<{ id: string; updated_at: string | null }> = [];
+    const rankNear: RowsNear = (d, near, where, whereParams) => {
+        if (!q.area) {
+            ranked = d.prepare(`
+        SELECT p.id, p.updated_at FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE 1=1${where} ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?`).all(...whereParams, q.newestWithoutArea) as typeof ranked;
+            return [];
+        }
+        const box = boundingBox(near.lat, near.lng, q.radiusKm);
+        const params: unknown[] = [near.lat, near.lng, box.latMin, box.latMax, ...box.lngRanges.flat(), ...whereParams];
+        let inner = `
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at
+                FROM posts p
+                LEFT JOIN members m ON p.author_pubkey = m.public_key
+                WHERE p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})${where}`;
+        if (q.measureAtMost && q.measureAtMost > 0) {
+            inner += ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?';
+            params.push(Math.floor(q.measureAtMost));
+        }
+        params.push(q.radiusKm, q.max);
+        ranked = d.prepare(`
+        WITH measured AS MATERIALIZED (
+            SELECT q.id, q.updated_at, q.created_at, haversine_km(?, ?, q.lat, q.lng) AS distance_km FROM (${inner}
+            ) q
+        )
+        SELECT p.id, p.updated_at FROM measured p WHERE p.distance_km <= ?${NEAREST_ORDER} LIMIT ?`).all(...params) as typeof ranked;
+        return [];
+    };
+    getPostsRankedBy(db, { ...base, near: q.area ? { lat: q.area.lat, lng: q.area.lng, radiusKm: q.radiusKm } : { lat: 0, lng: 0 }, sortByDistance: true, limit: q.max }, rankNear);
+    const near = ranked.map(r => r.id);
+
+    // own and ties, kept to a sync read's rules for this reader.
+    const inNear = new Set(near);
+    const extra = [...new Set([...own, ...tied])].filter(id => !inNear.has(id));
+    let kept: Array<{ id: string; updated_at: string | null }> = [];
+    if (extra.length > 0) {
+        const keep: RowsNear = (d, _near, where, whereParams) => {
+            kept = d.prepare(`
+        SELECT p.id, p.updated_at FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE 1=1${where} ORDER BY p.id`).all(...whereParams) as typeof kept;
+            return [];
+        };
+        getPostsRankedBy(db, { ...base, sync: true, ids: extra, near: { lat: 0, lng: 0 } }, keep);
+    }
+    const ids = [...near, ...kept.map(r => r.id)];
+    let stamp = '';
+    for (const r of [...ranked, ...kept]) if ((r.updated_at ?? '') > stamp) stamp = r.updated_at!;
+    if (ids.length > 0) {
+        const standing = db.prepare(`SELECT MAX(board_standing_changed_at) AS at FROM members WHERE public_key IN
+            (SELECT DISTINCT author_pubkey FROM posts WHERE id IN (SELECT value FROM json_each(?)))`).get(JSON.stringify(ids)) as { at: string | null } | undefined;
+        stamp += `|${standing?.at ?? ''}`;
+    }
+    return { ids, near, stamp };
+}
+
 /**
  * One page of a heal read (getPostsForPhotoHeal): where it starts, how many listings it may hold, and, once read, where
  * the next page starts.
@@ -1137,7 +1260,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     let where = '';
     const params: any[] = [];
 
-    if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
+    const byId = !!filter?.id || !!filter?.ids;
+    if (!byId && !filter?.updatedAfter && !filter?.sync) {
         const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
         if (!filter?.includeInactive) {
             where += selfView
@@ -1163,6 +1287,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     }
 
     if (filter?.id) { where += " AND p.id = ?"; params.push(filter.id); }
+    if (filter?.ids) { where += " AND p.id IN (SELECT value FROM json_each(?))"; params.push(JSON.stringify(filter.ids)); }
     if (filter?.type && filter.type !== 'all') { where += " AND p.type = ?"; params.push(filter.type); }
     if (filter?.types && filter.types.length > 0) {
         where += ` AND p.type IN (${filter.types.map(() => '?').join(',')})`;
@@ -1443,7 +1568,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             // window has passed. Internal lookups (includeAllScopes) and sync are not reader views.
             // A cancelled event read by id follows the same rule: host and Going only.
             const endMs = r.event_end_at ? Date.parse(r.event_end_at) : NaN;
-            const readerView = filter?.id && !filter.includeAllScopes && !filter.sync && !filter.updatedAfter;
+            const readerView = byId && !filter!.includeAllScopes && !filter!.sync && !filter!.updatedAfter;
             if (readerView && endMs <= nowMs) {
                 if ((!host && !going) || nowMs - endMs > EVENT_READABLE_AFTER_END_MS) continue;
             }

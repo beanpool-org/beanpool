@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    SYNODIC_MONTH_DAYS, moonAt, moonPicture, newMoonAt, readSkyPlace, readSkySettings, skyPlaceFor, skyToday, sunDay,
+    SYNODIC_MONTH_DAYS, moonAt, moonPercentShown, moonPicture, newMoonAt, readSkyPlace, readSkySettings, skyPlaceFor, skyToday, sunDay,
     type SkyClock,
 } from '../sky.js';
 
@@ -216,5 +216,26 @@ describe('the place and the settings', () => {
         expect(skyPlaceFor(me, { community, member, device })).toEqual(member);
         expect(skyPlaceFor(me, { community, device })).toEqual(device);
         expect(skyPlaceFor(me, { community })).toEqual(community);
+    });
+});
+
+describe("the percentage beside the phase (#1720 review, finding 1)", () => {
+    it("never says a crescent or a gibbous moon is 0% or 100% lit", () => {
+        expect(moonPercentShown({ lit: 0.0027, phase: "waxing-crescent" })).toBe(1);
+        expect(moonPercentShown({ lit: 0.9973, phase: "waxing-gibbous" })).toBe(99);
+        expect(moonPercentShown({ lit: 0.0027, phase: "new" })).toBe(0);
+        expect(moonPercentShown({ lit: 0.9999, phase: "full" })).toBe(100);
+        expect(moonPercentShown({ lit: 0.72, phase: "waxing-gibbous" })).toBe(72);
+    });
+    it("holds just outside the named new and full days, on the real moon", () => {
+        const step = 10 * 60 * 1000;
+        let t = Date.parse("2026-08-12T17:37Z");
+        while (moonAt(t).phase === "new") t += step;
+        expect(moonAt(t).phase).toBe("waxing-crescent");
+        expect(skyToday({ lat: -28.55, lng: 153.5 }, t).text).toMatch(/Waxing crescent, [1-9]\d?%/);
+        let u = Date.parse("2026-08-12T17:37Z") + (29.53 / 2) * 86400000;
+        while (moonAt(u).phase !== "full") u += step;
+        while (moonAt(u).phase === "full") u += step;
+        expect(skyToday({ lat: -28.55, lng: 153.5 }, u).text).toMatch(/Waning gibbous, (9\d|[1-8]\d)%/);
     });
 });

@@ -397,12 +397,6 @@ export function TipsBody({ view, colors, onNext, onReadMore, onDontShow }: {
 }
 
 /**
- * A saved search (CARD-FRAME §4): its caption is fixed and its words stand in the first row, bounded, with the distance
- * ("eggs · within 5 km"), never in the caption (member text clips there). Then up to four listings as the Market card
- * draws them, each opening the listing, and "See more" opening the Market with the words filled in. A search that finds
- * nothing says so; before the node has answered for these words, it says it shows when the community answers.
- */
-/**
  * Sun and moon (CARD-FRAME §4): one line worked out on the phone ("🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48"),
  * nothing to open. It wraps at the floor and is never cut; a screen reader hears it in words, no picture read aloud.
  */
@@ -415,6 +409,12 @@ export function SkyBody({ sky, colors }: { sky: SkyToday; colors: AppColors }) {
     );
 }
 
+/**
+ * A saved search (CARD-FRAME §4): its caption is fixed and its words stand in the first row, bounded, with the distance
+ * ("eggs · within 5 km"), never in the caption (member text clips there). Then up to four listings as the Market card
+ * draws them, each opening the listing, and "See more" opening the Market with the words filled in. A search that finds
+ * nothing says so; before the node has answered for these words, it says it shows when the community answers.
+ */
 export function SearchBody({ settings, card, nodeUrl, showsBeans, colors, onMore }: {
     settings: unknown;
     /** The node's body for these words (utils/home-cards.ts `searchCardFor`), or null when it hasn't answered for them. */

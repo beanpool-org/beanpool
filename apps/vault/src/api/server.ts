@@ -88,6 +88,8 @@ export const LOCKED_ALERT_MS = 5 * 60 * 1000;
 export const BACKUP_STALE_MS = 2 * 60 * 60 * 1000 + 10 * 60 * 1000;
 /** A failure this many times in a row is an alert too. */
 export const BACKUP_FAILURES_ALERT = 2;
+/** An off-box upload that fails is tried once more this long after, before the copy counts as failed. */
+export const OFFSITE_RETRY_MS = 30 * 1000;
 /** A day's signed report is made at the first check after midnight UTC; by this long after, its absence is an alert. */
 export const REPORT_GRACE_MS = 2 * 60 * 60 * 1000;
 /** A custodian's settings wait this long for a second custodian to send the same. */
@@ -150,6 +152,8 @@ export interface VaultApiOptions {
     settingsFile?: string;
     /** The off-box store and the webhook (tests: a stub on this machine). Defaults to the global fetch. */
     outboundFetch?: FetchLike;
+    /** How the API waits before trying a failed off-box upload again (tests: their clock moved at once). Defaults to a timer. */
+    sleep?: (ms: number) => Promise<void>;
     /** Extra TLS options for the mail server (tests: their own CA). */
     smtpTls?: tls.ConnectionOptions;
 }
@@ -278,6 +282,8 @@ class Counters {
         return {
             tickets: 0, deposits: 0, replaced: 0, restores: {} as Record<string, number>, holds: 0, approvals: 0, cancels: 0,
             releases: 0, deletes: 0, pushTokens: 0, errors: 0, backupsOk: 0, backupsFailed: 0, offsiteOk: 0, offsiteFailed: 0,
+            // Off-box uploads tried a second time (the copy then counted in offsiteOk or offsiteFailed).
+            offsiteRetried: 0,
             // Tidying the off-box store (its copies past 30 days) that failed: counted apart, a copy already up stays counted OK.
             offsitePruneFailed: 0,
         };
@@ -296,6 +302,7 @@ class Counters {
 
 export function createVaultApi(opts: VaultApiOptions): VaultApi {
     const clock = opts.clock ?? (() => Date.now());
+    const sleep = opts.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms).unref()));
     const about = opts.about ?? ((): AboutThisApi => ({ api: 'source', update: null, restart: restartStatus(null) }));
     const startedAt = clock();
     const kh = new KeyholderClient(opts.keyholderSocket);
@@ -1326,16 +1333,25 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     /**
      * The backup just written, copied to the off-box store (design §4: another provider, another country), and the
      * copies there older than 30 days removed, as at home (§1.7: a deleted copy leaves the backups within 30 days).
-     * The copy is done once its upload lands: tidying the old ones (pruneOffsite) is a step of its own, counted and
-     * said apart, so a listing that fails never turns a copy already there into a failed one. A failure is counted
-     * and said (the report, the alerts); the next hour's backup is the next try. Each backup holds every deletion
-     * record of the last 30 days, so a gap in the off-box copies loses nothing a restore needs.
+     * An upload that fails is tried once more 30 s later. The copy is done once its upload lands: tidying the old ones
+     * (pruneOffsite) is a step of its own, counted and said apart, so a listing that fails never turns a copy already
+     * there into a failed one. A failure is counted and said (the report, the alerts); the next hour's backup is the
+     * next try. Each backup holds every deletion record of the last 30 days, so a gap in the off-box copies loses
+     * nothing a restore needs.
      */
     async function copyOffsite(name: string, bytes: Uint8Array, now: number): Promise<void> {
         const target = offsite;
         if (!target) return;
         try {
-            await target.put(name, bytes);
+            try {
+                await target.put(name, bytes);
+            } catch {
+                // A store that hiccups (a reset connection, a 500) mostly takes the same upload a little later.
+                counters.counts.offsiteRetried++;
+                await sleep(OFFSITE_RETRY_MS);
+                if (target !== offsite) return;
+                await target.put(name, bytes);
+            }
         } catch (e) {
             if (target !== offsite) return;
             offsiteStatus.failuresInARow++;

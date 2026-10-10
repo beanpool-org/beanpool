@@ -6,7 +6,7 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { openSeedFromSso, openVaultRelease } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
 import { DB_FILE } from '../api/db.js';
-import { BACKUP_RETENTION_MS, HOLD_MS } from '../api/server.js';
+import { BACKUP_RETENTION_MS, HOLD_MS, OFFSITE_RETRY_MS } from '../api/server.js';
 import { custodianKey, listBackups, restoreFromBackup, sendSettings } from '../custodian/lib.js';
 import { openState, STATE_FILE } from '../keyholder/keys.js';
 import { BACKUP_BODY_AAD, parseBackupFile } from '../shared/backup-format.js';
@@ -241,6 +241,41 @@ describe('a copy that reached the store counts as done; tidying old ones is its 
         ({ body } = await report(v));
         expect(body.offsite.prune).toEqual({ lastOkAt: v.clock.now(), failuresInARow: 0, step: null, error: null });
         expect(stub.objects.size).toBe(3);
+    });
+});
+
+describe('an upload that fails is tried once more', () => {
+    it('fails, then lands 30 s later: one retry, and the copy counts as done', async () => {
+        const v = await vault();
+        await doGenesis(v);
+        const stub = await s3();
+        await setSettings(v, { v: 1, offsite: stub.settings() });
+        stub.failNext.put = [500];
+        const started = v.clock.now();
+        const name = await v.api.runBackup();
+        expect(stub.requests.filter(r => r.method === 'PUT')).toHaveLength(2);
+        expect(stub.objects.has(`vault/${name}`)).toBe(true);
+        expect(OFFSITE_RETRY_MS).toBe(30_000);
+        const { body } = await report(v);
+        // The harness's wait moves the test clock: the second try came the 30 s later.
+        expect(body.offsite).toMatchObject({ lastOkAt: started + OFFSITE_RETRY_MS, lastName: name, failuresInARow: 0, error: null });
+        expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0, offsiteRetried: 1 });
+    });
+
+    it('fails twice: the copy counts as failed, once, after the one retry', async () => {
+        const v = await vault();
+        await doGenesis(v);
+        const stub = await s3();
+        await setSettings(v, { v: 1, offsite: stub.settings() });
+        stub.failNext.put = [500, 500];
+        await v.api.runBackup();
+        expect(stub.requests.filter(r => r.method === 'PUT')).toHaveLength(2);
+        expect(stub.objects.size).toBe(0);
+        const { body } = await report(v);
+        expect(body.offsite).toMatchObject({ lastOkAt: null, failuresInARow: 1, error: 'HTTP 500 InternalError' });
+        expect(body.counts).toMatchObject({ offsiteOk: 0, offsiteFailed: 1, offsiteRetried: 1 });
+        // Nothing went up: nothing listed or removed either.
+        expect(stub.requests.filter(r => r.method !== 'PUT')).toHaveLength(0);
     });
 });
 

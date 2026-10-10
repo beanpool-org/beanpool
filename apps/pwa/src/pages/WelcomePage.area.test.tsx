@@ -21,7 +21,7 @@ import { generateIdentity, savePendingJoin, PENDING_JOIN_TTL_MS, type BeanPoolId
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 
-type Handler = (body: any, path: string) => Response;
+type Handler = (body: any, path: string, init: RequestInit) => Response;
 
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -35,7 +35,7 @@ function stubNode(info: unknown, handlers: Record<string, Handler> = {}) {
         calls.push({ path, body: raw ? JSON.parse(raw) : undefined, raw });
         if (path === '/api/community/info') return json(200, info);
         const key = Object.keys(handlers).find((k) => path === k || path.startsWith(k));
-        if (key) return handlers[key](raw ? JSON.parse(raw) : undefined, path);
+        if (key) return handlers[key](raw ? JSON.parse(raw) : undefined, path, init);
         return json(200, {});
     }));
     return calls;
@@ -183,5 +183,65 @@ describe('Your Area at signup (S4)', () => {
         expect(screen.queryByText(/Your Safety Backup/)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: '← Back' }));
         expect(await screen.findByText(/Choose your look/)).toBeInTheDocument();
+    });
+});
+
+// Deciding review of #1766, B2: a reading or a save that never answers. Skip and ← Back stay usable, and a reading or an
+// answer that lands after the member left is dropped: nothing is sent and nothing is kept.
+describe('a reading or a save that never answers (review B2)', () => {
+    it('a reading still pending: Skip works, and the reading landing afterwards sends nothing', async () => {
+        let late: PositionCallback | null = null;
+        geo.getCurrentPosition.mockImplementation((ok: PositionCallback) => { late = ok; });
+        const { calls, onComplete } = await toThePhoto(GLOBAL_BY_AREA);
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Use my location/ }));
+        const skip = screen.getByRole('button', { name: 'Skip for now' }) as HTMLButtonElement;
+        expect(skip.disabled).toBe(false);
+        fireEvent.click(skip);
+        await screen.findByText(/Your Safety Backup/);
+        late!({ coords: { latitude: -28.647412, longitude: 153.612031 } } as GeolocationPosition);
+        await new Promise((r) => setTimeout(r, 50));
+        expect(areaCalls(calls)).toEqual([]);
+        expect(localStorage.getItem('beanpool_area_place')).toBeNull();
+        await finishFromBackup(onComplete);
+        expect(areaCalls(calls)).toEqual([]);
+    });
+
+    it('← Back while a reading waits: the late reading sends nothing either', async () => {
+        let late: PositionCallback | null = null;
+        geo.getCurrentPosition.mockImplementation((ok: PositionCallback) => { late = ok; });
+        const { calls } = await toThePhoto(GLOBAL_BY_AREA);
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Use my location/ }));
+        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        await screen.findByText(/Choose your look/);
+        late!({ coords: { latitude: -28.647412, longitude: 153.612031 } } as GeolocationPosition);
+        await new Promise((r) => setTimeout(r, 50));
+        expect(areaCalls(calls)).toEqual([]);
+        expect(screen.getByText(/Choose your look/)).toBeInTheDocument();
+    });
+
+    it('a save still pending: Skip works, the request is stopped, and the late answer keeps nothing', async () => {
+        let release!: (r: Response) => void;
+        let signal: AbortSignal | null | undefined;
+        const { calls, onComplete } = await toThePhoto(GLOBAL_BY_AREA, (_b, _p, init) => {
+            signal = init.signal;
+            return new Promise<Response>((r) => { release = r; }) as unknown as Response;
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Type a town or suburb/ }));
+        fireEvent.click(screen.getByTestId('pick-byron'));
+        await waitFor(() => expect(areaCalls(calls)).toHaveLength(1));
+        const skip = screen.getByRole('button', { name: 'Skip for now' }) as HTMLButtonElement;
+        expect(skip.disabled).toBe(false);
+        fireEvent.click(skip);
+        await screen.findByText(/Your Safety Backup/);
+        expect(signal?.aborted).toBe(true);
+        release(json(200, AREA_SAVED));
+        await new Promise((r) => setTimeout(r, 50));
+        expect(localStorage.getItem('beanpool_area_place')).toBeNull();
+        expect(screen.getByText(/Your Safety Backup/)).toBeInTheDocument();
+        await finishFromBackup(onComplete);
+        expect(areaCalls(calls)).toHaveLength(1);
     });
 });

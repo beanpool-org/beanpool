@@ -5,11 +5,13 @@
  *
  * Use my location takes one low-accuracy reading and rounds it to 0.1° before the request is built (lib/member-area.ts);
  * Type a town is the Map's AddressSearch, rounded the same way. Skip writes nothing. A refusal or a failed save says so
- * in one line and never blocks: Skip is always there.
+ * in one line and never blocks: Skip is always there, even while the reading or the save waits, and leaving (Skip, Back,
+ * the step closing) drops whatever answers later. The reading (20 s) and the save (lib/member-area.ts) have time limits
+ * that end in the same one line.
  *
  * Small screens: three stacked full-width controls, each at least 44px tall; holds at 320px and 130% text.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AREA_STEP_WORDS, areaWhyLine, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from './AddressSearch';
 import { readBrowserPosition, writeArea, type AreaSender, type MemberArea } from '../lib/member-area';
@@ -33,29 +35,52 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
     const [busy, setBusy] = useState<'location' | 'town' | null>(null);
     const [showTown, setShowTown] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Skip, Back and the step closing move this on: a reading or an answer that comes after is dropped, so nothing is
+    // sent and onSaved isn't called once the member has gone on (review B2).
+    const generation = useRef(0);
+    const saving = useRef<AbortController | null>(null);
+    const drop = () => {
+        generation.current += 1;
+        saving.current?.abort();
+        saving.current = null;
+    };
+    useEffect(() => drop, []);
 
-    const save = async (point: { lat: number; lng: number }, placeName: string | null, kind: 'location' | 'town') => {
+    const save = async (point: { lat: number; lng: number }, placeName: string | null, kind: 'location' | 'town', gen: number) => {
         setBusy(kind);
         setError(null);
-        const result = await writeArea(send, point);
+        const stop = new AbortController();
+        saving.current = stop;
+        const result = await writeArea(send, point, { signal: stop.signal });
+        if (gen !== generation.current) return;
+        saving.current = null;
         setBusy(null);
         if (result.ok) onSaved(result.area, placeName);
         else setError(result.error);
     };
 
     const useMyLocation = async () => {
+        const gen = generation.current;
         setError(null);
         setBusy('location');
         try {
             const p = await readBrowserPosition();
-            await save(p, null, 'location');
+            if (gen !== generation.current) return;
+            await save(p, null, 'location', gen);
         } catch (e) {
+            if (gen !== generation.current) return;
             setBusy(null);
             setError(e instanceof Error ? e.message : "Couldn't read your location. Type a town instead, or skip for now.");
         }
     };
 
-    const pickTown = (r: AddressResult) => { void save({ lat: r.lat, lng: r.lng }, r.shortName || r.displayName, 'town'); };
+    const pickTown = (r: AddressResult) => { void save({ lat: r.lat, lng: r.lng }, r.shortName || r.displayName, 'town', generation.current); };
+
+    const skip = () => {
+        drop();
+        setBusy(null);
+        onSkip();
+    };
 
     return (
         <div data-testid="area-step">
@@ -95,8 +120,7 @@ export function AreaStep({ send, limits, onSaved, onSkip, skipLabel = AREA_STEP_
             <button
                 type="button"
                 data-testid="area-skip"
-                onClick={onSkip}
-                disabled={busy !== null}
+                onClick={skip}
                 style={{ ...fullButton, border: 'none', background: 'none', color: 'var(--text-muted)', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.95rem' }}
             >
                 {skipLabel}

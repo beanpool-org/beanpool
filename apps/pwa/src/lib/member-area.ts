@@ -27,27 +27,64 @@ export function areaOf(lat: number, lng: number): { lat: number; lng: number } {
 }
 
 /** How the body reaches the node: signed with the joining key at signup, with the stored one in Settings. */
-export type AreaSender = (body: { lat: number | null; lng: number | null }) => Promise<{ area?: unknown }>;
+export type AreaSender = (body: { lat: number | null; lng: number | null }, signal?: AbortSignal) => Promise<{ area?: unknown }>;
 
-/** Sets (a point, rounded here first) or clears (null). Never throws: a failure is a sentence for the screen. */
-export async function writeArea(send: AreaSender, point: { lat: number; lng: number } | null): Promise<AreaWriteResult> {
+// A request's time limit (deciding review of #1766, B2): fetch has none, and on a slow network a save could otherwise
+// wait for good. The same as the global join's on the phone (apps/native utils/global-join.ts JOIN_TIMEOUT_MS).
+export const AREA_REQUEST_TIMEOUT_MS = 30_000;
+
+const NO_REACH = "Couldn't reach the community. Check your connection and try again.";
+
+/**
+ * Runs `work` with a signal that stops at `ms` or when `outer` does (Skip, Back, leaving the screen), and rejects the
+ * moment it stops, even if the work ignores its signal. Rejects with `stopped` set, so a caller can tell it apart.
+ */
+async function bounded<T>(work: (signal: AbortSignal) => Promise<T>, ms: number, outer?: AbortSignal): Promise<T> {
+    const stop = new AbortController();
+    const onOuter = () => stop.abort();
+    if (outer?.aborted) stop.abort();
+    else outer?.addEventListener('abort', onOuter);
+    const timer = setTimeout(() => stop.abort(), ms);
+    const stopped = () => Object.assign(new Error('stopped'), { stopped: true });
+    try {
+        return await new Promise<T>((resolve, reject) => {
+            if (stop.signal.aborted) { reject(stopped()); return; }
+            stop.signal.addEventListener('abort', () => reject(stopped()));
+            work(stop.signal).then(resolve, reject);
+        });
+    } finally {
+        clearTimeout(timer);
+        outer?.removeEventListener('abort', onOuter);
+    }
+}
+
+/**
+ * Sets (a point, rounded here first) or clears (null), given up after AREA_REQUEST_TIMEOUT_MS or when `signal` stops it
+ * (nothing is sent once it has). Never throws: a failure is a sentence for the screen.
+ */
+export async function writeArea(
+    send: AreaSender,
+    point: { lat: number; lng: number } | null,
+    options: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<AreaWriteResult> {
     const body = point ? areaOf(point.lat, point.lng) : { lat: null, lng: null };
     if (point && (!Number.isFinite(body.lat as number) || !Number.isFinite(body.lng as number))) {
         return { ok: false, error: "That place couldn't be read. Try again or type a town." };
     }
     try {
-        const data = await send(body);
+        const data = await bounded((signal) => send(body, signal), options.timeoutMs ?? AREA_REQUEST_TIMEOUT_MS, options.signal);
         return { ok: true, area: readArea(data?.area) };
     } catch (e) {
+        if ((e as { stopped?: boolean })?.stopped || (e instanceof Error && e.name === 'AbortError')) return { ok: false, error: NO_REACH };
         const msg = e instanceof Error && e.message ? e.message : '';
-        return { ok: false, error: msg || "Couldn't reach the community. Check your connection and try again." };
+        return { ok: false, error: msg || NO_REACH };
     }
 }
 
 /** The sender for a key that isn't stored yet (signup): signed with that key. */
 export function senderForKey(privateKey: string, publicKey: string): AreaSender {
-    return async (body) => {
-        const res = await signedFetchWithKey('POST', '/api/community/me/area', body, privateKey, publicKey);
+    return async (body, signal) => {
+        const res = await signedFetchWithKey('POST', '/api/community/me/area', body, privateKey, publicKey, signal);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(typeof data?.error === 'string' ? data.error : `The community said no (${res.status}). Try again later.`);
         return data;
@@ -55,12 +92,12 @@ export function senderForKey(privateKey: string, publicKey: string): AreaSender 
 }
 
 /** The sender for the signed-in member (Settings). */
-export const senderForMe: AreaSender = (body) => request('POST', '/api/community/me/area', body);
+export const senderForMe: AreaSender = (body, signal) => request('POST', '/api/community/me/area', body, signal);
 
-/** The signed-in member's stored area: an area, null (none), or undefined (couldn't ask). */
+/** The signed-in member's stored area: an area, null (none), or undefined (couldn't ask, or no answer in time). */
 export async function readMyArea(): Promise<MemberArea | null | undefined> {
     try {
-        const me = await request<{ area?: unknown }>('GET', '/api/community/me');
+        const me = await bounded((signal) => request<{ area?: unknown }>('GET', '/api/community/me', undefined, signal), AREA_REQUEST_TIMEOUT_MS);
         return readArea(me?.area);
     } catch {
         return undefined;

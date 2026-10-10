@@ -4,16 +4,18 @@
  *
  * Use my location takes ONE reading, at low accuracy, and rounds it to its 0.1° area before the request is built
  * (utils/member-area.ts). Type a town is the event form's AddressSearch; the pick is rounded the same way. Skip writes
- * nothing. A refusal or a failed save says so in one line and never blocks: Skip is always there.
+ * nothing. A refusal or a failed save says so in one line and never blocks: Skip is always there, even while a reading
+ * or the save waits, and leaving (Skip, Cancel, ← Back) drops whatever answers later. The reading and the save each
+ * have a time limit (utils/member-area.ts) that ends in the same one line.
  *
  * Small screens: three stacked full-width controls, each at least 48 dp, and five short lines; holds at 320 dp, 1.3x.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
 import type { AddressResult } from '@beanpool/core';
 import { AddressSearch } from './AddressSearch';
-import { AREA_WORDS, areaWhyLine, writeMemberArea, type MemberArea } from '../utils/member-area';
+import { AREA_READING_TIMEOUT_MS, AREA_WORDS, areaWhyLine, withTimeLimit, writeMemberArea, type MemberArea } from '../utils/member-area';
 import type { NodeFeatures } from '../utils/node-profile';
 import { colors, palette } from '../constants/colors';
 
@@ -33,37 +35,62 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
     const [busy, setBusy] = useState<'location' | 'town' | null>(null);
     const [showTown, setShowTown] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Skip, Cancel and leaving the step (← Back, the screen closing) move this on: a reading or an answer that comes
+    // after is dropped, so nothing is sent and onSaved isn't called once the member has gone on (review B2).
+    const generation = useRef(0);
+    const saving = useRef<AbortController | null>(null);
+    const drop = () => {
+        generation.current += 1;
+        saving.current?.abort();
+        saving.current = null;
+    };
+    useEffect(() => drop, []);
 
-    const save = async (point: { lat: number; lng: number }, placeName: string | null, kind: 'location' | 'town') => {
-        if (!url || !identity) { setError("Couldn't reach the community. Skip for now and set it later in Settings."); return; }
+    const save = async (point: { lat: number; lng: number }, placeName: string | null, kind: 'location' | 'town', gen: number) => {
+        if (!url || !identity) { setBusy(null); setError("Couldn't reach the community. Skip for now and set it later in Settings."); return; }
         setBusy(kind);
         setError(null);
-        const result = await writeMemberArea(url, identity, point);
+        const stop = new AbortController();
+        saving.current = stop;
+        const result = await writeMemberArea(url, identity, point, { signal: stop.signal });
+        if (gen !== generation.current) return;
+        saving.current = null;
         setBusy(null);
         if (result.ok) onSaved(result.area, placeName);
         else setError(result.error);
     };
 
     const useMyLocation = async () => {
+        const gen = generation.current;
         setError(null);
         try {
             let { status } = await Location.getForegroundPermissionsAsync();
             if (status !== 'granted') status = (await Location.requestForegroundPermissionsAsync()).status;
+            if (gen !== generation.current) return;
             if (status !== 'granted') {
                 setError('Location is off for BeanPool. Type a town instead, or skip for now.');
                 return;
             }
             setBusy('location');
-            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
-            await save({ lat: loc.coords.latitude, lng: loc.coords.longitude }, null, 'location');
+            const loc = await withTimeLimit(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }), AREA_READING_TIMEOUT_MS);
+            if (gen !== generation.current) return;
+            if (!loc) throw new Error('no reading in time');
+            await save({ lat: loc.coords.latitude, lng: loc.coords.longitude }, null, 'location', gen);
         } catch {
+            if (gen !== generation.current) return;
             setBusy(null);
             setError("Couldn't read your location. Type a town instead, or skip for now.");
         }
     };
 
     const pickTown = (result: AddressResult) => {
-        void save({ lat: result.lat, lng: result.lng }, result.shortName || result.displayName, 'town');
+        void save({ lat: result.lat, lng: result.lng }, result.shortName || result.displayName, 'town', generation.current);
+    };
+
+    const skip = () => {
+        drop();
+        setBusy(null);
+        onSkip();
     };
 
     return (
@@ -108,8 +135,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
 
             <Pressable
                 style={styles.skipBtn}
-                disabled={busy !== null}
-                onPress={onSkip}
+                onPress={skip}
                 accessibilityRole="button"
                 accessibilityLabel={skipLabel}
                 testID="area-skip"

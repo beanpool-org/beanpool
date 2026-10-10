@@ -90,6 +90,35 @@ describe('Settings → Your area (S4)', () => {
         expect(writes).toHaveLength(1);
     });
 
+    it('← Back to Settings works while a save waits; the late answer changes nothing (review B2)', async () => {
+        let release!: (v: unknown) => void;
+        let signal: AbortSignal | undefined;
+        const base = vi.mocked(api.request).getMockImplementation()!;
+        vi.mocked(api.request).mockImplementation((async (method: string, path: string, body?: any, sig?: AbortSignal) => {
+            if (method === 'POST' && path === '/api/community/me/area') {
+                writes.push(body);
+                signal = sig;
+                return new Promise((r) => { release = r; });
+            }
+            return base(method, path, body);
+        }) as any);
+        open();
+        const row = await screen.findByTestId('settings-your-area');
+        await waitFor(() => expect(row).toHaveTextContent('Not set'));
+        fireEvent.click(row);
+        fireEvent.click(screen.getByRole('button', { name: /Use my location/ }));
+        await waitFor(() => expect(writes).toHaveLength(1));
+        const back = screen.getByRole('button', { name: '← Back to Settings' }) as HTMLButtonElement;
+        expect(back.disabled).toBe(false);
+        fireEvent.click(back);
+        await waitFor(() => expect(screen.getByTestId('settings-your-area')).toHaveTextContent('Not set'));
+        expect(signal?.aborted).toBe(true);
+        release({ success: true, area: { lat: 51.5, lng: -0.1 } });
+        await new Promise((r) => setTimeout(r, 50));
+        expect(screen.getByTestId('settings-your-area')).toHaveTextContent('Not set');
+        expect(screen.queryByTestId('settings-area')).toBeNull();
+    });
+
     it("a node that can't be asked: says so, never 'Not set'", async () => {
         vi.mocked(api.request).mockImplementation((async () => { throw new Error('offline'); }) as any);
         open();

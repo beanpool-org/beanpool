@@ -90,6 +90,7 @@ vi.mock('expo-location', () => ({
     getCurrentPositionAsync: vi.fn(async () => ({ coords: loc.coords })),
 }));
 
+import * as Location from 'expo-location';
 import ProfileSetupScreen from '../../app/profile-setup';
 import YourAreaScreen from '../../app/your-area';
 import { NewPollModal } from '../../components/NewPollModal';
@@ -250,6 +251,134 @@ describe('profile setup: the area step (S4)', () => {
             expect(style.minHeight, id).toBeGreaterThanOrEqual(44);
             expect(style.width ?? 'auto', id).not.toMatch(/^\d/); // no fixed width that could overflow 320 dp
             expect(style.position, id).toBeUndefined();
+        }
+    });
+});
+
+// Deciding review of #1766, B2: a reading or a save that never answers. Skip, Cancel and Back stay usable; a reading or an
+// answer that lands after the member left is dropped (nothing sent, onSaved not called, no router.back); and both have a
+// time limit that ends in the step's one line.
+describe('a reading or a save that never answers (review B2)', () => {
+    function deferred<T>() { let resolve!: (v: T) => void; const p = new Promise<T>((r) => { resolve = r; }); return { p, resolve }; }
+    const stepNow = () => text().match(/Step \d of \d/)?.[0];
+    const areaPosts = () => requests.filter((r) => r.url === `${NODE}/api/community/me/area`);
+    const disabledAttr = (id: string) => (document.querySelector(`[data-testid="${id}"]`) as HTMLElement).getAttribute('aria-disabled');
+    const PRECISE = { coords: { latitude: -28.647412, longitude: 153.612031 } };
+    /** A fetch whose POSTs never answer until `release`; the signal each was given is kept. */
+    function hangingPosts() {
+        const pending = deferred<{ ok: boolean; status: number; json: () => Promise<unknown> }>();
+        const signals: Array<AbortSignal | undefined> = [];
+        const before = (globalThis as any).fetch;
+        (globalThis as any).fetch = vi.fn((url: string, init?: { method?: string; body?: string; signal?: AbortSignal }) => {
+            if ((init?.method ?? 'GET') !== 'POST') return before(url, init);
+            requests.push({ url, method: 'POST', body: init?.body });
+            signals.push(init?.signal);
+            return pending.p;
+        });
+        return { signals, release: () => pending.resolve({ ok: true, status: 200, json: async () => ({ success: true, area: { lat: -28.6, lng: 153.6 } }) }) };
+    }
+    async function tick(ms: number) { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); }
+
+    it('a reading still pending: Skip works, and the reading landing afterwards sends nothing', async () => {
+        const reading = deferred<typeof PRECISE>();
+        vi.mocked(Location.getCurrentPositionAsync).mockImplementationOnce(() => reading.p as any);
+        await render(GLOBAL_FEATURES);
+        await toAreaStep();
+        await press('[data-testid="area-use-location"]');
+        expect(disabledAttr('area-skip')).toBeNull();
+        await press('[data-testid="area-skip"]');
+        expect(stepNow()).toBe('Step 4 of 4');
+        reading.resolve(PRECISE);
+        await settle(10);
+        expect(requests).toEqual([]);
+        expect(signed.calls).toEqual([]);
+        expect(stepNow()).toBe('Step 4 of 4');
+    });
+
+    it('← Back while a reading waits: the late reading sends nothing either', async () => {
+        const reading = deferred<typeof PRECISE>();
+        vi.mocked(Location.getCurrentPositionAsync).mockImplementationOnce(() => reading.p as any);
+        await render(GLOBAL_FEATURES);
+        await toAreaStep();
+        await press('[data-testid="area-use-location"]');
+        await act(async () => { (Array.from(document.querySelectorAll('button')).find(b => b.textContent === '← Back') as HTMLElement).click(); });
+        await settle();
+        expect(stepNow()).toBe('Step 2 of 4');
+        reading.resolve(PRECISE);
+        await settle(10);
+        expect(requests).toEqual([]);
+        expect(stepNow()).toBe('Step 2 of 4');
+    });
+
+    it('a save still pending: Skip works, the request is stopped, and the late answer neither moves on nor keeps the town', async () => {
+        await render(GLOBAL_FEATURES);
+        await toAreaStep();
+        const node = hangingPosts();
+        await press('[data-testid="area-type-town"]');
+        await press('[data-testid="pick-byron"]');
+        expect(areaPosts()).toHaveLength(1);
+        expect(disabledAttr('area-skip')).toBeNull();
+        await press('[data-testid="area-skip"]');
+        expect(stepNow()).toBe('Step 4 of 4');
+        expect(node.signals[0]?.aborted).toBe(true);
+        node.release();
+        await settle(10);
+        expect(mem.store.has(`beanpool_area_place:${NODE}`)).toBe(false);
+        expect(stepNow()).toBe('Step 4 of 4');
+        expect(areaPosts()).toHaveLength(1);
+    });
+
+    it('Settings → Your area: Cancel works while a save waits, and the late answer never goes back a second time', async () => {
+        answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: null } };
+        await render(GLOBAL_FEATURES, YourAreaScreen as () => unknown);
+        const node = hangingPosts();
+        nav.router.back.mockClear();
+        await press('[data-testid="area-use-location"]');
+        expect(areaPosts()).toHaveLength(1);
+        expect(disabledAttr('area-skip')).toBeNull();
+        await press('[data-testid="area-skip"]');
+        expect(nav.router.back).toHaveBeenCalledTimes(1);
+        node.release();
+        await settle(10);
+        expect(nav.router.back).toHaveBeenCalledTimes(1);
+    });
+
+    it('a reading that never answers ends after 20 s in the one line; nothing is sent and Skip goes on', async () => {
+        vi.mocked(Location.getCurrentPositionAsync).mockImplementationOnce(() => new Promise(() => {}) as any);
+        await render(GLOBAL_FEATURES);
+        await toAreaStep();
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            await act(async () => { (document.querySelector('[data-testid="area-use-location"]') as HTMLElement).click(); });
+            await tick(19_000);
+            expect(text()).not.toContain("Couldn't read your location");
+            await tick(1_500);
+            expect(text()).toContain("Couldn't read your location. Type a town instead, or skip for now.");
+            expect(disabledAttr('area-use-location')).toBeNull();
+            expect(requests).toEqual([]);
+        } finally {
+            vi.useRealTimers();
+        }
+        await press('[data-testid="area-skip"]');
+        expect(stepNow()).toBe('Step 4 of 4');
+    });
+
+    it('a save that never answers ends after 30 s in the one line, its request stopped; the step stays', async () => {
+        await render(GLOBAL_FEATURES);
+        await toAreaStep();
+        const node = hangingPosts();
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            await act(async () => { (document.querySelector('[data-testid="area-use-location"]') as HTMLElement).click(); });
+            await tick(29_000);
+            expect(areaPosts()).toHaveLength(1);
+            expect(text()).not.toContain("Couldn't reach the community");
+            await tick(1_500);
+            expect(text()).toContain("Couldn't reach the community. Check your connection and try again.");
+            expect(node.signals[0]?.aborted).toBe(true);
+            expect(stepNow()).toBe('Step 3 of 4');
+        } finally {
+            vi.useRealTimers();
         }
     });
 });

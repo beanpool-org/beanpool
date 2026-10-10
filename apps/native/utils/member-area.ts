@@ -53,40 +53,91 @@ export type AreaWriteResult = { ok: true; area: MemberArea | null } | { ok: fals
 
 interface Signer { publicKey: string; privateKey: string }
 
+// Time limits (deciding review of #1766, B2). React Native's fetch has none, and expo-location's reading takes no
+// timeout, so on old Android over a slow network either could wait for good. The reading gets what the web's
+// navigator.geolocation call is given; a request gets the global join's own limit (utils/global-join.ts JOIN_TIMEOUT_MS).
+export const AREA_READING_TIMEOUT_MS = 20_000;
+export const AREA_REQUEST_TIMEOUT_MS = 30_000;
+
+/** `promise`, or null once `ms` have passed without an answer. The work itself goes on; its answer is dropped. */
+export function withTimeLimit<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+        promise,
+        new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ms); }),
+    ]).finally(() => { if (timer) clearTimeout(timer); });
+}
+
+/**
+ * Runs `work` with a signal that stops at `ms` or when `outer` does (Skip, Cancel, leaving the screen), and rejects
+ * the moment it stops, even if the work ignores its signal.
+ */
+async function bounded<T>(work: (signal: AbortSignal) => Promise<T>, ms: number, outer?: AbortSignal): Promise<T> {
+    const stop = new AbortController();
+    const onOuter = () => stop.abort();
+    if (outer?.aborted) stop.abort();
+    else outer?.addEventListener('abort', onOuter);
+    const timer = setTimeout(() => stop.abort(), ms);
+    try {
+        return await new Promise<T>((resolve, reject) => {
+            if (stop.signal.aborted) { reject(new Error('stopped')); return; }
+            stop.signal.addEventListener('abort', () => reject(new Error('stopped')));
+            work(stop.signal).then(resolve, reject);
+        });
+    } finally {
+        clearTimeout(timer);
+        outer?.removeEventListener('abort', onOuter);
+    }
+}
+
 /**
  * Sets (a point, rounded here first) or clears (null) the signer's area on the community at `url`: one signed
- * `POST /api/community/me/area`. Never throws: a failure is a plain sentence for the screen to show.
+ * `POST /api/community/me/area`, given up after AREA_REQUEST_TIMEOUT_MS or when `signal` stops it (nothing is sent
+ * once it has). Never throws: a failure is a plain sentence for the screen to show.
  */
-export async function writeMemberArea(url: string, identity: Signer, point: { lat: number; lng: number } | null): Promise<AreaWriteResult> {
+export async function writeMemberArea(
+    url: string,
+    identity: Signer,
+    point: { lat: number; lng: number } | null,
+    options: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<AreaWriteResult> {
     const body = point ? areaOf(point.lat, point.lng) : { lat: null, lng: null };
     if (point && (!Number.isFinite(body.lat as number) || !Number.isFinite(body.lng as number))) {
         return { ok: false, error: "That place couldn't be read. Try again or type a town." };
     }
     const endpoint = `${url.replace(/\/+$/, '')}/api/community/me/area`;
     try {
-        const bodyString = JSON.stringify(body);
-        const headers = await buildSignedHeaders('POST', endpoint, bodyString, identity.privateKey, identity.publicKey);
-        const res = await fetch(endpoint, { method: 'POST', headers, body: bodyString });
-        if (!res.ok) {
+        return await bounded(async (signal): Promise<AreaWriteResult> => {
+            const bodyString = JSON.stringify(body);
+            const headers = await buildSignedHeaders('POST', endpoint, bodyString, identity.privateKey, identity.publicKey);
+            if (signal.aborted) throw new Error('stopped');
+            const res = await fetch(endpoint, { method: 'POST', headers, body: bodyString, signal });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                return { ok: false, error: typeof data?.error === 'string' ? data.error : `The community said no (${res.status}). Try again later.` };
+            }
             const data = await res.json().catch(() => ({}));
-            return { ok: false, error: typeof data?.error === 'string' ? data.error : `The community said no (${res.status}). Try again later.` };
-        }
-        const data = await res.json().catch(() => ({}));
-        return { ok: true, area: readArea(data?.area) };
+            return { ok: true, area: readArea(data?.area) };
+        }, options.timeoutMs ?? AREA_REQUEST_TIMEOUT_MS, options.signal);
     } catch {
         return { ok: false, error: "Couldn't reach the community. Check your connection and try again." };
     }
 }
 
-/** The signer's stored area from `GET /api/community/me`: an area, null (none set), or undefined (couldn't ask). */
+/**
+ * The signer's stored area from `GET /api/community/me`: an area, null (none set), or undefined (couldn't ask, which
+ * includes no answer within AREA_REQUEST_TIMEOUT_MS).
+ */
 export async function readMemberArea(url: string, identity: Signer): Promise<MemberArea | null | undefined> {
     const endpoint = `${url.replace(/\/+$/, '')}/api/community/me`;
     try {
-        const headers = await buildSignedHeaders('GET', endpoint, '', identity.privateKey, identity.publicKey);
-        const res = await fetch(endpoint, { headers });
-        if (!res.ok) return undefined;
-        const data = await res.json();
-        return readArea(data?.area);
+        return await bounded(async (signal) => {
+            const headers = await buildSignedHeaders('GET', endpoint, '', identity.privateKey, identity.publicKey);
+            const res = await fetch(endpoint, { headers, signal });
+            if (!res.ok) return undefined;
+            const data = await res.json();
+            return readArea(data?.area);
+        }, AREA_REQUEST_TIMEOUT_MS);
     } catch {
         return undefined;
     }

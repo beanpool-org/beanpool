@@ -4,7 +4,7 @@
  * (the signup's "Roughly where are you?", components/AreaPicker.tsx) and Clear. Both write the signed
  * `POST /api/community/me/area`; the current value is the node's (`GET /api/community/me`).
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { router, ErrorBoundary } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,6 +26,9 @@ export default function YourAreaScreen() {
     const [loaded, setLoaded] = useState(false);
     const [clearing, setClearing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Once the member has left, a save that answers late never goes back a second time (it would pop Settings too).
+    const left = useRef(false);
+    useEffect(() => () => { left.current = true; }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -86,6 +89,8 @@ export default function YourAreaScreen() {
                         skipLabel="Cancel"
                         onSkip={() => router.back()}
                         onSaved={async (_a, placeName) => {
+                            if (left.current) return;
+                            left.current = true;
                             if (url) await rememberAreaPlace(url, placeName);
                             router.back();
                         }}

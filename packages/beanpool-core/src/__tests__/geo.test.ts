@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { roundToArea, roundPointToArea } from '../geo.js';
 import * as barrel from '../index.js';
+import { areaWhyLine, describeArea, placelessListingNote, PLACELESS_NO_AREA_NOTE, AREA_STEP_WORDS } from '../member-area-words.js';
 
 // The apps round a position to its 0.1° area with this function BEFORE it leaves the device (signup's area step,
 // Settings → Your area); the node rounds again with the engine's roundToArea, which is this same function re-exported
@@ -40,5 +41,26 @@ describe('roundToArea (0.1°, shared by the apps and the engine)', () => {
         expect(roundPointToArea(-28.64741, 153.61203)).toEqual({ lat: -28.6, lng: 153.6 });
         expect(barrel.roundToArea).toBe(roundToArea);
         expect(barrel.roundPointToArea).toBe(roundPointToArea);
+    });
+});
+
+describe('the area step\'s words, shared by both apps', () => {
+    it('says the node\'s numbers, else the decided 500 within 250 km; no currency', () => {
+        expect(areaWhyLine({ radiusKm: 100, max: 300 })).toBe("The worldwide community shows you what's on offer near you: the nearest 300 listings within 100 km.");
+        expect(areaWhyLine(null)).toContain('the nearest 500 listings within 250 km');
+        expect(JSON.stringify(AREA_STEP_WORDS)).not.toMatch(/Ʀ|Beans/);
+    });
+
+    it('describeArea: a town, else two numbers to 0.1°, else Not set', () => {
+        expect(describeArea(null)).toBe('Not set');
+        expect(describeArea({ lat: -28.6, lng: 153.6 }, 'Byron Bay')).toBe('About 10 km around Byron Bay');
+        expect(describeArea({ lat: 51.5, lng: -0.1 })).toBe('About 10 km around 51.5, -0.1');
+    });
+
+    it('the placeless note: only on a by-area community, only when the area is known to be unset', () => {
+        expect(placelessListingNote(true, null)).toBe(PLACELESS_NO_AREA_NOTE);
+        expect(placelessListingNote(true, undefined)).toBeNull(); // couldn't ask: say nothing rather than something false
+        expect(placelessListingNote(true, { lat: 1, lng: 2 })).toBeNull();
+        expect(placelessListingNote(false, null)).toBeNull();
     });
 });

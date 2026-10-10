@@ -34,6 +34,8 @@ vi.mock('react-native', () => {
         Platform: { OS: 'android' },
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), SafeAreaView: el('div'), TextInput: el('input'),
         ActivityIndicator: () => createElement('span', null, '…'),
+        KeyboardAvoidingView: el('div'), Alert: { alert: vi.fn() },
+        Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {} },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
@@ -51,13 +53,20 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(64), callsign: 'Sally' };
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: IDENTITY, setIdentity: vi.fn() }) }));
+vi.mock('../../app/ThemeContext', async () => {
+    const { lightColors } = await import('../../constants/colors');
+    const ctx = { colors: lightColors, theme: 'light' };
+    return { useTheme: () => ctx, useStyles: (f: (t: unknown) => unknown) => f(ctx) };
+});
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
+vi.mock('expo-crypto', () => ({ randomUUID: () => 'uuid' }));
 vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
 vi.mock('../../components/OnboardingGuide', () => ({ OnboardingGuide: () => createElement('div', { 'data-testid': 'guide' }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span') }));
 const prof = vi.hoisted(() => ({ value: null as any }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => prof.value }));
 vi.mock('../identity', () => ({ updateCallsign: vi.fn(async () => null) }));
-vi.mock('../db', () => ({ getMemberProfile: vi.fn(async () => ({ avatar_url: '/api/avatar/aaa?size=thumb' })), updateMemberProfile: vi.fn(async () => undefined) }));
+vi.mock('../db', () => ({ createPost: vi.fn(async () => undefined), getMemberProfile: vi.fn(async () => ({ avatar_url: '/api/avatar/aaa?size=thumb' })), updateMemberProfile: vi.fn(async () => undefined) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: vi.fn(async () => null) }));
 vi.mock('../callsign-suggest', () => ({ checkCallsignAvailable: vi.fn(async () => 'available'), suggestCallsigns: vi.fn(async () => []) }));
 // The signature is the request-binding suite's business: here it records what was signed, so a test can see that the
@@ -83,6 +92,7 @@ vi.mock('expo-location', () => ({
 
 import ProfileSetupScreen from '../../app/profile-setup';
 import YourAreaScreen from '../../app/your-area';
+import { NewPollModal } from '../../components/NewPollModal';
 import { profileSteps, areaOf, describeArea, AREA_WORDS, writeMemberArea } from '../member-area';
 import { readNodeProfile } from '../node-profile';
 import { roundToArea } from '@beanpool/core';
@@ -277,6 +287,31 @@ describe('Settings → Your area (§3.5)', () => {
         answer = { status: 503, body: {} };
         await render(GLOBAL_FEATURES, YourAreaScreen as () => unknown);
         expect(document.querySelector('[data-testid="your-area-current"]')?.textContent).toBe("Couldn't check right now.");
+    });
+});
+
+describe("a poll's form: the note for a placeless listing (§3.4)", () => {
+    const pollModal = () => createElement(NewPollModal, { visible: true, onClose: () => {} });
+    it('a by-area community and no area: the note says the poll reaches others only through search', async () => {
+        answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: null } };
+        await render(GLOBAL_FEATURES, pollModal);
+        expect(document.querySelector('[data-testid="poll-placeless-note"]')?.textContent).toBe(
+            "📍 You haven't set your area, so other members find this only by searching. Set it in Settings → Your area to show it near you.");
+    });
+
+    it('with an area, on a local community, or when the node cannot be asked: no note', async () => {
+        answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: { lat: -28.6, lng: 153.6 } } };
+        await render(GLOBAL_FEATURES, pollModal);
+        expect(document.querySelector('[data-testid="poll-placeless-note"]')).toBeNull();
+        act(() => root!.unmount()); host!.remove(); root = null;
+        requests = [];
+        await render(LOCAL_FEATURES, pollModal);
+        expect(document.querySelector('[data-testid="poll-placeless-note"]')).toBeNull();
+        expect(requests).toEqual([]); // a local community is never asked
+        act(() => root!.unmount()); host!.remove(); root = null;
+        answer = { status: 503, body: {} };
+        await render(GLOBAL_FEATURES, pollModal);
+        expect(document.querySelector('[data-testid="poll-placeless-note"]')).toBeNull();
     });
 });
 

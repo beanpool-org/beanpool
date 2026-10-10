@@ -10,6 +10,7 @@
  * Skipping writes nothing: no request, no stored flag. A member without an area still gets in and sees the newest
  * listings worldwide (§3.4); nothing here may block the wizard or pretend a save worked.
  */
+import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { roundToArea, AREA_STEP_WORDS, areaWhyLine as coreWhyLine, describeArea } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
@@ -115,4 +116,25 @@ export async function rememberAreaPlace(url: string, placeName: string | null): 
 
 export async function recallAreaPlace(url: string): Promise<string | null> {
     try { return await AsyncStorage.getItem(placeKey(url)); } catch { return null; }
+}
+
+/**
+ * The member's area on the current community while `enabled` (a form is open on a by-area community): an area, null
+ * (known unset), or undefined (not asked yet, or couldn't ask). For the placeless listing's note (core
+ * placelessListingNote), which says nothing on undefined rather than something false.
+ */
+export function useMyArea(enabled: boolean, identity: Signer | null | undefined): MemberArea | null | undefined {
+    const [area, setArea] = useState<MemberArea | null | undefined>(undefined);
+    useEffect(() => {
+        if (!enabled || !identity) { setArea(undefined); return; }
+        let cancelled = false;
+        (async () => {
+            const url = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+            if (!url) return;
+            const a = await readMemberArea(url, identity);
+            if (!cancelled) setArea(a);
+        })();
+        return () => { cancelled = true; };
+    }, [enabled, identity?.publicKey]);
+    return area;
 }

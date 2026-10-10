@@ -28,3 +28,16 @@ export function describeArea(area: { lat: number; lng: number } | null | undefin
     const where = placeName?.trim() || `${area.lat.toFixed(1)}, ${area.lng.toFixed(1)}`;
     return `About 10 km around ${where}`;
 }
+
+/**
+ * A listing with no place (a poll) on a community that syncs by area takes its author's area as its place (design §3.4,
+ * Q4). An author with no area: the listing is still accepted, but it reaches only their own phone and the search, and
+ * the form says so with this line.
+ */
+export const PLACELESS_NO_AREA_NOTE =
+    "You haven't set your area, so other members find this only by searching. Set it in Settings → Your area to show it near you.";
+
+/** The note for a placeless listing's form: only on a by-area community, and only when the author's area is known to be unset. */
+export function placelessListingNote(byArea: boolean, area: { lat: number; lng: number } | null | undefined): string | null {
+    return byArea && area === null ? PLACELESS_NO_AREA_NOTE : null;
+}

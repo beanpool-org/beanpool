@@ -195,3 +195,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** Warning threshold detection (e.g. 70% CPU), loading refresh state, and single-point history rendering in `AnalyticsModule` (`apps/manager/src/components/modules/AnalyticsModule.tsx`) were untested.
 **Learning:** Testing `AnalyticsModule` edge cases required asserting warning badges when thresholds are approached without critical breach, checking disabled state during fleet diagnostics refresh, and verifying fallback rendering for single-point telemetry history.
 **Action:** Continue expanding test coverage for untested UI component states in `apps/manager/src/components/modules/`.
+
+## 2026-10-10 - [manager tests] signOutEverywhere, shutdown, disk health and decision actions unit tests
+**Gap:** `signOutEverywhere`, `emergencySuspendMember`, `haltDecision`, `liftMemberSuspension`, `acknowledgeShutdownStatus`, `fetchDiskHealth`, `fetchStorageCleanPreview`, `cleanStorageAndCompressLogs`, and `fetchAlertsSummary` in `apps/manager/src/lib/node-client.ts` lacked direct unit tests.
+**Learning:** Testing `signOutEverywhere` required handling the discriminated union type `SignOutEverywhereResult` where `ok: false` is accompanied by a `message` property.
+**Action:** Continue identifying any remaining untested helper utilities in `apps/manager/src/lib/`.

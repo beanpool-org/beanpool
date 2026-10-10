@@ -142,6 +142,11 @@ export interface ProfileSwitches {
      *  member's standing (a suspension, a vouch, holiday, a re-key) is not an edit of their card, and goes to every
      *  member's socket as before. */
     announceProfiles: boolean;
+    /** A member's phone may ask for its own set of listings (`nearby=1` on the posts sync read, routes/marketplace.ts):
+     *  the nearest NEARBY_LISTINGS_MAX within NEARBY_LISTINGS_RADIUS_KM of the member's stored area, their own and the
+     *  ones they are tied to, instead of every listing on the node (DESIGN-global-sync-by-area §2). A new listing with no
+     *  place takes its author's area. Off (a local community): `nearby` is ignored and every listing goes as before. */
+    nearbyListings: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -172,6 +177,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         decisions: true,
         announceJoins: true,
         announceProfiles: true,
+        nearbyListings: false,
     },
     global: {
         openJoin: true,
@@ -204,6 +210,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         announceJoins: false,
         // Nor each stranger's new photo: the people they talk with hear it, and everyone else reads it at their next sync.
         announceProfiles: false,
+        // The lobby holds the world's listings; a phone keeps the nearest 500 within 250 km (Marty, 2026-10-09).
+        nearbyListings: true,
     },
 };
 
@@ -251,6 +259,10 @@ export interface NodeFeatures {
     /** The open door takes a join with 12 words alone, beside the sign-in (`openJoin` on, `ssoRequiredForJoin` off). An
      *  app that finds no `wordsDoor` (a server from before it) offers the sign-in only. */
     wordsDoor: boolean;
+    /** Present only where `nearbyListings` is on: a phone's posts sync may say `nearby=1` and gets its member's set,
+     *  the nearest `max` listings within `radiusKm` of their area (NEARBY_LISTINGS_RADIUS_KM, NEARBY_LISTINGS_MAX).
+     *  Absent: the node syncs every listing, as before. */
+    nearbyListings?: { radiusKm: number; max: number };
     /** Present, and true, only while the node is in a private preview (config/private-preview.ts): only its members
      *  and the people its owner or an admin invites get in, and a visitor sees nothing. The apps show the preview's
      *  message instead of the doors. Absent otherwise, so a node not in a preview answers exactly as before. */
@@ -364,6 +376,33 @@ function lockKnocksToInvites(s: ProfileSwitches): ProfileSwitches {
     return s;
 }
 
+/** The radius and the cap of a member's set (`nearbyListings`): 250 km and 500 (Marty, 2026-10-09). */
+export const NEARBY_LISTINGS_RADIUS_KM_DEFAULT = 250;
+export const NEARBY_LISTINGS_MAX_DEFAULT = 500;
+const NEARBY_LISTINGS_RADIUS_KM_MAX = 2_000;
+const NEARBY_LISTINGS_MAX_MAX = 2_000;
+
+/** A whole number from the env within [1, ceiling], or the default when unset or anything else. */
+function envWhole(name: string, fallback: number, ceiling: number): number {
+    const raw = process.env[name];
+    if (raw === undefined || raw.trim() === '') return fallback;
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 1 && n <= ceiling ? n : fallback;
+}
+
+let nearbyLimits: { radiusKm: number; max: number } | null = null;
+/**
+ * The radius and the cap of a member's set: NEARBY_LISTINGS_RADIUS_KM and NEARBY_LISTINGS_MAX on a self-hosted node
+ * (design §9 Q6), else 250 km and 500. Read once, at the first ask (boot), so the node and `features` agree for the
+ * life of the process; a value out of range is the default, never a set of every listing.
+ */
+export function nearbyListingsLimits(): { radiusKm: number; max: number } {
+    return nearbyLimits ??= {
+        radiusKm: envWhole('NEARBY_LISTINGS_RADIUS_KM', NEARBY_LISTINGS_RADIUS_KM_DEFAULT, NEARBY_LISTINGS_RADIUS_KM_MAX),
+        max: envWhole('NEARBY_LISTINGS_MAX', NEARBY_LISTINGS_MAX_DEFAULT, NEARBY_LISTINGS_MAX_MAX),
+    };
+}
+
 export function getNodeFeatures(): NodeFeatures {
     const s = getProfileSwitches();
     const features: NodeFeatures = {
@@ -383,6 +422,7 @@ export function getNodeFeatures(): NodeFeatures {
         decisions: s.decisions,
         invites: s.invites,
         wordsDoor: s.openJoin && !s.ssoRequiredForJoin,
+        ...(s.nearbyListings ? { nearbyListings: { ...nearbyListingsLimits() } } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite.
     if (isPrivatePreview()) return { ...features, openJoin: false, wordsDoor: false, privatePreview: true };

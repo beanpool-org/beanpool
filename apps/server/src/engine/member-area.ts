@@ -7,16 +7,23 @@
  *   routes/community.ts). The actor comes from the signature, never the body.
  * - Rounded to 0.1° of latitude and of longitude (about 11 km north-south; east-west it narrows towards the poles, 5.5 km
  *   at 60°) BEFORE it is written, so a precise position never reaches the disk, the write-ahead log included.
- * - Read back by its member alone (GET /api/community/me). Anyone else gets a distance in whole km from the People list,
- *   and only as a signed member. Distances from many points can at best find the 0.1° cell, never anything finer: that
- *   is why the rounding happens before the write and not on the way out.
+ * - Read back by its member alone (GET /api/community/me), and used for their own set of listings (routes/marketplace.ts,
+ *   `nearby=1`). Anyone else gets a distance in whole km from the People list, and only as a signed member. Distances
+ *   from many points can at best find the 0.1° cell, never anything finer: that is why the rounding happens before the
+ *   write and not on the way out.
+ * - Published, on a node that syncs by area (the global profile's `nearbyListings`), as the place of each listing its
+ *   member posts with no place, or edits to have none (engine/posts.ts placelessListingArea; DESIGN-global-sync-by-area
+ *   §3.4, Q4: Marty, 2026-10-09). Such a listing's lat/lng IS the area, exactly, to every reader of that listing, an
+ *   unsigned visitor included. The posting form is to say so (S4); until it does, a member posting with no pin there
+ *   publishes their area without being told.
  * - Kept in members.area_lat / area_lng / area_updated_at, never in members.lat / lng: those are an enterprise's public,
  *   precise, signer-stamped map location, read by the map and the treasury routes.
  *
- * Every reader of the three columns: this module (the member's own read, the People list's distances), the replication
- * export and import (beanpool-engine sync.ts, engine/sync.ts: a standby and so a take-over, the same trust as the
- * database file), and file and sealed backups (the database itself). Nothing else reads them: not the member directory,
- * profiles, federation, the public directory, the map or the activity feed.
+ * Every reader of the three columns: this module (the member's own read, the People list's distances), engine/posts.ts
+ * (a placeless listing's place, above), the replication export and import (beanpool-engine sync.ts, engine/sync.ts: a
+ * standby and so a take-over, the same trust as the database file), and file and sealed backups (the database itself).
+ * Nothing else reads them: not the member directory, profiles, federation, the public directory, the map or the
+ * activity feed.
  */
 import { db } from '../db/db.js';
 import { haversineKm, roundToArea } from '@beanpool/engine';

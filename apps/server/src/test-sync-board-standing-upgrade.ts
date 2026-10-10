@@ -119,7 +119,8 @@ async function main() {
     {
         const d = new Database(path.join(dir, 'state.db'));
         d.pragma('foreign_keys = OFF');
-        d.exec(`DROP TRIGGER IF EXISTS members_touch_board_standing; DROP INDEX IF EXISTS idx_members_board_standing_changed_at;`);
+        d.exec(`DROP TRIGGER IF EXISTS members_touch_board_standing; DROP INDEX IF EXISTS idx_members_board_standing_changed_at;
+                DROP INDEX IF EXISTS idx_members_standing_by_key;`);
         try { d.exec('ALTER TABLE members DROP COLUMN board_standing_changed_at'); } catch { /* a tree from before it: never had it */ }
         d.prepare("DELETE FROM node_config WHERE key = 'migration_board_standing_v1'").run();
         const hasColumn = (d.prepare('PRAGMA table_info(members)').all() as Array<{ name: string }>).some(c => c.name === 'board_standing_changed_at');

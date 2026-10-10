@@ -18,6 +18,10 @@
  *   3. the reads circlesMayRead allows search circles, and every other read takes exactly one pass
  *   4. the default page's circle searched idx_posts_lat_lng
  *   5. the first pages are the pages a brute-force haversine over every post gives, on both paths
+ *   7. a member's set at depth 500 within 250 km (engine getNearbySet, DESIGN-global-sync-by-area §2.6), from the
+ *      biggest town, a small town and nothing within 700 km, at 20k and 100k posts: within 6× the design's lean set
+ *      pass, and, wherever any listing is within 250 km, within 0.6× the read it replaces (the engine's nearest 500
+ *      within 250 km); each measured interleaved with the set in the same run, the absolute ms printed, never asserted
  *   6. a visitor's read on the global node (G9a: `coarse`, every place read as its 0.1° area inside the query) is no
  *      slower than the member's read of the same shape beyond a timer's noise, takes the same path (circles, or one
  *      pass), and its pages are the brute-force pages by distance from each post's area
@@ -30,7 +34,7 @@
 delete process.env.NODE_PROFILE;
 
 import { initStateEngine, seedGenesisMember, createGroup } from './state-engine.js';
-import { boundingBox, getPostsRankedBy, getPosts as getPostsEngine, type PostFilter, type RowsNear } from '@beanpool/engine';
+import { boundingBox, getPostsRankedBy, getPosts as getPostsEngine, getNearbySet, ONE_PASS_MAX_MEASURED, type PostFilter, type RowsNear } from '@beanpool/engine';
 import { db } from './db/db.js';
 
 let run = 0, passed = 0;
@@ -266,6 +270,66 @@ function measure(size: string): Row[] {
     });
 }
 
+/**
+ * A member's set (getNearbySet) from three places: the nearest 500 listings within 250 km, as the global node works it
+ * out for each `nearby=1` sync and each of its 304s. Its bounds are relative, to two reads timed interleaved with it in
+ * the same run (absolute ms bounds failed on CI's shared runners and on a loaded Mac, 5 of 6 and 12 of 18 rows, the
+ * deciding review of b97677d5):
+ * - 6× the design's lean set pass (leanSet, DESIGN-global-sync-by-area §2.6): measured 1.5–4.0×, the most at the small
+ *   town, where the set's own, tied, standing and board statements weigh most. The regression the row was added for (a
+ *   members join per listing and a sort inside the near pass) was 22×.
+ * - 0.6× the read the set replaces, an old phone's nearest 500 within 250 km with every row (fullNear500), wherever any
+ *   listing is within 250 km: measured 0.12–0.33×. With nothing near, both are a few fixed statements, so only the
+ *   first bound holds there.
+ * The load-proof guard against the regression's cause is test-sync-nearby's plan check: every statement of a set reads
+ * an index, never a table of people.
+ */
+const SET_LEAN_TIMES = 6, SET_FULL_TIMES = 0.6;
+/** The design's lean set pass (geosync-measure/measure.mts setIds): the nearest ids within the radius, nothing else. */
+function leanSet(at: { lat: number; lng: number }, radiusKm: number, max: number): unknown[] {
+    const box = boundingBox(at.lat, at.lng, radiusKm);
+    return db.prepare(`SELECT p.id, haversine_km(?, ?, p.lat, p.lng) AS d FROM posts p
+        WHERE p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})
+          AND haversine_km(?, ?, p.lat, p.lng) <= ? AND p.status = 'active' AND p.active = 1 AND (p.audience_scope IS NULL OR p.audience_scope = 'public')
+          AND p.hidden_by_reports_at IS NULL
+        ORDER BY d ASC, p.updated_at DESC, p.id ASC LIMIT ?`).all(at.lat, at.lng, box.latMin, box.latMax, ...box.lngRanges.flat(), at.lat, at.lng, radiusKm, max);
+}
+/** The read the set replaces (measure.mts): the engine's nearest 500 within 250 km, every row as the route serves it. */
+const fullNear500 = (at: { lat: number; lng: number }) => getPostsEngine(db, {
+    limit: 500, offset: 0, excludeEvents: true, viewerPubkey: VIEWER(), types: ['offer', 'need'],
+    near: { lat: at.lat, lng: at.lng, radiusKm: 250 }, sortByDistance: true, measureAtMost: ONE_PASS_MAX_MEASURED,
+});
+interface SetRow { size: string; place: string; within: number; ms: number; lean: number; full: number; count: number }
+let smallTown: { lat: number; lng: number } | null = null;
+function measureSet(size: '20k' | '100k'): SetRow[] {
+    const posts = db.prepare('SELECT lat, lng FROM posts WHERE lat IS NOT NULL').all() as Array<{ lat: number; lng: number }>;
+    const within = (p: { lat: number; lng: number }) => posts.filter(x => haversine(p.lat, p.lng, x.lat, x.lng) <= 250).length;
+    // The small town: the one with about a hundred listings within 250 km at 20k, as the design's was (99).
+    smallTown ??= towns.slice(1).map(t => ({ t, n: within(t) })).sort((a, b) => Math.abs(a.n - 99) - Math.abs(b.n - 99))[0].t;
+    const places: Array<[string, { lat: number; lng: number }]> = [['the biggest town', HUB], ['a small town', smallTown], ['nothing within 700 km', NOTHING_NEAR]];
+    return places.map(([place, at]) => {
+        const q = { area: { lat: at.lat, lng: at.lng }, radiusKm: 250, max: 500, newestWithoutArea: 100, types: ['offer', 'need', 'poll', 'event'], measureAtMost: ONE_PASS_MAX_MEASURED };
+        let count = 0;
+        const reads: Array<[number[], () => unknown]> = [
+            [[], () => { count = getNearbySet(db, members[0], q).near.length; }],
+            [[], () => leanSet(at, 250, 500)],
+            [[], () => fullNear500(at)],
+        ];
+        for (let w = 0; w < 3; w++) for (const [, read] of reads) read();
+        // 15 rounds, each in a turned order, so each read goes first, second and third equally often.
+        for (let r = 0; r < 15; r++) {
+            for (let k = 0; k < reads.length; k++) {
+                const [into, read] = reads[(r + k) % reads.length];
+                const t0 = performance.now();
+                read();
+                into.push(performance.now() - t0);
+            }
+        }
+        const [set, lean, full] = reads.map(([xs]) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)]);
+        return { size, place, within: within(at), ms: set, lean, full, count };
+    });
+}
+
 async function main(): Promise<void> {
     console.log('\n=== Distance search (G4) at scale, against 743b5d57 ===\n');
     initStateEngine();
@@ -276,6 +340,7 @@ async function main(): Promise<void> {
     seedPostsTo(20_000);
     console.log(`seeded 20,000 posts in ${Math.round(performance.now() - t)} ms`);
     rows.push(...measure('20k / 0'));
+    const setRows = measureSet('20k');
     seedTransactions(200_000);
     rows.push(...measure('20k / 200k'));
     db.prepare("DELETE FROM transactions WHERE id LIKE 'perf-tx-%'").run();
@@ -283,6 +348,7 @@ async function main(): Promise<void> {
     seedPostsTo(100_000);
     console.log(`seeded to 100,000 posts in ${Math.round(performance.now() - t)} ms`);
     rows.push(...measure('100k / 0'));
+    setRows.push(...measureSet('100k'));
     seedTransactions(200_000);
     rows.push(...measure('100k / 200k'));
 
@@ -388,6 +454,20 @@ async function main(): Promise<void> {
         guestResults.push(`${name}: ${ref.length} posts${wrong.length ? `, wrong at ${wrong.join(', ')}` : ''}`);
     }
     assert(guestSame, `a visitor's pages at offsets 0, 50, 1,000 and near the end are the brute-force pages by distance from each post's area, on both paths (${guestResults.join('; ')})`);
+
+    console.log('\nA member\'s set at depth 500 within 250 km (getNearbySet), against the lean pass and the read it replaces, medians of 15 interleaved, ms:\n');
+    console.log('| posts | place | within 250 km | nearest in the set | set ms | lean ms | set/lean | nearest-500 ms | set/nearest-500 |');
+    console.log('|---|---|---|---|---|---|---|---|---|');
+    for (const r of setRows) console.log(`| ${r.size} | ${r.place} | ${r.within} | ${r.count} | ${r.ms.toFixed(2)} | ${r.lean.toFixed(2)} | ${(r.ms / r.lean).toFixed(2)} | ${r.full.toFixed(2)} | ${(r.ms / r.full).toFixed(2)} |`);
+    for (const r of setRows) {
+        assert(r.count === Math.min(500, r.within), `${r.size}, ${r.place}: the set holds the nearest ${r.count} of the ${r.within} listings within 250 km`);
+        assert(r.ms <= SET_LEAN_TIMES * r.lean,
+            `${r.size}, ${r.place}: the set in ${(r.ms / r.lean).toFixed(2)}× the design's lean pass, within ${SET_LEAN_TIMES}× (${r.ms.toFixed(2)} / ${r.lean.toFixed(2)} ms)`);
+        if (r.within > 0) {
+            assert(r.ms <= SET_FULL_TIMES * r.full,
+                `${r.size}, ${r.place}: the set in ${(r.ms / r.full).toFixed(2)}× the read it replaces (the nearest 500 within 250 km), within ${SET_FULL_TIMES}× (${r.ms.toFixed(2)} / ${r.full.toFixed(2)} ms)`);
+        }
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

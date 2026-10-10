@@ -123,6 +123,14 @@ CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
 -- The Market delta's author half (engine posts.ts getPosts): the authors whose standing changed since the cursor, from
 -- the index alone.
 CREATE INDEX IF NOT EXISTS idx_members_board_standing_changed_at ON members(board_standing_changed_at, public_key);
+-- A member's set on a node that syncs by area (engine posts.ts getNearbySet), which reads no author's row. The authors
+-- the board leaves off for a paused or finished enterprise (ENTERPRISE_ON_BOARD_BY_KEY_SQL: the same expression, so the
+-- planner takes this index), and the standing of the authors whose standing ever moved, by key (the set's ETag), each
+-- from the few rows they hold. Joined per listing instead, the busy town's set took 18 ms at 100k posts (2026-10-10).
+CREATE INDEX IF NOT EXISTS idx_members_off_board ON members(public_key)
+    WHERE NOT ((paused IS NULL OR paused = 0) AND (status IS NULL OR status NOT IN ('winding_up', 'completed')));
+CREATE INDEX IF NOT EXISTS idx_members_standing_by_key ON members(public_key, board_standing_changed_at)
+    WHERE board_standing_changed_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
 -- The member directory's delta (GET /api/members?updatedAfter=, engine members.ts getMemberDirectoryRows): who joined, or
 -- changed their profile, since a phone's cursor, from these alone. Without them every phone's sync read every member's
@@ -725,6 +733,11 @@ CREATE TABLE IF NOT EXISTS member_preferences (
     pref_value TEXT NOT NULL DEFAULT 'true',
     PRIMARY KEY (public_key, pref_key)
 );
+-- The authors on holiday (engine posts.ts ON_HOLIDAY_SQL, the same terms, so the planner takes this index), asked by every
+-- board read and every member's set on a node that syncs by area: from the few rows that hold one, not every preference
+-- of every member. At 20,000 members with three preferences each, the scan was 1.5 ms of each read (2026-10-10).
+CREATE INDEX IF NOT EXISTS idx_member_preferences_on_holiday ON member_preferences(public_key)
+    WHERE pref_key = 'holiday_mode' AND pref_value = 'true';
 
 -- 13. Full-Text Search Index (FTS5)
 CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(
@@ -1082,8 +1095,10 @@ CREATE INDEX IF NOT EXISTS idx_moderation_notices_updated_at ON moderation_notic
 -- web-blocklist-where, 2026-09-27), so the web app has it back on any browser after signing in and leaves nothing about it
 -- on a shared computer.
 --
--- Only `owner_pubkey` reads or changes it (routes/blocks.ts, the signer's own); nothing else here reads it, sends it or
--- counts it for anyone: not another member, a visitor, the activity feed or a broadcast. The community's operator can see
+-- Only `owner_pubkey` reads or changes it (routes/blocks.ts, the signer's own), and their own rows are read for them
+-- alone where their set of listings is worked out (engine getNearbySet, on a node that syncs by area: the listings of an
+-- author they blocked take none of its slots); nothing else here reads it, sends it or counts it for anyone: not another
+-- member, a visitor, the activity feed or a broadcast. The community's operator can see
 -- it, as they see reports. `blocked_pubkey` is any key in the one spelling, a member's or not, never the owner's own. At
 -- most 500 per member (MEMBER_BLOCKS_MAX). Replicated to a standby (SyncPayload.memberBlocks, watermarked on
 -- `updated_at`), with a `member_blocks` tombstone for each removal, stamped no earlier than the rows it deletes: keyed

@@ -199,6 +199,7 @@ export const SUITES = [
     'test-takeover-two-standbys',
     'test-sync-reads-carry-epoch',
     'test-posts-sync-paged',
+    'test-sync-nearby',
     'test-posts-sync-paged-cost',
     'test-takeover-keeps-listing-times',
     'test-profile-takeover',

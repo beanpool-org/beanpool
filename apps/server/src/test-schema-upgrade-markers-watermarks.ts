@@ -171,7 +171,7 @@ runSchemaSuite('the tables, columns and markers added since, and the watermarks'
         assert(fresh.cols.includes('board_standing_changed_at') && fresh.idx.includes('idx_members_board_standing_changed_at') && hasTrigger(d),
             'a fresh install has the column, its index and its trigger');
         d.pragma('foreign_keys = OFF');
-        d.exec(`DROP TRIGGER members_touch_board_standing; DROP INDEX idx_members_board_standing_changed_at;
+        d.exec(`DROP TRIGGER members_touch_board_standing; DROP INDEX idx_members_board_standing_changed_at; DROP INDEX idx_members_standing_by_key;
                 ALTER TABLE members DROP COLUMN board_standing_changed_at;
                 DELETE FROM node_config WHERE key = 'migration_board_standing_v1';`);
         const OLD = '2025-01-01T00:00:00.000Z';

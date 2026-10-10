@@ -16,6 +16,8 @@ import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './pos
 import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
+import { readMemberArea } from './member-area.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
     getMember,
@@ -301,6 +303,20 @@ function normaliseReach(rawReach: unknown, rawPeers: unknown): { reach: PostReac
     return { reach: 'local', reachPeers: null };
 }
 
+/**
+ * Where a listing with no place stands on a node that syncs by area (DESIGN-global-sync-by-area §3.4, Q4): at its
+ * author's area, which was rounded to 0.1° when it was stored, so visibly rough. Placeless, it would be in nobody's set
+ * but its author's. A poll too: poll isolation drops any pin it is sent, and the area is how the polls a member sees are
+ * the ones made near them. An event carries its own pin. Null where the node doesn't sync by area or the author has no
+ * area: the listing stays placeless. createPost and updatePost both place by it, so an edit that takes the pin away
+ * puts the listing back at the area.
+ */
+function placelessListingArea(authorPublicKey: string): { lat: number; lng: number } | null {
+    if (!getProfileSwitches().nearbyListings) return null;
+    const area = readMemberArea(authorPublicKey);
+    return area ? { lat: area.lat, lng: area.lng } : null;
+}
+
 export function createPost(
     broadcast: BroadcastFn,
     type: 'offer' | 'need' | 'poll' | 'event',
@@ -491,6 +507,8 @@ export function createPost(
     } else {
         validatePostPhotos(photos);
     }
+
+    if (type !== 'event' && (lat == null || lng == null)) ({ lat, lng } = placelessListingArea(authorPublicKey) ?? { lat, lng });
 
     if (type === 'need' && !hasListedOffer(db, authorPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
     options?.beforeWrite?.();
@@ -887,6 +905,13 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             return p;
         });
         validatePostPhotos(updates.photos);
+    }
+
+    // An edit that takes the pin away, on a node that syncs by area, puts the listing at its author's area, as a new one
+    // with no place is (placelessListingArea). An event can't lose its pin (assertEventPin); a poll's place is never edited.
+    if (existingPost.type !== 'event' && (updates.lat === null || updates.lng === null)) {
+        const area = placelessListingArea(existingPost.authorPublicKey);
+        if (area) { updates.lat = area.lat; updates.lng = area.lng; }
     }
 
     const fields: string[] = [];

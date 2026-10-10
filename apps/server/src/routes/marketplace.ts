@@ -20,7 +20,7 @@ import {
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { photoKeyMatches, photoKeyRequiredFor, photoHealFor, notePhotoHealServed, notePhotoHealAnsweredAgain, restartPhotoHealFor, PHOTO_HEAL_PAGE_ROWS, PHOTO_HEAL_MIN_PAGE_ROWS } from '../engine/photo-keys.js';
+import { photoKeyMatches, photoKeyRequiredFor, photoHealFor, photoUrlsChangedAfter, PHOTO_KEYS_SINCE_ROW, notePhotoHealServed, notePhotoHealAnsweredAgain, restartPhotoHealFor, PHOTO_HEAL_PAGE_ROWS, PHOTO_HEAL_MIN_PAGE_ROWS } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
 import { openThumbnailOf } from '../storage/photo-thumbnails.js';
@@ -39,11 +39,12 @@ import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CONVENOR_PAUSED_CODE } from '../engine/posts.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
-import { getProfileSwitches } from '../config/node-profile.js';
+import { getProfileSwitches, nearbyListingsLimits } from '../config/node-profile.js';
+import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { withheldAttachmentFor } from '../engine/withheld-lines.js';
-import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 
@@ -287,6 +288,24 @@ const KNOWN_POST_TYPES = ['offer', 'need', 'poll', 'event'] as const;
  */
 const POSTS_NEXT_HEADER = 'X-Posts-Next';
 
+/** The most listings one `ids=` read names (DESIGN-global-sync-by-area §2.3). */
+const IDS_MAX = 100;
+/** A member with no area: their set is the newest this many listings on the node, wherever they are (design §9 Q3). */
+const NEARBY_NEWEST_WITHOUT_AREA = 100;
+
+/** When this node's listing-photo URLs last changed shape (engine/photo-keys.ts), or '' when they never have. */
+function photoKeysSince(): string {
+    try {
+        const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(PHOTO_KEYS_SINCE_ROW) as { value: string } | undefined;
+        return row?.value ?? '';
+    } catch {
+        return '';
+    }
+}
+
+/** A member's set's hash, in each answer beside its ids (DESIGN-global-sync-by-area §2.3). */
+const nearbySetHash = (ids: string[]) => crypto.createHash('sha256').update(ids.join(',')).digest('hex').slice(0, 24);
+
 router.get('/api/marketplace/posts', async (ctx) => {
     // Distance search (G4, design §3.2), on every profile: `lat`, `lng`, `radiusKm`, `sort=distance|recent`. Checked
     // first, so garbage is a 400 and never a 304. Without these parameters nothing below changes.
@@ -314,10 +333,37 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const audienceScope = ctx.query.audienceScope as string | undefined;
     const targetGroupId = ctx.query.targetGroupId as string | undefined;
     const assignedTo = ctx.query.assignedTo as string | undefined;
+    // A few listings by id at once (`ids=a,b,c`, at most IDS_MAX), each read as `id=` reads one: a phone fetches the
+    // listings of its set it doesn't hold (DESIGN-global-sync-by-area §2.3). Garbage is a 400, never a quiet empty list.
+    let ids: string[] | undefined;
+    if (ctx.query.ids !== undefined) {
+        const raw = typeof ctx.query.ids === 'string' ? ctx.query.ids.split(',').map(x => x.trim()).filter(Boolean) : [];
+        ids = [...new Set(raw)];
+        if (ids.length === 0 || ids.length > IDS_MAX || ids.some(x => x.length > 200) || id) {
+            ctx.status = 400;
+            ctx.body = { error: `ids is 1 to ${IDS_MAX} listing ids, comma separated, without id` };
+            return;
+        }
+    }
     // A phone's sync paged by key (POSTS_NEXT_HEADER): only a sync read of the listings, not one by id or from a point.
     const pageAfter = typeof ctx.query.pageAfter === 'string' && ctx.query.pageAfter !== '' ? ctx.query.pageAfter : null;
-    const syncPage: SyncPage | undefined = (ctx.query.paged === '1' || pageAfter !== null) && (sync || !!updatedAfter) && !id && !point
+    const syncPage: SyncPage | undefined = (ctx.query.paged === '1' || pageAfter !== null) && (sync || !!updatedAfter) && !id && !ids && !point
         ? { after: pageAfter, next: null } : undefined;
+    // A member's own set (`nearby=1`, DESIGN-global-sync-by-area §2.2-2.3) on a node whose `nearbyListings` is on: the
+    // nearest listings within the node's radius of their stored area, their own and the ones they are tied to, with the
+    // set's ids in every answer. Only for a member's sync read: anyone else's read, and every read on a node with the
+    // switch off, is answered as without it, byte for byte. A whole read must page (paged=1, X-Posts-Next), as a phone
+    // (S3) does: without it, it answers only the first `limit` rows, newest first, and no key to the next page, and the
+    // rest of the set comes only by `ids=`. Its types are `types=` alone: a singular `type=` would keep the rows to it
+    // and not the set, which would name listings no page of the read answers.
+    const nearby = ctx.query.nearby === '1' && switches.nearbyListings && (sync || !!updatedAfter)
+        && !!ctx.state.actor && viewerTier(ctx) === 'member';
+    if (nearby && (id || ids || point || author || q || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
+        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true')) {
+        ctx.status = 400;
+        ctx.body = { error: 'nearby=1 reads your own set of listings: it takes types, limit, updatedAfter and the paging parameters only' };
+        return;
+    }
     if (pageAfter !== null && syncPage && !parsePageKey(pageAfter)) {
         ctx.status = 400;
         ctx.body = { error: 'pageAfter is not a page key this node handed out' };
@@ -328,13 +374,15 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // since would never be sent again with the URL that now opens its photo. So is each later sync of a key whose heal
     // didn't fit one answer (photoHealFor). Not a read with a point: no phone's sync has one.
     // A later page of a paged sync is the rest of the delta only: the heal's page went with its first.
-    const heal = point || syncPage?.after ? null : photoHealFor(updatedAfter, ctx.state.actor as string | undefined);
+    // A member's set (`nearby`) is never healed by page: a delta from before the change is answered as the whole set
+    // instead (below), at most a few hundred listings.
+    const heal = nearby || point || ids || syncPage?.after ? null : photoHealFor(updatedAfter, ctx.state.actor as string | undefined);
     // A whole sync read right after a heal page to the key (a take-over's, after the pull the phone threw away) starts
     // the key's heal again from the first page: the phone keeps what the pull doesn't carry, and the page the key's row
     // counts went to the pull it threw away (review of fe4c27ce, finding 1). A later one (a new install, an emptied
     // cache) doesn't: it holds no old URL (restartPhotoHealFor; review of 1bc39eb0, finding 2). Here, not in photoHealFor: the
     // phone's read of one listing by id (refreshCachedPost, `?id=…&sync=true`) has no cursor either.
-    if (!point && sync && !updatedAfter && !pageAfter && !id && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo) {
+    if (!nearby && !point && sync && !updatedAfter && !pageAfter && !id && !ids && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo) {
         restartPhotoHealFor(ctx.state.actor as string | undefined);
     }
 
@@ -380,9 +428,45 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // confirmed, and a member is never answered 304 for one.
     // A delta answered whole (heal) is a body of its own, so its ETag is too (`:whole`, or `:heal:` and where its page
     // starts): a copy of the delta held for the same URL is never confirmed with a 304 in its place.
+    // Events are OPT-IN on this route (docs/events-on-the-map.md §2.6). Every app already in the store pulls
+    // the whole feed with no type filter and renders anything that is not a poll as an offer, so it must never
+    // receive an event: a client that knows events says `types=offer,need,poll,event` or `type=event`. A by-id
+    // fetch is not guarded — only a screen that knows events can hold an event's id.
+    // The list is intersected with the known post types before it reaches SQL: each entry is a bound
+    // variable, so an unchecked list of tens of thousands would exceed SQLite's limit and 500 the route.
+    const types = typeof ctx.query.types === 'string'
+        ? KNOWN_POST_TYPES.filter(t => (ctx.query.types as string).split(',').some(q => q.trim() === t))
+        : undefined;
+    const wantsEvents = type === 'event' || !!types?.includes('event');
+    const excludeEvents = !id && !ids && !wantsEvents;
+    // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
+    // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else. The visitors' view is read
+    // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
+    const reader = guestView ? undefined : viewerPubkey;
+    const includeHidden = !!reader && !!nodeRoleOf(reader);
+
+    // A member's set, worked out before the ETag, which describes it: any listing of it changing, coming in or leaving
+    // changes the tag, and nothing outside it does, so a change 300 km away no longer ends this member's 304. A delta
+    // from before this node's listing-photo URLs last changed is answered as the whole set (`whole`), a body of its own.
+    let nearbySet: NearbySet | undefined;
+    let nearbyWhole = false;
+    let nearbyEtag = '';
+    if (nearby && (!types || types.length > 0)) {
+        const area = readMemberArea(viewerPubkey!);
+        const { radiusKm: setKm, max } = nearbyListingsLimits();
+        nearbySet = getNearbySet(db, viewerPubkey!, {
+            area: area ? { lat: area.lat, lng: area.lng } : null, radiusKm: setKm, max, newestWithoutArea: NEARBY_NEWEST_WITHOUT_AREA,
+            types, excludeEvents, includeHidden, measureAtMost: ONE_PASS_MAX_MEASURED,
+        });
+        nearbyWhole = !!updatedAfter && photoUrlsChangedAfter(updatedAfter);
+        const described = [ctx.querystring || '', viewerPubkey, area ? `${area.lat},${area.lng}` : '-', nearbySet.ids.join(','),
+            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : ''].join('\n');
+        nearbyEtag = `W/"near-${crypto.createHash('sha256').update(described).digest('hex').slice(0, 24)}"`;
+    }
+
     const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
-    const etag = `W/"posts-${getPostsVersion()}-${queryHash}"`;
+    const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
     ctx.set('ETag', etag);
     // A node with two views says which this is; the phone keeps a visitor's view only where it is one
@@ -402,7 +486,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // fetchEventDetail), and getPosts notes it for that member's deltas (the engine's noteEventReadOutsideSync). So it is
     // never answered 304: the phone's platform HTTP cache sends the last ETag of that URL by itself, and a 304 would skip
     // the note while the app writes the stored body. It is one row. Every other read keeps its 304.
-    const notesTheRead = !!viewerPubkey && !guestView && !!id && !sync && !updatedAfter;
+    const notesTheRead = !!viewerPubkey && !guestView && (!!id || !!ids) && !sync && !updatedAfter;
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch && !notesTheRead) {
         const cleanInm = ifNoneMatch.replace(/^W\//, '');
@@ -416,38 +500,29 @@ router.get('/api/marketplace/posts', async (ctx) => {
         }
     }
 
-    // Events are OPT-IN on this route (docs/events-on-the-map.md §2.6). Every app already in the store pulls
-    // the whole feed with no type filter and renders anything that is not a poll as an offer, so it must never
-    // receive an event: a client that knows events says `types=offer,need,poll,event` or `type=event`. A by-id
-    // fetch is not guarded — only a screen that knows events can hold an event's id.
-    // The list is intersected with the known post types before it reaches SQL: each entry is a bound
-    // variable, so an unchecked list of tens of thousands would exceed SQLite's limit and 500 the route.
-    const types = typeof ctx.query.types === 'string'
-        ? KNOWN_POST_TYPES.filter(t => (ctx.query.types as string).split(',').some(q => q.trim() === t))
-        : undefined;
     if (types && types.length === 0) {
-        // Only unknown types asked for: nothing matches. An empty list must not fall through to "no filter".
+        // Only unknown types asked for: nothing matches. An empty list must not fall through to "no filter". A member's
+        // set is then empty, in its own shape.
         ctx.status = 200;
         ctx.type = 'application/json';
-        ctx.body = '[]';
+        ctx.body = nearby ? JSON.stringify({ posts: [], set: [], setHash: nearbySetHash([]) }) : '[]';
         return;
     }
-    const wantsEvents = type === 'event' || !!types?.includes('event');
-    const excludeEvents = !id && !wantsEvents;
-
-    // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
-    // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else. The visitors' view is read
-    // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
-    const reader = guestView ? undefined : viewerPubkey;
-    const includeHidden = !!reader && !!nodeRoleOf(reader);
     // A visitor's posts each go through guestPost below, so the read leaves out what guestPost would replace (`guest`):
     // no author's trust profile, photo or trade count per post.
     const listing = {
-        id, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
+        id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
         targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined,
     };
     let posts: MarketplacePost[];
-    if (heal && updatedAfter) {
+    if (nearbySet) {
+        // The rows of the set, read as the phone's sync reads them (every state, so a listing taken off goes as its
+        // tombstone), kept to the set: whole, or what changed since the cursor (the author-standing half and the
+        // listings sent again included), paged by key as any sync read.
+        posts = getPosts({ ...listing, ids: nearbySet.ids, limit, updatedAfter: nearbyWhole ? undefined : updatedAfter, sync: true, syncPage });
+    } else if (ids) {
+        posts = getPosts({ ...listing, limit: IDS_MAX, updatedAfter, sync });
+    } else if (heal && updatedAfter) {
         // Answered whole: first the delta, exactly as asked (every row changed since the cursor, the author standing
         // changes and the listings sent again among them), then the node's other listings in heal order (engine
         // getPostsForPhotoHeal: those with a photo first, the ones on the board before the finished ones), as a first
@@ -478,8 +553,15 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const tradeSide = (p: MarketplacePost): boolean => isTradeParty(p, reader)
         || (!!reader && isTreasury(p.authorPublicKey) && canOperateTreasury(reader, p.authorPublicKey))
         || (!!reader && !!p.acceptedBy && isTreasury(p.acceptedBy) && canOperateTreasury(reader, p.acceptedBy));
-    const bodyStr = JSON.stringify(guestView ? posts.map(guestPost)
-        : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p));
+    const shown = guestView ? posts.map(guestPost)
+        : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p);
+    // A member's set answers its rows and the set's ids, every time (DESIGN-global-sync-by-area §2.3): the phone drops
+    // what it holds outside them and fetches what it lacks by `ids=`. Every other read keeps the bare list.
+    const bodyStr = JSON.stringify(nearbySet ? {
+        posts: shown,
+        set: nearbySet.ids,
+        setHash: nearbySetHash(nearbySet.ids),
+    } : shown);
 
     if (syncPage?.next) ctx.set(POSTS_NEXT_HEADER, syncPage.next);
     ctx.status = 200;
@@ -534,6 +616,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             : createPost(
             type, category || 'other', title, description || '',
             Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
+            // With no place, on a node that syncs by area, the engine gives the listing its author's area (Q4).
             lat != null ? Number(lat) : undefined,
             lng != null ? Number(lng) : undefined,
             photos,

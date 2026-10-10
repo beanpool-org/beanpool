@@ -14,7 +14,7 @@
 --   alert_channel   the channel's state (one row, 'ntfy'): last good send, failures in a row and the next try (every 5 min
 --                   while it fails), the hour's count for the cap of 20 messages an hour, and waiting events dropped over 50.
 --
--- Additive: four new tables, their two indexes and the four category rows. Apply before deploying the Worker that
+-- Additive: four new tables, their three indexes and the four category rows. Apply before deploying the Worker that
 -- writes them (an older Worker never reads them; a newer one without them sends nothing and logs why). Re-running
 -- changes nothing.
 
@@ -46,10 +46,12 @@ CREATE TABLE IF NOT EXISTS alert_outbox (
     muted    INTEGER NOT NULL DEFAULT 0,   -- 1 = not sent: over the hourly cap
     sent_at  INTEGER,
     claim    TEXT,
-    claim_at INTEGER
+    claim_at INTEGER,
+    once     TEXT                          -- told once: an event with a key already here is not kept again (A6, per pause)
 );
 CREATE INDEX IF NOT EXISTS idx_alert_outbox_waiting ON alert_outbox(sent_at, held, muted);
 CREATE INDEX IF NOT EXISTS idx_alert_outbox_at ON alert_outbox(at);   -- the 7-day prune each event runs reads by it
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alert_outbox_once ON alert_outbox(once);
 
 CREATE TABLE IF NOT EXISTS alert_channel (
     channel         TEXT PRIMARY KEY,               -- 'ntfy'

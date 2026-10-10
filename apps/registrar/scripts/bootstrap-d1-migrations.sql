@@ -73,10 +73,10 @@ INSERT OR IGNORE INTO d1_migrations (name)
 SELECT '0007_content_swap.sql'
 WHERE (SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'name_allocations') LIKE '%swap_fails INTEGER%';
 
--- 0008: its four tables and two indexes.
+-- 0008: its four tables and three indexes.
 INSERT OR IGNORE INTO d1_migrations (name)
 SELECT '0008_alerts.sql'
 WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('alert_settings', 'alert_state', 'alert_outbox', 'alert_channel'))
-       OR (type = 'index' AND name IN ('idx_alert_outbox_waiting', 'idx_alert_outbox_at'))) = 6;
+       OR (type = 'index' AND name IN ('idx_alert_outbox_waiting', 'idx_alert_outbox_at', 'idx_alert_outbox_once'))) = 7;
 
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

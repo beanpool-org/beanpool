@@ -667,7 +667,7 @@ async function heal(env, cur, b, now, tries = 3) {
     }
     if (!(await db.updateIfUnchanged(env, cur.name, res, { dns_record_id: g.dns_record_id }, { withIds: true }))) return missed();
     await logEvent(env, cur.name, 'heal-refused', `stays ${was}: edge re-attest ${g.verdict} (${g.why})`);
-    await tell(env, () => alerts.healRefused(env, cur.name, g.verdict));
+    await tell(env, () => alerts.healRefused(env, cur.name, g.verdict, cur.paused_at));
     return reply({ status: cur.status, reason: reasonOf(cur), since: sinceOf(cur), changed: ids.changed, attest: g.verdict, why: g.why });
 }
 

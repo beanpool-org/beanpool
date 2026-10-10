@@ -82,9 +82,9 @@ export function adminDid(env, name, action, out) {
         : `You ${verb} ${h}${action === 'release' ? (out.held_until ? ` (held until ${when(out.held_until)})` : ' (free now)') : ''}.`;
     return { category: 'admin', priority: PRIORITY.low, tag: TAG.resolved, name, title: `You ${verb} ${name}`, body };
 }
-// A6: a heal refused, a name repaired.
-export const healRefused = (env, name, verdict) => ({
-    category: 'names', priority: PRIORITY.low, tag: TAG.warning, name, title: `Heal refused: ${name}`,
+// A6: a heal refused (told once per pause: its node heals every 5 minutes while it lasts), a name repaired.
+export const healRefused = (env, name, verdict, pausedAt) => ({
+    category: 'names', priority: PRIORITY.low, tag: TAG.warning, name, title: `Heal refused: ${name}`, once: `heal-refused:${name}:${pausedAt ?? ''}`,
     body: `Heal refused: ${host(env, name)} stays paused (edge re-attest ${verdict}). Its node tries again.`,
 });
 export const repaired = (env, name, what) => ({
@@ -170,13 +170,14 @@ export async function categoryMode(env, category) {
 }
 
 // Into the outbox, as the category says: the row's id when it waits to be sent now, else 0 (off: nothing kept; digest:
-// held).
+// held; an event with a `once` key already in the outbox — kept 7 days — is not kept again).
 async function enqueue(env, ev, at) {
     const mode = ev.category === 'test' ? 'on' : await categoryMode(env, ev.category);
     if (mode === 'off') return 0;
     const held = mode === 'digest' ? 1 : 0;
-    const row = await env.DB.prepare('INSERT INTO alert_outbox (at, category, priority, tag, title, body, name, held) VALUES (?,?,?,?,?,?,?,?) RETURNING id')
-        .bind(at, ev.category, ev.priority, ev.tag || null, ev.title, ev.body, ev.name || null, held).first();
+    const row = await env.DB.prepare('INSERT OR IGNORE INTO alert_outbox (at, category, priority, tag, title, body, name, held, once) VALUES (?,?,?,?,?,?,?,?,?) RETURNING id')
+        .bind(at, ev.category, ev.priority, ev.tag || null, ev.title, ev.body, ev.name || null, held, ev.once || null).first();
+    if (!row) return 0;
     if (!held) {
         // At most MAX_WAITING wait; the oldest beyond go, and are counted.
         const r = await env.DB.prepare(`DELETE FROM alert_outbox WHERE id IN (SELECT id FROM alert_outbox

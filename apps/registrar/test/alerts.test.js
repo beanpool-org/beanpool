@@ -127,6 +127,26 @@ test('the sweep pausing an impostor is one high message that names no key', asyn
     } finally { r.done(); }
 });
 
+test('a heal refused is told once per pause, though its node heals every 5 minutes', async () => {
+    const r = await room();
+    try {
+        const [F, G, K1, K2] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);
+        await liveName(r.w, 'riverbend', K1); await liveName(r.w, 'yarrabank', K2);
+        await r.w.claim(F, { name: 'mudflat', mode: 'direct', public_ip: '203.0.113.7', origin: 'https://203.0.113.7:8443' });
+        r.w.nodes['mudflat.beanpool.org'] = attestsAs(G);   // something else answers at its address
+        r.step(300); await attestSweep(r.w.env); r.step(300); await attestSweep(r.w.env);
+        assert.equal((await r.w.row('mudflat')).status, 'paused');
+        const before = r.sent.length;
+        for (let i = 0; i < 24; i++) {   // two hours: the node's 5-minute heal, the cron's sweep
+            r.step(150); assert.equal((await r.w.heal(F, { name: 'mudflat' })).body.status, 'paused');
+            r.step(150); await attestSweep(r.w.env);
+        }
+        const heals = r.sent.slice(before).filter((m) => m.headers.title.startsWith('Heal refused'));
+        assert.equal(heals.length, 1, `${heals.length} "Heal refused" messages in two hours`);
+        assert.equal(heals[0].headers.title, 'Heal refused: mudflat');
+    } finally { r.done(); }
+});
+
 test('a suspended sweep is urgent once, "still" after 24 h, and "cleared" once when sweeps act again', async () => {
     const r = await room({ ...WITH_NTFY, CANARY_NAME: 'canary' });   // a canary that is not live: every sweep suspends
     try {

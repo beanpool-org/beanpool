@@ -26,6 +26,7 @@ import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone'
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
 import { ReportModal } from '../components/ReportModal';
+import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
 
 /** A removed line is a keeper's removal, or its author's own delete when they deleted their account (lib/chat-tombstone.ts). */
@@ -1125,6 +1126,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 </button>
                             </div>
                         )}
+
+                        {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
+                        <EnterpriseDecisions treasuryKey={pubkey} myPubkey={myPubkey} keepers={keeperList} balance={balance} lifecycle={detail?.lifecycle} />
 
                         {/* Operator Controls Panel */}
                         {isKeeperOfThis && (

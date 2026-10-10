@@ -4,6 +4,7 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
+import type { ScopedDecisionList, ScopedEffect } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -2176,6 +2177,31 @@ export async function proposeEnterpriseSuccession(treasury: string, candidatePub
     proposal: SuccessionProposalItem;
 }> {
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/propose`, { candidatePubkey });
+}
+
+/**
+ * An enterprise's keepers' votes (DESIGN-group-decisions S2; routes/enterprise-decisions.ts). Only its keepers, and those on
+ * a vote's roll, are answered; anyone else gets a 404, so null means "nothing for you", never an error to show.
+ */
+export async function getEnterpriseDecisions(treasury: string): Promise<ScopedDecisionList | null> {
+    try {
+        const body = await request<ScopedDecisionList>('GET', `/api/enterprise/${encodeURIComponent(treasury)}/decisions`);
+        return body && Array.isArray(body.decisions) ? body : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A keeper proposes a vote. A pay-out names its recipient as params.to; the node checks everything again. */
+export async function proposeEnterpriseDecision(treasury: string, body: {
+    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount: number; memo?: string };
+}): Promise<{ success: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/decisions`, body);
+}
+
+/** Yes or No on a keepers' vote. A vote can't be changed once cast. */
+export async function voteEnterpriseDecision(treasury: string, decisionId: string, support: boolean): Promise<{ success: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
 }
 
 export async function removeEnterpriseKeeper(treasury: string, memberPubkey: string): Promise<{ success: boolean; applied: boolean; change: KeeperChangeItem | null }> {

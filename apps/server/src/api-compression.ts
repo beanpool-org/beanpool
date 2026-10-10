@@ -25,10 +25,11 @@
  * already. A strong tag on an answer that is gzipped here is made weak (`"x"` → `W/"x"`), as nginx does: a strong tag
  * promises the same bytes, and the gzip bytes aren't. A reader that holds either form gets its 304, plain or gzipped.
  *
- * Level GZIP_LEVEL, chosen by measurement on a 200-listing sync page and a 26 MB answer (PR #—, the lane gzip's
- * bench-api-compression.ts): level 1 was barely faster than 6 at a noticeably larger answer, and 9 cost several times
- * the CPU for under a percent more. The compression runs off the main thread (zlib's async gzip, on libuv's pool), so a
- * big answer doesn't stall the event loop.
+ * Level GZIP_LEVEL, chosen by measurement (bench-api-compression.ts, sync-page-shaped JSON, an M4 Pro, 11 Oct): per MB of
+ * JSON, level 1 took 4.1 ms to 3.29×, level 4 8.5 ms to 3.65×, level 6 13.6 ms to 3.80×, level 9 18.5 ms to 3.84×. Level
+ * 4 is the knee: 11% fewer bytes than level 1, while level 6 saves 4% more for 60% more CPU. A sync page (200 listings,
+ * ~263 KB) is then about 2 ms of CPU here, 5 on the global droplet. The compression runs on libuv's pool (zlib's async
+ * gzip), not on the event loop.
  */
 import { promisify } from 'node:util';
 import { gzip as gzipCallback, constants as zlibConstants } from 'node:zlib';
@@ -41,7 +42,7 @@ const gzipAsync = promisify(gzipCallback);
 /** Smaller answers go out plain: gzip's 18-byte frame and a round of zlib cost more than they save. */
 export const MIN_BYTES = 1024;
 /** zlib's level, chosen by measurement (see above). */
-export const GZIP_LEVEL = 6;
+export const GZIP_LEVEL = 4;
 
 /** A content type worth compressing: text of every kind but an event stream (SSE goes out a frame at a time). */
 const COMPRESSIBLE = /^(?:text\/(?!event-stream)|application\/(?:json|javascript|xml|x-ndjson|[\w.+-]+\+(?:json|xml))\b)/i;

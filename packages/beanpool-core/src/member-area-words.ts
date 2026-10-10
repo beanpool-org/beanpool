@@ -39,11 +39,13 @@ export function describeArea(area: { lat: number; lng: number } | null | undefin
 export const PLACELESS_AT_AREA_NOTE = 'This poll is shown at your area (about 10 km around it) to everyone who can read it.';
 
 /**
- * An author with no area: the listing is still accepted, but it reaches only their own phone and the search, and the
- * form says so with this line.
+ * An author with no area: the listing is still accepted with no place, so it is in no member's list of what is near
+ * them, and anyone can still find it by searching; the form says so with this line. It says only that much, because a
+ * member with no area of their own may still get it among the newest listings (deciding review of #1766, N2). Fully
+ * true once phones (S3) and the web Market (S5) read listings by area; until then their plain reads still include it.
  */
 export const PLACELESS_NO_AREA_NOTE =
-    "You haven't set your area, so other members find this only by searching. Set it in Settings → Your area to show it near you.";
+    "You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.";
 
 /**
  * The note for a placeless listing's form, only on a by-area community: where it is shown when the author has an area,

@@ -61,6 +61,8 @@ describe('the area step\'s words, shared by both apps', () => {
         expect(placelessListingNote(true, null)).toBe(PLACELESS_NO_AREA_NOTE);
         expect(placelessListingNote(true, undefined)).toBeNull(); // couldn't ask: say nothing rather than something false
         expect(placelessListingNote(true, { lat: 1, lng: 2 })).toBe(PLACELESS_AT_AREA_NOTE);
+        // Only what is true once phones (S3) and the web Market (S5) read by area: review of #1766, N2.
+        expect(PLACELESS_NO_AREA_NOTE).toBe("You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.");
         expect(PLACELESS_AT_AREA_NOTE).toBe('This poll is shown at your area (about 10 km around it) to everyone who can read it.');
         expect(placelessListingNote(false, null)).toBeNull();
         expect(placelessListingNote(false, { lat: 1, lng: 2 })).toBeNull();

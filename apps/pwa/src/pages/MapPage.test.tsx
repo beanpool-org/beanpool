@@ -1272,7 +1272,7 @@ describe("MapPage: the node's refusal in the post form (G11-e, design G11 §6)",
 });
 
 // A poll has no place: on a community that syncs by area it takes its author's area, and an author with none is told
-// it reaches others only through search (design DESIGN-global-sync-by-area §3.4, slice S4).
+// members nearby won't see it in their list, only by searching (design DESIGN-global-sync-by-area §3.4, slice S4).
 describe("the poll form's note for a placeless listing (S4)", () => {
     const BY_AREA = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, nearbyListings: { radiusKm: 250, max: 500 } } };
     beforeEach(() => {
@@ -1310,7 +1310,7 @@ describe("the poll form's note for a placeless listing (S4)", () => {
     it('by area, no area set: the note says so', async () => {
         const { panel } = await openPoll(BY_AREA, null);
         await waitFor(() => expect(within(panel).getByTestId('poll-placeless-note').textContent).toBe(
-            "📍 You haven't set your area, so other members find this only by searching. Set it in Settings → Your area to show it near you."));
+            "📍 You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you."));
     });
 
     it('by area with an area: the note says the poll is shown at that area (review B1)', async () => {

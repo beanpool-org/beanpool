@@ -421,11 +421,11 @@ describe('Settings → Your area (§3.5)', () => {
 
 describe("a poll's form: the note for a placeless listing (§3.4)", () => {
     const pollModal = () => createElement(NewPollModal, { visible: true, onClose: () => {} });
-    it('a by-area community and no area: the note says the poll reaches others only through search', async () => {
+    it('a by-area community and no area: the note says members nearby will not see it in their list, only by searching', async () => {
         answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: null } };
         await render(GLOBAL_FEATURES, pollModal);
         expect(document.querySelector('[data-testid="poll-placeless-note"]')?.textContent).toBe(
-            "📍 You haven't set your area, so other members find this only by searching. Set it in Settings → Your area to show it near you.");
+            "📍 You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you.");
     });
 
     it('a by-area community with an area: the note says the poll is shown at that area (review B1)', async () => {

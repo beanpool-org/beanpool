@@ -96,10 +96,9 @@ export function localRowHasNoAvatar(localRow: string | null | undefined): boolea
  *               photo at all: one still inline while its move out of the rows is stopped
  *               part way counts as held (server db.ts memberHasPhoto for the gate,
  *               memberPhotoNotMovedYet for the member's own redeem card, #1482), so a newer
- *               photo set on another device is not written over. The members list says
- *               "none" for such a photo until the node's timer finishes the move (seconds
- *               after boot once its cause has cleared), so `undefined` after a members sync
- *               in that window can still send canonical over it.
+ *               photo set on another device is not written over. The members list gives
+ *               such a photo a URL too (server db.ts MEMBER_PHOTO_INLINE_REF), so the local
+ *               row the `undefined` case reads is not empty for it either.
  *   false     — the node said it HOLDS one. It may be newer than canonical, and the local row
  *               is no longer evidence of anything: an empty row on a node this device has
  *               never synced means unsynced, not empty. Nothing is published.

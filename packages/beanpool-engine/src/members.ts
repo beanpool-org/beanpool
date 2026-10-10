@@ -328,9 +328,23 @@ export interface DirectoryRow {
     elder_vouched_by: string | null;
     archetype: string | null;
     is_treasury: unknown;
+    /**
+     * 1 when the member's photo is still inline in the old `avatar_url` column, where a move of photos out of the rows
+     * stopped part way (the server's db.ts moveMemberPhotosOutOfRows) has left it, and no reference is in the row; 0
+     * otherwise. Only while that column exists (directoryColumns). SQLite works it out, so the photo is never copied into
+     * the server's heap (#1475's rule for a list). It may also be 1 for a value that is no photo (blank, the node's own address
+     * sent back), which the move clears without moving.
+     */
+    photo_inline?: number;
 }
 
 const DIRECTORY_COLUMNS = 'public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit, elder_vouched_by, archetype, is_treasury';
+
+/** DIRECTORY_COLUMNS, and photo_inline while the old `avatar_url` column is there (DirectoryRow). */
+function directoryColumns(db: Db): string {
+    if (!db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'avatar_url'`).get()) return DIRECTORY_COLUMNS;
+    return `${DIRECTORY_COLUMNS}, (avatar_ref IS NULL AND avatar_url IS NOT NULL) AS photo_inline`;
+}
 
 /**
  * Whether a member's row changed after `updatedAfter`, the phone's delta cursor: joined after it, or updated their
@@ -363,13 +377,14 @@ function changedAfter(row: DirectoryRow, updatedAfter: any): boolean {
  * in JavaScript, as before.
  */
 export function getMemberDirectoryRows(db: Db, updatedAfter?: unknown): DirectoryRow[] {
+    const columns = directoryColumns(db);
     if (!updatedAfter) {
-        return db.prepare(`SELECT ${DIRECTORY_COLUMNS} FROM members WHERE status != 'pruned' ORDER BY rowid`).all() as DirectoryRow[];
+        return db.prepare(`SELECT ${columns} FROM members WHERE status != 'pruned' ORDER BY rowid`).all() as DirectoryRow[];
     }
     let rows: DirectoryRow[];
     if (typeof updatedAfter === 'string' && !/[\uD800-￿]/.test(updatedAfter)) {
         // One index range a term, by rowid: written as one WHERE with ORs, SQLite scans the whole table instead.
-        rows = db.prepare(`SELECT ${DIRECTORY_COLUMNS} FROM members
+        rows = db.prepare(`SELECT ${columns} FROM members
                            WHERE rowid IN (
                                      SELECT rowid FROM members WHERE joined_at > @c
                            UNION ALL SELECT rowid FROM members WHERE joined_at < ''
@@ -378,7 +393,7 @@ export function getMemberDirectoryRows(db: Db, updatedAfter?: unknown): Director
                              AND status != 'pruned'
                            ORDER BY rowid`).all({ c: updatedAfter }) as DirectoryRow[];
     } else {
-        rows = db.prepare(`SELECT ${DIRECTORY_COLUMNS} FROM members WHERE status != 'pruned' ORDER BY rowid`).all() as DirectoryRow[];
+        rows = db.prepare(`SELECT ${columns} FROM members WHERE status != 'pruned' ORDER BY rowid`).all() as DirectoryRow[];
     }
     return rows.filter(r => changedAfter(r, updatedAfter));
 }

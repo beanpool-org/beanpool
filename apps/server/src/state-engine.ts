@@ -909,12 +909,14 @@ export function memberPhotoResumeWait(outcome: 'more' | 'stopped', failures: num
 
 /**
  * A members' photo move that stopped at boot (a full disk, an I/O error) carries on while the node runs (db.ts
- * resumeMemberPhotoMove, #1482), so its members stop showing no photo without waiting for a restart: one batch a turn,
+ * resumeMemberPhotoMove, #1482), so its photos reach member_photos without waiting for a restart: one batch a turn,
  * a short gap between turns while rows are left, a longer wait each time a turn stops (memberPhotoResumeWait), and no
  * more turns once the move is done. A node whose move finished at boot does one cheap turn (no old column) and stops.
  * On a main server only, and each turn asks the role again: a standby's copy never writes the old column, and its rows
- * are its main server's (engine/sync.ts MEMBER_PHOTO_COLUMNS). Each turn that moves photos bumps the members' and the
- * listings' versions, so no app is answered 304 from a copy that showed them without.
+ * are its main server's (engine/sync.ts MEMBER_PHOTO_COLUMNS). Each turn that clears a row's old value bumps the members'
+ * and the listings' versions, so no app is answered 304 from a copy made before: the members list gives a photo still
+ * inline a stand-in URL (db.ts MEMBER_PHOTO_INLINE_REF), which changes once the photo moves, or goes once a value that
+ * was no photo is cleared.
  */
 function armMemberPhotoMoveResume(): void {
     const first = Number(process.env.MEMBER_PHOTO_RESUME_MS) || MEMBER_PHOTO_RESUME_MS;
@@ -928,7 +930,7 @@ function armMemberPhotoMoveResume(): void {
             try {
                 const done = resumeMemberPhotoMove();
                 outcome = done.outcome;
-                if (done.moved > 0) { bumpMembersVersion(); bumpPostsVersion(); }
+                if (done.cleared > 0) { bumpMembersVersion(); bumpPostsVersion(); }
             } catch (e) {
                 console.warn("[DB] Members' photos: a turn of the resumed move failed:", e);
                 outcome = 'stopped';

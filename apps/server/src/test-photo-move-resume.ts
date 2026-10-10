@@ -12,9 +12,12 @@
  * the resumed move's first wait 200 ms), then the real node over real HTTPS through the real middleware:
  *   1. the move stopped at Ann at boot; Ann's own redeem card carries her inline photo, servable by the phone's own test
  *      (@beanpool/core isServableAvatarValue); Cal (no photo) and Dee (this node's own address sent back) carry none;
+ *      the members list the phone syncs (whole and delta) gives Ann's and Eve's own rows an avatar meanwhile, and
+ *      /api/avatar serves Ann's inline photo at it (the deciding review's B2: a null there let the offline-edit retry
+ *      publish an older copy, during a stop that lasts and up to an hour after it);
  *   2. while the cause lasts, the timer retries with a doubling wait (measured gaps), not every turn;
  *   3. once the cause is gone, the timer finishes the move without a restart: the old column dropped, Ann's and Eve's
- *      photos in member_photos as they were (NEW, never an older copy), their rows stamped so a delta carries them;
+ *      photos in member_photos as they were (NEW, never an older copy), their rows stamped so a standby's delta carries them;
  *      the members list the phone syncs now gives Ann's own row an avatar, which /api/avatar serves;
  *   4. memberPhotoResumeWait: a short gap while rows are left, doubling while it stops, never past an hour;
  *   5. a standby (NODE_ROLE=backup, a child process on its own data directory) never resumes its move.
@@ -110,6 +113,7 @@ async function main(): Promise<void> {
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { generateInvite } = await import('./engine/invites.js');
+    const { installAvatarKeysAtBoot } = await import('./engine/avatar-keys.js');
     const { isServableAvatarValue } = await import('@beanpool/core');
     await initTls();
     se.initStateEngine();
@@ -120,7 +124,7 @@ async function main(): Promise<void> {
     const port = await startHttpsServer(0);
     const base = `https://localhost:${port}`;
 
-    const request = async (who: Who, method: 'GET' | 'POST', route: string, body?: unknown) => {
+    const request = async (who: Who, method: 'GET' | 'POST', route: string, body?: unknown, extra: Record<string, string> = {}) => {
         const raw = body === undefined ? '' : JSON.stringify(body);
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
@@ -129,11 +133,12 @@ async function main(): Promise<void> {
             headers: {
                 ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
                 'X-Public-Key': who.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-                'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route}\n${ts}\n${nonce}\n${raw}`), who.priv).toString('base64'),
+                'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), who.priv).toString('base64'),
+                ...extra,
             },
             ...(body === undefined ? {} : { body: raw }),
         });
-        return { status: res.status, body: await res.json().catch(() => null) as any };
+        return { status: res.status, etag: res.headers.get('etag'), body: await res.json().catch(() => null) as any };
     };
     const redeemCard = async (who: Who) => {
         const code = generateInvite(bea.pk)?.code;
@@ -142,6 +147,8 @@ async function main(): Promise<void> {
     };
     const row = (pk: string) => db.prepare('SELECT avatar_ref, updated_at FROM members WHERE public_key = ?').get(pk) as { avatar_ref: string | null; updated_at: string };
     const photo = (pk: string) => (db.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(pk) as { photo: string } | undefined)?.photo ?? null;
+    const urlIn = (list: { body: any }, who: Who): string | null | undefined =>
+        Array.isArray(list.body) ? list.body.find((m: any) => m.publicKey === who.pk)?.avatarUrl : undefined;
     const hasColumn = () => db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'avatar_url'`).get() != null;
 
     try {
@@ -158,6 +165,33 @@ async function main(): Promise<void> {
             `Cal (no photo) and Dee (this node's own address sent back) still read no photo (${calCard.body?.member?.avatarUrl} / ${deeCard.body?.member?.avatarUrl})`);
         const beaCard = await redeemCard(bea);
         assert(beaCard.status === 200 && beaCard.body?.member?.avatarUrl === NEW && beaCard.nodeHasPhoto, `Bea, moved at boot, reads her photo as before`);
+
+        // The phone's offline-edit retry publishes its own copy when the list gave its own row no avatar
+        // (native avatar-value.ts localRowHasNoAvatar), so the list may not say "none" for a photo still inline.
+        const whole = await request(ann, 'GET', '/api/members');
+        const delta = await request(ann, 'GET', '/api/members?updatedAfter=2025-01-01T00:00:00.000Z');
+        const inWindowUrl = urlIn(whole, ann);
+        assert(whole.status === 200 && typeof inWindowUrl === 'string' && inWindowUrl.includes(ann.pk) && typeof urlIn(whole, eve) === 'string'
+            && typeof urlIn(whole, bea) === 'string' && urlIn(whole, cal) === null,
+            `while the move is stopped, the members list gives Ann's and Eve's own rows (photos still inline) an avatar; Cal none (${whole.status} ${String(inWindowUrl).slice(0, 60)} / ${urlIn(whole, eve)} / ${urlIn(whole, cal)})`);
+        assert(delta.status === 200 && typeof urlIn(delta, ann) === 'string' && urlIn(delta, ann) === inWindowUrl && typeof urlIn(delta, eve) === 'string',
+            `and so does a phone's delta read (${delta.status} ${String(urlIn(delta, ann)).slice(0, 60)})`);
+        const inlineServed = typeof inWindowUrl === 'string' ? await fetch(`${base}${inWindowUrl}`) : null;
+        const inlineBytes = inlineServed?.status === 200 ? Buffer.from(await inlineServed.arrayBuffer()) : null;
+        assert(inlineServed?.status === 200 && (inlineServed.headers.get('content-type') ?? '').startsWith('image/')
+            && !!inlineBytes && inlineBytes.equals(Buffer.from(NEW.split(',')[1], 'base64')),
+            `and /api/avatar serves Ann's inline photo at it meanwhile, not a 404 (${inlineServed?.status} ${inlineServed?.headers.get('content-type')})`);
+        // On a node whose faces are keyed (a private preview, guestListingsOnly), the URL carries the key for its stand-in
+        // reference, which the preview's gate and the route take; a wrong key is still refused.
+        process.env.PRIVATE_PREVIEW = '1';
+        const keyedOn = installAvatarKeysAtBoot();
+        const keyedUrl = urlIn(await request(ann, 'GET', '/api/members'), ann);
+        const keyedServed = typeof keyedUrl === 'string' ? await fetch(`${base}${keyedUrl}`) : null;
+        const wrongKey = typeof keyedUrl === 'string' ? await fetch(`${base}${keyedUrl.replace(/&k=([^&]+)/, (_m, k: string) => `&k=${k[0] === 'A' ? 'B' : 'A'}${k.slice(1)}`)}`) : null;
+        delete process.env.PRIVATE_PREVIEW;
+        const keyedOff = installAvatarKeysAtBoot();
+        assert(keyedOn && !keyedOff && typeof keyedUrl === 'string' && keyedUrl.includes('&k=') && keyedServed?.status === 200 && (wrongKey?.status === 403 || wrongKey?.status === 404),
+            `with faces keyed, Ann's in-window URL carries a key the route takes (${keyedServed?.status}), and a wrong key is refused (${wrongKey?.status})`);
 
         // ── 2. While the cause lasts, the timer retries, each wait twice the last ──
         await sleep(1700); // turns near 200, 400 (+200), 800 (+400), 1600 (+800) ms after boot
@@ -176,7 +210,7 @@ async function main(): Promise<void> {
         assert(photo(cal.pk) === null && photo(dee.pk) === null && row(cal.pk).avatar_ref === null && row(dee.pk).avatar_ref === null,
             `Cal and Dee still have no photo`);
         assert(row(ann.pk).updated_at !== STAMP && row(eve.pk).updated_at !== STAMP && row(cal.pk).updated_at === STAMP && row(dee.pk).updated_at === STAMP,
-            `the rows whose photos moved after boot are stamped, so a phone's and a standby's delta carries them; the no-photo rows aren't (${row(ann.pk).updated_at}, ${row(cal.pk).updated_at})`);
+            `the rows whose photos moved after boot are stamped, so a standby's delta carries them; the no-photo rows aren't (${row(ann.pk).updated_at}, ${row(cal.pk).updated_at})`);
 
         // The phone's offline-edit retry reads its own row from this list: now it has an avatar, so nothing is published.
         const list = await request(ann, 'GET', '/api/members');

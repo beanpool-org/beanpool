@@ -926,13 +926,15 @@ export function castDecisionVote(
     voterPubkey: string,
     support: boolean,
     voteCount = 1,
-    signature?: string
+    signature?: string,
+    /** The scope the calling route serves: a Decision of any other scope is answered as one that doesn't exist. */
+    scope?: Decision['scopeKind'],
 ): { success: boolean; creditsUsed: number; error?: string; code?: typeof FEATURE_OFF } {
     assertPlainTablesWritable();
     // A node with formal Decisions off takes no vote, on any Decision, open or not (routes answer 404 feature_off).
     if (!decisionsOn()) return { success: false, creditsUsed: 0, error: featureOffMessage('decisions'), code: FEATURE_OFF };
     const decision = getDecision(decisionId);
-    if (!decision) return { success: false, creditsUsed: 0, error: 'Decision not found' };
+    if (!decision || (scope && decision.scopeKind !== scope)) return { success: false, creditsUsed: 0, error: 'Decision not found' };
     if (madeWithoutVote(decision)) {
         return {
             success: false,
@@ -2453,7 +2455,8 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions): Decisio
     let params: Record<string, unknown> | null = null;
     if (opts.effect === 'pay_out') {
         const to = typeof opts.params?.to === 'string' ? opts.params.to : '';
-        const cents = floorCents(Number(opts.params?.amount));
+        // A number only: "40", true or [5] is the wrong shape, never read as one.
+        const cents = typeof opts.params?.amount === 'number' ? floorCents(opts.params.amount) : NaN;
         if (!Number.isFinite(cents) || cents <= 0) throw new Error('A pay-out needs an amount in Beans above 0.');
         if (!to || isSyntheticAccount(to) || !isNameableAccount(to) || to === opts.scopeId) throw new Error('Name a member or an enterprise of this community to pay.');
         const recipient = getMember(to);

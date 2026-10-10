@@ -278,13 +278,8 @@ router.post('/api/commons/decisions/:id/vote', async (ctx) => {
         ctx.body = { error: 'support (boolean) is required' };
         return;
     }
-    // An enterprise's keepers' vote is cast in that enterprise, never here: answered as missing.
-    if (getDecision(ctx.params.id)?.scopeKind === 'enterprise') {
-        ctx.status = 404;
-        ctx.body = { error: 'Decision not found' };
-        return;
-    }
-    const result = castDecisionVote(ctx.params.id, actor, Boolean(support), Number(voteCount || 1), signature);
+    // An enterprise's keepers' vote is cast in that enterprise, never here: answered exactly as an id that doesn't exist.
+    const result = castDecisionVote(ctx.params.id, actor, Boolean(support), Number(voteCount || 1), signature, 'community');
     if (!result.success) {
         // Formal Decisions switched off here: the same answer the feature gate gives in front of this route.
         if (result.code === FEATURE_OFF) {

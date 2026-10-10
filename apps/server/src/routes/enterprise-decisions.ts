@@ -103,7 +103,7 @@ export function createEnterpriseDecisionRoutes(_deps: RouteDeps): Router {
             if (err instanceof ScopedNotFoundError) return notFound(ctx);
             throw err;
         }
-        const result = castDecisionVote(ctx.params.id, actor, support, 1, typeof signature === 'string' ? signature : undefined);
+        const result = castDecisionVote(ctx.params.id, actor, support, 1, typeof signature === 'string' ? signature : undefined, 'enterprise');
         if (!result.success) {
             if (result.code === FEATURE_OFF) {
                 ctx.status = 404;

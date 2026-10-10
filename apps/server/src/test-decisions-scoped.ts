@@ -213,6 +213,12 @@ async function main(): Promise<void> {
     assert(self.status === 400, 'nobody proposes paying themselves');
     const over = await propose(e1, k1, { effect: 'pay_out', params: { to: ali.pubKeyHex, amount: 61 } });
     assert(over.status === 400 && /holds 60 Beans/.test(String(over.error)), `more than it holds is refused at proposal (got ${over.error})`);
+    for (const amount of ['40', true, [5]]) {
+        const odd = await propose(e1, k1, { effect: 'pay_out', params: { to: ali.pubKeyHex, amount } });
+        // One that opened is closed at once, so the next is measured on its own (one open vote per proposer).
+        if (odd.status === 200) db.prepare("UPDATE decisions SET status = 'failed' WHERE id = ?").run(odd.body.decision.id);
+        assert(odd.status === 400, `an amount that is not a number (${JSON.stringify(amount)}) is refused, never read as one (got ${odd.status} ${JSON.stringify(odd.body?.decision?.params ?? odd.error)})`);
+    }
 
     // ── 4. Who may see: a non-keeper, and a keeper of another enterprise ──────────────────────────────
     const p4 = await propose(e1, k2, { effect: 'pay_out', params: { to: ali.pubKeyHex, amount: 5 } });
@@ -228,7 +234,10 @@ async function main(): Promise<void> {
     const community = await signedFetch('GET', '/api/commons/decisions', null, k1);
     assert(community.status === 200 && !community.body.decisions.some((d: any) => d.id === d4 || d.id === d1), 'the community list never carries a keepers\' vote');
     assert((await signedFetch('GET', `/api/commons/decisions/${d4}`, null, k1)).status === 404, 'the community detail answers it as missing');
-    assert((await signedFetch('POST', `/api/commons/decisions/${d4}/vote`, { support: true }, k1)).status === 404, 'and the community vote route too');
+    const voteHere = await signedFetch('POST', `/api/commons/decisions/${d4}/vote`, { support: true }, k1);
+    const voteUnknown = await signedFetch('POST', `/api/commons/decisions/${crypto.randomUUID()}/vote`, { support: true }, k1);
+    assert(voteHere.status === voteUnknown.status && JSON.stringify(voteHere.body) === JSON.stringify(voteUnknown.body) && voteHere.status !== 200,
+        `and the community vote route answers it as it answers an id that doesn't exist (got ${voteHere.status} ${JSON.stringify(voteHere.body)} vs ${voteUnknown.status} ${JSON.stringify(voteUnknown.body)})`);
     assert((await signedFetch('GET', `/api/enterprise/${e1}/decisions`, null, null)).status === 401, 'an unsigned read is refused by the middleware');
     // The community's one-open-Decision rule is unchanged by a keepers' vote (§2.1): Kim's bakery vote is still open.
     const freeze = { title: 'Freeze a credit line', description: 'A community proposal from a keeper with a bakery vote open', touches: 'member', effect: 'freeze_credit', subject: outsider.pubKeyHex };

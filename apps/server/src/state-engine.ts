@@ -4330,14 +4330,6 @@ export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: numb
 }
 
 /**
- * Any keeper may step down (answer M, 2026-09-19).
- * - The only keeper cannot: there would be nobody left to run or wind up the enterprise.
- * - A keeper whose pledge is still needed to cover the enterprise's debt cannot yet: the message says how much
- *   the debt must come down, or how much more the others must pledge, first.
- * - A lead stepping down hands the lead role on by answer G's rule (longest-serving active keeper; none → pause).
- * Their pledge is released in full (the check above guarantees the others cover any deficit).
- */
-/**
  * A keeper who steps down leaves the roll of every open Decision of this enterprise (DESIGN-group-decisions §2.6): they
  * chose to have no say, so a vote they cast is no longer counted (decisions-engine.ts reads only electors still 'on').
  * Only stepping down does this. One removed by the lead, an admin or a vote stays on the roll: a removal must not be a
@@ -4396,6 +4388,14 @@ export function replaceLeadByVote(enterprisePubkey: string, memberPubkey: string
     engine.keepersChanged(db, enterprisePubkey);
 }
 
+/**
+ * Any keeper may step down (answer M, 2026-09-19).
+ * - The only keeper cannot: there would be nobody left to run or wind up the enterprise.
+ * - A keeper whose pledge is still needed to cover the enterprise's debt cannot yet: the message says how much
+ *   the debt must come down, or how much more the others must pledge, first.
+ * - A lead stepping down hands the lead role on by answer G's rule (longest-serving active keeper; none → pause).
+ * Their pledge is released in full (the check above guarantees the others cover any deficit).
+ */
 export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string): {
     ok: true; promoted: string | null; paused: boolean; releasedBacking: number;
 } {

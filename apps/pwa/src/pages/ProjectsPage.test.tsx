@@ -128,6 +128,10 @@ vi.mock('../lib/api', () => ({
     proposeDecision: vi.fn(async () => ({ success: true })),
     castDecisionVote: vi.fn(async () => ({ success: true })),
     request: vi.fn(),
+    // The enterprise page's Decisions block (components/EnterpriseDecisions.tsx): no keepers' vote here.
+    getEnterpriseDecisions: vi.fn(async () => null),
+    proposeEnterpriseDecision: vi.fn(async () => ({ success: true })),
+    voteEnterpriseDecision: vi.fn(async () => ({ success: true })),
 }));
 
 const backerIdentity: BeanPoolIdentity = {

@@ -73,6 +73,7 @@ import { addConnector } from './connector-manager.js';
 import { originOfCachedPost } from './federation-commission.js';
 import { REMOVALS_SINCE_SQL } from './engine/auto-moderation.js';
 import { knockRefusal } from './engine/probation.js';
+import { setMemberArea } from './engine/member-area.js';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
@@ -293,6 +294,9 @@ async function main(): Promise<void> {
 
     const avaSock = await socket(ava);
     const vicSock = await socket(viewer);
+    // Listings sync by area here (DESIGN-global-sync-by-area §2.5): a listing's own event reaches the members near it
+    // (test-ws-nearby-push). The viewer's area is near the listings below, so what reaches them is what any neighbour gets.
+    setMemberArea(viewer.pk, { lat: -28.6, lng: 153.5 });
     await sleep(100);
     avaSock.events.length = 0; vicSock.events.length = 0;
     const word = `zebrawidget${crypto.randomBytes(3).toString('hex')}`;

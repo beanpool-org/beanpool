@@ -1077,8 +1077,8 @@ export interface NearbySet {
     /** near(M): nearest first (NEAREST_ORDER), or the newest first for a member with no area. */
     near: string[];
     /** Each row of S with its updated_at, and each of its authors whose standing ever moved with their
-     *  board_standing_changed_at (an author's holiday moves no listing row), in one string: with `ids`, what a read of S answers depends on (the route's ETag).
-     *  Every row's own time, not the newest: a row edited to a time below another's (a clock behind, an imported row)
+     *  board_standing_changed_at (an author's holiday moves no listing row), in one string: with `ids`, what a read of S
+     *  answers depends on (the route's ETag). Every row's own time, not the newest: a row edited to a time below another's (a clock behind, an imported row)
      *  still changes it. */
     stamp: string;
 }
@@ -1091,8 +1091,9 @@ export interface NearbySet {
  *   enterprise, a group's or a person's listing they may read, hidden by reports out but their own), ordered by
  *   NEAREST_ORDER, a total order. One lean pass on the radius's box (idx_posts_lat_lng), as postRowsNear's bounded pass:
  *   at most `measureAtMost` of the matching posts in the box are measured. It reads no author's row: the enterprise
- *   half of the board's rule is tested on the author's key (ENTERPRISE_ON_BOARD_BY_KEY_SQL), the holiday half already is. A post with no place is never in it. With
- *   no area: the newest `newestWithoutArea` listings under the same rules, wherever they are.
+ *   half of the board's rule is tested on the author's key (ENTERPRISE_ON_BOARD_BY_KEY_SQL), as the holiday half
+ *   already is. A post with no place is never in it. With no area: the newest `newestWithoutArea` listings under the
+ *   same rules, wherever they are.
  * - own(M): every listing the member wrote here, whatever its place or state.
  * - ties(M): the listings they have an open deal on (asked for, or taken and not yet done) or a conversation about,
  *   the node's side of the phone's keep rule (apps/native utils/db.ts localPostTies).
@@ -1117,7 +1118,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
 
     // near(M): the rows are never read in full; the hook keeps what the lean pass ranked. `m` stays joined for any
     // other condition on the author's row; with none, SQLite leaves the join out. Each statement is compiled once
-    // (prepared): for a member with few listings near them, compiling was most of the cost.
+    // (prepared): compiling the near pass took about 60 µs, more than a quarter of a set with nothing near (2026-10-10).
     let ranked: Array<{ id: string; updated_at: string | null; author_pubkey: string }> = [];
     const rankNear: RowsNear = (d, near, listingWhere, whereParams) => {
         const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL);

@@ -13,7 +13,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 - **Admin (shared secret):** `GET /api/local/admin/registrar/pending` (every held name, any state) ·
   `GET /api/local/admin/registrar/events[?name=]` · `POST /api/local/admin/registrar/:name/`
   `approve | pause | resume | block | release` (`revoke` is block's old name; `release` takes
-  `{"free_now": true}`, below). Every action is logged in `name_events`.
+  `{"free_now": true}`, below). Every action is logged in `name_events`. Alerts (below):
+  `GET /api/local/admin/registrar/alerts` · `POST …/alerts/settings {category, mode}` · `POST …/alerts/test`
 - **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only. `?n=<name>` (or
   `?n=<name>.beanpool.org`) names the node to join, and is answered only for a name this registrar holds **live**;
   anything else is the "not found" page, never a link to another host (before 2026-10-01 any host was linked)
@@ -50,6 +51,36 @@ hostname routes as the row says) or the tunnel an admin pause keeps. A live `bp-
 no row records would make Cloudflare refuse every later tunnel for the name (1013), so a claim that meets one
 deletes it when it provably belongs to nobody: it is owed, or it was made before the claiming tenure or over 10
 minutes ago. Otherwise the claim answers **503** "cleaning up … try again shortly".
+
+## Alerts to the admin's phone (the control room)
+
+The Worker tells its admin, through one [ntfy](https://ntfy.sh) topic, what only the registrar knows (design
+`scratch/global-node/DESIGN-alerts-fable.md` §2, slice S1; Marty, 2026-10-09/10). `src/alerts.js`, state in D1
+(migration 0008):
+
+| Event | Priority | Category |
+|---|---|---|
+| A claim on a gated name, waiting for approval | default | names |
+| A new community's (auto) name went live | default | names |
+| The sweep paused a name (another node's key, or a content swap) | high | names |
+| A heal refused, a name repaired by the registrar | low | names |
+| The sweep suspended itself (canary, mass, unverifiable) — raised, still every 24 h, cleared | urgent | health |
+| Deletions Cloudflare has refused for over a day; the nonce table missing — raised, still, cleared | default | health |
+| Your own approve, pause, resume, block, release | low | admin |
+
+A message says a name, the community name its operator published, and counts — **never the `contact` column** (a
+person's address) or a key. Its `Click` (and one `view` action, "Open control room") opens `https://beanpool.org/admin#<name>`,
+which scrolls to and lights that row; there is no approve-from-the-notification button. A send that fails is tried
+again every 5 minutes (the cron) with everything waiting — at most 50 — in one message. At most 20 messages an hour:
+the 21st is one line, "muted: N more this hour, see /admin". Each category is `on`, `digest` (held for the daily
+summary, which slice S2 sends) or `off`: the toggles on `/admin`, which also shows the channel (set or not, last good
+send, waiting, failures), what is raised and the last 50 alerts, and has a "send a test alert" button.
+
+Secrets, as Worker secrets only (never `wrangler.toml`, never the repo, never a log line — a failed send logs its
+status code): `NTFY_URL`, the full topic URL (the topic name is the secret), and optionally `NTFY_TOKEN`, an ntfy
+access token sent as `Authorization: Bearer`. With no `NTFY_URL` nothing is sent, the events wait for the first
+channel that is set, and `/admin` says so. Rotating the topic: `wrangler secret put NTFY_URL`, then subscribe the
+phone to the new one.
 
 ## Limits on what a key may do (the 2026-10-01 review)
 
@@ -364,6 +395,8 @@ npx wrangler secret put CF_API_TOKEN             # scoped: Account·Tunnel·Edit
 npx wrangler secret put CF_ACCOUNT_ID            # 151a28c4fd1e6ee09768f4226be76b4d
 npx wrangler secret put CF_ZONE_ID               # 060a99ae34e53b26dcf3be6578722b31
 npx wrangler secret put ADMIN_SECRET
+npx wrangler secret put NTFY_URL                 # optional: the control room's ntfy topic URL (alerts above)
+npx wrangler secret put NTFY_TOKEN               # optional: an ntfy access token for it
 
 # 3. Deploy + attach routes
 npx wrangler deploy --var GIT_SHA:$(git rev-parse HEAD)
@@ -386,7 +419,10 @@ v1 nodes still working), and no Cloudflare ids or error bodies in an answer to a
 covers its M3: a content swap paused after 12 applied sweeps in a row and not before, what ends a run and what a
 suspended sweep leaves alone, the mass breaker counting swaps, two connectors on one tunnel (another key, or a page,
 every other answer), a direct name's address passed to a stranger, and rotate (its refusals, Cloudflare refusing or
-failing it, and the admin's pause landing during it).
+failing it, and the admin's pause landing during it). `test/alerts.test.js` covers the control room's alerts against
+a fake ntfy and a stepped clock: the headers, the words (never the contact), raised / still at 24 h / cleared, a 503
+retried in one message, the hourly cap, no channel set, the category toggles, `/admin#<name>`, and no secret in any
+log line.
 
 The signing contract with the node is tested from the node's side: `apps/server/src/test-registrar-contract.ts`
 (run by `scripts/test-all.sh`) imports this Worker's `src/` and the harness. `node scripts/check-migrations.mjs`

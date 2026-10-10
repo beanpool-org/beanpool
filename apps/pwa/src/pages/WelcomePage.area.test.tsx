@@ -132,6 +132,19 @@ describe('Your Area at signup (S4)', () => {
         expect(current.textContent).toBe('Your Area · Step 3 of 5');
     });
 
+    it('the count under the dots never splits: a line too narrow breaks before the dot (review N10)', async () => {
+        await toThePhoto(GLOBAL_BY_AREA);
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByText(/Roughly where are you\?/);
+        // Measured in Chromium at 320px and 130% text in WelcomePage's wrappers: four columns gave "Safety Backup · Step
+        // 3 of" over "4"; with the count kept whole and the space outside it, "Safety Backup" over "· Step 3 of 4".
+        const current = screen.getByTestId('onboarding-stepper-current');
+        const count = current.querySelector('span') as HTMLElement;
+        expect(count.style.whiteSpace).toBe('nowrap');
+        expect(count.textContent).toBe('· Step 3 of 5');
+        expect(current.textContent).toBe('Your Area · Step 3 of 5');
+    });
+
     it('four columns without the feature: the photo goes straight to the words, and the browser is asked once at the end, as today', async () => {
         const { calls, onComplete } = await toThePhoto(GLOBAL_OPEN);
         expect(columns()).toEqual(['Sign in', 'Your Photo', 'Safety Backup', 'How it Works']);

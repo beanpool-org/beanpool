@@ -267,7 +267,8 @@ export function OnboardingStepper({ step, firstLabel = 'Your Name', area = false
             textAlign: 'center',
             color: 'var(--text-primary)',
         }}>
-            {steps[position - 1]}<span style={{ fontWeight: 500, color: 'var(--text-muted)' }}> · Step {position} of {steps.length}</span>
+            {/* The space stays outside the span: a line too narrow for both breaks before the dot, never inside the count (review N10). */}
+            {steps[position - 1]}{' '}<span style={{ fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>· Step {position} of {steps.length}</span>
         </p>
         </div>
     );

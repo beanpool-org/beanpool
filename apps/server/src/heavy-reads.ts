@@ -94,6 +94,9 @@ let testOverrides: Partial<HeavyReadSettings> = {};
 let resolved: HeavyReadSettings | null = null;
 
 let inFlightBytes = 0;
+/** The most ever in flight at once (heavyReadStats), noted wherever inFlightBytes grows. */
+let peakInFlightBytes = 0;
+const notePeak = (): void => { if (inFlightBytes > peakInFlightBytes) peakInFlightBytes = inFlightBytes; };
 const line: Waiter[] = [];
 /** Each shared body held by sends in flight, and how many hold it (holdSharedBody). Its bytes are in inFlightBytes once. */
 const sharedHeld = new Map<Buffer, number>();
@@ -132,11 +135,11 @@ export function heavyReadSettings(): Readonly<HeavyReadSettings> {
 }
 
 /**
- * What is in flight and waiting now, and how many were let through, refused and cut off at the deadline since the server
- * started.
+ * What is in flight and waiting now, the most ever in flight at once, and how many were let through, refused and cut off
+ * at the deadline since the server started.
  */
-export function heavyReadStats(): { inFlightBytes: number; waiting: number; admitted: number; refused: number; cutOff: number; sharedBodies: number } {
-    return { inFlightBytes, waiting: line.length, admitted: admittedCount, refused: refusedCount, cutOff: cutOffCount, sharedBodies: sharedHeld.size };
+export function heavyReadStats(): { inFlightBytes: number; peakInFlightBytes: number; waiting: number; admitted: number; refused: number; cutOff: number; sharedBodies: number } {
+    return { inFlightBytes, peakInFlightBytes, waiting: line.length, admitted: admittedCount, refused: refusedCount, cutOff: cutOffCount, sharedBodies: sharedHeld.size };
 }
 
 /** What a send holding `body` would add to the bytes in flight now: nothing while another send in flight holds it. */
@@ -159,6 +162,7 @@ export function holdSharedBody(ctx: Koa.Context, body: Buffer, window: number): 
     const holders = sharedHeld.get(body) ?? 0;
     sharedHeld.set(body, holders + 1);
     if (holders === 0) inFlightBytes += body.length;
+    notePeak();
 }
 
 function releaseShared(body: Buffer): void {
@@ -188,6 +192,7 @@ export function setHeavyReadsForTests(overrides: Partial<HeavyReadSettings> | un
     testOverrides = { ...(overrides ?? {}) };
     resolved = null;
     lastSize.clear();
+    peakInFlightBytes = inFlightBytes;
     admittedCount = 0;
     refusedCount = 0;
     cutOffCount = 0;
@@ -314,6 +319,7 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
         weighs = null;
         ticket.waiter = null;
         inFlightBytes += ticket.held;
+        notePeak();
         admittedCount++;
         if (watched) ticket.deadline = setTimeout(cutOff, heavyReadSettings().deadlineMs).unref();
     };
@@ -398,6 +404,7 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
         if (!ticket.shared) {
             inFlightBytes += bytes - ticket.held;
             ticket.held = bytes;
+            notePeak();
         }
         if (ctx.status === 200) remember(key, bytes);
     }

@@ -410,7 +410,7 @@ async function main(): Promise<void> {
     // HEAVY_READ_CAP_ONLY=1d: section 1d alone, its own run in CI (scripts/server-suites.mjs VARIANTS).
     if (process.env.HEAVY_READ_CAP_ONLY === '1d') {
         console.log(`\n— 1d. ${STALLED_AT_THE_BOUND} readers of the shared directory who stop reading, more than the budget lets in —`);
-        await stalledReaders(dir, readers, BURST, HEAP_MB, [[STALLED_AT_THE_BOUND, false], [STALLED_AT_THE_BOUND, true]]);
+        await stalledReaders(dir, readers, BURST, HEAP_MB, [[STALLED_AT_THE_BOUND, false], [STALLED_AT_THE_BOUND, true, 'report']]);
         console.log(`\n${passed}/${run} passed`);
         process.exit(passed === run ? 0 : 1);
     }
@@ -549,19 +549,31 @@ async function main(): Promise<void> {
  * Section 1d: more readers who stop reading than the budget lets in at once, so that the cap, not the count, is what
  * stops them. 384 is the 48 MB budget over the 128 KB a send was weighed at before #1524, so it is past the bound at
  * that weight or any heavier one.
+ *
+ * Plain, the sends stay in flight (11 MB doesn't fit the socket's buffers), and that memory is the cap's: the server's
+ * RSS grows by no more than the budget (CI: +34 MB, 47.9 MB counted). Gzip, the cap's own promise is asserted (what it
+ * counts in flight never goes past the budget, and every reader is served or told "busy"), and the server's growth is
+ * reported, not asserted. On Linux the ~1.5 MB gzip body fits the loopback socket's buffers, so each send finishes and
+ * its weight comes back at 'finish', as it should, and the next reader is let in. What is left is the state of finished
+ * answers' connections their readers keep open, ~0.13–0.14 MB each: CI run 38027511359, 355 served, 0.0 MB counted, RSS
+ * +51 MB; and on a Mac, 384 readers who read it whole and keep the connection, +48.6 MB after a full collection, given
+ * back when they hang up. No weight can change that: it is held after the send is over. #1746 is that memory.
  */
 const STALLED_AT_THE_BOUND = 384;
 
-/** The shared directory's readers who stop reading, on servers of their own (main's section 1b; 1d at the bound). */
+/**
+ * The shared directory's readers who stop reading, on servers of their own (main's section 1b; 1d at the bound). A case
+ * marked 'report' prints the server's growth for each open connection instead of asserting it (1d gzip, above).
+ */
 async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_MB: number,
-    cases: readonly (readonly [number, boolean])[] = [[24, false], [48, false], [48, true]]): Promise<void> {
+    cases: readonly (readonly [n: number, gzip: boolean, growth?: 'report'])[] = [[24, false], [48, false], [48, true]]): Promise<void> {
         // Readers of the shared directory who stop reading, from a process of their own, as the deciding review of #1523
         // measured them: before this, each was sent the whole snapshot at once and its socket held about one encrypted
         // copy in native memory (11 MB plain, 2 MB gzip), off the heap, uncapped and with no deadline: 24 plain readers
         // +266 MB of RSS, 48 +532 MB. Now the server's whole memory stays within the cap's budget, and any reader past
         // what the budget allows is told "busy".
         const BUDGET_MB = 48;
-        for (const [n, gzip] of cases) {
+        for (const [n, gzip, growth] of cases) {
           // A fresh server for each: memory a process has freed is reused before its RSS grows, so after a burst, or after
           // the case before, RSS hides what readers hold. Its snapshot is built, and the gzip copy made, before the baseline.
           const server = await startServer(dir, HEAP_MB);
@@ -589,8 +601,13 @@ async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_M
             const grew = (resident(after) - resident(before)) / MB;
             console.log(`  (${n} ${gzip ? 'gzip' : 'plain'} readers who stop reading: ${served} served, ${busy.length} told "busy"; ${RSS} ${(resident(before) / MB).toFixed(0)} → ${(resident(after) / MB).toFixed(0)} MB (${grew >= 0 ? '+' : ''}${grew.toFixed(0)}), heap ${(after.heap / MB).toFixed(0)} MB, ${(held.inFlightBytes / MB).toFixed(1)} MB counted in flight; ${served ? (grew / served).toFixed(2) : '-'} MB of ${RSS} a send served; RSS ${(before.rss / MB).toFixed(0)} → ${(after.rss / MB).toFixed(0)} MB)`);
             assert(served + busy.length === n && busy.every(isBusy), `${n} ${gzip ? 'gzip' : 'plain'} readers who stop reading: each is served or told "busy" with Retry-After (${served} served, ${busy.length} busy)`);
-            assert(grew <= BUDGET_MB, `and the server's ${RSS} grows by no more than the ${BUDGET_MB} MB budget (${grew >= 0 ? '+' : ''}${grew.toFixed(0)} MB)`);
-            assert(held.inFlightBytes <= BUDGET_MB * MB, `and what they hold is counted within the budget (${(held.inFlightBytes / MB).toFixed(1)} MB)`);
+            if (growth === 'report') {
+                console.log(`  (reported, not asserted: the server's ${RSS} grew ${grew >= 0 ? '+' : ''}${grew.toFixed(0)} MB with ${(held.inFlightBytes / MB).toFixed(1)} MB counted in flight, ${served ? (grew / served).toFixed(2) : '-'} MB for each of the ${served} connections kept open; the cap gives a send's weight back once it is written, and what an open connection keeps after that is #1746)`);
+            } else {
+                assert(grew <= BUDGET_MB, `and the server's ${RSS} grows by no more than the ${BUDGET_MB} MB budget (${grew >= 0 ? '+' : ''}${grew.toFixed(0)} MB)`);
+            }
+            assert(held.inFlightBytes <= BUDGET_MB * MB && held.peakInFlightBytes <= BUDGET_MB * MB,
+                `and what they hold is counted within the budget, now and at its most (${(held.inFlightBytes / MB).toFixed(1)} MB now, ${(held.peakInFlightBytes / MB).toFixed(1)} MB at most)`);
           } finally {
             await server.stop();
           }

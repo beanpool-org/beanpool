@@ -20,12 +20,15 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
-import { groupPictureUrlOf, type GroupRole, type GroupMemberStatus } from '@beanpool/core';
+import { detectMentions, groupPictureUrlOf, type GroupRole, type GroupMemberStatus } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
 import { writeMessageTombstone } from './message-tombstone.js';
 import type { MessagingCallbacks } from './messaging.js';
+
+// Moved to core (group-crypto.ts): in an encrypted group the sending app detects mentions. Still exported from here.
+export { detectMentions };
 
 export const GROUP_THREAD_TYPE = 'group_thread';
 /** What a live chat update is about, beside a plain new message (chat parity, 2026-09-23). */
@@ -279,33 +282,6 @@ export function postGroupSystemLine(
     }, groupId, GROUP_THREAD_REMOVED_TEXT);
     broadcastToChat(cb, groupId, { ...shown, systemType } as any, undefined, alsoNotify);
     return msg;
-}
-
-/**
- * The members @mentioned in a message: "@" + a member's callsign (any case), starting the text or after a
- * non-word character, and not running on into more letters or digits. Callsigns may contain spaces.
- */
-export function detectMentions(text: string, candidates: { pubkey: string; callsign: string | null | undefined }[]): string[] {
-    const lower = text.toLowerCase();
-    const found = new Set<string>();
-    for (const c of candidates) {
-        const cs = (c.callsign || '').trim().toLowerCase();
-        if (cs.length < 2) continue;
-        const needle = `@${cs}`;
-        let from = 0;
-        while (from <= lower.length) {
-            const at = lower.indexOf(needle, from);
-            if (at < 0) break;
-            const before = at === 0 ? '' : lower[at - 1];
-            const after = lower[at + needle.length] ?? '';
-            if (!/[\p{L}\p{N}_]/u.test(before) && !/[\p{L}\p{N}_]/u.test(after)) {
-                found.add(c.pubkey);
-                break;
-            }
-            from = at + 1;
-        }
-    }
-    return Array.from(found);
 }
 
 function memberCandidates(groupId: string, exclude: string): { pubkey: string; callsign: string | null }[] {

@@ -161,6 +161,8 @@ export async function startVault(opts: {
     /** The custodians' restart: where a request goes, and the image waiting. */
     restartRequestFile?: string;
     imageWaiting?: VaultApiOptions['imageWaiting'];
+    /** A wait (the off-box upload's retry), in place of the test clock moved on at once: something done meanwhile. */
+    sleep?: (ms: number, clock: Clock) => Promise<void>;
 } = {}): Promise<VaultUnderTest> {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
@@ -189,7 +191,7 @@ export async function startVault(opts: {
             dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store, fetch: stub.fetch, clock: clock.now, trustProxy: opts.trustProxy, about: opts.about,
             settingsFile, smtpTls: opts.smtpTls, restartRequestFile: opts.restartRequestFile, imageWaiting: opts.imageWaiting,
             // A wait (the off-box upload's retry) is the test clock moved on, at once.
-            sleep: async ms => clock.advance(ms),
+            sleep: opts.sleep ? ms => opts.sleep!(ms, clock) : async ms => clock.advance(ms),
             ...(opts.requireDataMount ? { requireDataMount: true, restoreDir, dataMounted: () => dataMounted, dataPollMs: 50 } : {}),
         });
         const port = await api.listen(0, '127.0.0.1');

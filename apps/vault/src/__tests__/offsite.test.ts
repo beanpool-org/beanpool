@@ -298,6 +298,21 @@ describe('an upload that fails is tried once more', () => {
         // Nothing went up: nothing listed or removed either.
         expect(stub.requests.filter(r => r.method !== 'PUT')).toHaveLength(0);
     });
+
+    it('the store is changed during the wait: no retry is sent to either, and none is counted', async () => {
+        let meanwhile: (() => Promise<unknown>) | null = null;
+        const v = await vault({ sleep: async (ms, clock) => { await meanwhile?.(); clock.advance(ms); } });
+        await doGenesis(v);
+        const [a, b] = [await s3(), await s3()];
+        await setSettings(v, { v: 1, offsite: a.settings() });
+        a.failNext.put = [500];
+        meanwhile = () => setSettings(v, { v: 1, offsite: b.settings() });
+        await v.api.runBackup();
+        expect(a.requests.filter(r => r.method === 'PUT')).toHaveLength(1);
+        expect(b.requests).toHaveLength(0);
+        const { body } = await report(v);
+        expect(body.counts).toMatchObject({ offsiteOk: 0, offsiteFailed: 0, offsiteRetried: 0 });
+    });
 });
 
 describe('the cold path: a new machine, the off-box store and two shares', () => {

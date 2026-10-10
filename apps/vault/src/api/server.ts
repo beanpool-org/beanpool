@@ -1355,9 +1355,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 await target.put(name, bytes);
             } catch {
                 // A store that hiccups (a reset connection, a 500) mostly takes the same upload a little later.
-                counters.counts.offsiteRetried++;
                 await sleep(OFFSITE_RETRY_MS);
                 if (target !== offsite) return;
+                counters.counts.offsiteRetried++;
                 await target.put(name, bytes);
             }
         } catch (e) {

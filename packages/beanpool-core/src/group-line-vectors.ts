@@ -20,9 +20,10 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Pkcs8 } from './ed25519-key.js';
+import { mintGroupVectorRng } from './group-vector-rng.js';
 import type {
     GroupCryptoRandom, GroupEpochCheck, GroupEpochRecord, GroupLineBinding, GroupLinePart, GroupLinePayload, GroupTopUp,
-    MakeGroupEpochInput, OpenedGroupLine, SealGroupLineInput,
+    GroupTopUpCheck, MakeGroupEpochInput, OpenedGroupLine, SealGroupLineInput,
 } from './group-crypto.js';
 
 const seedOf = (name: string) => sha256(utf8ToBytes(`beanpool group-line vector: ${name}`));
@@ -30,10 +31,10 @@ const seedOf = (name: string) => sha256(utf8ToBytes(`beanpool group-line vector:
 /** The fixed randomness stream `label`: call i gives the first n bytes of SHA-256("… rng <label> <i>"). Vectors only. */
 export function groupVectorRandom(label: string): (n: number) => Uint8Array {
     let i = 0;
-    return (n: number) => {
+    return mintGroupVectorRng((n: number) => {
         if (n > 32) throw new Error('group-line vectors: a stream call gives at most 32 bytes');
         return sha256(utf8ToBytes(`beanpool group-line vector: rng ${label} ${i++}`)).slice(0, n);
-    };
+    });
 }
 
 type Who = 'ana' | 'ben' | 'cat' | 'dov';
@@ -144,7 +145,7 @@ export interface GroupCryptoApi {
     makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCryptoRandom): { record: GroupEpochRecord; groupKey: Uint8Array };
     openGroupEpochRecord(record: GroupEpochRecord, myEdPrivHex: string, check: GroupEpochCheck): Uint8Array;
     makeGroupTopUp(groupKey: Uint8Array, input: { myEdPrivHex: string; groupId: string; epoch: number; recipientPubHex: string }, opts?: GroupCryptoRandom): GroupTopUp;
-    openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string): Uint8Array;
+    openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string, check?: GroupTopUpCheck): Uint8Array;
     groupMessageKey(groupKey: Uint8Array, messageId: string): Uint8Array;
     sealGroupLine(text: string, input: SealGroupLineInput, opts?: GroupCryptoRandom): GroupLinePayload;
     openGroupLine(payload: GroupLinePayload, ref: GroupLineBinding, groupKey: Uint8Array): OpenedGroupLine;
@@ -182,17 +183,19 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
         const made = api.makeGroupEpochRecord({
             myEdPrivHex: keyOf('cat', pkcs8), groupId: GROUP_VECTOR_GROUP, epoch: 3, reason: 'join', subject: people.cat.publicKey,
             createdAt: GROUP_VECTOR_CREATED_AT, recipients: [people.ana.publicKey, people.ben.publicKey, people.cat.publicKey],
-        }, { randomBytes: groupVectorRandom('epoch 3') });
+        }, { randomBytesForVectors: groupVectorRandom('epoch 3') });
         if (JSON.stringify(made.record) !== JSON.stringify(GROUP_VECTOR_RECORD)) fail(`epoch record made with ${pkcs8 ? 'a PKCS8' : 'a bare-seed'} key differs from the frozen one`);
         if (bytesToHex(made.groupKey) !== GROUP_VECTOR_KEY_HEX) fail('the epoch key differs');
         const topUp = api.makeGroupTopUp(key, { myEdPrivHex: keyOf('ana', pkcs8), groupId: GROUP_VECTOR_GROUP, epoch: 3, recipientPubHex: people.dov.publicKey },
-            { randomBytes: groupVectorRandom('top-up') });
+            { randomBytesForVectors: groupVectorRandom('top-up') });
         if (JSON.stringify(topUp) !== JSON.stringify(GROUP_VECTOR_TOP_UP)) fail(`top-up made with ${pkcs8 ? 'a PKCS8' : 'a bare-seed'} key differs from the frozen one`);
         for (const who of MEMBERS) {
             const opened = api.openGroupEpochRecord(GROUP_VECTOR_RECORD, keyOf(who, pkcs8), { groupId: GROUP_VECTOR_GROUP, epoch: 3 });
             if (bytesToHex(opened) !== GROUP_VECTOR_KEY_HEX) fail(`${who} opened another key from the record`);
         }
         if (bytesToHex(api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, keyOf('dov', pkcs8))) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from the top-up');
+        const roster = [people.ana.publicKey, people.ben.publicKey, people.cat.publicKey, people.dov.publicKey];
+        if (bytesToHex(api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, keyOf('dov', pkcs8), { activeMembers: roster })) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from the top-up, roster given');
     }
     let dovInRecord = false;
     try { api.openGroupEpochRecord(GROUP_VECTOR_RECORD, people.dov.seedHex, { groupId: GROUP_VECTOR_GROUP }); dovInRecord = true; } catch { /* as it should */ }
@@ -200,6 +203,9 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
     let otherGroup = false;
     try { api.openGroupEpochRecord(GROUP_VECTOR_RECORD, people.ana.seedHex, { groupId: '00000000-0000-4000-8000-000000000000' }); otherGroup = true; } catch { /* as it should */ }
     if (otherGroup) fail('the record opened as another group\'s');
+    let outsideRoster = false;
+    try { api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, people.dov.seedHex, { activeMembers: [people.ben.publicKey, people.cat.publicKey, people.dov.publicKey] }); outsideRoster = true; } catch { /* as it should */ }
+    if (outsideRoster) fail('the top-up opened though its wrapper is in no roster given');
 
     for (const v of GROUP_LINE_VECTORS) {
         if (bytesToHex(api.groupMessageKey(key, v.messageId)) !== v.messageKeyHex) fail(`${v.label}: the message key differs`);
@@ -207,7 +213,7 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
             const sealed = api.sealGroupLine(v.text, {
                 myEdPrivHex: keyOf(v.from, pkcs8), groupKey: key, groupId: GROUP_VECTOR_GROUP, epoch: 3, messageId: v.messageId,
                 part: v.part, after: v.after, replyToId: v.replyToId,
-            }, { randomBytes: groupVectorRandom(v.rng) });
+            }, { randomBytesForVectors: groupVectorRandom(v.rng) });
             if (sealed.ciphertext !== v.payload.ciphertext || sealed.nonce !== v.payload.nonce) {
                 fail(`${v.label}: sealed with ${pkcs8 ? 'a PKCS8' : 'a bare-seed'} key, the bytes differ from the frozen line`);
             }

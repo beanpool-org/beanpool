@@ -285,6 +285,22 @@ async function main(): Promise<void> {
     const lead = await propose(eP, l2, { effect: 'replace_lead', subject: l2.pubKeyHex });
     assert(lead.status === 400 && /project's leader/.test(String(lead.error)), `a project's collaborators can't vote its leader out (got ${lead.error})`);
 
+    // ── 8. Removing a keeper, then replacing the lead, by the keepers' vote ───────────────────────────
+    const [ra, rb, rc] = [makeMember('Rae'), makeMember('Rex'), makeMember('Roo')];
+    const eR = makeEnterprise('Ropeworks', [ra, rb, rc], 20);
+    const roleOf = (pk: string) => (db.prepare('SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(eR, pk) as any)?.role ?? null;
+    const dR = (await propose(eR, rb, { effect: 'remove_keeper', subject: rc.pubKeyHex })).body?.decision?.id as string;
+    await vote(eR, dR, ra, true); await vote(eR, dR, rb, true);
+    tickDecisions();
+    assert(row(dR).status === 'executed' && roleOf(rc.pubKeyHex) === null, `two of three remove a keeper (got ${row(dR).status} ${row(dR).execution_error ?? ''}, role ${roleOf(rc.pubKeyHex)})`);
+    const lone = await propose(eR, ra, { effect: 'remove_keeper', subject: ra.pubKeyHex });
+    assert(lone.status === 400, 'nobody proposes removing themselves');
+    const dL = (await propose(eR, rb, { effect: 'replace_lead', subject: rb.pubKeyHex })).body?.decision?.id as string;
+    await vote(eR, dL, ra, true); await vote(eR, dL, rb, true);
+    tickDecisions();
+    assert(row(dL).status === 'executed' && roleOf(rb.pubKeyHex) === 'lead' && roleOf(ra.pubKeyHex) === 'keeper',
+        `the keepers make another keeper the lead; the old lead stays a keeper (got ${row(dL).status}, ${roleOf(rb.pubKeyHex)}/${roleOf(ra.pubKeyHex)})`);
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ AN ENTERPRISE\'S KEEPERS CAN VOTE TO PAY OUT.');

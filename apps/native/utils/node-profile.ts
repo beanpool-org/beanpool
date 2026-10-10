@@ -56,12 +56,18 @@ export interface NodeFeatures {
      * a sign-in, and nobody makes invites). A node from before the door says nothing: any member, as before.
      */
     door?: NodeDoor;
+    /**
+     * The community gives each member's phone the listings near the member's area: the nearest `max` within `radiusKm`
+     * (the worldwide one, design DESIGN-global-sync-by-area §2). Signup then asks for a rough area (utils/member-area.ts).
+     * A node that doesn't say gives every listing, as before.
+     */
+    nearbyListings?: { radiusKm: number; max: number };
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
 const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 
-const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door'>> = [
+const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview',
@@ -86,7 +92,7 @@ function cacheKey(url: string): string {
  * Read the profile out of an info answer, or null when the answer is not one.
  *
  * Only the exact string `global` makes a node global: anything else, including an answer that does
- * not say, is `local`. Only booleans are kept from `features`.
+ * not say, is `local`. Only booleans are kept from `features`, beside `door` and `nearbyListings`' two numbers.
  */
 export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProfile | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
@@ -98,6 +104,10 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
             if (typeof f[key] === 'boolean') features[key] = f[key] as boolean;
         }
         if (DOORS.includes(f.door as NodeDoor)) features.door = f.door as NodeDoor;
+        const n = f.nearbyListings as { radiusKm?: unknown; max?: unknown } | undefined;
+        if (n && typeof n === 'object' && typeof n.radiusKm === 'number' && n.radiusKm > 0 && typeof n.max === 'number' && n.max > 0) {
+            features.nearbyListings = { radiusKm: n.radiusKm, max: n.max };
+        }
     }
     return { profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString() };
 }

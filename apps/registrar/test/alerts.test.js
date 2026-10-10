@@ -29,6 +29,7 @@ async function room(env = WITH_NTFY) {
         const url = new URL(typeof input === 'string' ? input : input.url);
         if (url.hostname !== 'ntfy.test') return inner(input, init);
         sent.push({ url: url.href, method: init.method, headers: Object.fromEntries(new Headers(init.headers).entries()), body: String(init.body ?? ''), status: ntfy.status, redirect: init.redirect });
+        if (ntfy.hold) await ntfy.hold;   // ntfy not answering until the test lets it
         return new Response('{"id":"x"}', { status: ntfy.status });
     };
     const realNow = Date.now;
@@ -344,6 +345,25 @@ test('with ctx.waitUntil (the real runtime), the claim answers first and the mes
         await Promise.all(later);
         assert.equal(r.sent.length, 1);
         assert.equal(r.sent[0].headers.title, 'Name request: sydney');
+    } finally { r.done(); }
+});
+
+test('the cron sweep never waits for ntfy: with it not answering, the sweep ends and the send runs after (ctx.waitUntil)', async () => {
+    const r = await room({ ...WITH_NTFY, CANARY_NAME: 'canary' });   // every sweep suspends: an urgent message
+    try {
+        let answer;
+        r.ntfy.hold = new Promise((res) => { answer = res; });
+        const later = [];
+        await worker.scheduled({ cron: '*/5 * * * *' }, r.w.env, { waitUntil: (p) => later.push(p) });
+        const swept = await Promise.race([later[0].then((s) => s.action), new Promise((res) => setTimeout(() => res('stalled'), 2000))]);
+        assert.equal(swept, 'suspended:canary', 'the sweep ended while ntfy had not answered');
+        assert.ok(later.length >= 2, 'the send was handed to waitUntil on its own');
+        await new Promise((res) => setTimeout(res, 50));
+        assert.equal(r.sent.length, 1, 'the request is made, and ntfy has not answered it');
+        answer();
+        await Promise.all(later);
+        assert.equal(r.sent[0].headers.title, 'Attest sweep suspended');
+        assert.equal((await r.admin('alerts')).body.channel.last_status, 'HTTP 200');
     } finally { r.done(); }
 });
 

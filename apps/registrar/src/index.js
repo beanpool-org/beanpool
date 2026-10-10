@@ -1560,12 +1560,14 @@ async function routedOrRepaired(env, name) {
     if (row?.status === 'live') await owe(env, '[REPAIR_OWED]', name, 'dns', row.dns_record_id, 'Cloudflare does not route it as its row says');
 }
 
+// An alert's send runs after the response, or beside the sweep (src/alerts.js notify): the env, with ctx.waitUntil on it.
+const withWaitUntil = (workerEnv, ctx) => (typeof ctx?.waitUntil === 'function'
+    ? Object.assign(Object.create(workerEnv), { waitUntil: (p) => ctx.waitUntil(p) })
+    : workerEnv);
+
 export default {
     async fetch(request, workerEnv, ctx) {
-        // An alert's send runs after the response (src/alerts.js notify): the request's env, with ctx.waitUntil on it.
-        const env = typeof ctx?.waitUntil === 'function'
-            ? Object.assign(Object.create(workerEnv), { waitUntil: (p) => ctx.waitUntil(p) })
-            : workerEnv;
+        const env = withWaitUntil(workerEnv, ctx);
         const url = new URL(request.url);
         const p = url.pathname;
         const method = request.method;
@@ -1638,7 +1640,8 @@ export default {
         }
     },
 
-    async scheduled(event, env, ctx) {
-        ctx.waitUntil(attestSweep(env));
+    async scheduled(event, workerEnv, ctx) {
+        // A slow ntfy never holds the sweep: each send is its own waitUntil.
+        ctx.waitUntil(attestSweep(withWaitUntil(workerEnv, ctx)));
     },
 };

@@ -245,7 +245,8 @@ export async function updateConditions(env, conditions) {
             console.error('[ALERT_CONDITION]', c.key, String(e?.message || e).slice(0, 200));
         }
     }
-    await flush(env);
+    if (typeof env.waitUntil === 'function') env.waitUntil(flush(env));
+    else await flush(env);
 }
 
 // Send what waits, if a channel is set and a try is due: one message with every waiting event (at most 50), or, at the

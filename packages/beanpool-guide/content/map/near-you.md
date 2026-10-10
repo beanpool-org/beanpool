@@ -15,7 +15,7 @@ related: browsing-the-market, map-pins, pin-locations, events
 
 Posts with no location are always shown.
 
-The picker opens on a fixed spot, not on you. Tap the target button, or tap the map, before you tap **Apply**.
+If your browser already lets BeanPool use your location, the picker can open on where you are now. If not, it opens on a fixed spot. Check the pin, or tap the target button or the map, before you tap **Apply**. On the global community the web app sends the centre you chose to the community, rounded to about 11 metres.
 
 ## On the Map
 

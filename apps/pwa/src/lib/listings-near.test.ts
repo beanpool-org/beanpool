@@ -45,6 +45,18 @@ describe('nearRead: a centre past ±180° (the picker\'s map gives 185 for Tonga
     });
 });
 
+describe('nearRead: the Distance centre goes to the node at 4 dp, as the phone sends its position (about 11 m)', () => {
+    it('rounds a live-GPS-precise centre, and a wrapped one', () => {
+        const read = (lat: number, lng: number) => nearRead({ nearbyListings: NEARBY, setting: { ...SETTING, lat, lng }, area: null, visitor: false });
+        expect(read(-28.612345678901, 153.598765432109)).toMatchObject({ lat: -28.6123, lng: 153.5988, from: 'setting' });
+        expect(read(-28.643187, 153.612349)).toMatchObject({ lat: -28.6432, lng: 153.6123 });
+        expect(read(-21.123456, 185.123456)).toMatchObject({ lat: -21.1235, lng: -174.8765 });
+        // The area is the node's own, already rounded to 0.1°: sent exactly as stored.
+        expect(nearRead({ nearbyListings: NEARBY, setting: null, area: { lat: -28.6, lng: 153.6 }, visitor: false }))
+            .toMatchObject({ lat: -28.6, lng: 153.6, from: 'area' });
+    });
+});
+
 describe('nearParams and listingDistanceKm', () => {
     it('the read\'s four parameters, or none', () => {
         expect(nearParams(null)).toEqual({});

@@ -42,11 +42,17 @@ const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFi
  */
 const wrapLng = (lng: number): number => (lng >= -180 && lng <= 180 ? lng : ((((lng + 180) % 360) + 360) % 360) - 180);
 
+/**
+ * The Distance centre to 4 dp (about 11 m), as the phone sends its position (apps/native/utils/market-global.ts). The
+ * picker can open on the member's live position, and the read goes to the node with it.
+ */
+const dp4 = (n: number): number => Number(n.toFixed(4));
+
 /** The point and radius to read from, or null to read as before. */
 export function nearRead({ nearbyListings, setting, area, visitor, everywhere }: NearInputs): NearRead | null {
     if (visitor || everywhere || !nearbyListings) return null;
     if (setting && finite(setting.lat) && finite(setting.lng) && finite(setting.radiusKm) && setting.radiusKm > 0) {
-        return { lat: setting.lat, lng: wrapLng(setting.lng), radiusKm: setting.radiusKm, sort: 'distance', from: 'setting' };
+        return { lat: dp4(setting.lat), lng: dp4(wrapLng(setting.lng)), radiusKm: setting.radiusKm, sort: 'distance', from: 'setting' };
     }
     if (area && finite(area.lat) && finite(area.lng) && finite(nearbyListings.radiusKm) && nearbyListings.radiusKm > 0) {
         return { lat: area.lat, lng: area.lng, radiusKm: nearbyListings.radiusKm, sort: 'distance', from: 'area' };

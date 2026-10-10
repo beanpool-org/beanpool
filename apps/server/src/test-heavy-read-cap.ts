@@ -65,7 +65,7 @@ import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { stripVTControlCharacters } from 'node:util';
 
@@ -131,7 +131,7 @@ async function serve(): Promise<void> {
         // Imported here so that the burst in 1 runs on a server from before the cap too (the fail-first run).
         if (line === 'stats') import('./heavy-reads.js').then((m) => say({ stats: m.heavyReadStats() }), () => say({ stats: null }));
         // The whole process, not only the heap: TLS keeps each socket's ciphertext off the V8 heap.
-        if (line === 'mem') { const m = process.memoryUsage(); say({ mem: { rss: m.rss, heap: m.heapUsed, buffers: m.arrayBuffers } }); }
+        if (line === 'mem') { const m = process.memoryUsage(); say({ mem: { rss: m.rss, heap: m.heapUsed, buffers: m.arrayBuffers, footprint: footprint() } }); }
         // The same after a full collection: what is held, not the garbage of the builds before it (1c builds one each version).
         if (line === 'mem-gc') { (globalThis as any).gc?.(); (globalThis as any).gc?.(); const m = process.memoryUsage(); say({ mem: { rss: m.rss, heap: m.heapUsed, buffers: m.arrayBuffers } }); }
         // A write somewhere moves the version: the directory's (members) or every roster's (groups).
@@ -140,6 +140,21 @@ async function serve(): Promise<void> {
         if (line === 'group') import('./db/db.js').then(({ db }) => say({ group: (db.prepare(`SELECT id FROM groups WHERE name = 'Heavy roster'`).get() as { id: string } | undefined)?.id ?? null }));
         if (line === 'exit') process.exit(0);
     });
+}
+
+/**
+ * macOS only: this process's phys_footprint, its dirty memory wherever it is. On a Mac short of memory the compressor
+ * takes pages out of the RSS: 384 readers who stop reading measured RSS 217 → 52 MB with 48 MB counted in flight
+ * (#1524). Elsewhere null, and RSS is the measure.
+ */
+function footprint(): number | null {
+    if (process.platform !== 'darwin') return null;
+    try {
+        const m = /phys_footprint: (\d+) B/.exec(execFileSync('footprint', ['-p', String(process.pid), '-f', 'bytes', '--noCategories'], { encoding: 'utf8' }));
+        return m ? Number(m[1]) : null;
+    } catch {
+        return null;
+    }
 }
 
 /** `count` directory reads at once from this process when the orchestrator says go (a line on stdin): what each got. */
@@ -392,6 +407,13 @@ async function main(): Promise<void> {
         console.log(`\n${passed}/${run} passed`);
         process.exit(passed === run ? 0 : 1);
     }
+    // HEAVY_READ_CAP_ONLY=1d: section 1d alone, its own run in CI (scripts/server-suites.mjs VARIANTS).
+    if (process.env.HEAVY_READ_CAP_ONLY === '1d') {
+        console.log(`\n— 1d. ${STALLED_AT_THE_BOUND} readers of the shared directory who stop reading, more than the budget lets in —`);
+        await stalledReaders(dir, readers, BURST, HEAP_MB, [[STALLED_AT_THE_BOUND, false], [STALLED_AT_THE_BOUND, true]]);
+        console.log(`\n${passed}/${run} passed`);
+        process.exit(passed === run ? 0 : 1);
+    }
     const server = await startServer(dir, HEAP_MB);
     const target = { port: server.port, tls: true };
     try {
@@ -523,22 +545,32 @@ async function main(): Promise<void> {
     process.exit(passed === run ? 0 : 1);
 }
 
-/** The shared directory's readers who stop reading, on servers of their own (main's section 1b). */
-async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_MB: number): Promise<void> {
+/**
+ * Section 1d: more readers who stop reading than the budget lets in at once, so that the cap, not the count, is what
+ * stops them. 384 is the 48 MB budget over the 128 KB a send was weighed at before #1524, so it is past the bound at
+ * that weight or any heavier one.
+ */
+const STALLED_AT_THE_BOUND = 384;
+
+/** The shared directory's readers who stop reading, on servers of their own (main's section 1b; 1d at the bound). */
+async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_MB: number,
+    cases: readonly (readonly [number, boolean])[] = [[24, false], [48, false], [48, true]]): Promise<void> {
         // Readers of the shared directory who stop reading, from a process of their own, as the deciding review of #1523
         // measured them: before this, each was sent the whole snapshot at once and its socket held about one encrypted
         // copy in native memory (11 MB plain, 2 MB gzip), off the heap, uncapped and with no deadline: 24 plain readers
         // +266 MB of RSS, 48 +532 MB. Now the server's whole memory stays within the cap's budget, and any reader past
         // what the budget allows is told "busy".
         const BUDGET_MB = 48;
-        for (const [n, gzip] of [[24, false], [48, false], [48, true]] as const) {
+        for (const [n, gzip] of cases) {
           // A fresh server for each: memory a process has freed is reused before its RSS grows, so after a burst, or after
           // the case before, RSS hides what readers hold. Its snapshot is built, and the gzip copy made, before the baseline.
           const server = await startServer(dir, HEAP_MB);
           try {
             for (const enc of [{}, { 'Accept-Encoding': 'gzip' }] as Record<string, string>[]) await open({ port: server.port, tls: true }, '/api/members', { ...signed('/api/members', readers[0]), ...enc }).done;
             await sleep(1000);
-            const before = (await server.ask('mem')).mem as { rss: number; heap: number };
+            // The baseline after a full collection: the builds' garbage, freed later, would hide what the readers hold.
+            await server.ask('mem-gc');
+            const before = (await server.ask('mem')).mem as { rss: number; heap: number; footprint: number | null };
             const keys = readers.slice(0, BURST).map((r) => ({ pk: r.pk, der: r.priv.export({ type: 'pkcs8', format: 'der' }).toString('hex') }));
             const p = child('stall', dir, { port: server.port, keys, count: n, gzip });
             const said: ((m: any) => void)[] = [];
@@ -546,16 +578,18 @@ async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_M
             const ask = (line: string) => new Promise<any>((r) => { said.push(r); p.stdin!.write(line + '\n'); });
             const got: Answer[] = await ask('report');
             await sleep(3000);
-            const after = (await server.ask('mem')).mem as { rss: number; heap: number };
+            const after = (await server.ask('mem')).mem as { rss: number; heap: number; footprint: number | null };
             const held = (await server.ask('stats')).stats;
             await ask('bye');
             await new Promise((r) => p.once('exit', r));
             const served = got.filter((a) => a.status === 200).length;
             const busy = got.filter((a) => a.status === 503);
-            const grew = (after.rss - before.rss) / MB;
-            console.log(`  (${n} ${gzip ? 'gzip' : 'plain'} readers who stop reading: ${served} served, ${busy.length} told "busy"; RSS ${(before.rss / MB).toFixed(0)} → ${(after.rss / MB).toFixed(0)} MB (${grew >= 0 ? '+' : ''}${grew.toFixed(0)}), heap ${(after.heap / MB).toFixed(0)} MB, ${(held.inFlightBytes / MB).toFixed(1)} MB counted in flight)`);
+            // RSS, or on macOS the footprint (footprint()).
+            const resident = (m: typeof before) => m.footprint ?? m.rss, RSS = before.footprint === null ? 'RSS' : 'footprint';
+            const grew = (resident(after) - resident(before)) / MB;
+            console.log(`  (${n} ${gzip ? 'gzip' : 'plain'} readers who stop reading: ${served} served, ${busy.length} told "busy"; ${RSS} ${(resident(before) / MB).toFixed(0)} → ${(resident(after) / MB).toFixed(0)} MB (${grew >= 0 ? '+' : ''}${grew.toFixed(0)}), heap ${(after.heap / MB).toFixed(0)} MB, ${(held.inFlightBytes / MB).toFixed(1)} MB counted in flight; ${served ? (grew / served).toFixed(2) : '-'} MB of ${RSS} a send served; RSS ${(before.rss / MB).toFixed(0)} → ${(after.rss / MB).toFixed(0)} MB)`);
             assert(served + busy.length === n && busy.every(isBusy), `${n} ${gzip ? 'gzip' : 'plain'} readers who stop reading: each is served or told "busy" with Retry-After (${served} served, ${busy.length} busy)`);
-            assert(grew <= BUDGET_MB, `and the server's RSS grows by no more than the ${BUDGET_MB} MB budget (${grew >= 0 ? '+' : ''}${grew.toFixed(0)} MB)`);
+            assert(grew <= BUDGET_MB, `and the server's ${RSS} grows by no more than the ${BUDGET_MB} MB budget (${grew >= 0 ? '+' : ''}${grew.toFixed(0)} MB)`);
             assert(held.inFlightBytes <= BUDGET_MB * MB, `and what they hold is counted within the budget (${(held.inFlightBytes / MB).toFixed(1)} MB)`);
           } finally {
             await server.stop();

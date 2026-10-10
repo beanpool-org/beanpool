@@ -48,6 +48,8 @@ export function getCaCertPem(): string { return caCertPem; }
 export function getServerCertPem(): string { return serverCertPem; }
 export function getServerKeyPem(): string { return serverKeyPem; }
 export function isUsingLetsEncrypt(): boolean { return usingLetsEncrypt; }
+/** A public node (it asks Let's Encrypt) that is serving its self-signed certificate: what services/alerts.ts tells the owners. */
+export function tlsFellBackToSelfSigned(): boolean { return !!(CF_RECORD_NAME && CF_API_TOKEN && CF_ZONE_ID) && !usingLetsEncrypt && !!serverCertPem; }
 
 /**
  * Initialize TLS certificates. Tries Let's Encrypt for public nodes,

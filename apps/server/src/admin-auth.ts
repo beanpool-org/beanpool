@@ -601,6 +601,7 @@ const READ_ONLY_POSTS: readonly string[] = [
     '/api/local/admin/offbox-backups/status',
     '/api/local/admin/offbox-backups/list',
     '/api/local/admin/standby-health',
+    '/api/local/admin/alerts/status',
 ];
 
 function requestPathOf(ctx: any): string {

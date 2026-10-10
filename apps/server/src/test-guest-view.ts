@@ -1299,6 +1299,7 @@ async function main(): Promise<void> {
             'GET /api/local/admin/automation-tokens', 'POST /api/local/admin/automation-tokens', 'POST /api/local/admin/automation-tokens/:id/revoke',
             'POST /api/local/admin/node/config', 'GET /api/local/admin/offbox-backups/download', 'POST /api/local/admin/offbox-backups/list',
             'POST /api/local/admin/offbox-backups/run', 'POST /api/local/admin/offbox-backups/settings', 'POST /api/local/admin/offbox-backups/status',
+            'POST /api/local/admin/alerts/settings', 'POST /api/local/admin/alerts/status', 'POST /api/local/admin/alerts/test',
             'GET /api/local/admin/onboarding-funnel', 'POST /api/local/admin/onboarding-funnel',
             'POST /api/local/admin/posts/:id/delete', 'POST /api/local/admin/posts/:id/restore', 'POST /api/local/admin/posts/bulk-delete',
             'POST /api/local/admin/public-address/claim', 'GET /api/local/admin/public-address/extra-names', 'GET /api/local/admin/public-address/logs',

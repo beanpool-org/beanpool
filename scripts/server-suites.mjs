@@ -179,6 +179,7 @@ export const SUITES = [
     'test-backup-owner-gate',
     'test-sealed-backups',
     'test-offbox-backups',
+    'test-alerts',
     'test-takeover-envelope',
     'test-owner-words-check',
     'test-owner-lock-open-check',

@@ -37,6 +37,8 @@ interface SentinelFile {
 }
 
 let activeShutdownStatus: ShutdownStatus = { uncleanShutdown: false };
+/** Whether this start found the last run's sentinel still saying running (not an old, unacknowledged report). */
+let thisStartFollowedUncleanStop = false;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 let currentDataDir: string = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 let cleanShutdownRegistered = false;
@@ -94,6 +96,7 @@ export function initShutdownRecovery(options?: {
         } catch {}
     }
 
+    thisStartFollowedUncleanStop = !!(priorSentinel && priorSentinel.running === true);
     if (priorSentinel && priorSentinel.running === true) {
         // Unclean shutdown occurred! (Power loss, SIGKILL, crash)
         const powerLossTime = formatPowerLossTime(priorSentinel.lastHeartbeat);
@@ -284,6 +287,15 @@ export function markCleanShutdown(dataDir?: string): void {
  */
 export function getShutdownStatus(): ShutdownStatus {
     return activeShutdownStatus;
+}
+
+/**
+ * Whether this start came after a stop that was not clean (a crash, a kill, power): the alerts' crash-loop row counts
+ * only these, so `docker compose up -d` three times in a row is no crash loop. An unclean stop already acknowledged,
+ * or reported at an earlier start, is not this start's.
+ */
+export function startFollowedUncleanStop(): boolean {
+    return thisStartFollowedUncleanStop;
 }
 
 /**

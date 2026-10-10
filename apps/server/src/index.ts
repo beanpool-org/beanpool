@@ -78,6 +78,7 @@ import { initPublicAddress } from './services/public-address-agent.js';
 import { initTunnelConnector } from './services/tunnel-connector.js';
 import { initBackupPuller, registerSwapRestart } from './services/backup-puller.js';
 import { startStandbyHealthWatch } from './services/standby-health.js';
+import { recordBoot, startServerAlerts } from './services/alerts.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { initOffboxBackups } from './services/offbox-backups.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
@@ -95,7 +96,7 @@ import { startImageEvacuation } from './services/image-evacuation.js';
 import { checkImageStoreAtBoot } from './storage/image-store.js';
 import { startOrphanObjectSweep } from './engine/storage-health.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
-import { initShutdownRecovery } from './engine/shutdown-recovery.js';
+import { initShutdownRecovery, startFollowedUncleanStop } from './engine/shutdown-recovery.js';
 import { secureDataDirAtBoot } from './boot-file-safety.js';
 
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
@@ -120,6 +121,9 @@ async function main() {
 
     // Step 2.1: Unclean shutdown detection & SQLite PRAGMA integrity_check
     const shutdownRecovery = initShutdownRecovery();
+    // This start, for the alerts' crash-loop row (services/alerts.ts): three after unclean stops in 15 minutes is told at
+    // the third. A clean restart is not counted.
+    recordBoot(startFollowedUncleanStop());
     if (shutdownRecovery.uncleanShutdown) {
         if (shutdownRecovery.ok) {
             console.log(`🛡️  ${shutdownRecovery.message}`);
@@ -351,6 +355,9 @@ async function main() {
     // Step 10.2: The watch on this server's standbys (design G8): when one stops copying or copies wrongly, the community's
     // owners are told. Set on every node like the mirror: each tick reads the role.
     startStandbyHealthWatch();
+    // Step 10.3: this server's own alerts to its owners (services/alerts.ts): the disk, backups, restarts, the standby,
+    // its certificate. The owners' push and the admin queue always; the operator's own channel only when one is set.
+    startServerAlerts();
     // Step 10.4: the tunnel for <name>.beanpool.org runs inside this server (services/tunnel-connector.ts), on the token in
     // node_config, on the main server only, and after a take-over's own tunnel step. On every server: it also deletes a
     // leftover data/tunnel-token and warns when docker-compose.yml still mounts Docker's control socket. Never throws;

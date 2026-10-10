@@ -2400,6 +2400,37 @@ async function offboxPost<T>(nodeUrl: string, apiPath: string, body: object, adm
     return res.json();
 }
 
+/** This server's alerts (apps/server services/alerts.ts): owners only. The channel's address is never sent back. */
+export interface AlertsStatus {
+    channel: { source: 'env' | 'settings'; format: 'ntfy' | 'json'; where: string; tokenSet: boolean } | null;
+    channelProblem: string | null;
+    lastOkAt: number | null;
+    lastTriedAt: number | null;
+    failedInARow: number;
+    error: string | null;
+    nextTryAt: number | null;
+    waiting: number;
+    dropped: number;
+    sentLastHour: number;
+    hourlyCap: number;
+    active: Array<{ key: string; title: string; priority: number; since: number; detail: string }>;
+    history: Array<{ key: string; title: string; kind: 'raised' | 'still' | 'cleared'; at: number; since: number; priority: number; detail: string }>;
+}
+
+export function getAlertsStatus(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AlertsStatus> {
+    return offboxPost(nodeUrl, '/api/local/admin/alerts/status', {}, adminPassword, tfaToken);
+}
+
+export function saveAlertsChannel(
+    nodeUrl: string, update: { url?: string; format?: 'ntfy' | 'json'; token?: string; remove?: boolean }, adminPassword?: string, tfaToken?: string,
+): Promise<{ success: boolean; status: AlertsStatus }> {
+    return offboxPost(nodeUrl, '/api/local/admin/alerts/settings', update, adminPassword, tfaToken);
+}
+
+export function sendTestAlert(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<{ ok: boolean; status: AlertsStatus; error?: string }> {
+    return offboxPost(nodeUrl, '/api/local/admin/alerts/test', {}, adminPassword, tfaToken);
+}
+
 export function getOffboxStatus(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<OffboxStatus> {
     return offboxPost(nodeUrl, '/api/local/admin/offbox-backups/status', {}, adminPassword, tfaToken);
 }

@@ -469,8 +469,13 @@ async function main(): Promise<void> {
     fixture(0, Date.now());
     await tick();
     assert(!alerts.getAlertsStatus().active.some((a) => a.key === 'backups.offbox'), '7. the next upload that arrives clears it');
+    // Three clean restarts (docker compose up -d) in 15 minutes are no crash loop; three after unclean stops are.
+    fs.rmSync(path.join(dataDir!, alerts.BOOTS_FILE), { force: true });
+    for (let i = 0; i < 3; i++) alerts.recordBoot(false, Date.now() + offset - (10 - 5 * i) * MIN);
+    await tick();
+    assert(!alerts.getAlertsStatus().active.some((a) => a.key === 'boot.crashloop'), '7. three clean restarts in 15 minutes: no crash loop');
     fs.writeFileSync(path.join(dataDir!, alerts.BOOTS_FILE), JSON.stringify([Date.now() + offset - 10 * MIN, Date.now() + offset - 5 * MIN]));
-    alerts.recordBoot();
+    alerts.recordBoot(true);
     await tick();
     const loop = alerts.getAlertsStatus().active.find((a) => a.key === 'boot.crashloop');
     assert(!!loop && loop.priority === 5, '7. three starts in 15 minutes: a crash loop, urgent');

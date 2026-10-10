@@ -96,7 +96,7 @@ import { startImageEvacuation } from './services/image-evacuation.js';
 import { checkImageStoreAtBoot } from './storage/image-store.js';
 import { startOrphanObjectSweep } from './engine/storage-health.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
-import { initShutdownRecovery } from './engine/shutdown-recovery.js';
+import { initShutdownRecovery, startFollowedUncleanStop } from './engine/shutdown-recovery.js';
 import { secureDataDirAtBoot } from './boot-file-safety.js';
 
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
@@ -121,8 +121,9 @@ async function main() {
 
     // Step 2.1: Unclean shutdown detection & SQLite PRAGMA integrity_check
     const shutdownRecovery = initShutdownRecovery();
-    // This start, for the alerts' crash-loop row (services/alerts.ts): three in 15 minutes is told at the third.
-    recordBoot();
+    // This start, for the alerts' crash-loop row (services/alerts.ts): three after unclean stops in 15 minutes is told at
+    // the third. A clean restart is not counted.
+    recordBoot(startFollowedUncleanStop());
     if (shutdownRecovery.uncleanShutdown) {
         if (shutdownRecovery.ok) {
             console.log(`🛡️  ${shutdownRecovery.message}`);

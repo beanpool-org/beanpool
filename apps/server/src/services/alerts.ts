@@ -8,7 +8,7 @@
  * points below), backups going off the box (failing twice, none for two intervals, or none sent at all: destinations set
  * with no recovery code, or none of them usable), backups not leaving at all (no destination and no recovery code: the
  * owners only, once a week), scheduled snapshots failing twice in a row, a crash
- * loop (three starts in 15 minutes, told at the third start so it gets out before the next crash), an unclean stop (a
+ * loop (three starts after unclean stops in 15 minutes, told at the third start so it gets out before the next crash), an unclean stop (a
  * failed integrity check is urgent), the host watchdog restarting a frozen server or going quiet, the standby needing its
  * owners (services/standby-health.ts), and a public server whose Let's Encrypt certificate fell back to self-signed.
  *
@@ -66,7 +66,7 @@ function dataDir(): string {
 export const ALERTS_SETTINGS_FILE = 'alerts.json';
 /** What the alert book holds between starts: conditions, waiting events, history. Our own words only, never a secret. */
 export const ALERTS_STATE_FILE = 'alerts-state.json';
-/** The last starts of this server, for the crash-loop row. */
+/** The last starts of this server that followed an unclean stop, for the crash-loop row. */
 export const BOOTS_FILE = 'boots.json';
 
 export const ALERT_TICK_MS = 60_000;
@@ -630,8 +630,12 @@ function readBoots(): number[] {
     }
 }
 
-/** This start, kept with the last 19 (index.ts calls it once, at the start). */
-export function recordBoot(at = now()): void {
+/**
+ * This start, kept with the last 19 when it followed an unclean stop (a crash, a kill, power: index.ts calls it once, at
+ * the start, with engine/shutdown-recovery.ts's answer). A clean restart (docker compose up -d) is no crash.
+ */
+export function recordBoot(unclean: boolean, at = now()): void {
+    if (!unclean) return;
     const boots = [...readBoots(), at].slice(-MAX_BOOTS);
     try { writeFileAtomic(bootsFile(), JSON.stringify(boots)); } catch (e) { logger.warn('SYS', `[Alerts] Could not note this start: ${errorMessage(e)}`); }
 }
@@ -705,7 +709,7 @@ function bootConditions(t: number): Condition[] {
     const recent = boots.filter((b) => t - b < CRASH_LOOP_WINDOW_MS);
     const lastBoot = boots.length ? boots[boots.length - 1] : startedAt;
     const loop: Condition = recent.length >= CRASH_LOOP_STARTS
-        ? { key: 'boot.crashloop', active: true, since: recent[0], detail: `This server started ${recent.length} times in 15 minutes. Its logs say why.` }
+        ? { key: 'boot.crashloop', active: true, since: recent[0], detail: `This server stopped without shutting down and started again ${recent.length} times in 15 minutes. Its logs say why.` }
         : { key: 'boot.crashloop', active: !!readState().raised['boot.crashloop'] && t - lastBoot < CRASH_LOOP_CLEAR_MS, detail: 'Up for an hour without a restart.' };
     const sd = getShutdownStatus();
     const unclean: Condition = sd?.uncleanShutdown && !sd.acknowledged

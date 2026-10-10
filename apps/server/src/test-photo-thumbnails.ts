@@ -306,6 +306,34 @@ async function main(): Promise<void> {
         assert(!(await headObject(store, before)), "and the old photo's small copy went with the old photo");
     }
 
+    // ── 7. a 20-row Market page ─────────────────────────────────────────────────────────────────
+    console.log('\n── 7. a Market page of 20 rows: what a list downloads ──');
+    {
+        // Twenty different 800 px photos, as the phone sends them (JPEG at 0.7): crops, flips and tints of the fixture.
+        const base = fixture('listing-800.jpg');
+        const ids: string[] = [];
+        for (let i = 0; i < 20; i++) {
+            const side = 400 + (i % 5) * 80;
+            const left = (i * 37) % (800 - side);
+            const top = (i * 53) % (800 - side);
+            let img = sharp(base).extract({ left, top, width: side, height: side }).resize(800, 800).modulate({ hue: i * 18 });
+            if (i % 2) img = img.flop();
+            const photo = await img.jpeg({ quality: 70 }).toBuffer();
+            ids.push(make(`Thumb page row ${i + 1}`, [dataUrl('image/jpeg', photo)]));
+        }
+        await settled();
+        const page = await get('/api/marketplace/posts?limit=20&types=offer', carol);
+        const rows = (Array.isArray(page.body) ? page.body : []).filter((p: any) => ids.includes(p.id));
+        let full = 0, small = 0;
+        for (const p of rows) {
+            full += (await get(p.photos[0], carol)).bytes.length;
+            small += (await get(thumbOf(p.photos[0]), carol)).bytes.length;
+        }
+        console.log(`   20-row Market page: ${full} B of photos → ${small} B of small copies (${(100 * small / Math.max(full, 1)).toFixed(1)}%)`);
+        assert(rows.length === 20, `setup: the Market read lists the 20 rows (got ${rows.length})`);
+        assert(small > 0 && small * 5 <= full, `the page's small copies are at most a fifth of its photos (${small} B vs ${full} B)`);
+    }
+
     if (fake) await fake.stop();
     console.log(`\n${MODE} ${passed}/${run} passed`);
 }

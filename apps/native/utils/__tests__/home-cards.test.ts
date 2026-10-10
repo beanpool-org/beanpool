@@ -929,6 +929,16 @@ describe('the global node\'s Home (H4)', () => {
         expect(globalStepLines(steps(), find({ communities: [{ key: 'x', name: 'X', url: 'http://plain.example.org' }] }), false).map(l => l.id)).toEqual(['post']);
         expect(globalStepLines(steps(), undefined, false).map(l => l.id)).toEqual(['post']);
         expect(globalStepLines(steps({ firstPost: true }), find(), false)[0].done).toBe(true);
+        // The address is checked as Communities near you and the find card check it (community-directory.ts
+        // communityOrigin, #1517): no IP literal, no dotless host, never global's own host, no login in it.
+        const askWith = (url: string) => globalStepLines(steps(), find({ communities: [{ key: 'x', name: 'X', url, distanceKm: 12 }] }), false).map(l => l.id);
+        for (const url of ['https://203.0.113.5', 'https://[2001:db8::1]', 'https://localhost', 'https://intranet:8443', 'https://global.beanpool.org', 'https://GLOBAL.beanpool.org:443/', 'https://user@byron.example.org', 'https://-bad.example.org']) {
+            expect(askWith(url), url).toEqual(['post']);
+        }
+        expect(askWith('https://byron.example.org')).toEqual(['post', 'ask']);
+        expect(askWith('https://byron.example.org:8443/')).toEqual(['post', 'ask']);
+        // One good address among bad ones still asks.
+        expect(globalStepLines(steps(), find({ communities: [{ key: 'a', url: 'https://10.0.0.1' }, { key: 'b', url: 'https://byron.example.org', distanceKm: 30 }] }), false).map(l => l.id)).toEqual(['post', 'ask']);
         // Never a local line on the global node: no Offer, photo, interests or invite.
         const g = firstSteps(member(3, { cards: { steps: steps(), find: find(), community: { name: 'G', members: 9 } } }), { interests: [], knocked: false });
         expect(g.lines.map(l => l.text)).toEqual(['Post something free or for swap', 'Ask a community to let you in']);

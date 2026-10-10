@@ -27,6 +27,7 @@ import {
     skyToday, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday,
 } from '@beanpool/core';
+import { communityOrigin } from './community-origin';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
     type NeedsYouConversation, type NeedsYouEntry, type NeedsYouKind, type NeedsYouTarget, type NeedsYouTransaction,
@@ -724,11 +725,12 @@ export function stepLines(steps: NonNullable<HomeCards['steps']>, interestsSet: 
 export const isFindCard = (v: unknown): v is HomeFind => isObj(v) && Array.isArray(v.communities);
 
 /**
- * A community near enough to be listed, with an https address to knock on (the find card lists the nearest first, §3.1;
- * Communities near you checks each address in full, utils/community-directory.ts `communityOrigin`).
+ * A community near enough to be listed, with an address to knock on, checked as Communities near you and the find card
+ * check it (utils/community-origin.ts `communityOrigin`: an https host name, never an IP literal, a dotless host or the
+ * global node's own; #1517).
  */
 function communityToAsk(find: HomeFind | undefined): boolean {
-    return !!find && isFindCard(find) && find.communities.some(c => isObj(c) && typeof c.url === 'string' && /^https:\/\/[^\s/?#@]+/i.test(c.url));
+    return !!find && isFindCard(find) && find.communities.some(c => isObj(c) && communityOrigin(c.url) !== null);
 }
 
 /**

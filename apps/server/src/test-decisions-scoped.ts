@@ -25,11 +25,11 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, tickDecisions, reconcileLedgerFromDb, stepDownAsKeeper, removeKeeperByVote, setNodeRole } from './state-engine.js';
+import { initStateEngine, tickDecisions, reconcileLedgerFromDb, stepDownAsKeeper, removeKeeperByVote, setNodeRole, setUserStatusRow } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { getCommonsBalanceExact } from './state-engine.js';
-import { ROLL_OF_ONE, WAGE_NEEDS_SURPLUS, WINDING_UP_VOID, SCOPED_ALREADY_VOTED } from './decisions-engine.js';
+import { ROLL_OF_ONE, WAGE_NEEDS_SURPLUS, WINDING_UP_VOID, SCOPED_ALREADY_VOTED, SUBJECT_OFF_ROLL } from './decisions-engine.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -320,6 +320,22 @@ async function main(): Promise<void> {
     tickDecisions();
     assert(row(dL).status === 'executed' && roleOf(rb.pubKeyHex) === 'lead' && roleOf(ra.pubKeyHex) === 'keeper',
         `the keepers make another keeper the lead; the old lead stays a keeper (got ${row(dL).status}, ${roleOf(rb.pubKeyHex)}/${roleOf(ra.pubKeyHex)})`);
+
+    // ── 9. The subject is on the roll at execution (§2.3): suspended mid-vote, neither made the lead nor removed ──
+    const [h1, h2, h3, h4] = [makeMember('Hal'), makeMember('Hana'), makeMember('Hugo'), makeMember('Hux')];
+    const eH = makeEnterprise('Harbour', [h1, h2, h3, h4], 20);
+    const roleInH = (pk: string) => (db.prepare('SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(eH, pk) as any)?.role ?? null;
+    const dHlead = (await propose(eH, h2, { effect: 'replace_lead', subject: h4.pubKeyHex })).body?.decision?.id as string;
+    const dHout = (await propose(eH, h3, { effect: 'remove_keeper', subject: h4.pubKeyHex })).body?.decision?.id as string;
+    assert(!!dHlead && !!dHout, 'votes open to make Hux the lead and to remove Hux');
+    for (const d of [dHlead, dHout]) for (const k of [h1, h2, h3]) await vote(eH, d, k, true);
+    setUserStatusRow(h4.pubKeyHex, 'disabled');
+    tickDecisions();
+    assert(row(dHlead).status === 'execution_void' && row(dHlead).execution_reason === SUBJECT_OFF_ROLL && roleInH(h4.pubKeyHex) === 'keeper' && roleInH(h1.pubKeyHex) === 'lead',
+        `a keeper suspended mid-vote is not made the lead: void (got ${row(dHlead).status} ${row(dHlead).execution_reason ?? ''}, role ${roleInH(h4.pubKeyHex)})`);
+    assert(row(dHout).status === 'execution_void' && row(dHout).execution_reason === SUBJECT_OFF_ROLL && roleInH(h4.pubKeyHex) === 'keeper',
+        `nor removed by the vote: void (got ${row(dHout).status} ${row(dHout).execution_reason ?? ''})`);
+    setUserStatusRow(h4.pubKeyHex, 'active');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

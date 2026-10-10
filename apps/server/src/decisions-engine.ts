@@ -2252,6 +2252,8 @@ export const SCOPED_NO_ADMIN_HALT = "An enterprise's keepers' vote has no admin 
 export const PROJECT_LEADER_STAYS = "A project's leader can't be voted out by its collaborators: the project is the leader's goal.";
 export const PAY_SELF_REFUSAL = "You can't propose paying yourself. Another keeper can propose it.";
 export const SCOPED_ONE_OPEN = 'You already have an open vote in this enterprise. Wait for it to close first.';
+/** A replace_lead or remove_keeper subject off the roll at execution (§2.3): suspended, barred from operating, or a visitor. */
+export const SUBJECT_OFF_ROLL = 'They are not on this enterprise’s roll now (their account is not active, or they may not act for it)';
 export const WAGE_NEEDS_SURPLUS = 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus)';
 /** How long a passed vote waits on an enterprise an admin suspended or disabled before it is void (§2.6). */
 export const SCOPED_WAIT_DAYS = 90;
@@ -2567,6 +2569,9 @@ function preflightScoped(decision: Decision): { status: 'ok' | 'void' | 'blocked
     }
     const subject = decision.subject || '';
     if (!isEnterpriseKeeper(decision.scopeId!, subject)) return { status: 'void', reason: 'They no longer keep this enterprise' };
+    // The subject is on the roll at execution, by the roll's own test (§2.3): a suspension mid-vote voids it. It is the
+    // brake pick 6 counts on in place of an admin halt.
+    if (!enterpriseRollNow(decision.scopeId!).some(k => k.pubkey === subject)) return { status: 'void', reason: SUBJECT_OFF_ROLL };
     if (decision.effect === 'remove_keeper') {
         const why = keeperRemovalByVoteRefusal(decision.scopeId!, subject);
         if (why) return { status: why.startsWith('Not yet') ? 'blocked' : 'void', reason: why };

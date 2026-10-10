@@ -15,7 +15,7 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Ar
 import {
     HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardLabelName, cardName, cardRowName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
-    invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
+    invitesForReader, ASK_WITHIN_KM, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
@@ -965,6 +965,26 @@ describe('the global node\'s Home (H4)', () => {
         expect(draw(done, EVERY, ctx({ interests: ['food'], now: NOW }))).not.toContain('steps');
         // A local community's First steps never says the limits (unchanged from H2).
         expect(firstSteps(answer({ me: { ...answer().me!, probation: words }, cards: { steps: steps() } }), { interests: [] }).note).toBeNull();
+    });
+
+    it('"Ask a community to let you in" only for one within 250 km, the radius global\'s listings use (#1517)', () => {
+        expect(ASK_WITHIN_KM).toBe(250);
+        const askAt = (distanceKm: unknown) => globalStepLines(steps(), find({ communities: [{ key: 'x', name: 'X', url: 'https://x.example.org', distanceKm }] }), false).map(l => l.id);
+        expect(askAt(12)).toEqual(['post', 'ask']);
+        expect(askAt(0)).toEqual(['post', 'ask']);
+        expect(askAt(250)).toEqual(['post', 'ask']);
+        expect(askAt(250.1)).toEqual(['post']);
+        // A community 9,000 km away is not "within reach".
+        expect(askAt(9000)).toEqual(['post']);
+        // No distance (the node lists none without a point), or one that isn't a number: not within reach.
+        for (const d of [null, undefined, '12', Number.NaN, Infinity, -1]) expect(askAt(d), String(d)).toEqual(['post']);
+        // Both at once, on the same community: a good address within reach. A near one with no address and a far one
+        // with an address never add up to an ask.
+        expect(globalStepLines(steps(), find({ communities: [{ key: 'a', url: null, distanceKm: 5 }, { key: 'b', url: 'https://b.example.org', distanceKm: 9000 }] }), false).map(l => l.id)).toEqual(['post']);
+        expect(globalStepLines(steps(), find({ communities: [{ key: 'a', url: 'https://10.0.0.1', distanceKm: 5 }, { key: 'b', url: 'https://b.example.org', distanceKm: 240 }] }), false).map(l => l.id)).toEqual(['post', 'ask']);
+        // The card's own rule follows: nothing else holds it open, so far away a done member's First steps goes.
+        const far = member(20, { cards: { steps: steps({ firstPost: true, joinedAt: iso(NOW - 20 * DAY) }), find: find({ communities: [{ key: 'x', url: 'https://x.example.org', distanceKm: 9000 }] }), community: { name: 'G', members: 9 } } });
+        expect(firstSteps(far, { interests: ['food'], knocked: false, now: NOW })).toEqual({ lines: [{ id: 'post', text: 'Post something free or for swap', done: true }], note: null, show: false });
     });
 
     it('First steps stays for a global member\'s first 14 days, every line done and the limits over, as the web and the node keep it (#1517)', () => {

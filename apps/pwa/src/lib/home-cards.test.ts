@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
+    ASK_WITHIN_KM, HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -193,6 +193,18 @@ describe('First steps goes when it has nothing to say on the web (§6.1, PR #147
         const a = globalMember({ firstPost: true }, find);
         expect(stepLines(a, ['food']).map(l => l.key)).toEqual(['firstPost', 'ask']);
         expect(shown(a, { now: NOW })).not.toContain('steps');
+    });
+
+    it('"Ask X to let you in" only for a community within 250 km, the radius global\'s listings use (#1517)', () => {
+        expect(ASK_WITHIN_KM).toBe(250);
+        const at = (distanceKm: number | null) => stepLines(globalMember({ firstPost: true }, { ...find, communities: [{ ...find.communities[0], distanceKm: distanceKm as number }] }), ['food']).map(l => l.key);
+        expect(at(12)).toEqual(['firstPost', 'ask']);
+        expect(at(250)).toEqual(['firstPost', 'ask']);
+        expect(at(250.1)).toEqual(['firstPost']);
+        // A community 9,000 km away is not "within reach"; nor one with no distance (the node lists none without a point).
+        expect(at(9000)).toEqual(['firstPost']);
+        expect(at(null)).toEqual(['firstPost']);
+        expect(at(Number.NaN)).toEqual(['firstPost']);
     });
 
     it('it stays while a line is undone, the member is new, or the new-account limits apply', () => {

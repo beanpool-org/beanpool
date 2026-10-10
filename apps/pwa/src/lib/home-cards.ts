@@ -205,6 +205,15 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
 /** A member is new for this long: First steps stays while they are, even with every line done (the node's own rule). */
 export const STEPS_NEW_DAYS = 14;
 
+/**
+ * "Within reach" for "Ask a community to let you in" (DESIGN-home-dashboard-fable.md §7: the ask shows "while there is
+ * one within reach"): 250 km, the radius the global node's listings use (scratch/global-node/
+ * DESIGN-global-sync-by-area-fable.md: a phone keeps the nearest 500 listings within 250 km), so a community 9,000 km
+ * away is never suggested (#1517; the phone's
+ * `ASK_WITHIN_KM`). A community the node lists with no distance is not within reach.
+ */
+export const ASK_WITHIN_KM = 250;
+
 export interface StepLine {
     key: 'firstOffer' | 'photo' | 'interests' | 'invite' | 'firstPost' | 'ask';
     done: boolean;
@@ -217,15 +226,17 @@ export interface StepLine {
 
 /**
  * The lines First steps draws on the web (§3.1, §7). Local: a first Offer, a photo, interests (the chips' taps count at
- * once), and an invite once there is an Offer. Global: a first post, and "Ask X to let you in" where a community is
- * near. The web leaves out "Set your area" (it can't set the account's area), and can't tick the ask: a knock is kept on
+ * once), and an invite once there is an Offer. Global: a first post, and "Ask X to let you in" where the nearest
+ * community is within reach (`ASK_WITHIN_KM`). The web leaves out "Set your area" (it can't set the account's area), and can't tick the ask: a knock is kept on
  * the community knocked on, so it is a suggestion, never a step that holds the card.
  */
 export function stepLines(answer: HomeAnswer, interests: readonly string[]): StepLine[] {
     const s = answer.cards.steps;
     if (!s) return [];
     if (answer.profile === 'global') {
-        const near = answer.cards.find?.communities[0];
+        const nearest = answer.cards.find?.communities[0];
+        const km = nearest?.distanceKm;
+        const near = typeof km === 'number' && Number.isFinite(km) && km >= 0 && km <= ASK_WITHIN_KM ? nearest : undefined;
         return [
             { key: 'firstPost', done: s.firstPost, text: 'Post something free or for swap' },
             ...(near?.url ? [{ key: 'ask' as const, done: false, text: `Ask ${near.name ?? 'a community'} to let you in`, untracked: true as const, href: near.url }] : []),

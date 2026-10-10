@@ -22,6 +22,9 @@
  *  4. The gates: for each case the photo route refuses or allows (no key, a wrong key, a listing taken off, one hidden by
  *     reports, its rows gone), the small copy gets the same status and the same cache header, for every reader.
  *  5. Nothing in state.db: no row, column or byte of a small copy in the database file.
+ *  0. A host where sharp won't load (review opus-1742 #2; the `nosharp` run, a disk store, sharp made to throw on import):
+ *     the node boots, a listing with a photo is posted, its `size=thumb` is the photo itself, and the failure is logged
+ *     once.
  *  6. The orphan sweep keeps a small copy while its photo is named and removes one whose photo no row names; replacing a
  *     listing's photos removes the old photos' small copies with them.
  *
@@ -36,7 +39,7 @@ delete process.env.ENFORCE_LEDGER_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.NODE_PROFILE;
 delete process.env.PRIVATE_PREVIEW;
-type Mode = 'disk' | 's3';
+type Mode = 'disk' | 's3' | 'nosharp';
 const MODE_NAME: Mode = (process.env.THUMB_MODE as Mode | undefined) || 'disk';
 
 import crypto from 'node:crypto';
@@ -129,6 +132,17 @@ async function main(): Promise<void> {
         fake = await startFakeS3();
         Object.assign(process.env, fake.env());
     }
+    const warned: string[] = [];
+    if (MODE_NAME === 'nosharp') {
+        // Every import of sharp from here on throws, as it does on a host whose CPU or platform its binary refuses.
+        const { register } = await import('node:module');
+        register('data:text/javascript,' + encodeURIComponent(`export async function resolve(spec, context, next) {
+            if (spec === 'sharp') return { url: 'data:text/javascript,throw new Error("sharp: a simulated load failure")', shortCircuit: true };
+            return next(spec, context);
+        }`));
+        const warn = console.warn.bind(console);
+        console.warn = (...args: unknown[]) => { warned.push(args.map(String).join(' ')); warn(...args); };
+    }
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
@@ -148,7 +162,7 @@ async function main(): Promise<void> {
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     const store = getImageStore();
-    assert(store.kind === MODE_NAME, `setup: the node's image store is ${MODE_NAME} (got ${store.kind})`);
+    assert(store.kind === (MODE_NAME === 's3' ? 's3' : 'disk'), `setup: the node's image store is ${MODE_NAME === 's3' ? 's3' : 'disk'} (got ${store.kind})`);
 
     const member = (callsign: string): Id => {
         const id = newId();
@@ -179,6 +193,24 @@ async function main(): Promise<void> {
     const rowOf = (postId: string, n: number) =>
         db.prepare('SELECT storage_key, photo_data, mime FROM post_photos WHERE post_id = ? AND order_num = ?').get(postId, n) as
             { storage_key: string | null; photo_data: string | null; mime: string | null };
+
+    if (MODE_NAME === 'nosharp') {
+        console.log('\n── 0. sharp won\'t load: the node boots, lists get the photo itself ──');
+        const jpg = fixture('listing-800.jpg');
+        const id = make('Thumb vase, no sharp', [dataUrl('image/jpeg', jpg)]);
+        await settled();
+        const row = rowOf(id, 0);
+        assert(!!row.storage_key && !(await headObject(store, thumbKeyOf(row.storage_key))), 'the photo is stored, with no small copy');
+        const [url] = await urlsOf(id);
+        for (const n of [1, 2]) {
+            const r = await get(thumbOf(url), carol);
+            assert(r.status === 200 && r.bytes.equals(jpg) && r.type === 'image/jpeg', `&size=thumb serves the photo itself (ask ${n}: ${r.status} ${r.bytes.length} B)`);
+        }
+        const logged = warned.filter(w => w.includes('sharp')).length;
+        assert(logged === 1, `the load failure is logged once (${logged} times)`);
+        console.log(`\n${MODE} ${passed}/${run} passed`);
+        return;
+    }
 
     // ── 1. made at upload ─────────────────────────────────────────────────────────────────────
     console.log('\n── 1. made when the photo is stored ──');
@@ -404,17 +436,19 @@ async function parent(): Promise<void> {
     }
     ok &&= passed === run;
     if (process.env.THUMB_CHILD === '1') process.exit(ok ? 0 : 1);
-    console.log('\n── the s3 run, in a fresh process ──');
-    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beanpool-thumbs-s3-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, THUMB_MODE: 's3', THUMB_CHILD: '1', BEANPOOL_DATA_DIR: dataDir };
-    const child = spawn(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], { env, stdio: ['ignore', 'inherit', 'inherit'] });
-    const status = await new Promise<number | null>(resolve => {
-        child.on('exit', code => resolve(code));
-        child.on('error', () => resolve(null));
-    });
-    fs.rmSync(dataDir, { recursive: true, force: true });
-    run++;
-    if (status === 0) { passed++; console.log('✓ the s3 run passed'); } else { ok = false; console.error(`✗ the s3 run failed (exit ${status})`); }
+    for (const mode of ['s3', 'nosharp'] as const) {
+        console.log(`\n── the ${mode} run, in a fresh process ──`);
+        const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), `beanpool-thumbs-${mode}-`));
+        const env: NodeJS.ProcessEnv = { ...process.env, THUMB_MODE: mode, THUMB_CHILD: '1', BEANPOOL_DATA_DIR: dataDir };
+        const child = spawn(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], { env, stdio: ['ignore', 'inherit', 'inherit'] });
+        const status = await new Promise<number | null>(resolve => {
+            child.on('exit', code => resolve(code));
+            child.on('error', () => resolve(null));
+        });
+        fs.rmSync(dataDir, { recursive: true, force: true });
+        run++;
+        if (status === 0) { passed++; console.log(`✓ the ${mode} run passed`); } else { ok = false; console.error(`✗ the ${mode} run failed (exit ${status})`); }
+    }
     console.log(`\n${ok ? 'PASS' : 'FAIL'}: test-photo-thumbnails (${passed}/${run})`);
     process.exit(ok ? 0 : 1);
 }

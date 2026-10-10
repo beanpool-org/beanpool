@@ -38,10 +38,13 @@
  * decoded. And a photo that gives no copy is remembered ({@link unmakeable}), so it is read at most once per process
  * however often the lists ask for it: a copy that can't be made is never kept, and would otherwise be tried again on
  * every request.
+ *
+ * sharp is a native module, loaded on the first copy made ({@link loadSharp}), not with the node: a host whose CPU or
+ * platform its binary refuses still boots, and its lists get each photo itself (review opus-1742 #2).
  */
 
 import type { Readable } from 'node:stream';
-import sharp from 'sharp';
+import type sharp from 'sharp';
 import { deleteObjectUnless, headObject, openObject, readObject, writeObject, type ImageStore } from './image-store.js';
 
 /** The longest side of a small copy, in pixels. Lists draw photos at 56-120 dp; 200 px is sharp at 1.5-2× density. */
@@ -67,10 +70,23 @@ export function thumbnailReads(): number {
     return reads;
 }
 
-// One resize at a time, on one thread, and nothing kept in libvips' operation cache: a small node's memory and CPU
-// belong to its members' requests.
-sharp.concurrency(1);
-sharp.cache(false);
+let sharpLoaded: Promise<typeof sharp | null> | null = null;
+
+/** sharp, loaded once; null, logged once, where it won't load. */
+function loadSharp(): Promise<typeof sharp | null> {
+    sharpLoaded ??= import('sharp').then(m => {
+        const lib = m.default;
+        // One resize at a time, on one thread, and nothing kept in libvips' operation cache: a small node's memory and
+        // CPU belong to its members' requests.
+        lib.concurrency(1);
+        lib.cache(false);
+        return lib;
+    }, (e: unknown) => {
+        console.warn('[Thumbnails] sharp did not load, so lists get each photo itself:', e instanceof Error ? e.message : e);
+        return null;
+    });
+    return sharpLoaded;
+}
 
 /** `posts/<id>/<n>-<sha8>.<ext>`, the shape image-store.ts postPhotoKey makes. Only these have a small copy. */
 const PHOTO_KEY = /^(posts\/[A-Za-z0-9][A-Za-z0-9._-]*\/\d+-[0-9a-f]{8})\.(jpg|png|webp)$/;
@@ -98,12 +114,14 @@ function mimeOfKey(key: string): string {
 export async function makeThumbnail(photo: Buffer, thumbKey: string): Promise<Buffer | null> {
     const ext = thumbKey.slice(thumbKey.lastIndexOf('.') + 1);
     let image: sharp.Sharp;
+    const lib = await loadSharp();
+    if (!lib) return null;
     reads++;
     try {
         // The header alone first: a side the decoder would need gigabytes for is refused before any pixel is read.
-        const head = await sharp(photo, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+        const head = await lib(photo, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
         if (!head.width || !head.height || head.width > MAX_INPUT_SIDE || head.height > MAX_INPUT_SIDE) return null;
-        image = sharp(photo, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' })
+        image = lib(photo, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' })
             .rotate()
             .resize({ width: THUMB_MAX_SIDE, height: THUMB_MAX_SIDE, fit: 'inside', withoutEnlargement: true });
         if (ext === 'jpg') image = image.jpeg({ quality: 70, mozjpeg: true });

@@ -91,7 +91,7 @@ async function toThePhoto(info: unknown, areaAnswer: Handler = () => json(200, A
     return { calls, onComplete };
 }
 const columns = () => Array.from(screen.getByTestId('onboarding-stepper').children).map((c) => (c.textContent ?? '').replace('✓', ''));
-const areaCalls = (calls: Array<{ path: string }>) => calls.filter((c) => c.path === '/api/community/me/area');
+const areaCalls = <T extends { path: string }>(calls: T[]) => calls.filter((c) => c.path === '/api/community/me/area');
 
 async function finishFromBackup(onComplete: ReturnType<typeof vi.fn>) {
     await screen.findByText(/Your Safety Backup/);
@@ -147,7 +147,7 @@ describe('Your Area at signup (S4)', () => {
         await screen.findByText(/Your Safety Backup/);
         expect(geo.getCurrentPosition).toHaveBeenCalledTimes(1);
         expect(geo.getCurrentPosition.mock.calls[0][2]).toMatchObject({ enableHighAccuracy: false });
-        expect(areaCalls(calls).map((c) => (c as { raw: string }).raw)).toEqual(['{"lat":-28.6,"lng":153.6}']);
+        expect(areaCalls(calls).map((c) => c.raw)).toEqual(['{"lat":-28.6,"lng":153.6}']);
         expect(JSON.stringify(calls)).not.toMatch(/647412|612031/);
         await finishFromBackup(onComplete);
         expect(geo.getCurrentPosition).toHaveBeenCalledTimes(1); // not asked again at the end
@@ -159,7 +159,7 @@ describe('Your Area at signup (S4)', () => {
         fireEvent.click(await screen.findByRole('button', { name: /Type a town or suburb/ }));
         fireEvent.click(screen.getByTestId('pick-byron'));
         await screen.findByText(/Your Safety Backup/);
-        expect(areaCalls(calls).map((c) => (c as { raw: string }).raw)).toEqual(['{"lat":-28.6,"lng":153.6}']);
+        expect(areaCalls(calls).map((c) => c.raw)).toEqual(['{"lat":-28.6,"lng":153.6}']);
         expect(JSON.stringify(areaCalls(calls))).not.toContain('Byron');
         expect(localStorage.getItem('beanpool_area_place')).toBe('Byron Bay');
     });

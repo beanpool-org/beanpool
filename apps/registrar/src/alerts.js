@@ -12,8 +12,9 @@
 //     line, "muted: N more this hour, see /admin", the rest of that hour is kept for /admin only. High and urgent ones
 //     still go, up to 40 messages in the hour, so a loop can't flood the phone. A condition whose telling was muted is
 //     told again in the next hour.
-// Each category (names, health, uptake, admin) is on (sent at once), digest (held for the daily summary, which the S2
-// slice will send; until then held events are only shown on /admin) or off (alert_settings, /admin's toggles).
+// Each category (names, health, uptake, admin) is on (sent at once), digest (held, and sent in the daily summary at
+// 08:00 Brisbane — src/watch.js dailyLine) or off (alert_settings, /admin's toggles). The daily summary itself, like
+// the admin's test, is always sent: its absence is what says the Worker or ntfy is broken.
 // What a message says: a name, the community name its operator published, and counts. Never the `contact` column (a
 // person's address), a key, or anything a member wrote. The topic URL and token are secrets: they go in the request
 // and nowhere else — a failed send logs its status code, never the address.
@@ -138,7 +139,7 @@ function clip(s, max) {
     }
     return `${out}…`;
 }
-function listBody(lines) {
+export function listBody(lines) {
     const more = (n) => `\n… and ${n} more, see /admin`;
     let body = '';
     for (let i = 0; i < lines.length; i++) {
@@ -204,7 +205,7 @@ export async function categoryMode(env, category) {
 // Into the outbox, as the category says: the row's id when it waits to be sent now, else 0 (off: nothing kept; digest:
 // held; an event with a `once` key already in the outbox — kept 7 days — is not kept again).
 async function enqueue(env, ev, at) {
-    const mode = ev.category === 'test' ? 'on' : await categoryMode(env, ev.category);
+    const mode = ev.category === 'test' || ev.category === 'summary' ? 'on' : await categoryMode(env, ev.category);
     if (mode === 'off') return 0;
     const held = mode === 'digest' ? 1 : 0;
     const row = await env.DB.prepare('INSERT OR IGNORE INTO alert_outbox (at, category, priority, tag, title, body, name, held, once) VALUES (?,?,?,?,?,?,?,?,?) RETURNING id')
@@ -223,6 +224,10 @@ async function enqueue(env, ev, at) {
     await env.DB.prepare('DELETE FROM alert_outbox WHERE at < ? AND (sent_at IS NOT NULL OR muted=1 OR held=1)').bind(at - KEEP_S).run();
     return held ? 0 : Number(row?.id) || 0;
 }
+
+// Into the outbox now, as the category says; the row's id, or 0 when it is not to be sent now. Throws on a failed
+// write (the daily line marks the held events it carries only once it is in).
+export const enqueueEvent = (env, ev) => enqueue(env, ev, nowS());
 
 // Tell the admin of one event (A1–A3, A5, A6). Like logEvent, it never undoes what it reports: a failure is logged,
 // never thrown. The event is in the outbox before this returns; the send runs after the response when the request

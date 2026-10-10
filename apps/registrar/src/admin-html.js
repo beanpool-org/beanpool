@@ -144,8 +144,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         <div class="admin-card">
             <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #f59e0b; margin-bottom: 0.5rem;">📣 Alerts to your phone</h2>
-            <p style="font-size: 0.8rem; color: var(--text-muted);">Name requests, new communities, paused names, a suspended sweep and your own actions, sent to one ntfy topic. Each says a name, its community name and counts — never a contact address. At most 20 messages an hour.</p>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">Name requests, new communities, paused names, a suspended sweep, our servers below and your own actions, sent to one ntfy topic, and one quiet daily summary at 08:00 Brisbane. Each says a name, its community name and counts — never a contact address. At most 20 messages an hour.</p>
             <div id="alertsContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading alerts...</p></div>
+        </div>
+
+        <div class="admin-card">
+            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #38bdf8; margin-bottom: 0.5rem;">🛰️ Our servers</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">Looked at every 5 minutes from this Worker, never from the server itself (WATCH_TARGETS). Two failed looks in a row and your phone hears of it; so it does of a locked vault, a vault report that is not right, a release that changed, and a node its watchdog restarted.</p>
+            <div id="serversContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading servers...</p></div>
         </div>
 
         <div class="admin-card">
@@ -194,6 +200,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171;">Logged out. Please enter your ADMIN_SECRET key above.</p>';
             document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
             document.getElementById('alertsContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
+            document.getElementById('serversContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
         }
 
         logoutBtn.addEventListener('click', performLogout);
@@ -256,6 +263,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 showFragment();
                 loadEvents(secret);
                 loadAlerts(secret);
+                loadServers(secret);
             } catch (err) {
                 console.error(err);
                 document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading allocations.</p>';
@@ -421,7 +429,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         if (typeof window !== 'undefined') window.addEventListener('hashchange', showFragment);
 
         const CATEGORY_WORDS = {
-            names: 'Names (requests, new communities, pauses)', health: 'Registrar health (suspended sweep, refused deletions)',
+            names: 'Names (requests, new communities, pauses)', health: 'Health (our servers, suspended sweep, refused deletions)',
             uptake: 'Uptake', admin: 'Your own actions',
         };
         const MODE_WORDS = { on: 'on', digest: 'digest', off: 'off' };
@@ -441,14 +449,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             }
             const cap = st.cap || {};
             html += '<p style="font-size: 0.8rem; color: var(--text-muted);">This hour: ' + esc(cap.sent || 0) + ' sent (cap ' + esc(cap.per_hour || 20) + ', then one "muted" line; high and urgent still go, to 40)' + (cap.muted ? ', ' + esc(cap.muted) + ' muted' : '') + '.' +
-                (st.held_for_digest ? ' ' + esc(st.held_for_digest) + ' held: shown below, not sent (no daily summary yet).' : '') + '</p>';
+                (st.held_for_digest ? ' ' + esc(st.held_for_digest) + ' held for the daily summary (08:00 Brisbane): shown below.' : '') + '</p>';
             html += '<div class="alert-modes">' + Object.keys(CATEGORY_WORDS).map(function(c) {
                 const mode = (st.settings || {})[c] || 'on';
                 return '<span class="alert-mode">' + esc(CATEGORY_WORDS[c]) + ': ' + Object.keys(MODE_WORDS).map(function(m) {
                     return '<button data-alert-category="' + c + '" data-alert-mode="' + m + '"' + (m === mode ? ' class="on"' : '') + '>' + MODE_WORDS[m] + '</button>';
                 }).join('') + '</span>';
             }).join('') + '</div>';
-            html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">on = sent at once · digest = held and shown here, not sent (no daily summary yet) · off = nothing</p>';
+            html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">on = sent at once · digest = held, then sent in the daily summary at 08:00 Brisbane · off = nothing</p>';
             html += '<button data-alert-test="1" class="btn-approve">Send a test alert</button> <span id="alertTestResult" style="font-size: 0.8rem; color: var(--text-muted);"></span>';
             const active = st.active || [];
             if (active.length) {
@@ -459,7 +467,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const recent = st.recent || [];
             if (recent.length) {
                 html += '<div class="scroll-x" style="margin-top: 1rem;"><table class="admin-table"><thead><tr><th>When</th><th>Alert</th><th>State</th></tr></thead><tbody>' + recent.map(function(r) {
-                    const state = r.sent_at ? 'sent' : r.muted ? 'muted (over the hourly cap)' : r.held ? 'held (digest)' : 'waiting';
+                    const state = r.held ? (r.sent_at ? 'sent in the daily summary' : 'held for the daily summary') : r.sent_at ? 'sent' : r.muted ? 'muted (over the hourly cap)' : 'waiting';
                     return '<tr><td style="font-family: monospace; font-size: 0.75rem; white-space: nowrap;">' + esc(when(r.at)) + '</td>' +
                         '<td><b style="color: #fff;">' + esc(r.title) + '</b><br><span style="font-size: 0.8rem;">' + esc(r.body) + '</span></td>' +
                         '<td style="font-size: 0.75rem;">' + esc(state) + '</td></tr>';
@@ -499,6 +507,40 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 loadAlerts(secret);
             } catch (err) {
                 out.textContent = 'Network error: ' + err.message;
+            }
+        }
+
+        function renderServers(st) {
+            const container = document.getElementById('serversContainer');
+            const targets = st.targets || [];
+            if (!targets.length) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Nothing is watched: WATCH_TARGETS is not set in wrangler.toml.</p>'; return; }
+            let html = '';
+            if (!st.ticket_key_set) html += '<p style="color: #fbbf24; font-size: 0.8rem;">The vault report is not checked: VAULT_TICKET_KEYS (its ticket public key) is not set.</p>';
+            if (st.fleet_differs_since) html += '<p style="color: #fbbf24; font-size: 0.8rem;">Our nodes run different releases, since ' + esc(when(st.fleet_differs_since)) + '.</p>';
+            html += '<div class="scroll-x"><table class="admin-table"><thead><tr><th>Server</th><th>Now</th><th>Runs</th><th>Last 24 h</th></tr></thead><tbody>' + targets.map(function(t) {
+                const l = t.last;
+                const now = !l ? 'not looked at yet'
+                    : l.ok ? 'answers (' + esc(l.status) + (l.ms != null ? ', ' + esc(l.ms) + ' ms' : '') + ')' + (l.state ? ' · ' + esc(l.state) : '') + (l.report ? ' · report ' + esc(l.report) : '')
+                        : '<span style="color: #f87171;">does not answer: ' + esc(l.status) + '</span>' + (t.last_ok_at ? ' · last answered ' + esc(when(t.last_ok_at)) : '');
+                const ver = l && (l.version || l.commit) ? esc(l.version || '') + (l.commit ? ' <span style="font-family: monospace;">(' + esc(String(l.commit).slice(0, 7)) + ')</span>' : '') : '—';
+                const day = t.day || {};
+                return '<tr id="server-' + esc(t.name) + '"><td><b style="color: #fff;">' + esc(t.name) + '</b><br><span style="font-size: 0.75rem; color: var(--text-muted);">' + esc(t.url) + '</span></td>' +
+                    '<td style="font-size: 0.8rem;">' + now + (l ? '<br><span style="font-size: 0.7rem; color: var(--text-muted);">looked ' + esc(when(l.ran_at)) + '</span>' : '') + (l && l.recoveries ? '<br><span style="font-size: 0.75rem;">watchdog restarts: ' + esc(l.recoveries) + '</span>' : '') + '</td>' +
+                    '<td style="font-size: 0.8rem;">' + ver + '</td>' +
+                    '<td style="font-size: 0.8rem;">' + esc(day.ok || 0) + ' of ' + esc(day.looks || 0) + ' looks answered</td></tr>';
+            }).join('') + '</tbody></table></div>';
+            if (st.daily_sent_for) html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">Last daily summary: ' + esc(st.daily_sent_for) + ' (Brisbane day).</p>';
+            container.innerHTML = html;
+        }
+
+        async function loadServers(secret) {
+            const container = document.getElementById('serversContainer');
+            try {
+                const res = await fetch('/api/local/admin/registrar/servers', { headers: { 'x-admin-secret': secret } });
+                if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load servers.</p>'; return; }
+                renderServers(await res.json());
+            } catch (err) {
+                container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading servers.</p>';
             }
         }
 

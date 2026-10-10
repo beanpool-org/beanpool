@@ -635,10 +635,10 @@ test('/admin: #<name> lights and scrolls to that row; the alerts panel says when
         assert.equal(scrolled.length, 1, 'only a name is looked up');
 
         ctx.renderAlerts({ channel: { set: false, waiting: 2 }, cap: { per_hour: 20, sent: 0, muted: 0 }, settings: { names: 'digest' }, held_for_digest: 3, active: [], recent: [] });
-        // No daily summary is sent yet (slice S2): digest holds, and the page says it shows them, not that they are sent.
-        assert.match(els.alertsContainer.innerHTML, /3 held: shown below, not sent \(no daily summary yet\)/);
-        assert.match(els.alertsContainer.innerHTML, /digest = held and shown here, not sent \(no daily summary yet\)/);
-        assert.doesNotMatch(els.alertsContainer.innerHTML, /held for the daily summary/);
+        // The daily summary (slice S2, src/watch.js) sends what digest holds: the page says so, and when.
+        assert.match(els.alertsContainer.innerHTML, /3 held for the daily summary \(08:00 Brisbane\): shown below\./);
+        assert.match(els.alertsContainer.innerHTML, /digest = held, then sent in the daily summary at 08:00 Brisbane/);
+        assert.doesNotMatch(els.alertsContainer.innerHTML, /no daily summary yet/);
         assert.match(els.alertsContainer.innerHTML, /Not set: NTFY_URL is not a Worker secret, so nothing is sent \(2 waiting for it\)/);
         assert.match(els.alertsContainer.innerHTML, /data-alert-category="names" data-alert-mode="digest" class="on"/);
         assert.match(els.alertsContainer.innerHTML, /data-alert-test="1"/);

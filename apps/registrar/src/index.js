@@ -4,7 +4,8 @@
 //   scheduled: attestation sweep — pauses a live name's routing only on proof that something other than its own node
 //              answers at it (ANOTHER node key, or for about an hour a page that is no attest at all), never on anything
 //              the registrar merely can't verify, and never when the sweep as a whole looks wrong; then upkeep: a live name nothing answers at whose routing Cloudflare lost is repaired, and deletions
-//              Cloudflare refused earlier (migrations/0004_teardown.sql) are retried.
+//              Cloudflare refused earlier (migrations/0004_teardown.sql) are retried. Beside it, the outside checks of
+//              our own servers (src/watch.js: WATCH_TARGETS) and the daily line to the admin's phone.
 // A name belongs to the node key that claimed it; the registrar can stop routing it but never hands it to another
 // key. It frees only when its owner releases it (after a 30-day hold for that key), when the admin releases it (the
 // same hold, unless the admin frees it now; a name the admin blocked or paused is held from every key, its own
@@ -17,6 +18,7 @@ import * as db from './db.js';
 import { verifySignedRequest, signedQuery, verifyEd25519, requestProto, requestNonce, protoOf, PROTOCOLS, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
 import * as alerts from './alerts.js';
+import { watchOurServers, serversStatus } from './watch.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
 const json = (obj, status = 200) =>
@@ -1609,6 +1611,11 @@ export default {
                     return json({ error: `category must be one of ${alerts.CATEGORIES.join(', ')}, and mode one of ${alerts.MODES.join(', ')}` }, 400);
                 return json(await alerts.alertStatus(env));
             }
+            // The outside checks of our servers (src/watch.js): each one's newest look, for /admin's "Our servers".
+            if (p === '/api/local/admin/registrar/servers' && method === 'GET') {
+                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                return json(await serversStatus(env));
+            }
             if (p === '/api/local/admin/registrar/alerts/test' && method === 'POST') {
                 if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
                 return json(await alerts.sendTest(env));
@@ -1641,7 +1648,10 @@ export default {
     },
 
     async scheduled(event, workerEnv, ctx) {
-        // A slow ntfy never holds the sweep: each send is its own waitUntil.
-        ctx.waitUntil(attestSweep(withWaitUntil(workerEnv, ctx)));
+        // A slow ntfy never holds the sweep: each send is its own waitUntil. The outside checks of our servers run
+        // beside it (src/watch.js), from here — never from the server they watch — and neither waits for the other.
+        const env = withWaitUntil(workerEnv, ctx);
+        ctx.waitUntil(attestSweep(env));
+        ctx.waitUntil(watchOurServers(env));
     },
 };

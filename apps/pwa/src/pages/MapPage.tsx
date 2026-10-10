@@ -20,9 +20,10 @@ import {
     getMarketplacePosts, createMarketplacePost, updateMarketplacePost, treasuryPostEvent, getNodeInfo, getRemotePosts,
     getNodeConfig, getBalance, getReachablePeers, getTreasuries, getEnterpriseStatuses,
     getEnterpriseMapPins, type EnterpriseMapPin,
-    getGroups, type MarketplacePost, type PostReach, type ReachablePeer, type Group
+    getGroups, getCommunityMe, type MarketplacePost, type PostReach, type ReachablePeer, type Group
 } from '../lib/api';
-import { haversineDistance } from '../lib/geo';
+import { haversineDistance, loadRadiusSettings } from '../lib/geo';
+import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
@@ -43,13 +44,17 @@ import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refu
 import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import {
-    CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload,
+    CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
 } from '../lib/events';
 
 // The map's list read, and whether a listing pushed over the live feed belongs on it (lib/live-posts).
 const MAP_LIST_FILTER = { types: CLIENT_POST_TYPES };
 const fitsMapList = (p: MarketplacePost) => postFitsList(p, MAP_LIST_FILTER);
+/** The most pins one read asks for where the node reads by area (DESIGN-global-sync-by-area §5): the node's page cap. */
+const MAP_NEAR_LIMIT = 200;
+/** How long the first read waits to learn whether this node reads by area, before it reads as before. */
+const NEAR_WAIT_MS = 1500;
 
 // Simple deterministic hash for consistent pin placement
 function simpleHash(str: string): number {
@@ -540,8 +545,47 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const lastRefreshTimeRef = useRef<number>(0);
     const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
+    // Where the pins are read from on a node that keeps each member to the listings near their area (lib/listings-near,
+    // DESIGN-global-sync-by-area §5): the nearest MAP_NEAR_LIMIT within the Market's distance setting, else within the
+    // node's radius of the member's stored area. The first read waits until that is known (NEAR_WAIT_MS at most); a
+    // node without the switch, a visitor, and a read that fails all read as before.
+    const [nearbyListings, setNearbyListings] = useState<{ radiusKm: number } | null>(null);
+    const [memberArea, setMemberArea] = useState<{ lat: number; lng: number } | null>(null);
+    const [nearKnown, setNearKnown] = useState(false);
+    const [everywhere, setEverywhere] = useState(false);
+    const [radiusSetting] = useState(() => loadRadiusSettings());
+    useEffect(() => {
+        // A visitor reads the lobby's list as before, and asks nothing more for it.
+        if (visitor) { setNearKnown(true); return; }
+        let cancelled = false;
+        const known = () => { if (!cancelled) setNearKnown(true); };
+        const timer = setTimeout(known, NEAR_WAIT_MS);
+        communityInfoOnce()
+            .then(async info => {
+                if (cancelled) return;
+                const nearby = info?.features?.nearbyListings ?? null;
+                setNearbyListings(nearby);
+                if (nearby && identity?.publicKey) {
+                    const me = await getCommunityMe().catch(() => null);
+                    if (!cancelled) setMemberArea(me?.area ? { lat: me.area.lat, lng: me.area.lng } : null);
+                }
+            })
+            .catch(() => {})
+            .finally(() => { clearTimeout(timer); known(); });
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [identity?.publicKey, visitor]);
+    const near = useMemo(
+        () => nearKnown ? nearRead({ nearbyListings, setting: radiusSetting, area: memberArea, visitor: !!visitor, everywhere }) : null,
+        [nearKnown, nearbyListings, radiusSetting, memberArea, visitor, everywhere],
+    );
+    // A pin pushed over the live feed joins the map only inside the radius the map was read with.
+    const fitsMap = useCallback((p: MarketplacePost): boolean => fitsMapList(p) && (!near
+        || (p.lat != null && p.lng != null && haversineDistance(near.lat, near.lng, p.lat, p.lng) <= near.radiusKm)), [near]);
+
     // Load marketplace posts (home + enabled peers from localStorage)
     const refreshPosts = useCallback(async () => {
+        // Not before this node's way of reading is known, so the first read is made once, from the right place.
+        if (!nearKnown) return;
         if (refreshPromiseRef.current) return refreshPromiseRef.current;
         const p = (async () => {
             // Listings pushed while this read is in flight are replayed over it: it left before them.
@@ -565,13 +609,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         setInactiveEnterpriseKeys(inactiveKeys);
                     }).catch(() => {});
                 });
-                const [pinsRes, localData] = await Promise.all([
+                const [pinsRes, localData, ownData] = await Promise.all([
                     visitor ? Promise.resolve({ enterprises: [] }) : getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
-                    // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them.
-                    getMarketplacePosts({ ...MAP_LIST_FILTER }),
+                    // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them. Where the node
+                    // reads by area, the nearest within the radius, and the viewer's own pins wherever they are.
+                    getMarketplacePosts(near ? { ...MAP_LIST_FILTER, ...nearParams(near), limit: MAP_NEAR_LIMIT } : { ...MAP_LIST_FILTER }),
+                    near && identity ? getMarketplacePosts({ ...MAP_LIST_FILTER, author: identity.publicKey, limit: MAP_NEAR_LIMIT }).catch(() => []) : Promise.resolve([]),
                 ]);
                 setEnterprises(pinsRes?.enterprises || []);
-                let allPosts: MarketplacePost[] = [...localData];
+                const ownIds = new Set(localData.map(p => p.id));
+                let allPosts: MarketplacePost[] = [...localData, ...ownData.filter(p => !ownIds.has(p.id))];
 
                 // Only fetch from peers the user has toggled on; never for a visitor, whose lobby reads this node's
                 // guest list and no other community's (G9a §7).
@@ -594,7 +641,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         }
                     }
                 }
-                setPosts(replayLiveChanges(liveMark, allPosts, fitsMapList));
+                setPosts(replayLiveChanges(liveMark, allPosts, fitsMap));
                 setPinsLoaded(true);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale
@@ -606,7 +653,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, [visitor]);
+    }, [visitor, nearKnown, near, fitsMap, identity]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -665,10 +712,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const postsRef = useRef<MarketplacePost[]>(posts);
     useLayoutEffect(() => { postsRef.current = posts; }, [posts]);
     useEffect(() => {
-        const offView = onLivePostChange(change => setPosts(prev => applyLivePostChange(prev, change, fitsMapList)));
+        const offView = onLivePostChange(change => setPosts(prev => applyLivePostChange(prev, change, fitsMap)));
         const offTie = registerLivePostTie(heldPostTie(() => postsRef.current, identity?.publicKey));
         return () => { offView(); offTie(); };
-    }, [identity?.publicKey]);
+    }, [identity?.publicKey, fitsMap]);
 
     // Create a new post from the map
     function resetEventForm() {
@@ -1618,6 +1665,18 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 </p>
             )}
 
+            {/* Read by area and nothing near (lib/listings-near): never a dead end (DESIGN-global-sync-by-area §5). */}
+            {near && pinsLoaded && posts.length === 0 && !showLocationHint && !showNewPost && (
+                <p
+                    role="status"
+                    data-testid="map-near-empty"
+                    className="absolute top-[4.25rem] md:top-3 left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2"
+                >
+                    <span>{`Nothing within ${formatDistance(near.radiusKm)} ${near.from === 'area' ? 'of your area' : 'of the place you picked'} yet.`}</span>
+                    <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">Show everywhere</button>
+                </p>
+            )}
+
             {/* Event chips (docs/events-on-the-map.md §3). They filter event pins only, by start time. One row
                 that scrolls sideways rather than wraps, so it holds at 320px with large text, and only as wide as its chips so the rest of the map still pans. Shown once this
                 community has an upcoming event. */}
@@ -1722,9 +1781,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         post={previewPost}
                         identity={identity}
                         visitor={visitor}
-                        distanceKm={userLocation && previewPost.lat != null && previewPost.lng != null
-                            ? haversineDistance(userLocation.lat, userLocation.lng, previewPost.lat, previewPost.lng)
-                            : null}
+                        distanceKm={listingDistanceKm(previewPost,
+                            userLocation ? (lat, lng) => haversineDistance(userLocation.lat, userLocation.lng, lat, lng) : null)}
                         onOpen={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                         onRsvpChange={(p) => { setPreviewPost(p); refreshPosts().catch(() => {}); }}
                     />

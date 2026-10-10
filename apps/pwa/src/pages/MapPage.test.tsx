@@ -83,6 +83,7 @@ vi.mock('../lib/sync', () => ({
 
 vi.mock('../lib/geo', () => ({
     haversineDistance: vi.fn(() => 0),
+    loadRadiusSettings: vi.fn(() => null),
 }));
 
 vi.mock('../lib/profile-status', () => ({

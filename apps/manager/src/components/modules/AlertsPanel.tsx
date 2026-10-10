@@ -96,6 +96,13 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
 
             {loadError && <p className="text-xs text-nature-300 m-0 break-words">{loadError}</p>}
 
+            {!status && !loadError && (
+                <div className="flex items-center gap-2 text-xs text-nature-400" data-testid="alerts-loading">
+                    <span className="animate-spin text-terra-500">🔄</span>
+                    <span>Loading alerts status…</span>
+                </div>
+            )}
+
             {status && (
                 <>
                     <div className="space-y-2">

@@ -7,7 +7,7 @@ import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainSer
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
-import { bodyOfSignedText, bytesOfSignedText } from '@beanpool/core';
+import { bodyOfSignedText, bytesOfSignedText, replaceLoneSurrogates } from '@beanpool/core';
 import { getImageStore, headObject, readObject, postPhotoKey, MAX_OBJECT_BYTES, type ObjectInfo } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
@@ -1199,8 +1199,11 @@ function verifyTransactionAuthorship(tx: Transaction): boolean {
         if (Number(signed.amount) !== Number(tx.amount)) return false;
         // The note stored is the one signed, or none: a note the main server kept from someone who had blocked its sender
         // is stored blank (engine/withheld-notes.ts). Who signed it and the Beans it moved are checked above either way.
-        const stored = String(tx.memo ?? '');
-        if (stored !== '' && String(signed.memo ?? '') !== stored) return false;
+        // Both sides as stored: the main server keeps a note with each lone UTF-16 surrogate replaced by U+FFFD
+        // (state-engine.ts transfer), and so does this database whatever the copy carries (#1515). Only the words signed
+        // pass; U+FFFD matches nothing but a lone surrogate the sender signed.
+        const stored = replaceLoneSurrogates(String(tx.memo ?? ''));
+        if (stored !== '' && replaceLoneSurrogates(String(signed.memo ?? '')) !== stored) return false;
         return true;
     } catch {
         return false;

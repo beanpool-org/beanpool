@@ -175,6 +175,7 @@ export const SUITES = [
     'test-backend-monitors',
     'test-backup-hardening',
     'test-request-binding-ledger',
+    'test-standby-surrogate-memo',
     'test-backup-identity-bundle',
     'test-backup-owner-gate',
     'test-sealed-backups',

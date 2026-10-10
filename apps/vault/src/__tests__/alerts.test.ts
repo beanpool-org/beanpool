@@ -186,6 +186,7 @@ describe('when tidying the off-box store keeps failing', () => {
         servers.push(s3);
         const { v, smtp, hook, told } = await rig({ offsite: s3 });
         s3.failStep.list = 500;
+        const firstFailed = v.clock.now();
         for (let i = 1; i < 24; i++) {
             await v.api.runBackup();
             await v.api.checkAlerts();
@@ -198,10 +199,13 @@ describe('when tidying the off-box store keeps failing', () => {
         expect(smtp.mails).toHaveLength(1);
         expect(smtp.mails[0].data).toMatch(/^Subject: BeanPool key vault 127\.0\.0\.1: off-box tidy-up failing$/m);
         expect(smtp.mails[0].data).toMatch(/OFF-BOX TIDY-UP FAILING since .*: 24 tidy-ups of the off-box store in a row failed \(list: HTTP 500 InternalError\): copies past 30 days are not being removed there\. The copies themselves go up\./);
-        expect(JSON.parse(hook.posts[0].body).events).toEqual([expect.objectContaining({ condition: 'offsite-prune', state: 'raised' })]);
+        // Since the first of the 24, a day before the alert, not since the alert.
+        const since = `${new Date(firstFailed).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+        expect(smtp.mails[0].data).toContain(`OFF-BOX TIDY-UP FAILING since ${since}:`);
+        expect(JSON.parse(hook.posts[0].body).events).toEqual([expect.objectContaining({ condition: 'offsite-prune', state: 'raised', since: new Date(firstFailed).toISOString() })]);
         const report = await reportOf(v);
         expect(report.alerts.active).toEqual(['offsite-prune']);
-        expect(report.offsite).toMatchObject({ failuresInARow: 0, prune: { failuresInARow: 24, step: 'list' } });
+        expect(report.offsite).toMatchObject({ failuresInARow: 0, prune: { lastOkAt: null, firstFailedAt: firstFailed, failuresInARow: 24, step: 'list' } });
         expect(s3.objects.size).toBe(24);
         expect(OFFSITE_PRUNE_FAILURES_ALERT).toBe(24);
 

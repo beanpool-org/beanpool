@@ -148,7 +148,7 @@ describe('every backup goes off the box', () => {
         const { body } = await report(v);
         expect(body.offsite).toEqual({
             lastOkAt: v.clock.now(), lastName: firstName, failuresInARow: 0, error: null, step: null,
-            prune: { lastOkAt: v.clock.now(), failuresInARow: 0, step: null, error: null },
+            prune: { lastOkAt: v.clock.now(), firstFailedAt: null, failuresInARow: 0, step: null, error: null },
         });
         expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0, offsitePruneFailed: 0 });
 
@@ -201,7 +201,7 @@ describe('every backup goes off the box', () => {
         expect(body.offsite).toEqual({
             lastOkAt: null, lastName: null, failuresInARow: 1, error: 'HTTP 503 InternalError', step: 'put',
             // No copy went up: nothing was tidied, and nothing failed there.
-            prune: { lastOkAt: null, failuresInARow: 0, step: null, error: null },
+            prune: { lastOkAt: null, firstFailedAt: null, failuresInARow: 0, step: null, error: null },
         });
         stub.failWith = null;
         v.clock.advance(60 * 60 * 1000);
@@ -221,7 +221,8 @@ describe('a copy that reached the store counts as done; tidying old ones is its 
         expect(stub.objects.has(`vault/${name}`)).toBe(true);
         let { body } = await report(v);
         expect(body.offsite).toMatchObject({ lastOkAt: v.clock.now(), lastName: name, failuresInARow: 0, error: null });
-        expect(body.offsite.prune).toEqual({ lastOkAt: null, failuresInARow: 1, step: 'list', error: 'HTTP 500 InternalError' });
+        const firstFailed = v.clock.now();
+        expect(body.offsite.prune).toEqual({ lastOkAt: null, firstFailedAt: firstFailed, failuresInARow: 1, step: 'list', error: 'HTTP 500 InternalError' });
         expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0, offsitePruneFailed: 1 });
 
         // A second hour the same: still every copy there, and the off-box alert (copies failing) stays quiet.
@@ -230,7 +231,8 @@ describe('a copy that reached the store counts as done; tidying old ones is its 
         await v.api.checkAlerts();
         ({ body } = await report(v));
         expect(body.offsite).toMatchObject({ failuresInARow: 0, error: null });
-        expect(body.offsite.prune).toMatchObject({ failuresInARow: 2, step: 'list' });
+        // Failing since the first of the two, not since the latest.
+        expect(body.offsite.prune).toMatchObject({ firstFailedAt: firstFailed, failuresInARow: 2, step: 'list' });
         expect(body.counts).toMatchObject({ offsiteOk: 2, offsiteFailed: 0, offsitePruneFailed: 2 });
         expect(body.alerts.active).not.toContain('offsite');
 
@@ -239,7 +241,7 @@ describe('a copy that reached the store counts as done; tidying old ones is its 
         v.clock.advance(60 * 60 * 1000);
         await v.api.runBackup();
         ({ body } = await report(v));
-        expect(body.offsite.prune).toEqual({ lastOkAt: v.clock.now(), failuresInARow: 0, step: null, error: null });
+        expect(body.offsite.prune).toEqual({ lastOkAt: v.clock.now(), firstFailedAt: null, failuresInARow: 0, step: null, error: null });
         expect(stub.objects.size).toBe(3);
     });
 
@@ -255,7 +257,7 @@ describe('a copy that reached the store counts as done; tidying old ones is its 
         const name = await v.api.runBackup();
         let { body } = await report(v);
         expect(body.offsite).toMatchObject({ lastName: name, failuresInARow: 0, step: null, error: null });
-        expect(body.offsite.prune).toEqual({ lastOkAt: null, failuresInARow: 1, step: 'delete', error: 'HTTP 403 InternalError' });
+        expect(body.offsite.prune).toEqual({ lastOkAt: null, firstFailedAt: v.clock.now(), failuresInARow: 1, step: 'delete', error: 'HTTP 403 InternalError' });
         expect([...stub.objects.keys()].sort()).toEqual([old[0], `vault/${name}`]);
         v.clock.advance(60 * 60 * 1000);
         const next = await v.api.runBackup();

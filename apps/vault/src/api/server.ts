@@ -333,8 +333,11 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         lastOkAt: null as number | null, lastName: null as string | null, failuresInARow: 0, error: null as string | null,
         /** The call the last copy failed at (only ever `put`: the upload), beside `error`, its cause. */
         step: null as 'put' | null,
-        /** Removing the copies there past 30 days, after a copy went up: which call failed (`list`, `delete`) and why. */
-        prune: { lastOkAt: null as number | null, failuresInARow: 0, step: null as 'list' | 'delete' | null, error: null as string | null },
+        /**
+         * Removing the copies there past 30 days, after a copy went up: which call failed (`list`, `delete`) and why,
+         * and when the first of the failures in a row was (what an alert says it is failing since).
+         */
+        prune: { lastOkAt: null as number | null, firstFailedAt: null as number | null, failuresInARow: 0, step: null as 'list' | 'delete' | null, error: null as string | null },
     };
     useSettings(settings);
     /** Settings sent by one custodian, waiting for a second to send the same (by hash). In memory only. */
@@ -365,7 +368,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         offsiteStatus.failuresInARow = 0;
         offsiteStatus.error = null;
         offsiteStatus.step = null;
-        offsiteStatus.prune = { lastOkAt: null, failuresInARow: 0, step: null, error: null };
+        offsiteStatus.prune = { lastOkAt: null, firstFailedAt: null, failuresInARow: 0, step: null, error: null };
     }
 
     function saveSettings(f: SettingsFile): void {
@@ -1407,6 +1410,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         if (target !== offsite) return;
         if (failed) {
             const p = offsiteStatus.prune;
+            p.firstFailedAt ??= clock();
             p.failuresInARow++;
             p.step = failed.step;
             p.error = failed.error;
@@ -1415,7 +1419,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             console.error(`vault-api: tidying the off-box store failed (${what}: ${failed.error}); the copy itself is there`);
             return;
         }
-        offsiteStatus.prune ={ lastOkAt: clock(), failuresInARow: 0, step: null, error: null };
+        offsiteStatus.prune = { lastOkAt: clock(), firstFailedAt: null, failuresInARow: 0, step: null, error: null };
     }
 
     async function maintenance(): Promise<void> {
@@ -1504,7 +1508,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         const pruneFailing = !!offsite && prune.failuresInARow >= OFFSITE_PRUNE_FAILURES_ALERT;
         const left = 'the old one is no longer tidied, and its copies past 30 days stay there until deleted by hand.';
         conditions.push({
-            key: 'offsite-prune', active: pruneFailing, since: prune.lastOkAt ?? undefined,
+            key: 'offsite-prune', active: pruneFailing, since: prune.firstFailedAt ?? undefined,
             detail: pruneFailing
                 ? `${prune.failuresInARow} tidy-ups of the off-box store in a row failed (${prune.step ?? 'list'}: ${prune.error ?? 'failed'}): copies past 30 days are not being removed there. The copies themselves go up.`
                 : pruneAlertStore && pruneAlertStore !== offsite ? (offsite ? `the off-box store was changed: ${left}` : `no off-box store is set now: ${left}`)

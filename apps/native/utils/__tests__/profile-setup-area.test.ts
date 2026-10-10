@@ -300,6 +300,25 @@ describe('a reading or a save that never answers (review B2)', () => {
         expect(stepNow()).toBe('Step 4 of 4');
     });
 
+    it('the permission prompt still open: Skip works, and a grant landing afterwards takes no reading and sends nothing (review N9)', async () => {
+        const prompt = deferred<{ status: string }>();
+        vi.mocked(Location.getForegroundPermissionsAsync).mockImplementationOnce(async () => ({ status: 'undetermined' }) as any);
+        vi.mocked(Location.requestForegroundPermissionsAsync).mockImplementationOnce(() => prompt.p as any);
+        vi.mocked(Location.getCurrentPositionAsync).mockClear();
+        await render(GLOBAL_FEATURES);
+        await toAreaStep();
+        await press('[data-testid="area-use-location"]');
+        expect(disabledAttr('area-skip')).toBeNull();
+        await press('[data-testid="area-skip"]');
+        expect(stepNow()).toBe('Step 4 of 4');
+        prompt.resolve({ status: 'granted' });
+        await settle(10);
+        expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+        expect(requests).toEqual([]);
+        expect(signed.calls).toEqual([]);
+        expect(stepNow()).toBe('Step 4 of 4');
+    });
+
     it('← Back while a reading waits: the late reading sends nothing either', async () => {
         const reading = deferred<typeof PRECISE>();
         vi.mocked(Location.getCurrentPositionAsync).mockImplementationOnce(() => reading.p as any);

@@ -33,6 +33,7 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, createGroup } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -413,6 +414,17 @@ async function main(): Promise<void> {
     const lockedLine = db.prepare("SELECT * FROM messages WHERE conversation_id = ? AND system_type = 'GROUP_CHAT_LOCKED' ORDER BY rowid DESC LIMIT 1").get(other.id) as any;
     assert(!!lockedLine && lockedLine.ciphertext === groupThread.GROUP_CHAT_LOCKED_TEXT, 'and the group gets one line saying its chat is now end-to-end encrypted');
     assert(!db.prepare("SELECT 1 FROM messages WHERE conversation_id = ? AND system_type = 'GROUP_CHAT_LOCKED'").get(G), 'a group with nothing readable gets no such line');
+    // The rows are clean; so must the files be. secure_delete zeroes the old words in the pages the wipe writes, but
+    // state.db-wal still holds the pages as they were (and state.db once a checkpoint folds them back) until the WAL is
+    // emptied, as an account deletion does (review of #1762, finding 2).
+    const legacyBytes = [Buffer.from('the shed key is under the pot').toString('base64'), 'the shed key is under the pot'];
+    const holds = (file: string): boolean => {
+        let buf: Buffer;
+        try { buf = fs.readFileSync(file); } catch { return false; }
+        return legacyBytes.some((n) => buf.indexOf(Buffer.from(n, 'utf8')) >= 0);
+    };
+    assert(!holds(db.name), 'state.db holds no byte of a wiped line\'s words');
+    assert(!holds(`${db.name}-wal`), 'and neither does state.db-wal: the WAL is emptied after the wipe');
     assert(wipe(cb) === 0, 'a second run finds nothing: idempotent');
     assert(count("SELECT COUNT(*) AS n FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.type = 'group_thread' AND m.type = 'text' AND m.nonce NOT LIKE 'group-xc20p-v1:%'") === 0,
         'no readable group line is left on the node');

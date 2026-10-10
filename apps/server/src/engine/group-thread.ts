@@ -20,6 +20,7 @@
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
+import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
 import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, GROUP_NONCE_PREFIX, type GroupRole, type GroupMemberStatus } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
@@ -615,6 +616,12 @@ export function replyToIdFrom(metadata?: string | null): string | undefined {
  * reply go, and its updated_at moves, so a standby's next copy carries the tombstone, never the words), and each group
  * that had one gets one system line saying so. A sealed line, a system line and a line already down are left as they
  * are. Main server only, at boot; idempotent (a second run finds nothing readable left). Returns how many lines went.
+ *
+ * The files too: secure_delete zeroes the old words in the pages the wipe writes, and the WAL is emptied right after
+ * (as an account deletion does), so neither state.db nor state.db-wal keeps them (review of #1762, finding 2). A snapshot
+ * the old version took before the switch is left as it is, and a backup sealed from it carries the old words until the
+ * snapshot expires: 7 days by default, 14 at most. That is the same window accepted for a deleted account (data-at-rest
+ * F3), accepted here by the director, 2026-10-11.
  */
 export function wipeReadableGroupLines(cb: MessagingCallbacks): number {
     const rows = db.prepare(`
@@ -632,5 +639,6 @@ export function wipeReadableGroupLines(cb: MessagingCallbacks): number {
         }
     })();
     for (const g of groups) postGroupSystemLine(cb, g, GroupSystemType.CHAT_LOCKED, GROUP_CHAT_LOCKED_TEXT);
+    truncateWalAfterDelete('readable group chat lines were removed');
     return rows.length;
 }

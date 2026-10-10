@@ -1105,9 +1105,9 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     try {
         tied = (prepared(db, `
             SELECT post_id AS id FROM marketplace_transactions WHERE buyer_pubkey = @m AND status IN ('requested', 'pending') AND post_id IS NOT NULL
-            UNION
+            UNION ALL
             SELECT post_id FROM marketplace_transactions WHERE seller_pubkey = @m AND status IN ('requested', 'pending') AND post_id IS NOT NULL
-            UNION
+            UNION ALL
             SELECT c.post_id FROM conversation_participants cp JOIN conversations c ON c.id = cp.conversation_id
             WHERE cp.public_key = @m AND c.post_id IS NOT NULL`).all({ m: member }) as Array<{ id: string }>).map(r => r.id);
     } catch {
@@ -1138,12 +1138,14 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
                 WHERE ${inBox}${where}`;
         // The bound (measureAtMost): the newest `cap` of the matching posts, when the box holds more posts than that.
-        // Whether it does is counted from idx_posts_lat_lng alone, up to cap + 1; when it doesn't, every matching post is
-        // among the newest `cap` anyway, and they are measured without sorting them first (the sort was a third of the
-        // busy town's pass).
+        // Whether it does is counted from idx_posts_lat_lng alone: the box's band of latitude first, a range of the index
+        // that the pass below reads anyway, counted at a fraction of the pass's cost; the box itself, up to cap + 1, only
+        // when the band holds more. When it doesn't, every matching post is among the newest `cap` anyway, and they are
+        // measured without sorting them first (the sort was a third of the busy town's pass).
         const cap = q.measureAtMost && q.measureAtMost > 0 ? Math.floor(q.measureAtMost) : 0;
-        if (cap > 0 && (prepared(d, `SELECT count(*) AS n FROM (SELECT 1 FROM posts p WHERE ${inBox} LIMIT ?)`)
-            .get(...boxParams, cap + 1) as { n: number }).n > cap) {
+        if (cap > 0
+            && (prepared(d, 'SELECT count(*) AS n FROM posts p WHERE p.lat BETWEEN ? AND ?').get(box.latMin, box.latMax) as { n: number }).n > cap
+            && (prepared(d, `SELECT count(*) AS n FROM (SELECT 1 FROM posts p WHERE ${inBox} LIMIT ?)`).get(...boxParams, cap + 1) as { n: number }).n > cap) {
             inner += ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?';
             params.push(cap);
         }

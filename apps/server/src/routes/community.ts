@@ -467,7 +467,10 @@ router.get('/api/local/dashboard', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) {
         if (!(ctx.body as any)?.notSignedIn) return;
         ctx.status = 200;
-        ctx.body = { identity };
+        // Anyone gets the location rounded to two decimals (~1 km), as /api/local/status and community.place; an owner or
+        // admin gets it exact below, because the settings form edits it from this answer (static/settings.js data.identity).
+        const loc = config.location;
+        ctx.body = { identity: { ...identity, location: loc ? { lat: Math.round(loc.lat * 100) / 100, lng: Math.round(loc.lng * 100) / 100 } : loc } };
         return;
     }
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can see its peer links')) return;

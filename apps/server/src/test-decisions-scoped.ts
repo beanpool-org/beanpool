@@ -29,7 +29,7 @@ import { initStateEngine, tickDecisions, reconcileLedgerFromDb, stepDownAsKeeper
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { getCommonsBalanceExact } from './state-engine.js';
-import { ROLL_OF_ONE, WAGE_NEEDS_SURPLUS, WINDING_UP_VOID, SCOPED_ALREADY_VOTED, SUBJECT_OFF_ROLL } from './decisions-engine.js';
+import { ROLL_OF_ONE, WAGE_NEEDS_SURPLUS, WINDING_UP_VOID, SCOPED_ALREADY_VOTED, SUBJECT_OFF_ROLL, RECIPIENT_WOUND_UP } from './decisions-engine.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -336,6 +336,22 @@ async function main(): Promise<void> {
     assert(row(dHout).status === 'execution_void' && row(dHout).execution_reason === SUBJECT_OFF_ROLL && roleInH(h4.pubKeyHex) === 'keeper',
         `nor removed by the vote: void (got ${row(dHout).status} ${row(dHout).execution_reason ?? ''})`);
     setUserStatusRow(h4.pubKeyHex, 'active');
+
+    // ── 10. A pay-out to an enterprise that has wound up: refused at proposal, void before the transfer ──
+    const [c1, c2] = [makeMember('Cal'), makeMember('Cleo')];
+    const eC = makeEnterprise('Cannery', [c1, c2], 30);
+    const shut = makeEnterprise('Shut stall', [makeMember('Cyd')], 0);
+    db.prepare("UPDATE members SET status = 'completed' WHERE public_key = ?").run(shut);
+    const toShut = await propose(eC, c1, { effect: 'pay_out', params: { to: shut, amount: 5 } });
+    assert(toShut.status === 400 && toShut.error === RECIPIENT_WOUND_UP, `paying an enterprise that has wound up is refused at proposal (got ${toShut.status} ${toShut.error ?? ''})`);
+    const closing = makeEnterprise('Closing stall', [makeMember('Cy')], 0);
+    const dC = (await propose(eC, c2, { effect: 'pay_out', params: { to: closing, amount: 5 } })).body?.decision?.id as string;
+    await vote(eC, dC, c1, true); await vote(eC, dC, c2, true);
+    db.prepare("UPDATE members SET status = 'completed' WHERE public_key = ?").run(closing);
+    const supplyC = totalSupply();
+    tickDecisions();
+    assert(row(dC).status === 'execution_void' && row(dC).execution_reason === RECIPIENT_WOUND_UP && near(balanceOf(eC), 30) && near(totalSupply(), supplyC),
+        `one that wound up mid-vote is void before any transfer, nothing moved (got ${row(dC).status} ${row(dC).execution_reason ?? row(dC).execution_error ?? ''})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

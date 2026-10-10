@@ -2254,6 +2254,8 @@ export const PAY_SELF_REFUSAL = "You can't propose paying yourself. Another keep
 export const SCOPED_ONE_OPEN = 'You already have an open vote in this enterprise. Wait for it to close first.';
 /** A replace_lead or remove_keeper subject off the roll at execution (§2.3): suspended, barred from operating, or a visitor. */
 export const SUBJECT_OFF_ROLL = 'They are not on this enterprise’s roll now (their account is not active, or they may not act for it)';
+/** A pay-out to an enterprise that has wound up (its account is closed: state-engine transfer refuses it). */
+export const RECIPIENT_WOUND_UP = 'That enterprise has wound up and its account is closed, so it can’t be paid.';
 export const WAGE_NEEDS_SURPLUS = 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus)';
 /** How long a passed vote waits on an enterprise an admin suspended or disabled before it is void (§2.6). */
 export const SCOPED_WAIT_DAYS = 90;
@@ -2456,6 +2458,7 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions): Decisio
         if (!to || isSyntheticAccount(to) || !isNameableAccount(to) || to === opts.scopeId) throw new Error('Name a member or an enterprise of this community to pay.');
         const recipient = getMember(to);
         if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) throw new Error('Name a member or an enterprise of this community to pay.');
+        if (recipient.status === 'completed') throw new Error(RECIPIENT_WOUND_UP);
         if (to === opts.authorPubkey) throw new Error(PAY_SELF_REFUSAL);
         const held = floorCents(getBalance(opts.scopeId).balance);
         if (cents > held) throw new Error(`The enterprise holds ${beansText(Math.max(0, held))} Beans, so it can't pay ${beansText(cents)}.`);
@@ -2557,6 +2560,8 @@ function preflightScoped(decision: Decision): { status: 'ok' | 'void' | 'blocked
         const recipient = to ? getMember(to) : null;
         // A suspended recipient is paid: their balance is theirs (as a hardship grant behaves).
         if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) return { status: 'void', reason: 'The member to be paid no longer has an account here' };
+        // Here, not by transfer's throw inside the conserving transaction (validation before the transaction).
+        if (recipient.status === 'completed') return { status: 'void', reason: RECIPIENT_WOUND_UP };
         if (to === decision.authorPubkey) return { status: 'blocked', reason: PAY_SELF_REFUSAL };
         const cents = floorCents(Number(decision.params?.amount));
         if (!Number.isFinite(cents) || cents <= 0) return { status: 'blocked', reason: 'Invalid pay-out amount' };

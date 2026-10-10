@@ -2438,9 +2438,14 @@ CREATE TABLE IF NOT EXISTS group_key_wraps (
     sig              TEXT,
     created_at       TEXT NOT NULL,
     updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (group_id, epoch, recipient_pubkey)
+    -- When the recipient said this wrap does not open (POST …/keys/:epoch/reject; DESIGN-group-chat-epochs-over-time-fable.md
+    -- §1). Kept, never deleted: a record's wraps are its maker's signed set, and the row names who handed out a bad key.
+    -- A live wrap has none; a slot holds at most one live wrap, and one row per wrapper ever.
+    rejected_at      TEXT,
+    PRIMARY KEY (group_id, epoch, recipient_pubkey, wrapper_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_group_key_wraps_recipient ON group_key_wraps(recipient_pubkey);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_group_key_wraps_live ON group_key_wraps(group_id, epoch, recipient_pubkey) WHERE rejected_at IS NULL;
 
 -- Convenor succession (answer B): when a group's only convenor has shown no node activity for 30 days, any
 -- member may propose a member as convenor. Members vote yes or no for 14 days; more than half of those who

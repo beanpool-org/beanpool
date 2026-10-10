@@ -27,7 +27,7 @@ export const GROUP_MENTIONS_MAX = 20;
 
 export type GroupKeyErrorCode =
     | 'epoch_needed' | 'epoch_stale' | 'epoch_not_current' | 'epoch_conflict' | 'epoch_refused' | 'epoch_not_applicable'
-    | 'wrap_exists' | 'wrap_below_membership' | 'wrap_refused' | 'not_encrypted';
+    | 'wrap_exists' | 'wrap_below_membership' | 'wrap_refused' | 'wrap_rejected' | 'not_encrypted';
 
 /** A refusal the routes answer with its status, its code and, for a 409, the epoch and roster the app should use. */
 export class GroupKeyError extends Error {
@@ -80,16 +80,17 @@ export function currentGroupEpoch(groupId: string, roster = groupKeyRoster(group
  */
 export function fromEpochOf(groupId: string, pubkey: string | undefined): number | null {
     if (!pubkey) return null;
-    const row = db.prepare(`
-        SELECT gm.from_epoch AS f,
-               CASE WHEN gm.from_epoch IS NULL THEN
-                   (SELECT MIN(e.epoch) FROM group_key_epochs e WHERE e.group_id = gm.group_id AND e.stored_at >= gm.joined_at)
-               END AS legacy
-        FROM group_members gm WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.status = 'active'
-    `).get(groupId, pubkey) as { f: number | null; legacy: number | null } | undefined;
-    if (!row) return null;
-    return row.f ?? row.legacy ?? null;
+    const row = db.prepare(`SELECT ${FROM_EPOCH_SQL} AS f FROM group_members gm WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.status = 'active'`)
+        .get(groupId, pubkey) as { f: number | null } | undefined;
+    return row?.f ?? null;
 }
+
+/** fromEpochOf for the group_members row `gm`, in SQL: its from_epoch, or for a row no code wrote the stored_at rule. */
+const FROM_EPOCH_SQL = `COALESCE(gm.from_epoch,
+    (SELECT MIN(e0.epoch) FROM group_key_epochs e0 WHERE e0.group_id = gm.group_id AND e0.stored_at >= gm.joined_at))`;
+
+/** A wrap row its recipient has not refused (§1): the one they open. At most one per (group, epoch, recipient). */
+const LIVE = 'rejected_at IS NULL';
 
 /**
  * Where a membership's keys begin, by number, inside the transaction that made the row active. The row's updated_at
@@ -223,7 +224,12 @@ export function withMembershipEpoch<T>(
     })();
 }
 
-/** POST …/keys/wrap (§2.5, provenance §6): a member hands a key they hold to a member who lacks a wrap for it. */
+/**
+ * POST …/keys/wrap (§2.5, provenance §6): a member hands a key they hold to a member who lacks a live wrap for it. A wrap
+ * its recipient refused stays (rejectGroupWrap), and its wrapper may not try that slot again: one row per wrapper per
+ * slot, so a slot takes at most roster-size wraps ever (DESIGN-group-chat-epochs-over-time-fable.md §1, Marty's picks 2
+ * and 3). A group whose only other member was refused rotates instead.
+ */
 export function storeGroupTopUp(groupId: string, actor: string, body: any): { epoch: number; recipient: string } {
     const t: GroupTopUp = {
         epoch: body?.epoch, recipient: body?.recipient, wrapper: actor, ephPub: body?.ephPub, nonce: body?.nonce, wrapped: body?.wrapped, sig: body?.sig,
@@ -236,12 +242,17 @@ export function storeGroupTopUp(groupId: string, actor: string, body: any): { ep
             const msg = e instanceof Error ? e.message : 'Top-up refused.';
             throw new GroupKeyError(/not an active member/.test(msg) ? 403 : 400, 'wrap_refused', msg);
         }
+        if (t.recipient === actor) throw new GroupKeyError(400, 'wrap_refused', 'Nobody tops themselves up: another member hands you this key.');
         if (!epochRow(groupId, t.epoch)) throw new GroupKeyError(404, 'wrap_refused', 'This group has no such epoch.');
         const from = fromEpochOf(groupId, t.recipient);
         if (from === null || t.epoch < from) {
             throw new GroupKeyError(403, 'wrap_below_membership', 'Nobody is handed a key from before their membership began.');
         }
-        if (db.prepare('SELECT 1 FROM group_key_wraps WHERE group_id = ? AND epoch = ? AND recipient_pubkey = ?').get(groupId, t.epoch, t.recipient)) {
+        // A wrapper refused on this slot hears so whether or not another member has filled it since: their app stops trying.
+        if (db.prepare('SELECT 1 FROM group_key_wraps WHERE group_id = ? AND epoch = ? AND recipient_pubkey = ? AND wrapper_pubkey = ? AND rejected_at IS NOT NULL').get(groupId, t.epoch, t.recipient, actor)) {
+            throw new GroupKeyError(409, 'wrap_rejected', 'Your wrap for this member was refused once; another member must hand this key over.', { epoch: t.epoch, recipient: t.recipient });
+        }
+        if (db.prepare(`SELECT 1 FROM group_key_wraps WHERE group_id = ? AND epoch = ? AND recipient_pubkey = ? AND ${LIVE}`).get(groupId, t.epoch, t.recipient)) {
             throw new GroupKeyError(409, 'wrap_exists', 'This member already holds a wrap for this epoch.');
         }
         const now = new Date().toISOString();
@@ -284,7 +295,7 @@ export function getGroupKeys(groupId: string, viewer: string, q: { after?: numbe
     const epochList = rows.map((r) => r.epoch);
     const myWraps = epochList.length === 0 ? [] : (db.prepare(`
         SELECT epoch, wrapper_pubkey, eph_pub, nonce, wrapped, sig FROM group_key_wraps
-        WHERE group_id = ? AND recipient_pubkey = ? AND epoch IN (${epochList.map(() => '?').join(',')}) ORDER BY epoch
+        WHERE group_id = ? AND recipient_pubkey = ? AND ${LIVE} AND epoch IN (${epochList.map(() => '?').join(',')}) ORDER BY epoch
     `).all(groupId, viewer, ...epochList) as any[]).map((w) => ({ epoch: w.epoch, wrapper: w.wrapper_pubkey, ephPub: w.eph_pub, nonce: w.nonce, wrapped: w.wrapped, sig: w.sig ?? null }));
     return {
         current: current?.epoch ?? null,
@@ -297,37 +308,68 @@ export function getGroupKeys(groupId: string, viewer: string, q: { after?: numbe
     };
 }
 
-/** GET …/keys/missing (§2.5): the active members who lack a wrap for an epoch since their fromEpoch, and which. */
-export function getMissingGroupWraps(groupId: string) {
-    const roster = groupKeyRoster(groupId);
+/**
+ * GET …/keys/missing (§2.5, §1): the active members who lack a live wrap for an epoch since their fromEpoch, and which.
+ * Asked by `viewer`, so it leaves out each slot on which the viewer's own wrap was refused: they may not try it again.
+ * One query for the whole group; at most GROUP_KEYS_PAGE epochs per member.
+ */
+export function getMissingGroupWraps(groupId: string, viewer: string) {
+    const roster = new Set(groupKeyRoster(groupId));
     const cur = currentRow(groupId);
     const missing: { pubkey: string; fromEpoch: number; epochs: number[] }[] = [];
     if (cur) {
-        for (const pk of roster) {
-            const from = fromEpochOf(groupId, pk);
-            if (from === null) continue;
-            const lacking = (db.prepare(`
-                SELECT e.epoch FROM group_key_epochs e
-                WHERE e.group_id = ? AND e.epoch >= ?
-                  AND NOT EXISTS (SELECT 1 FROM group_key_wraps w WHERE w.group_id = e.group_id AND w.epoch = e.epoch AND w.recipient_pubkey = ?)
-                ORDER BY e.epoch LIMIT ?
-            `).all(groupId, from, pk, GROUP_KEYS_PAGE) as { epoch: number }[]).map((r) => r.epoch);
-            if (lacking.length > 0) missing.push({ pubkey: pk, fromEpoch: from, epochs: lacking });
+        const rows = db.prepare(`
+            SELECT m.pk, m.f, e.epoch FROM (
+                SELECT gm.member_pubkey AS pk, ${FROM_EPOCH_SQL} AS f FROM group_members gm WHERE gm.group_id = ? AND gm.status = 'active'
+            ) m
+            JOIN group_key_epochs e ON e.group_id = ? AND e.epoch >= m.f
+            WHERE NOT EXISTS (SELECT 1 FROM group_key_wraps w WHERE w.group_id = e.group_id AND w.epoch = e.epoch AND w.recipient_pubkey = m.pk AND w.${LIVE})
+              AND NOT EXISTS (SELECT 1 FROM group_key_wraps r WHERE r.group_id = e.group_id AND r.epoch = e.epoch AND r.recipient_pubkey = m.pk AND r.wrapper_pubkey = ?)
+            ORDER BY m.pk, e.epoch
+        `).all(groupId, groupId, viewer) as { pk: string; f: number; epoch: number }[];
+        for (const r of rows) {
+            if (!roster.has(r.pk)) continue;
+            const last = missing[missing.length - 1];
+            if (last?.pubkey === r.pk) { if (last.epochs.length < GROUP_KEYS_PAGE) last.epochs.push(r.epoch); }
+            else missing.push({ pubkey: r.pk, fromEpoch: r.f, epochs: [r.epoch] });
         }
     }
     return { epoch: cur?.epoch ?? null, missing };
 }
 
 /**
- * GET …/keys/:epoch/wraps (provenance §5.3): one epoch's wraps in full, for a member settling whose wrap was wrong by
- * checking wrapsDigest. Not before the viewer's own fromEpoch.
+ * POST …/keys/:epoch/reject (§1): the recipient says their live wrap for `epoch`, from `wrapper` with `ephPub`, does not
+ * open (its commitment does not match, or it fails where their other wraps open). Only they can know, and only for their
+ * own row: the row is flagged, never deleted (a record's wraps are its maker's signed set, and the flag names who handed
+ * out the bad key), and the slot shows in `missing` again for another member to fill. Naming ephPub guards the race with a
+ * top-up that landed meanwhile. 404 when the caller holds no such live wrap.
+ */
+export function rejectGroupWrap(groupId: string, actor: string, epoch: number, body: any): { epoch: number; missing: true } {
+    const wrapper = body?.wrapper, ephPub = body?.ephPub;
+    if (typeof wrapper !== 'string' || typeof ephPub !== 'string' || wrapper.length > MAX_FIELD || ephPub.length > MAX_FIELD) {
+        throw new GroupKeyError(400, 'wrap_refused', 'Name the wrap you refuse: its wrapper and its ephPub.');
+    }
+    const now = new Date().toISOString();
+    const res = db.prepare(`UPDATE group_key_wraps SET rejected_at = ?, updated_at = ?
+                            WHERE group_id = ? AND epoch = ? AND recipient_pubkey = ? AND wrapper_pubkey = ? AND eph_pub = ? AND ${LIVE}`)
+        .run(now, now, groupId, epoch, actor, wrapper, ephPub);
+    if (res.changes === 0) throw new GroupKeyError(404, 'wrap_refused', 'You hold no such wrap for this epoch.');
+    return { epoch, missing: true };
+}
+
+/**
+ * GET …/keys/:epoch/wraps (provenance §5.3, §1): one epoch's wraps in full, refused ones flagged with rejectedAt, for a
+ * member settling whose wrap was wrong by checking wrapsDigest. Not before the viewer's own fromEpoch.
  */
 export function getGroupEpochWraps(groupId: string, viewer: string, epoch: number) {
     const from = fromEpochOf(groupId, viewer);
     const row = epochRow(groupId, epoch);
     if (!row || from === null || epoch < from) throw new GroupKeyError(404, 'wrap_refused', 'No such epoch for you in this group.');
-    const wraps = (db.prepare('SELECT recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig FROM group_key_wraps WHERE group_id = ? AND epoch = ? ORDER BY recipient_pubkey')
-        .all(groupId, epoch) as any[]).map((w) => ({ recipient: w.recipient_pubkey, wrapper: w.wrapper_pubkey, ephPub: w.eph_pub, nonce: w.nonce, wrapped: w.wrapped, sig: w.sig ?? null }));
+    // Every row, refused ones flagged: the record's own (sig null) still hash to its wrapsDigest; top-ups are outside it.
+    const wraps = (db.prepare('SELECT recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, rejected_at FROM group_key_wraps WHERE group_id = ? AND epoch = ? ORDER BY recipient_pubkey, wrapper_pubkey')
+        .all(groupId, epoch) as any[]).map((w) => ({
+            recipient: w.recipient_pubkey, wrapper: w.wrapper_pubkey, ephPub: w.eph_pub, nonce: w.nonce, wrapped: w.wrapped, sig: w.sig ?? null, rejectedAt: w.rejected_at ?? null,
+        }));
     return { epoch, wrapsDigest: row.wraps_digest, membersDigest: row.members_digest, wraps };
 }
 

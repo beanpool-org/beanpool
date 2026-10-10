@@ -8,6 +8,11 @@
  *   F6/P. the same after an epoch stored by a clock that was ahead (no rejoin at all)
  *   F6.   a join with no epoch under the same step: from_epoch = current + 1, served from the next rotation at once; the
  *         creator's row holds 1; a row no code wrote (from_epoch NULL) falls back to the stored_at rule
+ *   F3.   a junk wrap in a maker's record: refused by the commitment, the recipient rejects it, `missing` lists the slot,
+ *         another member's top-up fills it and opens; the refused wrapper hears wrap_rejected, anyone else wrap_exists. A
+ *         junk top-up on a re-keyed member's empty slot: rejected, filled, the junk wrapper may not retry and `missing`
+ *         asked by them leaves the slot out. Another's wrap, a wrong ephPub, an outsider, a self top-up: each refused.
+ *         …/wraps flags the refused row, and the record's own wraps still hash to its wrapsDigest
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-group-keys-over-time node scripts/run-server-suites.mjs
  */
@@ -23,10 +28,12 @@ import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import {
-    dmPublicKeyOf, makeGroupEpochRecord, makeGroupTopUp, openMyGroupKey, sealGroupLine,
+    dmPublicKeyOf, groupEpochCanonical, groupWrapsDigest, makeGroupEpochRecord, makeGroupTopUp, openMyGroupKey, sealGroupLine, wrapGroupKey,
     type GroupEpochReason, type GroupEpochRecord, type GroupServedWrap,
 } from '@beanpool/core';
+import { ed25519 } from '@noble/curves/ed25519.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -103,6 +110,23 @@ const fromEpochCol = (g: string, pk: string): unknown => {
     try { return (db.prepare('SELECT from_epoch FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, pk) as any)?.from_epoch; } catch { return 'no column'; }
 };
 const ahead = () => new Date(Date.now() + STEP_MS).toISOString();
+const b64 = (u: Uint8Array) => Buffer.from(u).toString('base64');
+/** Re-sign a changed record as `signer`: what a modified or buggy app could send. */
+function resign(r: Omit<GroupEpochRecord, 'sig'>, signer: Id): GroupEpochRecord {
+    return { ...r, sig: b64(ed25519.sign(crypto.createHash('sha256').update(groupEpochCanonical(r), 'utf8').digest(), Buffer.from(signer.seedHex, 'hex'))) };
+}
+/** Refused by `match`, as the member's own open refuses. */
+function refuses(fn: () => unknown, match: RegExp, msg: string): void {
+    run++;
+    try {
+        fn();
+        console.error(`✗ ${msg} (it opened)`);
+    } catch (e: any) {
+        if (match.test(e?.message ?? '')) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg} (refused, but for "${e?.message}")`);
+    }
+}
+const missingFor = async (asker: Id, g: string, pk: string): Promise<number[] | null> =>
+    ((await call('GET', asker, `/api/groups/${g}/keys/missing`)).body.missing as any[]).find((m) => m.pubkey === pk)?.epochs ?? null;
 
 async function main(): Promise<void> {
     console.log('\n=== Group chats, step 2b: keys that hold up over time ===\n');
@@ -215,6 +239,85 @@ async function main(): Promise<void> {
         db.prepare("UPDATE group_members SET from_epoch = NULL, joined_at = ? WHERE group_id = ? AND member_pubkey = ?").run(ahead(), g, ana.pk);
         assert((await keysOf(ana, g)).fromEpoch === null, 'and with joined_at after every stored epoch, the fallback serves nothing (fails closed)');
         db.prepare('UPDATE group_members SET from_epoch = 1 WHERE group_id = ? AND member_pubkey = ?').run(g, ana.pk);
+    }
+
+    // ── F3. a wrong or orphaned wrap ─────────────────────────────────────────────────────────────────
+    console.log('\n── F3. a wrap that does not open: the recipient refuses it, another member fills the slot ──');
+    {
+        const eve = member('Eve');
+        const outsider = member('Mallory');
+        const g = createGroup({ name: 'Junk Wraps', joinPolicy: 'open', createdBy: ana.pk }).id;
+        const kp = `/api/groups/${g}/keys`;
+        assert((await call('POST', ana, `${kp}/epoch`, { epoch: epochBy(ana, g, 1, 'start', [ana]).record })).status === 201, 'Ana starts epoch 1');
+        for (const who of [ben, cat, dov, eve]) assert((await call('POST', who, `/api/groups/${g}/join`, {})).status === 200, `${who.name} joins (no epoch): from epoch 2`);
+        // Ana's app is buggy: its record commits to the real key, but Ben's wrap holds another. Re-signed, it passes the node.
+        const real = epochBy(ana, g, 2, 'rotate', [ana, ben, cat, dov, eve]);
+        const junkKey = new Uint8Array(crypto.randomBytes(32));
+        const junkWrap = wrapGroupKey(junkKey, { groupId: g, epoch: 2, recipientPubHex: ben.pk, wrapperPubHex: ana.pk });
+        const wraps = real.record.wraps!.map((w) => (w.recipient === ben.pk ? junkWrap : w));
+        const { sig: _s, ...head } = real.record;
+        const buggy = resign({ ...head, wraps, wrapsDigest: groupWrapsDigest(wraps) }, ana);
+        assert((await call('POST', ana, `${kp}/epoch`, { epoch: buggy })).status === 201, "Ana's record with a junk wrap for Ben is stored: the node cannot tell");
+        const benK = await keysOf(ben, g);
+        refuses(() => openFrom(benK, ben, g, 2), /commits to/, "Ben's open of epoch 2 is refused by the commitment");
+        const benServed = (benK.myWraps as any[]).find((w) => w.epoch === 2);
+        assert(!(await missingFor(cat, g, ben.pk)), 'before he says so, …/keys/missing does not list Ben');
+
+        const catReject = await call('POST', cat, `${kp}/2/reject`, { wrapper: ana.pk, ephPub: benServed.ephPub });
+        assert(catReject.status === 404, `Cat refusing Ben's wrap is 404: only a wrap's recipient may (got ${catReject.status})`);
+        const wrongEph = await call('POST', ben, `${kp}/2/reject`, { wrapper: ana.pk, ephPub: b64(crypto.randomBytes(32)) });
+        assert(wrongEph.status === 404, `naming the wrong ephPub is 404 (got ${wrongEph.status})`);
+        const byOutsider = await call('POST', outsider, `${kp}/2/reject`, { wrapper: ana.pk, ephPub: benServed.ephPub });
+        assert(byOutsider.status === 403, `an outsider is 403 (got ${byOutsider.status})`);
+        assert((await call('POST', ben, `${kp}/2/reject`, { wrapper: ana.pk })).status === 400, 'naming no ephPub is 400');
+        const rejected = await call('POST', ben, `${kp}/2/reject`, { wrapper: ana.pk, ephPub: benServed.ephPub });
+        assert(rejected.status === 200 && rejected.body.epoch === 2 && rejected.body.missing === true, `Ben refuses Ana's wrap: 200 { epoch: 2, missing: true } (got ${rejected.status} ${JSON.stringify(rejected.body)})`);
+        const row = db.prepare('SELECT rejected_at FROM group_key_wraps WHERE group_id = ? AND epoch = 2 AND recipient_pubkey = ? AND wrapper_pubkey = ?').get(g, ben.pk, ana.pk) as any;
+        assert(!!row?.rejected_at, 'the row stays, flagged, naming its wrapper');
+        assert((await call('POST', ben, `${kp}/2/reject`, { wrapper: ana.pk, ephPub: benServed.ephPub })).status === 404, 'refusing it again is 404: it is no longer live');
+        assert(!(await keysOf(ben, g)).myWraps.some((w: any) => w.epoch === 2), 'GET …/keys no longer serves Ben the refused wrap');
+        assert(JSON.stringify(await missingFor(cat, g, ben.pk)) === '[2]', '…/keys/missing lists Ben for epoch 2 again');
+
+        const catKey2 = openFrom(await keysOf(cat, g), cat, g, 2);
+        const anaAgain = await call('POST', ana, `${kp}/wrap`, makeGroupTopUp(real.groupKey, { myEdPrivHex: ana.seedHex, groupId: g, epoch: 2, recipientPubHex: ben.pk }));
+        assert(anaAgain.status === 409 && anaAgain.body.code === 'wrap_rejected', `Ana, refused once on this slot, may not try it again: 409 wrap_rejected (got ${anaAgain.status} ${anaAgain.body?.code})`);
+        assert(!(await missingFor(ana, g, ben.pk)), '…/keys/missing asked by Ana leaves the slot out, so her app never wastes a wrap on it');
+        const catTop = await call('POST', cat, `${kp}/wrap`, makeGroupTopUp(catKey2, { myEdPrivHex: cat.seedHex, groupId: g, epoch: 2, recipientPubHex: ben.pk }));
+        assert(catTop.status === 201, `Cat tops Ben up (got ${catTop.status} ${JSON.stringify(catTop.body)})`);
+        assert(Buffer.from(openFrom(await keysOf(ben, g), ben, g, 2)).equals(Buffer.from(real.groupKey)), 'and Ben opens epoch 2 from it');
+        const anaAfter = await call('POST', ana, `${kp}/wrap`, makeGroupTopUp(real.groupKey, { myEdPrivHex: ana.seedHex, groupId: g, epoch: 2, recipientPubHex: ben.pk }));
+        assert(anaAfter.status === 409 && anaAfter.body.code === 'wrap_rejected', `Ana's top-up for the slot is still 409 wrap_rejected (got ${anaAfter.status} ${anaAfter.body?.code})`);
+        const dovKey2 = openFrom(await keysOf(dov, g), dov, g, 2);
+        const dovTop = await call('POST', dov, `${kp}/wrap`, makeGroupTopUp(dovKey2, { myEdPrivHex: dov.seedHex, groupId: g, epoch: 2, recipientPubHex: ben.pk }));
+        assert(dovTop.status === 409 && dovTop.body.code === 'wrap_exists', `Dov's is 409 wrap_exists: the slot is filled (got ${dovTop.status} ${dovTop.body?.code})`);
+        const self = await call('POST', ben, `${kp}/wrap`, makeGroupTopUp(real.groupKey, { myEdPrivHex: ben.seedHex, groupId: g, epoch: 2, recipientPubHex: ben.pk }));
+        assert(self.status === 400, `a self top-up is 400 (got ${self.status} ${self.body?.code})`);
+
+        const all2 = (await call('GET', cat, `${kp}/2/wraps`)).body;
+        const flagged = (all2.wraps as any[]).filter((w) => w.recipient === ben.pk);
+        assert(flagged.length === 2 && flagged.some((w) => w.wrapper === ana.pk && w.rejectedAt && w.sig === null) && flagged.some((w) => w.wrapper === cat.pk && !w.rejectedAt && w.sig),
+            `…/keys/2/wraps shows Ben's refused wrap flagged beside Cat's live top-up (got ${JSON.stringify(flagged.map((w) => [w.wrapper === ana.pk ? 'ana' : 'cat', !!w.rejectedAt]))})`);
+        const recordOwn = (all2.wraps as any[]).filter((w) => w.sig === null);
+        assert(groupWrapsDigest(recordOwn) === all2.wrapsDigest && all2.wrapsDigest === buggy.wrapsDigest,
+            "the record's own wraps (sig null), the refused one among them, still hash to its wrapsDigest: the maker's signed set is checkable");
+
+        // A re-keyed Ben: every slot empty. Eve gets in first with junk.
+        const newBen = newId('Ben2');
+        completeRekey(ben.pk, newBen.pk, issueRekeyCode(ben.pk, owner.pk).code, owner.pk);
+        assert(JSON.stringify(await missingFor(cat, g, newBen.pk)) === '[2]', "after Ben's re-key, his new key lacks epoch 2");
+        const eveJunk = makeGroupTopUp(junkKey, { myEdPrivHex: eve.seedHex, groupId: g, epoch: 2, recipientPubHex: newBen.pk });
+        assert((await call('POST', eve, `${kp}/wrap`, eveJunk)).status === 201, "Eve's junk top-up lands first: signed by her, the node cannot tell");
+        const nbK = await keysOf(newBen, g);
+        refuses(() => openFrom(nbK, newBen, g, 2), /commits to/, "Ben's new key refuses it by the commitment");
+        assert((await call('POST', newBen, `${kp}/2/reject`, { wrapper: eve.pk, ephPub: eveJunk.ephPub })).status === 200, 'Ben rejects it');
+        assert(!(await missingFor(eve, g, newBen.pk)), '…/keys/missing asked by Eve leaves the slot out');
+        assert(JSON.stringify(await missingFor(cat, g, newBen.pk)) === '[2]', 'asked by Cat it lists it');
+        assert((await call('POST', cat, `${kp}/wrap`, makeGroupTopUp(catKey2, { myEdPrivHex: cat.seedHex, groupId: g, epoch: 2, recipientPubHex: newBen.pk }))).status === 201, 'Cat fills it');
+        assert(Buffer.from(openFrom(await keysOf(newBen, g), newBen, g, 2)).equals(Buffer.from(real.groupKey)), 'and Ben opens epoch 2 on his new key');
+        const eveRetry = await call('POST', eve, `${kp}/wrap`, makeGroupTopUp(junkKey, { myEdPrivHex: eve.seedHex, groupId: g, epoch: 2, recipientPubHex: newBen.pk }));
+        assert(eveRetry.status === 409 && eveRetry.body.code === 'wrap_rejected', `Eve cannot retry: 409 wrap_rejected (got ${eveRetry.status} ${eveRetry.body?.code})`);
+        const live = (db.prepare('SELECT COUNT(*) AS n FROM group_key_wraps WHERE group_id = ? AND epoch = 2 AND recipient_pubkey = ? AND rejected_at IS NULL').get(g, newBen.pk) as any).n;
+        assert(live === 1, `one live wrap per slot (got ${live})`);
     }
 
     console.log(`\n${passed}/${run} passed`);

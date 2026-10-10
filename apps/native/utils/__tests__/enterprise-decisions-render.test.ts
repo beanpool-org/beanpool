@@ -143,6 +143,14 @@ afterEach(async () => {
     host?.remove();
 });
 
+describe('a vote card', () => {
+    it("shows the proposer's Why? under what the vote does (design §2.5)", async () => {
+        await render();
+        expect(textEl(/^Pay 40 Beans to Bob$/)).toBeTruthy();
+        expect(textEl(/^Bob fixed the oven door last week\.$/), "the proposer's words").toBeTruthy();
+    });
+});
+
 describe("the propose form's error text", () => {
     for (const [name, palette] of [['light', lightColors], ['dark', darkColors]] as const) {
         it(`is drawn in the danger colour, readable on the sheet, in ${name}`, async () => {

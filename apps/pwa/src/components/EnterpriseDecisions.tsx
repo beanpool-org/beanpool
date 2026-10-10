@@ -78,6 +78,9 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, l
                     <article key={d.id} data-testid="scoped-decision" className="border-t border-nature-200 dark:border-nature-700 pt-3 min-w-0">
                         <h4 className="m-0 text-base font-bold text-nature-900 dark:text-nature-100 break-words">{d.title}</h4>
                         <p className="m-0 mt-1 text-sm text-nature-800 dark:text-nature-200 break-words">{scopedEffectWords(d, nameOf, lifecycle)}</p>
+                        {d.description && (
+                            <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300 break-words whitespace-pre-wrap" data-testid="scoped-why">{d.description}</p>
+                        )}
                         <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 break-words">
                             Proposed by {nameOf(d.authorPubkey)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}
                         </p>

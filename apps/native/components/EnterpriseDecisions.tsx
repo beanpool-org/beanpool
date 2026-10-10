@@ -76,6 +76,7 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, l
                     <View key={d.id} style={s.decision}>
                         <Text style={s.title}>{d.title}</Text>
                         <Text style={s.effect}>{scopedEffectWords(d, nameOf, lifecycle)}</Text>
+                        {!!d.description && <Text style={s.why}>{d.description}</Text>}
                         <Text style={s.meta}>Proposed by {nameOf(d.authorPubkey)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}</Text>
                         <Text style={s.tally}>{scopedTallyWords(d)}</Text>
                         {mine && <Text style={s.meta}>You voted {mine}.</Text>}
@@ -226,6 +227,7 @@ const styles = (colors: any) => StyleSheet.create({
     decision: { borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 10, marginTop: 8 },
     title: { fontSize: 15, fontWeight: '700', color: colors.text.heading },
     effect: { fontSize: 14, color: colors.text.body, marginTop: 2 },
+    why: { fontSize: 14, color: colors.text.secondary, marginTop: 4, lineHeight: 19 },
     meta: { fontSize: 12, color: colors.text.secondary, marginTop: 4 },
     tally: { fontSize: 13, color: colors.text.body, marginTop: 4, fontWeight: '600' },
     voteRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },

@@ -37,6 +37,8 @@ describe("an enterprise's Decisions block (DESIGN-group-decisions S2)", () => {
         expect(tallies[0].textContent).not.toMatch(/Yes \d|No \d/);
         expect(tallies[1]).toHaveTextContent('Yes 2 · No 1. 3 of 3 voted.');
         expect(screen.getByText('Pay 40 Beans to Cat')).toBeInTheDocument();
+        // The proposer's "Why?" is part of what the keepers vote on (design §2.5), on every card.
+        expect(screen.getAllByTestId('scoped-why').map(p => p.textContent)).toEqual(['Cat fixed the oven door.', 'Cat fixed the oven door.']);
         fireEvent.click(screen.getByRole('button', { name: 'Vote Yes on Pay Cat for the oven' }));
         await waitFor(() => expect(api.voteEnterpriseDecision).toHaveBeenCalledWith('ent', 'd1', true));
         expect(document.body.textContent).not.toMatch(/Ʀ/);

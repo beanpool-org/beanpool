@@ -120,6 +120,19 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         expect(screen.queryByTestId('market-near-line')).toBeNull();
     });
 
+    it('a link to one listing opens it when nothing is near: the by-id read once the first read has settled', async () => {
+        info.current = GLOBAL;
+        // Nothing within the radius of the member's area; the listing itself is far away.
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.id === 'offer-1' ? [offer] : []) as any);
+        const onPostOpened = vi.fn();
+        render(<MarketplacePage identity={identity} openPostId="offer-1" onPostOpened={onPostOpened} />);
+        await waitFor(() => expect(onPostOpened).toHaveBeenCalledTimes(1));
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'distance' }]);
+        expect(vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.id))
+            .toEqual([{ id: 'offer-1', types: CLIENT_POST_TYPES }]);
+        expect(await screen.findByText('Bicycle Repair')).toBeInTheDocument();
+    });
+
     it('a node that never answers its info still gets a list, read as before', async () => {
         info.current = GLOBAL;
         const gate = await import('../lib/visitor-lobby-gate');

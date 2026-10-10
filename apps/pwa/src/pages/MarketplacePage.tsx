@@ -377,7 +377,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
              setShowDealsModal(true);
              setDealsInitialTab('pending');
              onPostOpened?.();
-        } else if (openPostId && posts.length > 0) {
+        } else if (openPostId && !loading) {
+            // Once the first read has settled, not once it holds something: where the node reads by area the list
+            // can be empty (nothing near), and the link must still open its listing (DESIGN-global-sync-by-area §5).
             const found = posts.find(p => p.id === openPostId);
             if (found) {
                 setSelectedPost(found);
@@ -393,7 +395,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     .catch(() => { });
             }
         }
-    }, [openPostId, posts, onPostOpened]);
+    }, [openPostId, posts, loading, onPostOpened]);
 
     // A Live Pulse chip names a listing that the browse list need not be holding — an older post, or one
     // the current filters hide. Same two steps as the deep-link above: open what we already have, else

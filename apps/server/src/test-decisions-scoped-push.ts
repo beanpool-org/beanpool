@@ -8,6 +8,8 @@
  *  4. A push that throws never undoes the vote.
  *  5. A tap lands on the enterprise (review opus-1767 N4): the notice's details, which only the recipient reads, name the
  *     enterprise's screen, and the kind's tab is Home, whose Needs-you line opens it, for an app that can't fetch them.
+ *  6. A keeper who muted the enterprise's chat isn't told (design §2.8, review opus-1767 N10); a mute that has run out,
+ *     or one on another chat, changes nothing.
  *
  * In-process, as test-event-notify: the engine is called with a spy where the dispatcher goes.
  *
@@ -21,6 +23,7 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { initStateEngine, reconcileLedgerFromDb, setUserStatusRow } from './state-engine.js';
 import { createScopedDecision, getDecision, type ScopedVotePush } from './decisions-engine.js';
+import { setChatMute } from './engine/chat-mutes.js';
 import { PUSH_NOTICE_KINDS } from '@beanpool/core';
 
 let run = 0, passed = 0;
@@ -123,6 +126,20 @@ async function main(): Promise<void> {
         `the notice's details name the enterprise's screen, for the recipient's tap (${JSON.stringify(c?.data)})`);
     assert(PUSH_NOTICE_KINDS['decision.open'].tab === 'home',
         "and the kind's tab is Home, where the Needs-you line opens it, never Talk (which shows nothing of the vote)");
+
+    console.log("\n--- 6. A keeper who muted the enterprise's chat isn't told ---");
+    const [mo, mia, max, mel] = ['MoSecretname', 'MiaSecretname', 'MaxSecretname', 'MelSecretname'].map(makeMember);
+    const mill = makeEnterprise('Mill', [mo, mia, max, mel], 80);
+    setChatMute(mill, max, 'always');                                // the enterprise's chat is the thread keyed by its key
+    setChatMute(mill, mel, '8h', Date.now() - 9 * 60 * 60 * 1000);  // run out an hour ago
+    setChatMute(bakery, mia, 'always');                              // another enterprise's chat
+    calls = [];
+    createScopedDecision({
+        scopeKind: 'enterprise', scopeId: mill, authorPubkey: mo, title: 'Pay StrangerSecretname for the sacks',
+        description: 'StrangerSecretname carried the sacks.', effect: 'pay_out', params: { to: stranger, amount: 5 },
+    } as any, spy);
+    assert(calls.length === 1 && told(calls[0]).join() === [mia, mel].sort().join(),
+        `Mia (muted another chat) and Mel (her mute ran out) are told; Max, who muted the Mill's chat, isn't (told ${told(calls[0]).length})`);
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

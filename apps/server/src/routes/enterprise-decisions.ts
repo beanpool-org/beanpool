@@ -36,12 +36,12 @@ function card(d: Decision, actor: string) {
 export function createEnterpriseDecisionRoutes(_deps: RouteDeps): Router {
     const router = new Router();
 
-    router.get('/api/enterprise/:enterprise/decisions', async (ctx) => {
+    router.get('/api/enterprise/:treasury/decisions', async (ctx) => {
         const actor = (ctx.state as any)?.actor as string | undefined;
         if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
         try {
-            const decisions = getScopedDecisions(ctx.params.enterprise, actor);
-            const roll = enterpriseRollNow(ctx.params.enterprise);
+            const decisions = getScopedDecisions(ctx.params.treasury, actor);
+            const roll = enterpriseRollNow(ctx.params.treasury);
             ctx.body = {
                 decisions: decisions.map(d => card(d, actor)),
                 // A roll of one holds no vote (§2.2): the apps show no propose button then.
@@ -54,11 +54,11 @@ export function createEnterpriseDecisionRoutes(_deps: RouteDeps): Router {
         }
     });
 
-    router.get('/api/enterprise/:enterprise/decisions/:id', async (ctx) => {
+    router.get('/api/enterprise/:treasury/decisions/:id', async (ctx) => {
         const actor = (ctx.state as any)?.actor as string | undefined;
         if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
         try {
-            const d = getScopedDecision(ctx.params.enterprise, ctx.params.id, actor);
+            const d = getScopedDecision(ctx.params.treasury, ctx.params.id, actor);
             ctx.body = { decision: card(d, actor) };
         } catch (err) {
             if (err instanceof ScopedNotFoundError) return notFound(ctx);
@@ -66,7 +66,7 @@ export function createEnterpriseDecisionRoutes(_deps: RouteDeps): Router {
         }
     });
 
-    router.post('/api/enterprise/:enterprise/decisions', async (ctx) => {
+    router.post('/api/enterprise/:treasury/decisions', async (ctx) => {
         const actor = (ctx.state as any)?.actor as string | undefined;
         if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required to propose a vote' }; return; }
         const { title, description, effect, subject, params } = (ctx as any).requestBody || {};
@@ -75,7 +75,7 @@ export function createEnterpriseDecisionRoutes(_deps: RouteDeps): Router {
             assertNotMuted(actor);
             const decision = createScopedDecision({
                 scopeKind: 'enterprise',
-                scopeId: ctx.params.enterprise,
+                scopeId: ctx.params.treasury,
                 authorPubkey: actor,
                 title,
                 description,
@@ -92,13 +92,13 @@ export function createEnterpriseDecisionRoutes(_deps: RouteDeps): Router {
         }
     });
 
-    router.post('/api/enterprise/:enterprise/decisions/:id/vote', async (ctx) => {
+    router.post('/api/enterprise/:treasury/decisions/:id/vote', async (ctx) => {
         const actor = (ctx.state as any)?.actor as string | undefined;
         if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required to vote' }; return; }
         const { support, signature } = (ctx as any).requestBody || {};
         if (typeof support !== 'boolean') { ctx.status = 400; ctx.body = { error: 'support (true or false) is required' }; return; }
         try {
-            getScopedDecision(ctx.params.enterprise, ctx.params.id, actor);
+            getScopedDecision(ctx.params.treasury, ctx.params.id, actor);
         } catch (err) {
             if (err instanceof ScopedNotFoundError) return notFound(ctx);
             throw err;

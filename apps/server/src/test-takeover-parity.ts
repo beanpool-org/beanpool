@@ -566,6 +566,15 @@ async function main(): Promise<void> {
         const dumpT = await twin.send('dump') as DbDump;
         const dumpS = await standby.send('dump') as DbDump;
         diffDatabases(dumpT, dumpS, differences);
+        // messages.metadata is a known gap ('' against null), so the dump leaves it out; but a group line's epoch is its
+        // metadata, and an app opens the line by it. Compared here, as each server serves it (review of #1762, finding 7).
+        const gardenEpochOn = async (base: string): Promise<unknown> => {
+            const line = ((await api(base, 'GET', `/api/groups/${groupId}/chat`, { as: bo })).body?.messages ?? []).find((x: any) => x.id === gardenLineId);
+            const meta = typeof line?.metadata === 'string' ? JSON.parse(line.metadata) : line?.metadata;
+            return meta?.epoch;
+        };
+        const [epochT, epochS] = [await gardenEpochOn(t), await gardenEpochOn(s)];
+        assert(epochT === 1 && epochS === 1, `the sealed group line's epoch (its metadata) is the same on the promoted standby (${epochT} on the twin, ${epochS} on the standby)`);
         const manifest = await import('./engine/replication-manifest.js');
         diffSettings(await twin.send('settings'), await standby.send('settings'), {
             localConfig: (f) => manifest.LOCAL_CONFIG_FIELDS[f],

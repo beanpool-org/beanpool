@@ -41,6 +41,7 @@ import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import {
     dmPublicKeyOf, groupEpochCanonical, groupKeyCommit, groupMembersDigest, groupWrapsDigest, makeGroupEpochRecord, makeGroupTopUp,
     openGroupLine, openMyGroupKey, sealGroupLine, verifyGroupEpochRecord, wrapGroupKey, GROUP_NONCE_PREFIX,
@@ -235,6 +236,9 @@ async function main(): Promise<void> {
         `a line under the stale epoch is refused 409 epoch_stale, with the roster to rotate to (got ${staleSent.status} ${staleSent.body?.code})`);
     const old1 = await sendLine(ana, sealGroupLine('old key', { myEdPrivHex: ana.seedHex, groupKey: start.groupKey, groupId: G, epoch: 1, messageId: crypto.randomUUID() }), { epoch: 1 });
     assert(old1.status === 409 && old1.body.code === 'epoch_not_current', `a line under an older epoch is refused (got ${old1.status} ${old1.body?.code})`);
+    const anasByBen = await call('POST', ben, `${keysPath}/epoch`, { epoch: epochBy(ana, G, 3, 'rotate', [ana, ben, cat]).record });
+    assert(anasByBen.status === 403 && anasByBen.body.code === 'epoch_refused' && count('SELECT COUNT(*) AS n FROM group_key_epochs WHERE group_id = ? AND epoch = 3', G) === 0,
+        `a record Ana made and signed, sent by Ben, is refused 403 and not stored: an epoch is made by its sender (got ${anasByBen.status} ${anasByBen.body?.code})`);
     const rot3 = epochBy(ben, G, 3, 'rotate', [ana, ben, cat]);
     const rotated = await call('POST', ben, `${keysPath}/epoch`, { epoch: rot3.record });
     assert(rotated.status === 201, `any member rotates (Ben, epoch 3, reason rotate) (got ${rotated.status} ${JSON.stringify(rotated.body)})`);
@@ -245,6 +249,9 @@ async function main(): Promise<void> {
     assert(catKeys.body.fromEpoch === 3 && catKeys.body.epochs.every((e: any) => e.epoch >= 3) && catKeys.body.myWraps.every((w: any) => w.epoch >= 3),
         `Cat's fromEpoch is 3: no record or wrap from before he joined (got ${JSON.stringify(catKeys.body.epochs.map((e: any) => e.epoch))})`);
     assert(Buffer.from(await myKey(cat, G, 3, catKeys)).equals(Buffer.from(rot3.groupKey)), 'Cat opens epoch 3');
+    const catAsks = await call('GET', cat, `${keysPath}?epochs=1,2,3`);
+    assert(catAsks.status === 200 && JSON.stringify(catAsks.body.epochs.map((e: any) => e.epoch)) === '[3]' && catAsks.body.myWraps.every((w: any) => w.epoch >= 3),
+        `asking for epochs 1, 2 and 3 by number, Cat is served only 3 (got ${JSON.stringify(catAsks.body.epochs?.map((e: any) => e.epoch))})`);
     const catChat = (await call('GET', cat, `/api/groups/${G}/chat`)).body;
     assert(!catChat.messages.some((m: any) => m.id === msgId) && catChat.messages.some((m: any) => m.id === id3),
         "Cat's chat leaves out Ana's epoch-2 line and shows the epoch-3 one" + ` (got ${JSON.stringify(catChat.messages.map((m: any) => [m.id === msgId ? 'e2' : m.id === id3 ? 'e3' : m.type, m.metadata]))})`);
@@ -453,6 +460,39 @@ async function main(): Promise<void> {
     assert(benBack.body.fromEpoch === 3 && benBack.body.myWraps.some((w: any) => w.epoch === 3),
         `and is served it: fromEpoch 3 and his wrap (got fromEpoch ${benBack.body.fromEpoch}, wraps ${JSON.stringify(benBack.body.myWraps.map((w: any) => w.epoch))})`);
     assert(Buffer.from(await myKey(ben, clock.id, 3, benBack)).equals(Buffer.from(rejoin3.groupKey)), 'and opens it');
+
+    const pointless = await call('POST', ben, `/api/groups/${clock.id}/join`, { epoch: epochBy(ben, clock.id, 4, 'join', [ana, ben], ben).record });
+    assert(pointless.status === 400 && pointless.body.code === 'epoch_not_applicable' && count('SELECT MAX(epoch) AS n FROM group_key_epochs WHERE group_id = ?', clock.id) === 3,
+        `joining again while active, with an epoch: 400 epoch_not_applicable, and no epoch 4 is stored (got ${pointless.status} ${pointless.body?.code})`);
+    // An edit re-seals under the current epoch and moves the row's epoch with it (§7.4), or nobody could open it.
+    const clockLine = crypto.randomUUID();
+    const sentE3 = await call('POST', ana, `/api/groups/${clock.id}/chat/message`, {
+        ...sealGroupLine('the gate code is 4417', { myEdPrivHex: ana.seedHex, groupKey: rejoin3.groupKey, groupId: clock.id, epoch: 3, messageId: clockLine }), metadata: { epoch: 3 }, clientId: clockLine });
+    assert(sentE3.status === 201, 'Ana writes a line under epoch 3');
+    const rot4 = epochBy(ben, clock.id, 4, 'rotate', [ana, ben]);
+    assert((await call('POST', ben, `${clockKeys}/epoch`, { epoch: rot4.record })).status === 201, 'Ben rotates to epoch 4');
+    const edited = sealGroupLine('the gate code is 5528', { myEdPrivHex: ana.seedHex, groupKey: rot4.groupKey, groupId: clock.id, epoch: 4, messageId: clockLine, part: 'edit' });
+    const editRes = await call('POST', ana, '/api/messages/edit', { messageId: clockLine, ...edited, metadata: { epoch: 4 } });
+    const editedRow = db.prepare('SELECT ciphertext, nonce, metadata FROM messages WHERE id = ?').get(clockLine) as any;
+    const editedEpoch = JSON.parse(editedRow.metadata).epoch;
+    assert(editRes.status === 200 && editedEpoch === 4, `Ana edits it under epoch 4, and the row's epoch moves to 4 (got ${editRes.status}, epoch ${editedEpoch})`);
+    let editedText = '';
+    try {
+        editedText = openGroupLine({ ciphertext: editedRow.ciphertext, nonce: editedRow.nonce },
+            { groupId: clock.id, epoch: editedEpoch, senderPubHex: ana.pk, messageId: clockLine, part: 'edit' }, editedEpoch === 4 ? rot4.groupKey : rejoin3.groupKey).text;
+    } catch { /* the epoch the row names does not open it */ }
+    assert(editedText === 'the gate code is 5528', `so Ben opens the edit under the epoch the row names (got "${editedText}")`);
+
+    // ── 11. a real re-key ───────────────────────────────────────────────────────────────────────────
+    console.log('\n── 11. a real re-key (issueRekeyCode + completeRekey) drops the old key\'s wraps ──');
+    const benWrapsBefore = count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ben.pk);
+    const newBen = newId('Ben2');
+    completeRekey(ben.pk, newBen.pk, issueRekeyCode(ben.pk, owner.pk).code, owner.pk);
+    assert(benWrapsBefore > 0 && count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ben.pk) === 0,
+        `the old key's ${benWrapsBefore} wraps are gone after completeRekey (${count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ben.pk)} left)`);
+    assert(isActive(clock.id, newBen.pk) && !isActive(clock.id, ben.pk), 'and the group row moved to the new key');
+    const missingBen = (await call('GET', ana, `${clockKeys}/missing`)).body.missing?.find((m: any) => m.pubkey === newBen.pk);
+    assert(missingBen?.fromEpoch === 3 && missingBen.epochs.includes(4), `the new key shows in …/keys/missing from Ben's unchanged joined_at (got ${JSON.stringify(missingBen)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

@@ -31,7 +31,7 @@
  * The URL (an ntfy topic's name is its secret) and an optional token are kept in .env (ALERTS_WEBHOOK_URL,
  * ALERTS_WEBHOOK_FORMAT, ALERTS_WEBHOOK_TOKEN), or in data/alerts.json (mode 600) when set in Settings, as off-box backup
  * keys are: never in the database, so never in a snapshot, a backup or a standby's copy; never logged; never shown back
- * (the host is shown, the path is not). A standby that takes over has no channel until its owner sets one.
+ * (the scheme and registrable domain are shown, never a subdomain, the path or the token). A standby that takes over has no channel until its owner sets one.
  *
  * ## What an alert says
  *
@@ -274,15 +274,30 @@ export function readAlertChannel(env: NodeJS.ProcessEnv = process.env): AlertCha
     }
 }
 
-/** A .env channel that can't be used, by setting name, never its value. */
+/** A .env channel that can't be used, by setting name, never its value; else a Settings one that can't be. */
 function envChannelProblem(env: NodeJS.ProcessEnv = process.env): string | null {
     const envUrl = env.ALERTS_WEBHOOK_URL?.trim();
-    if (!envUrl) return null;
+    if (!envUrl) return settingsChannelProblem();
     const bad = checkChannelUrl(envUrl);
     if (bad) return `ALERTS_WEBHOOK_URL in .env can't be used: ${bad.toLowerCase()}.`;
     const badToken = checkToken(env.ALERTS_WEBHOOK_TOKEN?.trim());
     if (badToken) return `ALERTS_WEBHOOK_TOKEN in .env can't be used: ${badToken.toLowerCase()}.`;
     return null;
+}
+
+/** A channel file that is there but can't be used (unreadable, not JSON, a bad address), never repeating what it holds. */
+function settingsChannelProblem(): string | null {
+    const lead = "The alert channel kept in Settings (data/alerts.json)";
+    let raw: string;
+    try {
+        raw = fs.readFileSync(settingsFile(), 'utf8');
+    } catch (e) {
+        return (e as NodeJS.ErrnoException)?.code === 'ENOENT' ? null : `${lead} can't be read: set it again.`;
+    }
+    let s: any;
+    try { s = JSON.parse(raw); } catch { return `${lead} is not readable: set it again.`; }
+    const bad = checkChannelUrl(s?.url);
+    return bad ? `${lead} can't be used: ${bad.toLowerCase()}. Set it again.` : null;
 }
 
 /** Set (or with `remove`, take away) the channel kept in Settings. A token left out keeps the stored one for the same URL. */
@@ -291,7 +306,13 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
     if (process.env.ALERTS_WEBHOOK_URL?.trim()) return { ok: false, error: 'The alert channel is set in .env (ALERTS_WEBHOOK_URL): change it there' };
     const file = settingsFile();
     if (input.remove === true) {
-        try { fs.unlinkSync(file); } catch { /* none was set */ }
+        try {
+            fs.unlinkSync(file);
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+                return { ok: false, error: "The channel kept in Settings (data/alerts.json) could not be removed: remove that file by hand" };
+            }
+        }
         return { ok: true };
     }
     const bad = checkChannelUrl(input.url);
@@ -311,12 +332,26 @@ export function updateAlertChannel(input: { url?: unknown; format?: unknown; tok
     return { ok: true };
 }
 
-/** The channel as a screen may show it: the host, never the path (an ntfy topic's name is its secret) or the token. */
+/** Two letters of a country under which names are registered a level down (example.co.uk, example.com.au). */
+const SECOND_LEVEL = /^(com|co|net|org|gov|edu|ac|or|ne|go|gob|nic|ltd|plc|sch|mil|nom|id)$/;
+
+/**
+ * The part of a host a screen may show: its registrable domain (ntfy.sh, example.co.uk), with `…` for any subdomain
+ * left out, since webhook services key a channel by its subdomain. An IP address is shown as it is; never a port.
+ */
+export function shownHost(hostname: string): string {
+    if (LOOPBACK.has(hostname) || hostname.startsWith('[') || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return hostname;
+    const labels = hostname.replace(/\.$/, '').split('.');
+    const n = labels.length >= 3 && labels[labels.length - 1].length === 2 && SECOND_LEVEL.test(labels[labels.length - 2]) ? 3 : 2;
+    return labels.length > n ? `….${labels.slice(-n).join('.')}` : labels.join('.');
+}
+
+/** The channel as a screen may show it: the scheme and registrable domain, never a subdomain, the path (an ntfy topic's name is its secret) or the token. */
 export function describeChannel(c: AlertChannel): { source: AlertChannel['source']; format: AlertFormat; where: string; tokenSet: boolean } {
     let where = 'set';
     try {
         const u = new URL(c.url);
-        where = `${u.protocol}//${u.host}/…`;
+        where = `${u.protocol}//${shownHost(u.hostname)}/…`;
     } catch { /* checked when set */ }
     return { source: c.source, format: c.format, where, tokenSet: !!c.token };
 }

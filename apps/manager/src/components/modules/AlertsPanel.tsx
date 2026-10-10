@@ -104,7 +104,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                             <p className="text-xs text-nature-400 m-0">Nothing needs you.</p>
                         ) : status.active.map((a) => (
                             <div key={a.key} className="flex flex-wrap items-start gap-2 min-w-0">
-                                <span className={`px-2 py-0.5 rounded-lg text-[11px] font-bold shrink-0 ${PRIORITY_LABEL[a.priority]?.className ?? ''}`}>
+                                <span className={`px-2 py-0.5 rounded-lg text-xs font-bold shrink-0 ${PRIORITY_LABEL[a.priority]?.className ?? ''}`}>
                                     {PRIORITY_LABEL[a.priority]?.text ?? a.priority}
                                 </span>
                                 <span className="text-xs text-white min-w-0 flex-1 break-words">{a.detail} <span className="text-nature-500">Since {when(a.since)}.</span></span>
@@ -159,7 +159,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                                 <input type="url" value={form.url} placeholder="https://ntfy.sh/your-secret-topic" autoComplete="off" spellCheck={false}
                                     onChange={(e) => setForm((f) => (f ? { ...f, url: e.target.value } : f))}
                                     className="w-full min-w-0 bg-nature-950 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white" />
-                                <span className="block text-[11px] text-nature-500 mt-1">An ntfy topic's name is its password: pick a long one nobody can guess.</span>
+                                <span className="block text-xs text-nature-500 mt-1">An ntfy topic's name is its password: pick a long one nobody can guess.</span>
                             </label>
                             <label className="block min-w-0">
                                 <span className="block text-xs font-bold text-nature-300 mb-1">Kind</span>
@@ -174,7 +174,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                                 <input type="password" value={form.token} autoComplete="off"
                                     onChange={(e) => setForm((f) => (f ? { ...f, token: e.target.value } : f))}
                                     className="w-full min-w-0 bg-nature-950 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white" />
-                                <span className="block text-[11px] text-nature-500 mt-1">Sent as "Authorization: Bearer". Never shown again.</span>
+                                <span className="block text-xs text-nature-500 mt-1">Sent as "Authorization: Bearer". Never shown again.</span>
                             </label>
                             <div className="flex flex-wrap gap-2">
                                 <button type="submit" disabled={busy} className="px-4 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50">Save</button>

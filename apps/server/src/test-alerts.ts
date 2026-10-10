@@ -277,6 +277,32 @@ async function main(): Promise<void> {
     assert(setStale.status === 403 && setStale.json?.code === 'step_up_required', `1. and setting the channel from it asks for the step-up (${setStale.status} ${setStale.json?.code})`);
     assert(!fs.existsSync(path.join(dataDir!, alerts.ALERTS_SETTINGS_FILE)), '1. which kept nothing');
 
+    // A channel file that is there but can't be used says so (never what it holds), and one that can't be removed is not
+    // answered as removed. The status shows the scheme and registrable domain only: a subdomain can be the secret.
+    const chFile = path.join(dataDir!, alerts.ALERTS_SETTINGS_FILE);
+    for (const [content, why, re] of [
+        ['{not json', 'garbage', /not readable/],
+        [JSON.stringify({ url: `http://ntfy.example.org/${TOPIC}` }), 'a hand-written http:// address', /https:\/\//],
+    ] as const) {
+        fs.writeFileSync(chFile, content);
+        const r = await call('/api/local/admin/alerts/status', {}, asOwner);
+        assert(r.json?.channel === null && re.test(r.json?.channelProblem ?? '') && !r.text.includes(TOPIC), `1. ${why} in alerts.json is a channel problem in words (${r.json?.channelProblem})`);
+    }
+    fs.rmSync(chFile);
+    fs.mkdirSync(chFile);
+    const unreadable = await call('/api/local/admin/alerts/status', {}, asOwner);
+    assert(/can't be read/.test(unreadable.json?.channelProblem ?? ''), `1. an unreadable alerts.json says so (${unreadable.json?.channelProblem})`);
+    const rm = await call('/api/local/admin/alerts/settings', { remove: true }, asOwner);
+    assert(rm.status === 400 && /could not be removed/.test(rm.json?.error ?? ''), `1. a channel that can't be removed is not answered as removed (${rm.status} ${rm.json?.error})`);
+    fs.rmdirSync(chFile);
+    const rmNone = await call('/api/local/admin/alerts/settings', { remove: true }, asOwner);
+    assert(rmNone.status === 200 && rmNone.json?.status?.channelProblem === null, '1. removing when none is set is fine');
+    for (const [host, shown] of [['abc123secret.hooks.example.com', '….example.com'], ['ntfy.sh', 'ntfy.sh'], ['team-x.example.co.uk', '….example.co.uk'],
+        ['example.com.au', 'example.com.au'], ['10.0.0.1', '10.0.0.1']] as const) {
+        const d = alerts.describeChannel({ source: 'settings', url: `https://${host}:8443/${TOPIC}?k=1`, format: 'json', token: null });
+        assert(d.where === `https://${shown}/…`, `1. ${host} is shown as ${d.where}`);
+    }
+
     // ── 2. No channel: the disk, the owners' push and banner ─────────────────────────────────────────────────────────
     alerts.resetAlertsForTests();
     pushes.length = 0;
@@ -305,7 +331,7 @@ async function main(): Promise<void> {
     const bad = await call('/api/local/admin/alerts/settings', { url: `http://ntfy.example.org/${TOPIC}` }, asOwner);
     assert(bad.status === 400 && /https:\/\//.test(bad.json?.error) && !bad.text.includes(TOPIC), '3. http:// off this machine is refused, without repeating the address');
     const set = await call('/api/local/admin/alerts/settings', { url: ntfy.url(`/${TOPIC}`), format: 'ntfy', token: TOKEN }, asOwner);
-    assert(set.status === 200 && set.json?.status?.channel?.where === `http://127.0.0.1:${ntfy.port}/…` && set.json.status.channel.tokenSet === true,
+    assert(set.status === 200 && set.json?.status?.channel?.where === 'http://127.0.0.1/…' && set.json.status.channel.tokenSet === true,
         `3. the status shows the host and that a token is set (${JSON.stringify(set.json?.status?.channel)})`);
     assert(!set.text.includes(TOPIC) && !set.text.includes(TOKEN), '3. the answer carries neither the topic nor the token');
     const settingsFile = path.join(dataDir!, alerts.ALERTS_SETTINGS_FILE);

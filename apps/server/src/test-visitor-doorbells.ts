@@ -8,7 +8,9 @@
  * switched off. So there such a socket gets the listings' doorbells (new_post, post_updated, post_removed) and
  * state_synced, and none for a project, a decision or an enterprise. On a local node the listings are its members' too
  * (Marty, 2026-09-28), so such a socket gets state_synced only (2026-10-01). A socket that holds a key (a visitor's, a
- * suspended member's) gets every public doorbell everywhere.
+ * suspended member's) gets every public doorbell everywhere, but one: on a node that syncs listings by area (the global
+ * profile's `nearbyListings`, DESIGN-global-sync-by-area §2.5), a listing's own event reaches only the members near it
+ * and its parties (test-ws-nearby-push), so there no socket without an area near it gets that listing's doorbell.
  *
  * The real server in this process, real sockets over TLS, every change made over HTTP through the signature middleware
  * or by the engine's own functions, where this node can make one:
@@ -65,6 +67,11 @@ const LISTINGS_ONLY = COMBO === 'global' || COMBO === 'local+guest';
  * where every read is open. Not on a local node as it ships, whose listings are its members' (2026-09-28).
  */
 const KEYLESS_HEARS_LISTINGS = COMBO !== 'local';
+/**
+ * Listings sync by area (the global profile): a listing's own event reaches the members whose area is near it and its
+ * parties, and no other socket, keyed or not (state-engine.ts listingReach).
+ */
+const BY_AREA = COMBO === 'global' || COMBO === 'standby-read-open';
 /** Beans are on, so the engine makes Commons projects and places enterprises here. */
 const MONEY_ON = COMBO === 'local' || COMBO === 'local+guest';
 /** A standby: it changes nothing itself, so only section 5 runs. */
@@ -261,6 +268,9 @@ async function main(): Promise<void> {
     if (!STANDBY) {
         // ── 2. a listing ────────────────────────────────────────────────────────────────────────
         console.log('\n── 2. a listing posted, edited and taken down over HTTP ──');
+        // Bob's area 11 km from the listing: where listings sync by area, the members near a listing hear it.
+        const { setMemberArea } = await import('./engine/member-area.js');
+        setMemberArea(bob.pk, { lat: -28.6, lng: 153.5 });
         clear();
         const made = await call(alice, '/api/marketplace/posts', {
             type: 'offer', category: 'other', title: 'Doorbell offer', description: 'A doorbell test offer', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5,
@@ -273,12 +283,14 @@ async function main(): Promise<void> {
         assert(removed.status === 200 && removed.body?.success === true, `Alice takes it down (got ${removed.status} ${JSON.stringify(removed.body).slice(0, 120)})`);
         await until(S.member, 'post_removed');
         for (const [who, s] of keyless) {
-            if (KEYLESS_HEARS_LISTINGS) assert(LISTING_EVENTS.every(t => typesOf(s).has(t)), `${who} socket gets a doorbell for the new, the edited and the removed listing (${show(s)})`);
+            if (BY_AREA) assert(!LISTING_EVENTS.some(t => typesOf(s).has(t)), `${who} socket gets no doorbell for any of them: listings sync by area here, and it has none (${show(s)})`);
+            else if (KEYLESS_HEARS_LISTINGS) assert(LISTING_EVENTS.every(t => typesOf(s).has(t)), `${who} socket gets a doorbell for the new, the edited and the removed listing (${show(s)})`);
             else assert(!LISTING_EVENTS.some(t => typesOf(s).has(t)), `${who} socket gets no doorbell for any of them: a local community's listings are its members' (${show(s)})`);
             assert(bare(s), `${who} socket gets them bare: { type } only`);
         }
         for (const [who, s] of keyed) {
-            assert(LISTING_EVENTS.every(t => typesOf(s).has(t)), `${who} socket gets a doorbell for the new, the edited and the removed listing (${show(s)})`);
+            if (BY_AREA) assert(!LISTING_EVENTS.some(t => typesOf(s).has(t)), `${who} socket, with no area, gets no doorbell for any of them: listings sync by area here (${show(s)})`);
+            else assert(LISTING_EVENTS.every(t => typesOf(s).has(t)), `${who} socket gets a doorbell for the new, the edited and the removed listing (${show(s)})`);
             assert(bare(s), `${who} socket gets them bare: { type } only`);
         }
         assert(LISTING_EVENTS.every(t => typesOf(S.member).has(t)), `the member's socket gets all three (${show(S.member)})`);

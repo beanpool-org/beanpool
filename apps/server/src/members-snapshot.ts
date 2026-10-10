@@ -53,9 +53,11 @@ export interface MembersSnapshot {
 const SEND_CHUNK = 64 * 1024;
 /**
  * What one send of a ready snapshot holds in flight, as the heavy-read cap weighs it: a window of the body on its
- * socket, plaintext and encrypted (measured in test-heavy-read-cap §1b).
+ * socket, plaintext and encrypted, and its TLS connection (test-heavy-read-cap §1b, §1d). Weighed at 128 KB, readers who
+ * stopped reading at the bound (30,000 members, a 256 MB heap) grew RSS by about 0.19 MB a send plain and 0.16 MB gzip:
+ * +58 MB plain with the cap counting 48 MB (#1524). At 192 KB the budget is the real ceiling.
  */
-export const SNAPSHOT_SEND_WEIGHT = 128 * 1024;
+export const SNAPSHOT_SEND_WEIGHT = 192 * 1024;
 const MAX_AGE_MS = 60_000;
 
 let settings = { maxAgeMs: MAX_AGE_MS };

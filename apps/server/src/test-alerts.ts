@@ -160,7 +160,7 @@ async function main(): Promise<void> {
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
+    const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
     const { getAdminQueue } = await import('./engine/admin-queue.js');
@@ -251,6 +251,16 @@ async function main(): Promise<void> {
     assert(!fs.existsSync(path.join(dataDir!, alerts.ALERTS_SETTINGS_FILE)), '1. nothing a refused request sent was kept');
     const st0 = await call('/api/local/admin/alerts/status', {}, asOwner);
     assert(st0.status === 200 && st0.json?.channel === null, "1. the owner's key session reads the status: no channel yet");
+    // The phone's Manage hand-off asks for the unlock again before a change after 5 minutes; the status is a read, so it
+    // keeps showing (as the off-box card beside it does), while setting the channel still asks.
+    const phoneEx = consumeHandshakeToken(mintHandshakeToken(owner, 'owner').handshakeToken, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
+    const stalePhone = phoneEx.sessionId!;
+    backdateAdminSessionForTests(stalePhone, 6 * MIN);
+    const stStale = await call('/api/local/admin/alerts/status', {}, { 'x-admin-session': stalePhone });
+    assert(stStale.status === 200, `1. an owner's phone session minted 6 minutes ago still reads the status (${stStale.status} ${stStale.json?.code ?? ''})`);
+    const setStale = await call('/api/local/admin/alerts/settings', { url: ntfy.url(`/${TOPIC}`) }, { 'x-admin-session': stalePhone });
+    assert(setStale.status === 403 && setStale.json?.code === 'step_up_required', `1. and setting the channel from it asks for the step-up (${setStale.status} ${setStale.json?.code})`);
+    assert(!fs.existsSync(path.join(dataDir!, alerts.ALERTS_SETTINGS_FILE)), '1. which kept nothing');
 
     // ── 2. No channel: the disk, the owners' push and banner ─────────────────────────────────────────────────────────
     alerts.resetAlertsForTests();

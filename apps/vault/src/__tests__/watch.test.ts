@@ -114,6 +114,25 @@ describe('the watcher', () => {
         expect(h.posts.at(-1)?.body).toMatch(/RESOLVED \(backups failing/);
     });
 
+    it('relays the off-box copy failing with the step it failed at and the store\'s answer', async () => {
+        const v = await startVault();
+        open.push(v);
+        const g = await doGenesis(v);
+        const s3 = await new StubS3().start();
+        servers.push(s3);
+        for (const i of [0, 1]) await sendSettings(v.baseUrl, v.custodians[i], { v: 1, offsite: s3.settings() }, v.call());
+        const h = await hook();
+        const watcher = new VaultWatcher({ url: v.baseUrl, ticketKey: g.ticketKey, channels: { email: null, webhook: { url: h.url, format: 'json' } }, clock: v.clock.now });
+        s3.failWith = 500;
+        for (let i = 0; i < 2; i++) {
+            await v.api.runBackup();
+            v.clock.advance(30 * MIN);
+        }
+        await v.api.checkAlerts();
+        expect((await watcher.check()).problems).toEqual([{ key: 'offsite', detail: 'its signed report says the off-box copy is failing (2 in a row, put: HTTP 500 InternalError).' }]);
+        expect(events(h)).toEqual([expect.objectContaining({ condition: 'offsite', state: 'raised' })]);
+    });
+
     /** A vault whose off-box store takes every copy but fails every listing, a day of it: the tidy-up alert raised. */
     async function pruneFailingADay(): Promise<{ v: VaultUnderTest; s3: StubS3; h: StubWebhook; watcher: VaultWatcher; firstFailed: number }> {
         const v = await startVault();

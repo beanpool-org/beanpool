@@ -77,6 +77,21 @@ const server = http.createServer((req, res) => {
         if (f) {
             if (--f.count <= 0) faults.shift();
             res.writeHead(f.status, f.location ? { Location: f.location } : {});
+            if (f.bigMb) {
+                // An answer far bigger than the node's heap would hold, written only as fast as it is read.
+                const mb = Buffer.alloc(1024 * 1024, 120);
+                let left = f.bigMb;
+                const more = () => {
+                    while (left > 0) {
+                        left--;
+                        if (!res.write(mb)) { res.once('drain', more); return; }
+                    }
+                    res.end();
+                };
+                res.on('close', () => { left = 0; });
+                more();
+                return;
+            }
             res.end('fault');
             return;
         }
@@ -115,7 +130,7 @@ async function startFakeNtfy() {
         port,
         url: (p: string) => `http://127.0.0.1:${port}${p}`,
         hits: (): Promise<NtfyHit[]> => call('log'),
-        fault: (status: number, count = 1, location?: string) => call('fault', { fault: { status, count, location } }),
+        fault: (status: number, count = 1, location?: string, bigMb?: number) => call('fault', { fault: { status, count, location, bigMb } }),
         close: async () => { await call('close'); await worker.terminate(); },
     };
 }
@@ -350,6 +365,19 @@ async function main(): Promise<void> {
     advance(5 * MIN + 1000);
     await tick();
     assert(alerts.getAlertsStatus().waiting === 0, '5. delivered to the address the owner gave on the next try');
+
+    // The channel's answer is never read: only its status is looked at, so a huge one costs the node nothing.
+    const channel5 = alerts.readAlertChannel()!;
+    const msg5 = alerts.composeAlert('Alert Test Commons', [{ key: 'tls.fallback', kind: 'raised', at: 0, since: 0, priority: 4, detail: 'test' }], null);
+    for (const status of [200, 302]) {
+        await ntfy.fault(status, 1, status === 302 ? ntfy.url('/elsewhere') : undefined, 256);
+        global.gc?.();
+        const rss0 = process.memoryUsage().rss;
+        const t0 = Date.now();
+        const r5 = await alerts.sendToChannel(channel5, msg5);
+        const grew = Math.round((process.memoryUsage().rss - rss0) / 1024 / 1024);
+        assert(r5.ok === (status === 200) && grew < 64 && Date.now() - t0 < 10_000, `5. a 256 MB answer (HTTP ${status}) is not read: RSS +${grew} MB, ${Date.now() - t0} ms`);
+    }
 
     // ── 6. The hourly cap ────────────────────────────────────────────────────────────────────────────────────────────
     advance(2 * HOUR);

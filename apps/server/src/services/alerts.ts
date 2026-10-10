@@ -413,7 +413,9 @@ export async function sendToChannel(c: AlertChannel, m: AlertMessage): Promise<{
         }
         if (c.token) headers.Authorization = `Bearer ${c.token}`;
         const res = await fetch(c.url, { method: 'POST', body, headers, signal: controller.signal, redirect: 'manual' });
-        await res.arrayBuffer().catch(() => undefined);
+        // Only the status counts: the answer itself is never read, so a huge one (the channel is the owner's choice, and
+        // may misbehave) costs the node nothing.
+        await res.body?.cancel().catch(() => undefined);
         if (res.status >= 300 && res.status < 400) return { ok: false, error: `redirected (HTTP ${res.status}); a redirect is not followed` };
         if (res.status < 200 || res.status >= 300) return { ok: false, error: `HTTP ${res.status}` };
         return { ok: true, status: res.status };

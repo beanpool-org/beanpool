@@ -610,7 +610,7 @@ let memberPhotoResumeAfter = 0;
 /**
  * One turn of a members' photo move that stopped at boot, resumed while the node runs (#1482): at most one batch (each
  * its own transaction, as at boot), then the old column dropped once no row holds a photo. A main server's timer calls
- * it until it answers 'done' (state-engine.ts armMainServerTimers): 'more' when rows are left, 'stopped' when a batch or
+ * it until it answers 'done' (state-engine.ts armMemberPhotoMoveResume): 'more' when rows are left, 'stopped' when a batch or
  * the drop threw (tried again later, after a longer wait each time), 'done' when the old column is gone, at once on a
  * node whose move finished at boot. Until then the members not reached yet show no photo (the members list and
  * /api/avatar read only member_photos), and a phone told so may publish its own copy over their newer one; this ends

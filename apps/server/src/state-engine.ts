@@ -887,8 +887,12 @@ function runMainServerMigrations(): void {
     } catch (e) { console.warn('[Groups] Could not backfill group chats:', e); }
 }
 
-/** The wait before the first turn of a members' photo move resumed after boot, and before a retry once one stops. */
-export const MEMBER_PHOTO_RESUME_MS = 60 * 1000;
+/**
+ * The wait before the first turn of a members' photo move resumed after boot, and before a retry once one stops: short,
+ * because phones reconnect right after an upgrade, and until the move ends the members list says "no photo" for those
+ * it has not reached (armMemberPhotoMoveResume).
+ */
+export const MEMBER_PHOTO_RESUME_MS = 5 * 1000;
 /** The wait between two turns while the resumed move has rows left: the event loop is the members' between batches. */
 export const MEMBER_PHOTO_RESUME_GAP_MS = 250;
 /** The longest wait between retries of a resumed move that keeps stopping (a disk still full). */

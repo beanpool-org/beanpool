@@ -192,8 +192,8 @@ async function main(): Promise<void> {
         // ── 4. The waits ──
         const w = se.memberPhotoResumeWait;
         assert(w('more', 0) === se.MEMBER_PHOTO_RESUME_GAP_MS && w('stopped', 1) === se.MEMBER_PHOTO_RESUME_MS && w('stopped', 2) === 2 * se.MEMBER_PHOTO_RESUME_MS
-            && w('stopped', 7) === se.MEMBER_PHOTO_RESUME_MAX_MS && w('stopped', 10_000) === se.MEMBER_PHOTO_RESUME_MAX_MS && se.MEMBER_PHOTO_RESUME_MAX_MS === 3_600_000,
-            `the wait: a short gap while rows are left; 1, 2, 4… min while it stops, never past an hour (${[1, 2, 3, 7, 10_000].map((f) => w('stopped', f)).join('/')})`);
+            && w('stopped', 10) === 512 * se.MEMBER_PHOTO_RESUME_MS && w('stopped', 11) === se.MEMBER_PHOTO_RESUME_MAX_MS && w('stopped', 10_000) === se.MEMBER_PHOTO_RESUME_MAX_MS && se.MEMBER_PHOTO_RESUME_MAX_MS === 3_600_000,
+            `the wait: a short gap while rows are left; 5, 10, 20… s while it stops, never past an hour (${[1, 2, 3, 10, 11, 10_000].map((f) => w('stopped', f)).join('/')})`);
 
         // ── 5. A standby never resumes its move ──
         const standbyDir = path.join(dir, 'standby');

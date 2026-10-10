@@ -55,4 +55,15 @@ describe('AlertsPanel', () => {
         expect(screen.getByText('Nothing needs you.')).toBeInTheDocument();
         expect(screen.getByText('Add a channel')).toBeInTheDocument();
     });
+
+    it('shows a loading state while fetching initial alerts status', async () => {
+        let resolveFetch!: (res: any) => void;
+        vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => { resolveFetch = resolve; })));
+        render(<AlertsPanel activeNode={node} />);
+        expect(screen.getByTestId('alerts-loading')).toBeInTheDocument();
+        expect(screen.getByText('Loading alerts status…')).toBeInTheDocument();
+        resolveFetch(json(status({})));
+        expect(await screen.findByText('Nothing needs you.')).toBeInTheDocument();
+        expect(screen.queryByTestId('alerts-loading')).toBeNull();
+    });
 });

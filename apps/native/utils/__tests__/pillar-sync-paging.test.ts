@@ -11,6 +11,8 @@ import Module from 'node:module';
 // real schema is written in an in-memory SQLite and AsyncStorage is a map, so cursors last from one cycle to the next.
 
 const sql = new DatabaseSync(':memory:');
+/** Holds the next withTransactionAsync until `open()`: another writer keeping the sync lock. */
+const gate: { next: boolean; p: Promise<void>; open: () => void } = { next: false, p: Promise.resolve(), open: () => {} };
 const params = (p: unknown) => (p === undefined ? [] : Array.isArray(p) ? p : [p]) as any[];
 const adapter = {
     runAsync: vi.fn(async (q: string, p?: unknown) => {
@@ -21,7 +23,7 @@ const adapter = {
     getAllAsync: vi.fn(async (q: string, p?: unknown) => sql.prepare(q).all(...params(p))),
     getFirstAsync: vi.fn(async (q: string, p?: unknown) => sql.prepare(q).get(...params(p)) ?? null),
     closeAsync: vi.fn(async () => {}),
-    withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { await cb(); }),
+    withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { if (gate.next) { gate.next = false; await gate.p; } await cb(); }),
 };
 
 const ANCHOR = 'https://test.beanpool.org';
@@ -51,7 +53,7 @@ vi.mock('../nodes', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
-import { clearDB, getDb, initDB } from '../db';
+import { applyDelta, clearDB, getDb, initDB } from '../db';
 import {
     ALREADY_SYNCING, forceResyncNotice, forgetSyncCursors, getLastSyncTime, performSync, performSyncWhenFree, POSTS_HELD_TRIES, POSTS_PAGE_CAP,
     resetSyncFingerprints, syncCursorKeysOf,
@@ -866,6 +868,48 @@ describe('Force Resync after a sync already running', () => {
     it('the notice says Success only for a sync that succeeded', () => {
         expect(forceResyncNotice({ success: true }).title).toBe('Success');
         expect(forceResyncNotice({ success: false, errorMessage: 'Posts fetch failed with status: 500' }).title).toBe('Local copy cleared');
-        expect(forceResyncNotice({ success: false, errorMessage: 'Posts fetch failed with status: 500' }).message).toContain('status: 500');
+        // No internal text, and no promise of a download a members-only community won't give.
+        expect(forceResyncNotice({ success: false, errorMessage: 'Posts fetch failed with status: 500' }).message).not.toContain('status');
+        const refused = forceResyncNotice({ success: false, errorMessage: 'members_only' });
+        expect(refused.title).toBe('Local copy cleared');
+        expect(refused.message).toContain('members only');
+        expect(refused.message).not.toContain('downloads again');
+    });
+
+    it('a sync that starts while Force Resync waits for another writer\'s lock stores nothing, and none is missing after (confirm2 P1)', async () => {
+        store.set('bp_trust_sync_v3', 'true');
+        const tick = () => new Promise(r => setTimeout(r, 5));
+        const all = many('all', 450, Date.parse('2026-09-01T00:00:00.000Z'));
+        node.posts = [...all];
+        await sync(); await sync();
+        expect(held()).toHaveLength(450);
+        const now = new Date(Date.now() + 1000).toISOString();
+        for (const i of [0, 1, 2]) node.posts[i] = { ...node.posts[i], title: 'edited ' + i, updatedAt: now };
+        // another writer holds the lock when Force Resync is tapped
+        gate.p = new Promise<void>(r => { gate.open = r; }); gate.next = true;
+        const holder = applyDelta({ posts: [node.posts[10]] } as any);
+        await tick();
+        let own: any = null;
+        const fr = (async () => {
+            await clearDB(); await initDB();
+            for (const k of syncCursorKeysOf(FILE)) store.delete(k);
+            own = await performSyncWhenFree(undefined, 10_000);
+        })();
+        await tick();
+        // a sync starts during the wait; the writer finishes as its posts read goes out
+        requests = []; postsReadsThisCycle = 0;
+        let opened = false;
+        (globalThis as any).fetch = async (url: string) => {
+            if (!opened && url.includes('/api/marketplace/posts')) { opened = true; gate.open(); await tick(); }
+            return fetchMock(url);
+        };
+        await performSync();
+        await holder; await fr;
+        (globalThis as any).fetch = fetchMock;
+        expect(own).not.toBeNull();
+        await sync(); await sync();
+        const t = heldTitles();
+        expect(all.filter(p => !t.has(p.id))).toEqual([]);
+        expect(held()).toHaveLength(450);
     });
 });

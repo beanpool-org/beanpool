@@ -324,9 +324,12 @@ export async function performSyncWhenFree(
  */
 export function forceResyncNotice(result: Pick<SyncResult, 'success' | 'errorMessage'>): { title: string; message: string } {
     if (result.success) return { title: 'Success', message: 'Local database rebuilt, ratings restored, and re-synced from the node.' };
+    if (result.errorMessage === 'members_only') {
+        return { title: 'Local copy cleared', message: 'This community shows its listings to members only, so none were downloaded.' };
+    }
     const why = result.errorMessage === ALREADY_SYNCING
         ? 'A sync that was already running has not finished yet.'
-        : `The download did not finish${result.errorMessage ? ` (${result.errorMessage})` : ''}.`;
+        : 'The download did not finish.';
     return { title: 'Local copy cleared', message: `${why} Your community downloads again with the next sync, which the app runs on its own.` };
 }
 

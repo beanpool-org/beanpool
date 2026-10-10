@@ -680,6 +680,9 @@ export async function clearDB() {
     // the middle of the drop; one waiting for the lock after it finds the copy cleared (applyDelta `generation`).
     await acquireSyncLock({ urgent: true });
     try {
+        // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
+        // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
+        newCopyGeneration();
         await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps;');
     } finally {
         releaseSyncLock();

@@ -58,6 +58,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { nodeSha256 } from './services/door-work.js';
 import * as probation from './engine/probation.js';
 import { nodeRoleOf } from './engine/node-roles.js';
+import { setMemberArea } from './engine/member-area.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let BASE = '';
@@ -255,6 +256,9 @@ async function main(): Promise<void> {
     const est = ['Ann', 'Ben', 'Cal', 'Dee', 'Pia', 'Quin', 'Ray', 'Sue', 'Tom', 'Uma', 'Vic', 'Xan', 'Yul'].map(n => oldMember(n, 150, 3));
     const [ann_, ben, cal, dee, pia, quin, ray, sue, tom, uma, vic, xan, yul] = est;
     ann = ann_;
+    // Listings sync by area here (DESIGN-global-sync-by-area §2.5): a poll takes its author's area as its place, and its
+    // pushes reach the members near it. Ann, whose socket listens below, lives where Pia and Tom post their polls.
+    for (const m of [ann, pia, tom]) setMemberArea(m.pk, { lat: -28.6, lng: 153.5 });
     // 200 days a member and not one post: still on probation (fewer than 3 kept posts), so "new" as the app says it.
     const lou = oldMember('Lou', 200, 0);
     // Through the door: two sign-in newcomers, three 12-words newcomers.

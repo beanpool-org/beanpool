@@ -351,7 +351,8 @@ async function main(): Promise<void> {
     assert(hits.length === 2 && hits[1].headers.priority === '5' && /\(\+1 more\)/.test(hits[1].headers.title),
         `3. 95 % raises 90 and 95 in one urgent message (${hits.length}, ${hits[1]?.headers.priority}, ${hits[1]?.headers.title})`);
     told = await pushedKeys();
-    assert(told.filter((p) => p.alert === 'disk.95').length === 1 && told.filter((p) => p.alert === 'disk.90').length === 1, '3. one push each for 90 and 95');
+    assert(told.filter((p) => p.alert === 'disk.95').length === 1 && told.filter((p) => p.alert === 'disk.90').length === 0,
+        `3. one push for 90 and 95 together, naming the highest (${JSON.stringify(told.slice(-2))})`);
     setSimulatedDiskUsageForTesting(77);
     await tick();
     active = alerts.getAlertsStatus().active.map((a) => a.key);
@@ -527,6 +528,24 @@ async function main(): Promise<void> {
     // A channel removed: nothing is sent; the owners' push and banner still work.
     const removed = await call('/api/local/admin/alerts/settings', { remove: true }, asOwner);
     assert(removed.status === 200 && removed.json?.status?.channel === null && !fs.existsSync(settingsFile), '9. the channel removed: the file is gone');
+
+    // ── 10. The owners' pushes over days ─────────────────────────────────────────────────────────────────────────────
+    for (const k of Object.keys(process.env)) if (k.startsWith('BACKUP_OFFBOX_')) delete process.env[k];
+    setSimulatedDiskUsageForTesting(50);
+    advance(25 * HOUR);
+    await tick();
+    advance(20 * MIN);
+    await tick();
+    assert(alerts.getAlertsStatus().active.length === 0, `10. (nothing active to start: ${alerts.getAlertsStatus().active.map((a) => a.key)})`);
+    pushes.length = 0;
+    setSimulatedDiskUsageForTesting(92);
+    for (let day = 0; day < 3; day++) {
+        for (let i = 0; i < 3; i++) { await tick(); advance(MIN); }
+        advance(24 * HOUR - 3 * MIN);
+    }
+    told = await pushedKeys();
+    assert(told.length === 3 && told.every((p) => p.alert === 'disk.90'),
+        `10. three days at 92 %: one push a day, naming 90 only (${told.length}: ${told.map((p) => p.alert)})`);
 
     alerts.stopServerAlerts();
     await ntfy.close();

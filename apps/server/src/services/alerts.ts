@@ -18,8 +18,8 @@
  *
  * ## Who is told, and how
  *
- * 1. The owners, in the app: one `owner.alert` push per condition per day (the words are fixed, packages/beanpool-core
- *    push-notice.ts), and the admin queue's `server_alert` banner (engine/admin-queue.ts) while anything is active. Admins
+ * 1. The owners, in the app: one `owner.alert` push per minute at most, for whatever started (each condition at most
+ *    once a day, the disk's levels as one: the highest; the words are fixed, packages/beanpool-core push-notice.ts), and the admin queue's `server_alert` banner (engine/admin-queue.ts) while anything is active. Admins
  *    and moderators are not told: the Alerts panel is the owners' (routes/alerts.ts).
  * 2. Optionally, one channel the operator chooses: an ntfy topic, or any URL that takes a JSON POST. Nothing goes through
  *    BeanPool's servers: with none set, the push and the banner still work and nothing leaves the server. A channel
@@ -532,18 +532,30 @@ function owners(): string[] {
     ).all() as { pk: string }[]).map((r) => r.pk);
 }
 
-function pushOwners(s: BookState, e: AlertEvent, t: number): void {
-    const row = ROWS[e.key];
-    if (!row.pushEveryMs || e.kind === 'cleared') return;
-    const last = s.pushedAt[e.key];
-    if (last !== undefined && t - last < row.pushEveryMs) return;
+const DISK_LEVEL: Partial<Record<AlertKey, number>> = { 'disk.80': 80, 'disk.90': 90, 'disk.95': 95 };
+
+/**
+ * One push to the owners for everything this tick told that may push: each condition at most once per its interval, and
+ * the disk as one condition (a level under a higher one that is active is counted as told, never named).
+ */
+function pushOwners(s: BookState, events: readonly AlertEvent[], t: number): void {
     if (getNodeRole() !== 'primary') return;
-    s.pushedAt[e.key] = t;
+    const due = events.filter((e) => {
+        const every = ROWS[e.key].pushEveryMs;
+        const last = s.pushedAt[e.key];
+        return every > 0 && e.kind !== 'cleared' && (last === undefined || t - last >= every);
+    });
+    if (!due.length) return;
+    for (const e of due) s.pushedAt[e.key] = t;
+    const topDisk = Math.max(0, ...(Object.keys(s.raised) as AlertKey[]).map((k) => DISK_LEVEL[k] ?? 0));
+    const shown = due.filter((e) => (DISK_LEVEL[e.key] ?? topDisk) >= topDisk).sort((a, b) => b.priority - a.priority);
+    if (!shown.length) return;
+    const first = shown[0];
     try {
         const to = owners();
         if (to.length) {
-            dispatchPushNotification(to, 'SYSTEM', `${communityName()}: ${row.title}`, e.detail,
-                { kind: 'server_alert', alert: e.key, section: 'home' }, 'marketplace', 'owner.alert');
+            dispatchPushNotification(to, 'SYSTEM', `${communityName()}: ${ROWS[first.key].title}${shown.length > 1 ? ` (+${shown.length - 1} more)` : ''}`,
+                first.detail, { kind: 'server_alert', alert: first.key, section: 'home' }, 'marketplace', 'owner.alert');
         }
     } catch (err) {
         logger.warn('SYS', `[Alerts] The owners' push failed: ${errorMessage(err)}`);
@@ -569,7 +581,6 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
                 s.dropped++;
             }
         }
-        pushOwners(s, e, t);
     };
     for (const c of conditions) {
         const r = s.raised[c.key];
@@ -598,6 +609,7 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
             tell({ key: c.key, kind: 'cleared', at: t, since: r.since, priority: r.priority, detail: c.detail });
         }
     }
+    pushOwners(s, told, t);
     writeState();
     await flushAlerts();
     return told;

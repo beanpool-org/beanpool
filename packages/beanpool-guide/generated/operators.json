@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 112,
-  "hash": "e0f4c8d8e13e48992a5b02362010c39a155f6fecb1e46de0d62ef4c82166836d",
+  "version": 113,
+  "hash": "f3875e926abbb77ee5637bbf759dea2e3dc26c63004cd6bf4d7c61e7faf8e939",
   "sections": [
     {
       "id": "setup",
@@ -3129,6 +3129,22 @@
         {
           "type": "p",
           "text": "The server keeps its most recent log lines, which Settings shows under Logs. Some messages only appear in Docker's own log: docker compose logs --tail 200 beanpool-node"
+        },
+        {
+          "type": "h2",
+          "text": "Compressed answers"
+        },
+        {
+          "type": "p",
+          "text": "The server compresses (gzips) what it sends the apps and the web app, when they ask for it, which they all do. Members then spend less of their data: a phone's first sync is about a sixth of the bytes."
+        },
+        {
+          "type": "p",
+          "text": "If your server sits behind Cloudflare, as an address ending in .beanpool.org does, Cloudflare already compresses what it sends the phones. The server's own compressing then only shrinks what travels between your server and Cloudflare, and it costs processor time. On a server with one processor that is short of it, you can turn it off: put API_GZIP=off in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. The log says so as the server starts. Members' apps carry on as before, still compressed by Cloudflare."
+        },
+        {
+          "type": "p",
+          "text": "With no Cloudflare or other proxy in front (your own domain, straight to the server), leave API_GZIP empty: nothing else compresses for your members."
         },
         {
           "type": "h2",

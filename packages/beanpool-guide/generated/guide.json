@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 118,
-  "hash": "cf7e43f6e43d32da7c2a4dace98d1adc572f54e89f7196601dea45060d230f00",
+  "version": 119,
+  "hash": "6b5832ca82989fb440b01935d64d189793677045267ba3fe4b10b023c20f089e",
   "sections": [
     {
       "id": "about",
@@ -1170,17 +1170,18 @@
         },
         {
           "type": "h2",
-          "text": "The four steps"
+          "text": "The steps"
         },
         {
           "type": "p",
-          "text": "The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**."
+          "text": "The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**. On the global community there is one more, **Your Area**, after **Your Photo**."
         },
         {
           "type": "ul",
           "items": [
             "**Your Photo:** choose a photo or one of the ready-made pictures. You must pick one before **Next** works. People trade more easily with a face or a picture they recognise.",
             "**← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others.",
+            "**Your Area** (on the global community only): **Roughly where are you?** The global community shows you what's on offer near you: the nearest 500 listings within 250 km. Tap **Use my location**, or **Type a town or suburb**. Your area is kept to about 10 km, never your exact spot: your phone or browser rounds it before it is sent. Other members see how far away you are, and a poll you make is shown at your area. **Skip for now** sends nothing and asks for nothing; you still get in, and you see the newest listings worldwide until you set it. You can change or clear it any time in **Settings**, under **Your area**.",
             "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community with a sign-in, this step also shows your sign-in protecting your account. If you joined it with 12 words, it says first that these 12 words are your account, and offers **Add a sign-in as a second way back**: you can skip that too.",
             "**How it Works:** a short tour. Tap **Let's Begin!** to start."
           ]
@@ -2042,7 +2043,7 @@
             "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**.",
             "Choose how to join: **Create an account with 12 secret words**, which uses the 12 words your account already has (no sign-in, so no phone lock), or **Or sign in** once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.",
             "Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.",
-            "Then choose your photo for the global community, as for any new community."
+            "Then choose your photo for the global community, as for any new community, and then roughly where you are (**Your Area**, which you can skip): the global community shows you the listings near it. See \"Joining a community\"."
           ]
         },
         {
@@ -2149,7 +2150,7 @@
             "Tap **Join**, then **I'm new to BeanPool**.",
             "Choose the name people will see. It needs at least 2 letters, and at most 20.",
             "Choose how to join. **Create an account with 12 secret words** needs no other account. Or, under **Or sign in**, sign in once with one of the accounts the page shows: **Google**, **Apple** or **Facebook**. The page takes you to that company's own sign-in and brings you back. Where the community takes sign-ins only, the page shows the sign-ins alone.",
-            "Then the same steps as everyone: a photo, your 12 words and a short tour. The bar at the top says **Sign in** (or **Your Name**, when you joined with 12 words), **Your Photo**, **Safety Backup** and **How it Works**."
+            "Then the same steps as everyone: a photo, roughly where you are, your 12 words and a short tour. The bar at the top says **Sign in** (or **Your Name**, when you joined with 12 words), **Your Photo**, **Your Area**, **Safety Backup** and **How it Works**. At **Your Area**, **Use my location** asks your browser once and rounds the answer to about 10 km before it is sent; **Type a town or suburb** finds a place by name; **Skip for now** sends nothing. The browser is not asked for your location again at the end. See \"Joining a community\"."
           ]
         },
         {
@@ -2355,6 +2356,10 @@
         {
           "type": "p",
           "text": "Pull the list down to refresh it."
+        },
+        {
+          "type": "p",
+          "text": "On the global community, the web app shows the listings near you first: the nearest within your **Distance**, or within 250 km of your area (the rough place you give the community when you join, or in **Settings**), each with how far it is. A line above the list says which. Near your area it has **Show everywhere** for the newest from everywhere; with a **Distance**, open **Distance** and tap **Reset** for that. See \"Finding things near you\"."
         },
         {
           "type": "p",
@@ -2984,11 +2989,11 @@
         },
         {
           "type": "p",
-          "text": "Posts with no location are always shown."
+          "text": "Posts with no location are always shown, except on the global community in the web app (below)."
         },
         {
           "type": "p",
-          "text": "The picker opens on a fixed spot, not on you. Tap the target button, or tap the map, before you tap **Apply**."
+          "text": "If your browser already lets BeanPool use your location, the picker can open on where you are now. If not, it opens on a fixed spot. Check the pin, or tap the target button or the map, before you tap **Apply**. On the global community the web app sends the centre you chose to the community, rounded to about 11 metres."
         },
         {
           "type": "h2",
@@ -2996,7 +3001,31 @@
         },
         {
           "type": "p",
-          "text": "The map has no distance filter. Tap the target button on the left to see where you are, then look around and zoom."
+          "text": "The map has no distance filter of its own. Tap the target button on the left to see where you are, then look around and zoom."
+        },
+        {
+          "type": "h2",
+          "text": "On the global community, in the web app"
+        },
+        {
+          "type": "p",
+          "text": "The global community has listings from everywhere, so the web app's **Market** and **Map** start from near you:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "With a **Distance** chosen on the Market, both show the nearest listings within it, nearest first. The Map shows up to 200 pins.",
+            "Without one, they show the nearest listings within 250 km of your area: the rough place you give the community when you join, or later in **Settings**, under **Your area**. A line above the Market's list says **Nearest to your area first, within 250 km.** Tap **Show everywhere** for the newest from everywhere, and **Near your area** to come back.",
+            "With neither, you see the newest from everywhere, and **See what's near you** opens the distance picker. A line above the Market's list says which of these you are seeing. With a **Distance** it has no button: open **Distance** and tap **Reset** to see the newest from everywhere.",
+            "Each listing shows how far away it is, like **📍 12 km**. Your own listings are always on the Map, and on the Market near your area, wherever they are. With a **Distance**, the Market shows only what is within it, yours too.",
+            "While the list is near you, posts with no location, like most polls, are left out. Tap **Show everywhere**, or reset the **Distance**, to see them.",
+            "Under **Events** the list is never cut by your area or your **Distance**, as before.",
+            "If nothing is near, the Map says so, with **Show everywhere**. Then **Near your area** (or **Near the place you picked**) brings the nearest back."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The web app's search looks only through the listings on screen. **Show everywhere** shows the newest listings from everywhere, not every one, so a listing that is far away and not new won't come up in the search. In every other community the Market and the Map show everything, as before."
         },
         {
           "type": "h2",
@@ -5059,6 +5088,7 @@
           "items": [
             "**Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See \"Your profile\".",
             "**Location:** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how.",
+            "**Your area** (on the global community): in Settings, under **Your area**, see the area you gave, about 10 km around a town or two numbers, or **Not set**. **Clear** removes it. Below it, **Roughly where are you?** sets a new one with **Use my location** or **Type a town or suburb**, and **Cancel** (in a browser, **← Back to Settings**) leaves it as it is. Only the rounded area is ever sent. Other members see how far away you are, and a poll you make is shown at your area. Without one, you see the newest listings worldwide, and members nearby won't see a poll you make in their list, though they can still find it by searching.",
             "**App Lock:** asks for your phone's screen lock (its PIN, pattern, password, fingerprint or face) when the app opens, and when you come back to it after 15 seconds or more away. The lock covers the app's screens and pop-ups. On an iPhone it also closes a web page the app opened, such as your community's Settings from **Manage**. It can't cover a web page the app opened on an Android phone, which opens outside the app, or the panel for sharing something on either phone: close them before you put your phone down. Your community's Settings, opened from **Manage**, signs you out after 15 minutes unused. While App Lock is on, the app goes blank as you leave it, and comes back when you return. It needs a screen lock on the phone: without one there is nothing for it to ask.",
             "**Channels:** anything you share to the Pulse is shown with your name, to anyone who opens the Pulse. See \"Sharing your channels\"."
           ]

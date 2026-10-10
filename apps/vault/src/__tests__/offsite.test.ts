@@ -146,8 +146,11 @@ describe('every backup goes off the box', () => {
         const firstName = await v.api.runBackup();
         expect(stub.objects.get(`vault/${firstName}`)?.equals(readFileSync(path.join(v.storeDir, firstName)))).toBe(true);
         const { body } = await report(v);
-        expect(body.offsite).toEqual({ lastOkAt: v.clock.now(), lastName: firstName, failuresInARow: 0, error: null });
-        expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0 });
+        expect(body.offsite).toEqual({
+            lastOkAt: v.clock.now(), lastName: firstName, failuresInARow: 0, error: null,
+            prune: { lastOkAt: v.clock.now(), failuresInARow: 0, step: null, error: null },
+        });
+        expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0, offsitePruneFailed: 0 });
 
         // 31 days on, the next backup's copy goes up and the first one goes, there as here (§1.7).
         v.clock.advance(BACKUP_RETENTION_MS + 24 * 60 * 60 * 1000);
@@ -195,11 +198,49 @@ describe('every backup goes off the box', () => {
         expect(existsSync(path.join(v.storeDir, name))).toBe(true);
         const { body } = await report(v);
         expect(body.backups).toMatchObject({ failuresInARow: 0, error: null });
-        expect(body.offsite).toEqual({ lastOkAt: null, lastName: null, failuresInARow: 1, error: 'HTTP 503 InternalError' });
+        expect(body.offsite).toEqual({
+            lastOkAt: null, lastName: null, failuresInARow: 1, error: 'HTTP 503 InternalError',
+            // No copy went up: nothing was tidied, and nothing failed there.
+            prune: { lastOkAt: null, failuresInARow: 0, step: null, error: null },
+        });
         stub.failWith = null;
         v.clock.advance(60 * 60 * 1000);
         await v.api.runBackup();
         expect((await report(v)).body.offsite).toMatchObject({ failuresInARow: 0, error: null });
+    });
+});
+
+describe('a copy that reached the store counts as done; tidying old ones is its own step', () => {
+    it('the upload lands, the listing fails: the copy is OK, the tidy-up failed and says so on its own line, no off-box alert', async () => {
+        const v = await vault();
+        await doGenesis(v);
+        const stub = await s3();
+        await setSettings(v, { v: 1, offsite: stub.settings() });
+        stub.failStep.list = 500;
+        const name = await v.api.runBackup();
+        expect(stub.objects.has(`vault/${name}`)).toBe(true);
+        let { body } = await report(v);
+        expect(body.offsite).toMatchObject({ lastOkAt: v.clock.now(), lastName: name, failuresInARow: 0, error: null });
+        expect(body.offsite.prune).toEqual({ lastOkAt: null, failuresInARow: 1, step: 'list', error: 'HTTP 500 InternalError' });
+        expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0, offsitePruneFailed: 1 });
+
+        // A second hour the same: still every copy there, and the off-box alert (copies failing) stays quiet.
+        v.clock.advance(60 * 60 * 1000);
+        await v.api.runBackup();
+        await v.api.checkAlerts();
+        ({ body } = await report(v));
+        expect(body.offsite).toMatchObject({ failuresInARow: 0, error: null });
+        expect(body.offsite.prune).toMatchObject({ failuresInARow: 2, step: 'list' });
+        expect(body.counts).toMatchObject({ offsiteOk: 2, offsiteFailed: 0, offsitePruneFailed: 2 });
+        expect(body.alerts.active).not.toContain('offsite');
+
+        // The listing works again: so does the tidy-up.
+        delete stub.failStep.list;
+        v.clock.advance(60 * 60 * 1000);
+        await v.api.runBackup();
+        ({ body } = await report(v));
+        expect(body.offsite.prune).toEqual({ lastOkAt: v.clock.now(), failuresInARow: 0, step: null, error: null });
+        expect(stub.objects.size).toBe(3);
     });
 });
 

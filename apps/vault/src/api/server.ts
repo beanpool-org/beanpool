@@ -278,6 +278,8 @@ class Counters {
         return {
             tickets: 0, deposits: 0, replaced: 0, restores: {} as Record<string, number>, holds: 0, approvals: 0, cancels: 0,
             releases: 0, deletes: 0, pushTokens: 0, errors: 0, backupsOk: 0, backupsFailed: 0, offsiteOk: 0, offsiteFailed: 0,
+            // Tidying the off-box store (its copies past 30 days) that failed: counted apart, a copy already up stays counted OK.
+            offsitePruneFailed: 0,
         };
     }
 
@@ -315,7 +317,11 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     let offsite: BackupStore | null = null;
     /** When this process first had the off-box store it has now: the first copy is due within the hour after. */
     let offsiteSince = clock();
-    const offsiteStatus = { lastOkAt: null as number | null, lastName: null as string | null, failuresInARow: 0, error: null as string | null };
+    const offsiteStatus = {
+        lastOkAt: null as number | null, lastName: null as string | null, failuresInARow: 0, error: null as string | null,
+        /** Removing the copies there past 30 days, after a copy went up: which call failed (`list`, `delete`) and why. */
+        prune: { lastOkAt: null as number | null, failuresInARow: 0, step: null as 'list' | 'delete' | null, error: null as string | null },
+    };
     useSettings(settings);
     /** Settings sent by one custodian, waiting for a second to send the same (by hash). In memory only. */
     const proposals = new Map<string, { settings: OperatorSettings; by: Set<string>; at: number }>();
@@ -344,6 +350,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         offsiteSince = clock();
         offsiteStatus.failuresInARow = 0;
         offsiteStatus.error = null;
+        offsiteStatus.prune = { lastOkAt: null, failuresInARow: 0, step: null, error: null };
     }
 
     function saveSettings(f: SettingsFile): void {
@@ -1319,31 +1326,53 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     /**
      * The backup just written, copied to the off-box store (design §4: another provider, another country), and the
      * copies there older than 30 days removed, as at home (§1.7: a deleted copy leaves the backups within 30 days).
-     * A failure is counted and said (the report, the alerts); the next hour's backup is the next try. Each backup holds
-     * every deletion record of the last 30 days, so a gap in the off-box copies loses nothing a restore needs.
+     * The copy is done once its upload lands: tidying the old ones (pruneOffsite) is a step of its own, counted and
+     * said apart, so a listing that fails never turns a copy already there into a failed one. A failure is counted
+     * and said (the report, the alerts); the next hour's backup is the next try. Each backup holds every deletion
+     * record of the last 30 days, so a gap in the off-box copies loses nothing a restore needs.
      */
     async function copyOffsite(name: string, bytes: Uint8Array, now: number): Promise<void> {
         const target = offsite;
         if (!target) return;
         try {
             await target.put(name, bytes);
-            for (const old of await target.list()) {
-                if (backupTimeOf(old) < now - BACKUP_RETENTION_MS) await target.delete(old);
-            }
-            // Settings changed meanwhile: this store's result says nothing about the one in force now.
-            if (target !== offsite) return;
-            offsiteStatus.lastOkAt = clock();
-            offsiteStatus.lastName = name;
-            offsiteStatus.failuresInARow = 0;
-            offsiteStatus.error = null;
-            counters.counts.offsiteOk++;
         } catch (e) {
             if (target !== offsite) return;
             offsiteStatus.failuresInARow++;
             offsiteStatus.error = e instanceof OffsiteError ? e.short : 'failed';
             counters.counts.offsiteFailed++;
             console.error(`vault-api: the off-box copy of a backup failed: ${offsiteStatus.error}`);
+            return;
         }
+        // Settings changed meanwhile: this store's result says nothing about the one in force now.
+        if (target !== offsite) return;
+        offsiteStatus.lastOkAt = clock();
+        offsiteStatus.lastName = name;
+        offsiteStatus.failuresInARow = 0;
+        offsiteStatus.error = null;
+        counters.counts.offsiteOk++;
+        await pruneOffsite(target, now);
+    }
+
+    /** The off-box store's copies older than 30 days removed. The next copy's tidy-up tries again whatever this one left. */
+    async function pruneOffsite(target: BackupStore, now: number): Promise<void> {
+        let step: 'list' | 'delete' = 'list';
+        try {
+            const old = (await target.list()).filter(n => backupTimeOf(n) < now - BACKUP_RETENTION_MS);
+            step = 'delete';
+            for (const n of old) await target.delete(n);
+        } catch (e) {
+            if (target !== offsite) return;
+            const p = offsiteStatus.prune;
+            p.failuresInARow++;
+            p.step = step;
+            p.error = e instanceof OffsiteError ? e.short : 'failed';
+            counters.counts.offsitePruneFailed++;
+            console.error(`vault-api: tidying the off-box store failed (${step}: ${p.error}); the copy itself is there`);
+            return;
+        }
+        if (target !== offsite) return;
+        offsiteStatus.prune = { lastOkAt: clock(), failuresInARow: 0, step: null, error: null };
     }
 
     async function maintenance(): Promise<void> {

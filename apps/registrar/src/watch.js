@@ -1,6 +1,7 @@
 // The control room's outside checks (design scratch/global-node/DESIGN-alerts-fable.md §2.3, slice S2; decided by Marty
-// 2026-10-10): every 5 minutes, beside the sweep, the Worker looks at our servers from outside — never from the server
-// it watches — and tells the admin's phone through the alert book (src/alerts.js) what it sees:
+// 2026-10-10): every 5 minutes, 2 minutes after the sweep and in an invocation of its own, the Worker looks at our servers
+// from outside — never from the server it watches — and tells the admin's phone through the alert book (src/alerts.js)
+// what it sees:
 //   - a server that does not answer 2xx two looks in a row (15 s each, a redirect is not followed): urgent, cleared at
 //     its first 2xx;
 //   - the vault answering locked two looks in a row: urgent;
@@ -26,6 +27,9 @@ export const LOOKS_TO_RAISE = 2;               // two failed looks in a row (5 m
 export const FLEET_DIFFERS_S = 24 * 3600;
 export const DAILY_HOUR = 8;                   // 08:00 Brisbane
 export const BRISBANE_UTC_OFFSET_S = 10 * 3600;
+// Servers looked at together. One invocation may have 6 connections waiting for headers (a 7th is queued, and its 15 s
+// runs out there); a node is 2 at once and the vault 1, so 3 at a time never queue (5 targets: 30 s at worst).
+export const AT_ONCE = 3;
 const KEEP_S = 30 * 86400;
 const MAX_TARGETS = 20;
 const REPORT_TAG = 'beanpool-vault-report/1\n';
@@ -329,8 +333,17 @@ export async function dailyLine(env, targets, now) {
 
 // --- The tick ---
 
-// Every 5 minutes, beside the sweep (index.js scheduled). Never throws: a failure is logged, and the sweep is not
-// touched. Returns what each target answered (for tests and the workerd probe).
+// `fn` over `items`, `n` at a time, the answers in order.
+async function inTurns(items, n, fn) {
+    const out = new Array(items.length);
+    let next = 0;
+    const lane = async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i]); } };
+    await Promise.all(Array.from({ length: Math.min(n, items.length) }, lane));
+    return out;
+}
+
+// Every 5 minutes, 2 minutes after the sweep, in an invocation of its own (index.js scheduled, WATCH_CRON). Never
+// throws: a failure is logged. Returns what each target answered (for tests and the workerd probe).
 export async function watchOurServers(env) {
     try {
         const targets = watchTargets(env);
@@ -342,8 +355,8 @@ export async function watchOurServers(env) {
         }
         const now = nowS();
         const nowMs = now * 1000;
-        const seen = await Promise.all(targets.map((t) => (t.kind === 'vault' ? lookAtVault(env, t, nowMs) : lookAtNode(t))
-            .catch(() => ({ ok: false, status: 'unreachable', ms: null }))));
+        const seen = await inTurns(targets, AT_ONCE, (t) => (t.kind === 'vault' ? lookAtVault(env, t, nowMs) : lookAtNode(t))
+            .catch(() => ({ ok: false, status: 'unreachable', ms: null })));
         const conditions = [];
         for (let i = 0; i < targets.length; i++) {
             const t = targets[i], s = seen[i];

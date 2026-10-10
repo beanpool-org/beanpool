@@ -11,6 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import worker, { attestSweep } from '../src/index.js';
 import * as watch from '../src/watch.js';
 import { world, makeKey, migration, workerdFetchInit } from './harness.js';
@@ -452,17 +453,30 @@ test('the daily line says what is down, what is raised, and that the vault repor
     } finally { r.done(); }
 });
 
-test('the cron runs the watch beside the sweep, each its own waitUntil; a database without 0009 leaves the sweep untouched', async () => {
+// Two cron entries (wrangler.toml), each its own invocation: Cloudflare lets one invocation have 6 connections waiting
+// for headers (a 7th is queued, and its 15 s runs out in the queue), so servers that hang must never sit in the sweep's.
+test('each cron runs only its own job: the sweep on */5, the watch on 2-57/5; a database without 0009 leaves the sweep untouched', async () => {
+    const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+    assert.match(toml, /^crons = \["\*\/5 \* \* \* \*", "2-57\/5 \* \* \* \*"\]$/m, 'wrangler.toml has the two entries scheduled() knows');
     const r = await room();
+    const sweeps = () => r.w.sqlite.prepare('SELECT COUNT(*) AS n FROM sweep_log').get().n;
+    const looks = () => r.w.sqlite.prepare('SELECT COUNT(*) AS n FROM watch_log').get().n;
     try {
-        const later = [];
+        let later = [];
         await worker.scheduled({ cron: '*/5 * * * *' }, r.w.env, { waitUntil: (p) => later.push(p) });
-        assert.ok(later.length >= 2);
-        const [swept, watched] = await Promise.all(later.slice(0, 2));
-        assert.equal(swept.action, 'applied');
-        assert.deepEqual(watched.map((x) => [x.name, x.ok]), [['global', true], ['vault', true], ['mullum', true]]);
+        const swept = await later[0];
         await Promise.all(later);
-        assert.equal(r.w.sqlite.prepare('SELECT COUNT(*) AS n FROM watch_log').get().n, 3);
+        assert.equal(swept.action, 'applied', 'the sweep ran');
+        assert.equal(sweeps(), 1);
+        assert.equal(r.requests.length, 0, "the sweep's invocation looks at none of our servers");
+        assert.equal(looks(), 0);
+        later = [];
+        await worker.scheduled({ cron: '2-57/5 * * * *' }, r.w.env, { waitUntil: (p) => later.push(p) });
+        const watched = await later[0];
+        await Promise.all(later);
+        assert.deepEqual(watched.map((x) => [x.name, x.ok]), [['global', true], ['vault', true], ['mullum', true]]);
+        assert.equal(looks(), 3);
+        assert.equal(sweeps(), 1, "the watch's invocation runs no sweep");
     } finally { r.done(); }
 
     const BEFORE_0009 = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql'];
@@ -474,15 +488,49 @@ test('the cron runs the watch beside the sweep, each its own waitUntil; a databa
     const real = console.error;
     console.error = (...a) => lines.push(a.map(String).join(' '));
     try {
-        const later = [];
+        let later = [];
         await worker.scheduled({ cron: '*/5 * * * *' }, w.env, { waitUntil: (p) => later.push(p) });
-        const [swept, watched] = await Promise.all(later.slice(0, 2));
-        assert.equal(swept.action, 'applied', 'the sweep ran');
-        assert.ok(Array.isArray(watched), 'the watch ended without throwing');
+        assert.equal((await later[0]).action, 'applied', 'the sweep ran');
+        await Promise.all(later);
+        later = [];
+        await worker.scheduled({ cron: '2-57/5 * * * *' }, w.env, { waitUntil: (p) => later.push(p) });
+        assert.ok(Array.isArray(await later[0]), 'the watch ended without throwing');
+        await Promise.all(later);
         assert.ok(lines.some((l) => l.startsWith('[WATCH]') && l.includes('no such table')), 'and logged why');
         const k = await makeKey();
         assert.equal((await w.claim(k, { name: 'yarrabank' })).body.status, 'live', 'claims still work');
     } finally { console.error = real; w.restore(); }
+});
+
+test('the watch looks at 3 servers at a time at most: never more than 6 connections waiting at once', async () => {
+    const FIVE = JSON.stringify(['global', 'vault', 'mullum', 'castlemaine', 'test'].map((n) => ({ name: n, url: `https://${n}.watch.test`, ...(n === 'vault' ? { kind: 'vault' } : {}) })));
+    const r = await room({ env: { WATCH_TARGETS: FIVE } });
+    r.servers['castlemaine.watch.test'] = nodeServer();
+    r.servers['test.watch.test'] = nodeServer();
+    // Every look waits for its headers until let go: one at a time, oldest first.
+    const waiting = [];
+    let peak = 0, peakServers = 0;
+    for (const [host, s] of Object.entries(r.servers)) {
+        const handle = s.handle;
+        s.handle = async (path) => {
+            await new Promise((go) => waiting.push({ host, go }));
+            return handle(path);
+        };
+    }
+    try {
+        let done = false;
+        const p = r.tick().then((x) => { done = true; return x; });
+        while (!done) {
+            for (let i = 0; i < 5; i++) await new Promise((res) => setTimeout(res, 2));
+            peak = Math.max(peak, waiting.length);
+            peakServers = Math.max(peakServers, new Set(waiting.map((x) => x.host)).size);
+            waiting.shift()?.go();
+        }
+        const seen = await p;
+        assert.deepEqual(seen.map((x) => [x.name, x.ok]), [['global', true], ['vault', true], ['mullum', true], ['castlemaine', true], ['test', true]]);
+        assert.ok(peak <= 6, `at most 6 connections waiting at once (was ${peak})`);
+        assert.equal(peakServers, 3, 'three servers at a time');
+    } finally { r.done(); }
 });
 
 test('migration 0009: two tables; re-running changes nothing; WATCH_TARGETS skips what is not a name and an http(s) address', async () => {

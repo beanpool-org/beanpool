@@ -88,10 +88,15 @@ phone to the new one.
 
 ### Our servers, from outside (slice S2)
 
-Every 5 minutes, beside the sweep, the Worker looks at our own servers — `WATCH_TARGETS` in `wrangler.toml`: global,
-the vault, mullum, castlemaine, test; public names and addresses only — from here, never from the server itself
-(`src/watch.js`, state in D1: migration 0009). Each look is one GET of 15 s that never follows a redirect: a node's
-`/api/version` and `/api/community/health`, the vault's `/v1/health` and, when it answers open, its signed `/v1/report`.
+Every 5 minutes, 2 minutes after the sweep, the Worker looks at our own servers — `WATCH_TARGETS` in `wrangler.toml`:
+global, the vault, mullum, castlemaine, test; public names and addresses only — from here, never from the server itself
+(`src/watch.js`, state in D1: migration 0009). It has a cron entry of its own (`2-57/5 * * * *`; the sweep keeps
+`*/5 * * * *`, and `scheduled()` runs each entry's job only), so it runs in its own invocation: Cloudflare lets one
+invocation have 6 connections waiting for headers (a 7th is queued, and its timeout runs out in the queue) and one
+budget of subrequests, and our servers hanging must never hold the sweep's. It looks at 3 servers at a time (a node is
+2 connections, the vault 1), so it never queues behind itself either. Each look is one GET of 15 s that never follows a
+redirect: a node's `/api/version` and `/api/community/health`, the vault's `/v1/health` and, when it answers open, its
+signed `/v1/report`.
 
 | Condition | Rule | Priority |
 |---|---|---|

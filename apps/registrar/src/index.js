@@ -1567,6 +1567,10 @@ const withWaitUntil = (workerEnv, ctx) => (typeof ctx?.waitUntil === 'function'
     ? Object.assign(Object.create(workerEnv), { waitUntil: (p) => ctx.waitUntil(p) })
     : workerEnv);
 
+// The cron entries in wrangler.toml [triggers]: the attest sweep every 5 minutes, the watch 2 minutes after each.
+export const SWEEP_CRON = '*/5 * * * *';
+export const WATCH_CRON = '2-57/5 * * * *';
+
 export default {
     async fetch(request, workerEnv, ctx) {
         const env = withWaitUntil(workerEnv, ctx);
@@ -1648,10 +1652,11 @@ export default {
     },
 
     async scheduled(event, workerEnv, ctx) {
-        // A slow ntfy never holds the sweep: each send is its own waitUntil. The outside checks of our servers run
-        // beside it (src/watch.js), from here — never from the server they watch — and neither waits for the other.
+        // Each cron entry (wrangler.toml) runs its own job in its own invocation: the outside checks of our servers
+        // (src/watch.js, from here — never from the server they watch) on WATCH_CRON, the sweep on the other — and on
+        // anything else, as before them. Apart, servers that hang never hold the sweep's connections or subrequests.
+        // A slow ntfy never holds either: each send is its own waitUntil.
         const env = withWaitUntil(workerEnv, ctx);
-        ctx.waitUntil(attestSweep(env));
-        ctx.waitUntil(watchOurServers(env));
+        ctx.waitUntil(event?.cron === WATCH_CRON ? watchOurServers(env) : attestSweep(env));
     },
 };

@@ -9,9 +9,12 @@ name = "beanpool-registrar"
 main = "src/index.js"
 compatibility_date = "2025-06-01"
 
-# Attestation sweep — every 5 minutes.
+# Two cron entries, each its own invocation (src/index.js scheduled): the attestation sweep every 5 minutes, and the
+# outside checks of our servers (src/watch.js) 2 minutes after each sweep. Apart, because one invocation may have only
+# 6 connections waiting for headers (a 7th is queued) and one budget of subrequests: a server of ours that hangs must
+# never hold what the sweep needs.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "2-57/5 * * * *"]
 
 # Public, non-secret config.
 [vars]

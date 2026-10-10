@@ -5,8 +5,9 @@
  * ## What it watches
  *
  * Every minute the server looks at its own state: the disk (80, 90 and 95 % full, three minutes running, cleared three
- * points below), backups going off the box (failing twice, or none for two intervals), backups not leaving at all (no
- * destination and no recovery code: the owners only, once a week), scheduled snapshots failing twice in a row, a crash
+ * points below), backups going off the box (failing twice, none for two intervals, or none sent at all: destinations set
+ * with no recovery code, or none of them usable), backups not leaving at all (no destination and no recovery code: the
+ * owners only, once a week), scheduled snapshots failing twice in a row, a crash
  * loop (three starts in 15 minutes, told at the third start so it gets out before the next crash), an unclean stop (a
  * failed integrity check is urgent), the host watchdog restarting a frozen server or going quiet, the standby needing its
  * owners (services/standby-health.ts), and a public server whose Let's Encrypt certificate fell back to self-signed.
@@ -652,7 +653,20 @@ function backupConditions(): Condition[] {
     const stale = status.destinations.filter((d) => d.health === 'stale').length;
     const usable = status.destinations.filter((d) => d.health !== 'broken').length;
     const bad = status.state === 'sending' ? failing + stale : 0;
-    const offbox: Condition = bad > 0
+    // The owner set destinations and none is sent to: as bad as failing, and told the same way.
+    const offbox: Condition = status.state === 'not-locked'
+        ? {
+            key: 'backups.offbox', active: true,
+            detail: 'Off-box destinations are set, but nothing goes to them: this server has no recovery code, and only a locked '
+                + 'backup may leave it. Make a recovery code (Settings → Who can unlock this community).',
+        }
+        : status.destinations.length > 0 && usable === 0
+        ? {
+            key: 'backups.offbox', active: true,
+            detail: `${status.destinations.length === 1 ? 'The off-box destination' : `All ${status.destinations.length} off-box destinations`} `
+                + `can't be used (a setting is missing or wrong), so no backup leaves this server. Open Settings → Backups.`,
+        }
+        : bad > 0
         ? {
             key: 'backups.offbox', active: true,
             detail: `${bad} of ${usable} off-box destination${usable === 1 ? '' : 's'} ${bad === 1 ? 'is' : 'are'} `

@@ -423,7 +423,6 @@ async function main(): Promise<void> {
     assert(alerts.getAlertsStatus().waiting === 0 && (await ntfyHits()).length - before6 === alerts.ALERT_HOURLY_CAP + 2, '6. an hour later the held one goes');
 
     // ── 7. Off-box state fixtures; a crash loop ──────────────────────────────────────────────────────────────────────
-    const code = await makeRecoveryCode();
     process.env.BACKUP_OFFBOX_1_NAME = 'Fixture store';
     process.env.BACKUP_OFFBOX_1_ENDPOINT = 'https://s3.fixture.invalid';
     process.env.BACKUP_OFFBOX_1_BUCKET = 'fixture-bucket';
@@ -431,6 +430,20 @@ async function main(): Promise<void> {
     process.env.BACKUP_OFFBOX_1_ACCESS_KEY_ID = 'AKIAFIXTURE123';
     process.env.BACKUP_OFFBOX_1_SECRET_ACCESS_KEY = 'fixture-secret-never-used';
     const offbox = await import('./services/offbox-backups.js');
+    // Destinations set but nothing sent to them (no recovery code; then none usable): raised, as failing is.
+    assert(offbox.getOffboxStatus().state === 'not-locked', '7. a destination and no recovery code: not-locked');
+    const offboxDetail = () => alerts.getAlertsStatus().active.find((a) => a.key === 'backups.offbox')?.detail ?? '';
+    await tick();
+    active = alerts.getAlertsStatus().active.map((a) => a.key);
+    assert(active.includes('backups.offbox') && !active.includes('backups.none') && /make a recovery code/i.test(offboxDetail()),
+        `7. destinations set but not locked: raised, saying to make a recovery code (${active}: ${offboxDetail()})`);
+    const code = await makeRecoveryCode();
+    const secret7 = process.env.BACKUP_OFFBOX_1_SECRET_ACCESS_KEY;
+    delete process.env.BACKUP_OFFBOX_1_SECRET_ACCESS_KEY;
+    assert(offbox.getOffboxStatus().destinations.every((d) => d.health === 'broken'), '7. a destination missing its secret is broken');
+    await tick();
+    assert(/can't be used/.test(offboxDetail()), `7. every destination broken: still raised, in words (${offboxDetail()})`);
+    process.env.BACKUP_OFFBOX_1_SECRET_ACCESS_KEY = secret7;
     const dest = offbox.getOffboxStatus().destinations[0];
     const where = `${dest.endpoint}|${dest.bucket}|${dest.prefix}`;
     const stateFile = path.join(dataDir!, offbox.OFFBOX_STATE_FILE);
@@ -438,6 +451,11 @@ async function main(): Promise<void> {
         destinations: { [dest.id]: { where, lastAttemptAt: Date.now(), lastSuccessAt, lastSuccessKey: null, lastSuccessBytes: 1, lastError: failures ? 'HTTP 503' : null, failures, lastPruneAt: null, lastPruned: 0, lastPruneError: null } },
         lastRunAt: Date.now(), lastRunError: null,
     }));
+    fixture(0, Date.now());
+    await tick();
+    assert(!alerts.getAlertsStatus().active.some((a) => a.key === 'backups.offbox'), '7. locked, usable and arriving: cleared');
+    advance(16 * MIN);
+    await tick();
     fixture(2, Date.now() - HOUR);
     const before7 = (await ntfyHits()).length;
     await tick();

@@ -143,14 +143,18 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // The small copy for the lists (`size=thumb`, storage/photo-thumbnails.ts): asked only here, after every gate above,
     // so it goes to exactly whoever the photo goes to, under the same cache header. A photo with none (one kept in its
     // row, one it can't read) is answered with the photo itself, as is one whose small copy the store can't give now:
-    // the photo's own path below says what a missing or unreachable photo means.
+    // the photo's own path below says what a missing or unreachable photo means. That photo is cached for 5 minutes, not
+    // the year below: a copy the store can't give now (a bucket hiccup) would otherwise leave the 800 px bytes under the
+    // list's URL, on the phone and for a public listing in a shared cache, until the photo changed (review opus-1742 #5).
     let served: Awaited<ReturnType<typeof openPhotoOf>> = null;
+    let thumbNotServed = false;
     if (ctx.query.size === 'thumb') {
         try {
             served = await openThumbnailOf(getImageStore(), photo.photo_data ? null : photo.storage_key);
         } catch (e) {
             console.warn(`[Photos] ${id}/${orderNum}: no small copy, serving the photo:`, e);
         }
+        thumbNotServed = !served;
     }
     if (!served) {
         // A row that has not been evacuated yet is served from the row, exactly as it always was; an evacuated
@@ -200,7 +204,8 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // member removed. A shared cache's copy would outlive that for the year (review FABLE-sec-images, MEDIUM). `private`
     // keeps it cached as long in the browser or app that fetched it, which has already been shown those bytes. No Vary:
     // the bytes a URL is answered with differ by who asks only for a hidden or taken-off listing's, which no cache keeps.
-    ctx.set('Cache-Control', hidden || off ? 'private, no-store' : keyed ? 'private, max-age=31536000, immutable' : 'public, max-age=31536000, immutable');
+    const lifetime = thumbNotServed ? 'max-age=300' : 'max-age=31536000, immutable';
+    ctx.set('Cache-Control', hidden || off ? 'private, no-store' : keyed ? `private, ${lifetime}` : `public, ${lifetime}`);
     ctx.type = served.contentType;
     ctx.body = served.body;
     if (served.bytes !== null) ctx.length = served.bytes;

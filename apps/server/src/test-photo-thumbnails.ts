@@ -20,7 +20,9 @@
  *     which is then in the store, and the next request is served from the store (its bytes, marked, come back). On a
  *     bucket, a page of them asked at once waits on one resize at a time, not on each other's bucket requests (review
  *     opus-1742 #4): six, every request to the bucket slowed to 200 ms, are all answered within 1.5 s.
- *  3. A photo kept in its row (not in the store) has no small copy: `size=thumb` serves the photo itself.
+ *  3. A photo kept in its row (not in the store) has no small copy: `size=thumb` serves the photo itself. A photo served
+ *     in place of its small copy is cached for 5 minutes, not the year the photo's own URL is (review opus-1742 #5): a
+ *     copy that can't be had now (a bucket hiccup) would otherwise leave the 800 px bytes under the list's URL for good.
  *  4. The gates: for each case the photo route refuses or allows (no key, a wrong key, a listing taken off, one hidden by
  *     reports, its rows gone), the small copy gets the same status and the same cache header, for every reader.
  *  5. Nothing in state.db: no row, column or byte of a small copy in the database file.
@@ -265,8 +267,8 @@ async function main(): Promise<void> {
             assert(!!row.storage_key && !(await headObject(store, thumbKeyOf(row.storage_key))), `${name} (${bytes.length} B): no small copy in the store`);
             for (const n of [1, 2]) {
                 const r = await get(thumbOf(urls[i]), carol);
-                assert(r.status === 200 && r.bytes.equals(bytes) && r.type === 'image/png',
-                    `${name}: &size=thumb serves the photo itself (ask ${n}: ${r.status} ${r.bytes.length} B)`);
+                assert(r.status === 200 && r.bytes.equals(bytes) && r.type === 'image/png' && !!r.cache?.endsWith(', max-age=300'),
+                    `${name}: &size=thumb serves the photo itself, cached 5 minutes (ask ${n}: ${r.status} ${r.bytes.length} B "${r.cache}")`);
             }
         }
         await settled();
@@ -336,6 +338,9 @@ async function main(): Promise<void> {
         const [url] = await urlsOf(inline);
         const r = await get(thumbOf(url), carol);
         assert(r.status === 200 && r.bytes.equals(bytes) && r.type === 'image/png', `size=thumb serves the photo from the row as it is (${r.status} ${r.bytes.length} B)`);
+        const own = await get(url, carol);
+        assert(!!own.cache?.endsWith(', max-age=31536000, immutable') && r.cache === own.cache.replace('max-age=31536000, immutable', 'max-age=300'),
+            `…cached 5 minutes, the photo's own URL a year (${r.cache} vs ${own.cache})`);
     }
 
     // ── 4. the gates ────────────────────────────────────────────────────────────────────────────

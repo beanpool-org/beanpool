@@ -49,7 +49,9 @@ export type NeedsTarget =
     | { to: 'decide' }
     | { to: 'chat'; conversationId: string; event?: boolean; thread?: 'group' | 'enterprise' }
     | { to: 'unread-messages' }
-    | { to: 'your-groups' };
+    | { to: 'your-groups' }
+    /** An enterprise's own screen, for its keepers' vote; sent only to an app that asks with `lands=enterprise` (lib/api.ts getHome). */
+    | { to: 'enterprise'; id: string };
 export interface NeedsItem { kind: 'admin' | 'deal' | 'vote' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 /**

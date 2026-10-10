@@ -2391,6 +2391,9 @@ export type HomeRead = { notModified: false; answer: HomeAnswer; etag: string | 
 export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}, etag?: string | null): Promise<HomeRead> {
     const q = new URLSearchParams();
     if (params.cards) q.set('cards', params.cards.join(','));
+    // This app opens an enterprise's own screen (HomePage needsLine, { to: 'enterprise', id }), so the node may point a
+    // keepers' vote line there and count it (routes/home-answer.ts parseLands). The two ship together.
+    q.set('lands', 'enterprise');
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
         q.set('lat', String(params.lat));
         q.set('lng', String(params.lng));

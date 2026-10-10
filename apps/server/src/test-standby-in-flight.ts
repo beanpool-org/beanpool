@@ -69,7 +69,7 @@ const FORMAT_BEFORE = '4';
 
 /** The plain tables and their keys, as the manifest names them (engine/replication-manifest.ts). */
 const PLAIN = [
-    'deferred_wage_claims', 'decisions', 'decision_votes', 'suspended_node_roles', 'enterprise_keeper_requests',
+    'deferred_wage_claims', 'decisions', 'decision_votes', 'decision_electors', 'suspended_node_roles', 'enterprise_keeper_requests',
     'enterprise_keeper_changes', 'enterprise_succession_proposals', 'enterprise_succession_votes', 'group_convenor_proposals',
     'group_convenor_votes', 'invite_codes', 'rekey_requests', 'recovery_releases', 'federation_links', 'federation_link_treasuries',
 ] as const;

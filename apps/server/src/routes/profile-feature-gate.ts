@@ -108,6 +108,8 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
         writesOnly: true,
         paths: [
             /^\/api\/commons\/decisions(\/|$)/,
+            // An enterprise's keepers' votes (routes/enterprise-decisions.ts): the same engine, scoped.
+            /^\/api\/enterprise\/[^/]+\/decisions(\/|$)/,
             /^\/api\/local\/admin\/decisions\/[^/]+\/accelerate\/?$/,
         ],
     },

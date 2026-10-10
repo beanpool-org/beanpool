@@ -268,9 +268,11 @@ async function main(): Promise<void> {
     if (!STANDBY) {
         // ── 2. a listing ────────────────────────────────────────────────────────────────────────
         console.log('\n── 2. a listing posted, edited and taken down over HTTP ──');
-        // Bob's area 11 km from the listing: where listings sync by area, the members near a listing hear it.
+        // Bob's area 11 km from the listing: where listings sync by area, the members near a listing hear it. Sam's too,
+        // so that there a suspended member near it is seen to get them bare (a visitor can't set an area).
         const { setMemberArea } = await import('./engine/member-area.js');
         setMemberArea(bob.pk, { lat: -28.6, lng: 153.5 });
+        setMemberArea(sam.pk, { lat: -28.6, lng: 153.5 });
         clear();
         const made = await call(alice, '/api/marketplace/posts', {
             type: 'offer', category: 'other', title: 'Doorbell offer', description: 'A doorbell test offer', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5,
@@ -289,8 +291,8 @@ async function main(): Promise<void> {
             assert(bare(s), `${who} socket gets them bare: { type } only`);
         }
         for (const [who, s] of keyed) {
-            if (BY_AREA) assert(!LISTING_EVENTS.some(t => typesOf(s).has(t)), `${who} socket, with no area, gets no doorbell for any of them: listings sync by area here (${show(s)})`);
-            else assert(LISTING_EVENTS.every(t => typesOf(s).has(t)), `${who} socket gets a doorbell for the new, the edited and the removed listing (${show(s)})`);
+            if (BY_AREA && s === S.visitor) assert(!LISTING_EVENTS.some(t => typesOf(s).has(t)), `${who} socket, with no area, gets no doorbell for any of them: listings sync by area here (${show(s)})`);
+            else assert(LISTING_EVENTS.every(t => typesOf(s).has(t)), `${who} socket gets a doorbell for the new, the edited and the removed listing${BY_AREA ? ', its member near it' : ''} (${show(s)})`);
             assert(bare(s), `${who} socket gets them bare: { type } only`);
         }
         assert(LISTING_EVENTS.every(t => typesOf(S.member).has(t)), `the member's socket gets all three (${show(S.member)})`);

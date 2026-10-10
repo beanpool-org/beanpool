@@ -1810,6 +1810,7 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run(); } catch { }
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_status ON marketplace_transactions(post_id, status)`).run(); } catch { }
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by)`).run(); } catch { }

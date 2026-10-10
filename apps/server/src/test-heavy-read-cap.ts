@@ -600,7 +600,8 @@ async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_M
             const resident = (m: typeof before) => m.footprint ?? m.rss, RSS = before.footprint === null ? 'RSS' : 'footprint';
             const grew = (resident(after) - resident(before)) / MB;
             console.log(`  (${n} ${gzip ? 'gzip' : 'plain'} readers who stop reading: ${served} served, ${busy.length} told "busy"; ${RSS} ${(resident(before) / MB).toFixed(0)} → ${(resident(after) / MB).toFixed(0)} MB (${grew >= 0 ? '+' : ''}${grew.toFixed(0)}), heap ${(after.heap / MB).toFixed(0)} MB, ${(held.inFlightBytes / MB).toFixed(1)} MB counted in flight; ${served ? (grew / served).toFixed(2) : '-'} MB of ${RSS} a send served; RSS ${(before.rss / MB).toFixed(0)} → ${(after.rss / MB).toFixed(0)} MB)`);
-            assert(served + busy.length === n && busy.every(isBusy), `${n} ${gzip ? 'gzip' : 'plain'} readers who stop reading: each is served or told "busy" with Retry-After (${served} served, ${busy.length} busy)`);
+            const other = got.filter((a) => a.status !== 200 && a.status !== 503);
+            assert(served + busy.length === n && busy.every(isBusy), `${n} ${gzip ? 'gzip' : 'plain'} readers who stop reading: each is served or told "busy" with Retry-After (${served} served, ${busy.length} busy${other.length ? `; ${other.length} neither, ${JSON.stringify(tally(other))}: ${[...new Set(other.map((a) => `${a.error} after ${Math.round(a.ms)} ms`))].slice(0, 4).join('; ')}` : ''})`);
             if (growth === 'report') {
                 console.log(`  (reported, not asserted: the server's ${RSS} grew ${grew >= 0 ? '+' : ''}${grew.toFixed(0)} MB with ${(held.inFlightBytes / MB).toFixed(1)} MB counted in flight, ${served ? (grew / served).toFixed(2) : '-'} MB for each of the ${served} connections kept open; the cap gives a send's weight back once it is written, and what an open connection keeps after that is #1746)`);
             } else {

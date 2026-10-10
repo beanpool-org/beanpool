@@ -266,3 +266,28 @@ describe('sun and moon (CARD-FRAME §4, §5.2 item 22): worked out here, from th
         expect(cardsToAsk(withSky(), [], { profile: 'local', features: LOCAL_FEATURES as never, cards: {} })).not.toContain('sky');
     });
 });
+
+describe('a pinned Find your community on the web (#1517)', () => {
+    const written = (...types: string[]): HomeLayoutV2 => ({ v: 2, cards: types.map(id => ({ id, type: id })), dismissed: {}, updatedAt: daysAgo(0) });
+    const global = (days: number) => answer(
+        { safety: { words: true, signInLinked: false }, find, steps: { ...steps, joinedAt: daysAgo(days) }, market, events, community: { name: null, members: 2310, communities: 38 } },
+        { profile: 'global', features: GLOBAL_FEATURES, me: me({ joinedAt: daysAgo(days), interests: ['food'] }) },
+    );
+
+    it('sits right under Needs you and "Your way back in", as the phone\'s cardOrder puts it, whatever layout another device wrote', () => {
+        // Moved to the bottom, "Your way back in" further down: under Needs you.
+        expect(shown(global(3), { now: NOW }, written('market', 'events', 'steps', 'safety', 'find'))).toEqual(['find', 'market', 'events', 'steps', 'safety', 'community']);
+        // "Your way back in" keeps its place at the top: under it.
+        expect(shown(global(3), { now: NOW }, written('safety', 'market', 'find'))).toEqual(['safety', 'find', 'market', 'community']);
+        // Left out of the list (removed on a copy that saw no pin), or listed twice: once, at the top.
+        expect(shown(global(3), { now: NOW }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        expect(shown(global(3), { now: NOW }, written('market', 'find', 'events', 'find'))).toEqual(['find', 'market', 'events', 'community']);
+        // The same as the phone's rule for the same list (apps/native utils/home-cards.ts cardOrder, held by its own suite).
+        expect(shown(global(29), { now: NOW }, written('events', 'find', 'market'))).toEqual(['find', 'events', 'market', 'community']);
+    });
+
+    it('after 30 days it is a card like any other: drawn where the list puts it', () => {
+        expect(shown(global(30), { now: NOW }, written('market', 'find', 'events'))).toEqual(['market', 'find', 'events', 'community']);
+        expect(shown(global(30), { now: NOW }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
+    });
+});

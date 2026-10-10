@@ -10,7 +10,8 @@
  *   1. brute force: for 30 members at three densities (a busy town with more than 500 listings within 250 km, a small
  *      town, nothing within 700 km), the set the node names is the brute-force S, the near part in NEAREST order; an
  *      author on holiday and a paused or winding-up enterprise are off it; with the bound (measureAtMost) below the
- *      listings in the box, the engine's set is the nearest of the newest that many;
+ *      listings in the box, the engine's set is the nearest of the newest that many; and every statement of a set reads
+ *      an index (the box, the authors off the board, on holiday, and whose standing moved), never a table of people;
  *   2. a whole read in pages (paged=1, X-Posts-Next) brings exactly the rows of S, each once;
  *   3. after random writes, moves and removals, and one member moving their area, a delta from the old cursor plus the
  *      `set` (drop what is held outside it, fetch what is missing by `ids=`) gives the phone exactly the new S;
@@ -274,6 +275,32 @@ async function main() {
     const anaSet = new Set((await get(`${SYNC}&nearby=1`, ana)).set);
     assert(![grouped, offBoard, pausedEnterprise, windingUp, removed].some(x => anaSet.has(x)) && !anaSet.has(doneDeal),
         'a group listing she is not in, an author on holiday, a paused and a winding-up enterprise, a taken-off listing and a finished deal are not in it');
+    // The plans of a set's statements, as it runs them (each statement as it ran, with its arguments): the box on
+    // idx_posts_lat_lng, the authors off the board, on holiday and whose standing moved each from its partial index,
+    // and no statement reads every member's row or every member's preferences (2026-10-10: the join per listing was 14
+    // of 18 ms at 100k posts; the preferences, 1.5 ms of every read at 20,000 members).
+    {
+        const proto = Object.getPrototypeOf(db.prepare('SELECT 1'));
+        const ran: Array<{ sql: string; args: unknown[] }> = [];
+        const { all, get } = proto;
+        proto.all = function (this: { source: string }, ...args: unknown[]) { ran.push({ sql: this.source, args }); return all.apply(this, args); };
+        proto.get = function (this: { source: string }, ...args: unknown[]) { ran.push({ sql: this.source, args }); return get.apply(this, args); };
+        try {
+            const me = db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?').get(ana.pubKeyHex) as { area_lat: number; area_lng: number };
+            getNearbySet(db, ana.pubKeyHex, { area: { lat: me.area_lat, lng: me.area_lng }, radiusKm: 250, max: 500, newestWithoutArea: 100,
+                types: TYPES.split(','), excludeEvents: false, measureAtMost: 10_000 });
+        } finally {
+            proto.all = all;
+            proto.get = get;
+        }
+        const plan = ran.filter(r => !r.sql.startsWith('SELECT is_visitor'))
+            .flatMap(r => (db.prepare(`EXPLAIN QUERY PLAN ${r.sql}`).all(...r.args) as Array<{ detail: string }>).map(p => p.detail));
+        const uses = (index: string) => plan.some(d => d.includes(index));
+        const wholeTable = plan.filter(d => /^SCAN (members|member_preferences|m|cp)\b/.test(d) && !/USING (COVERING )?INDEX/.test(d));
+        assert(uses('idx_posts_lat_lng') && uses('idx_members_off_board') && uses('idx_member_preferences_on_holiday')
+            && uses('idx_members_standing_by_key') && wholeTable.length === 0,
+            `each statement of a set reads an index: the box, the authors off the board, on holiday, whose standing moved; no table of people (${wholeTable.join('; ') || 'none read whole'})`);
+    }
     // The bound below the listings in the box: the engine measures the newest that many, and the set is the nearest of
     // them. Once with the box holding more than the bound (the pass again, newest first), once with it holding fewer.
     for (const bound of [40, 5000]) {

@@ -733,6 +733,11 @@ CREATE TABLE IF NOT EXISTS member_preferences (
     pref_value TEXT NOT NULL DEFAULT 'true',
     PRIMARY KEY (public_key, pref_key)
 );
+-- The authors on holiday (engine posts.ts ON_HOLIDAY_SQL, the same terms, so the planner takes this index), asked by every
+-- board read and every member's set on a node that syncs by area: from the few rows that hold one, not every preference
+-- of every member. At 20,000 members with three preferences each, the scan was 1.5 ms of each read (2026-10-10).
+CREATE INDEX IF NOT EXISTS idx_member_preferences_on_holiday ON member_preferences(public_key)
+    WHERE pref_key = 'holiday_mode' AND pref_value = 'true';
 
 -- 13. Full-Text Search Index (FTS5)
 CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(

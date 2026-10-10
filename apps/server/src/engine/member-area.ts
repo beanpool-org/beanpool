@@ -107,8 +107,9 @@ export function importedArea(rm: { areaLat?: unknown; areaLng?: unknown; areaUpd
  * Every member's area, in memory, for the listing pushes of a node that syncs by area (state-engine.ts listingReach,
  * DESIGN-global-sync-by-area §2.5): one lookup per socket per listing event, never a read of the table. Loaded from
  * `members` at boot (loadMemberAreas) or on first use, and kept by every writer of the area: setMemberArea, the
- * replication import (engine/sync.ts) and a member's removal (a prune or a Delete account clears it; state-engine.ts
- * refreshes the key on user_pruned), each through refreshMemberAreas.
+ * replication import (engine/sync.ts), a re-key (engine/key-move.ts moveMemberKeyRows moves the row to the new key, on
+ * the main server and on a standby following it) and a member's removal (a prune or a Delete account clears it;
+ * state-engine.ts refreshes the key on user_pruned), each through refreshMemberAreas.
  */
 let areasByKey: Map<string, { lat: number; lng: number }> | null = null;
 

@@ -19,9 +19,10 @@
  *   6. the member who took a listing hears it from anywhere, as its author does
  *   7. a bare doorbell for many listings, state_synced, a transfer, a message: as before
  *   8. a standby's copy in this process: an import of a member row whose area moved updates who hears a listing
- *   9. a member removed: their area leaves the map
- *  10. the cost: 3,500 sockets, the filter on against off, interleaved, with the load printed
- *  11. the local profile, in its own process: every member socket still gets every listing in full
+ *   9. a member who re-keys: their area follows them to the new key, and their new phone hears the listings near it
+ *  10. a member removed: their area leaves the map
+ *  11. the cost: 3,500 sockets, the filter on against off, interleaved, with the load printed
+ *  12. the local profile, in its own process: every member socket still gets every listing in full
  *
  * Run: pnpm exec node scripts/run-server-suites.mjs with SERVER_SUITES_ONLY=test-ws-nearby-push.
  */
@@ -341,16 +342,41 @@ async function main(): Promise<void> {
         assert(heard('post_updated', post2).noel, 'after the copy, Noel hears the listing near his imported area');
         await p2p.stop();
 
-        // ── 9. a member removed ─────────────────────────────────────────────────────────────────
-        console.log('\n── 9. a member removed ──');
+        // ── 9. a member who re-keys ─────────────────────────────────────────────────────────────
+        console.log('\n── 9. a member who re-keys, near the listings ──');
+        const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+        const rex = member('NearbyRex');
+        await setArea(rex, 'Rex, 11 km away', NEAR);
+        const rexNew = newId();
+        completeRekey(rex.pk, rexNew.pk, issueRekeyCode(rex.pk, 'owner:password').code, 'owner:password');
+        await sleep(100);
+        const mapOld = area.memberAreaFor?.(rex.pk), mapNew = area.memberAreaFor?.(rexNew.pk);
+        assert(mapOld === undefined && mapNew?.lat === NEAR.lat && mapNew?.lng === NEAR.lng,
+            `the map follows Rex's area to his new key (old ${JSON.stringify(mapOld)}, new ${JSON.stringify(mapNew)})`);
+        const rexSock = await openSocket(`${wsBase}?${signedWsQuery(rexNew)}`);
+        await sleep(200);
+        rexSock.raw.length = 0;
+        clear();
+        const made4 = await call(ana, '/api/marketplace/posts', {
+            type: 'offer', category: 'other', title: 'Nearby offer four', description: 'An offer after a re-key', authorPublicKey: ana.pk, lat: PLACE.lat, lng: PLACE.lng,
+        });
+        const post4 = made4.body?.post?.id as string;
+        assert(made4.status === 200 && !!post4, `Ana posts at the place after Rex's re-key (got ${made4.status})`);
+        await until(rexSock, 'new_post');
+        assert(got(rexSock).some(e => e.type === 'new_post' && e.post?.id === post4 && e.post?.title === 'Nearby offer four'),
+            `Rex's new phone, 11 km away, hears the listing in full (${show(rexSock)})`);
+        rexSock.ws.close();
+
+        // ── 10. a member removed ────────────────────────────────────────────────────────────────
+        console.log('\n── 10. a member removed ──');
         const before = typeof area.memberAreaFor === 'function' ? area.memberAreaFor(fay.pk) : undefined;
         se.adminPruneUser(fay.pk, 'owner:password');
         await sleep(100);
         const after = typeof area.memberAreaFor === 'function' ? area.memberAreaFor(fay.pk) : 'no map';
         assert(!!before && after === undefined, `Fay's area leaves the map with her removal (${JSON.stringify(before)} → ${JSON.stringify(after)})`);
 
-        // ── 10. the cost at 3,500 sockets ───────────────────────────────────────────────────────
-        console.log('\n── 10. the cost: 3,500 member sockets, the filter on against off ──');
+        // ── 11. the cost at 3,500 sockets ───────────────────────────────────────────────────────
+        console.log('\n── 11. the cost: 3,500 member sockets, the filter on against off ──');
         for (const s of Object.values(S)) s.ws.close();
         await sleep(200);
         const fakes: any[] = [];
@@ -403,9 +429,9 @@ async function main(): Promise<void> {
         for (const s of Object.values(S)) s.ws.close();
     }
 
-    // ── 11. the local profile, in its own process ───────────────────────────────────────────────
+    // ── 12. the local profile, in its own process ───────────────────────────────────────────────
     if (process.env.NEARBY_PUSH_CHILD !== '1') {
-        console.log('\n── 11. the local node, in its own process ──');
+        console.log('\n── 12. the local node, in its own process ──');
         const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beanpool-nearby-push-local-'));
         ownedDirs.add(dataDir);
         const env: NodeJS.ProcessEnv = { ...process.env, NEARBY_PUSH_COMBO: 'local', NEARBY_PUSH_CHILD: '1', BEANPOOL_DATA_DIR: dataDir };

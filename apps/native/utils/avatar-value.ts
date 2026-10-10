@@ -92,7 +92,10 @@ export function localRowHasNoAvatar(localRow: string | null | undefined): boolea
  *               phone's evidence that there is nothing on the node to overwrite.
  *   true      — the node just said it holds none ("please set a profile photo", or a redeem
  *               response with no servable avatar). Stronger than any local row, so canonical
- *               goes even over a stale URL.
+ *               goes even over a stale URL. The node's marketplace gate says it only when it
+ *               holds no photo at all: one still inline while its move out of the rows is
+ *               stopped part way counts as held (server db.ts memberHasPhoto, #1482), so a
+ *               newer photo set on another device is not written over.
  *   false     — the node said it HOLDS one. It may be newer than canonical, and the local row
  *               is no longer evidence of anything: an empty row on a node this device has
  *               never synced means unsynced, not empty. Nothing is published.

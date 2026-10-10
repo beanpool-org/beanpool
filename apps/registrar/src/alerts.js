@@ -136,7 +136,8 @@ export function composeAlert(env, events) {
 // --- Sending ---
 
 // One POST to the topic, as ntfy reads it: the body is the message, the headers its title, priority, tag and tap. True
-// on a 2xx. Never throws, and what it reports is a status, never the address.
+// on a 2xx. Never throws, and what it reports is a status, never the address. A redirect is never followed: 'manual'
+// hands back the 3xx, which fails like any other non-2xx (workerd's fetch takes only follow or manual — 'error' throws).
 async function post(env, m) {
     const headers = {
         'Content-Type': 'text/plain; charset=utf-8', Title: m.title, Priority: String(m.priority), Click: m.click,
@@ -146,7 +147,7 @@ async function post(env, m) {
     if (typeof env.NTFY_TOKEN === 'string' && env.NTFY_TOKEN.trim()) headers.Authorization = `Bearer ${env.NTFY_TOKEN.trim()}`;
     try {
         const res = await fetch(env.NTFY_URL.trim(), {
-            method: 'POST', body: m.body, headers, redirect: 'error', signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+            method: 'POST', body: m.body, headers, redirect: 'manual', signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
         });
         await res.arrayBuffer().catch(() => undefined);
         return { ok: res.status >= 200 && res.status < 300, status: `HTTP ${res.status}` };

@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import worker, { attestSweep } from '../src/index.js';
 import * as alerts from '../src/alerts.js';
-import { world, liveName, makeKey, attestsAs, migration } from './harness.js';
+import { world, liveName, makeKey, attestsAs, migration, workerdFetchInit } from './harness.js';
 
 const SECRET = 's3cr3t';
 const TOPIC = `https://ntfy.test/bp-control-room-${SECRET}-topic`;
@@ -25,9 +25,10 @@ async function room(env = WITH_NTFY) {
     const ntfy = { status: 200 };
     const inner = globalThis.fetch;
     globalThis.fetch = async (input, init = {}) => {
+        workerdFetchInit(init);
         const url = new URL(typeof input === 'string' ? input : input.url);
         if (url.hostname !== 'ntfy.test') return inner(input, init);
-        sent.push({ url: url.href, method: init.method, headers: Object.fromEntries(new Headers(init.headers).entries()), body: String(init.body ?? ''), status: ntfy.status });
+        sent.push({ url: url.href, method: init.method, headers: Object.fromEntries(new Headers(init.headers).entries()), body: String(init.body ?? ''), status: ntfy.status, redirect: init.redirect });
         return new Response('{"id":"x"}', { status: ntfy.status });
     };
     const realNow = Date.now;
@@ -344,6 +345,18 @@ test('categories: off keeps nothing, digest holds for the summary; the toggles a
         for (const body of [{ category: 'names', mode: 'loud' }, { category: 'people', mode: 'on' }, {}]) {
             assert.equal((await r.admin('alerts/settings', { method: 'POST', body })).status, 400, JSON.stringify(body));
         }
+    } finally { r.done(); }
+});
+
+test('a redirect from ntfy is a failed send, never followed; the request asks fetch not to follow (as workerd allows)', async () => {
+    const r = await room();
+    try {
+        r.ntfy.status = 302;
+        const res = await r.admin('alerts/test', { method: 'POST' });
+        assert.deepEqual(res.body, { sent: false, error: 'not sent: HTTP 302' });
+        assert.equal(r.sent.length, 1, 'one request, nothing followed');
+        assert.equal(r.sent[0].redirect, 'manual');
+        assert.equal((await r.admin('alerts')).body.channel.waiting, 1, 'it waits for the retry');
     } finally { r.done(); }
 });
 

@@ -25,11 +25,18 @@ export interface S3Request {
     body: Buffer;
 }
 
+/** The four calls the vault makes of a store. */
+export type S3Step = 'put' | 'get' | 'list' | 'delete';
+
 export class StubS3 {
     readonly objects = new Map<string, Buffer>();
     readonly requests: S3Request[] = [];
     /** Answer every request with this status (a store that is down or refuses), when set. */
     failWith: number | null = null;
+    /** Answer every request of one kind with this status: a store whose listing (say) fails while uploads land. */
+    readonly failStep: Partial<Record<S3Step, number>> = {};
+    /** Answer the next requests of one kind with these statuses, one each, then as usual: a store that fails now and then. */
+    readonly failNext: Record<S3Step, number[]> = { put: [], get: [], list: [], delete: [] };
     /** Objects per listing page, to make the vault follow continuation tokens. */
     pageSize = 1000;
     private server: http.Server | null = null;
@@ -86,6 +93,10 @@ export class StubS3 {
         const parts = url.pathname.split('/').slice(1).map(decodeURIComponent);
         if (parts[0] !== this.bucket) return this.error(res, 404, 'NoSuchBucket');
         const key = parts.slice(1).join('/');
+        const step: S3Step | null = req.method === 'PUT' && key ? 'put' : req.method === 'DELETE' && key ? 'delete'
+            : req.method === 'GET' && key ? 'get' : req.method === 'GET' && query['list-type'] === '2' ? 'list' : null;
+        const failing = step ? this.failNext[step].shift() ?? this.failStep[step] : undefined;
+        if (failing) return this.error(res, failing, 'InternalError');
         if (req.method === 'GET' && !key && query['list-type'] === '2') {
             const prefix = query.prefix ?? '';
             const all = [...this.objects.keys()].filter(k => k.startsWith(prefix)).sort();

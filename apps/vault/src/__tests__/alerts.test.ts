@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { BACKUP_STALE_MS, LOCKED_ALERT_MS, REPORT_GRACE_MS } from '../api/server.js';
+import { BACKUP_STALE_MS, LOCKED_ALERT_MS, OFFSITE_PRUNE_FAILURES_ALERT, REPORT_GRACE_MS } from '../api/server.js';
 import { ALERT_REMIND_MS, ALERT_RETRY_MS } from '../api/alerts.js';
 import { sendMail } from '../api/smtp.js';
 import { sendSettings } from '../custodian/lib.js';
@@ -172,11 +172,91 @@ describe('when backups stop', () => {
         await v.api.runBackup();
         await v.api.checkAlerts();
         expect(smtp.mails).toHaveLength(1);
-        expect(smtp.mails[0].data).toMatch(/OFF-BOX BACKUPS FAILING since .*: 2 off-box copies in a row failed \(HTTP 403 InternalError\): the backups are on the vault's own disk only\./);
+        expect(smtp.mails[0].data).toMatch(/OFF-BOX BACKUPS FAILING since .*: 2 off-box copies in a row failed \(put: HTTP 403 InternalError\): the backups are on the vault's own disk only\./);
         expect(JSON.parse(hook.posts[0].body).events).toEqual([expect.objectContaining({ condition: 'offsite', state: 'raised' })]);
         const report = await reportOf(v);
         expect(report.alerts.active).toEqual(['offsite']);
-        expect(report.offsite).toMatchObject({ failuresInARow: 2, error: 'HTTP 403 InternalError' });
+        expect(report.offsite).toMatchObject({ failuresInARow: 2, step: 'put', error: 'HTTP 403 InternalError' });
+    });
+});
+
+describe('when tidying the off-box store keeps failing', () => {
+    it('a day of tidy-ups failing in a row (the copies landing): its own alert, never the off-box one; resolved when it works again', async () => {
+        const s3 = await new StubS3().start();
+        servers.push(s3);
+        const { v, smtp, hook, told } = await rig({ offsite: s3 });
+        s3.failStep.list = 500;
+        const firstFailed = v.clock.now();
+        for (let i = 1; i < 24; i++) {
+            await v.api.runBackup();
+            await v.api.checkAlerts();
+            v.clock.advance(HOUR);
+        }
+        // A tidy-up that fails now and then is caught up by the next one: nothing said yet.
+        expect(told()).toEqual([]);
+        await v.api.runBackup();
+        await v.api.checkAlerts();
+        expect(smtp.mails).toHaveLength(1);
+        expect(smtp.mails[0].data).toMatch(/^Subject: BeanPool key vault 127\.0\.0\.1: off-box tidy-up failing$/m);
+        expect(smtp.mails[0].data).toMatch(/OFF-BOX TIDY-UP FAILING since .*: 24 tidy-ups of the off-box store in a row failed \(list: HTTP 500 InternalError\): copies past 30 days are not being removed there\. The copies themselves go up\./);
+        // Since the first of the 24, a day before the alert, not since the alert.
+        const since = `${new Date(firstFailed).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+        expect(smtp.mails[0].data).toContain(`OFF-BOX TIDY-UP FAILING since ${since}:`);
+        expect(JSON.parse(hook.posts[0].body).events).toEqual([expect.objectContaining({ condition: 'offsite-prune', state: 'raised', since: new Date(firstFailed).toISOString() })]);
+        const report = await reportOf(v);
+        expect(report.alerts.active).toEqual(['offsite-prune']);
+        expect(report.offsite).toMatchObject({ failuresInARow: 0, prune: { lastOkAt: null, firstFailedAt: firstFailed, failuresInARow: 24, step: 'list' } });
+        expect(s3.objects.size).toBe(24);
+        expect(OFFSITE_PRUNE_FAILURES_ALERT).toBe(24);
+
+        delete s3.failStep.list;
+        v.clock.advance(HOUR);
+        await v.api.runBackup();
+        await v.api.checkAlerts();
+        expect(smtp.mails).toHaveLength(2);
+        expect(smtp.mails[1].data).toMatch(/^Subject: BeanPool key vault 127\.0\.0\.1: off-box tidy-up failing: resolved$/m);
+        expect(smtp.mails[1].data).toMatch(/RESOLVED \(off-box tidy-up failing, since .*\): the off-box store is tidied again: copies past 30 days are removed\./);
+        expect((await reportOf(v)).alerts.active).toEqual([]);
+    });
+
+    /** A day of failing tidy-ups on `s3`, then the custodians set `offsite` in its place: what the clear says. */
+    async function storeReplacedWhileFailing(offsite: (s3: StubS3) => Promise<unknown>): Promise<{ s3: StubS3; told: string[] }> {
+        const s3 = await new StubS3().start();
+        servers.push(s3);
+        const { v, smtp, hook } = await rig({ offsite: s3 });
+        s3.failStep.list = 500;
+        for (let i = 0; i < OFFSITE_PRUNE_FAILURES_ALERT; i++) {
+            await v.api.runBackup();
+            await v.api.checkAlerts();
+            v.clock.advance(HOUR);
+        }
+        expect((await reportOf(v)).alerts.active).toEqual(['offsite-prune']);
+        const settings = { v: 1, offsite: await offsite(s3), alerts: { email: smtp.channel(), webhook: { url: hook.url } } };
+        for (const i of [0, 1]) expect(((await sendSettings(v.baseUrl, v.custodians[i], settings, v.call())) as Reply).status).toBe(200);
+        await v.api.idle();
+        await v.api.checkAlerts();
+        expect((await reportOf(v)).alerts.active).toEqual([]);
+        // Nothing tidied the old store: what it holds past 30 days stays there.
+        expect(s3.objects.size).toBe(OFFSITE_PRUNE_FAILURES_ALERT);
+        return { s3, told: smtp.mails.map(m => m.data) };
+    }
+
+    it('the store removed while it fails: the clear says the old one keeps its old copies, never that it is tidied', async () => {
+        const { told } = await storeReplacedWhileFailing(async () => null);
+        expect(told).toHaveLength(2);
+        expect(told[1]).toMatch(/RESOLVED \(off-box tidy-up failing, since .*\): no off-box store is set now: the old one is no longer tidied, and its copies past 30 days stay there until deleted by hand\./);
+        expect(told[1]).not.toMatch(/tidied again/);
+    });
+
+    it('the store changed while it fails: the same, for the store left behind', async () => {
+        const { told } = await storeReplacedWhileFailing(async () => {
+            const other = await new StubS3().start();
+            servers.push(other);
+            return other.settings();
+        });
+        expect(told).toHaveLength(2);
+        expect(told[1]).toMatch(/RESOLVED \(off-box tidy-up failing, since .*\): the off-box store was changed: the old one is no longer tidied, and its copies past 30 days stay there until deleted by hand\./);
+        expect(told[1]).not.toMatch(/tidied again/);
     });
 });
 

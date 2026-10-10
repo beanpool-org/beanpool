@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import net, { type AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OffsiteError, OffsiteNotFound, S3Store, signV4, uriEncode } from '../api/s3-store.js';
 import { parseSettings } from '../shared/settings.js';
@@ -85,10 +86,33 @@ describe('the store', () => {
         expect(stub.requests.length).toBe(before + 1);
         await stub.stop();
         stubs.length = 0;
+        // The store just went down: fetch may try its pooled keep-alive socket (reset) or a new connection (refused).
         const e = await s3.put('bv-20261001T120000Z.bin', Buffer.from('x')).catch(err => err as OffsiteError);
         expect(e).toBeInstanceOf(OffsiteError);
-        expect((e as OffsiteError).short).toBe('unreachable');
+        expect((e as OffsiteError).short).toMatch(/^unreachable \((ECONNREFUSED|ECONNRESET|UND_ERR_SOCKET)\)$/);
         expect((e as OffsiteError).message).not.toMatch(/127\.0\.0\.1|stub-secret|AKID/);
+        // Nothing has ever listened on this port, so there is no pooled socket: always refused.
+        const unused = net.createServer();
+        await new Promise<void>(resolve => unused.listen(0, '127.0.0.1', resolve));
+        const port = (unused.address() as AddressInfo).port;
+        await new Promise<void>(resolve => unused.close(() => resolve()));
+        const nowhere = new S3Store(parseSettings({ v: 1, offsite: { ...stub.settings(), endpoint: `http://127.0.0.1:${port}` } }).offsite!);
+        const refused = await nowhere.put('bv-20261001T120000Z.bin', Buffer.from('x')).catch(err => err as OffsiteError);
+        expect(refused).toBeInstanceOf(OffsiteError);
+        expect((refused as OffsiteError).short).toBe('unreachable (ECONNREFUSED)');
+        expect((refused as OffsiteError).message).not.toMatch(/127\.0\.0\.1|stub-secret|AKID/);
+        expect((refused as OffsiteError).message).not.toContain(`:${port}`);
+    });
+
+    it('a connection that fails says its code (ECONNRESET), never its message; a code that is not a plain word is left out', async () => {
+        const { stub } = await store();
+        const settings = parseSettings({ v: 1, offsite: stub.settings() }).offsite!;
+        const failing = (cause: unknown) => new S3Store(settings, { fetch: async () => { throw Object.assign(new TypeError('fetch failed'), { cause }); } });
+        const reset = Object.assign(new Error(`read ECONNRESET ${stub.endpoint}`), { code: 'ECONNRESET' });
+        await expect(failing(reset).put('bv-20261001T120000Z.bin', Buffer.from('x'))).rejects.toMatchObject({ short: 'unreachable (ECONNRESET)' });
+        await expect(failing({ code: 'UND_ERR_SOCKET' }).list()).rejects.toMatchObject({ short: 'unreachable (UND_ERR_SOCKET)' });
+        await expect(failing({ code: `ENOTFOUND ${stub.endpoint}` }).delete('bv-20261001T120000Z.bin')).rejects.toMatchObject({ short: 'unreachable' });
+        await expect(failing(undefined).get('bv-20261001T120000Z.bin')).rejects.toMatchObject({ short: 'unreachable' });
     });
 
     it('takes only backup names', async () => {

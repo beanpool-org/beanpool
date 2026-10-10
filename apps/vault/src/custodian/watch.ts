@@ -13,8 +13,9 @@ import type { AlertChannels } from '../shared/settings.js';
  *   - it answers locked for five minutes;
  *   - it answers open but gives no report signed by the ticket key the apps pin, or one that isn't fresh (a replay):
  *     the daily signed report has stopped;
- *   - its own signed report says backups, the off-box copy or the daily report are failing (what the vault raised,
- *     relayed, since its own alerts may be what is broken), or the newest backup it names is over two hours old.
+ *   - its own signed report says backups, the off-box copy, tidying the off-box store or the daily report are failing
+ *     (what the vault raised, relayed, since its own alerts may be what is broken), or the newest backup it names is
+ *     over two hours old.
  *
  * It holds no key and sends nothing to the vault but two GETs; nothing in what it reads or sends is per member.
  */
@@ -52,7 +53,10 @@ interface SignedReport {
     /** When the vault opened, as its API saw it: no backup is taken while it is locked, so staleness counts from here. */
     openSince?: number;
     backups?: { lastOkAt?: number | null; failuresInARow?: number };
-    offsite?: { lastOkAt?: number | null; failuresInARow?: number; error?: string | null } | null;
+    offsite?: {
+        lastOkAt?: number | null; failuresInARow?: number; step?: string | null; error?: string | null;
+        prune?: { firstFailedAt?: number | null; failuresInARow?: number; step?: string | null; error?: string | null };
+    } | null;
     alerts?: { active?: string[] };
 }
 
@@ -178,6 +182,8 @@ export class VaultWatcher {
                 const offsiteOld = !!off && now - Math.max(openedAt, off.lastOkAt ?? 0) > STALE_MS;
                 const backupBad = relayed.has('backup') || backupOld;
                 const offsiteBad = relayed.has('offsite') || offsiteOld;
+                const prune = off?.prune;
+                const pruneBad = relayed.has('offsite-prune');
                 conditions.push(
                     {
                         key: 'backup', active: backupBad, since: lastBackup ?? undefined,
@@ -188,8 +194,16 @@ export class VaultWatcher {
                     {
                         key: 'offsite', active: offsiteBad, since: off?.lastOkAt ?? undefined,
                         detail: offsiteBad
-                            ? `its signed report says the off-box copy is failing (${off?.failuresInARow ?? 0} in a row${off?.error ? `, ${off.error}` : ''}).`
+                            ? `its signed report says the off-box copy is failing (${off?.failuresInARow ?? 0} in a row${off?.error ? `, ${off.step ? `${off.step}: ` : ''}${off.error}` : ''}).`
                             : 'its signed report says backups go off the box again.',
+                    },
+                    {
+                        key: 'offsite-prune', active: pruneBad, since: prune?.firstFailedAt ?? undefined,
+                        detail: pruneBad
+                            ? `its signed report says tidying the off-box store is failing (${prune?.failuresInARow ?? 0} in a row${prune?.error ? `, ${prune.step ? `${prune.step}: ` : ''}${prune.error}` : ''}): copies past 30 days are not being removed there.`
+                            // A changed store looks the same here as one tidied again: only a removed one can be told apart.
+                            : !off ? 'its signed report says no off-box store is set now: copies past 30 days left in the old one stay there until deleted by hand.'
+                                : 'its signed report no longer says tidying the off-box store fails.',
                     },
                 );
             }

@@ -381,7 +381,11 @@ against a buggy one, and it would hand two signatures a second thing to make roo
   `vault-custodian watch` (below) does, from any machine.
 - `/v1/report` (while open) is signed with the ticket key and holds nothing per member: counts, copies, re-wrap
   progress, backups (`backups`: the vault's own; `offsite`: the copy off the box, `{lastOkAt, lastName,
-  failuresInARow, error}`, or null with no store set), `alerts` (which channels are set, what is raised now, when a
+  failuresInARow, step, error, prune}`, or null with no store set: `step` is the call the last copy failed at (`put`)
+  and `error` its cause in a few words (`unreachable (ECONNREFUSED)`, `HTTP 500 InternalError`); `prune` is the
+  tidy-up of the copies there past 30 days, `{lastOkAt, firstFailedAt, failuresInARow, step: list | delete, error}`;
+  the counts add `offsiteOk`, `offsiteFailed`, `offsiteRetried` (uploads tried a second time, the copy then counted in
+  one of the two) and `offsitePruneFailed`), `alerts` (which channels are set, what is raised now, when a
   message last got through, how many wait, each channel's last error, and the last day whose report was signed),
   `settings` (the first 16 characters of the settings' hash, when two custodians agreed to them, whether a store and
   which kinds of channel are set: never an address, a host, a bucket or a key), pushes, memory hygiene, how many new
@@ -460,10 +464,16 @@ disconnected: the "within 30 days" promise no longer holds there. They stay seal
 ## Backups off the box (design §4)
 
 Every hour, while open, the vault seals a backup (`src/shared/backup-format.ts`), writes it to its own store, and then
-copies the same file to the off-box store, outside the lock that deposits wait on. Copies there older than 30 days are
-removed, as at home. A copy that fails is counted (`offsite` in the report) and told (below); the next hour's backup is
-the next try. Every backup holds every deletion record of the last 30 days, so a gap off the box loses nothing a
+copies the same file to the off-box store, outside the lock that deposits wait on. An upload that fails is tried once
+more 30 s later: the same file, under the same name, to the same store (not if the custodians changed the store
+meanwhile). A copy that fails both times is counted (`offsite` in the report) and told (below); the next hour's backup
+is the next try. Every backup holds every deletion record of the last 30 days, so a gap off the box loses nothing a
 restore needs.
+
+A copy is done once its upload lands. Then the copies there older than 30 days are removed, as at home: a step of its
+own (`offsite.prune` in the report), so a listing or a delete that fails never turns a copy already there into a failed
+one. A delete that fails doesn't stop the others, and the next tidy-up takes whatever one left; a day of them failing
+in a row is told (`offsite-prune`, below).
 
 **What a backup holds**, readable by no one without the master secret `M` (two custodians):
 - the database (copies, holds, deletion records), sealed under `K_backup`;
@@ -502,6 +512,7 @@ The API checks every minute and tells the settings' channels (`src/api/alerts.ts
 | `locked` | the keyholder locked or not answering, or a restore or the data partition not finished, for 5 minutes (not a fresh vault, which holds nothing) | when it opens |
 | `backup` | two backups in a row failed, or none for 2 h 10 min while open (counted from the reopening after a lock) | the next good one |
 | `offsite` | the same, for the copy off the box, when a store is set | the next good copy |
+| `offsite-prune` | 24 tidy-ups of the off-box store in a row failed (its listing, or a delete), so copies past 30 days stay there; the copies themselves still go up. Told as failing since the first of the 24 | the next tidy-up that works; or the store changed or removed, and then it says the old store keeps its copies past 30 days until someone deletes them by hand |
 | `report` | a finished day with no signed daily report two hours into the next (for a day the running API saw) | the next one signed |
 
 Each is told once when it starts, again every 24 hours while it lasts, and once when it ends; a channel that fails is
@@ -520,8 +531,8 @@ vault-custodian watch --url https://vault.beanpool.org --ticket-key <…> --once
 
 `alerts.json` is the settings' `alerts` part, for the watcher's own channels. It tells them when the vault doesn't
 answer, or answers locked, for five minutes; when its report isn't signed by that ticket key or isn't from now (a
-replay); and what the vault's signed report raises (backups, the off-box copy, the daily report). It holds no key and
-sends the vault nothing but two GETs.
+replay); and what the vault's signed report raises (backups, the off-box copy, tidying the off-box store, the daily
+report). It holds no key and sends the vault nothing but two GETs.
 
 ## Tests
 

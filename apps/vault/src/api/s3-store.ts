@@ -16,8 +16,8 @@ import type { BackupStore } from './backup-store.js';
  * prefix; it carries no metadata of its own. The payload's SHA-256 is signed with the request, so the store refuses
  * bytes changed on the way; a file changed in the store fails the keyholder's signature check when it is opened.
  *
- * An error says what failed in a few words (`HTTP 403 AccessDenied`, `unreachable`, `timed out`): never a body, a
- * key or a URL, since it goes into the public report and the alerts.
+ * An error says what failed in a few words (`HTTP 403 AccessDenied`, `unreachable (ECONNRESET)`, `timed out`): never
+ * a body, a key or a URL, since it goes into the public report and the alerts.
  */
 
 const SERVICE = 's3';
@@ -114,6 +114,12 @@ function xmlText(s: string): string {
     });
 }
 
+/** A failed connection's code (`ECONNRESET`, `UND_ERR_SOCKET`), if it is a plain one: never its message, which names the address. */
+function causeCode(e: unknown): string {
+    const code = (e as { cause?: { code?: unknown } } | null)?.cause?.code;
+    return typeof code === 'string' && /^[A-Z][A-Z0-9_]{1,39}$/.test(code) ? ` (${code})` : '';
+}
+
 /** The S3 error code in a response body (`<Code>AccessDenied</Code>`), if it is a plain word. */
 function errorCode(body: string): string {
     const m = /<Code>([A-Za-z]{1,64})<\/Code>/.exec(body);
@@ -158,7 +164,7 @@ export class S3Store implements BackupStore {
             return { status: res.status, body: Buffer.from(await res.arrayBuffer()) };
         } catch (e) {
             if (e instanceof OffsiteError) throw e;
-            throw new OffsiteError(controller.signal.aborted ? 'timed out' : 'unreachable');
+            throw new OffsiteError(controller.signal.aborted ? 'timed out' : `unreachable${causeCode(e)}`);
         } finally {
             clearTimeout(timer);
         }

@@ -6,7 +6,7 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { openSeedFromSso, openVaultRelease } from '@beanpool/core';
 import type { SsoProvider } from '@beanpool/signin';
 import { DB_FILE } from '../api/db.js';
-import { BACKUP_RETENTION_MS, HOLD_MS } from '../api/server.js';
+import { BACKUP_RETENTION_MS, HOLD_MS, OFFSITE_RETRY_MS } from '../api/server.js';
 import { custodianKey, listBackups, restoreFromBackup, sendSettings } from '../custodian/lib.js';
 import { openState, STATE_FILE } from '../keyholder/keys.js';
 import { BACKUP_BODY_AAD, parseBackupFile } from '../shared/backup-format.js';
@@ -146,8 +146,11 @@ describe('every backup goes off the box', () => {
         const firstName = await v.api.runBackup();
         expect(stub.objects.get(`vault/${firstName}`)?.equals(readFileSync(path.join(v.storeDir, firstName)))).toBe(true);
         const { body } = await report(v);
-        expect(body.offsite).toEqual({ lastOkAt: v.clock.now(), lastName: firstName, failuresInARow: 0, error: null });
-        expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0 });
+        expect(body.offsite).toEqual({
+            lastOkAt: v.clock.now(), lastName: firstName, failuresInARow: 0, error: null, step: null,
+            prune: { lastOkAt: v.clock.now(), firstFailedAt: null, failuresInARow: 0, step: null, error: null },
+        });
+        expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0, offsitePruneFailed: 0 });
 
         // 31 days on, the next backup's copy goes up and the first one goes, there as here (§1.7).
         v.clock.advance(BACKUP_RETENTION_MS + 24 * 60 * 60 * 1000);
@@ -195,11 +198,122 @@ describe('every backup goes off the box', () => {
         expect(existsSync(path.join(v.storeDir, name))).toBe(true);
         const { body } = await report(v);
         expect(body.backups).toMatchObject({ failuresInARow: 0, error: null });
-        expect(body.offsite).toEqual({ lastOkAt: null, lastName: null, failuresInARow: 1, error: 'HTTP 503 InternalError' });
+        expect(body.offsite).toEqual({
+            lastOkAt: null, lastName: null, failuresInARow: 1, error: 'HTTP 503 InternalError', step: 'put',
+            // No copy went up: nothing was tidied, and nothing failed there.
+            prune: { lastOkAt: null, firstFailedAt: null, failuresInARow: 0, step: null, error: null },
+        });
         stub.failWith = null;
         v.clock.advance(60 * 60 * 1000);
         await v.api.runBackup();
         expect((await report(v)).body.offsite).toMatchObject({ failuresInARow: 0, error: null });
+    });
+});
+
+describe('a copy that reached the store counts as done; tidying old ones is its own step', () => {
+    it('the upload lands, the listing fails: the copy is OK, the tidy-up failed and says so on its own line, no off-box alert', async () => {
+        const v = await vault();
+        await doGenesis(v);
+        const stub = await s3();
+        await setSettings(v, { v: 1, offsite: stub.settings() });
+        stub.failStep.list = 500;
+        const name = await v.api.runBackup();
+        expect(stub.objects.has(`vault/${name}`)).toBe(true);
+        let { body } = await report(v);
+        expect(body.offsite).toMatchObject({ lastOkAt: v.clock.now(), lastName: name, failuresInARow: 0, error: null });
+        const firstFailed = v.clock.now();
+        expect(body.offsite.prune).toEqual({ lastOkAt: null, firstFailedAt: firstFailed, failuresInARow: 1, step: 'list', error: 'HTTP 500 InternalError' });
+        expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0, offsitePruneFailed: 1 });
+
+        // A second hour the same: still every copy there, and the off-box alert (copies failing) stays quiet.
+        v.clock.advance(60 * 60 * 1000);
+        await v.api.runBackup();
+        await v.api.checkAlerts();
+        ({ body } = await report(v));
+        expect(body.offsite).toMatchObject({ failuresInARow: 0, error: null });
+        // Failing since the first of the two, not since the latest.
+        expect(body.offsite.prune).toMatchObject({ firstFailedAt: firstFailed, failuresInARow: 2, step: 'list' });
+        expect(body.counts).toMatchObject({ offsiteOk: 2, offsiteFailed: 0, offsitePruneFailed: 2 });
+        expect(body.alerts.active).not.toContain('offsite');
+
+        // The listing works again: so does the tidy-up.
+        delete stub.failStep.list;
+        v.clock.advance(60 * 60 * 1000);
+        await v.api.runBackup();
+        ({ body } = await report(v));
+        expect(body.offsite.prune).toEqual({ lastOkAt: v.clock.now(), firstFailedAt: null, failuresInARow: 0, step: null, error: null });
+        expect(stub.objects.size).toBe(3);
+    });
+
+    it('a delete that fails is named, the other old copies still go, and the next tidy-up takes what was left', async () => {
+        const v = await vault();
+        await doGenesis(v);
+        const stub = await s3();
+        await setSettings(v, { v: 1, offsite: stub.settings() });
+        // Two copies from well over 30 days ago, as a tidy-up that kept failing would leave them.
+        const old = ['vault/bv-20200101T000000Z.bin', 'vault/bv-20200101T010000Z.bin'];
+        for (const k of old) stub.objects.set(k, Buffer.from('old'));
+        stub.failNext.delete = [403];
+        const name = await v.api.runBackup();
+        let { body } = await report(v);
+        expect(body.offsite).toMatchObject({ lastName: name, failuresInARow: 0, step: null, error: null });
+        expect(body.offsite.prune).toEqual({ lastOkAt: null, firstFailedAt: v.clock.now(), failuresInARow: 1, step: 'delete', error: 'HTTP 403 InternalError' });
+        expect([...stub.objects.keys()].sort()).toEqual([old[0], `vault/${name}`]);
+        v.clock.advance(60 * 60 * 1000);
+        const next = await v.api.runBackup();
+        ({ body } = await report(v));
+        expect(body.offsite.prune).toMatchObject({ failuresInARow: 0, step: null, error: null });
+        expect([...stub.objects.keys()].sort()).toEqual([`vault/${name}`, `vault/${next}`]);
+    });
+});
+
+describe('an upload that fails is tried once more', () => {
+    it('fails, then lands 30 s later: one retry, and the copy counts as done', async () => {
+        const v = await vault();
+        await doGenesis(v);
+        const stub = await s3();
+        await setSettings(v, { v: 1, offsite: stub.settings() });
+        stub.failNext.put = [500];
+        const started = v.clock.now();
+        const name = await v.api.runBackup();
+        expect(stub.requests.filter(r => r.method === 'PUT')).toHaveLength(2);
+        expect(stub.objects.has(`vault/${name}`)).toBe(true);
+        expect(OFFSITE_RETRY_MS).toBe(30_000);
+        const { body } = await report(v);
+        // The harness's wait moves the test clock: the second try came the 30 s later.
+        expect(body.offsite).toMatchObject({ lastOkAt: started + OFFSITE_RETRY_MS, lastName: name, failuresInARow: 0, error: null });
+        expect(body.counts).toMatchObject({ offsiteOk: 1, offsiteFailed: 0, offsiteRetried: 1 });
+    });
+
+    it('fails twice: the copy counts as failed, once, after the one retry', async () => {
+        const v = await vault();
+        await doGenesis(v);
+        const stub = await s3();
+        await setSettings(v, { v: 1, offsite: stub.settings() });
+        stub.failNext.put = [500, 500];
+        await v.api.runBackup();
+        expect(stub.requests.filter(r => r.method === 'PUT')).toHaveLength(2);
+        expect(stub.objects.size).toBe(0);
+        const { body } = await report(v);
+        expect(body.offsite).toMatchObject({ lastOkAt: null, failuresInARow: 1, step: 'put', error: 'HTTP 500 InternalError' });
+        expect(body.counts).toMatchObject({ offsiteOk: 0, offsiteFailed: 1, offsiteRetried: 1 });
+        // Nothing went up: nothing listed or removed either.
+        expect(stub.requests.filter(r => r.method !== 'PUT')).toHaveLength(0);
+    });
+
+    it('the store is changed during the wait: no retry is sent to either, and none is counted', async () => {
+        let meanwhile: (() => Promise<unknown>) | null = null;
+        const v = await vault({ sleep: async (ms, clock) => { await meanwhile?.(); clock.advance(ms); } });
+        await doGenesis(v);
+        const [a, b] = [await s3(), await s3()];
+        await setSettings(v, { v: 1, offsite: a.settings() });
+        a.failNext.put = [500];
+        meanwhile = () => setSettings(v, { v: 1, offsite: b.settings() });
+        await v.api.runBackup();
+        expect(a.requests.filter(r => r.method === 'PUT')).toHaveLength(1);
+        expect(b.requests).toHaveLength(0);
+        const { body } = await report(v);
+        expect(body.counts).toMatchObject({ offsiteOk: 0, offsiteFailed: 0, offsiteRetried: 0 });
     });
 });
 

@@ -12,8 +12,10 @@
 //     line, "muted: N more this hour, see /admin", the rest of that hour is kept for /admin only. High and urgent ones
 //     still go, up to 40 messages in the hour, so a loop can't flood the phone. A condition whose telling was muted is
 //     told again in the next hour.
-// Each category (names, health, uptake, admin) is on (sent at once), digest (held for the daily summary, which the S2
-// slice will send; until then held events are only shown on /admin) or off (alert_settings, /admin's toggles).
+// Each category (names, health, uptake, admin) is on (sent at once), digest (held, and sent in the daily summary at
+// 08:00 Brisbane — src/watch.js dailyLine) or off (alert_settings, /admin's toggles). The daily summary itself, like
+// the admin's test, is always sent — in a message of its own, never muted: its absence is what says the Worker or ntfy
+// is broken. What it carries stays held until it is sent.
 // What a message says: a name, the community name its operator published, and counts. Never the `contact` column (a
 // person's address), a key, or anything a member wrote. The topic URL and token are secrets: they go in the request
 // and nowhere else — a failed send logs its status code, never the address.
@@ -138,7 +140,7 @@ function clip(s, max) {
     }
     return `${out}…`;
 }
-function listBody(lines) {
+export function listBody(lines) {
     const more = (n) => `\n… and ${n} more, see /admin`;
     let body = '';
     for (let i = 0; i < lines.length; i++) {
@@ -204,7 +206,7 @@ export async function categoryMode(env, category) {
 // Into the outbox, as the category says: the row's id when it waits to be sent now, else 0 (off: nothing kept; digest:
 // held; an event with a `once` key already in the outbox — kept 7 days — is not kept again).
 async function enqueue(env, ev, at) {
-    const mode = ev.category === 'test' ? 'on' : await categoryMode(env, ev.category);
+    const mode = ev.category === 'test' || ev.category === 'summary' ? 'on' : await categoryMode(env, ev.category);
     if (mode === 'off') return 0;
     const held = mode === 'digest' ? 1 : 0;
     const row = await env.DB.prepare('INSERT OR IGNORE INTO alert_outbox (at, category, priority, tag, title, body, name, held, once) VALUES (?,?,?,?,?,?,?,?,?) RETURNING id')
@@ -222,6 +224,27 @@ async function enqueue(env, ev, at) {
     }
     await env.DB.prepare('DELETE FROM alert_outbox WHERE at < ? AND (sent_at IS NOT NULL OR muted=1 OR held=1)').bind(at - KEEP_S).run();
     return held ? 0 : Number(row?.id) || 0;
+}
+
+// The daily summary (src/watch.js dailyLine) is a message of its own: never batched with what else waits, never muted,
+// and the held events it carries are marked sent only once it is (flush). Its row is claimed while it is written, so
+// no sender takes it half made; `compose(id)` gives its { title, body } from what the digest held before row `id`.
+// It supersedes one not yet sent (it says more, and carries the same held events), so one waits, never a pile.
+// Throws on a failed write.
+export async function enqueueSummary(env, compose) {
+    const now = nowS();
+    const claim = crypto.randomUUID();
+    const row = await env.DB.prepare("INSERT INTO alert_outbox (at, category, priority, tag, title, body, held, claim, claim_at) VALUES (?, 'summary', ?, ?, '', '', 0, ?, ?) RETURNING id")
+        .bind(now, PRIORITY.min, TAG.summary, claim, now).first();
+    try {
+        const { title, body } = await compose(row.id);
+        await env.DB.prepare('UPDATE alert_outbox SET title=?, body=?, claim=NULL, claim_at=NULL WHERE id=?').bind(title, body, row.id).run();
+    } catch (e) {
+        await env.DB.prepare('DELETE FROM alert_outbox WHERE id=?').bind(row.id).run();
+        throw e;
+    }
+    await env.DB.prepare("DELETE FROM alert_outbox WHERE category='summary' AND sent_at IS NULL AND id < ?").bind(row.id).run();
+    return row.id;
 }
 
 // Tell the admin of one event (A1–A3, A5, A6). Like logEvent, it never undoes what it reports: a failure is logged,
@@ -281,28 +304,65 @@ export async function updateConditions(env, conditions) {
     else await flush(env);
 }
 
-// Send what waits, if a channel is set and a try is due: one message with every waiting event (at most 50), or, at the
-// hour's cap, the one "muted" line and then nothing until the next hour — unless something high or urgent waits, which
-// goes (with the rest) up to the hour's ceiling. `force`: try now even inside the 5 minutes
-// after a failure (the admin's test button). Returns what happened: { sent, muted, status? }. Never throws.
+const channelOk = (env, now, status) => env.DB.prepare("UPDATE alert_channel SET last_ok_at=?, last_try_at=?, last_status=?, failed_in_a_row=0, next_try_at=0 WHERE channel='ntfy'")
+    .bind(now, now, status).run();
+const channelFailed = (env, now, status) => env.DB.prepare("UPDATE alert_channel SET last_try_at=?, last_status=?, failed_in_a_row=failed_in_a_row+1, next_try_at=? WHERE channel='ntfy'")
+    .bind(now, status, now + ALERT_RETRY_S).run();
+
+// The newest daily summary waiting, in a message of its own: counted in the hour, never muted by it. The held events
+// it carries (those before it) are marked sent when it is; a send that fails leaves them held, and it is tried again
+// with the rest. Null when none waits.
+async function flushSummary(env, now, hour, cur) {
+    const claim = crypto.randomUUID();
+    const w = await env.DB.prepare(`UPDATE alert_outbox SET claim=?, claim_at=? WHERE id = (SELECT id FROM alert_outbox
+        WHERE category='summary' AND sent_at IS NULL AND muted=0 AND (claim IS NULL OR claim_at < ?) ORDER BY id DESC LIMIT 1)`)
+        .bind(claim, now, now - CLAIM_S).run();
+    if (!w?.meta?.changes) return null;
+    const s = await env.DB.prepare('SELECT * FROM alert_outbox WHERE claim=?').bind(claim).first();
+    if (!s) return null;
+    await env.DB.prepare(`UPDATE alert_channel SET hour_sent = ${cur('hour_sent')} + 1, hour_muted = ${cur('hour_muted')}, hour_line = ${cur('hour_line')},
+        hour_start=? WHERE channel='ntfy'`).bind(hour).run();
+    const r = await post(env, composeAlert(env, [s]));
+    if (r.ok) {
+        await env.DB.prepare('UPDATE alert_outbox SET sent_at=?, claim=NULL WHERE claim=?').bind(now, claim).run();
+        await env.DB.prepare('UPDATE alert_outbox SET sent_at=? WHERE held=1 AND sent_at IS NULL AND id < ?').bind(now, s.id).run();
+        await channelOk(env, now, r.status);
+        return r;
+    }
+    await env.DB.prepare('UPDATE alert_outbox SET claim=NULL WHERE claim=?').bind(claim).run();
+    await env.DB.prepare("UPDATE alert_channel SET hour_sent = MAX(0, hour_sent - 1) WHERE channel='ntfy' AND hour_start=?").bind(hour).run();
+    await channelFailed(env, now, r.status);
+    console.error('[ALERT_SEND]', `ntfy: ${r.status}; the daily summary waiting, tried again in ${ALERT_RETRY_S / 60} min`);
+    return r;
+}
+
+// Send what waits, if a channel is set and a try is due: the daily summary on its own (flushSummary), then one message
+// with every other waiting event (at most 50), or, at the hour's cap, the one "muted" line and then nothing until the
+// next hour — unless something high or urgent waits, which goes (with the rest) up to the hour's ceiling. `force`: try
+// now even inside the 5 minutes after a failure (the admin's test button). Returns what happened to the events:
+// { sent, muted, status?, summary? } (summary: the daily summary went). Never throws.
 export async function flush(env, { force = false } = {}) {
     try {
         if (!channelSet(env)) return { sent: 0, muted: 0, status: 'not set' };
         const now = nowS();
         const ch = await channelRow(env);
         if (!force && now < (ch?.next_try_at || 0)) return { sent: 0, muted: 0, status: 'waiting to retry' };
-        const claim = crypto.randomUUID();
-        await env.DB.prepare(`UPDATE alert_outbox SET claim=?, claim_at=? WHERE id IN (SELECT id FROM alert_outbox
-            WHERE sent_at IS NULL AND held=0 AND muted=0 AND (claim IS NULL OR claim_at < ?) ORDER BY id LIMIT ?)`)
-            .bind(claim, now, now - CLAIM_S, MAX_WAITING).run();
-        const events = (await env.DB.prepare('SELECT * FROM alert_outbox WHERE claim=? ORDER BY id').bind(claim).all()).results || [];
-        if (!events.length) return { sent: 0, muted: 0 };
-
         // The hour's cap, held even by two senders at once: a message is sent only once it has reserved its place in the
         // hour (one of HOURLY_CAP; past them, one of HOURLY_CEILING when something high or urgent is in it; or the one
         // "muted" line, which also counts what it mutes), and a send that fails gives it back.
         const hour = now - (now % 3600);
         const cur = (col) => `CASE WHEN hour_start=${hour} THEN ${col} ELSE 0 END`;
+        const daily = await flushSummary(env, now, hour, cur);
+        if (daily && !daily.ok) return { sent: 0, muted: 0, status: daily.status };
+        const summary = daily ? { summary: true } : {};
+
+        const claim = crypto.randomUUID();
+        await env.DB.prepare(`UPDATE alert_outbox SET claim=?, claim_at=? WHERE id IN (SELECT id FROM alert_outbox
+            WHERE sent_at IS NULL AND held=0 AND muted=0 AND category <> 'summary' AND (claim IS NULL OR claim_at < ?) ORDER BY id LIMIT ?)`)
+            .bind(claim, now, now - CLAIM_S, MAX_WAITING).run();
+        const events = (await env.DB.prepare('SELECT * FROM alert_outbox WHERE claim=? ORDER BY id').bind(claim).all()).results || [];
+        if (!events.length) return { sent: 0, muted: 0, ...summary };
+
         const reserve = async (limit, muting = 0) => ((await env.DB.prepare(`UPDATE alert_channel
             SET hour_sent = ${cur('hour_sent')} + 1, hour_muted = ${cur('hour_muted')} + ?, hour_line = ${cur('hour_line')} + ?, hour_start=?
             WHERE channel='ntfy' AND ${cur('hour_sent')} < ?${muting ? ` AND ${cur('hour_line')} = 0` : ''}`).bind(muting, muting ? 1 : 0, hour, limit).run())?.meta?.changes ?? 0) > 0;
@@ -312,7 +372,7 @@ export async function flush(env, { force = false } = {}) {
             // Muted for the rest of the hour: kept for /admin, never sent.
             await env.DB.prepare('UPDATE alert_outbox SET muted=1, claim=NULL WHERE claim=?').bind(claim).run();
             await env.DB.prepare("UPDATE alert_channel SET hour_muted = hour_muted + ? WHERE channel='ntfy' AND hour_start=?").bind(events.length, hour).run();
-            return { sent: 0, muted: events.length };
+            return { sent: 0, muted: events.length, ...summary };
         }
         const m = mutedLine ? {
             title: `Muted: ${events.length} more this hour`, body: `muted: ${events.length} more this hour, see /admin`,
@@ -322,17 +382,15 @@ export async function flush(env, { force = false } = {}) {
         if (r.ok) {
             await env.DB.prepare(`UPDATE alert_outbox SET ${mutedLine ? 'muted=1' : 'sent_at=?'}, claim=NULL WHERE claim=?`)
                 .bind(...(mutedLine ? [claim] : [now, claim])).run();
-            await env.DB.prepare("UPDATE alert_channel SET last_ok_at=?, last_try_at=?, last_status=?, failed_in_a_row=0, next_try_at=0 WHERE channel='ntfy'")
-                .bind(now, now, r.status).run();
-            return { sent: 1, muted: mutedLine ? events.length : 0, status: r.status };
+            await channelOk(env, now, r.status);
+            return { sent: 1, muted: mutedLine ? events.length : 0, status: r.status, ...summary };
         }
         await env.DB.prepare('UPDATE alert_outbox SET claim=NULL WHERE claim=?').bind(claim).run();
         await env.DB.prepare("UPDATE alert_channel SET hour_sent = MAX(0, hour_sent - 1), hour_muted = MAX(0, hour_muted - ?), hour_line = CASE WHEN ? THEN 0 ELSE hour_line END WHERE channel='ntfy' AND hour_start=?")
             .bind(mutedLine ? events.length : 0, mutedLine ? 1 : 0, hour).run();
-        await env.DB.prepare("UPDATE alert_channel SET last_try_at=?, last_status=?, failed_in_a_row=failed_in_a_row+1, next_try_at=? WHERE channel='ntfy'")
-            .bind(now, r.status, now + ALERT_RETRY_S).run();
+        await channelFailed(env, now, r.status);
         console.error('[ALERT_SEND]', `ntfy: ${r.status}; ${plural(events.length, 'event')} waiting, tried again in ${ALERT_RETRY_S / 60} min`);
-        return { sent: 0, muted: 0, status: r.status };
+        return { sent: 0, muted: 0, status: r.status, ...summary };
     } catch (e) {
         console.error('[ALERT_FLUSH]', String(e?.message || e).slice(0, 200));
         return { sent: 0, muted: 0, status: 'error' };

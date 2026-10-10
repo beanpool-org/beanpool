@@ -634,11 +634,20 @@ test('/admin: #<name> lights and scrolls to that row; the alerts panel says when
         ctx.showFragment();
         assert.equal(scrolled.length, 1, 'only a name is looked up');
 
+        const heldRow = { at: 1, title: 'You paused x', body: 'You paused x.beanpool.org.', held: 1, sent_at: null };
+        ctx.renderAlerts({ channel: { set: false, waiting: 2 }, cap: { per_hour: 20, sent: 0, muted: 0 }, settings: { names: 'digest' }, held_for_digest: 3, active: [], recent: [heldRow] });
+        // With no channel, what digest holds is never sent: the page says it is held with no channel, never "sent".
+        assert.match(els.alertsContainer.innerHTML, /3 held — no channel set, so no daily summary carries them yet: shown below\./);
+        assert.match(els.alertsContainer.innerHTML, /<td style="font-size: 0\.75rem;">held — no channel set<\/td>/);
+        assert.doesNotMatch(els.alertsContainer.innerHTML, /sent in the daily summary<\/td>/);
+        assert.match(els.alertsContainer.innerHTML, /digest = held, then sent in the daily summary at 08:00 Brisbane/);
+        // The daily summary (slice S2, src/watch.js) sends what digest holds: the page says so, and when.
+        ctx.renderAlerts({ channel: { set: true, waiting: 0 }, cap: {}, settings: {}, held_for_digest: 3, active: [], recent: [heldRow, { ...heldRow, sent_at: 2 }] });
+        assert.match(els.alertsContainer.innerHTML, /3 held for the daily summary \(08:00 Brisbane\): shown below\./);
+        assert.match(els.alertsContainer.innerHTML, /<td style="font-size: 0\.75rem;">held for the daily summary<\/td>/);
+        assert.match(els.alertsContainer.innerHTML, /<td style="font-size: 0\.75rem;">sent in the daily summary<\/td>/);
         ctx.renderAlerts({ channel: { set: false, waiting: 2 }, cap: { per_hour: 20, sent: 0, muted: 0 }, settings: { names: 'digest' }, held_for_digest: 3, active: [], recent: [] });
-        // No daily summary is sent yet (slice S2): digest holds, and the page says it shows them, not that they are sent.
-        assert.match(els.alertsContainer.innerHTML, /3 held: shown below, not sent \(no daily summary yet\)/);
-        assert.match(els.alertsContainer.innerHTML, /digest = held and shown here, not sent \(no daily summary yet\)/);
-        assert.doesNotMatch(els.alertsContainer.innerHTML, /held for the daily summary/);
+        assert.doesNotMatch(els.alertsContainer.innerHTML, /no daily summary yet/);
         assert.match(els.alertsContainer.innerHTML, /Not set: NTFY_URL is not a Worker secret, so nothing is sent \(2 waiting for it\)/);
         assert.match(els.alertsContainer.innerHTML, /data-alert-category="names" data-alert-mode="digest" class="on"/);
         assert.match(els.alertsContainer.innerHTML, /data-alert-test="1"/);

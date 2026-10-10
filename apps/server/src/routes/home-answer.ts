@@ -70,7 +70,7 @@ import { getInterestsUpdatedAt } from '../engine/home-preferences.js';
 import { chatHiddenFrom } from '../engine/event-thread.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
-import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits } from '../decisions-engine.js';
+import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor } from '../decisions-engine.js';
 import { landingCardFor, type LandingCard } from './global-directory.js';
 
 /** The catalogue (§3.1), in the default order (§3.1 "Default order"). */
@@ -423,7 +423,9 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     if (c.member && decisionsOn()) {
         const mine = getOwnDecisionVotes(me);
         const blocked = !hasCompletedTrade(me) && getVoiceCredits(me) <= 0;
-        const votes = getOpenDecisions()
+        // And an enterprise's keepers' votes the member is on the roll of (decisions-engine openScopedDecisionsFor): never
+        // counted for anyone off it.
+        const votes = [...getOpenDecisions(), ...openScopedDecisionsFor(me)]
             .filter(d => !madeWithoutVote(d) && !mine.has(d.id)
                 && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now
                 && !(d.franchise === 'quadratic_trade' && blocked))
@@ -633,7 +635,8 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
 function decideCard(c: Ctx): HomeCards['decide'] | undefined {
     built('decide');
     const open = decisionsOn()
-        ? getOpenDecisions().filter(d => !madeWithoutVote(d) && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now)
+        ? [...getOpenDecisions(), ...openScopedDecisionsFor(c.me!)]
+            .filter(d => !madeWithoutVote(d) && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now)
         : [];
     const soonest = open.map(d => d.closesAt).sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
     const polls = getPosts({ type: 'poll', viewerPubkey: c.me!, limit: POLL_POOL + 1 })

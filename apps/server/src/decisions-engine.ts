@@ -2601,3 +2601,17 @@ function settleOpenScopedDecisions(nowIso: string): void {
         }
     }
 }
+
+/**
+ * The open scoped votes `member` is on the live roll of (home's Needs-you line and Decide card, routes/home-answer.ts):
+ * nobody off the roll ever has one counted, so the count tells them nothing about an enterprise they don't keep.
+ */
+export function openScopedDecisionsFor(member: string): Decision[] {
+    return (db.prepare(`
+        SELECT d.* FROM decisions d
+        JOIN decision_electors e ON e.decision_id = d.id AND e.member_pubkey = ? AND e.status = 'on'
+        JOIN members m ON m.public_key = e.member_pubkey AND m.status = 'active'
+        WHERE d.status = 'open' AND d.scope_kind != 'community'
+        ORDER BY d.closes_at ASC
+    `).all(member) as any[]).map(rowToDecision);
+}

@@ -19,6 +19,7 @@ import {
 } from '../storage/image-store.js';
 import { stagedObjects } from '../services/stager.js';
 import { OPTIONAL_STORAGE_KEY_TABLES } from '../storage/image-columns.js';
+import { thumbnailKeyOf } from '../storage/photo-thumbnails.js';
 
 export interface DiskBreakdownItem {
     dbSizeBytes: number;
@@ -401,7 +402,12 @@ async function findOrphanedImageObjects(db: any, options: { dataDir?: string; st
         ...optional,
     ]) {
         try {
-            for (const r of db.prepare(sql).all() as any[]) referenced.add(r.storage_key as string);
+            for (const r of db.prepare(sql).all() as any[]) {
+                referenced.add(r.storage_key as string);
+                // A listing photo's small copy (storage/photo-thumbnails.ts) is kept while its photo is.
+                const thumb = thumbnailKeyOf(r.storage_key);
+                if (thumb) referenced.add(thumb);
+            }
         } catch {
             // A table this build does not have cannot be holding references. But it could equally be a
             // transient read failure, and deleting objects on the strength of a failed read is how a sweep

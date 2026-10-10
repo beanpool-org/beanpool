@@ -31,6 +31,7 @@ import {
     getImageStore, openObject, readObject, sha256Hex, writeObject, type ImageStore, type StoredObject,
 } from './image-store.js';
 import { stripImageValue } from './image-metadata.js';
+import { queueThumbnail, thumbnailKeyOf } from './photo-thumbnails.js';
 
 /**
  * The route's own parse, deliberately duplicated rather than imported: `^data:([^;]+);base64,(.*)$` with no
@@ -279,13 +280,21 @@ export async function storePhotoColumnsAsync(
  * what the row holds from the start. Only this writer strips. The evacuation job moves bytes that are already
  * stored and must not change them, and the backup importer (engine/sync.ts) copies its mirror's stored photos
  * verbatim: a replica is the primary's state, and the primary strips at upload.
+ *
+ * Its small copy for the lists is made here too, off the request, once the photo is in the store
+ * (storage/photo-thumbnails.ts). Only an upload's: a photo the evacuation or a copy stores gets its small copy on its
+ * first request.
  */
 export function storeUploadedPhotoColumns(
     store: ImageStore,
     key: (s: StorableBytes) => string,
     photoData: string,
 ): PhotoColumns {
-    return storePhotoColumns(store, key, stripImageValue(photoData));
+    const stripped = stripImageValue(photoData);
+    const columns = storePhotoColumns(store, key, stripped);
+    const parsed = columns.storage_key ? parseDataUrl(stripped) : null;
+    if (columns.storage_key && parsed) queueThumbnail(store, columns.storage_key, Buffer.from(parsed.base64, 'base64'));
+    return columns;
 }
 
 export function inlinePhotoColumns(photoData: string): PhotoColumns {
@@ -347,6 +356,11 @@ export function deleteStoredObjects(handle: ReadableDb, keys: Iterable<string>, 
             if (s.delete(key)) removed++;
         } catch (e) {
             console.warn(`[ImageStore] Could not delete ${key}:`, e);
+        }
+        // A listing photo's small copy (storage/photo-thumbnails.ts) goes with it; one never made is already gone.
+        const thumb = thumbnailKeyOf(key);
+        if (thumb) {
+            try { s.delete(thumb); } catch (e) { console.warn(`[ImageStore] Could not delete ${thumb}:`, e); }
         }
     }
     return removed;

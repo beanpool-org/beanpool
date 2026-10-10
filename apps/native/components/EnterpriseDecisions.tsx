@@ -246,5 +246,5 @@ const styles = (colors: any) => StyleSheet.create({
     chipTextOn: { color: colors.text.inverse, fontWeight: '700' },
     input: { borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: colors.text.body, fontSize: 15, backgroundColor: colors.surface.subtle },
     fee: { fontSize: 13, color: colors.text.body, marginBottom: 6, lineHeight: 18 },
-    error: { fontSize: 13, color: colors.feedback.danger, marginBottom: 6 },
+    error: { fontSize: 13, color: colors.feedback.danger.fg, marginBottom: 6 },
 });

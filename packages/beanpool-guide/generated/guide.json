@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 119,
-  "hash": "6b5832ca82989fb440b01935d64d189793677045267ba3fe4b10b023c20f089e",
+  "version": 120,
+  "hash": "72c8e2eba12698c86fcd06fea0cc8217ee056c91ffcfe096c2bee8bd9a3d5025",
   "sections": [
     {
       "id": "about",
@@ -544,6 +544,7 @@
             "**Stepping down:** any keeper can step down. If the enterprise is in debt and your pledge is needed to cover it, you must wait until the debt is smaller or other keepers pledge more. The only keeper cannot step down; they add another keeper first, or wind the enterprise up.",
             "**Your pledge** backs the enterprise's credit line. It is never taken from your own balance or your own credit line.",
             "**A quiet lead:** if the lead keeper has done nothing in the app for 30 days, the other keepers can choose a new lead from among themselves. The vote runs up to 14 days, with Yes and No. It passes when more than half of the other keepers say Yes. If the lead comes back and does anything in the app, the vote is cancelled. While the lead's account is suspended, nothing they do counts as coming back. Keeper votes cannot be changed.",
+            "**Votes among the keepers:** in an enterprise with two or more keepers, any keeper can propose paying Beans out of the enterprise's own account (never more than it holds, never to themselves, and to a keeper only out of what it has earned, with the 1.5% trade fee), removing a keeper, or, in an enterprise but not a project, making another keeper the lead. The keepers at the time it opens vote; more than half must vote; 60% Yes to pay out or remove, more than half to choose a lead. It runs 7 days or ends sooner once the answer can't change, and is carried out by itself. Only the keepers see it. While it is open it shows how many have voted; Yes and No show once it closes. Nobody sees who voted how, but in a very small group the result and who has voted can show it. These votes never touch the Commons or anyone's standing in the community: those are community Decisions.",
             "**If the lead leaves or is removed,** the longest-serving keeper becomes lead at once, and the other keepers can replace them straight away. If no keeper is left, the enterprise is paused.",
             "**Winding up:** the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. When it closes, any beans left go to the Commons."
           ]
@@ -4493,6 +4494,38 @@
             "The only keeper cannot step down. They can wind the enterprise up instead.",
             "If the enterprise is below zero and needs your backing to cover it, the app says **Not yet**."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Votes among the keepers"
+        },
+        {
+          "type": "p",
+          "text": "When an enterprise has two or more keepers, any keeper can open a vote among them. Open the enterprise: its votes are under **Decisions**, and only its keepers see them. Tap **Propose a vote** and choose what should happen:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Pay Beans out** of the enterprise's own account, to a keeper you pick. It can never pay more than the enterprise holds, and never from its credit line. You can't propose paying yourself. Paying a keeper is a wage, so it only comes out of what the enterprise has earned. The usual 1.5% trade fee comes out of the amount and goes to the Commons; the form shows both figures before you send it.",
+            "**Remove a keeper.** The lead keeper is not removed this way: they are replaced.",
+            "**Make another keeper the lead.** Only in an enterprise. A project's leader can't be voted out by its collaborators."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Everyone who was a keeper when the vote opened can vote **Yes** or **No**, the person who proposed it too. More than half of them must vote. Paying out and removing a keeper need 60% Yes; choosing a new lead needs more than half. A vote runs 7 days, or ends sooner once the answer can't change. When it passes, the app carries it out by itself."
+        },
+        {
+          "type": "p",
+          "text": "While a vote is open, everyone sees how many have voted, not how. Yes and No show once it closes. Nobody sees who voted how. In a very small group, though, the result and who has voted can show it: if three keepers all vote and it ends 3–0, everyone knows how everyone voted."
+        },
+        {
+          "type": "p",
+          "text": "Each keeper on the vote gets one notification when it opens. It names nobody: it says a vote opened in one of your groups, and the app shows the rest. On Home, an open vote you haven't cast shows under **Needs you** and opens the enterprise."
+        },
+        {
+          "type": "p",
+          "text": "A keeper who steps down during a vote leaves it, and their vote goes with them. A keeper removed during a vote keeps the vote they cast. If the enterprise starts winding up, its open votes end without doing anything."
         },
         {
           "type": "h2",

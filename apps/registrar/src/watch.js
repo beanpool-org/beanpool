@@ -290,9 +290,10 @@ export const brisbaneDay = (s) => new Date((s + BRISBANE_UTC_OFFSET_S) * 1000).t
 const brisbaneHour = (s) => new Date((s + BRISBANE_UTC_OFFSET_S) * 1000).getUTCHours();
 
 // Once per Brisbane day, in its 08:00 hour: how our servers are, the names, what is raised, and every event the digest
-// held since the last one (they are then marked sent: their words are in this line). A conditional write decides which
-// tick sends it. A day whose 08:00 hour had no tick gets no line, late or otherwise: that silence is the sign the cron,
-// the Worker or ntfy is broken.
+// held since the last one — in a message of its own, never muted; those events are marked sent once it is sent
+// (alerts.js enqueueSummary, flush). A conditional write decides which tick makes it. A send that fails is tried again
+// with the rest, 5 minutes on; a day whose 08:00 hour had no tick gets no line, late or otherwise: that silence is the
+// sign the cron, the Worker or ntfy is broken.
 export async function dailyLine(env, targets, now) {
     if (brisbaneHour(now) !== DAILY_HOUR) return false;
     const day = brisbaneDay(now);
@@ -316,18 +317,15 @@ export async function dailyLine(env, targets, now) {
     lines.push(`${live} ${live === 1 ? 'name' : 'names'} live${waiting ? `, ${waiting} waiting for your approval` : ''}.`);
     const raised = (await env.DB.prepare('SELECT key, detail FROM alert_state ORDER BY since').all()).results || [];
     lines.push(raised.length ? `Raised now (${raised.length}): ${raised.map((r) => r.detail).join(' | ')}` : 'Nothing raised.');
-    const held = (await env.DB.prepare('SELECT id, at, body FROM alert_outbox WHERE held=1 AND sent_at IS NULL ORDER BY id').all()).results || [];
-    if (held.length) {
-        lines.push(`Held for this summary (${held.length}):`);
-        for (const h of held) lines.push(`- ${when(h.at)}: ${h.body}`);
-    }
-    await alerts.enqueueEvent(env, {
-        category: 'summary', priority: alerts.PRIORITY.min, tag: 'bar_chart', name: null,
-        title: `Daily: ${up} of ${targets.length} servers answer, ${live} ${live === 1 ? 'name' : 'names'} live${held.length ? `, ${held.length} held` : ''}`,
-        body: alerts.listBody(lines),
+    // A message of its own; the held events it carries are those before its row, marked sent only once it is sent.
+    await alerts.enqueueSummary(env, async (id) => {
+        const held = (await env.DB.prepare('SELECT id, at, body FROM alert_outbox WHERE held=1 AND sent_at IS NULL AND id < ? ORDER BY id').bind(id).all()).results || [];
+        if (held.length) lines.push(`Held for this summary (${held.length}):`, ...held.map((h) => `- ${when(h.at)}: ${h.body}`));
+        return {
+            title: `Daily: ${up} of ${targets.length} servers answer, ${live} ${live === 1 ? 'name' : 'names'} live${held.length ? `, ${held.length} held` : ''}`,
+            body: alerts.listBody(lines),
+        };
     });
-    // Their words are in the line now: sent with it (/admin shows them as in the daily summary).
-    if (held.length) await env.DB.prepare('UPDATE alert_outbox SET sent_at=? WHERE held=1 AND sent_at IS NULL AND id <= ?').bind(now, held[held.length - 1].id).run();
     if (typeof env.waitUntil === 'function') env.waitUntil(alerts.flush(env));
     else await alerts.flush(env);
     return true;

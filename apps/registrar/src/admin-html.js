@@ -449,7 +449,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             }
             const cap = st.cap || {};
             html += '<p style="font-size: 0.8rem; color: var(--text-muted);">This hour: ' + esc(cap.sent || 0) + ' sent (cap ' + esc(cap.per_hour || 20) + ', then one "muted" line; high and urgent still go, to 40)' + (cap.muted ? ', ' + esc(cap.muted) + ' muted' : '') + '.' +
-                (st.held_for_digest ? ' ' + esc(st.held_for_digest) + ' held for the daily summary (08:00 Brisbane): shown below.' : '') + '</p>';
+                (st.held_for_digest ? ' ' + esc(st.held_for_digest) + (ch.set ? ' held for the daily summary (08:00 Brisbane): shown below.' : ' held — no channel set, so no daily summary carries them yet: shown below.') : '') + '</p>';
             html += '<div class="alert-modes">' + Object.keys(CATEGORY_WORDS).map(function(c) {
                 const mode = (st.settings || {})[c] || 'on';
                 return '<span class="alert-mode">' + esc(CATEGORY_WORDS[c]) + ': ' + Object.keys(MODE_WORDS).map(function(m) {
@@ -467,7 +467,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const recent = st.recent || [];
             if (recent.length) {
                 html += '<div class="scroll-x" style="margin-top: 1rem;"><table class="admin-table"><thead><tr><th>When</th><th>Alert</th><th>State</th></tr></thead><tbody>' + recent.map(function(r) {
-                    const state = r.held ? (r.sent_at ? 'sent in the daily summary' : 'held for the daily summary') : r.sent_at ? 'sent' : r.muted ? 'muted (over the hourly cap)' : 'waiting';
+                    // A held event is marked sent only once the daily summary carrying it is sent.
+                    const state = r.held ? (r.sent_at ? 'sent in the daily summary' : ch.set ? 'held for the daily summary' : 'held — no channel set') : r.sent_at ? 'sent' : r.muted ? 'muted (over the hourly cap)' : 'waiting';
                     return '<tr><td style="font-family: monospace; font-size: 0.75rem; white-space: nowrap;">' + esc(when(r.at)) + '</td>' +
                         '<td><b style="color: #fff;">' + esc(r.title) + '</b><br><span style="font-size: 0.8rem;">' + esc(r.body) + '</span></td>' +
                         '<td style="font-size: 0.75rem;">' + esc(state) + '</td></tr>';

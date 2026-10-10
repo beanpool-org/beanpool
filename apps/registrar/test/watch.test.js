@@ -81,11 +81,13 @@ async function room({ env = {}, ticketKey = true } = {}) {
     const w = await world({ env: { ...WITH_NTFY, WATCH_TARGETS: TARGETS, ...(ticketKey ? { VAULT_TICKET_KEYS: vault.pubHex } : {}), ...env } });
     const sent = [];
     const requests = [];
+    const ntfy = { status: 200 };   // a test sets another to make the send fail (only what it accepts is in `sent`)
     const inner = globalThis.fetch;
     globalThis.fetch = async (input, init = {}) => {
         workerdFetchInit(init);
         const url = new URL(typeof input === 'string' ? input : input.url);
         if (url.hostname === 'ntfy.test') {
+            if (ntfy.status !== 200) return new Response('no', { status: ntfy.status });
             sent.push({ headers: Object.fromEntries(new Headers(init.headers).entries()), body: String(init.body ?? '') });
             return new Response('{"id":"x"}', { status: 200 });
         }
@@ -120,7 +122,7 @@ async function room({ env = {}, ticketKey = true } = {}) {
         w.restore();
         assert.deepEqual(lines.filter((l) => l.includes(SECRET)), [], 'no console line carries the topic or the token');
     };
-    return { w, servers, vault, mullum: servers['mullum.watch.test'], global: servers['global.watch.test'], sent, requests, step, at, tick, admin, titles, lines, done };
+    return { w, servers, vault, mullum: servers['mullum.watch.test'], global: servers['global.watch.test'], sent, requests, ntfy, step, at, tick, admin, titles, lines, done };
 }
 
 test('down: nothing after one failed look, urgent after two, nothing more until 24 h ("still"), cleared once', async () => {
@@ -460,6 +462,74 @@ test('the daily line: at 08:00 Brisbane (22:00 UTC, winter and summer alike — 
         assert.equal(await dailies(Date.UTC(2026, 6, 2, 23, 0, 0), 3), 0, '09:00 Brisbane, the 08:00 hour missed');
         assert.equal(watch.brisbaneDay(Date.UTC(2026, 6, 1, 22, 0, 0) / 1000), '2026-07-02');
         assert.equal(watch.brisbaneDay(Date.UTC(2026, 6, 1, 13, 59, 0) / 1000), '2026-07-01');
+    } finally { r.done(); }
+});
+
+// The digest's held events, as /admin's own actions are when that category is on digest.
+const holdSome = (r, n, at) => {
+    const ins = r.w.sqlite.prepare("INSERT INTO alert_outbox (at, category, priority, tag, title, body, held) VALUES (?, 'admin', 2, 'white_check_mark', ?, ?, 1)");
+    for (let i = 0; i < n; i++) ins.run(Math.floor(at / 1000), `You paused held${i}`, `You paused held${i}.beanpool.org.`);
+};
+
+test('the daily line is a message of its own: never batched behind a retry, never muted by the cap; what it carries is marked sent only once it is', async () => {
+    const r = await room();
+    try {
+        const heldNow = async () => (await r.admin('alerts')).body.held_for_digest;
+        // 30 held; a name request at 21:56 whose send fails, so it waits for its retry at 22:01.
+        r.at(Date.UTC(2026, 9, 10, 21, 50, 0));
+        holdSome(r, 30, Date.now());
+        r.at(Date.UTC(2026, 9, 10, 21, 56, 0));
+        r.ntfy.status = 503;
+        assert.equal((await r.w.claim(await makeKey(), { name: 'sydney', community_name: 'Sydney Commons' })).body.status, 'pending');
+        r.ntfy.status = 200;
+        r.at(Date.UTC(2026, 9, 10, 21, 55, 0));
+        await r.tick();   // 22:00 UTC = 08:00 Brisbane: the line is made, but the channel waits for its retry
+        assert.deepEqual(r.titles(), []);
+        assert.equal(await heldNow(), 30, 'not marked sent before it is sent');
+        await r.tick();   // 22:05: the line alone, then what else waits
+        assert.deepEqual(r.titles(), ['Daily: 3 of 3 servers answer, 0 names live, 30 held', 'Name request: sydney']);
+        assert.equal(r.sent[0].headers.priority, '1');
+        assert.match(r.sent[0].body, /\nHeld for this summary \(30\):\n- 2026-10-10 21:50 UTC: You paused held0\.beanpool\.org\.\n/);
+        assert.equal(await heldNow(), 0, 'marked sent once it is');
+
+        // Over the hour's cap (20 sent in the 08:00 hour already): the line still goes, as itself.
+        holdSome(r, 2, Date.now());
+        const hour = Math.floor(Date.UTC(2026, 9, 11, 22, 0, 0) / 1000);
+        r.w.sqlite.prepare("UPDATE alert_channel SET hour_start=?, hour_sent=20, hour_muted=0, hour_line=0 WHERE channel='ntfy'").run(hour);
+        r.at(Date.UTC(2026, 9, 11, 21, 55, 0));
+        r.sent.length = 0;
+        await r.tick();
+        assert.deepEqual(r.titles(), ['Daily: 3 of 3 servers answer, 0 names live, 2 held'], 'never muted');
+        assert.equal(await heldNow(), 0);
+
+        // A send that fails: nothing marked; tried again 5 minutes on, once.
+        holdSome(r, 2, Date.now());
+        r.at(Date.UTC(2026, 9, 12, 21, 55, 0));
+        r.sent.length = 0;
+        r.ntfy.status = 500;
+        await r.tick();
+        assert.equal(await heldNow(), 2, 'its send failed: still held');
+        r.ntfy.status = 200;
+        await r.tick(); await r.tick();
+        assert.deepEqual(r.titles(), ['Daily: 3 of 3 servers answer, 0 names live, 2 held'], 'sent at the retry, once');
+        assert.equal(await heldNow(), 0);
+    } finally { r.done(); }
+});
+
+test('no NTFY_URL: the daily line waits, and what the digest held stays held — never shown as sent', async () => {
+    const r = await room({ env: { NTFY_URL: '' } });
+    try {
+        r.at(Date.UTC(2026, 9, 10, 21, 50, 0));
+        holdSome(r, 3, Date.now());
+        await r.tick(); await r.tick();   // 22:00 UTC
+        const st = (await r.admin('alerts')).body;
+        assert.equal(st.held_for_digest, 3);
+        assert.deepEqual(st.recent.filter((x) => x.held).map((x) => x.sent_at), [null, null, null]);
+        // The next day's line supersedes the one not sent: one waits, never a pile of them.
+        r.at(Date.UTC(2026, 9, 11, 21, 55, 0));
+        await r.tick();
+        const waiting = r.w.sqlite.prepare("SELECT COUNT(*) AS n FROM alert_outbox WHERE category='summary' AND sent_at IS NULL").get().n;
+        assert.equal(waiting, 1);
     } finally { r.done(); }
 });
 

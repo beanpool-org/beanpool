@@ -107,7 +107,7 @@ signed `/v1/report`.
 | `<server> now runs …` | the version or commit changed since the last look; told once | default (the vault: high) |
 | `<server> restarted by its watchdog` | its health's `watchdog.recoveries` rose; told once | high |
 | `Our nodes run different releases` | our nodes (not the vault) on different versions for over a day; then daily while it lasts | default |
-| `Daily: …` | once a day in the 08:00 Brisbane hour (22:00 UTC all year: Queensland keeps no daylight saving): how each server answers and what it runs, names live, what is raised, and every event the digest held since the last one. A day whose 08:00 hour had no tick gets none: its absence says the cron, the Worker or ntfy is broken | min |
+| `Daily: …` | once a day in the 08:00 Brisbane hour (22:00 UTC all year: Queensland keeps no daylight saving): how each server answers and what it runs, names live, what is raised, and every event the digest held since the last one. A message of its own, never batched and never muted by the hourly cap; the held events it carries are marked sent only once it is sent (a failed send is tried again with the rest, 5 minutes on; with no `NTFY_URL` they stay held and `/admin` says so). A day whose 08:00 hour had no tick gets none: its absence says the cron, the Worker or ntfy is broken | min |
 
 The vault's report is believed only under `VAULT_TICKET_KEYS` (a var, not a secret: the ticket PUBLIC key(s) the apps
 are built with, 64 hex each, newest first, two at most), with strict Ed25519 (RFC 8032; a ZIP-215-only signature is

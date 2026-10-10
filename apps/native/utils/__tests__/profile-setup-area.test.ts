@@ -58,7 +58,12 @@ vi.mock('../../app/ThemeContext', async () => {
     const ctx = { colors: lightColors, theme: 'light' };
     return { useTheme: () => ctx, useStyles: (f: (t: unknown) => unknown) => f(ctx) };
 });
-vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
+vi.mock('react-native-safe-area-context', () => ({
+    useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }),
+    // The edges it pads, so a test can see a screen asked for the status bar's inset.
+    SafeAreaView: ({ children, edges }: { children?: unknown; edges?: string[] }) => createElement('div', { 'data-safe-area-edges': (edges ?? ['all']).join(',') }, children as any),
+}));
+vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'uuid' }));
 vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
 vi.mock('../../components/OnboardingGuide', () => ({ OnboardingGuide: () => createElement('div', { 'data-testid': 'guide' }) }));
@@ -398,7 +403,7 @@ describe('Settings → Your area (§3.5)', () => {
         expect(document.querySelector('[data-testid="your-area-clear"]')).toBeNull();
     });
 
-    it('Not set: no Clear; Change is the same step, its Cancel writes nothing and goes back', async () => {
+    it('Not set: no Clear; the same step below it, whose Cancel writes nothing and goes back', async () => {
         answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: null } };
         await render(GLOBAL_FEATURES, YourAreaScreen as () => unknown);
         expect(document.querySelector('[data-testid="your-area-current"]')?.textContent).toBe('Not set');
@@ -416,6 +421,21 @@ describe('Settings → Your area (§3.5)', () => {
         answer = { status: 503, body: {} };
         await render(GLOBAL_FEATURES, YourAreaScreen as () => unknown);
         expect(document.querySelector('[data-testid="your-area-current"]')?.textContent).toBe("Couldn't check right now.");
+    });
+
+    it("has the standard header: a Back button and the screen's name, under the status bar's inset (review N4)", async () => {
+        answer = { status: 200, body: { publicKey: IDENTITY.publicKey, area: null } };
+        await render(GLOBAL_FEATURES, YourAreaScreen as () => unknown);
+        // react-native-safe-area-context's SafeAreaView, padding the top: React Native's gives no inset on Android.
+        expect(document.querySelector('[data-safe-area-edges]')?.getAttribute('data-safe-area-edges')).toBe('top,left,right');
+        const headings = Array.from(document.querySelectorAll('[role="heading"]')).map((h) => h.textContent);
+        expect(headings[0]).toBe('Your area');
+        const back = document.querySelector('[aria-label="Back"]') as HTMLElement;
+        expect(back).not.toBeNull();
+        expect(back.querySelector('[data-icon="arrow-left"]')).not.toBeNull();
+        nav.router.back.mockClear();
+        await act(async () => { back.click(); });
+        expect(nav.router.back).toHaveBeenCalledTimes(1);
     });
 });
 

@@ -3,9 +3,16 @@
  * near their area (`features.nearbyListings`). Shows "About 10 km around <town or lat, lng>" or "Not set", with Clear,
  * and below it the signup's "Roughly where are you?" (components/AreaPicker.tsx) to set a new one, or Cancel. Both
  * write the signed `POST /api/community/me/area`; the current value is the node's (`GET /api/community/me`).
+ *
+ * The root stack draws no headers, so this screen draws the standard one, as find-community.tsx does: ← Back and its
+ * name, under react-native-safe-area-context's top inset (React Native's own SafeAreaView gives none on Android under
+ * edge-to-edge), and the bottom inset under the scroll. Light only, like the signup wizard whose step it shows.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
 import { router, ErrorBoundary } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -19,6 +26,7 @@ import { colors, palette } from '../constants/colors';
 export default function YourAreaScreen() {
     const { identity } = useIdentity();
     const nodeProfile = useNodeProfile();
+    const insets = useSafeAreaInsets();
     const [url, setUrl] = useState<string | null>(null);
     // undefined: not read yet, or the node couldn't be asked.
     const [area, setArea] = useState<MemberArea | null | undefined>(undefined);
@@ -62,10 +70,17 @@ export default function YourAreaScreen() {
     const current = !loaded ? 'Checking…' : area === undefined ? "Couldn't check right now." : describeArea(area, place);
 
     return (
-        <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+            <StatusBar style="light" />
+            <View style={styles.header}>
+                <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+                    <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.inverse} />
+                </Pressable>
+                <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">Your area</Text>
+                <View style={styles.headerSpacer} />
+            </View>
+            <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom, 16) + 32 }]} keyboardShouldPersistTaps="handled">
                 <View style={styles.card}>
-                    <Text style={styles.label}>Your area</Text>
                     <Text style={styles.current} testID="your-area-current">{current}</Text>
                     {area && (
                         <Pressable
@@ -103,9 +118,12 @@ export default function YourAreaScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.page },
-    scroll: { padding: 16, paddingBottom: 48 },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: colors.text.heading },
+    backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
+    headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
+    headerSpacer: { width: 48 },
+    scroll: { padding: 16 },
     card: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, marginBottom: 12 },
-    label: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, textTransform: 'uppercase', marginBottom: 4 },
     current: { fontSize: 17, fontWeight: '700', color: colors.text.heading, marginBottom: 8 },
     clearBtn: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: palette.red600 || '#dc2626', alignItems: 'center', justifyContent: 'center', padding: 12 },
     clearText: { color: palette.red600 || '#dc2626', fontSize: 15, fontWeight: '700' },

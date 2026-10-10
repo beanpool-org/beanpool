@@ -34,6 +34,7 @@ import { AutomationTokensPanel } from './AutomationTokensPanel';
 import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
+import { AlertsPanel } from './AlertsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -1332,6 +1333,11 @@ export function ApplianceSection({
                     {/* Backups off the server (the owners' card: the node answers anyone else 403) */}
                     <SectionErrorBoundary sectionName="Backups off the server" resetKey={activeNode.id}>
                         <OffboxBackupsPanel activeNode={activeNode} />
+                    </SectionErrorBoundary>
+
+                    {/* This server's alerts (the owners' card: the node answers anyone else 403) */}
+                    <SectionErrorBoundary sectionName="Alerts" resetKey={activeNode.id}>
+                        <AlertsPanel activeNode={activeNode} />
                     </SectionErrorBoundary>
 
                     {/* Standby Live Backup / Replication Configuration (Standby) vs Replication Access (Primary) */}

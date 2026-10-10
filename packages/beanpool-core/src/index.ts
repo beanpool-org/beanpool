@@ -51,3 +51,4 @@ export * from './recovery-kit.js';
 export * from './home-tips.js';
 export * from './home-frame.js';
 export * from './sky.js';
+export * from './group-crypto.js';

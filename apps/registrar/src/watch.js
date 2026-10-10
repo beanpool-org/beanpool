@@ -283,11 +283,12 @@ async function unwatched(env, targets) {
 export const brisbaneDay = (s) => new Date((s + BRISBANE_UTC_OFFSET_S) * 1000).toISOString().slice(0, 10);
 const brisbaneHour = (s) => new Date((s + BRISBANE_UTC_OFFSET_S) * 1000).getUTCHours();
 
-// Once per Brisbane day, from 08:00: how our servers are, the names, what is raised, and every event the digest held
-// since the last one (they are then marked sent: their words are in this line). A conditional write decides which
-// tick sends it.
+// Once per Brisbane day, in its 08:00 hour: how our servers are, the names, what is raised, and every event the digest
+// held since the last one (they are then marked sent: their words are in this line). A conditional write decides which
+// tick sends it. A day whose 08:00 hour had no tick gets no line, late or otherwise: that silence is the sign the cron,
+// the Worker or ntfy is broken.
 export async function dailyLine(env, targets, now) {
-    if (brisbaneHour(now) < DAILY_HOUR) return false;
+    if (brisbaneHour(now) !== DAILY_HOUR) return false;
     const day = brisbaneDay(now);
     const w = await env.DB.prepare(`INSERT INTO watch_marks (key, value) VALUES ('daily', ?)
         ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE watch_marks.value IS NOT excluded.value`).bind(day).run();

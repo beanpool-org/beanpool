@@ -276,13 +276,14 @@ function measure(size: string): Row[] {
  * the same run (absolute ms bounds failed on CI's shared runners and on a loaded Mac, 5 of 6 and 12 of 18 rows, the
  * deciding review of b97677d5):
  * - 6× the design's lean set pass (leanSet, DESIGN-global-sync-by-area §2.6): measured 1.5–4.0×, the most at the small
- *   town, where the set's own, tied, standing and board statements weigh most. The regression the row was added for (a
- *   members join per listing and a sort inside the near pass) was 22×.
+ *   town, where the set's own, tied, standing and board statements weigh most.
  * - 0.6× the read the set replaces, an old phone's nearest 500 within 250 km with every row (fullNear500), wherever any
  *   listing is within 250 km: measured 0.12–0.33×. With nothing near, both are a few fixed statements, so only the
  *   first bound holds there.
- * The load-proof guard against the regression's cause is test-sync-nearby's plan check: every statement of a set reads
- * an index, never a table of people.
+ * What these rows guard: a lost index or a read of a whole table (losing the indexes put the 20k small town at 15.9×
+ * lean, red). Not the per-listing members join the first version had: put back today it stays inside both bounds
+ * (158/158 green, the 100k busy town 11 → 17 ms; the deciding review of #1739). The guard against that join is
+ * test-sync-nearby's plan check, which is load-proof: every statement of a set reads an index, never a table of people.
  */
 const SET_LEAN_TIMES = 6, SET_FULL_TIMES = 0.6;
 /** The design's lean set pass (geosync-measure/measure.mts setIds): the nearest ids within the radius, nothing else. */

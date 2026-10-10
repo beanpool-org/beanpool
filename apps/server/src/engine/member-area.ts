@@ -19,13 +19,14 @@
  * - Kept in members.area_lat / area_lng / area_updated_at, never in members.lat / lng: those are an enterprise's public,
  *   precise, signer-stamped map location, read by the map and the treasury routes.
  *
- * Every reader of the three columns: this module (the member's own read, the People list's distances), engine/posts.ts
- * (a placeless listing's place, above), the replication export and import (beanpool-engine sync.ts, engine/sync.ts: a
+ * Every reader of the three columns: this module (the member's own read, the People list's distances, and the map that
+ * decides which members a listing's push reaches on a node that syncs by area, below), engine/posts.ts (a placeless
+ * listing's place, above), the replication export and import (beanpool-engine sync.ts, engine/sync.ts: a
  * standby and so a take-over, the same trust as the database file), and file and sealed backups (the database itself).
  * Nothing else reads them: not the member directory, profiles, federation, the public directory, the map or the
  * activity feed.
  */
-import { db } from '../db/db.js';
+import { db, afterTransactionCommit } from '../db/db.js';
 import { haversineKm, roundToArea } from '@beanpool/engine';
 import { bumpMembersVersion } from './versions.js';
 
@@ -68,6 +69,8 @@ export function setMemberArea(publicKey: string, point: { lat: number; lng: numb
         .run(lat, lng, point ? now : null, now, publicKey);
     // The People list's ETag: a list read with a point must not answer 304 with the old distances.
     bumpMembersVersion();
+    // And the listing pushes: from the next event on, this member hears what is near the new area.
+    refreshMemberAreas([publicKey]);
     return readMemberArea(publicKey);
 }
 
@@ -98,4 +101,44 @@ export function importedArea(rm: { areaLat?: unknown; areaLng?: unknown; areaUpd
     if (!isPoint(rm.areaLat, rm.areaLng)) return [null, null, null];
     const at = typeof rm.areaUpdatedAt === 'string' && rm.areaUpdatedAt ? rm.areaUpdatedAt : null;
     return [roundToArea(rm.areaLat), roundToArea(rm.areaLng as number), at];
+}
+
+/**
+ * Every member's area, in memory, for the listing pushes of a node that syncs by area (state-engine.ts listingReach,
+ * DESIGN-global-sync-by-area §2.5): one lookup per socket per listing event, never a read of the table. Loaded from
+ * `members` at boot (loadMemberAreas) or on first use, and kept by every writer of the area: setMemberArea, the
+ * replication import (engine/sync.ts), a re-key (engine/key-move.ts moveMemberKeyRows moves the row to the new key, on
+ * the main server and on a standby following it) and a member's removal (a prune or a Delete account clears it;
+ * state-engine.ts refreshes the key on user_pruned), each through refreshMemberAreas.
+ */
+let areasByKey: Map<string, { lat: number; lng: number }> | null = null;
+
+/** Loads (or loads again) every member's area from the table. */
+export function loadMemberAreas(): void {
+    const rows = db.prepare('SELECT public_key, area_lat, area_lng FROM members WHERE area_lat IS NOT NULL AND area_lng IS NOT NULL').all() as
+        { public_key: string; area_lat: number; area_lng: number }[];
+    areasByKey = new Map(rows.map(r => [r.public_key, { lat: r.area_lat, lng: r.area_lng }]));
+}
+
+/** A member's area as the pushes see it (the map above), or undefined. */
+export function memberAreaFor(publicKey: string): { lat: number; lng: number } | undefined {
+    if (!areasByKey) loadMemberAreas();
+    return areasByKey!.get(publicKey);
+}
+
+/**
+ * Reads these members' areas from the table into the map, after any write of them: once the transaction in hand (an
+ * import's) commits, so one that unwinds leaves the map as the table is. Nothing before the map is loaded.
+ */
+export function refreshMemberAreas(keys: Iterable<string>): void {
+    const list = [...keys];
+    afterTransactionCommit(() => {
+        if (!areasByKey) return;
+        const read = db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?');
+        for (const key of list) {
+            const row = read.get(key) as { area_lat: number | null; area_lng: number | null } | undefined;
+            if (row && row.area_lat != null && row.area_lng != null) areasByKey.set(key, { lat: row.area_lat, lng: row.area_lng });
+            else areasByKey.delete(key);
+        }
+    });
 }

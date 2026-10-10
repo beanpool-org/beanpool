@@ -38,7 +38,18 @@ import {
     type EventRsvpStatus
 } from '@beanpool/engine';
 
-type BroadcastFn = (event: any, recipients?: string[]) => void;
+type BroadcastFn = (event: any, recipients?: string[], opts?: { listingParties?: string[] }) => void;
+
+/**
+ * Both sides of a listing's open deals (asked for, or taken and not yet done). A removal closes those deals before its
+ * `post_removed` goes out, so it names them to the broadcast, which then reaches them wherever they are on a node that
+ * syncs listings by area (state-engine.ts listingReach). Read before the removal's transaction.
+ */
+function openDealSides(postId: string): string[] {
+    const rows = db.prepare("SELECT buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending')")
+        .all(postId) as { buyer_pubkey: string; seller_pubkey: string }[];
+    return [...new Set(rows.flatMap(r => [r.buyer_pubkey, r.seller_pubkey]))];
+}
 
 /**
  * A listing with a keeper's wage owed on it (deferred_wage_claims, pending): taking it down cancels the claim, a row a
@@ -666,6 +677,7 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     if (!isDirectAuthor) assertNodeMember(callerPublicKey);
 
     const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'`).get(id) as any;
+    const dealSides = openDealSides(id);
     if (pendingTx && pendingTx.c > 0) throw new Error('This post has a deal in escrow — complete or cancel the deal before deleting it');
 
     let removed = false;
@@ -706,7 +718,7 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     // The audience rides along so the apps can tell a public removal, which they apply without fetching, from a
     // group or direct one, which keeps the doorbell (@beanpool/core `livePostChange`). A socket without a member
     // gets the bare `{ type }` doorbell either way. NULL is a row from before audience scoping: public.
-    broadcast({ type: 'post_removed', id, audienceScope: postRow.audience_scope ?? 'public' }, recipients);
+    broadcast({ type: 'post_removed', id, audienceScope: postRow.audience_scope ?? 'public' }, recipients, { listingParties: dealSides });
     // Cancelling an event tells everyone who said they were going (§2.2). The chat turns read-only on its
     // own: event-thread.ts reads `event_state`, which the transaction above has already set to 'cancelled'.
     if (postRow.type === 'event') {
@@ -1401,6 +1413,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
     // listing with none is rows alone, so a moderator can take it down while the Commons pot is unknown, when every
     // conservingTransaction refuses at its pre-flush (#1465 re-review, NB-3). One with a held deal still refuses then.
     const holdsDeal = !!transferFn && !!db.prepare("SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1").get(postId);
+    const dealSides = openDealSides(postId);
     const runTx = conservingTxn && holdsDeal ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
     runTx(() => {
         if (transferFn) {
@@ -1452,7 +1465,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
     if (!deleted) return false;
     broadcast({ type: 'post_removed', id: postId, audienceScope: audienceRow?.audience_scope ?? 'public' }, audienceRow?.audience_scope === 'direct'
         ? Array.from(new Set([audienceRow.author_pubkey, audienceRow.target_pubkey, audienceRow.assigned_to].filter(Boolean) as string[]))
-        : audienceRecipients(audienceRow ?? {}));
+        : audienceRecipients(audienceRow ?? {}), { listingParties: dealSides });
     if (eventRow) notifyEventChange(push, 'cancelled', postId, eventRow.title, 'SYSTEM');
     return true;
 }

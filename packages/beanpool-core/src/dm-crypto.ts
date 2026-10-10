@@ -140,13 +140,25 @@ export function dmPublicKeyOf(myEdPrivHex: string): string {
     return bytesToHex(ed25519.getPublicKey(toEd25519Seed(hexToBytes(myEdPrivHex))));
 }
 
+/**
+ * My X25519 secret, from my Ed25519 private key in either spelling: the one derivation direct messages and group keys
+ * (group-crypto.ts) both use. Normalised, not length-checked: the X25519 secret must come from the seed, and a
+ * PKCS8-wrapped key silently derives a different one.
+ */
+export function identityX25519Secret(myEdPrivHex: string): Uint8Array {
+    return ed25519.utils.toMontgomerySecret(toEd25519Seed(hexToBytes(myEdPrivHex)));
+}
+
+/** A member's X25519 public key, from their Ed25519 public key, hex: the other half of identityX25519Secret. */
+export function identityX25519Public(edPubHex: string): Uint8Array {
+    return ed25519.utils.toMontgomery(hexToBytes(edPubHex));
+}
+
 /** The conversation's key. The same for format 2 and 3, and for both people. */
 export function deriveDmKey(ctx: DmKeyContext): Uint8Array {
     try {
-        // Normalised, not length-checked: the X25519 secret must come from the seed, and a PKCS8-wrapped key silently
-        // derives a different one.
-        const myXPriv = ed25519.utils.toMontgomerySecret(toEd25519Seed(hexToBytes(ctx.myEdPrivHex)));
-        const peerXPub = ed25519.utils.toMontgomery(hexToBytes(ctx.peerEdPubHex));
+        const myXPriv = identityX25519Secret(ctx.myEdPrivHex);
+        const peerXPub = identityX25519Public(ctx.peerEdPubHex);
         const shared = x25519.getSharedSecret(myXPriv, peerXPub);
         return hkdf(sha256, shared, utf8ToBytes(ctx.conversationId), HKDF_INFO, 32);
     } catch (e: any) {

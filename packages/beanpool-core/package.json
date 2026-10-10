@@ -44,6 +44,11 @@
       "types": "./dist/door-work-vectors.d.ts",
       "import": "./dist/door-work-vectors.js",
       "default": "./dist/door-work-vectors.js"
+    },
+    "./group-line-vectors": {
+      "types": "./dist/group-line-vectors.d.ts",
+      "import": "./dist/group-line-vectors.js",
+      "default": "./dist/group-line-vectors.js"
     }
   },
   "scripts": {

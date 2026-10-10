@@ -19,8 +19,9 @@ import { darkColors, lightColors } from '../../constants/colors';
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', radio: 'radio' };
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityLabel, accessibilityRole, accessibilityState, disabled, value, onChangeText } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, accessibilityState, disabled, value, onChangeText, testID } = props;
         const attrs: Record<string, unknown> = {};
+        if (testID) attrs['data-testid'] = testID;
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
@@ -133,6 +134,8 @@ function contrast(fg: string, bg: string): number {
 
 beforeEach(() => {
     theme.dark = false;
+    keyboard.height = 0;
+    keyboard.isVisible = false;
     node.list = { decisions: [card()], canPropose: true, rollSize: 3 };
     node.proposed = [];
     node.propose = null;
@@ -148,6 +151,31 @@ describe('a vote card', () => {
         await render();
         expect(textEl(/^Pay 40 Beans to Bob$/)).toBeTruthy();
         expect(textEl(/^Bob fixed the oven door last week\.$/), "the proposer's words").toBeTruthy();
+    });
+});
+
+describe('the propose sheet and the keyboard', () => {
+    // components/useModalKeyboardLift.ts: a KeyboardAvoidingView inside an RN Modal collapsed a sheet to its title at
+    // 320 dp; the sheet is lifted by the keyboard's height from the root provider's state instead.
+    it('no KeyboardAvoidingView in the Modal; the sheet is lifted by the keyboard and fits what is left above it', async () => {
+        await render();
+        await press(button(/^Propose a vote$/));
+        expect(host.querySelector('[data-modal]'), 'the sheet is open').toBeTruthy();
+        expect(host.querySelector('[data-modal] [data-kav]'), 'no KeyboardAvoidingView inside the Modal').toBeNull();
+        const down = styleOf(host.querySelector('[data-testid="propose-scoped-sheet"]'));
+        expect(down.marginBottom ?? 0).toBe(0);
+        expect(down.maxHeight).toBeCloseTo(569 * 0.92);
+        await act(async () => { root.unmount(); });
+        host.remove();
+
+        keyboard.height = 300;
+        keyboard.isVisible = true;
+        await render();
+        await press(button(/^Propose a vote$/));
+        const up = styleOf(host.querySelector('[data-testid="propose-scoped-sheet"]'));
+        expect(up.marginBottom).toBe(300);
+        // The window less the keyboard and the gap kept under the status bar (inset 24 + 8).
+        expect(up.maxHeight).toBe(569 - 300 - 32);
     });
 });
 

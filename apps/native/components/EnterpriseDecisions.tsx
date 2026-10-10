@@ -8,7 +8,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, TextInput, Modal, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
     scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE,
@@ -16,6 +16,7 @@ import {
 } from '@beanpool/core';
 import { getEnterpriseDecisions, proposeEnterpriseDecision, voteEnterpriseDecision } from '../utils/db';
 import { useTheme } from '../app/ThemeContext';
+import { useModalKeyboardLift } from './useModalKeyboardLift';
 
 export interface EnterpriseDecisionsProps {
     treasuryKey: string;
@@ -123,6 +124,9 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycle, onCl
 }) {
     const { colors } = useTheme();
     const s = styles(colors);
+    // Lifted by the keyboard's height, never a KeyboardAvoidingView inside this Modal: see components/useModalKeyboardLift.
+    const insets = useSafeAreaInsets();
+    const lift = useModalKeyboardLift(insets.top + 8, 0.92);
     const effects = scopedEffectsFor(lifecycle);
     const [effect, setEffect] = useState<ScopedEffect>('pay_out');
     const [who, setWho] = useState<string | null>(null);
@@ -156,8 +160,8 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycle, onCl
 
     return (
         <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-            <KeyboardAvoidingView behavior="padding" style={s.backdrop}>
-                <View style={s.sheet}>
+            <View style={[s.backdrop, { paddingTop: insets.top + 8 }]}>
+                <View style={[s.sheet, { maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="propose-scoped-sheet">
                     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
                         <Text style={s.sheetTitle} accessibilityRole="header">Propose a vote</Text>
                         <Text style={s.note}>Everyone on the roll votes. It runs 7 days, or ends sooner once the answer can't change.</Text>
@@ -214,7 +218,7 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycle, onCl
                         </View>
                     </ScrollView>
                 </View>
-            </KeyboardAvoidingView>
+            </View>
         </Modal>
     );
 }
@@ -238,7 +242,8 @@ const styles = (colors: any) => StyleSheet.create({
     proposeBtn: { marginTop: 12, minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
     proposeText: { color: colors.brand.primary, fontWeight: '700', fontSize: 15 },
     backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-    sheet: { backgroundColor: colors.surface.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, maxHeight: '92%' },
+    // maxHeight comes from useModalKeyboardLift: 92% of the screen, or what is left above the keyboard.
+    sheet: { backgroundColor: colors.surface.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, flexShrink: 1 },
     sheetTitle: { fontSize: 18, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
     fieldLabel: { fontSize: 13, fontWeight: '700', color: colors.text.heading, marginTop: 10, marginBottom: 6 },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

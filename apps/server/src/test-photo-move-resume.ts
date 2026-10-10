@@ -18,7 +18,8 @@
  *   2. while the cause lasts, the timer retries with a doubling wait (measured gaps), not every turn;
  *   3. once the cause is gone, the timer finishes the move without a restart: the old column dropped, Ann's and Eve's
  *      photos in member_photos as they were (NEW, never an older copy), their rows stamped so a standby's delta carries them;
- *      the members list the phone syncs now gives Ann's own row an avatar, which /api/avatar serves;
+ *      the members list the phone syncs now gives Ann's own row an avatar, which /api/avatar serves; an ETag a phone
+ *      took in the window is not answered 304 (the deciding review's N5);
  *   4. memberPhotoResumeWait: a short gap while rows are left, doubling while it stops, never past an hour;
  *   5. a standby (NODE_ROLE=backup, a child process on its own data directory) never resumes its move.
  *
@@ -201,6 +202,9 @@ async function main(): Promise<void> {
             `while it keeps stopping the resumed move retries with a doubling wait (${attempts.length - 1} turns, gaps ${gaps.join('/')} ms)`);
 
         // ── 3. The cause is gone: the timer finishes the move without a restart ──
+        // The list as a phone holds it just before (whole and delta), with its ETag: nothing but the move changes it after.
+        const before = await request(ann, 'GET', '/api/members');
+        const beforeDelta = await request(ann, 'GET', '/api/members?updatedAfter=2025-01-01T00:00:00.000Z');
         db.exec('DROP TRIGGER injected_failure');
         const deadline = Date.now() + 10_000;
         while (hasColumn() && Date.now() < deadline) await sleep(100);
@@ -219,6 +223,15 @@ async function main(): Promise<void> {
             `the members list the phone syncs gives Ann's own row her avatar (${list.status} ${String(mine?.avatarUrl).slice(0, 50)})`);
         const served = mine?.avatarUrl ? await fetch(`${base}${mine.avatarUrl}`) : null;
         assert(served?.status === 200 && (served.headers.get('content-type') ?? '').startsWith('image/'), `and /api/avatar serves it (${served?.status} ${served?.headers.get('content-type')})`);
+        // Each turn that cleared rows bumped the members' version, so a phone sending the ETag it got in the window is
+        // given the list again, now with Ann's photo at its real reference, not a 304 for the stand-in it holds.
+        const again = await request(ann, 'GET', '/api/members', undefined, before.etag ? { 'If-None-Match': before.etag } : {});
+        const againDelta = await request(ann, 'GET', '/api/members?updatedAfter=2025-01-01T00:00:00.000Z', undefined,
+            beforeDelta.etag ? { 'If-None-Match': beforeDelta.etag } : {});
+        assert(!!before.etag && !!beforeDelta.etag && urlIn(before, ann) === inWindowUrl
+            && again.status === 200 && typeof urlIn(again, ann) === 'string' && urlIn(again, ann) !== inWindowUrl && !String(urlIn(again, ann)).includes('v=inline')
+            && againDelta.status === 200 && urlIn(againDelta, ann) === urlIn(again, ann),
+            `a members ETag taken in the window is not answered 304 after the move, whole (${again.status}) or delta (${againDelta.status}); Ann's URL now carries her photo's reference (${String(urlIn(again, ann)).slice(-20)})`);
         const turnsAtDone = attempts.length;
         await sleep(600);
         assert(attempts.length === turnsAtDone && !hasColumn(), `once done, no more turns`);

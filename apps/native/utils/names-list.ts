@@ -41,7 +41,7 @@ import {
 } from '@beanpool/core';
 import { buildSignedHeaders, bytesToHex } from './crypto';
 import { communityAddress } from './push-pins';
-import type { BeanPoolIdentity } from './identity';
+import { KEY_ITEM_OPTIONS, type BeanPoolIdentity } from './identity';
 import type { HealthExceptionsBody, HealthLogLine } from './community-health';
 
 export const NAMES_PATH = '/api/names';
@@ -279,7 +279,7 @@ export const DEVICE_NAMES_STORE: NamesPinStore = {
     getItem: (k) => AsyncStorage.getItem(k),
     setItem: (k, v) => AsyncStorage.setItem(k, v),
     getSecret: (name) => SecureStore.getItemAsync(name),
-    setSecret: (name, value) => SecureStore.setItemAsync(name, value),
+    setSecret: (name, value) => SecureStore.setItemAsync(name, value, KEY_ITEM_OPTIONS),
 };
 
 /**

@@ -74,6 +74,13 @@ describe("an enterprise's Decisions block (DESIGN-group-decisions S2)", () => {
         }));
     });
 
+    it('what it holds, rounded down to cents (review opus-1767 N8)', async () => {
+        vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 3 });
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={112.3125} lifecycle="ongoing" />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Propose a vote' }));
+        expect(screen.getByText('It holds 112.31 Beans now.')).toBeInTheDocument();
+    });
+
     it("a project: no vote takes it off its leader; the words are a project's", async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 3 });
         render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="bounded" />);

@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, TextInput, Modal, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
+    beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
     scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE,
     type RollPerson, type ScopedDecisionCard, type ScopedDecisionList, type ScopedEffect,
 } from '@beanpool/core';
@@ -194,7 +194,7 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycle, onCl
                                     value={amountText} onChangeText={setAmountText} keyboardType="decimal-pad" placeholder="40"
                                     placeholderTextColor={colors.text.muted} style={s.input} accessibilityLabel="Amount in Beans"
                                 />
-                                <Text style={s.note}>It holds {balance} Beans now.</Text>
+                                <Text style={s.note}>It holds {beansHeld(balance)} Beans now.</Text>
                                 {amountError && <Text style={s.error}>{amountError}</Text>}
                                 {amount && 'amount' in amount && person && <Text style={s.fee}>{payOutFeeWords(amount.amount, person.name)}</Text>}
                                 <Text style={s.note}>Paying a keeper is a wage: only out of what the {lifecycle === 'bounded' ? 'project' : 'enterprise'} has earned.</Text>

@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
+    beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
     scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE,
     type RollPerson, type ScopedDecisionCard, type ScopedDecisionList, type ScopedEffect,
 } from '@beanpool/core';
@@ -183,7 +183,7 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, lifecycl
                     <label className={label} htmlFor="scoped-amount">How many Beans?</label>
                     <input id="scoped-amount" className={input} inputMode="decimal" placeholder="40" value={amountText}
                         onChange={e => setAmountText(e.target.value)} aria-describedby="scoped-amount-help" />
-                    <p id="scoped-amount-help" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300">It holds {balance} Beans now.</p>
+                    <p id="scoped-amount-help" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300">It holds {beansHeld(balance)} Beans now.</p>
                     {amountError && <p className="m-0 mt-1 text-sm text-amber-700 dark:text-amber-400 break-words">{amountError}</p>}
                     {amount && 'amount' in amount && person && (
                         <p className="m-0 mt-1 text-sm text-nature-900 dark:text-nature-100 break-words" data-testid="scoped-fee">{payOutFeeWords(amount.amount, person.name)}</p>

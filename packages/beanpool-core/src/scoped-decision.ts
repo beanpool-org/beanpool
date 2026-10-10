@@ -49,6 +49,17 @@ export function beansAmount(n: number): string {
     return cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2).replace(/0$/, '');
 }
 
+const heldCents = (balance: number) => Math.floor(Math.max(0, balance) * 100 + 1e-6);
+
+/**
+ * What an account holds, rounded down to cents, as the node counts what it can pay ("112.31" for 112.3125): never a
+ * fraction of a cent, and never more than it can pay.
+ */
+export function beansHeld(balance: number): string {
+    return beansAmount(heldCents(balance) / 100);
+}
+
+
 /** What a pay-out of `amount` gives: the recipient's share and the Commons' 1.5%, in cents so they add up. */
 export function payOutSplit(amount: number): { receives: number; fee: number } {
     const cents = Math.floor(amount * 100 + 1e-6);
@@ -71,8 +82,7 @@ export function checkPayOutAmount(typed: string, held: number): { amount: number
     if (!/^\d+(\.\d{1,2})?$/.test(t)) return { error: 'Enter an amount in Beans, like 40 or 12.50.' };
     const amount = Number(t);
     if (!(amount > 0)) return { error: 'The amount must be more than 0 Beans.' };
-    const heldCents = Math.floor(Math.max(0, held) * 100 + 1e-6);
-    if (Math.round(amount * 100) > heldCents) return { error: `The enterprise holds ${beansAmount(heldCents / 100)} Beans, so it can't pay more than that.` };
+    if (Math.round(amount * 100) > heldCents(held)) return { error: `The enterprise holds ${beansHeld(held)} Beans, so it can't pay more than that.` };
     return { amount };
 }
 

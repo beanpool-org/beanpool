@@ -154,6 +154,14 @@ describe('a vote card', () => {
     });
 });
 
+describe('the pay-out form', () => {
+    it('what it holds, rounded down to cents (review opus-1767 N8)', async () => {
+        await render({ balance: 112.3125 });
+        await press(button(/^Propose a vote$/));
+        expect(textEl(/^It holds 112\.31 Beans now\.$/), textEl(/It holds/)?.textContent).toBeTruthy();
+    });
+});
+
 describe('the propose sheet and the keyboard', () => {
     // components/useModalKeyboardLift.ts: a KeyboardAvoidingView inside an RN Modal collapsed a sheet to its title at
     // 320 dp; the sheet is lifted by the keyboard's height from the root provider's state instead.

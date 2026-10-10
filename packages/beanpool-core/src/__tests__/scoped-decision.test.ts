@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    beansAmount, payOutSplit, payOutFeeWords, checkPayOutAmount, scopedEffectsFor, scopedEffectLabel, rollChoices,
+    beansAmount, beansHeld, payOutSplit, payOutFeeWords, checkPayOutAmount, scopedEffectsFor, scopedEffectLabel, rollChoices,
     scopedEffectWords, scopedTallyWords, scopedOutcomeWords, scopedClosesWords, type RollPerson,
 } from '../scoped-decision';
 
@@ -41,6 +41,15 @@ describe("an enterprise's keepers' vote, as the apps show it", () => {
         expect(checkPayOutAmount('1.005', 120)).toHaveProperty('error');
         expect(checkPayOutAmount('abc', 120)).toHaveProperty('error');
         expect(checkPayOutAmount('5', -10)).toHaveProperty('error');
+    });
+
+    it('what it holds, rounded down to cents, as the node counts what it can pay (review opus-1767 N8)', () => {
+        expect(beansHeld(112.3125)).toBe('112.31');
+        expect(beansHeld(0.339)).toBe('0.33');
+        expect(beansHeld(40)).toBe('40');
+        expect(beansHeld(39.999)).toBe('39.99');
+        expect(beansHeld(-5)).toBe('0');
+        expect(checkPayOutAmount('113', 112.3125)).toEqual({ error: "The enterprise holds 112.31 Beans, so it can't pay more than that." });
     });
 
     it("a project's collaborators can't vote the leader out; an enterprise's keepers can choose a new lead", () => {

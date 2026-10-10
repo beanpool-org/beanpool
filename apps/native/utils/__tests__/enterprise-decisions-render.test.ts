@@ -96,20 +96,20 @@ async function render(props: Partial<Parameters<typeof EnterpriseDecisions>[0]> 
     await act(async () => {
         root.render(createElement(EnterpriseDecisions, {
             treasuryKey: ENT, myPubkey: BOB, keepers: KEEPERS, balance: 100, lifecycle: 'ongoing', ...props,
-        }));
+        }) as unknown as Parameters<Root['render']>[0]);
     });
     await settle();
 }
 
 const styleOf = (el: Element | null | undefined): Record<string, any> => JSON.parse(el?.getAttribute('data-style') || '{}');
-const textEl = (re: RegExp) => [...host.querySelectorAll('span')].find(s => re.test(s.textContent || '') && ![...s.children].some(c => re.test(c.textContent || '')));
+const textEl = (re: RegExp) => Array.from(host.querySelectorAll('span')).find(s => re.test(s.textContent || '') && !Array.from(s.children).some(c => re.test(c.textContent || '')));
 const press = async (el: Element | null | undefined) => {
     expect(el, 'the control is there').toBeTruthy();
     await act(async () => { (el as HTMLElement).click(); });
     await settle();
 };
-const button = (re: RegExp) => [...host.querySelectorAll('button')].find(b => re.test(b.getAttribute('aria-label') || b.textContent || ''));
-const radio = (re: RegExp) => [...host.querySelectorAll('[role=radio]')].find(r => re.test(r.textContent || ''));
+const button = (re: RegExp) => Array.from(host.querySelectorAll('button')).find(b => re.test(b.getAttribute('aria-label') || b.textContent || ''));
+const radio = (re: RegExp) => Array.from(host.querySelectorAll('[role=radio]')).find(r => re.test(r.textContent || ''));
 const field = (label: string) => host.querySelector(`input[aria-label="${label}"]`) as HTMLInputElement;
 async function type(label: string, text: string) {
     const input = field(label);

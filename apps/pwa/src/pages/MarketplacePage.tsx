@@ -3047,10 +3047,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {/* Post-Release Review Modal */}
             {promptReviewForTx && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="w-full max-w-sm bg-white dark:bg-nature-900 rounded-3xl shadow-2xl border border-nature-200 dark:border-nature-800 overflow-hidden animate-in slide-in-from-bottom-4 zoom-in-95 duration-300">
+                    <div role="dialog" aria-modal="true" aria-labelledby="post-release-review-title" className="w-full max-w-sm bg-white dark:bg-nature-900 rounded-3xl shadow-2xl border border-nature-200 dark:border-nature-800 overflow-hidden animate-in slide-in-from-bottom-4 zoom-in-95 duration-300">
                         <div className="p-6 text-center">
-                            <div className="text-4xl mb-4">🎉</div>
-                            <h3 className="text-xl font-black text-nature-900 dark:text-white mb-2">Deal Complete!</h3>
+                            <div className="text-4xl mb-4" aria-hidden="true">🎉</div>
+                            <h3 id="post-release-review-title" className="text-xl font-black text-nature-900 dark:text-white mb-2">Deal Complete!</h3>
                             <p className="text-nature-600 dark:text-nature-400 text-sm mb-6">
                                 How was your experience with <strong>{promptReviewForTx.targetCallsign}</strong>?
                             </p>
@@ -3059,8 +3059,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 {[1, 2, 3, 4, 5].map(star => (
                                     <button
                                         key={star}
+                                        type="button"
                                         onClick={() => setReviewStars(star)}
-                                        className="text-4xl hover:scale-110 transition-transform focus:outline-none"
+                                        aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}
+                                        className="text-4xl hover:scale-110 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg"
                                     >
                                         <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-700"}>★</span>
                                     </button>
@@ -3071,18 +3073,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 value={reviewComment}
                                 onChange={e => setReviewComment(e.target.value)}
                                 placeholder="Write a short review (optional)..."
-                                className="w-full p-3 bg-nature-50 border border-nature-200 dark:bg-nature-950 dark:border-nature-800 rounded-xl text-sm focus:outline-none focus:border-amber-300 focus:ring-1 focus:ring-amber-300 mb-6 font-medium text-nature-900 dark:text-white resize-none"
+                                className="w-full p-3 bg-nature-50 border border-nature-200 dark:bg-nature-950 dark:border-nature-800 rounded-xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 mb-6 font-medium text-nature-900 dark:text-white resize-none"
                                 rows={3}
                             />
 
                             <div className="flex gap-2">
                                 <button
+                                    type="button"
                                     onClick={() => setPromptReviewForTx(null)}
-                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 rounded-xl transition-colors outline-none"
+                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                 >
                                     Skip for now
                                 </button>
                                 <button
+                                    type="button"
                                     disabled={submittingReview}
                                     onClick={async () => {
                                         if (!identity) return;

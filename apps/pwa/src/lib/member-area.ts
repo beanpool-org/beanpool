@@ -7,8 +7,10 @@
  * BEFORE any request is built, so a precise position is never on the wire; the node rounds again on the write. Skipping
  * writes nothing.
  */
+import { useEffect, useState } from 'react';
 import { roundToArea } from '@beanpool/core';
 import { request, signedFetchWithKey, type CommunityInfo } from './api';
+import { communityInfoOnce } from './visitor-lobby-gate';
 
 export interface MemberArea { lat: number; lng: number; updatedAt?: string | null }
 export type AreaWriteResult = { ok: true; area: MemberArea | null } | { ok: false; error: string };
@@ -101,4 +103,33 @@ export function readBrowserPosition(): Promise<{ lat: number; lng: number }> {
             { enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: 20_000 },
         );
     });
+}
+
+/**
+ * The community's by-area limits (`features.nearbyListings`), or null on a community that doesn't sync by area. Asked
+ * only while `enabled`, so a screen a visitor sees (the Map) asks nothing until a member opens the form that needs it.
+ */
+export function useNearbyLimits(enabled = true): { radiusKm: number; max: number } | null {
+    const [limits, setLimits] = useState<{ radiusKm: number; max: number } | null>(null);
+    useEffect(() => {
+        if (!enabled) return;
+        let cancelled = false;
+        communityInfoOnce()
+            .then((info) => { if (!cancelled && nearbyListingsOn(info)) setLimits(info.features!.nearbyListings!); })
+            .catch(() => { /* a node that can't be asked says nothing about areas */ });
+        return () => { cancelled = true; };
+    }, [enabled]);
+    return limits;
+}
+
+/** The signed-in member's area while `enabled`: an area, null (known unset), or undefined (not asked, or couldn't ask). */
+export function useMyArea(enabled: boolean): MemberArea | null | undefined {
+    const [area, setArea] = useState<MemberArea | null | undefined>(undefined);
+    useEffect(() => {
+        if (!enabled) { setArea(undefined); return; }
+        let cancelled = false;
+        readMyArea().then((a) => { if (!cancelled) setArea(a); });
+        return () => { cancelled = true; };
+    }, [enabled]);
+    return area;
 }

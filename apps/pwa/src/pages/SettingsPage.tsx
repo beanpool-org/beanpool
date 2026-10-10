@@ -5,8 +5,7 @@
 
 import { AREA_STEP_WORDS, describeArea } from '@beanpool/core';
 import { AreaStep } from '../components/AreaStep';
-import { nearbyListingsOn, readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, writeArea, type MemberArea } from '../lib/member-area';
-import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { clearAccountStorage } from '../lib/device-prefs';
@@ -111,18 +110,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide' | 'area'>(initialMode || 'menu');
     // Your area (design DESIGN-global-sync-by-area §3.5): only on a community that gives each member the listings near
     // their area. The line is the node's value (GET /api/community/me), with the town typed in this browser.
-    const [areaLimits, setAreaLimits] = useState<{ radiusKm: number; max: number } | null>(null);
+    const areaLimits = useNearbyLimits();
     const [myArea, setMyArea] = useState<MemberArea | null | undefined>(undefined);
     const [areaLoaded, setAreaLoaded] = useState(false);
     const [areaError, setAreaError] = useState<string | null>(null);
     const [areaClearing, setAreaClearing] = useState(false);
-    useEffect(() => {
-        let cancelled = false;
-        communityInfoOnce()
-            .then((info) => { if (!cancelled && nearbyListingsOn(info)) setAreaLimits(info.features!.nearbyListings!); })
-            .catch(() => { /* no row: a node that can't be asked says nothing about areas */ });
-        return () => { cancelled = true; };
-    }, []);
     const loadMyArea = () => {
         setAreaLoaded(false);
         readMyArea().then((a) => { setMyArea(a); setAreaLoaded(true); });

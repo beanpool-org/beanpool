@@ -11,7 +11,9 @@
  *   4. every DM is held to it: one tied to a listing (the old per-post DM), and a conversation of any other kind that
  *      reaches the DM store
  *   5. a DM opened with a name (the phone's old "decline with a message") is refused: those words go as a message
- *   6. what stays readable, as designed: a group chat line through either route and its edit, an event chat and an
+ *   6. a group chat is held to the same since group chats step 2 (test-group-keys-http.ts has the rest): a readable line
+ *      through either route and a readable edit are refused, a sealed one is stored as sent; what stays readable, as
+ *      designed: an event chat and an
  *      enterprise discussion (node-readable, plaintext-v1); the deal notices the node writes into a DM; a removed
  *      message's tombstone; the message the operator writes from the node's admin page
  *
@@ -31,6 +33,7 @@ import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -205,19 +208,25 @@ async function main(): Promise<void> {
     const unnamed = await call('POST', cal, '/api/messages/conversation', { type: 'dm', participants: [cal.pk, ben.pk], createdBy: cal.pk });
     assert(unnamed.status === 200 && !!unnamed.body?.conversation?.id, `the same DM opened without one is fine (got ${unnamed.status})`);
 
-    // ── 6. what stays readable, as designed ──────────────────────────────────────────────────────
-    console.log('\n── 6. what stays readable ──');
+    // ── 6. a group chat is never stored readable either; what stays readable, as designed ──────────
+    console.log('\n── 6. a group chat, and what stays readable ──');
     const group = createGroup({ name: 'Seed Library', joinPolicy: 'request_to_join', createdBy: ana.pk });
+    const groupBefore = countIn(group.id);
     const oldAppGroupLine = await send(ana, group.id, readable('seeds are in'));
-    const oldAppGroupLineId: string = oldAppGroupLine.body?.message?.id;
-    assert(oldAppGroupLine.status === 200 && rowOf(oldAppGroupLineId)?.nonce === 'plaintext-v1',
-        `a group chat line through the send route old apps use is still plaintext-v1 (got ${oldAppGroupLine.status} ${JSON.stringify(oldAppGroupLine.body?.error ?? '')})`);
+    assert(oldAppGroupLine.status === 400 && /Update BeanPool/.test(oldAppGroupLine.body?.error ?? ''),
+        `a readable group chat line through the send route old apps use is refused, told to update (got ${oldAppGroupLine.status} ${JSON.stringify(oldAppGroupLine.body ?? '')})`);
     const groupLine = await call('POST', ana, `/api/groups/${group.id}/chat/message`, { text: 'swap day on Saturday' });
-    assert(groupLine.status === 201 && decode(rowOf(groupLine.body?.message?.id)?.ciphertext ?? '') === 'swap day on Saturday',
-        `a group chat line through the group's route is stored readable (got ${groupLine.status})`);
-    const groupEdit = await call('POST', ana, '/api/messages/edit', { messageId: oldAppGroupLineId, ...readable('seeds are in the hall') });
-    assert(groupEdit.status === 200 && decode(rowOf(oldAppGroupLineId)?.ciphertext ?? '') === 'seeds are in the hall',
-        `a group chat edit in plaintext-v1 is still accepted (got ${groupEdit.status} ${JSON.stringify(groupEdit.body?.error ?? '')})`);
+    assert(groupLine.status === 400 && groupLine.body?.code === 'not_encrypted', `a readable line through the group's own route is refused (got ${groupLine.status})`);
+    assert(countIn(group.id) === groupBefore && !db.prepare('SELECT 1 FROM messages WHERE ciphertext IN (?, ?)').get(b64('seeds are in'), b64('swap day on Saturday')),
+        'nothing was stored, and the words are nowhere in the database');
+    const sealedLine = lockedGroupLine(db, group.id);
+    const sealedSent = await send(ana, group.id, sealedLine);
+    const sealedId: string = sealedSent.body?.message?.id;
+    assert(sealedSent.status === 200 && rowOf(sealedId)?.ciphertext === sealedLine.ciphertext && rowOf(sealedId)?.nonce === sealedLine.nonce,
+        `a sealed group line is stored exactly as sent (got ${sealedSent.status} ${JSON.stringify(sealedSent.body?.error ?? '')})`);
+    const groupEdit = await call('POST', ana, '/api/messages/edit', { messageId: sealedId, ...readable('seeds are in the hall') });
+    assert(groupEdit.status === 400 && rowOf(sealedId)?.ciphertext === sealedLine.ciphertext,
+        `a readable edit of a group line is refused and the line is untouched (got ${groupEdit.status} ${JSON.stringify(groupEdit.body?.error ?? '')})`);
 
     const event = createPost('event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', ben.pk, -28.55, 153.5, [], false, undefined, false,
         { eventStartAt: inHours(24), eventPlaceName: 'The hall' })!;

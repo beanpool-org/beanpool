@@ -38,7 +38,7 @@ import {
 } from './state-engine.js';
 import { resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 import { rsvpEvent } from './engine/posts.js';
-import { postGroupThreadMessage, getGroupThread, GROUP_THREAD_MESSAGE_MAX } from './engine/group-thread.js';
+import { postGroupThreadMessage, getGroupThread, GROUP_LINE_MAX_BYTES } from './engine/group-thread.js';
 import { postEnterpriseThreadMessage } from './engine/enterprise-thread.js';
 import { postEventThreadMessage } from './engine/event-thread.js';
 import {
@@ -48,6 +48,7 @@ import {
 import { createGroupRoutes } from './routes/groups.js';
 import { createMessagingRoutes } from './routes/messaging.js';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -144,10 +145,20 @@ async function main(): Promise<void> {
     removeGroupMember(crew.id, gina, gina);
     const chatPath = `/api/groups/${crew.id}/chat`;
 
+    // A group chat line is sealed on the sender's phone (group chats step 2): the node keeps the bytes it is handed and
+    // never reads them, so what a line SAYS no longer exists on this side. `sealed` is a locked line under the group's
+    // current epoch, `post` writes one as `author`, and an edit re-seals the same way, naming the current epoch.
+    type Sealed = ReturnType<typeof lockedGroupLine>;
+    const sealed = (extra: { replyToId?: string; mentions?: string[]; bytes?: number } = {}, groupId = crew.id): Sealed => lockedGroupLine(db, groupId, extra);
+    const post = (author: string, extra: { replyToId?: string; mentions?: string[] } = {}, groupId = crew.id) =>
+        postGroupThreadMessage(cb, groupId, author, sealed(extra, groupId));
     /** A fresh message from Bob in the group chat. */
-    const bobLine = (text = 'Kettle needs a new element') => postGroupThreadMessage(cb, crew.id, bob, text);
-    const editBody = (id: string, text: string) => ({ messageId: id, ciphertext: b64(text), nonce: 'plaintext-v1' });
-    const edit = (actor: string | undefined, id: string, text: string) => mpost('/api/messages/edit', actor, editBody(id, text));
+    const bobLine = (extra: { replyToId?: string; mentions?: string[] } = {}) => post(bob, extra);
+    const editBody = (id: string, line: Sealed) => ({ messageId: id, ciphertext: line.ciphertext, nonce: line.nonce, metadata: line.metadata });
+    const edit = (actor: string | undefined, id: string, line: Sealed = sealed()) => mpost('/api/messages/edit', actor, editBody(id, line));
+    /** An edit in its old, readable form: what the enterprise and event chats still take, and a group chat now refuses. */
+    const editPlain = (actor: string | undefined, id: string, text: string) =>
+        mpost('/api/messages/edit', actor, { messageId: id, ciphertext: b64(text), nonce: 'plaintext-v1' });
     const react = (actor: string | undefined, id: string, emoji = '👍') => mpost('/api/messages/react', actor, { messageId: id, authorPubkey: actor, emoji });
     const del = (actor: string | undefined, id: string) => mpost('/api/messages/delete', actor, { messageId: id });
     /** A DM line through the engine, in the encrypted form the node requires of a member's direct message. */
@@ -156,73 +167,89 @@ async function main(): Promise<void> {
     // ── 1. Edit in a group chat ─────────────────────────────────────────────────────────────
     console.log('\n--- 1. Edit in a group chat ---');
     const m1 = bobLine();
-    const e1 = await edit(bob, m1.id, 'Kettle needs a new element, and a fuse');
-    assert(e1.body?.success === true && decode(rowOf(m1.id).ciphertext) === 'Kettle needs a new element, and a fuse',
-        `the author edits their own line (got ${statusOf(e1)} ${e1.body?.error ?? ''})`);
-    assert(!!rowOf(m1.id).edited_at && rowOf(m1.id).nonce === 'plaintext-v1', 'editedAt is stamped and it stays node-readable');
+    const newLine1 = sealed();
+    const e1 = await edit(bob, m1.id, newLine1);
+    assert(e1.body?.success === true && rowOf(m1.id).ciphertext === newLine1.ciphertext && rowOf(m1.id).ciphertext !== m1.ciphertext,
+        `the author edits their own line: the row now holds the new sealed line (got ${statusOf(e1)} ${e1.body?.error ?? ''})`);
+    assert(!!rowOf(m1.id).edited_at && rowOf(m1.id).nonce === newLine1.nonce && rowOf(m1.id).nonce.startsWith('group-xc20p-v1:'),
+        'editedAt is stamped and the line stays sealed: the node keeps the nonce it was handed');
     const seen = getGroupThread(crew.id, bob).messages.find(x => x.id === m1.id)!;
-    assert(!!seen.editedAt && decode(seen.ciphertext) === 'Kettle needs a new element, and a fuse', "the chat's GET returns the new text with editedAt");
+    assert(!!seen.editedAt && seen.ciphertext === newLine1.ciphertext, "the chat's GET returns the new line with editedAt");
     // The live update, straight from the engine: the routes run on the node's own callbacks, which a test
     // cannot see. Everything about who may do what is asserted through the routes above.
     broadcasts.length = 0; pushes.length = 0;
-    const m1b = bobLine('a line to edit for the live update');
+    const m1b = bobLine();
     broadcasts.length = 0; pushes.length = 0;
-    editEngine(cb, m1b.id, bob, b64('edited, live'), 'plaintext-v1');
+    const liveLine = sealed();
+    editEngine(cb, m1b.id, bob, liveLine.ciphertext, liveLine.nonce, undefined, liveLine.metadata);
     const liveEdit = broadcasts.filter(b => b.event?.action === 'edited' && b.event?.message?.id === m1b.id);
     assert(liveEdit.length === 1 && liveEdit[0].recipients!.includes(alice) && liveEdit[0].recipients!.includes(carol)
         && !liveEdit[0].recipients!.includes(erin) && !liveEdit[0].recipients!.includes(dave),
         `the edit reaches the chat's members live, and nobody else (got ${JSON.stringify(broadcasts.map(b => b.event?.action))})`);
-    assert(decode(liveEdit[0].event.message.ciphertext) === 'edited, live' && !!liveEdit[0].event.message.editedAt,
-        'and carries the new text and editedAt');
+    assert(liveEdit[0].event.message.ciphertext === liveLine.ciphertext && !!liveEdit[0].event.message.editedAt,
+        'and carries the new line and editedAt');
     assert(pushes.length === 0, 'an edit pushes nobody');
 
-    const convLine = postGroupThreadMessage(cb, crew.id, alice, 'I have a spare');
-    assert((await edit(alice, convLine.id, 'I have two spares')).body?.success === true, 'an active convenor edits their own line');
+    const convLine = post(alice);
+    assert((await edit(alice, convLine.id)).body?.success === true, 'an active convenor edits their own line');
 
     // Who may NOT edit. Each writes their own line first where they can, else borrows Bob's — an edit by anyone
     // but the author is refused before any group rule, so the interesting case is the author who lost standing.
-    const carolBefore = postGroupThreadMessage(cb, crew.id, carol, 'from when Carol was a member');
+    const carolBefore = post(carol);
     setMemberRole(crew.id, alice, carol, 'observer');  // an observer from here on
-    assert(statusOf(await edit(carol, carolBefore.id, 'changed my mind')) === 403, 'an observer cannot edit, even their own line: reacting and editing are writing in the room');
-    const daveLine = postGroupThreadMessage(cb, crew.id, alice, 'placeholder');
+    assert(statusOf(await edit(carol, carolBefore.id)) === 403, 'an observer cannot edit, even their own line: reacting and editing are writing in the room');
+    const daveLine = post(alice);
     db.prepare('UPDATE messages SET author_pubkey = ? WHERE id = ?').run(dave, daveLine.id);
-    assert(statusOf(await edit(dave, daveLine.id, 'let me back')) === 403, 'a removed member cannot edit their old line');
-    const ginaLine = postGroupThreadMessage(cb, crew.id, alice, 'placeholder 2');
+    assert(statusOf(await edit(dave, daveLine.id)) === 403, 'a removed member cannot edit their old line');
+    const ginaLine = post(alice);
     db.prepare('UPDATE messages SET author_pubkey = ? WHERE id = ?').run(gina, ginaLine.id);
-    assert(statusOf(await edit(gina, ginaLine.id, 'back for a sec')) === 403, 'nor does someone who left');
-    const erinLine = postGroupThreadMessage(cb, crew.id, alice, 'placeholder 3');
+    assert(statusOf(await edit(gina, ginaLine.id)) === 403, 'nor does someone who left');
+    const erinLine = post(alice);
     db.prepare('UPDATE messages SET author_pubkey = ? WHERE id = ?').run(erin, erinLine.id);
-    assert(statusOf(await edit(erin, erinLine.id, 'hello')) === 403, 'nor an outsider');
-    const adminLine = postGroupThreadMessage(cb, crew.id, alice, 'placeholder 4');
+    assert(statusOf(await edit(erin, erinLine.id)) === 403, 'nor an outsider');
+    const adminLine = post(alice);
     db.prepare('UPDATE messages SET author_pubkey = ? WHERE id = ?').run(admin, adminLine.id);
-    assert(statusOf(await edit(admin, adminLine.id, 'moderating')) === 403, 'nor a node admin who is not in the group — adminship is not membership');
-    assert(statusOf(await edit(undefined, m1.id, 'unsigned')) === 401, 'an unsigned edit is 401');
+    assert(statusOf(await edit(admin, adminLine.id)) === 403, 'nor a node admin who is not in the group — adminship is not membership');
+    assert(statusOf(await edit(undefined, m1.id)) === 401, 'an unsigned edit is 401');
 
     // What may NOT be edited.
-    const other = bobLine('someone elses');
+    const other = bobLine();
     db.prepare('UPDATE messages SET author_pubkey = ? WHERE id = ?').run(alice, other.id);
-    assert(statusOf(await edit(bob, other.id, 'mine now')) === 400, "somebody else's message is refused");
-    const old = bobLine('too old to change');
+    assert(statusOf(await edit(bob, other.id)) === 400, "somebody else's message is refused");
+    const old = bobLine();
     ageOut(old.id);
-    const oldEdit = await edit(bob, old.id, 'changed anyway');
-    assert(statusOf(oldEdit) === 400 && /15 minutes/.test(oldEdit.body?.error || '') && decode(rowOf(old.id).ciphertext) === 'too old to change',
+    const oldEdit = await edit(bob, old.id);
+    assert(statusOf(oldEdit) === 400 && /15 minutes/.test(oldEdit.body?.error || '') && rowOf(old.id).ciphertext === old.ciphertext,
         'outside the 15-minute window it is refused, and nothing is written');
-    const big = bobLine('short');
-    const bigEdit = await edit(bob, big.id, 'x'.repeat(GROUP_THREAD_MESSAGE_MAX + 1));
-    assert(statusOf(bigEdit) === 400 && decode(rowOf(big.id).ciphertext) === 'short',
-        `over the 2000-character cap is refused, and nothing is written (got ${statusOf(bigEdit)})`);
-    assert(statusOf(await edit(bob, big.id, '   ')) === 400, 'an empty edit is refused');
+    const big = bobLine();
+    // The 2000-character cap of a group send is, sealed, GROUP_LINE_MAX_BYTES: the largest line the node takes. An edit is held to it.
+    const bigEdit = await edit(bob, big.id, sealed({ bytes: GROUP_LINE_MAX_BYTES + 1 }));
+    assert(statusOf(bigEdit) === 400 && rowOf(big.id).ciphertext === big.ciphertext,
+        `over the largest sealed line (the 2000-character cap) is refused, and nothing is written (got ${statusOf(bigEdit)})`);
+    const edgeLine = bobLine();
+    assert((await edit(bob, edgeLine.id, sealed({ bytes: GROUP_LINE_MAX_BYTES }))).body?.success === true,
+        'a line of exactly the largest sealed size is taken');
+    const noWords = await mpost('/api/messages/edit', bob, { messageId: big.id, ...sealed(), ciphertext: '' });
+    assert(statusOf(noWords) === 400 && rowOf(big.id).ciphertext === big.ciphertext, 'an empty edit is refused');
+    const tooShort = await mpost('/api/messages/edit', bob, { messageId: big.id, ...sealed(), ciphertext: crypto.randomBytes(10).toString('base64') });
+    assert(statusOf(tooShort) === 400 && rowOf(big.id).ciphertext === big.ciphertext, 'nor is a ciphertext shorter than the smallest sealed line');
+    // A group chat is node-blind: a readable edit is refused whatever it says, and so is any other form of line.
+    const readable = await editPlain(bob, big.id, 'a plain edit');
+    assert(statusOf(readable) === 400 && rowOf(big.id).ciphertext === big.ciphertext,
+        `a plaintext-v1 edit of a group line is refused (got ${statusOf(readable)} ${readable.body?.error ?? ''})`);
     const encrypted = await mpost('/api/messages/edit', bob, { messageId: big.id, ciphertext: 'zz', nonce: 'somenonce' });
-    assert(statusOf(encrypted) === 400, 'anything but plaintext-v1 is refused — a group chat is node-readable');
+    assert(statusOf(encrypted) === 400, 'and so is any form but the group lock');
+    const noEpoch = await mpost('/api/messages/edit', bob, { messageId: big.id, ...sealed(), metadata: JSON.stringify({}) });
+    assert(statusOf(noEpoch) === 409 && rowOf(big.id).ciphertext === big.ciphertext, 'a sealed edit that names no epoch is refused (409), and nothing is written');
     const sysId = (db.prepare("SELECT id FROM messages WHERE conversation_id = ? AND type = 'system' LIMIT 1").get(crew.id) as any).id;
-    assert(statusOf(await edit(alice, sysId, 'rewriting history')) === 400, 'a system line cannot be edited');
-    const gone = bobLine('about to go');
+    assert(statusOf(await edit(alice, sysId)) === 400, 'a system line cannot be edited');
+    const gone = bobLine();
     await gpost(`${chatPath}/remove`, alice, { messageId: gone.id });
-    assert(statusOf(await edit(bob, gone.id, 'undelete')) === 403, 'a removed message cannot be edited');
+    assert(statusOf(await edit(bob, gone.id)) === 403, 'a removed message cannot be edited');
 
     // ── 2. React in a group chat ────────────────────────────────────────────────────────────
     console.log('\n--- 2. React in a group chat ---');
-    const m2 = bobLine('New handle for the shed door');
+    const m2 = bobLine();
     const r1 = await react(alice, m2.id, '👍');
     assert(r1.body?.success === true && metaOf(m2.id).reactions?.length === 1
         && metaOf(m2.id).reactions?.[0]?.emoji === '👍' && metaOf(m2.id).reactions?.[0]?.author === alice,
@@ -253,14 +280,15 @@ async function main(): Promise<void> {
     assert(statusOf(await react(alice, sysId)) === 400, 'a system line takes no reaction');
     assert(statusOf(await react(alice, gone.id)) === 403, 'a removed message takes no reaction');
     // Age is nothing to a reaction — only an edit has a window.
-    const oldish = bobLine('an old line');
+    const oldish = bobLine();
     ageOut(oldish.id);
     assert((await react(alice, oldish.id)).body?.success === true, 'an old message can still be reacted to — the window is the edits');
 
     // ── 3. Delete for everyone ──────────────────────────────────────────────────────────────
     console.log('\n--- 3. Delete for everyone ---');
     // ── 3a. In a group chat ──
-    const m3 = postGroupThreadMessage(cb, crew.id, bob, 'Thanks @Alice, I owe you one', undefined, m2.id);
+    // A mention is declared by the sending app now (the node cannot read the words): bob's line names alice and replies to m2.
+    const m3 = post(bob, { mentions: [alice], replyToId: m2.id });
     await react(alice, m3.id, '❤️');
     assert(metaOf(m3.id).mentions?.includes(alice) && metaOf(m3.id).replyToId === m2.id && metaOf(m3.id).reactions?.length === 1,
         'before the delete it carries a mention, a reply and a reaction');
@@ -268,12 +296,12 @@ async function main(): Promise<void> {
     assert(d1.body?.success === true && d1.body.message.type === 'removed', `the author deletes their own group chat line (got ${statusOf(d1)} ${d1.body?.error ?? ''})`);
     const t3 = rowOf(m3.id);
     assert(t3.type === 'removed' && decode(t3.ciphertext) === 'This message was deleted' && t3.nonce === 'plaintext-v1',
-        'the row becomes a tombstone with a fixed marker');
+        'the row becomes a tombstone with a fixed marker (the sealed line is replaced by it, readable without the group key)');
     assert(metaOf(m3.id).removed === true && metaOf(m3.id).removedBy === bob && !!metaOf(m3.id).removedAt,
         'metadata.removed / removedBy / removedAt say who took it down and when');
     assert(!metaOf(m3.id).reactions && !metaOf(m3.id).mentions && !metaOf(m3.id).replyToId,
         'reactions, mentions and the reply go with it');
-    const liveMsg = postGroupThreadMessage(cb, crew.id, bob, 'a line to delete for the live update');
+    const liveMsg = post(bob);
     broadcasts.length = 0; pushes.length = 0;
     deleteEngine(cb, liveMsg.id, bob);
     const liveDel = broadcasts.filter(b => b.event?.action === 'removed' && b.event?.message?.id === liveMsg.id);
@@ -282,7 +310,7 @@ async function main(): Promise<void> {
         'it reaches the chat live, the way a convenor removal does');
     assert(decode(liveDel[0].event.message.ciphertext) === 'This message was deleted', 'carrying the tombstone the chat now shows');
     assert(pushes.length === 0, 'and nobody is pushed for a delete');
-    assert(statusOf(await edit(bob, m3.id, 'back please')) === 403, 'a deleted message cannot be edited afterwards');
+    assert(statusOf(await edit(bob, m3.id)) === 403, 'a deleted message cannot be edited afterwards');
     assert(statusOf(await react(alice, m3.id)) === 403, 'nor reacted to');
     const d1again = await del(bob, m3.id);
     assert(d1again.body?.success === true && metaOf(m3.id).removedBy === bob, 'deleting twice is a no-op success');
@@ -290,12 +318,12 @@ async function main(): Promise<void> {
         "the tombstone is what the chat's GET shows");
 
     // Age is nothing to a delete: "no window" is the whole point.
-    const ancient = bobLine('written long ago');
+    const ancient = bobLine();
     ageOut(ancient.id);
     assert((await del(bob, ancient.id)).body?.success === true, 'a message far outside the edit window can still be deleted');
 
     // Who may NOT delete.
-    const mine = bobLine('bobs line');
+    const mine = bobLine();
     for (const [pk, who] of [[alice, 'a convenor'], [carol, 'an observer'], [erin, 'an outsider'],
         [admin, 'a node admin']] as const) {
         assert(statusOf(await del(pk, mine.id)) === 403, `${who} cannot delete somebody elses message through this route`);
@@ -305,11 +333,11 @@ async function main(): Promise<void> {
     assert(statusOf(await del(bob, crypto.randomUUID())) === 404, 'an unknown message is 404');
     assert(statusOf(await del(alice, sysId)) === 400, 'a system line cannot be deleted');
     // Left the room: the author can no longer reach in.
-    const ginasOwn = postGroupThreadMessage(cb, crew.id, alice, 'placeholder 5');
+    const ginasOwn = post(alice);
     db.prepare('UPDATE messages SET author_pubkey = ? WHERE id = ?').run(gina, ginasOwn.id);
     assert(statusOf(await del(gina, ginasOwn.id)) === 403, 'someone who left cannot delete the line they wrote while they were in');
     // An observer still READS the chat, so they may take down what they wrote when they could post.
-    const carolsOwn = postGroupThreadMessage(cb, crew.id, alice, 'placeholder 6');
+    const carolsOwn = post(alice);
     db.prepare('UPDATE messages SET author_pubkey = ? WHERE id = ?').run(carol, carolsOwn.id);
     assert((await del(carol, carolsOwn.id)).body?.success === true, 'an observer deletes their own old line — delete needs read, not post');
 
@@ -349,7 +377,7 @@ async function main(): Promise<void> {
 
     // ── 4. A convenor's removal is still its own thing ──────────────────────────────────────
     console.log('\n--- 4. Convenor removal, told apart by removedBy ---');
-    const toRemove = bobLine('something a convenor takes down');
+    const toRemove = bobLine();
     const removed = await gpost(`${chatPath}/remove`, alice, { messageId: toRemove.id });
     assert(removed.body?.success === true && decode(removed.body.message.ciphertext) === 'removed by a convenor',
         'a convenor still removes somebody elses message');
@@ -372,7 +400,7 @@ async function main(): Promise<void> {
     // pulse item, and the moderation list reads the joined posts/pulse_items row for what was said. There is no
     // report path in any app that names a chat message, so a delete destroys no moderator's copy — the evidence
     // a report holds is its own `reason` text plus the joined row, and both survive untouched.
-    const reportable = bobLine('the line someone reports');
+    const reportable = bobLine();
     const report = submitReport(erin, bob, 'Rude in the Repair Crew chat', undefined, undefined)!;
     const messageColumns = (db.prepare('PRAGMA table_info(abuse_reports)').all() as any[]).map(c => c.name);
     assert(!messageColumns.some(c => /message/i.test(c)),
@@ -385,42 +413,58 @@ async function main(): Promise<void> {
 
     // ── 6. Reply in a group chat ────────────────────────────────────────────────────────────
     console.log('\n--- 6. Reply in a group chat ---');
-    const parent = bobLine('Who has the 10mm?');
-    const replyRes = await gpost(`${chatPath}/message`, alice, { text: 'I do', replyToId: parent.id });
+    const parent = bobLine();
+    const replyRes = await gpost(`${chatPath}/message`, alice, sealed({ replyToId: parent.id }));
     assert(statusOf(replyRes) === 201 && parseMeta(replyRes.body.message.metadata).replyToId === parent.id,
         `a reply stores metadata.replyToId (got ${statusOf(replyRes)} ${replyRes.body?.error ?? ''})`);
     assert(parseMeta(getGroupThread(crew.id, bob).messages.find(x => x.id === replyRes.body.message.id)?.metadata).replyToId === parent.id,
         "and the chat's GET carries it");
     const otherGroup = createGroup({ name: 'Other Crew', joinPolicy: 'open', createdBy: alice });
-    const elsewhere = postGroupThreadMessage(cb, otherGroup.id, alice, 'a line in another chat');
-    const crossed = await gpost(`${chatPath}/message`, alice, { text: 'quoting another room', replyToId: elsewhere.id });
+    const elsewhere = post(alice, {}, otherGroup.id);
+    const crossed = await gpost(`${chatPath}/message`, alice, sealed({ replyToId: elsewhere.id }));
     assert(statusOf(crossed) === 400, `a message from another chat cannot be replied to (got ${statusOf(crossed)})`);
-    assert(statusOf(await gpost(`${chatPath}/message`, alice, { text: 'quoting the system', replyToId: sysId })) === 400,
+    assert(statusOf(await gpost(`${chatPath}/message`, alice, sealed({ replyToId: sysId }))) === 400,
         'nor a system line');
-    assert(statusOf(await gpost(`${chatPath}/message`, alice, { text: 'nobody', replyToId: crypto.randomUUID() })) === 400,
+    assert(statusOf(await gpost(`${chatPath}/message`, alice, sealed({ replyToId: crypto.randomUUID() }))) === 400,
         'nor a message that does not exist');
-    assert(statusOf(await gpost(`${chatPath}/message`, alice, { text: 'bad type', replyToId: 42 })) === 400,
-        'replyToId must be a string');
-    assert(statusOf(await gpost(`${chatPath}/message`, alice, { text: 'no reply at all' })) === 201,
+    // The reply is named in the line's metadata now, and only a message id names one.
+    const badType = sealed();
+    const badTypeRes = await gpost(`${chatPath}/message`, alice, { ...badType, metadata: JSON.stringify({ ...JSON.parse(badType.metadata), replyToId: 42 }) });
+    assert(statusOf(badTypeRes) === 400 && /must be a message id/.test(badTypeRes.body?.error ?? '') && !rowOf(badType.clientId),
+        `a replyToId that is not a message id is refused, nothing stored (got ${statusOf(badTypeRes)} ${badTypeRes.body?.error ?? ''})`);
+    assert(statusOf(await gpost(`${chatPath}/message`, alice, sealed())) === 201,
         'and a message without a reply is unchanged');
+    // The readable form of the same send is refused, and nothing is stored.
+    const rowsBefore = (db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(crew.id) as any).n;
+    const plainRes = await gpost(`${chatPath}/message`, alice, { text: 'a readable reply', replyToId: parent.id });
+    assert(statusOf(plainRes) === 400 && /Update BeanPool/.test(plainRes.body?.error || '')
+        && (db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(crew.id) as any).n === rowsBefore,
+        `a readable group line is refused with the update words and nothing is stored (got ${statusOf(plainRes)} ${plainRes.body?.error ?? ''})`);
     // The old apps' path keeps a valid replyToId too.
-    const viaOld = await mpost('/api/messages/send', bob, {
+    // An app that still sends a readable line through it is told to update, and nothing is stored.
+    const viaOldPlain = await mpost('/api/messages/send', bob, {
         conversationId: crew.id, authorPubkey: bob, ciphertext: b64('from an old app, quoting'), nonce: 'plaintext-v1',
         metadata: JSON.stringify({ replyToId: parent.id }),
     });
+    assert(statusOf(viaOldPlain) === 400 && /Update BeanPool/.test(viaOldPlain.body?.error || ''),
+        `a readable line through /api/messages/send is refused with the update words (got ${statusOf(viaOldPlain)} ${viaOldPlain.body?.error ?? ''})`);
+    const viaOld = await mpost('/api/messages/send', bob, {
+        conversationId: crew.id, authorPubkey: bob, ...sealed({ replyToId: parent.id }),
+    });
     assert(viaOld.body?.success === true && metaOf(viaOld.body.message.id).replyToId === parent.id,
-        'the old /api/messages/send path keeps a valid replyToId');
+        'the /api/messages/send path keeps a valid replyToId on a sealed line');
     const oldCrossed = await mpost('/api/messages/send', bob, {
-        conversationId: crew.id, authorPubkey: bob, ciphertext: b64('old app, wrong room'), nonce: 'plaintext-v1',
-        metadata: JSON.stringify({ replyToId: elsewhere.id }),
+        conversationId: crew.id, authorPubkey: bob, ...sealed({ replyToId: elsewhere.id }),
     });
     assert(statusOf(oldCrossed) === 400, 'and refuses one from another chat, exactly as the group route does');
+    const forging = sealed({ mentions: [erin], replyToId: parent.id });
     const oldForged = await mpost('/api/messages/send', bob, {
-        conversationId: crew.id, authorPubkey: bob, ciphertext: b64('old app, forging'), nonce: 'plaintext-v1',
-        metadata: JSON.stringify({ mentions: [erin], reactions: [{ emoji: '👍', author: erin }], replyToId: parent.id }),
+        conversationId: crew.id, authorPubkey: bob, ...forging,
+        metadata: JSON.stringify({ ...JSON.parse(forging.metadata), reactions: [{ emoji: '👍', author: erin }] }),
     });
     assert(!metaOf(oldForged.body.message.id).reactions && !metaOf(oldForged.body.message.id).mentions?.includes(erin),
-        'a client cannot smuggle reactions or mentions in through that metadata — only the reply is taken');
+        'a client cannot smuggle reactions in through that metadata, and a mention of someone outside the group is dropped — only the reply and the epoch are taken');
+    assert(metaOf(oldForged.body.message.id).replyToId === parent.id, 'while the reply it carried is kept');
 
     // ── 7. A muted DM sends no push ─────────────────────────────────────────────────────────
     console.log('\n--- 7. A muted DM sends no push ---');
@@ -458,7 +502,7 @@ async function main(): Promise<void> {
     const bakery = createTreasury('Village Bakery', AVATAR, 0).publicKey;
     adminAssignTreasuryOperator(bakery, bob, 'admin');
     const entLine = postEnterpriseThreadMessage(cb, bakery, bob, 'Bread is up');
-    assert(statusOf(await edit(bob, entLine.id, 'Bread is down')) === 403, 'an enterprise thread message cannot be edited');
+    assert(statusOf(await editPlain(bob, entLine.id, 'Bread is down')) === 403, 'an enterprise thread message cannot be edited');
     assert(statusOf(await react(bob, entLine.id)) === 403, 'nor reacted to');
     const entDel = await del(bob, entLine.id);
     assert(statusOf(entDel) === 403 && rowOf(entLine.id).type !== 'removed',
@@ -468,7 +512,7 @@ async function main(): Promise<void> {
         { eventStartAt: inHours(24), eventPlaceName: 'The hall' })!;
     rsvpEvent(() => { }, ev.id, bob, 'going');
     const evLine = postEventThreadMessage(cb, ev.id, bob, 'Bringing a drill');
-    assert(statusOf(await edit(bob, evLine.id, 'Bringing two drills')) === 403, 'an event chat message cannot be edited');
+    assert(statusOf(await editPlain(bob, evLine.id, 'Bringing two drills')) === 403, 'an event chat message cannot be edited');
     assert(statusOf(await react(bob, evLine.id)) === 403, 'nor reacted to');
     const evDel = await del(bob, evLine.id);
     assert(statusOf(evDel) === 403 && rowOf(evLine.id).type !== 'removed',
@@ -476,12 +520,15 @@ async function main(): Promise<void> {
 
     // ── 9. None of this pushes ──────────────────────────────────────────────────────────────
     console.log('\n--- 9. Edits, reactions and deletes are silent ---');
-    const loud = postGroupThreadMessage(cb, crew.id, bob, 'plain line');
+    const loud = post(bob);
     await pushesSent();
     pushes.length = 0;
-    editEngine(cb, loud.id, bob, b64('Hey @Alice, look at this'), 'plaintext-v1');
+    // The words are sealed, so "an edited text names @Alice" is an edit whose metadata declares the mention: the node
+    // keeps the original line's mentions, not the edit's, and pushes nobody.
+    const mentioning = sealed({ mentions: [alice] });
+    editEngine(cb, loud.id, bob, mentioning.ciphertext, mentioning.nonce, undefined, mentioning.metadata);
     await pushesSent();
-    assert(pushes.length === 0, 'an edit pushes nobody — and an edited text raises no new @mention notification');
+    assert(pushes.length === 0, 'an edit pushes nobody — and an edit that declares a mention raises no new @mention notification');
     assert(!metaOf(loud.id).mentions, 'nor does it add a mention to the message');
     reactEngine(cb, loud.id, alice, '👍');
     await pushesSent();
@@ -489,7 +536,7 @@ async function main(): Promise<void> {
     deleteEngine(cb, loud.id, bob);
     await pushesSent();
     assert(pushes.length === 0, 'a delete pushes nobody');
-    const stillLoud = postGroupThreadMessage(cb, crew.id, bob, 'and a NEW message still pushes');
+    const stillLoud = post(bob);
     await pushesSent();
     assert(pushes.flatMap(p => p.targets).includes(alice) && !!stillLoud, 'while a new message still does');
 
@@ -499,7 +546,7 @@ async function main(): Promise<void> {
     const circle = createGroup({ name: 'Quiet Circle', joinPolicy: 'invite_only', createdBy: alice });
     inviteGroupMember(circle.id, alice, bob, 'member');
     joinGroup(circle.id, bob);
-    const secret = postGroupThreadMessage(cb, circle.id, bob, 'only the circle sees this');
+    const secret = post(bob, {}, circle.id);
     const ghost = crypto.randomUUID();  // an id nobody has
     /** Status and words: all a prober can see. The two answers must be the same string. */
     const answer = (ctx: any) => `${statusOf(ctx)} ${ctx.body?.error ?? ''}`;
@@ -507,7 +554,7 @@ async function main(): Promise<void> {
         const [realDel, ghostDel] = [await del(pk, secret.id), await del(pk, ghost)];
         assert(answer(realDel) === answer(ghostDel),
             `${who} deleting a message inside an invite-only group is answered exactly as an id nobody has (got ${answer(realDel)} vs ${answer(ghostDel)})`);
-        const [realEdit, ghostEdit] = [await edit(pk, secret.id, 'mine now'), await edit(pk, ghost, 'mine now')];
+        const [realEdit, ghostEdit] = [await edit(pk, secret.id, sealed({}, circle.id)), await edit(pk, ghost, sealed({}, circle.id))];
         assert(answer(realEdit) === answer(ghostEdit),
             `${who} editing one is answered the same way (got ${answer(realEdit)} vs ${answer(ghostEdit)})`);
         const [realReact, ghostReact] = [await react(pk, secret.id), await react(pk, ghost)];
@@ -522,13 +569,13 @@ async function main(): Promise<void> {
     resetChatRateLimit();
     const frank = makeMember('Frank');
     joinGroup(crew.id, frank); approveGroupMember(crew.id, alice, frank);
-    const franksLine = postGroupThreadMessage(cb, crew.id, frank, 'a line of my own');
+    const franksLine = post(frank);
     let braked = 0;
     for (let i = 0; i < CHAT_LINES_PER_MINUTE + 1; i++) {
         if (statusOf(await react(frank, franksLine.id)) === 429) braked++;
     }
     assert(braked === 1, `only the ${CHAT_LINES_PER_MINUTE + 1}th room write in a minute is braked (got ${braked})`);
-    assert(statusOf(await edit(frank, franksLine.id, 'still braked')) === 429,
+    assert(statusOf(await edit(frank, franksLine.id)) === 429,
         'and edits, reactions and deletes share the one bucket — the chat bucket the group send route uses');
     // A DM is not a room: its fan-out is the other phone, so it keeps the DM rules.
     const franksDm = createConversation('dm', [frank, bob], frank)!;

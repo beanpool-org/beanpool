@@ -129,6 +129,7 @@ import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate
 import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { scrubServerFaults } from './routes/member-error-text.js';
+import { apiCompression, apiGzipFromEnv, API_GZIP_ENV } from './api-compression.js';
 import { CommonsPotUnknownError } from './engine/audit.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createAppleReturnRoutes } from './routes/apple-return.js';
@@ -1161,6 +1162,11 @@ export async function startHttpsServer(port: number): Promise<number> {
         ctx.request.ip = clientIp(ctx);
         await next();
     });
+
+    // An /api answer is gzipped for a reader that asks (api-compression.ts). First of those that set or change a body,
+    // so it compresses the final one: its work is after next(). API_GZIP=off in .env leaves it out altogether.
+    if (apiGzipFromEnv()) app.use(apiCompression());
+    else console.log(`🗜️  ${API_GZIP_ENV}=off: /api answers go out as the routes make them, not gzipped here.`);
 
     // A database, network or bug's text in an answer outside the operator's routes is a server fault: replaced by fixed
     // words and answered 500, over every route and gate below (routes/member-error-text.ts).

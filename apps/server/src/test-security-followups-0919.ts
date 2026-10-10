@@ -38,6 +38,7 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { authRateLimit } from './auth-rate-limit.js';
 import { resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 import { db } from './db/db.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { removalInGraceFromBefore } from './decisions-from-before-test-fixture.js';
 import { setCommonsBalance } from '@beanpool/core';
 import type { RouteDeps } from './routes/types.js';
@@ -290,7 +291,7 @@ async function run() {
     let sentOk = 0;
     for (let i = 0; i < 10; i++) {
         for (const pk of [alice, bob]) {
-            const r = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: pk, ip: NAT_IP, body: { text: `line ${i}` } });
+            const r = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: pk, ip: NAT_IP, body: lockedGroupLine(db, hall.id) });
             if (r.status === 201) sentOk++;
         }
     }
@@ -299,17 +300,18 @@ async function run() {
     assert(lookup.status === 200, `a recovery lookup from that IP is not locked out (got ${lookup.status} ${JSON.stringify(lookup.body)})`);
     const viaSend = await callRouter(messaging, 'POST', '/api/messages/send', {
         actor: bob, ip: NAT_IP,
-        body: { conversationId: hall.id, authorPubkey: bob, ciphertext: Buffer.from('old app line').toString('base64'), nonce: 'plaintext-v1' },
+        // The sealed form of a group line (the readable one an old app sent is refused, and is the keeper-read-cursor suite's check).
+        body: { conversationId: hall.id, authorPubkey: bob, ...lockedGroupLine(db, hall.id) },
     });
     assert(viaSend.status === 200 && viaSend.body?.success === true, `a group line through the old send route uses the same chat bucket (got ${viaSend.status})`);
     let aliceLast = 0;
     for (let i = 10; i < CHAT_LINES_PER_MINUTE; i++) {
-        aliceLast = (await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: alice, ip: NAT_IP, body: { text: `more ${i}` } })).status;
+        aliceLast = (await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: alice, ip: NAT_IP, body: lockedGroupLine(db, hall.id) })).status;
     }
     assert(aliceLast === 201, `Alice can send ${CHAT_LINES_PER_MINUTE} lines in a minute`);
-    const aliceOver = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: alice, ip: NAT_IP, body: { text: 'one too many' } });
+    const aliceOver = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: alice, ip: NAT_IP, body: lockedGroupLine(db, hall.id) });
     assert(aliceOver.status === 429, `line ${CHAT_LINES_PER_MINUTE + 1} from Alice is refused`);
-    const bobStill = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: bob, ip: NAT_IP, body: { text: 'still here' } });
+    const bobStill = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: bob, ip: NAT_IP, body: lockedGroupLine(db, hall.id) });
     assert(bobStill.status === 201, 'while Bob, on the same IP, keeps his own budget');
     const lookupAfter = await callRouter(community, 'GET', '/api/recovery/lookup/bob', { ip: NAT_IP });
     assert(lookupAfter.status === 200, 'and recovery lookup from that IP still works');

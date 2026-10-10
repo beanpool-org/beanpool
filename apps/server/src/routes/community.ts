@@ -71,7 +71,7 @@ import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@be
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
-import { db } from '../db/db.js';
+import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
@@ -1095,7 +1095,12 @@ router.post('/api/invite/generate', async (ctx) => {
 function redeemedCard(ctx: any, result: { member?: Parameters<typeof publicMemberCard>[0]; alreadyMember?: boolean }, publicKey: string) {
     if (!result.member) return undefined;
     if (result.alreadyMember && !signedByKey(ctx, publicKey)) return undefined;
-    return publicMemberCard(result.member);
+    const card = publicMemberCard(result.member);
+    // A photo still inline while the move out of the rows is stopped part way (db.ts memberPhotoNotMovedYet, #1482):
+    // getMember reads member_photos only, so without it the phone reads "no photo" and publishes its own copy, an older
+    // one, say, over the member's newer photo for good (native utils/db.ts redeemInvite nodeHasPhoto).
+    if (!card.avatarUrl) card.avatarUrl = memberPhotoNotMovedYet(result.member.publicKey);
+    return card;
 }
 
 /**
@@ -2217,7 +2222,10 @@ router.get('/api/members', async (ctx) => {
     // getMemberDirectoryRows): reading every member's whole row for every request cost ~76 ms of CPU for a 513-byte
     // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal). No photo
     // is read: each URL is made from the row's avatar_ref (@beanpool/core avatarUrlOf). Reading each photo to version
-    // its URL ran a 256 MB heap out of memory with one full list at ~6,400 members with photos.
+    // its URL ran a 256 MB heap out of memory with one full list at ~6,400 members with photos. A photo still inline
+    // while a move out of the rows is stopped part way (#1482) gets a URL too, from photo_inline, a 0/1 SQLite works out
+    // (db.ts MEMBER_PHOTO_INLINE_REF): a null there told the member's phone "no photo", and its offline-edit retry
+    // published its own older copy over the newer one.
     const build = (): string => {
         const rows = getMemberDirectoryRows(facesHeal ? undefined : ctx.query.updatedAfter || undefined)
             .filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
@@ -2229,7 +2237,7 @@ router.get('/api/members', async (ctx) => {
             callsign: r.callsign,
             joinedAt: r.joined_at,
             nodeRole: rolesByPubkey.get(r.public_key) ?? null,
-            avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
+            avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref ?? (r.photo_inline ? MEMBER_PHOTO_INLINE_REF : null)),
             profileUpdatedAt: r.profile_updated_at || null,
             earnedCredit: r.earned_credit ?? 0,
             elderVouchedBy: r.elder_vouched_by || null,

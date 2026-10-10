@@ -34,7 +34,7 @@
  */
 import crypto from 'node:crypto';
 import { avatarVersionOfRef, configureAvatarKeys, configureGroupPictureKeys } from '@beanpool/core';
-import { db } from '../db/db.js';
+import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { isPrivatePreview } from '../config/private-preview.js';
 import { getNodeRole } from '../config/node-role.js';
@@ -223,9 +223,13 @@ export function avatarKeysRequired(): boolean {
 export function avatarKeyMatches(pubkey: string, k: unknown): boolean {
     if (!secret || typeof k !== 'string' || k.length !== KEY_CHARS) return false;
     const row = db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(pubkey) as { avatar_ref: string | null } | undefined;
-    if (!row || !row.avatar_ref) return false;
-    // The version avatarUrlOf put in the URL, from the row's reference: the photo is never read.
-    const want = Buffer.from(keyFor(secret, pubkey, avatarVersionOfRef(row.avatar_ref)));
+    if (!row) return false;
+    // A photo still inline while a move out of the rows is stopped part way has its URL made with a stand-in reference
+    // (db.ts MEMBER_PHOTO_INLINE_REF, #1482); only then is a photo read, one member's.
+    const ref = row.avatar_ref ?? (memberPhotoNotMovedYet(pubkey) !== null ? MEMBER_PHOTO_INLINE_REF : null);
+    if (!ref) return false;
+    // The version avatarUrlOf put in the URL, from the row's reference: the photo is never read for that.
+    const want = Buffer.from(keyFor(secret, pubkey, avatarVersionOfRef(ref)));
     const got = Buffer.from(k);
     return got.length === want.length && crypto.timingSafeEqual(got, want);
 }

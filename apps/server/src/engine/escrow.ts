@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import { isSyntheticAccount, isBeanAmount, type PushNoticeKind } from '@beanpool/core';
-import { db } from '../db/db.js';
+import { db, memberHasPhoto } from '../db/db.js';
 import { isNodeOwner } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import { adminActorName } from './admin-actor-name.js';
@@ -117,10 +117,10 @@ function assertAccountOpen(publicKey: string): void {
 }
 
 function assertProfileComplete(publicKey: string): void {
-    const member = db.prepare("SELECT avatar_ref, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
+    const member = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) return;
-    // See the identical gate in engine/posts.ts: an avatar the node serves, by the row's reference.
-    if (!member.avatar_ref) {
+    // See the identical gate in engine/posts.ts: an avatar the node serves, moved or still inline (db.ts memberHasPhoto).
+    if (!memberHasPhoto(publicKey)) {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {

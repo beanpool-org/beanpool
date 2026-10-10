@@ -80,11 +80,14 @@ export function coarseHomePoint(point: HomePoint | null | undefined): HomePoint 
 
 /**
  * The address: the cards in the catalogue's order and, on the global node, the coarse point "near you" is measured from
- * (GET /api/home's `lat`/`lng`; without one the node uses the member's own area). The signature covers the path only.
+ * (GET /api/home's `lat`/`lng`; without one the node uses the member's own area), and the landings it can open
+ * (`lands=`). The signature covers the path only.
  */
 export function homePath(asked: readonly HomeCardId[], point?: HomePoint | null): string {
     const p = coarseHomePoint(point);
-    return `/api/home?cards=${asked.join(',')}${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}` : ''}`;
+    // `lands=enterprise`: this app opens an enterprise's own screen (utils/needs-you.ts needsTargetHref), so the node may
+    // point a keepers' vote line there and count it (apps/server routes/home-answer.ts parseLands).
+    return `/api/home?cards=${asked.join(',')}&lands=enterprise${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}` : ''}`;
 }
 
 export async function readStoredHome(publicKey: string, url: string): Promise<StoredHome | null> {

@@ -145,7 +145,7 @@ describe('one signed read for the whole screen, and the 304', () => {
         expect(homeReads()).toHaveLength(1);
         const [r] = homeReads();
         // A newcomer's Home (CARD-FRAME §3): the fixed two and the five's node-built cards, in catalogue order.
-        expect(r.url).toBe(`${NODE}/api/home?cards=needs,safety,steps,events,market,notices,community`);
+        expect(r.url).toBe(`${NODE}/api/home?cards=needs,safety,steps,events,market,notices,community&lands=enterprise`);
         expect(r.headers['If-None-Match']).toBeUndefined();
         expect(boundSignatureValid(r, me.publicKey)).toBe(true);
         const kept = await readStoredHome(me.publicKey, NODE);
@@ -154,12 +154,12 @@ describe('one signed read for the whole screen, and the 304', () => {
     });
 
     it('a point (the global node, H4): two decimals in the address, outside the signature, and the kept tag still sent', async () => {
-        expect(homePath(['market'], { lat: -28.548_31, lng: 153.499_97 })).toBe('/api/home?cards=market&lat=-28.55&lng=153.50');
+        expect(homePath(['market'], { lat: -28.548_31, lng: 153.499_97 })).toBe('/api/home?cards=market&lands=enterprise&lat=-28.55&lng=153.50');
         expect(coarseHomePoint({ lat: -28.548_31, lng: 153.499_97 })).toEqual({ lat: -28.55, lng: 153.5 });
         // No point, or one that isn't a place: the address is H2's.
-        expect(homePath(['market'])).toBe('/api/home?cards=market');
-        expect(homePath(['market'], { lat: NaN, lng: 1 })).toBe('/api/home?cards=market');
-        expect(homePath(['market'], { lat: 91, lng: 1 })).toBe('/api/home?cards=market');
+        expect(homePath(['market'])).toBe('/api/home?cards=market&lands=enterprise');
+        expect(homePath(['market'], { lat: NaN, lng: 1 })).toBe('/api/home?cards=market&lands=enterprise');
+        expect(homePath(['market'], { lat: 91, lng: 1 })).toBe('/api/home?cards=market&lands=enterprise');
         // A street's move is the same address, so a repeat read is still a 304.
         expect(homePath(['market'], { lat: -28.5481, lng: 153.4999 })).toBe(homePath(['market'], { lat: -28.5517, lng: 153.4962 }));
         const first = await readHomeFromNode(NODE, me, asked, null, { point: { lat: -28.548_31, lng: 153.499_97 } });

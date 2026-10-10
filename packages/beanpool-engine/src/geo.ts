@@ -9,6 +9,7 @@
 // no PostGIS. That is why the listing keeps its distance SQL to a function call, BETWEEN, OR and NULLS LAST.
 
 import type Database from 'better-sqlite3';
+import { roundToArea } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -35,13 +36,12 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
  * poles). A person's area is stored rounded to it (apps/server engine/member-area.ts), and a visitor on a node that
  * shows them the listings but not the people (the global profile's `guestListingsOnly`) is given every post's place
  * rounded to it, with every distance, order and radius worked out from the rounded place (posts.ts `coarse`). One rule
- * and one implementation for both: SQL measures from it through `area_km` (registerGeoFunctions), never through its
- * own `round()`, which rounds halves away from zero where this rounds them up, and would measure a post from another
- * area than the one it is shown in. Never -0, which would read back as a different number from 0.
+ * and one implementation for both, and for the apps, which round a position before it leaves the device: it lives in
+ * @beanpool/core (geo.ts) and is re-exported here. SQL measures from it through `area_km` (registerGeoFunctions), never
+ * through its own `round()`, which rounds halves away from zero where this rounds them up, and would measure a post from
+ * another area than the one it is shown in.
  */
-export function roundToArea(deg: number): number {
-    return Math.round(deg * 10) / 10 + 0;
-}
+export { roundToArea };
 
 /** How far a place can be from its area's centre on each axis, in degrees: half a step. */
 export const AREA_HALF_STEP_DEG = 0.05;

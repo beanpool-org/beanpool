@@ -548,6 +548,14 @@ function hiddenAsRemoved(post: MarketplacePost): MarketplacePost {
  */
 export const ON_HOLIDAY_SQL = "SELECT public_key FROM member_preferences WHERE pref_key = 'holiday_mode' AND pref_value = 'true'";
 export const ENTERPRISE_ON_BOARD_SQL = "(m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+/**
+ * ENTERPRISE_ON_BOARD_SQL as a test of the listing's author key alone, for a pass that reads many listings and no author
+ * (getNearbySet). The authors it leaves off the board are the few rows of idx_members_off_board (schema.sql, the same
+ * expression), read once a query, where the join looked up every listing's author: at 100k posts and 20,000 members
+ * that was 14 of the busy town's 18 ms (2026-10-10). The same test: posts.author_pubkey is NOT NULL, members.public_key
+ * is the key, and the expression is never NULL for a row, so an author with no row here stays on the board as before.
+ */
+const ENTERPRISE_ON_BOARD_BY_KEY_SQL = `p.author_pubkey NOT IN (SELECT public_key FROM members WHERE NOT (${ENTERPRISE_ON_BOARD_SQL.replace(/\bm\./g, '')}))`;
 
 /** Of these authors, the ones whose listings the board leaves out (ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL). */
 function authorsOffBoard(db: Db, authors: string[]): Set<string> {
@@ -1068,8 +1076,8 @@ export interface NearbySet {
     ids: string[];
     /** near(M): nearest first (NEAREST_ORDER), or the newest first for a member with no area. */
     near: string[];
-    /** Each row of S with its updated_at, and each of its authors with their board_standing_changed_at (an author's
-     *  holiday moves no listing row), in one string: with `ids`, what a read of S answers depends on (the route's ETag).
+    /** Each row of S with its updated_at, and each of its authors whose standing ever moved with their
+     *  board_standing_changed_at (an author's holiday moves no listing row), in one string: with `ids`, what a read of S answers depends on (the route's ETag).
      *  Every row's own time, not the newest: a row edited to a time below another's (a clock behind, an imported row)
      *  still changes it. */
     stamp: string;
@@ -1082,7 +1090,8 @@ export interface NearbySet {
  *   reader (getPosts with no `sync`: on the board, open, an event not ended, the author not on holiday nor a paused
  *   enterprise, a group's or a person's listing they may read, hidden by reports out but their own), ordered by
  *   NEAREST_ORDER, a total order. One lean pass on the radius's box (idx_posts_lat_lng), as postRowsNear's bounded pass:
- *   at most `measureAtMost` of the matching posts in the box are measured. A post with no place is never in it. With
+ *   at most `measureAtMost` of the matching posts in the box are measured. It reads no author's row: the enterprise
+ *   half of the board's rule is tested on the author's key (ENTERPRISE_ON_BOARD_BY_KEY_SQL), the holiday half already is. A post with no place is never in it. With
  *   no area: the newest `newestWithoutArea` listings under the same rules, wherever they are.
  * - own(M): every listing the member wrote here, whatever its place or state.
  * - ties(M): the listings they have an open deal on (asked for, or taken and not yet done) or a conversation about,
@@ -1091,10 +1100,10 @@ export interface NearbySet {
  * of S is a row that a sync read kept to `ids` hands back, and nothing the reader may not read is named.
  */
 export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbySet {
-    const own = (db.prepare('SELECT id FROM posts WHERE author_pubkey = ? AND origin_node IS NULL').all(member) as Array<{ id: string }>).map(r => r.id);
+    const own = (prepared(db, 'SELECT id FROM posts WHERE author_pubkey = ? AND origin_node IS NULL').all(member) as Array<{ id: string }>).map(r => r.id);
     let tied: string[] = [];
     try {
-        tied = (db.prepare(`
+        tied = (prepared(db, `
             SELECT post_id AS id FROM marketplace_transactions WHERE buyer_pubkey = @m AND status IN ('requested', 'pending') AND post_id IS NOT NULL
             UNION
             SELECT post_id FROM marketplace_transactions WHERE seller_pubkey = @m AND status IN ('requested', 'pending') AND post_id IS NOT NULL
@@ -1106,34 +1115,45 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     }
     const base: PostFilter = { viewerPubkey: member, types: q.types, excludeEvents: q.excludeEvents, includeHidden: q.includeHidden };
 
-    // near(M): the rows are never read in full; the hook keeps what the lean pass ranked.
-    let ranked: Array<{ id: string; updated_at: string | null }> = [];
-    const rankNear: RowsNear = (d, near, where, whereParams) => {
+    // near(M): the rows are never read in full; the hook keeps what the lean pass ranked. `m` stays joined for any
+    // other condition on the author's row; with none, SQLite leaves the join out. Each statement is compiled once
+    // (prepared): for a member with few listings near them, compiling was most of the cost.
+    let ranked: Array<{ id: string; updated_at: string | null; author_pubkey: string }> = [];
+    const rankNear: RowsNear = (d, near, listingWhere, whereParams) => {
+        const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL);
         if (!q.area) {
-            ranked = d.prepare(`
-        SELECT p.id, p.updated_at FROM posts p
+            ranked = prepared(d, `
+        SELECT p.id, p.updated_at, p.author_pubkey FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE 1=1${where} ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?`).all(...whereParams, q.newestWithoutArea) as typeof ranked;
             return [];
         }
         const box = boundingBox(near.lat, near.lng, q.radiusKm);
-        const params: unknown[] = [near.lat, near.lng, box.latMin, box.latMax, ...box.lngRanges.flat(), ...whereParams];
+        const inBox = `p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})`;
+        const boxParams = [box.latMin, box.latMax, ...box.lngRanges.flat()];
+        const params: unknown[] = [near.lat, near.lng, ...boxParams, ...whereParams];
         let inner = `
-                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.author_pubkey
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
-                WHERE p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})${where}`;
-        if (q.measureAtMost && q.measureAtMost > 0) {
+                WHERE ${inBox}${where}`;
+        // The bound (measureAtMost): the newest `cap` of the matching posts, when the box holds more posts than that.
+        // Whether it does is counted from idx_posts_lat_lng alone, up to cap + 1; when it doesn't, every matching post is
+        // among the newest `cap` anyway, and they are measured without sorting them first (the sort was a third of the
+        // busy town's pass).
+        const cap = q.measureAtMost && q.measureAtMost > 0 ? Math.floor(q.measureAtMost) : 0;
+        if (cap > 0 && (prepared(d, `SELECT count(*) AS n FROM (SELECT 1 FROM posts p WHERE ${inBox} LIMIT ?)`)
+            .get(...boxParams, cap + 1) as { n: number }).n > cap) {
             inner += ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?';
-            params.push(Math.floor(q.measureAtMost));
+            params.push(cap);
         }
         params.push(q.radiusKm, q.max);
-        ranked = d.prepare(`
+        ranked = prepared(d, `
         WITH measured AS MATERIALIZED (
-            SELECT q.id, q.updated_at, q.created_at, haversine_km(?, ?, q.lat, q.lng) AS distance_km FROM (${inner}
+            SELECT q.id, q.updated_at, q.created_at, q.author_pubkey, haversine_km(?, ?, q.lat, q.lng) AS distance_km FROM (${inner}
             ) q
         )
-        SELECT p.id, p.updated_at FROM measured p WHERE p.distance_km <= ?${NEAREST_ORDER} LIMIT ?`).all(...params) as typeof ranked;
+        SELECT p.id, p.updated_at, p.author_pubkey FROM measured p WHERE p.distance_km <= ?${NEAREST_ORDER} LIMIT ?`).all(...params) as typeof ranked;
         return [];
     };
     getPostsRankedBy(db, { ...base, near: q.area ? { lat: q.area.lat, lng: q.area.lng, radiusKm: q.radiusKm } : { lat: 0, lng: 0 }, sortByDistance: true, limit: q.max }, rankNear);
@@ -1142,11 +1162,11 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     // own and ties, kept to a sync read's rules for this reader.
     const inNear = new Set(near);
     const extra = [...new Set([...own, ...tied])].filter(id => !inNear.has(id));
-    let kept: Array<{ id: string; updated_at: string | null }> = [];
+    let kept: Array<{ id: string; updated_at: string | null; author_pubkey: string }> = [];
     if (extra.length > 0) {
         const keep: RowsNear = (d, _near, where, whereParams) => {
-            kept = d.prepare(`
-        SELECT p.id, p.updated_at FROM posts p
+            kept = prepared(d, `
+        SELECT p.id, p.updated_at, p.author_pubkey FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE 1=1${where} ORDER BY p.id`).all(...whereParams) as typeof kept;
             return [];
@@ -1156,9 +1176,12 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     const ids = [...near, ...kept.map(r => r.id)];
     let stamp = [...ranked, ...kept].map(r => `${r.id}@${r.updated_at ?? ''}`).join(',');
     if (ids.length > 0) {
-        const standing = db.prepare(`SELECT public_key, board_standing_changed_at AS at FROM members WHERE public_key IN
-            (SELECT DISTINCT author_pubkey FROM posts WHERE id IN (SELECT value FROM json_each(?))) ORDER BY public_key`).all(JSON.stringify(ids)) as Array<{ public_key: string; at: string | null }>;
-        stamp += `|${standing.map(r => `${r.public_key}@${r.at ?? ''}`).join(',')}`;
+        // The authors of S whose standing ever moved (idx_members_standing_by_key, schema.sql). One whose never has adds
+        // nothing: a listing's author never changes, so the authors are fixed by `ids`, and a first change adds a line.
+        const authors = [...new Set([...ranked, ...kept].map(r => r.author_pubkey))];
+        const standing = prepared(db, `SELECT public_key, board_standing_changed_at AS at FROM members
+            WHERE board_standing_changed_at IS NOT NULL AND public_key IN (SELECT value FROM json_each(?)) ORDER BY public_key`).all(JSON.stringify(authors)) as Array<{ public_key: string; at: string }>;
+        stamp += `|${standing.map(r => `${r.public_key}@${r.at}`).join(',')}`;
     }
     return { ids, near, stamp };
 }

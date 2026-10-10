@@ -11,6 +11,7 @@ import type { MarketplacePost } from '../lib/api';
 import { formatEventWhen } from '../lib/events';
 import { PLACE_AFTER_JOIN, visitorDistanceText, visitorPriceText } from '../lib/visitor-lobby';
 import { PollCard } from './PollCard';
+import { listPhotoUrl } from '@beanpool/core';
 
 function typeLabel(post: MarketplacePost): string {
     return post.type === 'offer' ? 'Offer' : post.type === 'need' ? 'Need' : post.type === 'event' ? 'Event' : 'Poll';
@@ -62,7 +63,7 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
         >
             <span className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-nature-100 dark:bg-nature-800 flex items-center justify-center">
                 {photo
-                    ? <img src={photo} alt="" className="w-full h-full object-cover" />
+                    ? <img src={listPhotoUrl(photo)} alt="" className="w-full h-full object-cover" />
                     : <span className="text-3xl" aria-hidden="true">{cat?.emoji ?? '📦'}</span>}
             </span>
             <span className="flex-1 min-w-0 flex flex-col gap-1">

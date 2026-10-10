@@ -31,6 +31,7 @@ import { imageFromTransfer, dragCarriesFile, chatImageRefusal } from '../lib/cha
 import { nodeRefusal } from '../lib/node-refusal';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
+import { listPhotoUrl } from '@beanpool/core';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -2036,7 +2037,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     }}>
                                         {conv.postPhoto ? (
-                                            <img src={conv.postPhoto} alt="" style={{
+                                            <img src={listPhotoUrl(conv.postPhoto)} alt="" style={{
                                                 width: '44px', height: '44px', objectFit: 'cover', borderRadius: '12px',
                                             }} />
                                         ) : (

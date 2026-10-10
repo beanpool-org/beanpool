@@ -37,6 +37,7 @@ export * from './owner-words-check.js';
 export * from './recovery-words.js';
 export * from './owner-unlock.js';
 export * from './avatar-url.js';
+export * from './list-photo-url.js';
 export * from './onboarding-funnel.js';
 export * from './live-updates.js';
 export * from './request-signing.js';

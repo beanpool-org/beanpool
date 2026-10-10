@@ -7,6 +7,7 @@ import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
+import { listPhotoUrl } from '@beanpool/core';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -405,7 +406,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                     isPending && { backgroundColor: palette.green50, borderColor: palette.green200 },
                 ]}>
                     {item.coverImage && typeof item.coverImage === 'string' && item.coverImage.trim() !== '' && item.coverImage !== 'null' && item.coverImage !== 'undefined' ? (
-                        <ExpoImage source={{ uri: item.coverImage }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                        <ExpoImage source={{ uri: listPhotoUrl(item.coverImage) }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ) : (
                         <View style={[styles.dealThumb, styles.dealThumbFallback]}>
                             <Text style={{ fontSize: 24, opacity: 0.5 }}>{isBuyer ? '🛒' : '🏷️'}</Text>
@@ -505,7 +506,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push(`/post/${item.id}`); }}>
                 <View style={[styles.dealCard, highlightStyle, item.status === 'paused' && styles.dealCardPaused]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                        <ExpoImage source={{ uri: coverImage }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                        <ExpoImage source={{ uri: listPhotoUrl(coverImage) }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ) : (
                         <View style={[styles.dealThumb, styles.dealThumbFallback]}>
                             <Text style={{ fontSize: 24, opacity: 0.5 }}>📦</Text>

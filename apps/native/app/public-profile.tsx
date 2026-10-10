@@ -11,7 +11,7 @@ import { blockUser } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, listPhotoUrl, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
 import { getCanonicalProfile } from '../utils/canonical-profile';
 import { ChannelChips } from '../components/ChannelChips';
 import { fetchPublicChannels } from '../utils/channels';
@@ -1242,7 +1242,7 @@ export default function PublicProfileScreen() {
                                                 <View style={styles.dealCard}>
                                                     <View style={{ flexDirection: 'row', gap: 12 }}>
                                                         {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                                                            <Image accessibilityLabel="Listing photo" source={{ uri: coverImage }} style={styles.dealThumb} />
+                                                            <Image accessibilityLabel="Listing photo" source={{ uri: listPhotoUrl(coverImage) }} style={styles.dealThumb} />
                                                         ) : (
                                                             <View style={[styles.dealThumb, styles.dealThumbFallback]}>
                                                                 <Text style={{ fontSize: 24, opacity: 0.4 }}>📦</Text>

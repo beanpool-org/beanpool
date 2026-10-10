@@ -8,7 +8,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, listPhotoUrl, type QuizResult } from '@beanpool/core';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
@@ -808,7 +808,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                     aria-label={`View enlarged photo: ${p.title}`}
                                                                     className="w-14 h-14 rounded-lg overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                                                 >
-                                                                    <img src={coverImage} alt={p.title} className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
+                                                                    <img src={listPhotoUrl(coverImage)} alt={p.title} className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
                                                                 </button>
                                                             ) : (
                                                                 <div className="w-14 h-14 rounded-lg bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-2xl opacity-50">

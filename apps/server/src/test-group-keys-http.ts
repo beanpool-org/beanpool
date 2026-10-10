@@ -437,6 +437,23 @@ async function main(): Promise<void> {
     const missingAna = (await call('GET', ana, `${keysPath}/missing`)).body.missing.find((m: any) => m.pubkey === ana.pk);
     assert(missingAna?.fromEpoch === 1 && missingAna.epochs.includes(4), 'and the member shows in …/keys/missing from their first epoch');
 
+    // ── 10. a rejoin after a clock step back ────────────────────────────────────────────────────────
+    console.log('\n── 10. a rejoin whose joined_at lands after the moment its own epoch is stored ──');
+    // Ben's leave was stamped 5 s ahead (the clock stepped back since, or a promoted standby is behind the main server that
+    // stamped it), so his rejoin's joined_at is moved past it. His own join epoch must still be his (review finding 6).
+    const clock = createGroup({ name: 'Clock Step', joinPolicy: 'open', createdBy: ana.pk });
+    const clockKeys = `/api/groups/${clock.id}/keys`;
+    assert((await call('POST', ana, `${clockKeys}/epoch`, { epoch: epochBy(ana, clock.id, 1, 'start', [ana]).record })).status === 201, 'a fresh group starts at epoch 1');
+    assert((await call('POST', ben, `/api/groups/${clock.id}/join`, { epoch: epochBy(ben, clock.id, 2, 'join', [ana, ben], ben).record })).status === 200, 'Ben joins with epoch 2');
+    assert((await call('DELETE', ben, `/api/groups/${clock.id}/members/${ben.pk}`, {})).status === 200, 'Ben leaves');
+    db.prepare("UPDATE tombstones SET deleted_at = ? WHERE table_name = 'group_members' AND row_key = ?").run(new Date(Date.now() + 5000).toISOString(), `${clock.id}|${ben.pk}`);
+    const rejoin3 = epochBy(ben, clock.id, 3, 'join', [ana, ben], ben);
+    assert((await call('POST', ben, `/api/groups/${clock.id}/join`, { epoch: rejoin3.record })).status === 200, 'Ben rejoins with his own epoch 3');
+    const benBack = await call('GET', ben, clockKeys);
+    assert(benBack.body.fromEpoch === 3 && benBack.body.myWraps.some((w: any) => w.epoch === 3),
+        `and is served it: fromEpoch 3 and his wrap (got fromEpoch ${benBack.body.fromEpoch}, wraps ${JSON.stringify(benBack.body.myWraps.map((w: any) => w.epoch))})`);
+    assert(Buffer.from(await myKey(ben, clock.id, 3, benBack)).equals(Buffer.from(rejoin3.groupKey)), 'and opens it');
+
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);
 }

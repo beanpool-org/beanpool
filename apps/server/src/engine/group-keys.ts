@@ -129,7 +129,10 @@ function recordFrom(groupId: string, raw: unknown): GroupEpochRecord {
  * Check and store the next epoch, inside the caller's transaction, against the membership as it is NOW (after the change
  * the caller just made). Throws GroupKeyError; the caller's transaction then rolls the membership change back with it.
  */
-export function storeGroupEpoch(groupId: string, actor: string, raw: unknown, opts: { allowed: readonly GroupEpochReason[]; subject?: string | null }): { epoch: number } {
+export function storeGroupEpoch(
+    groupId: string, actor: string, raw: unknown,
+    opts: { allowed: readonly GroupEpochReason[]; subject?: string | null; storedNotBefore?: string | null },
+): { epoch: number } {
     const record = recordFrom(groupId, raw);
     if (record.createdBy !== actor) throw new GroupKeyError(403, 'epoch_refused', 'An epoch is made by the member who sends it.');
     if (!opts.allowed.includes(record.reason)) throw new GroupKeyError(400, 'epoch_refused', `This change takes an epoch made for: ${opts.allowed.join(', ')}.`);
@@ -147,11 +150,13 @@ export function storeGroupEpoch(groupId: string, actor: string, raw: unknown, op
     }
     if (!groupEpochCoversExactly(record, roster)) throw conflict("The epoch is not wrapped to exactly this group's active members.");
     const now = new Date().toISOString();
+    // fromEpochOf compares stored_at with joined_at, so a joiner's own epoch is never stamped before their membership began.
+    const storedAt = opts.storedNotBefore && opts.storedNotBefore > now ? opts.storedNotBefore : now;
     db.prepare(`INSERT INTO group_key_epochs (group_id, epoch, created_by, reason, subject_pubkey, created_at, key_commit, members_digest,
                     wraps_digest, sig, stored_at, stale_since, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`)
         .run(groupId, record.epoch, record.createdBy, record.reason, record.subject, record.createdAt, record.keyCommit,
-            record.membersDigest, record.wrapsDigest, record.sig, now, now);
+            record.membersDigest, record.wrapsDigest, record.sig, storedAt, now);
     const wrap = db.prepare(`INSERT INTO group_key_wraps (group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at, updated_at)
                              VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`);
     for (const w of record.wraps!) wrap.run(groupId, record.epoch, w.recipient, record.createdBy, w.ephPub, w.nonce, w.wrapped, now, now);
@@ -178,7 +183,12 @@ export function withMembershipEpoch<T>(
         const changed = groupKeyRoster(groupId).join(',') !== before;
         if (raw !== undefined && raw !== null) {
             if (!changed) throw new GroupKeyError(400, 'epoch_not_applicable', 'This change lets nobody in or out of the chat, so it takes no new key.');
-            storeGroupEpoch(groupId, actor, raw, opts);
+            // A joiner's joined_at can lie ahead of the clock (groups.ts membershipWriteAt moves it past a leave stamped
+            // later: a clock step back, or a promoted standby behind the main server); their epoch is stored no earlier, so
+            // it stays their first (review of #1762, finding 6).
+            const joinedAt = (db.prepare("SELECT joined_at FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'")
+                .get(groupId, opts.subject) as { joined_at: string } | undefined)?.joined_at ?? null;
+            storeGroupEpoch(groupId, actor, raw, { ...opts, storedNotBefore: joinedAt });
         } else if (changed) {
             markGroupEpochStale(groupId);
         }

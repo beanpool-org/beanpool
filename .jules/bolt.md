@@ -252,3 +252,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-12 - O(1) Escrow Banner Pending Transaction Lookups in PWA MessagesPage
 **Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, checking for active trust hold / escrow banners executed `userTransactions.find(...)` inside the render block on every render cycle ($O(T)$ complexity).
 **Action:** Memoized `activePendingTransaction` via `useMemo` dependent on `activeConv` and `userTransactions`, eliminating $O(T)$ array scans during active chat renders.
+
+## 2026-10-13 - O(1) Peer Pubkey Lookups in Engine getConversationsByMember
+**Learning:** In `packages/beanpool-engine/src/messaging.ts`, `getConversationsByMember` performed `parts.find(p => p !== pubkey)` on every conversation row inside `rows.map`, causing $O(C \times P)$ array scans when constructing conversation lists.
+**Action:** Pre-computed `peerPubkeyByConv` Map during participant chunk iteration, converting peer public key resolution into constant-time $O(1)$ Map retrievals.

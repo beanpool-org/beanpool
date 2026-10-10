@@ -509,6 +509,9 @@ async function main(): Promise<void> {
         const placed = await get('/api/home?cards=community', erin);
         assert(JSON.stringify(placed.body?.cards?.community?.place) === JSON.stringify({ lat: -28.56, lng: 153.5 }),
             `and the node's location to two decimals once it has one (${JSON.stringify(placed.body?.cards?.community?.place)})`);
+        const status = await get('/api/local/status');
+        assert(JSON.stringify(status.body?.location) === JSON.stringify({ lat: -28.56, lng: 153.5 }),
+            `/api/local/status, which answers anyone, gives the location rounded to two decimals too (${JSON.stringify(status.body?.location)})`);
         // F5 (the sun and moon card): the place is part of the answer's tag, so a move is a fresh answer and no move a 304.
         const samePlace = await get('/api/home?cards=community', erin, { 'If-None-Match': placed.etag! });
         assert(samePlace.status === 304, `an unchanged place is still a 304 (${samePlace.status})`);

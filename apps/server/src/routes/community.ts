@@ -127,7 +127,9 @@ router.get('/api/local/status', async (ctx) => {
         // unlocked, and one from a community with no password leaves an older server's lock with no hash behind it.
         isLocked: hasAdminPassword(config),
         callsign: config.callsign || null,
-        location: config.location || null,
+        // Rounded to two decimals (~1 km), as the Home answer's community.place: this route answers anyone, from anywhere, and an
+        // operator may have set a home address. The only reader is the sister map in the legacy settings page (a marker).
+        location: config.location ? { lat: Math.round(config.location.lat * 100) / 100, lng: Math.round(config.location.lng * 100) / 100 } : null,
         // Design step 10: an owner retired the admin password, so sign-in screens show no password field and the fleet
         // manager knows to use a token. Absent on a node from before.
         passwordRetired: !!config.passwordRetired,
@@ -465,7 +467,10 @@ router.get('/api/local/dashboard', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) {
         if (!(ctx.body as any)?.notSignedIn) return;
         ctx.status = 200;
-        ctx.body = { identity };
+        // Anyone gets the location rounded to two decimals (~1 km), as /api/local/status and community.place; an owner or
+        // admin gets it exact below, because the settings form edits it from this answer (static/settings.js data.identity).
+        const loc = config.location;
+        ctx.body = { identity: { ...identity, location: loc ? { lat: Math.round(loc.lat * 100) / 100, lng: Math.round(loc.lng * 100) / 100 } : loc } };
         return;
     }
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can see its peer links')) return;

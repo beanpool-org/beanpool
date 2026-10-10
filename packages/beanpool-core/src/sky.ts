@@ -295,6 +295,16 @@ export interface SkyToday {
 }
 
 /**
+ * The lit percentage as shown beside the phase's name. Only a new or a full moon may read 0% or 100%: a crescent or a gibbous
+ * moon just outside the named day is held to 1–99%, so the card never says "Waxing crescent, 0%" (#1720 review, finding 1).
+ */
+export function moonPercentShown(moon: Pick<MoonState, "lit" | "phase">): number {
+    const raw = Math.round(moon.lit * 100);
+    return moon.phase === 'new' || moon.phase === 'full' || moon.phase === 'first-quarter' || moon.phase === 'last-quarter'
+        ? raw : Math.min(99, Math.max(1, raw));
+}
+
+/**
  * The sun and moon at a place today, in words. `now` is the moment; `day` the day the sun's times are for (the device's
  * own by default); `clock` turns a moment into hours and minutes (the device's own by default).
  */
@@ -303,7 +313,7 @@ export function skyToday(place: SkyPlace, now: number, opts: { day?: { from: num
     const day = opts.day ?? deviceDay(now);
     const moon = moonAt(now);
     const sun = sunDay(place.lat, place.lng, day.from, day.to);
-    const percent = Math.round(moon.lit * 100);
+    const percent = moonPercentShown(moon);
     const name = MOON_PHASE_NAMES[moon.phase];
     const picture = moonPicture(moon.phase, place.lat);
     let sunText: string;

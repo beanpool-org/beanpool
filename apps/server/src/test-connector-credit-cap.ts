@@ -22,7 +22,7 @@ process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
+import { initAdminPassword, updateLocalConfig } from './config/local-config.js';
 import { getConnectorCreditCap, getConnectorByAddress } from './connector-manager.js';
 import { settlementCapacity, type SettlementCapacity } from './federation-bridge.js';
 import { turnOn2faForTests, ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
@@ -233,7 +233,11 @@ async function main() {
             `7b. GET ${LIST} with ${who} → the list, cap and blocked peer included (got ${r.status}, ${list.length} links)`);
     }
 
+    // A location an operator may have set at home: anyone sees it to ~1 km, an owner or admin exactly (the settings form edits it).
+    updateLocalConfig({ location: { lat: -28.55555, lng: 153.49999 } });
     const anonDash = await getAs(DASH);
+    assert(JSON.stringify(anonDash.json?.identity?.location) === JSON.stringify({ lat: -28.56, lng: 153.5 }),
+        `7c2. GET ${DASH} with no credential → the location rounded to two decimals (got ${JSON.stringify(anonDash.json?.identity?.location)})`);
     const identityKeys = Object.keys(anonDash.json?.identity ?? {}).sort().join(',');
     assert(anonDash.status === 200 && identityKeys === 'callsign,joinedAt,location,peerId',
         `7c. GET ${DASH} with no credential → 200 with the public identity (got ${anonDash.status} ${identityKeys})`);
@@ -249,8 +253,11 @@ async function main() {
     for (const [who, headers] of adminCallers) {
         const r = await getAs(DASH, headers());
         const peer = (r.json?.connectors ?? []).find((c: any) => c.address === ADDRESS);
-        assert(r.status === 200 && peer?.creditCap === 250 && JSON.stringify(r.json?.identity) === JSON.stringify(anonDash.json?.identity),
-            `7g. GET ${DASH} with ${who} → the same identity plus the links (got ${r.status} cap=${peer?.creditCap})`);
+        const { location: exact, ...rest } = r.json?.identity ?? {};
+        const { location: _rounded, ...anonRest } = anonDash.json?.identity ?? {};
+        assert(r.status === 200 && peer?.creditCap === 250 && JSON.stringify(rest) === JSON.stringify(anonRest)
+            && JSON.stringify(exact) === JSON.stringify({ lat: -28.55555, lng: 153.49999 }),
+            `7g. GET ${DASH} with ${who} → the same identity with the exact location, plus the links (got ${r.status} cap=${peer?.creditCap} ${JSON.stringify(exact)})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

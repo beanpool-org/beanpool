@@ -654,6 +654,22 @@ export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOT
     return moved;
 }
 
+/**
+ * Whether a member has a photo this node serves, wherever it is held (#1482): its reference in the row (`avatar_ref`), or,
+ * while a move stopped part way (moveMemberPhotosOutOfRows) has left the old column, a photo still inline in it. By the
+ * move's rule a value there is a photo not moved yet that nobody has set or removed since, and it counts as one by the
+ * move's own test (memberPhotoColumnsOf): never this node's own avatar address sent back. The marketplace's photo gates
+ * read this, so a member the move has not reached is not told to set a photo they have.
+ */
+export function memberHasPhoto(publicKey: string): boolean {
+    const row = db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(publicKey) as { avatar_ref: string | null } | undefined;
+    if (!row) return false;
+    if (row.avatar_ref) return true;
+    if (!db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'avatar_url'`).get()) return false;
+    const inline = db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(publicKey) as { avatar_url: string | null };
+    return memberPhotoColumnsOf(inline.avatar_url) !== null;
+}
+
 /** Image bytes of group pictures moved in one transaction, at most (moveGroupPicturesOutOfRows); GROUP_PICTURE_MOVE_BYTES. */
 export const GROUP_PICTURE_MOVE_BYTES = 16 * 1024 * 1024;
 

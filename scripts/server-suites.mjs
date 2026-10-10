@@ -339,6 +339,7 @@ export const SUITES = [
     'test-version-route',
     'test-update-check-node-tags',
     'test-avatar-endpoint',
+    'test-photo-move-stopped-market',
     'test-avatar-keys',
     'test-etag-short-circuit',
     'test-photo-keys-resync',

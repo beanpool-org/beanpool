@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import { isSyntheticAccount, isBeanAmount, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
-import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney } from '../db/db.js';
+import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
@@ -102,12 +102,13 @@ function assertMemberActive(publicKey: string): void {
 }
 
 function assertProfileComplete(publicKey: string): void {
-    const member = db.prepare("SELECT avatar_ref, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
+    const member = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) return;
-    // The row's avatar reference, set only for an avatar the node serves (@beanpool/core avatarRefOf): never this
-    // node's own /api/avatar/ URL sent back, which holds no photo at all. Counting that as "has a photo" kept the gate
-    // open on a photo nobody could see, and the phone's self-heal never got the signal to republish the real one.
-    if (!member.avatar_ref) {
+    // An avatar the node serves (@beanpool/core avatarRefOf): never this node's own /api/avatar/ URL sent back, which
+    // holds no photo at all. Counting that as "has a photo" kept the gate open on a photo nobody could see, and the
+    // phone's self-heal never got the signal to republish the real one. Held either way: moved (the row's reference) or
+    // still inline while a stopped move leaves the old column (db.ts memberHasPhoto, #1482).
+    if (!memberHasPhoto(publicKey)) {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {

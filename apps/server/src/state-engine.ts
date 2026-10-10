@@ -2227,7 +2227,7 @@ export function reconcileLedgerFromDb(): void {
 }
 
 
-export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean }): Transaction | null {
+export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean; decisionPayOut?: boolean }): Transaction | null {
     if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
     // Before every other guard: on a node whose `beans` switch is off nothing moves, whoever asks (a member's send,
     // an escrow, a settlement, a wizard's gift). Thrown, not null, so an enclosing transaction rolls back.
@@ -2276,7 +2276,12 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // trust profile, so the completed-trade gate would block every cross-node settlement.
     // Operator/admin-signed transfers for member offboarding wizard gifts are narrowly exempt via offboardOverride.
     const isOffboardOverride = Boolean(auth?.offboardOverride && auth?.signer && (auth.signer === 'owner:password' || isNodeAdmin(auth.signer) || isNodeOwner(auth.signer)));
-    if (!isEscrow && !isOffboardOverride && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
+    // A pay-out an enterprise's keepers voted for (decisions-engine.ts pay_out, DESIGN-group-decisions §2.3): a direct send
+    // at floor 0 like any other, so never into the enterprise's credit line, but with the 1.5% fee a Need's payment carries
+    // (Marty, 2026-10-10, §5 pick 2). The first-trade gate is for a fresh account forwarding Beans and vanishing; a vote
+    // of the keepers is not that. Only the engine's own signer can ask for it: no route passes `auth` from a body.
+    const isDecisionPayOut = Boolean(auth?.decisionPayOut && typeof auth.signer === 'string' && auth.signer.startsWith('system:decision:'));
+    if (!isEscrow && !isOffboardOverride && !isDecisionPayOut && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
         const { earnedCredit } = getMemberTrustProfile(from);
         if (earnedCredit <= 0) {
             console.log(`🚫 Send blocked (no completed trade yet): ${from.substring(0, 12)}`);
@@ -2313,7 +2318,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Fee policy: the 1.5% community fee applies ONLY to marketplace/escrow settlements. Direct
     // peer "send credits" gifts are fee-free — gifting a friend beans you hold shouldn't be taxed.
     // System moves (escrow holds, refunds, admin) stay exempt via the caller's isFeeExempt.
-    const feeExempt = isFeeExempt || !isEscrow;
+    const feeExempt = isFeeExempt || (!isEscrow && !isDecisionPayOut);
     // A note to someone who has blocked its sender is kept for the sender alone, never in the row the recipient reads
     // (engine/withheld-notes.ts). Decided here, before the transaction: it refuses nothing and moves nothing, and the
     // Beans go as any send's.
@@ -4332,6 +4337,65 @@ export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: numb
  * - A lead stepping down hands the lead role on by answer G's rule (longest-serving active keeper; none → pause).
  * Their pledge is released in full (the check above guarantees the others cover any deficit).
  */
+/**
+ * A keeper who steps down leaves the roll of every open Decision of this enterprise (DESIGN-group-decisions §2.6): they
+ * chose to have no say, so a vote they cast is no longer counted (decisions-engine.ts reads only electors still 'on').
+ * Only stepping down does this. One removed by the lead, an admin or a vote stays on the roll: a removal must not be a
+ * way to swing a vote. Runs in the caller's transaction.
+ */
+function dropFromOpenScopedRolls(enterprisePubkey: string, memberPubkey: string): void {
+    db.prepare(`
+        UPDATE decision_electors SET status = 'left', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE member_pubkey = ? AND status = 'on' AND decision_id IN (
+            SELECT id FROM decisions WHERE scope_kind = 'enterprise' AND scope_id = ? AND status = 'open'
+        )
+    `).run(memberPubkey, enterprisePubkey);
+}
+
+/**
+ * Why a keeper can't be removed from an enterprise by its keepers' vote now (decisions-engine.ts remove_keeper), or
+ * null: the rules stepping down obeys (stepDownAsKeeper). Never the lead (a vote replaces the lead instead), never the
+ * last keeper, and not while their pledge is part of what covers the enterprise's debt.
+ */
+export function keeperRemovalByVoteRefusal(enterprisePubkey: string, memberPubkey: string): string | null {
+    const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .get(enterprisePubkey, memberPubkey) as { role: string } | undefined;
+    if (!op) return 'They no longer keep this enterprise';
+    if (op.role === 'lead') return 'The lead keeper is replaced by a vote, not removed';
+    if (keeperBindingCount(enterprisePubkey) <= 1) return 'They are the only keeper left';
+    const pledge = activePledgeTotal(enterprisePubkey, memberPubkey);
+    const deficit = Math.max(0, -getBalance(enterprisePubkey).balance);
+    if (pledge > 0 && allowanceWithoutKeeper(enterprisePubkey, memberPubkey) < deficit) {
+        return 'Not yet: their pledge is part of what covers this enterprise\'s debt. They can be removed once the debt is '
+            + 'covered without it.';
+    }
+    return null;
+}
+
+/**
+ * Removes a keeper as their fellow keepers voted (decisions-engine.ts remove_keeper): the binding goes and their pledge
+ * is settled exactly as when the lead removes them (keeperLeaves). Runs in the caller's transaction; the caller clears
+ * the floor cache and broadcasts. `by` is the Decision's signer.
+ */
+export function removeKeeperByVote(enterprisePubkey: string, memberPubkey: string, by: string): void {
+    keeperLeaves(enterprisePubkey, memberPubkey, by);
+}
+
+/**
+ * Makes `memberPubkey`, a keeper, the lead of an ongoing enterprise as its keepers voted (decisions-engine.ts
+ * replace_lead): what a passed succession vote does (settleSuccession). The old lead becomes a keeper and keeps their
+ * backing. Runs in the caller's transaction.
+ */
+export function replaceLeadByVote(enterprisePubkey: string, memberPubkey: string): void {
+    db.prepare("UPDATE treasury_operators SET role = 'keeper', auto_promoted_at = NULL WHERE treasury_pubkey = ? AND role = 'lead'")
+        .run(enterprisePubkey);
+    db.prepare("UPDATE treasury_operators SET role = 'lead', auto_promoted_at = NULL WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .run(enterprisePubkey, memberPubkey);
+    db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'lead_changed'
+                WHERE enterprise_pubkey = ? AND status = 'active'`).run(enterprisePubkey);
+    engine.keepersChanged(db, enterprisePubkey);
+}
+
 export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string): {
     ok: true; promoted: string | null; paused: boolean; releasedBacking: number;
 } {
@@ -4365,6 +4429,7 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
     let result = { promoted: null as string | null, paused: false };
     db.transaction(() => {
         result = keeperLeaves(enterprisePubkey, memberPubkey, memberPubkey);
+        dropFromOpenScopedRolls(enterprisePubkey, memberPubkey);
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);

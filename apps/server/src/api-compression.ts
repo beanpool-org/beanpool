@@ -76,14 +76,14 @@ function isApiPath(path: string): boolean {
     return path === '/api' || path.startsWith('/api/');
 }
 
-/** The body as the bytes Koa would send, or null when it isn't one held whole (a stream, nothing). */
-function wholeBody(body: unknown): Buffer | string | null {
-    if (body == null) return null;
-    if (Buffer.isBuffer(body)) return body;
-    if (typeof body === 'string') return body;
-    if (body instanceof Stream) return null;
-    if (typeof body === 'object') return JSON.stringify(body);
-    return null;
+/** Is the body one held whole (an object, a string or a Buffer), not a stream or nothing? */
+function heldWhole(body: unknown): body is object | string {
+    return typeof body === 'string' || (body != null && typeof body === 'object' && !(body instanceof Stream));
+}
+
+/** A body held whole as the bytes Koa would send: an object becomes its JSON, as Koa's respond makes it. */
+function asSent(body: object | string): Buffer | string {
+    return typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
 }
 
 /** `"x"` → `W/"x"`; a weak tag, or none, as it is. */
@@ -103,14 +103,19 @@ export function apiCompression(): Koa.Middleware {
         if (status < 200 || NO_BODY.has(status)) return;
         if (ctx.response.get('Content-Encoding') || ctx.response.get('Content-Range') || ctx.get('Range')) return;
         if (!COMPRESSIBLE.test(ctx.response.get('Content-Type'))) return;
-        const body = wholeBody(ctx.body);
-        if (body === null) return;
-        if (isHeavyRead(ctx)) return;
+        if (!heldWhole(ctx.body) || isHeavyRead(ctx)) return;
 
         ctx.vary('Accept-Encoding');
-        const size = typeof body === 'string' ? Buffer.byteLength(body) : body.length;
-        if (size < MIN_BYTES) return;
+        // An object is made its JSON only for a reader that asks: for any other, Koa makes it as it sends, once.
         if (ctx.acceptsEncodings('gzip', 'identity') !== 'gzip') return;
+        const body = asSent(ctx.body);
+        const size = typeof body === 'string' ? Buffer.byteLength(body) : body.length;
+        if (size < MIN_BYTES) {
+            // Made here, it goes to Koa as made, not made again. The Content-Type the route set stays (Koa sets one only
+            // where none was).
+            if (body !== ctx.body) ctx.body = body;
+            return;
+        }
 
         const gzipped = await gzipAsync(body, { level: GZIP_LEVEL, memLevel: zlibConstants.Z_DEFAULT_MEMLEVEL });
         // The reader may have gone while it was compressed: Koa then writes nothing, as it would have.

@@ -14,6 +14,8 @@
  *      as before this change
  *   5. a member's photo: its bytes as stored, never encoded, though they compress to nothing
  *   6. HEAD, a range request and a small answer: never encoded
+ *   7. an object body is made its JSON once, gzipped or not, small, heavy or neither (the #1764 review, F1: twice whenever
+ *      the middleware didn't compress)
  * With API_GZIP=off (the operator's switch; its own run in scripts/server-suites.mjs), sections 1-6 give way to: every
  * answer as the route made it, no Vary of the middleware's, the route's own ETag; the snapshots' own gzip copy stays.
  *
@@ -70,6 +72,22 @@ const varies = (a: Answer) => String(a.headers.vary ?? '').toLowerCase().split('
 const encoding = (a: Answer) => a.headers['content-encoding'];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** One read, and how many times the server made its answer from an object: JSON.stringify calls that gave its text. */
+async function timesMade(path: string, id: Id | null, headers: Record<string, string> = {}): Promise<{ answer: Answer; made: number }> {
+    const original = JSON.stringify;
+    const made: string[] = [];
+    JSON.stringify = function (this: unknown, ...args: Parameters<typeof JSON.stringify>) {
+        const text = original.apply(JSON, args);
+        if (typeof text === 'string' && text.length > 100) made.push(text);
+        return text;
+    } as typeof JSON.stringify;
+    let answer: Answer;
+    try { answer = await ask(path, id, headers); } finally { JSON.stringify = original; }
+    let text = '';
+    try { text = (encoding(answer) === 'gzip' ? gunzipSync(answer.bytes) : answer.bytes).toString(); } catch { /* the count says so */ }
+    return { answer, made: made.filter((t) => t === text).length };
+}
+
 // A real 1×1 PNG, then 8 KB of zeros: gzip would shrink it to almost nothing, so an encoded photo couldn't hide.
 const PNG_PADDED = Buffer.concat([
     Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'),
@@ -100,6 +118,9 @@ async function main() {
     };
     const alice = member('alice');
     for (let i = 0; i < 40; i++) member(`neighbour${i}`);
+    for (let i = 0; i < 5; i++) {
+        se.createGroup({ name: `Valley group ${i}`, description: `A group about the valley, number ${i}.`, joinPolicy: 'open', createdBy: alice.pubKeyHex });
+    }
     for (let i = 0; i < 60; i++) {
         se.createPost('offer', 'food', `Sourdough loaf ${i}`, `A loaf of sourdough, baked this morning, number ${i} of the batch.`, 5, 'fixed', alice.pubKeyHex)!;
     }
@@ -176,6 +197,19 @@ async function main() {
     assert(small.status === 200 && small.bytes.length < 1024 && encoding(small) === undefined,
         `a small answer stays plain (${small.status}, ${small.bytes.length} bytes, ${encoding(small)})`);
 
+    console.log('\n── 7. an object body is made its JSON once ──');
+    for (const [what, path, id, enc] of [
+        ['the activity feed, read with gzip', '/api/activity/feed', alice, { 'Accept-Encoding': 'gzip' }],
+        ['the activity feed, read without', '/api/activity/feed', alice, {}],
+        ['a small answer, read with gzip', '/api/community/info', null, { 'Accept-Encoding': 'gzip' }],
+        ['a heavy read (an object), read with gzip', '/api/groups?limit=100', alice, { 'Accept-Encoding': 'gzip' }],
+        ['a heavy read (an object), read without', '/api/groups?limit=100', alice, {}],
+        ['a heavy read (a string), read with gzip', '/api/community/members', alice, { 'Accept-Encoding': 'gzip' }],
+    ] as const) {
+        const { answer, made } = await timesMade(path, id, enc);
+        assert(answer.status === 200 && made === 1, `${what}: made once (${answer.status}, ${encoding(answer) ?? 'plain'}, ${answer.bytes.length} bytes, made ${made} times)`);
+    }
+
     finish();
 }
 
@@ -203,7 +237,7 @@ async function switchedOff(alice: Id, SYNC: string): Promise<void> {
 }
 
 function withoutGeneratedAt(bytes: Buffer): string {
-    try { const { generatedAt: _, ...rest } = JSON.parse(bytes.toString()); return JSON.stringify(rest); } catch { return 'not JSON'; }
+    try { const home = JSON.parse(bytes.toString()); delete home.generatedAt; return JSON.stringify(home); } catch { return 'not JSON'; }
 }
 
 function finish(): never {

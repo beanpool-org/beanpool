@@ -82,6 +82,7 @@ import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -292,7 +293,7 @@ async function main(): Promise<void> {
     // on them, a DM with Bob, and Beans to pledge.
     const carol = makeMember('CarolNM');
     offer(carol, 'Carol plums');
-    const bobGroupLine = postGroupThreadMessage(group.id, bob.pubKeyHex, 'Seedlings are in');
+    const bobGroupLine = postGroupThreadMessage(group.id, bob.pubKeyHex, lockedGroupLine(db, group.id)); // a group chat line is sealed
     const bobGroupPost = createPost('offer', 'produce', 'Bob spare pots', 'For the club', 1, 'fixed', bob.pubKeyHex,
         undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: group.id });
     if (!bobGroupPost) throw new Error('could not post to the group');

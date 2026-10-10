@@ -8,8 +8,9 @@
  *
  *  1. The main server M. Rhea writes in a group's chat (a reply, a line Bo reacts to, one Bo replies to, one the convenor
  *     removed), an enterprise's discussion, an event's chat and a DM with Bo (text, a photo, and a line carrying a photo in
- *     the old in-row form); Bo and Cy write beside her, Bo sends a photo too. Every line of hers names words found nowhere
- *     else. Bo's phone syncs, and every route shows her words (so the checks below can fail).
+ *     the old in-row form); Bo and Cy write beside her, Bo sends a photo too. Every plaintext line of hers names words found
+ *     nowhere else; a group chat line is sealed (group chats step 2), so the node holds no words of it and its sealed
+ *     ciphertext stands for them. Bo's phone syncs, and every route shows her words (so the checks below can fail).
  *  2. The standby S copies M: it holds her lines as they were.
  *  3. Rhea deletes her account (POST /api/member/purge). On M: each line she wrote is a tombstone of her own ("This
  *     message was deleted", removedBy her key, accountDeleted), the line the convenor removed keeps the convenor's name,
@@ -36,6 +37,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 delete process.env.CF_RECORD_NAME;
@@ -48,18 +50,19 @@ const PW_STANDBY = 'Blank-Chat-Standby-Pw-3307!';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DELETED_TEXT = 'This message was deleted';
 
-/** Rhea's words, each found nowhere else. None may be read, or found in a file, after she deletes her account. */
+/**
+ * Rhea's words in the chats the node can still read, each found nowhere else. None may be read, or found in a file, after
+ * she deletes her account. Her group chat lines have no words on the node: they are sealed, so what stands for them is the
+ * ciphertext the node was handed (SEALED, from the fixture), which must be gone just the same.
+ */
 const WORDS = {
-    group: 'Quillomere seeds are in the shed',
-    reply: 'Vandrelle says the tomatoes split',
-    reacted: 'Ostrevain compost by Friday',
-    repliedTo: 'Pemberlook ladder is free to borrow',
-    removed: 'Thrennick rant the convenor took down',
     enterprise: 'Grollimer flour is short this week',
     event: 'Saffington cakes for the picnic',
 };
-/** Cy's one line, in the group chat; he deletes his account in section 7. */
-const CY_WORDS = 'Morravel tools in the hall';
+/** The sealed group chat lines of the fixture, by name: Rhea's, Bo's reply to her, and Cy's (he deletes his account in section 7). */
+interface Sealed { group: string; reply: string; reacted: string; repliedTo: string; removed: string; boLine: string; boReply: string; cy: string }
+/** Rhea's sealed group lines, filled once the fixture is built: what leaks() looks for beside WORDS. */
+let herSealed: string[] = [];
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
@@ -85,7 +88,7 @@ async function child(): Promise<void> {
             return true;
         },
         /** Section 1's chats. Returns the ids the orchestrator checks, and Rhea's DM ciphertexts and photo bytes. */
-        'chat-fixture': async (a: { rhea: string; bo: string; cy: string; words: typeof WORDS; cyWords: string }) => {
+        'chat-fixture': async (a: { rhea: string; bo: string; cy: string; words: typeof WORDS }) => {
             const se = await import('./state-engine.js');
             const { db } = await import('./db/db.js');
             const { postGroupThreadMessage, removeGroupThreadMessage } = await import('./engine/group-thread.js');
@@ -98,16 +101,23 @@ async function child(): Promise<void> {
             const group = se.createGroup({ name: 'Seed Savers', joinPolicy: 'open', createdBy: bo });
             se.joinGroup(group.id, rhea);
             se.joinGroup(group.id, cy);
-            const g1 = postGroupThreadMessage(quiet, group.id, rhea, words.group);
-            const boLine = postGroupThreadMessage(quiet, group.id, bo, 'Thanks, I will pick some up');
-            const reply = postGroupThreadMessage(quiet, group.id, rhea, words.reply, undefined, boLine.id);
-            const reacted = postGroupThreadMessage(quiet, group.id, rhea, words.reacted);
+            // A group line goes in sealed, under the group's current epoch; the ciphertext is kept to look for it later.
+            const sealed: Record<string, string> = {};
+            const put = (name: keyof Sealed, author: string, extra: { replyToId?: string } = {}) => {
+                const line = lockedGroupLine(db, group.id, extra);
+                sealed[name] = line.ciphertext;
+                return postGroupThreadMessage(quiet, group.id, author, line);
+            };
+            const g1 = put('group', rhea);
+            const boLine = put('boLine', bo);
+            const reply = put('reply', rhea, { replyToId: boLine.id });
+            const reacted = put('reacted', rhea);
             toggleMessageReaction(quiet, reacted.id, bo, '👍');
-            const repliedTo = postGroupThreadMessage(quiet, group.id, rhea, words.repliedTo);
-            const boReply = postGroupThreadMessage(quiet, group.id, bo, 'Can I have it Sunday?', undefined, repliedTo.id);
-            const removed = postGroupThreadMessage(quiet, group.id, rhea, words.removed);
+            const repliedTo = put('repliedTo', rhea);
+            const boReply = put('boReply', bo, { replyToId: repliedTo.id });
+            const removed = put('removed', rhea);
             removeGroupThreadMessage(quiet, group.id, removed.id, bo);
-            const cyLine = postGroupThreadMessage(quiet, group.id, cy, a.cyWords);
+            const cyLine = put('cy', cy);
 
             const bakery = se.createTreasury('Village Bakery', AVATAR, 0).publicKey;
             se.adminAssignTreasuryOperator(bakery, bo, 'admin');
@@ -156,7 +166,8 @@ async function child(): Promise<void> {
                 rheaPhotos: [dmPhoto.id, dmOld.id], boPhoto: boPhoto.id, cyLine: cyLine.id,
                 // What of hers sits in the database as bytes: her DM ciphertexts and her photos.
                 rheaSecrets: [t1.ciphertext, cap.ciphertext, photo.ciphertext, old.ciphertext, oldPhotoData],
-                boSecrets: [bt.ciphertext, bcap.ciphertext],
+                boSecrets: [bt.ciphertext, bcap.ciphertext, sealed.boLine, sealed.boReply],
+                sealed,
             };
         },
         /** Dee, in a DM with Bo, removed by the community (adminPruneUser): her lines stay, and she is no deleted account. */
@@ -291,9 +302,9 @@ const meta = (raw: unknown): any => { try { return JSON.parse(String(raw ?? '{}'
 const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.slice(0, 4).join(' | ')}`);
 const brief = (a: Answer) => `${a.status} ${a.text.slice(0, 160)}`;
 
-/** Which of Rhea's words a text gives away, as written or as the base64 a plaintext chat stores. */
+/** Which of Rhea's words a text gives away, as written or as the base64 a plaintext chat stores, or her sealed group lines as stored. */
 function leaks(text: string): string[] {
-    return Object.values(WORDS).filter((w) => text.includes(w) || text.includes(b64(w)));
+    return [...Object.values(WORDS).filter((w) => text.includes(w) || text.includes(b64(w))), ...herSealed.filter((s) => text.includes(s))];
 }
 
 /**
@@ -360,7 +371,9 @@ async function main(): Promise<void> {
         const main = await spawnNode(SCRIPT, dir('main'), { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', WAL_TRUNCATE_RETRY_MS: '150' });
         nodes.push(main);
         await main.send('setup-primary', { replicationToken, gwen: gwen.pk, members: [[rhea.pk, 'Rhea'], [bo.pk, 'Bo'], [cy.pk, 'Cy'], [dee.pk, 'Dee'], [eli.pk, 'Eli']] });
-        const fx = await main.send('chat-fixture', { rhea: rhea.pk, bo: bo.pk, cy: cy.pk, words: WORDS, cyWords: CY_WORDS });
+        const fx = await main.send('chat-fixture', { rhea: rhea.pk, bo: bo.pk, cy: cy.pk, words: WORDS });
+        const sealedFx = fx.sealed as Sealed;
+        herSealed = [sealedFx.group, sealedFx.reply, sealedFx.reacted, sealedFx.repliedTo, sealedFx.removed];
         const removedDee = await main.send('removed-member', { dee: dee.pk, bo: bo.pk });
         require_(removedDee.status === 'pruned', `the community removed Dee, who was in a DM with Bo (${JSON.stringify(removedDee)})`);
         const m = `https://localhost:${await main.send('serve')}`;
@@ -406,15 +419,15 @@ async function main(): Promise<void> {
             `her two photos are stored, one in the image store and one in its row; Bo's too (${JSON.stringify(before.attachments)}; ${before.objects.length} objects)`);
         require_(meta(rowBefore.get(fx.rheaLines[2])?.metadata).reactions && meta(rowBefore.get(fx.rheaLines[1])?.metadata).replyToId,
             'a line of hers carries Bo\'s reaction, another her reply to Bo');
-        const needles = [...Object.values(WORDS).map(b64), ...fx.rheaSecrets];
+        const needles = [...Object.values(WORDS).map(b64), ...herSealed, ...fx.rheaSecrets];
         const filesBefore = await main.send('files', { needles });
         require_(filesBefore.inDb.length + filesBefore.inWal.length > 0, `M's files hold her words before (${first([...filesBefore.inDb, ...filesBefore.inWal])})`);
         const groupBefore = await api(m, 'GET', `/api/groups/${fx.groupId}/chat?limit=100`, bo);
         const eventBefore = await api(m, 'GET', `/api/marketplace/posts/${fx.eventId}/chat?limit=100`, bo);
         const entBefore = await api(m, 'GET', `/api/enterprise/${fx.bakery}/thread?limit=100`, bo);
-        require_([WORDS.group, WORDS.reply, WORDS.reacted, WORDS.repliedTo].every((w) => leaks(groupBefore.text).includes(w))
+        require_([sealedFx.group, sealedFx.reply, sealedFx.reacted, sealedFx.repliedTo].every((s) => leaks(groupBefore.text).includes(s))
             && leaks(eventBefore.text).includes(WORDS.event) && leaks(entBefore.text).includes(WORDS.enterprise),
-            `the group, event and enterprise chats show her words to Bo (${brief(groupBefore)}; ${brief(eventBefore)}; ${brief(entBefore)})`);
+            `the group chat (her sealed lines), the event and the enterprise chat show her words to Bo (${brief(groupBefore)}; ${brief(eventBefore)}; ${brief(entBefore)})`);
 
         // ── 2. S copies M ──
         console.log('\n— 2. the standby S copies M —');
@@ -508,8 +521,9 @@ async function main(): Promise<void> {
             `the group, event and enterprise chats show none of her words (${first([...leaks(groupAfter.text), ...leaks(eventAfter.text), ...leaks(entAfter.text)])})`);
         assert(shown(groupAfter, fx.rheaLines[0]) === DELETED_TEXT && shown(eventAfter, fx.rheaLines[5]) === DELETED_TEXT && shown(entAfter, fx.rheaLines[4]) === DELETED_TEXT,
             `each reads "${DELETED_TEXT}" there, not a host's or a keeper's removal (group ${shown(groupAfter, fx.rheaLines[0])}, event ${shown(eventAfter, fx.rheaLines[5])}, enterprise ${shown(entAfter, fx.rheaLines[4])})`);
-        assert(shown(groupAfter, fx.othersLines[1]) === 'Can I have it Sunday?' && shown(eventAfter, fx.othersLines[4]) === 'I will bring the urn',
-            'and Bo\'s lines read as he wrote them, his reply to her line too');
+        const heldAs = (a: Answer, id: string) => (a.body?.messages ?? []).find((x: any) => x.id === id)?.ciphertext ?? null;
+        assert(heldAs(groupAfter, fx.othersLines[1]) === sealedFx.boReply && shown(eventAfter, fx.othersLines[4]) === 'I will bring the urn',
+            'and Bo\'s lines are served as he sent them (the group line as the sealed ciphertext he sent), his reply to her line too');
         // The Talk list (GET /api/your-groups): her line is the LAST one in an event chat and in an enterprise chat.
         const talk = await api(m, 'GET', '/api/your-groups', bo);
         const talkOf = (id: string) => (talk.body?.items ?? []).find((i: any) => i.conversationId === id)?.lastMessage;
@@ -561,13 +575,13 @@ async function main(): Promise<void> {
         const boList = await api(m, 'GET', `/api/messages/conversations/${bo.pk}`, bo);
         assert(JSON.stringify(boList.body?.deletedAccounts) === JSON.stringify([cy.pk, rhea.pk].sort()),
             `and Bo's conversation list names him too, from the group chat they share (no DM) (${JSON.stringify(boList.body?.deletedAccounts)})`);
-        const held = await main.send('files', { needles: [b64(CY_WORDS)] });
+        const held = await main.send('files', { needles: [sealedFx.cy] });
         assert(held.walBytes > 0, `while the reader holds it, the WAL cannot be emptied (${held.walBytes} bytes)`);
         await main.send('release-reader');
         let emptied = -1;
         for (let i = 0; i < 40; i++) {
             await new Promise((r) => setTimeout(r, 100));
-            const f = await main.send('files', { needles: [b64(CY_WORDS)] });
+            const f = await main.send('files', { needles: [sealedFx.cy] });
             if (f.walBytes === 0) { emptied = f.inDb.length + f.inWal.length; break; }
         }
         assert(emptied === 0, `once the reader lets go, the next try empties the WAL, and his words are in neither file (${emptied === -1 ? 'never emptied' : `${emptied} found`})`);

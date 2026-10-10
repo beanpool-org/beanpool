@@ -237,7 +237,7 @@ router.post('/api/messages/send', async (ctx) => {
         // A line's words at most 64 KB as stored (W-main); a photo goes as an attachment and is not counted. Checked by
         // the engine after every refusal of who may write in this conversation and just before the line is stored, so
         // a limit never answers for someone who may not write here (an enterprise or event chat's 403, an outsider's
-        // 404). A group chat line keeps its own 2000 characters.
+        // 404). A group chat line is held to its own bound, GROUP_LINE_MAX_BYTES of sealed bytes (engine/group-thread.ts).
         msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId,
             (stored) => assertDmLineFits(stored.ciphertext, stored.metadata));
     } catch (e: any) {

@@ -59,6 +59,7 @@ export const GROUP_CHAT_NONCE_ERROR = GROUP_CHAT_UPDATE_APP;
 export const GROUP_THREAD_DELETED_TEXT = 'This message was deleted';
 export const GROUP_CHAT_REPLY_NOT_FOUND = 'The message being replied to is not in this chat';
 export const GROUP_CHAT_REPLY_SYSTEM = 'A system line cannot be replied to';
+export const GROUP_CHAT_REPLY_ID_ERROR = 'replyToId must be a message id';
 export const GROUP_CHAT_SYSTEM_REACT_ERROR = 'A system line cannot be reacted to';
 
 /** System-line kinds. The first four are membership housekeeping and never count as unread (QUIET_SYSTEM_TYPES in @beanpool/engine). */
@@ -407,7 +408,10 @@ export function postGroupThreadMessage(
     const epoch = assertSealedGroupLine(groupId, line?.ciphertext, line?.nonce, declared);
     clientId = clientId ?? line?.clientId;
     if (typeof clientId !== 'string' || !SEALED_LINE_ID.test(clientId)) throw new Error(GROUP_LINE_NEEDS_ID);
-    const replyToId = typeof declared.replyToId === 'string' && declared.replyToId.trim() ? declared.replyToId : undefined;
+    if (declared.replyToId !== undefined && declared.replyToId !== null && (typeof declared.replyToId !== 'string' || !declared.replyToId.trim())) {
+        throw new Error(GROUP_CHAT_REPLY_ID_ERROR);
+    }
+    const replyToId = typeof declared.replyToId === 'string' ? declared.replyToId : undefined;
     // A reply quotes a message in THIS chat, never one from another chat and never a system line.
     if (replyToId) assertGroupChatReplyTarget(groupId, replyToId);
 

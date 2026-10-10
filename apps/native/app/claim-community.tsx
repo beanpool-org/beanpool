@@ -35,14 +35,9 @@ export { ErrorBoundary };
 type Phase = 'form' | 'unlocking' | 'checking' | 'done';
 
 export default function ClaimCommunityScreen() {
-    const params = useLocalSearchParams<{ node?: string | string[]; refused?: string | string[]; id?: string | string[]; code?: string | string[] }>();
+    const params = useLocalSearchParams<{ node?: string; refused?: string; id?: string; code?: string }>();
     const { identity } = useIdentity();
     const manage = useManageNode();
-
-    const nodeParam = Array.isArray(params.node) ? params.node[0] : params.node;
-    const refusedParam = Array.isArray(params.refused) ? params.refused[0] : params.refused;
-    const codeParam = Array.isArray(params.code) ? params.code[0] : params.code;
-    const idParam = Array.isArray(params.id) ? params.id[0] : params.id;
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -77,11 +72,11 @@ export default function ClaimCommunityScreen() {
     const placeholder = colors.text.muted;
 
     // ── Which node ──────────────────────────────────────────────────────────────────────────────────────
-    const linkNode = typeof nodeParam === 'string' ? claimNodeOrigin(nodeParam) : null;
+    const linkNode = typeof params.node === 'string' ? claimNodeOrigin(params.node) : null;
     const [origin, setOrigin] = useState<string | null>(linkNode);
     const [addressInput, setAddressInput] = useState('');
     const [addressError, setAddressError] = useState<string | null>(
-        refusedParam === '1' ? "The link named an address BeanPool won't use. Type the server's address instead." : null,
+        params.refused === '1' ? "The link named an address BeanPool won't use. Type the server's address instead." : null,
     );
     const [status, setStatus] = useState<ClaimStatus | null>(null);
     const [isMember, setIsMember] = useState<boolean | null>(null);
@@ -112,8 +107,8 @@ export default function ClaimCommunityScreen() {
     };
 
     // ── The code and the callsign ───────────────────────────────────────────────────────────────────────
-    const linkCode = typeof codeParam === 'string' ? codeParam : '';
-    const linkId = typeof idParam === 'string' ? idParam : '';
+    const linkCode = typeof params.code === 'string' ? params.code : '';
+    const linkId = typeof params.id === 'string' ? params.id : '';
     const [digits, setDigits] = useState(() => (linkCode ? claimCodeDigits(linkCode) : ''));
     const [callsign, setCallsign] = useState('');
     const [phase, setPhase] = useState<Phase>('form');

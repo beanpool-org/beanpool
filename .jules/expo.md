@@ -156,8 +156,3 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `google-probe.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `google-probe.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
-
-## 2026-11-08 - [Refine search parameters in claim-community.tsx]
-**Issue:** `claim-community.tsx` typed `useLocalSearchParams` strictly as `{ node?: string; refused?: string; id?: string; code?: string }`.
-**Learning:** Expo Router can return query parameters as `string[]` when repeated in URLs. Updated parameter types to allow `string | string[]` and extracted scalar values safely.
-**Pattern:** Ensure Expo Router screen route components type `useLocalSearchParams` properties with optional `string | string[]` union types and safely unwrap array parameters.

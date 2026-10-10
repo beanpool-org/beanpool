@@ -2440,13 +2440,14 @@ export type ScopedVotePush = (
  * A vote opened: one push to each keeper on its roll but the proposer (the dispatcher drops the actor), in one batch
  * (DESIGN-group-decisions §2.8). The push names nobody: the lock screen shows the kind's fixed words, and the notice's
  * details carry the enterprise's name and nothing about the vote (not its title, whom it pays or whom it removes),
- * since a push leaves the trust boundary of the device. The member's own notify_chat setting applies.
+ * since a push leaves the trust boundary of the device. The details (only the recipient reads them) name the
+ * enterprise's screen, so a tap lands on it (the app's noticeRoute). The member's own notify_chat setting applies.
  */
 export function noticeScopedVoteOpened(d: Decision, electors: string[], push: ScopedVotePush): void {
     const name = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(d.scopeId) as { callsign?: string } | undefined)?.callsign
         || 'Your enterprise';
     try {
-        push(electors, d.authorPubkey, `🗳️ ${name}`, 'A vote opened. Open the enterprise to see it.', {}, 'chat', 'decision.open');
+        push(electors, d.authorPubkey, `🗳️ ${name}`, 'A vote opened. Open the enterprise to see it.', { screen: 'enterprise', publicKey: d.scopeId }, 'chat', 'decision.open');
     } catch (err) {
         // A push that fails never undoes the vote it announces.
         console.warn('[Decisions] vote-opened push failed:', err);

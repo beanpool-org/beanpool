@@ -525,6 +525,15 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('community.notice', { screen: 'nowhere' })).toBe('/(tabs)');
     });
 
+    it("a keepers' vote opening lands on the enterprise it names, its key in the node's own shape; anything else on Home (opus-1767 N4)", () => {
+        const ENT = 'e1'.repeat(32);
+        expect(noticeRoute('decision.open', { screen: 'enterprise', publicKey: ENT })).toBe(`/treasury-detail?publicKey=${ENT}`);
+        for (const bad of [...FORGED, ENT.toUpperCase(), ENT.slice(1), `${ENT}0`, `${ENT}&x=1`, 42, null, ['a'], { a: 1 }]) {
+            expect(noticeRoute('decision.open', { screen: 'enterprise', publicKey: bad })).toBe('/(tabs)');
+        }
+        expect(noticeRoute('decision.open', null)).toBe('/(tabs)');
+    });
+
     it('a valid notice whose community answers a forged target lands on its kind\'s tab, the target nowhere in the route', async () => {
         for (const bad of FORGED) {
             await tap(push(mullum.notice('market.request', kim.publicKey, { data: { screen: 'post', postId: bad } })));

@@ -6,6 +6,8 @@
  *  3. The push names nobody: its kind is `decision.open` (fixed words on the lock screen), and its title, body and data
  *     carry the enterprise's name only — never the vote's title, the member it pays or removes, or the proposer.
  *  4. A push that throws never undoes the vote.
+ *  5. A tap lands on the enterprise (review opus-1767 N4): the notice's details, which only the recipient reads, name the
+ *     enterprise's screen, and the kind's tab is Home, whose Needs-you line opens it, for an app that can't fetch them.
  *
  * In-process, as test-event-notify: the engine is called with a spy where the dispatcher goes.
  *
@@ -115,6 +117,12 @@ async function main(): Promise<void> {
         effect: 'replace_lead', subject: bob,
     } as any, () => { throw new Error('Expo down'); });
     assert(getDecision(thrown.id)?.status === 'open', 'a push that throws: the vote is still open');
+
+    console.log('\n--- 5. A tap lands on the enterprise ---');
+    assert(JSON.stringify(c?.data) === JSON.stringify({ screen: 'enterprise', publicKey: bakery }),
+        `the notice's details name the enterprise's screen, for the recipient's tap (${JSON.stringify(c?.data)})`);
+    assert(PUSH_NOTICE_KINDS['decision.open'].tab === 'home',
+        "and the kind's tab is Home, where the Needs-you line opens it, never Talk (which shows nothing of the vote)");
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

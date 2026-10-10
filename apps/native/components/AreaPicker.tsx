@@ -1,6 +1,6 @@
 /**
  * "Roughly where are you?" (design DESIGN-global-sync-by-area §3.2): the signup step after the photo on a community
- * that syncs listings by area (app/profile-setup.tsx), and Settings → Your area → Change (app/your-area.tsx).
+ * that syncs listings by area (app/profile-setup.tsx), and Settings → Your area (app/your-area.tsx).
  *
  * Use my location takes ONE reading, at low accuracy, and rounds it to its 0.1° area before the request is built
  * (utils/member-area.ts). Type a town is the event form's AddressSearch; the pick is rounded the same way. Skip writes

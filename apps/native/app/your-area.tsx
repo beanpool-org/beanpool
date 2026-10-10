@@ -1,8 +1,8 @@
 /**
  * Settings → Your area (design DESIGN-global-sync-by-area §3.5), on a community that gives each member the listings
- * near their area (`features.nearbyListings`). Shows "About 10 km around <town or lat, lng>" or "Not set", with Change
- * (the signup's "Roughly where are you?", components/AreaPicker.tsx) and Clear. Both write the signed
- * `POST /api/community/me/area`; the current value is the node's (`GET /api/community/me`).
+ * near their area (`features.nearbyListings`). Shows "About 10 km around <town or lat, lng>" or "Not set", with Clear,
+ * and below it the signup's "Roughly where are you?" (components/AreaPicker.tsx) to set a new one, or Cancel. Both
+ * write the signed `POST /api/community/me/area`; the current value is the node's (`GET /api/community/me`).
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';

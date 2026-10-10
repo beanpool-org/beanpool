@@ -1,6 +1,6 @@
 /**
  * "Roughly where are you?" (design DESIGN-global-sync-by-area §3.2): the signup's Your Area step after the photo on a
- * community that syncs listings by area (pages/WelcomePage.tsx), and Settings → Your area → Change. The same words as
+ * community that syncs listings by area (pages/WelcomePage.tsx), and Settings → Your area. The same words as
  * the phone's (@beanpool/core AREA_STEP_WORDS).
  *
  * Use my location takes one low-accuracy reading and rounds it to 0.1° before the request is built (lib/member-area.ts);

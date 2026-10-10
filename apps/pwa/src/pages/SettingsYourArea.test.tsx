@@ -1,7 +1,8 @@
 /**
  * Settings → Your area (design DESIGN-global-sync-by-area §3.5, slice S4): a row only on a community whose info says
  * `features.nearbyListings`, showing the node's value (GET /api/community/me) as "About 10 km around <town or lat, lng>"
- * or "Not set", with Change (the signup's step, rounded before the request) and Clear (both null).
+ * or "Not set", with Clear (both null) and below it the signup's step (rounded before the request), whose Skip is
+ * "← Back to Settings".
  */
 import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';

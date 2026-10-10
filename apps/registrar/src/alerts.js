@@ -121,6 +121,38 @@ export const nonceCondition = (missing) => ({
         : 'The request_nonces table is there again: v2 requests are served.',
 });
 
+// ntfy takes a message of up to 4,096 bytes (a longer body becomes an attachment, "You received a file"): a body stays
+// under this, as many events as fit and then "… and N more, see /admin".
+const MAX_BODY_BYTES = 3900;
+const utf8 = new TextEncoder();
+const bytes = (s) => utf8.encode(s).length;
+// The longest start of `s` that fits in `max` bytes with an ellipsis, cut between characters.
+function clip(s, max) {
+    if (bytes(s) <= max) return s;
+    let out = '';
+    let size = bytes('…');
+    for (const ch of s) {
+        size += bytes(ch);
+        if (size > max) break;
+        out += ch;
+    }
+    return `${out}…`;
+}
+function listBody(lines) {
+    const more = (n) => `\n… and ${n} more, see /admin`;
+    let body = '';
+    for (let i = 0; i < lines.length; i++) {
+        const next = `${i ? '\n' : ''}${lines[i]}`;
+        const after = lines.length - i - 1;
+        if (bytes(body) + bytes(next) + (after ? bytes(more(after)) : 0) > MAX_BODY_BYTES) {
+            if (i) return body + more(lines.length - i);
+            return after ? clip(lines[0], MAX_BODY_BYTES - bytes(more(after))) + more(after) : clip(lines[0], MAX_BODY_BYTES);
+        }
+        body += next;
+    }
+    return body;
+}
+
 // One message for `events` (oldest first): the first one's title (+N more), the highest priority, and the name's row
 // for a tap when every event is about one name.
 export function composeAlert(env, events) {
@@ -129,7 +161,7 @@ export function composeAlert(env, events) {
     const names = new Set(events.map((e) => e.name || ''));
     return {
         title: ascii(`${first.title}${events.length > 1 ? ` (+${events.length - 1} more)` : ''}`),
-        body: events.length === 1 ? first.body : events.map((e) => `- ${when(e.at)}: ${e.body}`).join('\n'),
+        body: events.length === 1 ? clip(first.body, MAX_BODY_BYTES) : listBody(events.map((e) => `- ${when(e.at)}: ${e.body}`)),
         priority,
         tag: (events.find((e) => e.priority === priority) || first).tag,
         click: adminUrl(env, names.size === 1 ? first.name : null),

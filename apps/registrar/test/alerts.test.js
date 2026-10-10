@@ -482,6 +482,27 @@ test('words: a resume the re-attest refused, a release, a content-swap pause —
     assert.doesNotThrow(() => new Headers({ Title: m.title }));
 });
 
+test('a batched message stays under ntfy\'s 4,096 bytes: as many as fit, then "… and N more, see /admin"', () => {
+    const env = { BASE_DOMAIN: 'beanpool.org' };
+    const mk = (n, community) => Array.from({ length: n }, (_, i) => ({ ...alerts.nameRequest(env, { name: `community-name-${String(i).padStart(3, '0')}`, community_name: community, mode: 'tunnel' }, i + 1), at: 1_791_000_000 }));
+    for (const community of ['Sydney Commons Swap', 'x'.repeat(120), '東'.repeat(120), '東'.repeat(2000)]) {
+        for (const n of [2, 10, 50]) {
+            const events = mk(n, community);
+            const m = alerts.composeAlert(env, events);
+            const size = Buffer.byteLength(m.body);
+            assert.ok(size <= 3900, `${n} × "${community.slice(0, 8)}…": ${size} bytes`);
+            assert.ok(!m.body.includes('\uFFFD'), 'cut between characters');
+            const shown = m.body.split('\n').filter((l) => l.startsWith('- ')).length;
+            const more = m.body.match(/\n… and (\d+) more, see \/admin$/);
+            assert.equal(shown + (more ? Number(more[1]) : 0), n, `every event is shown or counted (${shown} + ${more?.[1]})`);
+            assert.ok(shown >= 1, 'at least the first');
+            if (!more) assert.equal(m.body, events.map((e) => `- ${new Date(e.at * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC: ${e.body}`).join('\n'), 'what fits is as it was');
+        }
+    }
+    const one = alerts.composeAlert(env, mk(1, '東'.repeat(2000)));
+    assert.ok(Buffer.byteLength(one.body) <= 3900, 'one event alone too');
+});
+
 const BEFORE_0008 = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql'];
 
 test('migration 0008: four tables and the categories, all on; re-running changes nothing, the admin\'s choices included', async () => {

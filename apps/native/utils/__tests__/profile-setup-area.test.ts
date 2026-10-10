@@ -134,7 +134,7 @@ async function press(selector: string) {
     await act(async () => { el.click(); });
     await settle();
 }
-const nextButton = () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Next →') as HTMLElement;
+const nextButton = () => Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Next →') as HTMLElement;
 async function toAreaStep() {
     await act(async () => { nextButton().click(); });
     await settle();

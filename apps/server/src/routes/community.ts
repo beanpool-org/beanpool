@@ -71,7 +71,7 @@ import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@be
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
-import { db } from '../db/db.js';
+import { db, memberPhotoNotMovedYet } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
@@ -1095,7 +1095,12 @@ router.post('/api/invite/generate', async (ctx) => {
 function redeemedCard(ctx: any, result: { member?: Parameters<typeof publicMemberCard>[0]; alreadyMember?: boolean }, publicKey: string) {
     if (!result.member) return undefined;
     if (result.alreadyMember && !signedByKey(ctx, publicKey)) return undefined;
-    return publicMemberCard(result.member);
+    const card = publicMemberCard(result.member);
+    // A photo still inline while the move out of the rows is stopped part way (db.ts memberPhotoNotMovedYet, #1482):
+    // getMember reads member_photos only, so without it the phone reads "no photo" and publishes its own copy, an older
+    // one, say, over the member's newer photo for good (native utils/db.ts redeemInvite nodeHasPhoto).
+    if (!card.avatarUrl) card.avatarUrl = memberPhotoNotMovedYet(result.member.publicKey);
+    return card;
 }
 
 /**

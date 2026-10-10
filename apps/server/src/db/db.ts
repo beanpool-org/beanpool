@@ -597,12 +597,48 @@ export const MEMBER_PHOTO_MOVE_BATCH = 500;
  * from "never had one"; the column itself is the marker. And should a row still hold a value while its member already
  * has a member_photos row (a writer outside that rule), the move keeps the member_photos row, which is the newer: it
  * clears the old value and never writes over a photo. Returns how many moved: only batches that committed count.
+ *
+ * A move stopped at boot is resumed while the node runs, by a main server's timer (resumeMemberPhotoMove, #1482).
  */
 export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH): number {
+    return moveMemberPhotos(batch, Infinity, 0).moved;
+}
+
+/** Where the move resumed after boot carries on from (resumeMemberPhotoMove): the last row of its last committed batch. */
+let memberPhotoResumeAfter = 0;
+
+/**
+ * One turn of a members' photo move that stopped at boot, resumed while the node runs (#1482): at most one batch (each
+ * its own transaction, as at boot), then the old column dropped once no row holds a photo. A main server's timer calls
+ * it until it answers 'done' (state-engine.ts armMainServerTimers): 'more' when rows are left, 'stopped' when a batch or
+ * the drop threw (tried again later, after a longer wait each time), 'done' when the old column is gone, at once on a
+ * node whose move finished at boot. Until then the members not reached yet show no photo (the members list and
+ * /api/avatar read only member_photos), and a phone told so may publish its own copy over their newer one; this ends
+ * that without a restart.
+ *
+ * The move's one rule holds as at boot: a value in the old column is a photo not moved yet that nobody has set or
+ * removed since, every writer clears it, and the move never writes over a member_photos row. One difference: after
+ * boot members_touch_updated_at is in place, so each row whose photo moves now is stamped. That is wanted: the members
+ * list has told every phone those members had no photo, and only a stamp brings their rows (now with the photo) to
+ * each phone's next delta, and to a standby's. A row whose value was no photo is cleared unstamped, as at boot: the
+ * list already said none.
+ *
+ * Its own cost is one batch's transaction a turn (MEMBER_PHOTO_MOVE_BATCH, 500 photos, ~13 MB) and, once, the DROP
+ * COLUMN, which rewrites the members table in one statement (measured at boot for #1475: 0.74 s at 30,000 photo
+ * members); both hold the event loop while they run, as any write does. Kept out of a list read (#1475's heap rule).
+ */
+export function resumeMemberPhotoMove(batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH): { moved: number; outcome: 'done' | 'more' | 'stopped' } {
+    const turn = moveMemberPhotos(batch, 1, memberPhotoResumeAfter);
+    memberPhotoResumeAfter = turn.after;
+    return { moved: turn.moved, outcome: turn.outcome };
+}
+
+/** The move itself (moveMemberPhotosOutOfRows, resumeMemberPhotoMove): at most `maxBatches` batches, from rowid `from`. */
+function moveMemberPhotos(batch: number, maxBatches: number, from: number): { moved: number; after: number; outcome: 'done' | 'more' | 'stopped' } {
     const columns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('members') as { name: string }[]).map((c) => c.name));
-    if (!columns.has('avatar_url')) return 0;
+    if (!columns.has('avatar_url')) return { moved: 0, after: from, outcome: 'done' };
     const started = Date.now();
-    let moved = 0, dropped = 0, kept = 0, after = 0;
+    let moved = 0, dropped = 0, kept = 0, after = from, batches = 0;
     try {
         db.exec(`CREATE TABLE IF NOT EXISTS member_photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL)`);
         const next = db.prepare(`SELECT rowid AS rid, public_key, avatar_url FROM members WHERE rowid > ? AND avatar_url IS NOT NULL ORDER BY rowid LIMIT ?`);
@@ -613,6 +649,8 @@ export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOT
         for (;;) {
             const rows = next.all(after, batch) as { rid: number; public_key: string; avatar_url: string }[];
             if (rows.length === 0) break;
+            if (batches === maxBatches) return { moved, after, outcome: 'more' };
+            batches++;
             const done = db.transaction(() => {
                 const n = { moved: 0, dropped: 0, kept: 0 };
                 for (const r of rows) {
@@ -641,17 +679,18 @@ export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOT
             if (done.moved > 0 && moved % (batch * 20) < done.moved) console.log(`[DB] Members' photos moved out of their rows: ${moved} so far`);
         }
     } catch (e) {
-        console.error(`[DB] ❌ Members' photos: the move out of their rows stopped after ${moved}; the next boot carries on:`, e);
-        return moved;
+        console.error(`[DB] ❌ Members' photos: the move out of their rows stopped after ${moved}; it carries on later (a main server's timer, or the next boot):`, e);
+        return { moved, after, outcome: 'stopped' };
     }
     try {
         db.exec('ALTER TABLE members DROP COLUMN avatar_url');
         console.log(`[DB] Members' photos are in member_photos now: ${moved} moved, ${dropped} that were no photo left out${kept ? `, ${kept} already there kept` : ''}, in ${Date.now() - started} ms.`);
     } catch (e) {
-        // Every photo is out; the column stays, empty and read by nothing, until a boot can drop it.
-        console.error(`[DB] ❌ Members' photos are in member_photos (${moved} moved), but members.avatar_url could not be dropped; the next boot tries again:`, e);
+        // Every photo is out; the column stays, empty and read by nothing, until it can be dropped.
+        console.error(`[DB] ❌ Members' photos are in member_photos (${moved} moved), but members.avatar_url could not be dropped; it is tried again later:`, e);
+        return { moved, after, outcome: 'stopped' };
     }
-    return moved;
+    return { moved, after, outcome: 'done' };
 }
 
 /**
@@ -664,10 +703,18 @@ export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOT
 export function memberHasPhoto(publicKey: string): boolean {
     const row = db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(publicKey) as { avatar_ref: string | null } | undefined;
     if (!row) return false;
-    if (row.avatar_ref) return true;
-    if (!db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'avatar_url'`).get()) return false;
-    const inline = db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(publicKey) as { avatar_url: string | null };
-    return memberPhotoColumnsOf(inline.avatar_url) !== null;
+    return !!row.avatar_ref || memberPhotoNotMovedYet(publicKey) !== null;
+}
+
+/**
+ * One member's photo still inline in their row, while a stopped move (moveMemberPhotosOutOfRows) has left the old column,
+ * when it is one the move would carry out (memberPhotoColumnsOf); otherwise null. For reads of ONE member only (the
+ * gates above, the member's own redeem card): never in a list, whose rows no longer carry photos (#1475).
+ */
+export function memberPhotoNotMovedYet(publicKey: string): string | null {
+    if (!db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'avatar_url'`).get()) return null;
+    const row = db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(publicKey) as { avatar_url: string | null } | undefined;
+    return memberPhotoColumnsOf(row?.avatar_url)?.photo ?? null;
 }
 
 /** Image bytes of group pictures moved in one transaction, at most (moveGroupPicturesOutOfRows); GROUP_PICTURE_MOVE_BYTES. */

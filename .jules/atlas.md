@@ -190,3 +190,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `onDismissReport` execution/error handling and insularity/cohort telemetry metric parsing in `ThreatReviewModal` (`apps/manager/src/components/modules/ThreatReviewModal.tsx`) were untested.
 **Learning:** Testing `ThreatReviewModal` report dismissal requires mocking `onDismissReport` promises and using Vitest fake timers (`vi.useFakeTimers()`) to verify async timer delays, error state banner rendering (`role="alert"`), and subsequent `onDismiss` callbacks.
 **Action:** Continue expanding edge case coverage for module components in `apps/manager/src/components/modules/`.
+
+## 2026-10-09 - [manager tests] AnalyticsModule warning threshold and empty history unit tests
+**Gap:** Warning threshold detection (e.g. 70% CPU), loading refresh state, and single-point history rendering in `AnalyticsModule` (`apps/manager/src/components/modules/AnalyticsModule.tsx`) were untested.
+**Learning:** Testing `AnalyticsModule` edge cases required asserting warning badges when thresholds are approached without critical breach, checking disabled state during fleet diagnostics refresh, and verifying fallback rendering for single-point telemetry history.
+**Action:** Continue expanding test coverage for untested UI component states in `apps/manager/src/components/modules/`.

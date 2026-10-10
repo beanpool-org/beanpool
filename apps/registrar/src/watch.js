@@ -219,14 +219,16 @@ function reportConditions(t, rows, seen) {
     return c;
 }
 
-// The newest look before `id` that said what it runs, or its watchdog's count.
-const before = (env, t, id, col) => env.DB.prepare(`SELECT id, ${col === 'version' ? 'version, commit_sha' : col} FROM watch_log
+// The newest look before `id` that said what it runs (`col` version, or commit_sha), or its watchdog's count.
+const before = (env, t, id, col) => env.DB.prepare(`SELECT id, version, commit_sha, recoveries FROM watch_log
     WHERE target=? AND id < ? AND ${col} IS NOT NULL ORDER BY id DESC LIMIT 1`).bind(t.name, id).first();
 
 async function oneShots(env, t, id, seen) {
     if (seen.version) {
-        const prev = await before(env, t, id, 'version');
-        if (prev && (prev.version !== seen.version || (prev.commit_sha || null) !== (seen.commit || null))) {
+        // A look with a commit is held to the newest that had one; a look without (its /api/version did not answer, so
+        // the version is its health's) compares versions only: a blip of /api/version is no release change.
+        const prev = (seen.commit && await before(env, t, id, 'commit_sha')) || await before(env, t, id, 'version');
+        if (prev && (prev.version !== seen.version || (!!seen.commit && !!prev.commit_sha && prev.commit_sha !== seen.commit))) {
             const vault = t.kind === 'vault';
             await alerts.notify(env, {
                 category: 'health', priority: vault ? alerts.PRIORITY.high : alerts.PRIORITY.default, tag: vault ? 'warning' : 'seedling',

@@ -30,13 +30,14 @@ const toHex = (b) => Buffer.from(b).toString('hex');
 
 // A node: /api/version and /api/community/health, or a failure a test switches on.
 function nodeServer({ version = '1.2.30', commit = 'aaaaaaa1111111', recoveries = 0 } = {}) {
-    const s = { version, commit, recoveries, fail: null, hits: [] };
+    const s = { version, commit, recoveries, fail: null, versionFail: null, hits: [] };
     s.handle = (path) => {
         s.hits.push(path);
-        if (s.fail === 'unreachable') throw new TypeError('fetch failed');
-        if (s.fail === 'timeout') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
-        if (s.fail === '302') return new Response(null, { status: 302, headers: { location: 'https://elsewhere.watch.test/landing' } });
-        if (typeof s.fail === 'number') return new Response('no', { status: s.fail });
+        const fail = s.fail ?? (path === '/api/version' ? s.versionFail : null);   // versionFail: /api/version alone
+        if (fail === 'unreachable') throw new TypeError('fetch failed');
+        if (fail === 'timeout') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+        if (fail === '302') return new Response(null, { status: 302, headers: { location: 'https://elsewhere.watch.test/landing' } });
+        if (typeof fail === 'number') return new Response('no', { status: fail });
         if (path === '/api/version') return Response.json({ version: s.version, commit: s.commit, buildTime: 'x', node: 'n', extra: { added: 1 } });
         if (path === '/api/community/health') return Response.json({ nodeName: 'X', version: s.version, watchdog: { present: true, recoveries: s.recoveries, healthy: true } });
         return new Response('not found', { status: 404 });
@@ -349,6 +350,29 @@ test('a release change is told once (default; the vault\'s high); a watchdog res
         assert.match(r.sent[3].body, /\(0 → 2 recoveries\): the node hung/);
         await r.tick(); await r.tick();
         assert.equal(r.sent.length, 4, 'told once');
+    } finally { r.done(); }
+});
+
+test('a blip of /api/version alone (a 502 once, a timeout once) is no release change; a change seen behind one is told once', async () => {
+    const r = await room();
+    try {
+        await r.tick();
+        r.mullum.versionFail = 502; await r.tick();   // its health still answers: up, on health's version, no commit
+        r.mullum.versionFail = null; await r.tick();
+        r.mullum.versionFail = 'timeout'; await r.tick();
+        r.mullum.versionFail = null; await r.tick();
+        assert.deepEqual(r.titles(), [], 'nothing changed: nothing said');
+        // A new commit that first shows behind a blip: nothing at the blip (versions only), told once the commit is seen.
+        r.mullum.versionFail = 502; r.mullum.commit = 'ddddddd4444444'; await r.tick();
+        assert.deepEqual(r.titles(), [], 'a look without a commit compares no commits');
+        r.mullum.versionFail = null; await r.tick();
+        assert.deepEqual(r.titles(), ['mullum now runs 1.2.30 (ddddddd)']);
+        assert.equal(r.sent[0].body, 'Release changed: mullum now runs 1.2.30 (ddddddd), was 1.2.30 (aaaaaaa).');
+        // A new version behind a blip: told at the blip (by its version), not again when its commit shows.
+        r.mullum.versionFail = 502; r.mullum.version = '1.2.31'; r.mullum.commit = 'eeeeeee5555555'; await r.tick();
+        assert.deepEqual(r.titles().slice(1), ['mullum now runs 1.2.31']);
+        r.mullum.versionFail = null; await r.tick(); await r.tick();
+        assert.equal(r.sent.length, 2, 'told once');
     } finally { r.done(); }
 });
 

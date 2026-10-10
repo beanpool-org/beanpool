@@ -48,6 +48,7 @@ import { concatBytes, hexToBytes, randomBytes as cryptoRandomBytes, utf8ToBytes 
 import { Buffer } from 'buffer';
 import { toEd25519Seed } from './ed25519-key.js';
 import { dmPublicKeyOf, identityX25519Public, identityX25519Secret } from './dm-crypto.js';
+import { isGroupVectorRng } from './group-vector-rng.js';
 
 /** The nonce column's prefix for every encrypted group line. Not the DM's (see the header). */
 export const GROUP_NONCE_PREFIX = 'group-xc20p-v1:';
@@ -81,11 +82,12 @@ export type GroupLinePart = 'body' | 'attachment' | 'edit';
 const GROUP_LINE_PARTS: readonly GroupLinePart[] = ['body', 'attachment', 'edit'];
 
 /**
- * Where randomness comes from. The platform CSPRNG unless a test or the vectors hand in a fixed one: the apps and the node
- * never pass this.
+ * Where randomness comes from: always the platform CSPRNG, unless the frozen vectors or core's tests hand in a stream minted
+ * by group-vector-rng.ts (not in the core barrel). Any other function is refused, so an app or the node can't fix an epoch
+ * key, a one-time key or a nonce by mistake.
  */
 export interface GroupCryptoRandom {
-    randomBytes?: (n: number) => Uint8Array;
+    randomBytesForVectors?: (n: number) => Uint8Array;
 }
 
 /** One epoch key locked to one member (§2.2). Field names as the routes use them (Appendix A). */
@@ -187,7 +189,10 @@ function utf8(bytes: Uint8Array): string {
 }
 
 function rngOf(opts?: GroupCryptoRandom): (n: number) => Uint8Array {
-    return opts?.randomBytes ?? cryptoRandomBytes;
+    const fixed = opts?.randomBytesForVectors;
+    if (fixed === undefined) return cryptoRandomBytes;
+    if (!isGroupVectorRng(fixed)) throw new Error('Group keys and nonces come from the platform CSPRNG; a fixed stream is for the vectors and tests only.');
+    return fixed;
 }
 
 function isPubHex(s: unknown): s is string {
@@ -240,9 +245,12 @@ function checkWrapBinding(b: GroupWrapBinding): void {
  * Lock an epoch key to one member. RNG order (pinned by the vectors): the ephemeral secret (32), then the nonce (24).
  */
 export function wrapGroupKey(groupKey: Uint8Array, b: GroupWrapBinding, opts?: GroupCryptoRandom): GroupKeyWrap {
+    return wrapWith(groupKey, b, rngOf(opts));
+}
+
+function wrapWith(groupKey: Uint8Array, b: GroupWrapBinding, rng: (n: number) => Uint8Array): GroupKeyWrap {
     if (!(groupKey instanceof Uint8Array) || groupKey.length !== KEY_LEN) throw new Error('A group key is 32 bytes.');
     checkWrapBinding(b);
-    const rng = rngOf(opts);
     const recipientX = identityX25519Public(b.recipientPubHex);
     const eph = rng(KEY_LEN);
     const ephPub = x25519.getPublicKey(eph);
@@ -331,7 +339,7 @@ export function makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCry
         createdBy: pubHex,
         createdAt: input.createdAt,
         wraps: recipients.map((recipientPubHex) =>
-            wrapGroupKey(groupKey, { groupId: input.groupId, epoch: input.epoch, recipientPubHex, wrapperPubHex: pubHex }, { randomBytes: rng })),
+            wrapWith(groupKey, { groupId: input.groupId, epoch: input.epoch, recipientPubHex, wrapperPubHex: pubHex }, rng)),
     };
     const problem = epochRecordProblem(unsigned);
     if (problem) throw new Error(`Not an epoch record this member can make: ${problem}`);

@@ -13,6 +13,7 @@ import {
 } from '../group-crypto.js';
 import { DM_NONCE_PREFIX, dmPublicKeyOf, identityX25519Secret, isDmEncryptedNonce } from '../dm-crypto.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
+import { mintGroupVectorRng } from '../group-vector-rng.js';
 import * as core from '../index.js';
 import {
     checkGroupCryptoVectors, groupVectorRandom, GROUP_LINE_VECTORS, GROUP_VECTOR_GROUP, GROUP_VECTOR_KEY_HEX, GROUP_VECTOR_PEOPLE,
@@ -141,8 +142,8 @@ describe('identity keys in either spelling', () => {
         expect(bytesToHex(openGroupEpochRecord(record, ben.pkcs8Hex, { groupId: GROUP }))).toBe(bytesToHex(groupKey));
         const line = sealGroupLine('hello', { myEdPrivHex: ben.pkcs8Hex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG });
         expect(openGroupLine(line, refOf(ben), groupKey).text).toBe('hello');
-        const line2 = sealGroupLine('hello', { myEdPrivHex: ben.seedHex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG }, { randomBytes: () => new Uint8Array(24).fill(1) });
-        const line3 = sealGroupLine('hello', { myEdPrivHex: ben.pkcs8Hex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG }, { randomBytes: () => new Uint8Array(24).fill(1) });
+        const line2 = sealGroupLine('hello', { myEdPrivHex: ben.seedHex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG }, { randomBytesForVectors: mintGroupVectorRng(() => new Uint8Array(24).fill(1)) });
+        const line3 = sealGroupLine('hello', { myEdPrivHex: ben.pkcs8Hex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG }, { randomBytesForVectors: mintGroupVectorRng(() => new Uint8Array(24).fill(1)) });
         expect(line3).toEqual(line2);
     });
 
@@ -395,6 +396,32 @@ describe('lines', () => {
     });
 });
 
+describe('randomness', () => {
+    const start = { myEdPrivHex: ana.seedHex, groupId: GROUP, epoch: 1, reason: 'start' as const, createdAt: AT, recipients: [ana.publicKey] };
+    const zeros = (n: number) => new Uint8Array(n);
+
+    it('the app or the node cannot hand in its own: a stream not minted for the vectors or tests is refused', () => {
+        const key = new Uint8Array(32).fill(5);
+        const opts = { randomBytesForVectors: zeros };
+        expect(() => makeGroupEpochRecord(start, opts)).toThrow(/platform CSPRNG/);
+        expect(() => wrapGroupKey(key, { groupId: GROUP, epoch: 1, recipientPubHex: ben.publicKey, wrapperPubHex: ana.publicKey }, opts)).toThrow(/platform CSPRNG/);
+        expect(() => makeGroupTopUp(key, { myEdPrivHex: ana.seedHex, groupId: GROUP, epoch: 1, recipientPubHex: ben.publicKey }, opts)).toThrow(/platform CSPRNG/);
+        expect(() => sealGroupLine('x', { myEdPrivHex: ana.seedHex, groupKey: key, groupId: GROUP, epoch: 1, messageId: MSG }, opts)).toThrow(/platform CSPRNG/);
+    });
+
+    it("a stray option under the old name is ignored: the epoch key is fresh, never all zero", () => {
+        const { groupKey, record } = makeGroupEpochRecord(start, { randomBytes: zeros } as never);
+        expect(bytesToHex(groupKey)).not.toBe('00'.repeat(32));
+        expect(Buffer.from(record.wraps[0].nonce, 'base64').equals(Buffer.alloc(24))).toBe(false);
+    });
+
+    it('a stream minted for the vectors or tests is used exactly, in the pinned order', () => {
+        const { groupKey } = makeGroupEpochRecord(start, { randomBytesForVectors: mintGroupVectorRng(zeros) });
+        expect(bytesToHex(groupKey)).toBe('00'.repeat(32));
+        expect(bytesToHex(makeGroupEpochRecord(start, { randomBytesForVectors: groupVectorRandom('t') }).groupKey)).toBe(bytesToHex(groupVectorRandom('t')(32)));
+    });
+});
+
 describe('the wire form', () => {
     const { groupKey } = epoch2();
     const line = sealGroupLine('hi', { myEdPrivHex: ben.seedHex, groupKey, groupId: GROUP, epoch: 2, messageId: MSG });
@@ -442,5 +469,9 @@ describe('the core barrel', () => {
 
     it('leaves out the raw wrap opener: a wrap alone proves nothing about who made it, only a signed record or top-up does', () => {
         for (const name of ['openGroupKeyWrap', 'openGroupKeyWrapUnverified']) expect(name in core).toBe(false);
+    });
+
+    it('leaves out the minting of fixed randomness: only the vectors and tests make a stream group-crypto takes', () => {
+        for (const name of ['mintGroupVectorRng', 'isGroupVectorRng', 'groupVectorRandom']) expect(name in core).toBe(false);
     });
 });

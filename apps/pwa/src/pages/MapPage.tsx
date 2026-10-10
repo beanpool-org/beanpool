@@ -578,6 +578,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         () => nearKnown ? nearRead({ nearbyListings, setting: radiusSetting, area: memberArea, visitor: !!visitor, everywhere }) : null,
         [nearKnown, nearbyListings, radiusSetting, memberArea, visitor, everywhere],
     );
+    // After Show everywhere, where the map would read from again: Near your area (or the place picked) brings it back.
+    const nearAgain = useMemo(
+        () => everywhere ? nearRead({ nearbyListings, setting: radiusSetting, area: memberArea, visitor: !!visitor }) : null,
+        [everywhere, nearbyListings, radiusSetting, memberArea, visitor],
+    );
     // A pin pushed over the live feed joins the map only inside the radius the map was read with.
     const fitsMap = useCallback((p: MarketplacePost): boolean => fitsMapList(p) && (!near
         || (p.lat != null && p.lng != null && haversineDistance(near.lat, near.lng, p.lat, p.lng) <= near.radiusKm)), [near]);
@@ -1678,6 +1683,18 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 </p>
             )}
 
+            {nearAgain && !showLocationHint && !showNewPost && (
+                <p
+                    data-testid="map-near-again"
+                    className="absolute top-[4.25rem] md:top-3 left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2"
+                >
+                    <span>Newest from everywhere.</span>
+                    <button type="button" onClick={() => setEverywhere(false)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">
+                        {nearAgain.from === 'area' ? 'Near your area' : 'Near the place you picked'}
+                    </button>
+                </p>
+            )}
+
             {/* Event chips (docs/events-on-the-map.md §3). They filter event pins only, by start time. One row
                 that scrolls sideways rather than wraps, so it holds at 320px with large text, and only as wide as its chips so the rest of the map still pans. Shown once this
                 community has an upcoming event. */}
@@ -1782,8 +1799,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         post={previewPost}
                         identity={identity}
                         visitor={visitor}
-                        distanceKm={listingDistanceKm(previewPost,
-                            userLocation ? (lat, lng) => haversineDistance(userLocation.lat, userLocation.lng, lat, lng) : null)}
+                        // From where the member is, once they tapped the target (as before); else the node's number,
+                        // from their area or the place they picked.
+                        distanceKm={userLocation && previewPost.lat != null && previewPost.lng != null
+                            ? haversineDistance(userLocation.lat, userLocation.lng, previewPost.lat, previewPost.lng)
+                            : listingDistanceKm(previewPost, null)}
                         onOpen={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                         onRsvpChange={(p) => { setPreviewPost(p); refreshPosts().catch(() => {}); }}
                     />

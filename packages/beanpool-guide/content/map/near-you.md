@@ -31,7 +31,7 @@ The global community has listings from everywhere, so the web app's **Market** a
 - Each listing shows how far away it is, like **📍 12 km**. Your own listings are always on the Map, and on the Market near your area, wherever they are. With a **Distance**, the Market shows only what is within it, yours too.
 - While the list is near you, posts with no location, like most polls, are left out. Tap **Show everywhere**, or reset the **Distance**, to see them.
 - Under **Events** the list is never cut by your area or your **Distance**, as before.
-- If nothing is near, the Map says so, with **Show everywhere**.
+- If nothing is near, the Map says so, with **Show everywhere**. Then **Near your area** (or **Near the place you picked**) brings the nearest back.
 
 The web app's search looks only through the listings on screen. **Show everywhere** shows the newest listings from everywhere, not every one, so a listing that is far away and not new won't come up in the search. In every other community the Market and the Map show everything, as before.
 

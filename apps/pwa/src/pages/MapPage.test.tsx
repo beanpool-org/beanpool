@@ -1348,4 +1348,17 @@ describe('MapPage: where the pins are read from (S5)', () => {
         await waitFor(() => expect(listReads().at(-1)).toEqual({ types: TYPES }));
         await waitFor(() => expect(view!.queryByTestId('map-near-empty')).toBeNull());
     });
+
+    it('after Show everywhere, Near your area reads from the area again', async () => {
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author ? [] : [post]) as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        const note = await view!.findByTestId('map-near-empty');
+        fireEvent.click(within(note).getByRole('button', { name: 'Show everywhere' }));
+        await waitFor(() => expect(listReads().at(-1)).toEqual({ types: TYPES }));
+        const back = await view!.findByTestId('map-near-again');
+        fireEvent.click(within(back).getByRole('button', { name: 'Near your area' }));
+        await waitFor(() => expect(listReads().at(-1)).toMatchObject({ types: TYPES, radiusKm: 250, sort: 'distance', limit: 200 }));
+        await waitFor(() => expect(view!.queryByTestId('map-near-again')).toBeNull());
+    });
 });

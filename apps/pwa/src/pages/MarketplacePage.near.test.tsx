@@ -133,6 +133,28 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         expect(await screen.findByText('Bicycle Repair')).toBeInTheDocument();
     });
 
+    it('Events are never cut by the area or the distance: no point on their read, every event shown, no line', async () => {
+        info.current = GLOBAL;
+        const farEvent = {
+            ...offer, id: 'ev-oslo', type: 'event', category: 'events', title: 'Oslo choir night', lat: 59.9, lng: 10.7,
+            eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), eventEndAt: new Date(Date.now() + 90_000_000).toISOString(),
+        };
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.author ? [] : f?.type === 'event' ? [farEvent] : [offer]) as any);
+        vi.spyOn(api, 'getMyEvents').mockResolvedValue([]);
+        for (const setting of [null, { lat: -37.1, lng: 144.2, radiusKm: 30, label: '30km radius' }]) {
+            vi.mocked(loadRadiusSettings).mockReturnValue(setting);
+            vi.mocked(api.getMarketplacePosts).mockClear();
+            const { unmount } = render(<MarketplacePage identity={identity} />);
+            await screen.findByText('Bicycle Repair');
+            fireEvent.click(screen.getByRole('button', { name: 'Events' }));
+            await screen.findByText('Oslo choir night');
+            expect(feedReads().filter(f => f?.type === 'event')).toEqual([{ type: 'event' }]);
+            expect(ownReads().filter(f => f?.type === 'event')).toEqual([{ type: 'event', author: 'member-me' }]);
+            expect(screen.queryByTestId('market-near-line')).toBeNull();
+            unmount();
+        }
+    });
+
     it('a node that never answers its info still gets a list, read as before', async () => {
         info.current = GLOBAL;
         const gate = await import('../lib/visitor-lobby-gate');

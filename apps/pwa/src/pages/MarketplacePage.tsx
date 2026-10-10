@@ -282,9 +282,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             .finally(() => { clearTimeout(timer); known(); });
         return () => { cancelled = true; clearTimeout(timer); };
     }, [identity?.publicKey, isVisitor]);
+    // Under Events the list is not cut, as on a local node: no point on the read and none on a pushed listing. The
+    // Distance chip is off screen there, so nothing on that screen could undo the cut.
     const near = useMemo(
-        () => nearKnown ? nearRead({ nearbyListings, setting: radiusSettings, area: memberArea, visitor: isVisitor, everywhere }) : null,
-        [nearKnown, nearbyListings, radiusSettings, memberArea, isVisitor, everywhere],
+        () => nearKnown && typeFilter !== 'event'
+            ? nearRead({ nearbyListings, setting: radiusSettings, area: memberArea, visitor: isVisitor, everywhere })
+            : null,
+        [nearKnown, typeFilter, nearbyListings, radiusSettings, memberArea, isVisitor, everywhere],
     );
     // How far a listing is: the node's word when it measured from `near`, else from the picked centre in the browser.
     const measureFrom = near ?? radiusSettings;

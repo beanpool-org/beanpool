@@ -388,6 +388,34 @@ describe('lines', () => {
         }
     });
 
+    // A frame Ben genuinely signed, with its unsigned bytes chosen freely, sealed under the key every member holds.
+    const signedBy = (who: typeof ana, unsigned: Uint8Array, nonce = new Uint8Array(24).fill(6)) => {
+        const sig = ed25519.sign(sha256(concatBytes(gc.groupLineAad(refOf(who)), nonce, unsigned)), hexToBytes(who.seedHex));
+        return resealFrame(concatBytes(unsigned.subarray(0, 1), sig, unsigned.subarray(1)), refOf(who), groupKey, nonce);
+    };
+    const words = utf8ToBytes('hello');
+
+    it('refuses a frame of another format, though signed by the sender it names', () => {
+        expect(openGroupLine(signedBy(ben, new Uint8Array([1, 0, ...words])), refOf(ben), groupKey).text).toBe('hello');
+        expect(() => openGroupLine(signedBy(ben, new Uint8Array([2, 0, ...words])), refOf(ben), groupKey)).toThrow(GroupLineNotVerifiedError);
+    });
+
+    it("refuses a frame whose 'after' length runs past its end, though signed by the sender it names", () => {
+        expect(() => openGroupLine(signedBy(ben, new Uint8Array([1, 200, ...words])), refOf(ben), groupKey)).toThrow(GroupLineNotVerifiedError);
+    });
+
+    it("refuses an epoch spelled as a string, though String('2') binds the same bytes as 2", () => {
+        const two = '2' as unknown as number;
+        expect(() => seal('x', { epoch: two })).toThrow();
+        expect(() => openGroupLine(seal('hi'), refOf(ben, { epoch: two }), groupKey)).toThrow(GroupLineNotVerifiedError);
+        expect(() => verifyGroupEpochRecord({ ...epoch2().record, epoch: two }, { groupId: GROUP })).toThrow(/epoch/);
+    });
+
+    it("refuses a reply to the empty id, which would bind the same bytes as a line that answers nothing", () => {
+        expect(() => seal('x', { replyToId: '' })).toThrow(/reply/);
+        expect(() => openGroupLine(seal('hi'), refOf(ben, { replyToId: '' }), groupKey)).toThrow(GroupLineNotVerifiedError);
+    });
+
     it('refuses to seal under an id the node would store differently', () => {
         expect(() => seal('x', { messageId: MSG.toUpperCase() })).toThrow(/UUID v4/);
         expect(() => seal('x', { messageId: 'not-a-uuid' })).toThrow(/UUID v4/);

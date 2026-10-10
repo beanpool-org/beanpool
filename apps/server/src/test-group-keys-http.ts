@@ -164,8 +164,9 @@ async function main(): Promise<void> {
     // ── 1. the first epoch ─────────────────────────────────────────────────────────────────────────
     console.log('── 1. the first epoch, and what POST …/keys/epoch refuses ──');
     const k0 = await call('GET', ana, keysPath);
-    assert(k0.status === 200 && k0.body.current === null && k0.body.fromEpoch === null && JSON.stringify(k0.body.roster) === JSON.stringify([ana.pk]),
-        `a group with no epoch: current null, Ana's roster of one (got ${k0.status} ${JSON.stringify(k0.body)})`);
+    // fromEpoch is a number the creation wrote (step 2b, §4): the creator holds keys from epoch 1, which does not exist yet.
+    assert(k0.status === 200 && k0.body.current === null && k0.body.fromEpoch === 1 && k0.body.epochs.length === 0 && JSON.stringify(k0.body.roster) === JSON.stringify([ana.pk]),
+        `a group with no epoch: current null, Ana's fromEpoch 1, nothing served, her roster of one (got ${k0.status} ${JSON.stringify(k0.body)})`);
     const noKeyYet = await sendLine(ana, { ciphertext: b64(crypto.randomBytes(120)), nonce: GROUP_NONCE_PREFIX + b64(crypto.randomBytes(24)) }, { epoch: 1 });
     assert(noKeyYet.status === 409 && noKeyYet.body.code === 'epoch_needed', `a line before any epoch is refused: epoch_needed (got ${noKeyYet.status} ${noKeyYet.body?.code})`);
 

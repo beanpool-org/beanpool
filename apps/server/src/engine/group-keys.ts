@@ -72,18 +72,42 @@ export function currentGroupEpoch(groupId: string, roster = groupKeyRoster(group
 }
 
 /**
- * The first epoch this member may hold (§3, §2.5): the first one this node stored at or after their membership began
- * (group_members.joined_at, which a re-key keeps and a re-join restarts). Null for someone not active in the group, and
- * for a member who joined after the current epoch was made, until the next one.
+ * The first epoch this member may hold (§3, §2.5): group_members.from_epoch, the number the transaction that admitted them
+ * wrote (setMembershipFromEpoch; DESIGN-group-chat-epochs-over-time-fable.md §4). It may be past the current epoch ("you
+ * hold keys from the next epoch on"). Null for someone not active in the group. Only a row no code wrote has none; it falls
+ * back to the first epoch stored at or after joined_at, which compares two clocks' stamps and so is never the rule for a
+ * row a join path wrote (review of #1762, confirmation round, finding 1).
  */
 export function fromEpochOf(groupId: string, pubkey: string | undefined): number | null {
     if (!pubkey) return null;
     const row = db.prepare(`
-        SELECT MIN(e.epoch) AS e FROM group_key_epochs e
-        JOIN group_members gm ON gm.group_id = e.group_id AND gm.member_pubkey = ? AND gm.status = 'active'
-        WHERE e.group_id = ? AND e.stored_at >= gm.joined_at
-    `).get(pubkey, groupId) as { e: number | null } | undefined;
-    return row?.e ?? null;
+        SELECT gm.from_epoch AS f,
+               CASE WHEN gm.from_epoch IS NULL THEN
+                   (SELECT MIN(e.epoch) FROM group_key_epochs e WHERE e.group_id = gm.group_id AND e.stored_at >= gm.joined_at)
+               END AS legacy
+        FROM group_members gm WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.status = 'active'
+    `).get(groupId, pubkey) as { f: number | null; legacy: number | null } | undefined;
+    if (!row) return null;
+    return row.f ?? row.legacy ?? null;
+}
+
+/**
+ * Where a membership's keys begin, by number, inside the transaction that made the row active. The row's updated_at
+ * moves strictly past the one it holds: left alone, the touch trigger would stamp the clock, which may be behind a stamp
+ * membershipWriteAt moved ahead of it (a leave stamped later), and a standby would then take the re-join for older than
+ * the leave. Moving it also carries the column to a standby with the row.
+ */
+export function setMembershipFromEpoch(groupId: string, pubkey: string, fromEpoch: number): void {
+    const prev = (db.prepare('SELECT updated_at FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(groupId, pubkey) as { updated_at: string | null } | undefined)?.updated_at ?? null;
+    const nowIso = new Date().toISOString();
+    const prevMs = prev ? Date.parse(prev) : NaN;
+    const at = Number.isFinite(prevMs) && prevMs >= Date.parse(nowIso) ? new Date(prevMs + 1).toISOString() : nowIso;
+    db.prepare('UPDATE group_members SET from_epoch = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?').run(fromEpoch, at, groupId, pubkey);
+}
+
+function activeKeys(groupId: string): string[] {
+    return (db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(groupId) as { member_pubkey: string }[])
+        .map((r) => r.member_pubkey);
 }
 
 /** What GET /api/groups/:id/chat says about the chat's lock (§14.3): its absence tells an app it talks to an old node. */
@@ -150,7 +174,6 @@ export function storeGroupEpoch(
     }
     if (!groupEpochCoversExactly(record, roster)) throw conflict("The epoch is not wrapped to exactly this group's active members.");
     const now = new Date().toISOString();
-    // fromEpochOf compares stored_at with joined_at, so a joiner's own epoch is never stamped before their membership began.
     const storedAt = opts.storedNotBefore && opts.storedNotBefore > now ? opts.storedNotBefore : now;
     db.prepare(`INSERT INTO group_key_epochs (group_id, epoch, created_by, reason, subject_pubkey, created_at, key_commit, members_digest,
                     wraps_digest, sig, stored_at, stale_since, updated_at)
@@ -171,7 +194,8 @@ export function rotateGroupEpoch(groupId: string, actor: string, raw: unknown): 
 /**
  * A membership change and its epoch in one transaction (§2.3). With a record: the change, then the record checked against
  * the membership after it; either refused rolls both back. Without one (an old app, a leaver): the change applies and,
- * if it let anyone in or out, the current epoch is marked stale so the next member to write rotates first.
+ * if it let anyone in or out, the current epoch is marked stale so the next member to write rotates first. Every row the
+ * change made active gets its from_epoch by number: the epoch stored here, or the next one when none was (the stale path).
  */
 export function withMembershipEpoch<T>(
     groupId: string, actor: string, raw: unknown, change: () => T,
@@ -179,19 +203,22 @@ export function withMembershipEpoch<T>(
 ): T {
     return db.transaction(() => {
         const before = groupKeyRoster(groupId).join(',');
+        const activeBefore = new Set(activeKeys(groupId));
+        const next = (currentRow(groupId)?.epoch ?? 0) + 1;
         const res = change();
         const changed = groupKeyRoster(groupId).join(',') !== before;
+        let fromEpoch = next;
         if (raw !== undefined && raw !== null) {
             if (!changed) throw new GroupKeyError(400, 'epoch_not_applicable', 'This change lets nobody in or out of the chat, so it takes no new key.');
-            // A joiner's joined_at can lie ahead of the clock (groups.ts membershipWriteAt moves it past a leave stamped
-            // later: a clock step back, or a promoted standby behind the main server); their epoch is stored no earlier, so
-            // it stays their first (review of #1762, finding 6).
+            // stored_at is informational since from_epoch (§4), but it is still never stamped before the joiner's joined_at,
+            // which groups.ts membershipWriteAt can move ahead of the clock (review of #1762, finding 6).
             const joinedAt = (db.prepare("SELECT joined_at FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'")
                 .get(groupId, opts.subject) as { joined_at: string } | undefined)?.joined_at ?? null;
-            storeGroupEpoch(groupId, actor, raw, { ...opts, storedNotBefore: joinedAt });
+            fromEpoch = storeGroupEpoch(groupId, actor, raw, { ...opts, storedNotBefore: joinedAt }).epoch;
         } else if (changed) {
             markGroupEpochStale(groupId);
         }
+        for (const pk of activeKeys(groupId)) if (!activeBefore.has(pk)) setMembershipFromEpoch(groupId, pk, fromEpoch);
         return res;
     })();
 }

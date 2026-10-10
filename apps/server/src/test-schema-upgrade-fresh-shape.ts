@@ -335,6 +335,55 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 8b. group_members.from_epoch (group chats step 2b) ──────────────────────────────────────────
+    // The first epoch a membership holds keys from, by number. Once, with the column: a group with no epoch (every group
+    // on a node from before the chat's keys) starts its active rows at 1; a group that already has epochs gives each the
+    // epoch the old stored_at rule gave, or the next one. Not a pending row, and no row stamped.
+    console.log('\n--- 8b. group_members gains from_epoch ---');
+    {
+        const dir = tmp('group-members-from-epoch');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TABLE group_members; ${legacyDdl('group_members', ['from_epoch'])}`);
+        const pk = (c: string) => c.repeat(64);
+        for (const c of ['a', 'b', 'c', 'd', 'e']) d.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, '2025-01-01T00:00:00.000Z')`).run(pk(c), c);
+        d.prepare(`INSERT INTO groups (id, name, slug, created_by) VALUES ('g1', 'Garden', 'garden', ?), ('g2', 'Shed', 'shed', ?)`).run(pk('a'), pk('a'));
+        const gm = d.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at) VALUES (?, ?, 'member', ?, ?, '2025-01-01T00:00:00.000Z')`);
+        gm.run('g1', pk('a'), 'active', '2025-01-01T00:00:00.000Z');
+        gm.run('g1', pk('b'), 'pending_approval', '2025-01-01T00:00:00.000Z');
+        const ep = d.prepare(`INSERT INTO group_key_epochs (group_id, epoch, created_by, reason, created_at, key_commit, members_digest, wraps_digest, sig, stored_at)
+                              VALUES ('g2', ?, ?, 'rotate', 'x', 'k', 'm', 'w', 's', ?)`);
+        ep.run(1, pk('a'), '2025-02-01T00:00:00.000Z');
+        ep.run(2, pk('a'), '2025-03-01T00:00:00.000Z');
+        gm.run('g2', pk('a'), 'active', '2025-01-15T00:00:00.000Z');
+        gm.run('g2', pk('c'), 'active', '2025-02-15T00:00:00.000Z');
+        gm.run('g2', pk('d'), 'active', '2025-04-01T00:00:00.000Z');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the node from before the column boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        const f = (g: string, c: string) => (after.prepare('SELECT from_epoch, updated_at FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, pk(c)) as any);
+        assert(f('g1', 'a').from_epoch === 1, `a group with no epoch: its active row starts at 1 (got ${f('g1', 'a').from_epoch})`);
+        assert(f('g1', 'b').from_epoch === null, 'a pending request gets none');
+        assert(f('g2', 'a').from_epoch === 1 && f('g2', 'c').from_epoch === 2 && f('g2', 'd').from_epoch === 3,
+            `a group with epochs: the old rule's epoch each, or the next one (got ${f('g2', 'a').from_epoch}, ${f('g2', 'c').from_epoch}, ${f('g2', 'd').from_epoch})`);
+        assert(['a', 'c', 'd'].every((c) => f('g2', c).updated_at === '2025-01-01T00:00:00.000Z') && f('g1', 'a').updated_at === '2025-01-01T00:00:00.000Z',
+            'no row is stamped by it');
+        after.prepare(`UPDATE group_members SET role = 'convenor' WHERE group_id = 'g1' AND member_pubkey = ?`).run(pk('a'));
+        assert(f('g1', 'a').updated_at > '2025-01-01T00:00:00.000Z', 'the updated_at touch trigger is back');
+        after.prepare(`UPDATE group_members SET from_epoch = NULL WHERE group_id = 'g2' AND member_pubkey = ?`).run(pk('c'));
+        after.close();
+        assert(bootInto(dir).ok, 'a second boot');
+        const again = new Database(path.join(dir, 'state.db'), { readonly: true });
+        assert((again.prepare('SELECT from_epoch FROM group_members WHERE group_id = ? AND member_pubkey = ?').get('g2', pk('c')) as any).from_epoch === null,
+            'and it runs only once: a row left NULL since stays NULL (the reader falls back)');
+        again.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     // ── accounts.balance NOT NULL (review FABLE-sec-input F1, 2026-10-01) ─────────────────────────
     // better-sqlite3 binds NaN as NULL, and the column was nullable, so a NaN balance was written as NULL without a word.
     // A fresh install declares it NOT NULL; a node whose table predates that is rebuilt at boot, unless a balance there

@@ -2325,6 +2325,12 @@ CREATE TABLE IF NOT EXISTS group_members (
     -- Only people who were convenors before a silent lead's last activity vote on replacing them
     -- (engine/group-succession.ts). NULL on a row written before the column existed: read as joined_at.
     role_since DATETIME,
+    -- The first epoch of the group's chat this membership holds keys from (engine/group-keys.ts fromEpochOf), set BY
+    -- NUMBER in the transaction that makes the row active: the epoch that admission stored, or the next one when it
+    -- carried none (1 for a group's creator). A timestamp is not the rule: two clocks' stamps cannot say which epoch
+    -- came after a join (DESIGN-group-chat-epochs-over-time-fable.md §4). A re-key keeps it; a re-join sets it afresh.
+    -- NULL only on a row no code wrote, read by the old stored_at >= joined_at rule.
+    from_epoch INTEGER,
     PRIMARY KEY (group_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_group_members_pubkey ON group_members(member_pubkey);
@@ -2412,8 +2418,7 @@ CREATE TABLE IF NOT EXISTS group_key_epochs (
     members_digest  TEXT NOT NULL,
     wraps_digest    TEXT NOT NULL,
     sig             TEXT NOT NULL,
-    -- When this node stored it: a member reads, and is topped up with, only epochs stored at or after their
-    -- group_members.joined_at (their fromEpoch).
+    -- When this node stored it. Informational: which epochs a member holds is group_members.from_epoch, a number.
     stored_at       TEXT NOT NULL,
     -- Set on the current epoch when the membership changed without a new one (a leaver, a prune, an app that sent none):
     -- the next line refused until a member rotates.

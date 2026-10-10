@@ -405,6 +405,10 @@ test('migration 0008: four tables and the categories, all on; re-running changes
         assert.equal(dump(), before, 'rows as they were');
         assert.equal(schema(), shape, 'schema as it was');
         assert.throws(() => w.sqlite.exec("UPDATE alert_settings SET mode='loud' WHERE category='names'"), /CHECK constraint/);
+        // The prune every enqueue runs reads by the index on `at`, not the whole outbox.
+        const plan = w.sqlite.prepare('EXPLAIN QUERY PLAN DELETE FROM alert_outbox WHERE at < ? AND (sent_at IS NOT NULL OR muted=1 OR held=1)').all(0).map((r) => r.detail);
+        assert.ok(plan.some((d) => d.includes('idx_alert_outbox_at')), JSON.stringify(plan));
+        assert.ok(!plan.some((d) => /^SCAN alert_outbox$/.test(d)), JSON.stringify(plan));
     } finally { w.restore(); }
 });
 

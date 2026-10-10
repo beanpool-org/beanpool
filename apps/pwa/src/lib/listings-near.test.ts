@@ -30,6 +30,21 @@ describe('nearRead', () => {
     });
 });
 
+describe('nearRead: a centre past ±180° (the picker\'s map gives 185 for Tonga panned from Fiji)', () => {
+    it('wraps the longitude into [-180, 180], so the node does not refuse the read', () => {
+        const at = (lng: number) => nearRead({ nearbyListings: NEARBY, setting: { ...SETTING, lat: -21.1, lng }, area: null, visitor: false })?.lng;
+        expect(at(185)).toBeCloseTo(-175, 9);
+        expect(at(181.6)).toBeCloseTo(-178.4, 9);
+        expect(at(-190)).toBeCloseTo(170, 9);
+        expect(at(540)).toBeCloseTo(-180, 9);
+        expect(at(144.2)).toBe(144.2);
+        for (const lng of [185, 181.6, -190, 540, 900.5]) {
+            const got = at(lng)!;
+            expect(got >= -180 && got <= 180).toBe(true);
+        }
+    });
+});
+
 describe('nearParams and listingDistanceKm', () => {
     it('the read\'s four parameters, or none', () => {
         expect(nearParams(null)).toEqual({});

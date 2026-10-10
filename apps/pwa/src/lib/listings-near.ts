@@ -36,11 +36,17 @@ export interface NearInputs {
 
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 
+/**
+ * A longitude in [-180, 180]. The picker's map gives unwrapped ones past the antimeridian (Tonga tapped with the map on
+ * Fiji is 185), which the node refuses (routes/distance-query.ts).
+ */
+const wrapLng = (lng: number): number => (lng >= -180 && lng <= 180 ? lng : ((((lng + 180) % 360) + 360) % 360) - 180);
+
 /** The point and radius to read from, or null to read as before. */
 export function nearRead({ nearbyListings, setting, area, visitor, everywhere }: NearInputs): NearRead | null {
     if (visitor || everywhere || !nearbyListings) return null;
     if (setting && finite(setting.lat) && finite(setting.lng) && finite(setting.radiusKm) && setting.radiusKm > 0) {
-        return { lat: setting.lat, lng: setting.lng, radiusKm: setting.radiusKm, sort: 'distance', from: 'setting' };
+        return { lat: setting.lat, lng: wrapLng(setting.lng), radiusKm: setting.radiusKm, sort: 'distance', from: 'setting' };
     }
     if (area && finite(area.lat) && finite(area.lng) && finite(nearbyListings.radiusKm) && nearbyListings.radiusKm > 0) {
         return { lat: area.lat, lng: area.lng, radiusKm: nearbyListings.radiusKm, sort: 'distance', from: 'area' };

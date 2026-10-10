@@ -8,7 +8,9 @@
  * `{ posts, set, setHash }`, with an ETag that describes S alone. Boots the real server on the global profile and reads
  * over HTTP, signed by members' keys, through the real middleware:
  *   1. brute force: for 30 members at three densities (a busy town with more than 500 listings within 250 km, a small
- *      town, nothing within 700 km), the set the node names is the brute-force S, the near part in NEAREST order;
+ *      town, nothing within 700 km), the set the node names is the brute-force S, the near part in NEAREST order; an
+ *      author on holiday and a paused or winding-up enterprise are off it; with the bound (measureAtMost) below the
+ *      listings in the box, the engine's set is the nearest of the newest that many;
  *   2. a whole read in pages (paged=1, X-Posts-Next) brings exactly the rows of S, each once;
  *   3. after random writes, moves and removals, and one member moving their area, a delta from the old cursor plus the
  *      `set` (drop what is held outside it, fetch what is missing by `ids=`) gives the phone exactly the new S;
@@ -31,7 +33,7 @@ delete process.env.NEARBY_LISTINGS_MAX;
 process.env.NODE_PROFILE = 'global';
 
 import crypto from 'node:crypto';
-import { haversineKm } from '@beanpool/engine';
+import { haversineKm, boundingBox, getNearbySet } from '@beanpool/engine';
 import { localFetch } from './keepalive-test-fetch.js';
 
 let BASE = '';
@@ -178,6 +180,11 @@ async function main() {
     const offBoard = post(around(BUSY, 5), holidayAuthor);
     const removed = post(around(BUSY, 5), authors[4]);
     db.prepare(`UPDATE posts SET active = 0, status = 'cancelled' WHERE id = ?`).run(removed);
+    // An enterprise paused and one winding up: their listings are off the board (read on the author's key, not their row).
+    db.prepare(`UPDATE members SET paused = 1 WHERE public_key = ?`).run(authors[10].pubKeyHex);
+    db.prepare(`UPDATE members SET status = 'winding_up' WHERE public_key = ?`).run(authors[11].pubKeyHex);
+    const pausedEnterprise = post(around(BUSY, 5), authors[10]);
+    const windingUp = post(around(BUSY, 5), authors[11]);
 
     // 30 members: ten at each density (each 0.1° area), and a few kinds of ties for the first.
     const placeNear = (c: { lat: number; lng: number }) => {
@@ -206,7 +213,8 @@ async function main() {
 
     // ── The brute force: every post, every rule, in JavaScript ──
     const nowIso = () => new Date().toISOString();
-    function bruteSet(m: Id): { near: string[]; all: Set<string> } {
+    /** With `bound`: the nearest of the newest `bound` listings in the radius's box (the engine's measureAtMost). */
+    function bruteSet(m: Id, bound?: number): { near: string[]; all: Set<string> } {
         const me = db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?').get(m.pubKeyHex) as { area_lat: number | null; area_lng: number | null };
         const rows = db.prepare(`SELECT p.id, p.type, p.status, p.active, p.lat, p.lng, p.updated_at, p.created_at, p.author_pubkey, p.audience_scope,
                     p.target_group_id, p.target_pubkey, p.assigned_to, p.hidden_by_reports_at, p.event_end_at, p.origin_node FROM posts p`).all() as any[];
@@ -228,7 +236,13 @@ async function main() {
             near = listed.sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? '') || (b.created_at ?? '').localeCompare(a.created_at ?? '') || b.id.localeCompare(a.id))
                 .slice(0, 100).map(p => p.id);
         } else {
-            near = listed.filter(p => typeof p.lat === 'number' && typeof p.lng === 'number')
+            const box = boundingBox(me.area_lat!, me.area_lng!, 250);
+            const placed = listed.filter(p => typeof p.lat === 'number' && typeof p.lng === 'number');
+            const inBox = bound === undefined ? placed : placed
+                .filter(p => p.lat >= box.latMin && p.lat <= box.latMax && box.lngRanges.some(([a, b]) => p.lng >= a && p.lng <= b))
+                .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? '') || (b.created_at ?? '').localeCompare(a.created_at ?? '') || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+                .slice(0, bound);
+            near = inBox
                 .map(p => ({ p, d: haversineKm(me.area_lat!, me.area_lng!, p.lat, p.lng) }))
                 .filter(x => x.d <= 250)
                 .sort((a, b) => a.d - b.d || (b.p.updated_at ?? '').localeCompare(a.p.updated_at ?? '') || (b.p.created_at ?? '').localeCompare(a.p.created_at ?? '') || (a.p.id < b.p.id ? -1 : a.p.id > b.p.id ? 1 : 0))
@@ -258,8 +272,20 @@ async function main() {
     assert(sizes.busy.every(s => s === 500) && sizes.small.every(s => s > 0 && s < 500) && sizes.empty.every(s => s === 0),
         `the three densities are what they claim: busy ${sizes.busy.join('/')}, small ${sizes.small.join('/')}, empty ${sizes.empty.join('/')}`);
     const anaSet = new Set((await get(`${SYNC}&nearby=1`, ana)).set);
-    assert(![grouped, offBoard, removed].some(x => anaSet.has(x)) && !anaSet.has(doneDeal),
-        'a group listing she is not in, an author on holiday, a taken-off listing and a finished deal are not in it');
+    assert(![grouped, offBoard, pausedEnterprise, windingUp, removed].some(x => anaSet.has(x)) && !anaSet.has(doneDeal),
+        'a group listing she is not in, an author on holiday, a paused and a winding-up enterprise, a taken-off listing and a finished deal are not in it');
+    // The bound below the listings in the box: the engine measures the newest that many, and the set is the nearest of
+    // them. Once with the box holding more than the bound (the pass again, newest first), once with it holding fewer.
+    for (const bound of [40, 5000]) {
+        let same = 0;
+        for (const m of members.filter(x => x.kind !== 'empty')) {
+            const me = db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?').get(m.id.pubKeyHex) as { area_lat: number; area_lng: number };
+            const got = getNearbySet(db, m.id.pubKeyHex, { area: { lat: me.area_lat, lng: me.area_lng }, radiusKm: 250, max: 500, newestWithoutArea: 100,
+                types: TYPES.split(','), excludeEvents: false, measureAtMost: bound });
+            if (got.near.join() === bruteSet(m.id, bound).near.join()) same++;
+        }
+        assert(same === 20, `with the bound at ${bound}, each placed member's near part is the nearest of the newest ${bound} in the box, in order (${same}/20)`);
+    }
     const author2 = members.find(m => m.kind === 'busy')!.id;
     assert(!(await get(`${SYNC}&nearby=1`, author2)).set.includes(hidden), 'a listing hidden by reports is in nobody\'s near set but its author\'s');
 

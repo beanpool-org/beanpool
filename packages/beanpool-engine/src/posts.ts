@@ -1129,33 +1129,31 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
             return [];
         }
         const box = boundingBox(near.lat, near.lng, q.radiusKm);
-        const inBox = `p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})`;
-        const boxParams = [box.latMin, box.latMax, ...box.lngRanges.flat()];
-        const params: unknown[] = [near.lat, near.lng, ...boxParams, ...whereParams];
-        let inner = `
+        // The bound (measureAtMost): at most `cap` of the matching posts are measured, the newest when more match. First
+        // in the index's order, stopping at cap + 1, and the statement says how many it measured: when that is not over
+        // `cap`, every matching post was measured, which is what the newest `cap` are then, without sorting them first
+        // (the sort was a third of the busy town's pass). Only past it, the pass again, newest first. The one row with no
+        // listing (LEFT JOIN) carries the count when none is near.
+        const cap = q.measureAtMost && q.measureAtMost > 0 ? Math.floor(q.measureAtMost) : 0;
+        const pass = (newestFirst: boolean) => prepared(d, `
+        WITH measured AS MATERIALIZED (
+            SELECT q.id, q.updated_at, q.created_at, q.author_pubkey, haversine_km(?, ?, q.lat, q.lng) AS distance_km FROM (
                 SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.author_pubkey
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
-                WHERE ${inBox}${where}`;
-        // The bound (measureAtMost): the newest `cap` of the matching posts, when the box holds more posts than that.
-        // Whether it does is counted from idx_posts_lat_lng alone: the box's band of latitude first, a range of the index
-        // that the pass below reads anyway, counted at a fraction of the pass's cost; the box itself, up to cap + 1, only
-        // when the band holds more. When it doesn't, every matching post is among the newest `cap` anyway, and they are
-        // measured without sorting them first (the sort was a third of the busy town's pass).
-        const cap = q.measureAtMost && q.measureAtMost > 0 ? Math.floor(q.measureAtMost) : 0;
-        if (cap > 0
-            && (prepared(d, 'SELECT count(*) AS n FROM posts p WHERE p.lat BETWEEN ? AND ?').get(box.latMin, box.latMax) as { n: number }).n > cap
-            && (prepared(d, `SELECT count(*) AS n FROM (SELECT 1 FROM posts p WHERE ${inBox} LIMIT ?)`).get(...boxParams, cap + 1) as { n: number }).n > cap) {
-            inner += ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?';
-            params.push(cap);
-        }
-        params.push(q.radiusKm, q.max);
-        ranked = prepared(d, `
-        WITH measured AS MATERIALIZED (
-            SELECT q.id, q.updated_at, q.created_at, q.author_pubkey, haversine_km(?, ?, q.lat, q.lng) AS distance_km FROM (${inner}
+                WHERE p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})${where}${
+                    newestFirst ? ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC' : ''}${cap > 0 ? ' LIMIT ?' : ''}
             ) q
+        ),
+        nearest AS (
+            SELECT p.id, p.updated_at, p.created_at, p.author_pubkey, p.distance_km FROM measured p WHERE p.distance_km <= ?${NEAREST_ORDER} LIMIT ?
         )
-        SELECT p.id, p.updated_at, p.author_pubkey FROM measured p WHERE p.distance_km <= ?${NEAREST_ORDER} LIMIT ?`).all(...params) as typeof ranked;
+        SELECT c.n, p.id, p.updated_at, p.author_pubkey FROM (SELECT count(*) AS n FROM measured) c LEFT JOIN nearest p ON 1${NEAREST_ORDER}`)
+            .all(near.lat, near.lng, box.latMin, box.latMax, ...box.lngRanges.flat(), ...whereParams, ...(cap > 0 ? [newestFirst ? cap : cap + 1] : []), q.radiusKm, q.max) as
+            Array<{ n: number; id: string | null; updated_at: string | null; author_pubkey: string }>;
+        let rows = pass(false);
+        if (cap > 0 && rows[0].n > cap) rows = pass(true);
+        ranked = rows.flatMap(r => r.id === null ? [] : [{ id: r.id, updated_at: r.updated_at, author_pubkey: r.author_pubkey }]);
         return [];
     };
     getPostsRankedBy(db, { ...base, near: q.area ? { lat: q.area.lat, lng: q.area.lng, radiusKm: q.radiusKm } : { lat: 0, lng: 0 }, sortByDistance: true, limit: q.max }, rankNear);

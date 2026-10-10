@@ -172,10 +172,12 @@ async function main(): Promise<void> {
     // ── 2. Replay, a changed vote, forged roll ─────────────────────────────────────────────────────────
     const k4 = makeMember('Kev'), k5 = makeMember('Kya');
     const e2 = makeEnterprise('Garden', [k4, k5], 50);
+    const forgedAuthor = await propose(e2, k4, { effect: 'pay_out', params: { to: ali.pubKeyHex, amount: 10 }, authorPubkey: k5.pubKeyHex });
+    assert(forgedAuthor.status === 403, `a body naming another author is refused by the middleware (got ${forgedAuthor.status})`);
     const p2 = await propose(e2, k4, {
         effect: 'pay_out', params: { to: ali.pubKeyHex, amount: 10 },
-        // Fields no route reads: the scope, the author and the roll come from the path, the signer and the keepers.
-        scopeId: e1, scopeKind: 'community', authorPubkey: k5.pubKeyHex, electors: [outsider.pubKeyHex], enterprisePubkey: e1,
+        // Fields no route reads: the scope and the roll come from the path and the keepers.
+        scopeId: e1, scopeKind: 'community', scope_id: e1, electors: [outsider.pubKeyHex], decision_electors: [outsider.pubKeyHex],
     });
     const d2 = p2.body?.decision?.id as string;
     assert(p2.status === 200 && row(d2).scope_id === e2 && row(d2).author_pubkey === k4.pubKeyHex && row(d2).scope_kind === 'enterprise',

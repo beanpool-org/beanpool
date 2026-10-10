@@ -70,6 +70,14 @@ If neither answers, the server is down or unreachable. See Troubleshooting.
 
 The server keeps its most recent log lines, which Settings shows under Logs. Some messages only appear in Docker's own log: docker compose logs --tail 200 beanpool-node
 
+## Compressed answers
+
+The server compresses (gzips) what it sends the apps and the web app, when they ask for it, which they all do. Members then spend less of their data: a phone's first sync is about a sixth of the bytes.
+
+If your server sits behind Cloudflare, as an address ending in .beanpool.org does, Cloudflare already compresses what it sends the phones. The server's own compressing then only shrinks what travels between your server and Cloudflare, and it costs processor time. On a server with one processor that is short of it, you can turn it off: put API_GZIP=off in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. The log says so as the server starts. Members' apps carry on as before, still compressed by Cloudflare.
+
+With no Cloudflare or other proxy in front (your own domain, straight to the server), leave API_GZIP empty: nothing else compresses for your members.
+
 ## Alerts
 
 The server watches itself every minute and tells its owners when it needs them:

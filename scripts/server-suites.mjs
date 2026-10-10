@@ -276,6 +276,7 @@ export const SUITES = [
     'test-members-contact-visibility',
     'test-heavy-read-cap',
     'test-heavy-read-keys',
+    'test-api-compression',
     'test-members-snapshot',
     'test-roster-snapshots',
     'test-members-directory-cost',
@@ -476,6 +477,8 @@ export const VARIANTS = [
     { name: 'test-heavy-read-cap', tag: '1c-roster', label: 'version moves (1c), a roster', env: { HEAVY_READ_CAP_ONLY: '1c', HEAVY_READ_CAP_1C: 'roster' } },
     // Its section 1d (more readers who stop reading than the budget lets in, plain and gzip) on its own too (#1524).
     { name: 'test-heavy-read-cap', tag: '1d', label: 'readers who stop reading at the bound (1d)', env: { HEAVY_READ_CAP_ONLY: '1d' } },
+    // The /api gzip switched off by its operator (API_GZIP=off): answers as the routes made them, no Vary of its own.
+    { name: 'test-api-compression', tag: 'off', label: 'API_GZIP=off', env: { API_GZIP: 'off' } },
     // The two settlement ROUTES with settlement ENABLED. The plain run covers the shipped state (off, the kill switch
     // refusing everything) and this covers the full matrix behind it. Running either one once would leave half the
     // route untested, and it is the half that moves value: the purchase route can debit a member, and the commission

@@ -21,7 +21,9 @@
  *      the members list the phone syncs now gives Ann's own row an avatar, which /api/avatar serves; an ETag a phone
  *      took in the window is not answered 304 (the deciding review's N5);
  *   4. memberPhotoResumeWait: a short gap while rows are left, doubling while it stops, never past an hour;
- *   5. a standby (NODE_ROLE=backup, a child process on its own data directory) never resumes its move.
+ *   5. a standby (NODE_ROLE=backup, a child process on its own data directory) never resumes its move;
+ *   6. each turn moves at most MEMBER_PHOTO_MOVE_BYTES of photos, never fewer than one row (a child process again): a
+ *      photo may be 2 MB, and 500 of them in one turn held the event loop for 7.9 s (the deciding review's N4).
  *
  *   SERVER_SUITES_ONLY=test-photo-move-resume node scripts/run-server-suites.mjs
  */
@@ -97,8 +99,43 @@ async function standbyPart(): Promise<void> {
     process.exit(0);
 }
 
+/** Part 6, in a child process: the turns of a resumed move over photos of 40/40/40/150/40/40 KB, 100,000 bytes a turn. */
+async function bytesPart(): Promise<void> {
+    const dir = process.env.BEANPOOL_DATA_DIR!;
+    if (!bootInto(dir).ok) throw new Error('a fresh node did not boot');
+    const d = new Database(path.join(dir, 'state.db'));
+    d.exec(`DROP TRIGGER members_touch_updated_at; DROP TABLE member_photos;
+            ALTER TABLE members DROP COLUMN avatar_ref; ALTER TABLE members DROP COLUMN avatar_bytes;
+            ALTER TABLE members ADD COLUMN avatar_url TEXT;`);
+    const ins = d.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, avatar_url, updated_at)
+                           VALUES (?, ?, '${STAMP}', 'active', ?, '${STAMP}')`);
+    const keys = [40, 40, 40, 150, 40, 40].map((kb, i) => {
+        const m = newId(`M${i}`);
+        ins.run(m.pk, m.name, 'data:image/jpeg;base64,' + 'A'.repeat(kb * 1024));
+        return m.pk;
+    });
+    // The boot move stops at the first row, so every photo is left for the resumed turns.
+    d.exec(`CREATE TABLE member_photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL);
+            CREATE TRIGGER injected_failure BEFORE INSERT ON member_photos WHEN NEW.public_key = '${keys[0]}'
+            BEGIN SELECT RAISE(ABORT, 'injected'); END;`);
+    d.close();
+    const { db, initSchema, resumeMemberPhotoMove } = await import('./db/db.js');
+    initSchema();
+    db.exec('DROP TRIGGER injected_failure');
+    const turns: string[] = [];
+    for (let t = 0; t < 10; t++) {
+        const r = resumeMemberPhotoMove(500, 100_000);
+        turns.push(`${r.outcome}:${r.moved}`);
+        if (r.outcome !== 'more') break;
+    }
+    const moved = (db.prepare('SELECT COUNT(*) AS n FROM member_photos').get() as { n: number }).n;
+    console.log('BYTES ' + JSON.stringify({ turns, moved }));
+    process.exit(0);
+}
+
 async function main(): Promise<void> {
     if (process.env.PHOTO_RESUME_PART === 'standby') return standbyPart();
+    if (process.env.PHOTO_RESUME_PART === 'bytes') return bytesPart();
     console.log('A stopped photo move tells no phone "no photo", and ends while the node runs (#1482 b)\n');
     const dir = process.env.BEANPOOL_DATA_DIR;
     if (!dir) throw new Error('BEANPOOL_DATA_DIR is needed (the suite runner gives every suite a fresh one)');
@@ -253,6 +290,18 @@ async function main(): Promise<void> {
         const sb = line ? JSON.parse(line.slice(8)) : null;
         assert(sb?.role === 'backup' && sb.atBoot === 1 && sb.after === 1 && sb.column === true && sb.annInline === true,
             `a standby whose boot move stopped never resumes it (${line ?? `no answer: ${(child.stderr ?? '').slice(-800)}`})`);
+
+        // ── 6. Each turn holds at most MEMBER_PHOTO_MOVE_BYTES of photos, never fewer than one row ──
+        const bytesDir = path.join(dir, 'bytes');
+        fs.mkdirSync(bytesDir, { recursive: true });
+        const bytesChild = spawnSync(process.execPath, [...process.execArgv, process.argv[1]], {
+            env: { ...process.env, PHOTO_RESUME_PART: 'bytes', BEANPOOL_DATA_DIR: bytesDir },
+            encoding: 'utf8', timeout: 120_000,
+        });
+        const bytesLine = (bytesChild.stdout ?? '').split('\n').find((l) => l.startsWith('BYTES '));
+        const by = bytesLine ? JSON.parse(bytesLine.slice(6)) : null;
+        assert(JSON.stringify(by?.turns) === JSON.stringify(['more:2', 'more:1', 'more:1', 'done:2']) && by?.moved === 6,
+            `a resumed turn moves at most 100,000 bytes of photos, and a 150 KB photo alone (${bytesLine ?? `no answer: ${(bytesChild.stderr ?? '').slice(-800)}`})`);
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);
     }

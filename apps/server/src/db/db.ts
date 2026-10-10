@@ -551,8 +551,13 @@ function movePlainPushTablesAside(): void {
     console.log('[DB] Moved the push tokens stored in the clear aside: the boot locks them (a standby drops them).');
 }
 
-/** Members whose photos move out of their rows in one transaction (moveMemberPhotosOutOfRows); MEMBER_PHOTO_MOVE_BATCH. */
+/** Members whose photos move out of their rows in one transaction, at most (moveMemberPhotosOutOfRows); MEMBER_PHOTO_MOVE_BATCH. */
 export const MEMBER_PHOTO_MOVE_BATCH = 500;
+/**
+ * Photo bytes moved in one transaction, at most (moveMemberPhotosOutOfRows); MEMBER_PHOTO_MOVE_BYTES. A photo may be up
+ * to 2 MB, so 500 of them read at once held the event loop for 7.9 s and took 732 MB of heap (#1736's review, N4).
+ */
+export const MEMBER_PHOTO_MOVE_BYTES = 8 * 1024 * 1024;
 
 /**
  * Before schema.sql runs, on a database from before member_photos: each member's avatar (`members.avatar_url`, a photo
@@ -563,7 +568,8 @@ export const MEMBER_PHOTO_MOVE_BATCH = 500;
  * a photo moved is not a change, and a standby moves its own the same way at its own boot.
  *
  * The move is in batches by rowid, each its own transaction, so no transaction of the move grows with the community (a
- * 50,000-member database is 1.3 GB of photos), and its heap stays flat. Killed part way, the batches done stay done, the
+ * 50,000-member database is 1.3 GB of photos), and its heap stays flat: at most `batch` rows and `batchBytes` of photos
+ * (never fewer than one row), each photo read on its own, as the groups' move does (moveGroupPicturesOutOfRows). Killed part way, the batches done stay done, the
  * next boot carries on from the first row still holding its photo, and nothing reads half of one. Before the server
  * listens, so no reader ever sees a member half moved.
  *
@@ -601,8 +607,11 @@ export const MEMBER_PHOTO_MOVE_BATCH = 500;
  *
  * A move stopped at boot is resumed while the node runs, by a main server's timer (resumeMemberPhotoMove, #1482).
  */
-export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH): number {
-    return moveMemberPhotos(batch, Infinity, 0).moved;
+export function moveMemberPhotosOutOfRows(
+    batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH,
+    batchBytes = Number(process.env.MEMBER_PHOTO_MOVE_BYTES) || MEMBER_PHOTO_MOVE_BYTES,
+): number {
+    return moveMemberPhotos(batch, batchBytes, Infinity, 0).moved;
 }
 
 /** Where the move resumed after boot carries on from (resumeMemberPhotoMove): the last row of its last committed batch. */
@@ -627,12 +636,16 @@ let memberPhotoResumeAfter = 0;
  * list (at least hourly), and meanwhile holds the stand-in URL, which /api/avatar serves. A row whose value was no photo
  * is cleared unstamped, as at boot.
  *
- * Its own cost is one batch's transaction a turn (MEMBER_PHOTO_MOVE_BATCH, 500 photos, ~13 MB) and, once, the DROP
+ * Its own cost is one batch's transaction a turn (at most MEMBER_PHOTO_MOVE_BATCH rows and MEMBER_PHOTO_MOVE_BYTES of
+ * photos) and, once, the DROP
  * COLUMN, which rewrites the members table in one statement (measured at boot for #1475: 0.74 s at 30,000 photo
  * members); both hold the event loop while they run, as any write does. Kept out of a list read (#1475's heap rule).
  */
-export function resumeMemberPhotoMove(batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH): { moved: number; cleared: number; outcome: 'done' | 'more' | 'stopped' } {
-    const turn = moveMemberPhotos(batch, 1, memberPhotoResumeAfter);
+export function resumeMemberPhotoMove(
+    batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH,
+    batchBytes = Number(process.env.MEMBER_PHOTO_MOVE_BYTES) || MEMBER_PHOTO_MOVE_BYTES,
+): { moved: number; cleared: number; outcome: 'done' | 'more' | 'stopped' } {
+    const turn = moveMemberPhotos(batch, batchBytes, 1, memberPhotoResumeAfter);
     memberPhotoResumeAfter = turn.after;
     return { moved: turn.moved, cleared: turn.cleared, outcome: turn.outcome };
 }
@@ -641,38 +654,50 @@ export function resumeMemberPhotoMove(batch = Number(process.env.MEMBER_PHOTO_MO
  * The move itself (moveMemberPhotosOutOfRows, resumeMemberPhotoMove): at most `maxBatches` batches, from rowid `from`.
  * `cleared` counts every row whose old value was cleared (moved, no photo, or already in member_photos).
  */
-function moveMemberPhotos(batch: number, maxBatches: number, from: number): { moved: number; cleared: number; after: number; outcome: 'done' | 'more' | 'stopped' } {
+function moveMemberPhotos(batch: number, batchBytes: number, maxBatches: number, from: number): { moved: number; cleared: number; after: number; outcome: 'done' | 'more' | 'stopped' } {
     const columns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('members') as { name: string }[]).map((c) => c.name));
     if (!columns.has('avatar_url')) return { moved: 0, cleared: 0, after: from, outcome: 'done' };
     const started = Date.now();
     let moved = 0, dropped = 0, kept = 0, after = from, batches = 0;
     try {
         db.exec(`CREATE TABLE IF NOT EXISTS member_photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL)`);
-        const next = db.prepare(`SELECT rowid AS rid, public_key, avatar_url FROM members WHERE rowid > ? AND avatar_url IS NOT NULL ORDER BY rowid LIMIT ?`);
+        // The rows still holding a value, and each one's size, without reading a photo.
+        const next = db.prepare(`SELECT rowid AS rid, octet_length(avatar_url) AS size FROM members
+                                 WHERE rowid > ? AND avatar_url IS NOT NULL ORDER BY rowid LIMIT ?`);
+        const read = db.prepare('SELECT public_key, avatar_url FROM members WHERE rowid = ?');
         const hasPhoto = db.prepare('SELECT 1 FROM member_photos WHERE public_key = ?');
         const putPhoto = db.prepare(`INSERT INTO member_photos (public_key, photo) VALUES (?, ?)`);
         const setRow = db.prepare('UPDATE members SET avatar_url = NULL, avatar_ref = ?, avatar_bytes = ? WHERE rowid = ?');
         const clearRow = db.prepare('UPDATE members SET avatar_url = NULL WHERE rowid = ?');
         for (;;) {
-            const rows = next.all(after, batch) as { rid: number; public_key: string; avatar_url: string }[];
-            if (rows.length === 0) break;
+            const waiting = next.all(after, batch) as { rid: number; size: number }[];
+            if (waiting.length === 0) break;
             if (batches === maxBatches) return { moved, cleared: moved + dropped + kept, after, outcome: 'more' };
             batches++;
+            const rids: number[] = [];
+            let bytes = 0;
+            for (const w of waiting) {
+                if (rids.length > 0 && bytes + w.size > batchBytes) break;
+                rids.push(w.rid);
+                bytes += w.size;
+            }
             const done = db.transaction(() => {
                 const n = { moved: 0, dropped: 0, kept: 0 };
-                for (const r of rows) {
+                for (const rid of rids) {
+                    const r = read.get(rid) as { public_key: string; avatar_url: string | null } | undefined;
+                    if (!r || r.avatar_url === null) continue;
                     if (hasPhoto.get(r.public_key)) {
-                        clearRow.run(r.rid); // their photo is already in member_photos: theirs, and newer
+                        clearRow.run(rid); // their photo is already in member_photos: theirs, and newer
                         n.kept++;
                         continue;
                     }
                     const photo = memberPhotoColumnsOf(r.avatar_url);
                     if (photo) {
                         putPhoto.run(r.public_key, photo.photo);
-                        setRow.run(photo.ref, photo.bytes, r.rid);
+                        setRow.run(photo.ref, photo.bytes, rid);
                         n.moved++;
                     } else {
-                        clearRow.run(r.rid);
+                        clearRow.run(rid);
                         n.dropped++;
                     }
                 }
@@ -682,7 +707,7 @@ function moveMemberPhotos(batch: number, maxBatches: number, from: number): { mo
             moved += done.moved;
             dropped += done.dropped;
             kept += done.kept;
-            after = rows[rows.length - 1].rid;
+            after = rids[rids.length - 1];
             if (done.moved > 0 && moved % (batch * 20) < done.moved) console.log(`[DB] Members' photos moved out of their rows: ${moved} so far`);
         }
     } catch (e) {

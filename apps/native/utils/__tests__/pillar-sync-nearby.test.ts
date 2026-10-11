@@ -373,6 +373,8 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         const after = expectedSet(BYRON, left, ['mine-ldn']);
         const cameIn = [...after].filter(id => !before.has(id));
         expect(cameIn).toHaveLength(2);
+        // The node's world moved whatever this test finds: the tests after it start from it.
+        near = left;
 
         await sync();
         // A delta (from the cursor less the phone's 5 minutes for clock drift: every listing here changed within them, so
@@ -391,7 +393,6 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(sorted(JSON.parse(held.set))).toEqual(sorted(after));
         expect(JSON.parse(held.tied)).toEqual(['mine-ldn']);
         expect(held.hash).toBe(nearbySetHash([...after], ['mine-ldn']));
-        near = left;
     }, START_MS);
 
     it('a diff that doesn\'t check out (one setAdd id flipped): nothing of it written, nearby_held forgotten, the cursor kept; the next read is named the set whole', async () => {
@@ -403,6 +404,8 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         await control('edit', { post: gone.id, status: 'cancelled' });
         const left = near.filter(p => p.id !== gone.id);
         const after = expectedSet(BYRON, left, ['mine-ldn']);
+        // The node's world moved whatever this test finds: the tests after it start from it.
+        near = left;
         tamper = (path, body) => {
             if (!path.includes('nearby=1')) return null;
             const b = JSON.parse(body);
@@ -424,7 +427,6 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         const held = Object.fromEntries((sql.prepare('SELECT k, v FROM nearby_held').all() as { k: string; v: string }[]).map(r => [r.k, r.v]));
         expect(sorted(JSON.parse(held.set))).toEqual(sorted(after));
         expect(held.hash).toBe(nearbySetHash([...after], JSON.parse(held.tied)));
-        near = left;
     }, START_MS);
 
     it('a push beyond the nearest 500 is pruned; a nearer one stays and the farthest goes', async () => {

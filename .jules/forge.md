@@ -47,6 +47,11 @@ const { id } = req.body; // could be undefined, crashes downstream
 
 ## ✅ Resolved — do NOT re-file
 
+### 2026-10-12 — "safe JSON parsing for commons projects" (#1728, #1802) — CLOSED TWICE, WOULD LOSE DATA.
+Returning `[]` for a corrupt `commons_projects` value in state-engine.ts lets `createProject` save a one-item list over every stored
+project. A loud failure loses nothing; a silent fallback on a path that then writes loses the community's projects. See POLICY.md
+"2026-10-10 — Forge: swallow bad commons_projects JSON". Do not file it again in any form.
+
 ### 2026-09-22 — "braked takeover/open does not return 429" (#1017) — CLOSED, CLAIM FALSE.
 `refuseBraked` (apps/server/src/password-brake.ts) sets `ctx.status = 429` and `Retry-After` itself, and Koa keeps an
 explicitly set status when `ctx.body` is assigned afterwards. `test-takeover-by-code.ts` already asserts 429 on

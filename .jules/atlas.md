@@ -200,3 +200,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `signOutEverywhere`, `emergencySuspendMember`, `haltDecision`, `liftMemberSuspension`, `acknowledgeShutdownStatus`, `fetchDiskHealth`, `fetchStorageCleanPreview`, `cleanStorageAndCompressLogs`, and `fetchAlertsSummary` in `apps/manager/src/lib/node-client.ts` lacked direct unit tests.
 **Learning:** Testing `signOutEverywhere` required handling the discriminated union type `SignOutEverywhereResult` where `ok: false` is accompanied by a `message` property.
 **Action:** Continue identifying any remaining untested helper utilities in `apps/manager/src/lib/`.
+
+## 2026-10-11 - [manager tests] token-guard unit tests
+**Gap:** `tokenCannotReach`, `guardTokenFetch`, and `installTokenFetchGuard` in `apps/manager/src/lib/token-guard.ts` lacked a standalone test file in `.test.ts` (existing tests were in `.test.tsx`).
+**Learning:** Adding `token-guard.test.ts` verified path blocking, event dispatch (`OWNER_PHONE_EVENT`), Request input extraction, 401 refusal formatting (`TOKEN_REPLACE_ADVICE`), and fetch guard wrapping without requiring React component rendering.
+**Action:** Continue expanding test coverage for untested utilities or components in `apps/manager/`.

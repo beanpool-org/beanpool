@@ -397,7 +397,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 const target = editingMessage;
                 setEditingMessage(null);
                 try {
-                    await editThreadMessage(target.id, text, locked ? { groupId: id, metadata: target.metadata } : undefined);
+                    await editThreadMessage(target.id, text, { groupId: id, metadata: target.metadata, locked: !!locked });
                     await load();
                 } catch (e: any) {
                     await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);

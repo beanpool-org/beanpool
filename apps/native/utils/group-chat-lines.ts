@@ -47,8 +47,13 @@ export function chatIsLocked(answer: any): answer is { encryption: GroupChatEncr
 export const GROUP_CHAT_OLD_NODE_NOTICE = "This community's node is older and can read this group's chat. It will be locked once the node is updated.";
 /** A locked chat's notice (design §8), in the phone's own words. */
 export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, and who was mentioned.";
-/** A chat this phone has held a key of, which the node now says isn't locked. */
-export const GROUP_CHAT_LOCK_LOST_TEXT = "This node now says this chat isn't locked, but this phone has held its keys. Nothing is sent until the node locks it again.";
+/**
+ * A chat this phone has held a key of, which the node now says isn't locked: what the phone does, not what it waits for
+ * (confirmation of #1788, finding 4). Every line still goes sealed when the keys come; nothing goes readable.
+ */
+export const GROUP_CHAT_LOCK_LOST_TEXT = "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.";
+/** A node that refuses this phone the group's keys and its chat (a removed member): it said nothing about locking. */
+export const GROUP_CHAT_NOT_MEMBER_TEXT = 'Only members of this group can open its chat';
 
 /** The group chat's notice: the phone's own words for what it decided, never the node's text. */
 export function groupChatNotice(state: { nodeSaysLocked: boolean; seenLocked: boolean }): string {

@@ -3,8 +3,8 @@
  * scratch/global-node/DESIGN-rekey-redeem-fable.md §5, decided by Marty 2026-10-11).
  *
  * Scanning or typing the RK- code binds nothing. The phone ASKS (`POST /api/member/re-enroll`, signed by the key it wants
- * bound) and is given two digits to show the admin; the admin presses "Bind this phone" on the dashboard when the number
- * matches the phone in front of them, and the phone's poll (`GET /api/member/re-enroll/status`) then says `bound`.
+ * bound) and is given two digits to show the admin; the admin types that number on the dashboard and the node binds the
+ * phone showing it (#1783 review B2), and the phone's poll (`GET /api/member/re-enroll/status`) then says `bound`.
  *
  * ## One identity per device, never overwritten
  *

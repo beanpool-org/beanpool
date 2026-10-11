@@ -101,6 +101,8 @@ describe('An admin gave me a re-key code', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
 
         expect((await screen.findByTestId('web-rekey-number')).textContent).toBe('47');
+        expect(screen.getByTestId('web-rekey-number-host').textContent).toBe(`from ${window.location.host}`);
+        expect(screen.queryByText(/Bind this phone/)).toBeNull();
         const ask = calls.find((c) => c.path === '/api/member/re-enroll')!;
         expect(atAsk).not.toBeNull();
         expect(atAsk!.identity.publicKey).toBe(ask.body.newPublicKey);

@@ -1,7 +1,7 @@
 /**
  * "An admin gave me a re-key code" (#1768; design DESIGN-rekey-redeem-fable.md §5): a member who lost their phone takes
  * over their account on this one. They scan the QR on the admin's screen, or type the code and their community; the
- * phone asks and shows two digits; the admin presses "Bind this phone" when the number matches; the phone is the member.
+ * phone asks and shows two digits; the admin types them on the dashboard, and the node binds the phone showing them.
  *
  * Reached from Restore your account (welcome.tsx), from a `https://<node>/?rekey=RK-…` link (_layout.tsx), and on the next
  * launch while an ask is waiting (welcome.tsx resumes it). The flow itself is utils/rekey-redeem.ts, where it is tested:
@@ -61,6 +61,12 @@ async function moveOntoCommunity(url: string, name: string): Promise<void> {
     await db.initDB();
     communitySwitched();
     await nodes.addSavedNode(url, name || undefined).catch(() => {});
+}
+
+/** A community address as the admin would know it: "mullum.example.org". */
+function hostOf(community: string | undefined): string {
+    if (!community) return '';
+    try { return new URL(community).host; } catch { return community; }
 }
 
 export default function RekeyCodeScreen() {
@@ -247,8 +253,11 @@ export default function RekeyCodeScreen() {
                 <Text style={styles.title} accessibilityRole="header">Show this number to your admin</Text>
                 <View style={styles.numberCard}>
                     <Text style={styles.number} accessibilityLabel={`Number ${match.split('').join(' ')}`}>{match}</Text>
+                    {/* The community this number came from, so the admin can check it is theirs: a mistyped or look-alike
+                        address could relay someone else's number here (#1783 review N9). */}
+                    <Text style={styles.numberLabel} testID="rekey-number-host">from {hostOf(slot?.community)}</Text>
                     <Text style={styles.numberLabel}>
-                        They press <Text style={{ fontWeight: '800' }}>Bind this phone</Text> on their screen. Your old phone stops working for good.
+                        They type it on their screen. Check the address above is your community's. Your old phone stops working for good.
                     </Text>
                 </View>
                 <View style={styles.busyRow}>

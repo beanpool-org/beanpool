@@ -120,8 +120,10 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
             <div data-testid="web-rekey-waiting">
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Show this number to your admin</h3>
                 <p style={{ fontSize: '3rem', fontWeight: 900, letterSpacing: '0.4rem', fontFamily: 'monospace', margin: '0.75rem 0' }} data-testid="web-rekey-number">{match}</p>
+                {/* The community this number came from, so the admin can check it is theirs (#1783 review N9). */}
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0 0 0.5rem', overflowWrap: 'anywhere' }} data-testid="web-rekey-number-host">from {typeof window !== 'undefined' ? window.location.host : ''}</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                    They press <strong>Bind this phone</strong> on their screen. Your old phone stops working for good.
+                    They type it on their screen. Check the address above is your community's. Your old phone stops working for good.
                 </p>
                 <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Waiting for your admin…</p>
                 {error && <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem' }}>{error}</p>}

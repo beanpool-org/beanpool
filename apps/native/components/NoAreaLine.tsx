@@ -8,9 +8,12 @@ import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { colors as defaultColors, type AppColors } from '../constants/colors';
 import { NO_AREA_LINE } from '../utils/nearby-area';
+import { readableOn } from '../utils/readable-color';
 
 export function NoAreaLine({ onPress, colors = defaultColors }: { onPress: () => void; colors?: AppColors }): React.JSX.Element {
     const tone = colors.feedback.info;
+    // The action is 13 px bold at 1.3x, not large text: 4.5:1 on the box in every theme (earth's info tone is 4.17:1).
+    const actionColor = readableOn(tone.fg, tone.bg);
     return (
         <Pressable
             style={[styles.box, { backgroundColor: tone.bg, borderColor: tone.border }]}
@@ -20,7 +23,7 @@ export function NoAreaLine({ onPress, colors = defaultColors }: { onPress: () =>
             testID="market-no-area-line"
         >
             <Text style={[styles.line, { color: colors.text.body }]}>
-                📍 {NO_AREA_LINE.seeing} <Text style={[styles.action, { color: tone.fg }]}>{NO_AREA_LINE.action}</Text>
+                📍 {NO_AREA_LINE.seeing} <Text style={[styles.action, { color: actionColor }]}>{NO_AREA_LINE.action}</Text>
             </Text>
         </Pressable>
     );

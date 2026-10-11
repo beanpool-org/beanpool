@@ -36,6 +36,17 @@ vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem
 
 import { NoAreaLine } from '../../components/NoAreaLine';
 import { NO_AREA_LINE } from '../nearby-area';
+import { lightColors, earthColors, slateColors, darkColors, type AppColors } from '../../constants/colors';
+
+/** WCAG 2 contrast of two #rrggbb colours, worked here (not the component's helper). */
+function contrast(a: string, b: string): number {
+    const lum = (hex: string) => {
+        const [r, g, bl] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+        return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+    };
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+}
 
 describe('the Market\'s no-area line at 320 dp, text at 1.3x', () => {
     it('says what the member sees and the way on, as one link to Settings → Your area, and wraps', async () => {
@@ -62,5 +73,22 @@ describe('the Market\'s no-area line at 320 dp, text at 1.3x', () => {
         }
         // No currency, and no gate: it is a line above the feed, never instead of it.
         expect(line.textContent).not.toMatch(/Ʀ|Beans/);
+    });
+
+    it('the action reads at 4.5:1 or more on its box in every theme, the text at 16.9 px bold not being large (the review of #1778, finding 9)', async () => {
+        const themes: Array<[string, AppColors]> = [['light', lightColors], ['earth', earthColors as unknown as AppColors], ['slate', slateColors as unknown as AppColors], ['dark', darkColors as unknown as AppColors]];
+        for (const [name, colors] of themes) {
+            const host = document.createElement('div');
+            document.body.appendChild(host);
+            await act(async () => { createRoot(host).render(createElement(NoAreaLine, { onPress: () => {}, colors }) as unknown as Parameters<Root['render']>[0]); });
+            const line = host.querySelector('[data-testid="market-no-area-line"]') as HTMLElement;
+            const box = JSON.parse(line.getAttribute('data-style')!);
+            const action = [...Array.from(line.querySelectorAll('span'))].find(n => n.textContent === NO_AREA_LINE.action)!;
+            const fg = JSON.parse(action.getAttribute('data-style')!).color as string;
+            expect(contrast(fg, box.backgroundColor), `${name}: ${fg} on ${box.backgroundColor}`).toBeGreaterThanOrEqual(4.5);
+            // A theme whose tone already reads keeps it.
+            if (contrast(colors.feedback.info.fg, colors.feedback.info.bg) >= 4.5) expect(fg, name).toBe(colors.feedback.info.fg);
+            host.remove();
+        }
     });
 });

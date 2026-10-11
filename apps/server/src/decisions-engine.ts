@@ -2663,6 +2663,16 @@ function castScopedVote(decision: Decision, voterPubkey: string, support: boolea
     return { success: true, creditsUsed: 0 };
 }
 
+/**
+ * Whether `reader` may vote on this scoped vote now, as castScopedVote will judge it: it is open, and they are on its roll as
+ * it was frozen when it opened (§2.6) with their account active. Someone a convenor removed or made an observer since is still
+ * on it; someone who joined since never is. The apps draw Yes / No from this, never from who is in the group now.
+ */
+export function canVoteOnScoped(d: Decision, reader: string): boolean {
+    return decisionsOn() && d.scopeKind !== 'community' && d.status === 'open' && parseDbTime(d.closesAt) > Date.now()
+        && !madeWithoutVote(d) && liveRoll(d.id).has(reader);
+}
+
 /** Who hears a scoped vote's live changes: its electors, less those who left its roll (they read it, unannounced). */
 function electorsOf(decisionId: string): string[] {
     return (db.prepare("SELECT member_pubkey FROM decision_electors WHERE decision_id = ? AND status != 'left'").all(decisionId) as Array<{ member_pubkey: string }>)
@@ -2836,6 +2846,27 @@ function inGroupNow(groupId: string, reader: string): boolean {
     return !!db.prepare(`
         SELECT 1 FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
         WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0
+    `).get(groupId, reader);
+}
+
+/**
+ * Everyone a vote may name (the propose form's pickers, #1784 review N2): in the group now, any role, account active and no
+ * visitor. A suspended member is on no roll and can be named in no vote, so the apps never offer one.
+ */
+export function groupNameableNow(groupId: string): string[] {
+    return (db.prepare(`
+        SELECT gm.member_pubkey AS pubkey FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
+        WHERE gm.group_id = ? AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0
+        ORDER BY gm.joined_at ASC
+    `).all(groupId) as Array<{ pubkey: string }>).map(r => r.pubkey);
+}
+
+/** An observer of the group now: they watch its votes. Whether they vote on one is that vote's roll (canVoteOnScoped). */
+export function observesGroupNow(groupId: string, reader: string): boolean {
+    return !!db.prepare(`
+        SELECT 1 FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
+        WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.status = 'active' AND gm.role = 'observer'
+          AND m.status = 'active' AND m.is_visitor = 0
     `).get(groupId, reader);
 }
 

@@ -1,20 +1,26 @@
 /**
- * The "Decisions" block on an enterprise's or project's screen (DESIGN-group-decisions §4 row S2): its keepers' votes, each
- * card with its two tally states (turnout while open, Yes and No once closed), Yes / No for a keeper who hasn't voted,
- * and the propose form. The words and the form's checks are @beanpool/core scoped-decision.ts, shared with the PWA.
+ * The "Decisions" block on an enterprise's or project's screen (DESIGN-group-decisions §4 row S2), and on a chat group's
+ * info (row S3): its votes, each card with its two tally states (turnout while open, Yes and No once closed), Yes / No
+ * for someone on the roll who hasn't voted, and the propose form. One block for both scopes; the forms differ by what
+ * each scope may vote on. The words and the form's checks are @beanpool/core scoped-decision.ts, shared with the PWA.
  *
- * Shown only to those the node answers (its keepers, and those on a vote's roll): anyone else gets a 404, and the block
- * draws nothing. A roll of one holds no vote, so then there is no propose button (canPropose).
+ * Shown only to those the node answers (its keepers or the group's members, and those on a vote's roll): anyone else gets
+ * a 404, and the block draws nothing. A roll of one holds no vote, so then there is no propose button (canPropose); nor
+ * for an observer, who watches, or in a group its members closed.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, TextInput, Modal, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+    GROUP_DECISIONS_NOTE, groupChoiceLabel, groupChoicePeople, groupChoicesFor, groupChoiceWhoWords, groupProposal, joinPolicyChoices,
+    joinPolicyLabel, type GroupChoice, type GroupJoinPolicy, type GroupPerson,
     beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
     scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE, wageNoteWords,
     type RollPerson, type ScopedDecisionCard, type ScopedDecisionList, type ScopedEffect,
 } from '@beanpool/core';
-import { getEnterpriseDecisions, proposeEnterpriseDecision, voteEnterpriseDecision } from '../utils/db';
+import {
+    getEnterpriseDecisions, proposeEnterpriseDecision, voteEnterpriseDecision, getGroupDecisions, proposeGroupDecision, voteGroupDecision,
+} from '../utils/db';
 import { useTheme } from '../app/ThemeContext';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
 
@@ -33,6 +39,66 @@ export interface EnterpriseDecisionsProps {
 }
 
 export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, earnedSurplus, lifecycle, refreshKey }: EnterpriseDecisionsProps) {
+    const roll: RollPerson[] = useMemo(() => keepers.filter(k => !k.suspended)
+        .map(k => ({ pubkey: k.publicKey, name: k.callsign || 'A keeper', role: k.role })), [keepers]);
+    const nameOf = useCallback((pk: string) => keepers.find(k => k.publicKey === pk)?.callsign || (pk === treasuryKey ? 'this enterprise' : 'a member'), [keepers, treasuryKey]);
+    const read = useCallback(() => getEnterpriseDecisions(treasuryKey), [treasuryKey]);
+    const cast = useCallback((id: string, support: boolean) => voteEnterpriseDecision(treasuryKey, id, support), [treasuryKey]);
+    return (
+        <ScopedDecisions
+            read={read} cast={cast} nameOf={nameOf} lifecycle={lifecycle} refreshKey={refreshKey}
+            note={`Votes among this ${lifecycle === 'bounded' ? "project's leader and collaborators" : "enterprise's keepers"}. More than half must vote. 7 days, or sooner once the answer can't change.`}
+            propose={myPubkey ? (close, done) => (
+                <ProposeScopedDecision
+                    treasuryKey={treasuryKey} me={myPubkey} roll={roll} balance={balance} earnedSurplus={earnedSurplus} lifecycle={lifecycle}
+                    onClose={close} onDone={done}
+                />
+            ) : null}
+        />
+    );
+}
+
+export interface GroupDecisionsProps {
+    groupId: string;
+    myPubkey: string | null;
+    /** Everyone in the group now (any role, the lead as 'lead'), for the names and the pickers. */
+    people: GroupPerson[];
+    joinPolicy?: string | null;
+    /** Bumped by the info sheet when it reads the group again. */
+    refreshKey?: number;
+    /** A vote was cast or opened: the group may have changed (a new lead, a role, closed), so its info reads again. */
+    onChanged?: () => void;
+}
+
+/** A chat group's votes (slice S3), on its info: the same block, its own form (no recipient, no amount). */
+export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, refreshKey, onChanged }: GroupDecisionsProps) {
+    const nameOf = useCallback((pk: string) => people.find(p => p.pubkey === pk)?.name || 'a former member', [people]);
+    const read = useCallback(() => getGroupDecisions(groupId), [groupId]);
+    const cast = useCallback((id: string, support: boolean) => voteGroupDecision(groupId, id, support), [groupId]);
+    return (
+        <ScopedDecisions
+            read={read} cast={cast} nameOf={nameOf} refreshKey={refreshKey} note={GROUP_DECISIONS_NOTE} onChanged={onChanged}
+            propose={myPubkey ? (close, done, list) => (
+                // Only the people the node takes in a vote (no suspended member, #1784 review N2).
+                <ProposeGroupDecision groupId={groupId} me={myPubkey}
+                    people={list.nameable ? people.filter(p => list.nameable!.includes(p.pubkey)) : people}
+                    joinPolicy={joinPolicy} onClose={close} onDone={done} />
+            ) : null}
+        />
+    );
+}
+
+/** The block both scopes draw: the cards, Yes / No, and the propose button that opens the scope's own form. */
+function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, propose, onChanged }: {
+    read: () => Promise<ScopedDecisionList | null>;
+    cast: (id: string, support: boolean) => Promise<unknown>;
+    nameOf: (pubkey: string) => string;
+    note: string;
+    lifecycle?: string | null;
+    refreshKey?: number;
+    propose: ((close: () => void, done: () => void, list: ScopedDecisionList) => React.ReactNode) | null;
+    onChanged?: () => void;
+}) {
     const { colors } = useTheme();
     const [list, setList] = useState<ScopedDecisionList | null>(null);
     const [busyId, setBusyId] = useState<string | null>(null);
@@ -40,15 +106,11 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, e
     const [now, setNow] = useState(() => Date.now());
 
     const load = useCallback(async () => {
-        const answer = await getEnterpriseDecisions(treasuryKey);
+        const answer = await read();
         setList(answer);
         setNow(Date.now());
-    }, [treasuryKey]);
+    }, [read]);
     useEffect(() => { void load(); }, [load, refreshKey]);
-
-    const roll: RollPerson[] = useMemo(() => keepers.filter(k => !k.suspended)
-        .map(k => ({ pubkey: k.publicKey, name: k.callsign || 'A keeper', role: k.role })), [keepers]);
-    const nameOf = useCallback((pk: string) => keepers.find(k => k.publicKey === pk)?.callsign || (pk === treasuryKey ? 'this enterprise' : 'a member'), [keepers, treasuryKey]);
 
     if (!list) return null;
     const open = list.decisions.filter(d => d.status === 'open');
@@ -58,8 +120,9 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, e
     const vote = async (d: ScopedDecisionCard, support: boolean) => {
         setBusyId(d.id);
         try {
-            await voteEnterpriseDecision(treasuryKey, d.id, support);
+            await cast(d.id, support);
             await load();
+            onChanged?.();
         } catch (e: any) {
             Alert.alert('Your vote was not counted', e?.message || 'Try again in a moment.');
         } finally {
@@ -71,7 +134,8 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, e
     return (
         <View style={s.card} accessibilityLabel="Decisions">
             <Text style={s.label} accessibilityRole="header">DECISIONS</Text>
-            <Text style={s.note}>Votes among this {lifecycle === 'bounded' ? "project's leader and collaborators" : "enterprise's keepers"}. More than half must vote. 7 days, or sooner once the answer can't change.</Text>
+            <Text style={s.note}>{note}</Text>
+            {list.watching === true && !list.closedAt && <Text style={s.note}>You watch this group, so you see its votes but don't vote.</Text>}
             {[...open, ...closed.slice(0, 5)].map(d => {
                 const mine = d.myVote ? (d.myVote.support === true || d.myVote.support === 1 ? 'Yes' : 'No') : null;
                 const isOpen = d.status === 'open';
@@ -83,7 +147,8 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, e
                         <Text style={s.meta}>Proposed by {nameOf(d.authorPubkey)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}</Text>
                         <Text style={s.tally}>{scopedTallyWords(d)}</Text>
                         {mine && <Text style={s.meta}>You voted {mine}.</Text>}
-                        {isOpen && !mine && (
+                        {/* The vote's own roll, frozen when it opened, says who votes: never who is in the group now. */}
+                        {isOpen && !mine && d.canVote === true && (
                             <View style={s.voteRow}>
                                 <Pressable
                                     style={[s.voteBtn, { backgroundColor: colors.brand.primary }, busyId === d.id && { opacity: 0.5 }]}
@@ -105,17 +170,12 @@ export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, e
                 );
             })}
             {list.decisions.length > 0 && list.rollSize <= 4 && <Text style={s.small}>{SMALL_ROLL_BALLOT_NOTE}</Text>}
-            {list.canPropose && (
+            {list.canPropose && !!propose && (
                 <Pressable style={s.proposeBtn} onPress={() => setProposing(true)} accessibilityRole="button">
                     <Text style={s.proposeText}>Propose a vote</Text>
                 </Pressable>
             )}
-            {proposing && myPubkey && (
-                <ProposeScopedDecision
-                    treasuryKey={treasuryKey} me={myPubkey} roll={roll} balance={balance} earnedSurplus={earnedSurplus} lifecycle={lifecycle}
-                    onClose={() => setProposing(false)} onDone={() => { setProposing(false); void load(); }}
-                />
-            )}
+            {proposing && propose?.(() => setProposing(false), () => { setProposing(false); void load(); onChanged?.(); }, list)}
         </View>
     );
 }
@@ -207,6 +267,114 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
                         )}
                         <Text style={s.fieldLabel}>Title</Text>
                         <TextInput value={title} onChangeText={setTitle} style={s.input} maxLength={120} placeholder="Pay Ali for the stall repairs"
+                            placeholderTextColor={colors.text.muted} accessibilityLabel="Title" />
+                        <Text style={s.fieldLabel}>Why?</Text>
+                        <TextInput value={why} onChangeText={setWhy} style={[s.input, { minHeight: 72, textAlignVertical: 'top' }]} multiline
+                            placeholder="Say why, in a sentence or two." placeholderTextColor={colors.text.muted} accessibilityLabel="Why" />
+                        {error && <Text style={s.error}>{error}</Text>}
+                        <View style={s.voteRow}>
+                            <Pressable style={[s.voteBtn, { backgroundColor: colors.brand.primary }, (!ready || busy) && { opacity: 0.5 }]}
+                                disabled={!ready || busy} onPress={send} accessibilityRole="button" accessibilityState={{ disabled: !ready || busy, busy }}>
+                                {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={s.voteYesText}>Open the vote</Text>}
+                            </Pressable>
+                            <Pressable style={[s.voteBtn, s.voteNo]} onPress={onClose} accessibilityRole="button">
+                                <Text style={s.voteNoText}>Cancel</Text>
+                            </Pressable>
+                        </View>
+                    </ScrollView>
+                </View>
+            </View>
+        </Modal>
+    );
+}
+
+/**
+ * A chat group's propose form (slice S3): what should happen (the five effects, a role vote as its two directions), the
+ * person or the join rule it names, a title and why. No recipient and no amount: a group holds no Beans.
+ */
+function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone }: {
+    groupId: string; me: string; people: GroupPerson[]; joinPolicy?: string | null; onClose: () => void; onDone: () => void;
+}) {
+    const { colors } = useTheme();
+    const s = styles(colors);
+    // Lifted by the keyboard's height, never a KeyboardAvoidingView inside this Modal: see components/useModalKeyboardLift.
+    const insets = useSafeAreaInsets();
+    const lift = useModalKeyboardLift(insets.top + 8, 0.92);
+    const choicesOffered = groupChoicesFor(people, me);
+    const [choice, setChoice] = useState<GroupChoice>(choicesOffered[0] ?? 'close');
+    const [who, setWho] = useState<string | null>(null);
+    const [policy, setPolicy] = useState<GroupJoinPolicy | null>(null);
+    const [title, setTitle] = useState('');
+    const [why, setWhy] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const whoWords = groupChoiceWhoWords(choice);
+    const pickable = groupChoicePeople(choice, people, me);
+    const proposal = groupProposal(choice, pickable.some(p => p.pubkey === who) ? who : null, policy);
+    const ready = !!proposal && title.trim().length > 0 && why.trim().length >= 10;
+
+    const send = async () => {
+        if (!ready || !proposal) return;
+        setBusy(true);
+        setError(null);
+        try {
+            await proposeGroupDecision(groupId, { title: title.trim(), description: why.trim(), ...proposal });
+            onDone();
+        } catch (e: any) {
+            setError(e?.message || 'The vote was not opened. Try again in a moment.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+            <View style={[s.backdrop, { paddingTop: insets.top + 8 }]}>
+                <View style={[s.sheet, { maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="propose-group-sheet">
+                    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
+                        <Text style={s.sheetTitle} accessibilityRole="header">Propose a vote</Text>
+                        <Text style={s.note}>The group's members and convenors vote. It runs 7 days, or ends sooner once the answer can't change.</Text>
+                        <Text style={s.fieldLabel}>What should happen?</Text>
+                        <View style={s.chips}>
+                            {choicesOffered.map(c => (
+                                <Pressable key={c} onPress={() => { setChoice(c); setWho(null); setPolicy(null); }}
+                                    style={[s.chip, choice === c && s.chipOn]} accessibilityRole="radio" accessibilityState={{ selected: choice === c }}>
+                                    <Text style={[s.chipText, choice === c && s.chipTextOn]}>{groupChoiceLabel(c)}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                        {whoWords && (
+                            <>
+                                <Text style={s.fieldLabel}>{whoWords}</Text>
+                                <View style={s.chips}>
+                                    {pickable.map(p => (
+                                        <Pressable key={p.pubkey} onPress={() => setWho(p.pubkey)}
+                                            style={[s.chip, who === p.pubkey && s.chipOn]} accessibilityRole="radio" accessibilityState={{ selected: who === p.pubkey }}>
+                                            <Text style={[s.chipText, who === p.pubkey && s.chipTextOn]}>{p.name}{p.pubkey === me ? ' (you)' : ''}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            </>
+                        )}
+                        {choice === 'join_policy' && (
+                            <>
+                                <Text style={s.fieldLabel}>Who should be able to join?</Text>
+                                <View style={s.chips}>
+                                    {joinPolicyChoices(joinPolicy).map(p => (
+                                        <Pressable key={p} onPress={() => setPolicy(p)}
+                                            style={[s.chip, policy === p && s.chipOn]} accessibilityRole="radio" accessibilityState={{ selected: policy === p }}>
+                                            <Text style={[s.chipText, policy === p && s.chipTextOn]}>{joinPolicyLabel(p)}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            </>
+                        )}
+                        {choice === 'close' && (
+                            <Text style={s.fee}>If it passes, the group takes no new messages, posts or members, and its other open votes end. Its chat stays to read.</Text>
+                        )}
+                        <Text style={s.fieldLabel}>Title</Text>
+                        <TextInput value={title} onChangeText={setTitle} style={s.input} maxLength={120} placeholder="Ada leads the guild"
                             placeholderTextColor={colors.text.muted} accessibilityLabel="Title" />
                         <Text style={s.fieldLabel}>Why?</Text>
                         <TextInput value={why} onChangeText={setWhy} style={[s.input, { minHeight: 72, textAlignVertical: 'top' }]} multiline

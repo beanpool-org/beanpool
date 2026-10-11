@@ -89,8 +89,8 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
  * never waits on a database read to decide. The lookup is the fallback for an older link or a push.
  */
 export default function ChatRoute() {
-    const { id, event, group, enterprise, created, name } = useLocalSearchParams<{
-        id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string;
+    const { id, event, group, enterprise, created, name, info } = useLocalSearchParams<{
+        id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string; info?: string;
     }>();
     const [isEventChat, setIsEventChat] = useState(event === '1');
     // A group's chat and an enterprise's public discussion thread are node-readable threads like the event chat, on
@@ -125,7 +125,7 @@ export default function ChatRoute() {
     if (knownDm) return <ChatScreen />;
     if ((isEventChat || threadKind) && knownDm === null) return null;
     if (isEventChat && id) return <EventChatView eventId={String(id)} />;
-    if (threadKind && id) return <GroupChatView kind={threadKind} id={String(id)} justCreated={created === '1'} initialName={name} />;
+    if (threadKind && id) return <GroupChatView kind={threadKind} id={String(id)} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     return <ChatScreen />;
 }
 

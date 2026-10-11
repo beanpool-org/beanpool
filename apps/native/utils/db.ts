@@ -20,7 +20,7 @@ import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange, type ScopedDecisionList, type ScopedEffect } from '@beanpool/core';
+import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -2425,6 +2425,33 @@ export async function proposeEnterpriseDecision(treasury: string, body: {
 /** Yes or No on a keepers' vote. A vote can't be changed once cast. */
 export async function voteEnterpriseDecision(treasury: string, decisionId: string, support: boolean) {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
+}
+
+/**
+ * A chat group's votes (DESIGN-group-decisions S3; routes/group-decisions.ts). Its members (any role) are answered, and those
+ * on a vote's roll after they left; anyone else gets a 404, so null here means "nothing for you", never an error to show.
+ */
+export async function getGroupDecisions(groupId: string): Promise<ScopedDecisionList | null> {
+    try {
+        const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/decisions`);
+        if (!res.ok) return null;
+        const body = await res.json();
+        return body && Array.isArray(body.decisions) ? body as ScopedDecisionList : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A member or convenor proposes a group vote: the group's own things only, never a recipient or an amount. */
+export async function proposeGroupDecision(groupId: string, body: {
+    title: string; description: string; effect: GroupEffect; subject?: string; params?: { role?: 'convenor' | 'member'; policy?: string };
+}) {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/decisions`, body);
+}
+
+/** Yes or No on a group's vote. A vote can't be changed once cast. */
+export async function voteGroupDecision(groupId: string, decisionId: string, support: boolean) {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
 }
 
 export async function stepDownAsKeeper(treasury: string) {
@@ -5958,6 +5985,9 @@ export interface GroupItem {
     /** The group's LEAD convenor (2026-09-23): the one nobody can remove or demote. */
     leadPubkey?: string | null;
     leadCallsign?: string;
+    /** When its members closed it by a vote (GET /api/groups/:id), or null: it stays to read and takes nothing new. */
+    closedAt?: string | null;
+    readOnly?: boolean;
 }
 
 export interface GroupMemberItem {

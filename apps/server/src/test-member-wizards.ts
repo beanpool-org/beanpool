@@ -77,6 +77,21 @@ import { createAdminRoutes } from './routes/admin.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
+// No host but this machine: the push at issue (account.rekey-started) reaches a fixture token, so it is caught where it
+// would leave for Expo, as test-rekey-redeem does (#1783 review N7: the runner does not scrub EXPO_ACCESS_TOKEN).
+const pushed: any[] = [];
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.hostname === 'exp.host' || url.hostname.endsWith('expo.dev')) {
+        const batch = JSON.parse(String(init?.body ?? '[]'));
+        pushed.push(...batch);
+        return new Response(JSON.stringify({ data: batch.map(() => ({ status: 'ok', id: crypto.randomUUID() })) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') throw new TypeError(`this suite reaches no host but this machine (${url.host})`);
+    return realFetch(input, init);
+}) as typeof fetch;
+
 let run = 0;
 let passed = 0;
 
@@ -316,6 +331,8 @@ async function main() {
 
     // Step A: Issue re-key code (tested with uppercase key to verify case normalization)
     const rekeyIssue = issueRekeyCode(oldAliceKey.toUpperCase(), operatorPubkey);
+    for (let i = 0; i < 20 && !pushed.some((m) => m.to === 'lost_phone_apns_token_xyz'); i++) await new Promise((r) => setTimeout(r, 25));
+    assert(pushed.some((m) => m.to === 'lost_phone_apns_token_xyz'), 'the push at issue to the old phone is caught here, never sent to Expo');
     assert(Boolean(rekeyIssue.code), `Re-enrolment code generated: ${rekeyIssue.code}`);
     assert(/^RK-[0-9A-F]{4}-[0-9A-F]{4}$/.test(rekeyIssue.code), 'Code format is RK-XXXX-XXXX');
     assert(isKeyInvalidated(oldAliceKey), 'oldAliceKey is immediately recorded in invalidated_keys');

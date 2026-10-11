@@ -428,7 +428,7 @@ async function main(): Promise<void> {
     // What a tap opens (the phone's noticeRoute): the group itself by its id, never Talk. The kind's own tab is Home.
     const lands = notices.map(n => JSON.parse(n.data || '{}'));
     assert(lands.length === 2 && lands.every(d => d.screen === 'group' && d.groupId === gf && Object.keys(d).length === 2)
-        && PUSH_NOTICE_KINDS['decision.open'].tab !== 'chats',
+        && (PUSH_NOTICE_KINDS['decision.open'].tab as string) !== 'chats',
         `each notice's details name the group's screen and id, nothing else (got ${JSON.stringify(lands)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);

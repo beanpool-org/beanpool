@@ -88,6 +88,12 @@ export interface GroupLineDisplayContext {
     nodeNameOf?: (pubkey: string) => string | null | undefined;
     /** The first signer this phone saw for a message id (rule 3: an edit is compared with it). */
     signerSeen?: (messageId: string) => string | undefined;
+    /**
+     * Succession verdicts, by (member, their former keys, signer): a chain is verified once per load however many lines
+     * its former key signed (§4 2b; the keyring keeps one per group). `walk` is core's walker unless a test counts it.
+     */
+    successions?: Map<string, boolean>;
+    walk?: typeof walkKeySuccession;
 }
 
 function epochOf(meta: any): number | null {
@@ -107,13 +113,13 @@ function unverifiedView(epoch: number | null): GroupLineView {
 }
 
 /** Who a signer is, by the rule (§4 2a–2c). */
-export function nameSigner(signer: string, line: Pick<ServedGroupLine, 'authorPubkey' | 'authorCallsign'>, ctx: Pick<GroupLineDisplayContext, 'roster' | 'nodeNameOf'>):
+export function nameSigner(signer: string, line: Pick<ServedGroupLine, 'authorPubkey' | 'authorCallsign'>, ctx: Pick<GroupLineDisplayContext, 'roster' | 'nodeNameOf' | 'successions' | 'walk'>):
     { name: string; nameHint: string | null; details: string | null } {
     const row = ctx.roster.find((r) => r.memberPubkey === signer);
     if (row) return { name: row.callsign || signer.slice(0, 8), nameHint: null, details: null };
     for (const r of ctx.roster) {
         const former = Array.isArray(r.formerKeys) ? r.formerKeys.find((f) => f?.pubkey === signer) : undefined;
-        if (former && walkKeySuccession({ memberPubkey: r.memberPubkey, formerKeys: r.formerKeys }, signer)) {
+        if (former && walked(r, signer, ctx)) {
             const name = r.callsign || r.memberPubkey.slice(0, 8);
             return { name, nameHint: null, details: earlierKeyDetails(name, former.at) };
         }
@@ -123,10 +129,20 @@ export function nameSigner(signer: string, line: Pick<ServedGroupLine, 'authorPu
     return { name: GROUP_LINE_FORMER_MEMBER, nameHint: null, details: null };
 }
 
+/** walkKeySuccession, once per (row, its former keys, signer) for as long as `ctx.successions` lives. */
+function walked(row: DisplayRosterRow, signer: string, ctx: Pick<GroupLineDisplayContext, 'successions' | 'walk'>): boolean {
+    const walk = ctx.walk ?? walkKeySuccession;
+    if (!ctx.successions) return walk({ memberPubkey: row.memberPubkey, formerKeys: row.formerKeys }, signer);
+    const id = `${row.memberPubkey}|${signer}|${JSON.stringify(row.formerKeys ?? [])}`;
+    let v = ctx.successions.get(id);
+    if (v === undefined) { v = walk({ memberPubkey: row.memberPubkey, formerKeys: row.formerKeys }, signer); ctx.successions.set(id, v); }
+    return v;
+}
+
 /** True if `a` and `b` are one member's keys by this phone's roster (the same key, or one a former key of the other). */
-function sameMember(a: string, b: string, roster: readonly DisplayRosterRow[]): boolean {
+function sameMember(a: string, b: string, ctx: Pick<GroupLineDisplayContext, 'roster' | 'successions' | 'walk'>): boolean {
     if (a === b) return true;
-    return roster.some((r) => (r.memberPubkey === a && walkKeySuccession(r, b)) || (r.memberPubkey === b && walkKeySuccession(r, a)));
+    return ctx.roster.some((r) => (r.memberPubkey === a && walked(r, b, ctx)) || (r.memberPubkey === b && walked(r, a, ctx)));
 }
 
 /**
@@ -153,7 +169,7 @@ export function groupLineView(line: ServedGroupLine, ctx: GroupLineDisplayContex
         // An edit is signed by its editor: on this phone, one by anyone but the line's first signer (or that member's
         // other keys) is not the author's words (§4 rule 3).
         const first = ctx.signerSeen?.(line.id);
-        if (line.editedAt && first && !sameMember(signer, first, ctx.roster)) return unverifiedView(epoch);
+        if (line.editedAt && first && !sameMember(signer, first, ctx)) return unverifiedView(epoch);
         const named = nameSigner(signer, line, ctx);
         return { hidden: false, text: opened.text, ...named, unverified: false, waitingKey: false, signer, after: opened.after, epoch };
     }

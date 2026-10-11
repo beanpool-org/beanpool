@@ -24,6 +24,12 @@
  *                               their names-list entry (fixture rows, as test-names-debts-http's); answers the debt's id
  *   receive {key, beans}        a direct payment to the member (transfer()), whose after-commit hook runs the repayment sweep
  *   debt {key, debtId}          the member's balance and the debt record (repaid, status, how it was settled)
+ *   members {members}           member rows (each {key, callsign}, joined 30 days ago), as workingOff writes one: for the
+ *                               phone's group chat e2e (utils/__tests__/group-chat-e2e.test.ts)
+ *   groupRows {groupId, keys}   active group_members rows written straight in, with no epoch: members a node let in
+ *                               without a rotation (a big group for the rotation timing; an old app's join)
+ *   sql {sql, params, all}      one statement on the node's database, for that e2e's assertions and its dishonest-node
+ *                               cases (a moved author column, a rolled-back epoch, a junk wrap); `all` answers the rows
  *   quit                        exit
  */
 
@@ -138,6 +144,26 @@ async function main(): Promise<void> {
             record: db.prepare('SELECT amount, repaid, status, settled_how FROM names_debts WHERE id = ?').get(String(debtId)) ?? null,
             links: (db.prepare('SELECT COUNT(*) n FROM names_debt_payments WHERE debt_id = ?').get(String(debtId)) as { n: number }).n,
         }),
+        members: ({ members }: { members?: { key: string; callsign: string }[] }) => {
+            const joined = new Date(Date.now() - 30 * 86_400_000).toISOString();
+            for (const m of members ?? []) {
+                db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
+                    .run(String(m.key), String(m.callsign), joined);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(String(m.key));
+            }
+            return (members ?? []).length;
+        },
+        groupRows: ({ groupId, keys }: { groupId?: string; keys?: string[] }) => {
+            const now = new Date().toISOString();
+            const add = db.prepare(`INSERT OR IGNORE INTO group_members (group_id, member_pubkey, role, status, joined_at, role_since, updated_at)
+                                    VALUES (?, ?, 'member', 'active', ?, ?, ?)`);
+            db.transaction(() => { for (const k of keys ?? []) add.run(String(groupId), String(k), now, now, now); })();
+            return (keys ?? []).length;
+        },
+        sql: ({ sql, params, all }: { sql?: string; params?: unknown[]; all?: boolean }) => {
+            const st = db.prepare(String(sql));
+            return all ? st.all(...(params ?? [])) : st.run(...(params ?? [])).changes;
+        },
         quit: () => process.exit(0),
     };
 

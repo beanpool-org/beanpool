@@ -147,6 +147,8 @@ export class GroupKeyring {
     private verdicts = new Set<string>();
     private signers = new Map<string, string>();
     private lastHoleFetch = 0;
+    /** Succession verdicts for this group's roster (line-display §4 2b): one walk per (member, former key) per session. */
+    readonly successions = new Map<string, boolean>();
     /** Epochs whose record didn't verify: nothing under them opens, and no wrap of theirs is refused for it. */
     private badRecords = new Set<number>();
     state: GroupKeysState | null = null;
@@ -310,6 +312,8 @@ export class GroupKeyring {
         const wrap = stored.wrap;
         if (!wrap) return;
         stored.wrap = null;
+        // The next sync asks for this epoch again at once: another member's top-up may already be there.
+        this.lastHoleFetch = 0;
         await this.store.dropWrap(this.groupId, stored.epoch).catch(() => { });
         await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/${stored.epoch}/reject`,
             { wrapper: wrap.wrapper, ephPub: wrap.ephPub }, this.identity as BeanPoolIdentity).catch(() => null);
@@ -411,6 +415,9 @@ export class GroupKeyring {
         } catch {
             return 0;
         }
+        // A slot for an epoch this phone hasn't fetched yet (it never opened the chat since): fetch first, once.
+        const wanted = (answer.missing ?? []).flatMap((m) => m.epochs ?? []);
+        if (wanted.some((e) => !this.epochs.has(e))) await this.sync().catch(() => null);
         let sent = 0;
         for (const m of answer.missing ?? []) {
             if (m.pubkey === this.identity.publicKey) continue;

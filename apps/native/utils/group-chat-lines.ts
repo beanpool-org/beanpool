@@ -133,7 +133,7 @@ export async function openGroupThread(
     for (const l of lines) {
         const v = groupLineView(l, {
             groupId: ring.groupId, fromEpoch: from, keyFor: (e) => ring.openedKey(e), open: openLine, memo, roster, nodeNameOf,
-            signerSeen: (id) => ring.signerSeen(id),
+            signerSeen: (id) => ring.signerSeen(id), successions: ring.successions,
         });
         if (v.signer && !l.editedAt) ring.rememberSigner(l.id, v.signer);
         views.set(l.id, v);

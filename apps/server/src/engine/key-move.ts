@@ -381,9 +381,11 @@ export function followReplicatedRekeys(rekeys: ReplicatedRekey[], beforeMove?: (
 
 /**
  * The recovery copies of a re-key this standby followed: the ones the main server moved to the new key go from the old
- * one here. The main server wraps each copy the member owns again for the new key (engine/recovery-shares.ts
- * moveRecoverySharesToNewKey), which this standby cannot (it holds no seal key), and stamps it, so the copy brings the
- * moved rows; the rows under the old key would stay beside them, a second copy of a replaced key's recovery. So a row
+ * one here. The main server renames the copies the member keeps for someone else (engine/recovery-shares.ts
+ * moveKeeperCopiesToNewKey) and stamps them, so the copy brings the moved rows; the rows under the old key would stay
+ * beside them, a second copy of a replaced key's recovery. The copies the member owns, it deletes with a tombstone
+ * (completeRekey), which the import applies; an older main server re-wrapped them for the new key instead, and this
+ * still drops the old rows of such a move. So a row
  * here goes once the copy has brought its moved counterpart, by the key the table is unique on, with the owner and a
  * keeper ref that named the old key naming the new one. One the main server left under the old key (locked with another
  * key, which it could not open) has no counterpart, and stays here as it stays there. After the copy's recovery rows,

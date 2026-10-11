@@ -39,6 +39,7 @@ import {
     getCommonsBalanceExact,
     reconcileLedgerFromDb,
     countOpenTrades,
+    dispatchPushNotification,
 } from '../state-engine.js';
 import { ledger } from './ledger.js';
 import { isMemberKeySpelling } from './member-key.js';
@@ -46,7 +47,7 @@ import { logger, sanitizeMessage } from '../logger.js';
 import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.js';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { movePlaceWatches } from './place-watches.js';
-import { moveRecoverySharesToNewKey } from './recovery-shares.js';
+import { deleteAllShares, moveKeeperCopiesToNewKey } from './recovery-shares.js';
 import { moveKnocks } from './knocks.js';
 import { moveKeptNotices } from './kept-notices.js';
 import { moveBlocks } from './member-blocks.js';
@@ -184,7 +185,7 @@ function shortKey(key: string): string {
  * password or the member themselves is refused, 403, before any write. Both steps ask it: a code an owner issued is
  * no licence for an admin to bind the new key. An admin re-keying a member or a moderator is untouched.
  */
-function assertMayRekey(cleanOld: string, cleanOperator: string): void {
+export function assertMayRekey(cleanOld: string, cleanOperator: string): void {
     if (!heldPrivilegedRole(cleanOld) || cleanOperator === cleanOld || isOwnerLevelActor(cleanOperator)) return;
     const err: any = new Error('Only an owner can re-key an owner or admin');
     err.status = 403;
@@ -284,6 +285,23 @@ export function issueRekeyCode(
     broadcast({ type: 'profile_updated', publicKey: cleanOld });
     logger.info('AUTH', `[Rekey] Re-enrolment code issued for ${member.callsign} (${shortKey(cleanOld)}) by ${shortKey(cleanOperator)}, valid until ${expiresAtIso}`);
 
+    // The old phone hears it, while its push tokens are still here (the move deletes them): an admin acting without the
+    // member is seen (design DESIGN-rekey-redeem-fable.md §3, Marty's pick 4). The push's words are fixed by its kind;
+    // the details kept for the old key name no code, ever.
+    try {
+        dispatchPushNotification(
+            [cleanOld],
+            cleanOperator,
+            'Your account is being moved to a new phone',
+            'An admin started moving your account to a new phone. If you still have this phone and didn’t ask for this, tell an owner now.',
+            { screen: 'settings', kind: 'rekey_started' },
+            'recovery',
+            'account.rekey-started',
+        );
+    } catch (e) {
+        logger.warn('AUTH', `[Rekey] could not tell the old phone: ${(e as Error)?.message || e}`);
+    }
+
     return {
         code,
         oldPubkey: cleanOld,
@@ -301,7 +319,7 @@ export function completeRekey(
     newPublicKey: string,
     code: string,
     operatorPubkey: string
-): { success: boolean; oldPubkey: string; newPubkey: string; callsign: string } {
+): { success: boolean; oldPubkey: string; newPubkey: string; callsign: string; signInCopiesRemoved: number } {
     assertPlainTablesWritable();
     const cleanOld = oldPublicKey.trim().toLowerCase();
     const cleanNew = newPublicKey.trim().toLowerCase();
@@ -354,6 +372,8 @@ export function completeRekey(
     const nowIso = new Date().toISOString();
     /** The members whose block lists the re-key changed (moveBlocks), told after the commit. */
     let blockListsMoved: string[] = [];
+    /** The member's own recovery copies deleted (they hold the replaced seed). */
+    let signInCopiesRemoved = 0;
 
     // Atomic execution inside conservingTransaction
     conservingTransaction(() => {
@@ -375,10 +395,13 @@ export function completeRekey(
         // What the main server moves by rules of its own, each stamped so the move replicates.
         // (n2) place watches (G5): the places the member watches are theirs, whatever device holds the key.
         movePlaceWatches(cleanOld, cleanNew);
-        // (p) recovery shares
-        // The owner is what a wrapped copy is bound to, so the move opens and re-wraps each copy the member owns. Without
-        // the recovery-seal key it throws and this whole re-key rolls back (engine/recovery-shares.ts).
-        moveRecoverySharesToNewKey(cleanOld, cleanNew);
+        // (p) recovery shares. The member's own sign-in copies rebuild the OLD seed (recovery-model: seed = A ⊕ B), so
+        // moved to the new key, a sign-in restore would land on the key just replaced: they go, with a tombstone so a
+        // standby drops them too, and the member links their sign-in again from the new phone (design
+        // DESIGN-rekey-redeem-fable.md §4, Marty's pick 2, 2026-10-11). Nothing is opened, so no seal key is needed.
+        // The copies they keep for someone else are that person's, and only renamed to the new key.
+        signInCopiesRemoved = deleteAllShares(cleanOld);
+        moveKeeperCopiesToNewKey(cleanOld, cleanNew);
         // (p2) Requests to join (G6): a knock the member made before they joined, and the knocks they answered. Left on
         // the invalidated key, the old knock would be back on the members' list and an approval would let that key in
         // as a second member; deleting the account would miss what they wrote. Stamped, so the move replicates
@@ -450,6 +473,7 @@ export function completeRekey(
         oldPubkey: cleanOld,
         newPubkey: cleanNew,
         callsign: member.callsign,
+        signInCopiesRemoved,
     };
 }
 
@@ -597,6 +621,8 @@ export function cancelRekeyCode(
  * `codeNeedsStepUp` says the viewer may read it after Manage again (the phone's step-up).
  */
 export type RekeyRequestView = Omit<RekeyRequestRow, 'code'> & { code?: string; codeNeedsStepUp?: true };
+/** A phone that asked on the pending code (engine/rekey-redeem.ts): its key, the digits it shows, when it asked. */
+export interface RekeyProposalRow { newPubkey: string; match: string; proposedAt: string }
 /** A finished re-key as the status answer gives it: its spent code stays in the audit log. */
 export type RekeyAuditLogView = Omit<RekeyAuditLogRow, 'reenrollment_code'>;
 
@@ -618,6 +644,8 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
     isInvalidated: boolean;
     invalidatedInfo: InvalidatedKeyRow | null;
     pendingRequest: RekeyRequestView | null;
+    /** The phones waiting on the pending code, oldest first: only beside the code itself, to a viewer who may read it. */
+    proposals: RekeyProposalRow[];
     history: RekeyAuditLogView[];
 } {
     const cleanPub = publicKey.trim().toLowerCase();
@@ -642,6 +670,12 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
         if (mayReadCode && privileged && opts.viewerStepUpDue) pendingRequest = { ...rest, codeNeedsStepUp: true };
         else pendingRequest = mayReadCode ? { ...rest, code } : rest;
     }
+    // The phones that asked, for the wizard's "Bind this phone" cards: to whoever reads the code, as binding asks the same.
+    const proposals: RekeyProposalRow[] = pendingRequest?.code
+        ? (db.prepare('SELECT new_pubkey, match, proposed_at FROM rekey_proposals WHERE code = ? AND declined_at IS NULL ORDER BY proposed_at, new_pubkey')
+            .all(pendingRequest.code) as { new_pubkey: string; match: string; proposed_at: string }[])
+            .map((p) => ({ newPubkey: p.new_pubkey, match: p.match, proposedAt: p.proposed_at }))
+        : [];
 
     const history = (db.prepare(`
         SELECT id, old_pubkey, new_pubkey, operator_pubkey, performed_at, completed_at, details
@@ -652,6 +686,7 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
         isInvalidated,
         invalidatedInfo,
         pendingRequest,
+        proposals,
         history,
     };
 }

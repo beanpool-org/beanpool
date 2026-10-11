@@ -2495,6 +2495,22 @@ CREATE TABLE IF NOT EXISTS rekey_requests (
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_code ON rekey_requests(code);
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_old ON rekey_requests(old_pubkey);
 
+-- A phone that asked for a re-key code (engine/rekey-redeem.ts, design scratch/global-node/DESIGN-rekey-redeem-fable.md §4): the
+-- key it wants bound and the two digits it shows. Scanning or typing the code binds nothing: the admin binds the key whose
+-- digits match the phone in front of them, or declines it. One row per key per code; they live as long as the code's row.
+CREATE TABLE IF NOT EXISTS rekey_proposals (
+    code         TEXT NOT NULL,
+    new_pubkey   TEXT NOT NULL,
+    match        TEXT NOT NULL CHECK (length(match) = 2),
+    proposed_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    declined_at  DATETIME,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at   DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (code, new_pubkey)
+);
+-- Two phones waiting on one code never show the same digits.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rekey_proposals_live_match ON rekey_proposals(code, match) WHERE declined_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS rekey_audit_log (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     old_pubkey        TEXT NOT NULL,

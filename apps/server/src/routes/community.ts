@@ -36,10 +36,10 @@ import {
 } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
-import { completeRekey } from '../engine/member-wizards.js';
 import { pushKeyHex } from '../engine/push-notices.js';
 import { boundInviteCodesOf } from '../engine/names-list.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
+import { cleanRekeyCode, proposeRekey, rekeyRedeemStatus, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import {
@@ -78,7 +78,7 @@ import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.
 import { membersOnlyHere, memberReadsOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
-import { doorRateLimit } from '../auth-rate-limit.js';
+import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
@@ -1352,11 +1352,22 @@ router.post('/api/member/purge', async (ctx) => {
     }
 });
 
+// A replacement phone asks to take over a member's account with the admin's RK- code (engine/rekey-redeem.ts, design
+// DESIGN-rekey-redeem-fable.md §4). It binds nothing: it registers a proposal and answers the two digits the phone shows,
+// and the admin binds the key whose digits match the phone in front of them (…/rekey/complete with that key). The
+// headers are signed by the asking key (the middleware: replay-proof, its spoof check holds `newPublicKey` to the signer),
+// and the body carries its statement over `beanpool-re-enroll/2\n<host>\n<code>`, so an ask names this community.
 router.post('/api/member/re-enroll', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
     const { code, newPublicKey, signature } = body;
+    const signer = ctx.state.actor as string | undefined;
 
+    if (!signer) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     if (!code || typeof code !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Re-enrolment code is required' };
@@ -1368,23 +1379,28 @@ router.post('/api/member/re-enroll', async (ctx) => {
         return;
     }
 
-    const cleanCode = code.trim().toUpperCase();
+    const cleanCode = cleanRekeyCode(code);
     const cleanNew = newPublicKey.trim().toLowerCase();
+    // The middleware's spoof check already holds the field to the signer; said again here, as the route's own rule.
+    if (cleanNew !== signer) {
+        ctx.status = 403;
+        ctx.body = { error: 'Signature validation failed' };
+        return;
+    }
 
-    // Verify Proof of Possession signature (mandatory to prevent unauthenticated takeover)
     if (!signature || typeof signature !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Signature is required: proof of possession of new private key must be provided' };
         return;
     }
-    // Request binding: `0xFF ‖ beanpool-re-enroll/2\n<host>\n<code>` naming this community's host (`signedFor`), or the
-    // bare code from an app before it, until the switch (engine/member-signature.ts).
+    // Request binding: `0xFF ‖ beanpool-re-enroll/2\n<host>\n<code>` naming this community's host (`signedFor`). No app
+    // ever called this route before it took proposals, so there is no older format to accept.
     const proof = verifyStatementSignature({
         signature,
         pubKeyHex: cleanNew,
         boundText: (host) => reEnrollText(host, cleanCode),
         signedFor: body.signedFor,
-        oldTexts: [cleanCode],
+        oldTexts: [],
     });
     if (!proof.ok) {
         const bound = proof.status === 421 || proof.status === 426;
@@ -1394,19 +1410,32 @@ router.post('/api/member/re-enroll', async (ctx) => {
     }
 
     try {
-        const req = db.prepare("SELECT * FROM rekey_requests WHERE code = ?").get(cleanCode) as any;
-        if (!req) {
-            ctx.status = 404;
-            ctx.body = { error: 'Invalid re-enrolment code' };
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = proposeRekey(cleanCode, cleanNew);
+    } catch (e: any) {
+        if (e instanceof RekeyRedeemRefusal) {
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
             return;
         }
-
-        const result = completeRekey(req.old_pubkey, cleanNew, cleanCode, req.operator_pubkey);
-        ctx.body = result;
-    } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to complete re-enrolment') };
+        ctx.body = { error: memberErrorText(e, 'Failed to ask for the re-key') };
     }
+});
+
+// Where a replacement phone's ask stands (engine/rekey-redeem.ts rekeyRedeemStatus): waiting, bound, declined or gone,
+// for the signing key alone. Public on the read gate (a proposing key is no member yet), so the route asks for the
+// signature itself; a key that never asked on the code, a member's included, is told `gone`.
+router.get('/api/member/re-enroll/status', async (ctx) => {
+    if (!rekeyStatusRateLimit(ctx)) return;
+    const signer = ctx.state.actor as string | undefined;
+    if (!signer) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = rekeyRedeemStatus(ctx.query.code, signer);
 });
 
 router.get('/api/profile/:publicKey', async (ctx) => {

@@ -93,6 +93,7 @@ import {
     executeOffboard,
     type OffboardOptions,
 } from '../engine/member-wizards.js';
+import { declineRekeyProposal, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
 import { getOffboxHealth } from '../services/offbox-backups.js';
@@ -2503,6 +2504,23 @@ router.post('/api/local/admin/members/:pubkey/rekey/cancel', async (ctx) => {
     } catch (e: any) {
         ctx.status = e?.status || (e?.message?.includes('not found') ? 404 : 400);
         ctx.body = { error: e?.message || 'Failed to cancel the re-key code' };
+    }
+});
+
+// "Not theirs" (engine/rekey-redeem.ts declineRekeyProposal): a phone that asked on the member's code is declined, and
+// its poll answers `declined`. Who may make the code may decline, as issue-code asks.
+router.post('/api/local/admin/members/:pubkey/rekey/proposals/:newPubkey/decline', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey, newPubkey } = ctx.params;
+    const effectiveActor = resolveAdminActor(ctx);
+    if (!effectiveActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
+
+    try {
+        ctx.body = { success: true, ...declineRekeyProposal(pubkey, newPubkey, effectiveActor) };
+    } catch (e: any) {
+        ctx.status = e?.status || 400;
+        ctx.body = { error: e?.message || 'Failed to decline the phone', ...(e instanceof RekeyRedeemRefusal ? { code: e.code } : {}) };
     }
 });
 

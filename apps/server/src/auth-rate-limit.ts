@@ -87,3 +87,28 @@ export function doorRateLimit(ctx: Koa.Context, key: string): boolean {
     chargeDoor(doorByAddress, address, now);
     return true;
 }
+
+/**
+ * A replacement phone's poll of its re-key ask (GET /api/member/re-enroll/status, engine/rekey-redeem.ts): 20 a minute
+ * per address, its own bucket, so a phone polling every 3 s never spends the auth limiter that guards the ask itself.
+ */
+export const REKEY_STATUS_RATE_LIMIT = { perAddress: 20, windowMs: 60_000 } as const;
+const rekeyStatusByAddress = new Map<string, { count: number; resetAt: number }>();
+
+export function rekeyStatusRateLimit(ctx: Koa.Context): boolean {
+    const address = clientLimiterKey(ctx);
+    const now = Date.now();
+    const until = doorWindowFull(rekeyStatusByAddress, address, REKEY_STATUS_RATE_LIMIT.perAddress, now);
+    if (until !== null) {
+        const waitSec = Math.max(1, Math.ceil((until - now) / 1000));
+        ctx.status = 429;
+        ctx.set('Retry-After', String(waitSec));
+        ctx.body = { error: `Too many attempts. Try again in ${waitSec}s` };
+        return false;
+    }
+    if (rekeyStatusByAddress.size > 10_000) for (const [k, v] of rekeyStatusByAddress) if (now >= v.resetAt) rekeyStatusByAddress.delete(k);
+    const entry = rekeyStatusByAddress.get(address);
+    if (entry && now < entry.resetAt) entry.count++;
+    else rekeyStatusByAddress.set(address, { count: 1, resetAt: now + REKEY_STATUS_RATE_LIMIT.windowMs });
+    return true;
+}

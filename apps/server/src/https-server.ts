@@ -321,6 +321,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
+    '/api/member/re-enroll/status',  // a replacement phone's poll of its re-key ask: signed by a key that is no member yet, the route asks for the signature (routes/community.ts)
     '/api/channels/options',         // the platform/category vocabulary the channel form renders
     '/api/pulse/feed',               // members only (MEMBERS_ONLY_READS_EXACT)
     '/api/pulse/oauth/config',       // public platform OAuth availability configuration (The Pulse, Phase 5)

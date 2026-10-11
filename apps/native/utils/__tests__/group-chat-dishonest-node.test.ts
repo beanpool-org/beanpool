@@ -478,6 +478,24 @@ describe('group chats on the phone against a dishonest node', () => {
         expect((await shown(fresh, g)).visible.find((l) => l.epoch === 2)).toMatchObject({ name: 'Ben', text: 'J2: Ben under 2' });
     });
 
+    it('two identities, one phone (finding 8): the second starts on its own rows and reads its own lines', async () => {
+        await control('limiters');
+        forgetGroupKeys(); _resetGroupKeySessionForTests();
+        const g = await newGroup(dov, 'Two identities, one phone');
+        await say(dov, g, 'X1');
+        await join_(pia, g);
+        await say(dov, g, 'X2: for Pia too');
+        const shared = memoryGroupKeyStore();
+        forgetGroupKeys();
+        await shown({ ...dov, store: shared }, g);
+        // Dov signs out, the app restarts, Pia signs in on this phone, over the same store.
+        forgetGroupKeys();
+        const piaHere: Phone = { ...pia, store: shared };
+        expect((await shown(piaHere, g)).visible.map((l) => l.text)).toEqual(['X2: for Pia too']);
+        expect(await ring(piaHere, g).highestEpoch()).toBeGreaterThanOrEqual(0);
+        expect((await shared.load(`${dov.identity.publicKey}/${g}`)).epochs.length).toBeGreaterThan(0);
+    });
+
     it('every request stayed on this machine', () => {
         expect(elsewhere).toEqual([]);
     });

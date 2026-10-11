@@ -29,7 +29,7 @@ import type { GroupSuccessionData } from './group-succession';
 import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, withoutSendState, type LocalMessageRow } from './chat-sync';
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
-import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import { sqliteGroupKeyStore } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
@@ -717,6 +717,8 @@ export function newCopyGeneration(): void {
 export async function clearDB() {
     // First, before anything awaits: from here no sync cycle that began before stores a cursor for this copy.
     newCopyGeneration();
+    // Every group key opened this session leaves memory with the copy (sign-out, a new identity, Delete here).
+    forgetGroupKeys();
     try {
         const { resetSyncFingerprints } = require('../services/pillar-sync');
         resetSyncFingerprints();
@@ -731,7 +733,7 @@ export async function clearDB() {
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied;');
+        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers;');
     } finally {
         releaseSyncLock();
     }

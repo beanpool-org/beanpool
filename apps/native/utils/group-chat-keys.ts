@@ -51,7 +51,10 @@ export interface StoredGroupEpoch {
     wrap: GroupServedWrap | null;
 }
 
-/** Where a group's keys are kept between sessions (SQLite on the phone, utils/group-chat-store.ts; memory in tests). */
+/**
+ * Where a group's keys are kept between sessions (SQLite on the phone, utils/group-chat-store.ts; memory in tests). The
+ * `groupId` each call takes is the keyring's key for the rows: this identity's public key, "/", the group's id.
+ */
 export interface GroupKeyStore {
     load(groupId: string): Promise<{ epochs: StoredGroupEpoch[]; highest: number; after: number }>;
     putEpochs(groupId: string, epochs: StoredGroupEpoch[]): Promise<void>;
@@ -164,17 +167,25 @@ export class GroupKeyring {
     private refetched = new Set<number>();
     state: GroupKeysState | null = null;
 
-    constructor(public readonly groupId: string, private readonly nodeUrl: string, private readonly identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, private readonly store: GroupKeyStore) {}
+    /**
+     * What this group's rows are kept under: this identity's, then the group's. Another identity on this phone (a sign-in
+     * after a sign-out, a new one) never reads or extends them (review of #1788, finding 8).
+     */
+    private readonly storeKey: string;
+
+    constructor(public readonly groupId: string, private readonly nodeUrl: string, private readonly identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, private readonly store: GroupKeyStore) {
+        this.storeKey = `${identity.publicKey}/${groupId}`;
+    }
 
     private ensureLoaded(): Promise<void> {
         if (!this.loading) {
             this.loading = (async () => {
-                const saved = await this.store.load(this.groupId).catch(() => ({ epochs: [] as StoredGroupEpoch[], highest: 0, after: 0 }));
+                const saved = await this.store.load(this.storeKey).catch(() => ({ epochs: [] as StoredGroupEpoch[], highest: 0, after: 0 }));
                 for (const e of saved.epochs) this.epochs.set(e.epoch, e);
                 this.highest = Math.max(this.highest, saved.highest);
                 this.after = Math.max(this.after, saved.after);
-                for (const k of await this.store.loadVerdicts(this.groupId).catch(() => [] as string[])) this.verdicts.add(k);
-                for (const [id, s] of await this.store.loadSigners(this.groupId).catch(() => [] as [string, string][])) this.signers.set(id, s);
+                for (const k of await this.store.loadVerdicts(this.storeKey).catch(() => [] as string[])) this.verdicts.add(k);
+                for (const [id, s] of await this.store.loadSigners(this.storeKey).catch(() => [] as [string, string][])) this.signers.set(id, s);
             })();
         }
         return this.loading;
@@ -226,14 +237,14 @@ export class GroupKeyring {
 
     private async raise(epoch: number): Promise<void> {
         if (epoch > this.highest) this.highest = epoch;
-        await this.store.raiseHighest(this.groupId, epoch).catch(() => { });
+        await this.store.raiseHighest(this.storeKey, epoch).catch(() => { });
     }
 
     /** The verify memo for this group's lines (core GroupLineVerifyMemo): in memory, each new verdict written behind. */
     get memo(): GroupLineVerifyMemo {
         return {
             has: (k) => this.verdicts.has(k),
-            add: (k) => { this.verdicts.add(k); this.store.addVerdict(this.groupId, k).catch(() => { }); },
+            add: (k) => { this.verdicts.add(k); this.store.addVerdict(this.storeKey, k).catch(() => { }); },
         };
     }
 
@@ -242,7 +253,7 @@ export class GroupKeyring {
     rememberSigner(messageId: string, signer: string): void {
         if (this.signers.has(messageId)) return;
         this.signers.set(messageId, signer);
-        this.store.putSigner(this.groupId, messageId, signer).catch(() => { });
+        this.store.putSigner(this.storeKey, messageId, signer).catch(() => { });
     }
 
     private servedRecord(e: KeysAnswer['epochs'][number]): GroupEpochRecord {
@@ -285,7 +296,7 @@ export class GroupKeyring {
             this.epochs.set(e.epoch, next);
             put.push(next);
         }
-        if (put.length) await this.store.putEpochs(this.groupId, put).catch(() => { });
+        if (put.length) await this.store.putEpochs(this.storeKey, put).catch(() => { });
         return put.map((e) => e.epoch);
     }
 
@@ -303,7 +314,7 @@ export class GroupKeyring {
             a = await this.fetchKeys(`?after=${this.after}`);
             await this.absorb(a);
             const top = (a.epochs || []).reduce((m, e) => Math.max(m, e.epoch), 0);
-            if (top > this.after) { this.after = top; await this.store.setCursor(this.groupId, top).catch(() => { }); }
+            if (top > this.after) { this.after = top; await this.store.setCursor(this.storeKey, top).catch(() => { }); }
             newest = Math.max(newest, top);
         } while (a.more && ++guard < 50);
         const from = a.fromEpoch;
@@ -455,7 +466,7 @@ export class GroupKeyring {
         stored.wrap = null;
         // The next sync asks for this epoch again at once: another member's top-up may already be there.
         this.lastHoleFetch = 0;
-        await this.store.dropWrap(this.groupId, stored.epoch).catch(() => { });
+        await this.store.dropWrap(this.storeKey, stored.epoch).catch(() => { });
         await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/${stored.epoch}/reject`,
             { wrapper: wrap.wrapper, ephPub: wrap.ephPub }, this.identity as BeanPoolIdentity).catch(() => null);
     }
@@ -480,9 +491,9 @@ export class GroupKeyring {
         await this.ensureLoaded();
         if (this.refusesEpoch(record.epoch)) throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
         const stored = this.storeMade(record, key);
-        await this.store.putEpochs(this.groupId, [stored]).catch(() => { });
+        await this.store.putEpochs(this.storeKey, [stored]).catch(() => { });
         await this.raise(record.epoch);
-        if (record.epoch > this.after) { this.after = record.epoch; await this.store.setCursor(this.groupId, record.epoch).catch(() => { }); }
+        if (record.epoch > this.after) { this.after = record.epoch; await this.store.setCursor(this.storeKey, record.epoch).catch(() => { }); }
         this.state = { current: record.epoch, stale: false, fromEpoch: this.state?.fromEpoch ?? null, roster: this.state?.roster ?? [] };
     }
 
@@ -635,9 +646,11 @@ export function groupKeyring(nodeUrl: string, identity: Pick<BeanPoolIdentity, '
     return k;
 }
 
-/** Sign-out, a new identity, Delete here: every opened key leaves memory. */
+/** Sign-out, a new identity, Delete here (utils/db.ts clearDB): every opened key leaves memory, and this session's wrap tally. */
 export function forgetGroupKeys(): void {
     keyrings.clear();
+    wrapOpenedThisSession = false;
+    wrapFailuresBeforeAnyOpened = 0;
 }
 
 // ─── Membership changes that carry an epoch (§2.3) ─────────────────────────────────────────────────────────────────

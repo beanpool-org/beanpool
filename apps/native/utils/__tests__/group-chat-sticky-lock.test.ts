@@ -62,11 +62,11 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { insertMessage, postGroupChatMessage } from '../db';
+import { insertMessage, postGroupChatMessage, clearDB } from '../db';
 import {
     groupChatNotice, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_LOCKED_NOTICE, GROUP_CHAT_OLD_NODE_NOTICE,
 } from '../group-chat-lines';
-import { forgetGroupKeys, GroupChatKeyError } from '../group-chat-keys';
+import { forgetGroupKeys, groupKeyring, memoryGroupKeyStore, GroupChatKeyError } from '../group-chat-keys';
 
 const realLoad = (Module as any)._load;
 (Module as any)._load = function (request: string, ...rest: any[]) {
@@ -148,5 +148,14 @@ describe('a group chat this phone has held a key of stays locked here', () => {
         expect(groupChatNotice({ nodeSaysLocked: true, seenLocked: true })).toBe(GROUP_CHAT_LOCKED_NOTICE);
         expect(groupChatNotice({ nodeSaysLocked: false, seenLocked: true })).toBe(GROUP_CHAT_LOCK_LOST_TEXT);
         expect(groupChatNotice({ nodeSaysLocked: false, seenLocked: false })).toBe(GROUP_CHAT_OLD_NODE_NOTICE);
+    });
+
+    it('a wipe or sign-out (clearDB) drops the four group-key tables and forgets every opened key (finding 8)', async () => {
+        const ring = groupKeyring('https://test.beanpool.org', who.me, G, memoryGroupKeyStore());
+        store.execs.length = 0;
+        await clearDB();
+        const drops = store.execs.filter((s) => /DROP TABLE/.test(s)).join(' ');
+        for (const t of ['group_chat_epochs', 'group_chat_key_state', 'group_line_verdicts', 'group_line_signers']) expect(drops).toContain(`DROP TABLE IF EXISTS ${t};`);
+        expect(groupKeyring('https://test.beanpool.org', who.me, G, memoryGroupKeyStore())).not.toBe(ring);
     });
 });

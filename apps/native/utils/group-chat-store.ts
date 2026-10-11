@@ -2,7 +2,9 @@
  * group-chat-store — where a group chat's keys are kept on the phone between sessions: the node's own SQLite file
  * (utils/db.ts getDb, one file per node), tables group_chat_epochs, group_chat_key_state, group_line_verdicts and
  * group_line_signers. Records and wraps are stored exactly as the node served them: ciphertext, nothing an outsider could
- * open without this member's seed (design §4: "cache nothing secret"). The opened keys are never written.
+ * open without this member's seed (design §4: "cache nothing secret"). The opened keys are never written. Rows are kept
+ * under "<identity>/<group>" (GroupKeyring's key), so another identity on this phone starts on its own, and clearDB drops
+ * the four tables with the rest.
  */
 import type { GroupKeyStore, StoredGroupEpoch } from './group-chat-keys';
 

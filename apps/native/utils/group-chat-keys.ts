@@ -160,6 +160,8 @@ export class GroupKeyring {
     private recordRecipients = new Map<number, Set<string>>();
     /** Epochs this phone made and the node said it stored, not yet served back: a served record that verifies replaces one. */
     private unconfirmed = new Set<number>();
+    /** Epochs whose refused record was asked for again this session (finding 7): once each. */
+    private refetched = new Set<number>();
     state: GroupKeysState | null = null;
 
     constructor(public readonly groupId: string, private readonly nodeUrl: string, private readonly identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, private readonly store: GroupKeyStore) {}
@@ -407,7 +409,8 @@ export class GroupKeyring {
         const held = this.keys.get(epoch);
         if (held) return held;
         const stored = this.epochs.get(epoch);
-        if (!stored?.wrap || this.badRecords.has(epoch)) return null;
+        if (!stored?.wrap) return null;
+        if (this.badRecords.has(epoch)) return this.refetchRefused(epoch, stored);
         try {
             const key = openMyKey(stored.record, stored.wrap, this.identity.privateKey, this.groupId);
             this.keys.set(epoch, key);
@@ -420,13 +423,29 @@ export class GroupKeyring {
             if (why.startsWith('Epoch record refused')) {
                 // The record itself is bad: the node served a header its maker didn't sign. Not the wrap's fault.
                 this.badRecords.add(epoch);
-                return null;
+                return this.refetchRefused(epoch, stored);
             }
             const unambiguous = why.includes('commits to') || why.startsWith('Top-up refused') || why.startsWith('An unsigned wrap');
             if (unambiguous || wrapOpenedThisSession) await this.refuse(stored);
             else wrapFailuresBeforeAnyOpened++;
             return null;
         }
+    }
+
+    /**
+     * A held record that doesn't verify is asked for again, once a session: `?after` has moved past it, and a record that
+     * verifies replaces it (absorb), so one bad answer never shuts an epoch on this phone for good (review of #1788,
+     * finding 7). Opens the key from the new copy when there is one.
+     */
+    private async refetchRefused(epoch: number, stored: StoredGroupEpoch): Promise<Uint8Array | null> {
+        if (this.refetched.has(epoch)) return null;
+        this.refetched.add(epoch);
+        try {
+            await this.absorb(await this.fetchKeys(`?epochs=${epoch}`));
+        } catch {
+            return null;
+        }
+        return this.epochs.get(epoch) !== stored ? this.keyFor(epoch) : null;
     }
 
     /** Refuse my wrap for one epoch on the node (POST …/keys/:epoch/reject): the slot shows in `missing` again. */

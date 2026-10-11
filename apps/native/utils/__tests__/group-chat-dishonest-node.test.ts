@@ -455,6 +455,29 @@ describe('group chats on the phone against a dishonest node', () => {
         expect((await sql("SELECT COUNT(*) n FROM messages WHERE conversation_id = ? AND type = 'text'", [g]))[0].n).toBe(3);
     });
 
+    it('records (finding 7): a record the node once served unsigned gives way to the real one; that epoch opens', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const g = await newGroup(ana, 'Junk record held');
+        await say(ana, g, 'J1');
+        await join_(ben, g);
+        await say(ben, g, 'J2: Ben under 2');
+        const fresh: Phone = { ...ana, store: memoryGroupKeyStore() };
+        hooks.push(async (r) => {
+            if (r.method === 'GET' && r.path === `/api/groups/${g}/keys`) {
+                const a = await nodeAnswer(r);
+                for (const e of a.body.epochs) if (e.epoch === 2) e.sig = Buffer.alloc(64, 7).toString('base64');
+                return jsonResponse(a.status, a.body);
+            }
+            return undefined;
+        });
+        forgetGroupKeys();
+        expect((await shown(fresh, g)).visible.find((l) => l.epoch === 2)?.waitingKey).toBe(true);
+        hooks.pop();
+        forgetGroupKeys();
+        expect((await shown(fresh, g)).visible.find((l) => l.epoch === 2)).toMatchObject({ name: 'Ben', text: 'J2: Ben under 2' });
+    });
+
     it('every request stayed on this machine', () => {
         expect(elsewhere).toEqual([]);
     });

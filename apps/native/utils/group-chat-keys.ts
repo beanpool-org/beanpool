@@ -1,0 +1,529 @@
+/**
+ * group-chat-keys — a group chat's keys on the phone (group chats slice 3).
+ *
+ * Designs (all decided by Marty): scratch/global-node/DESIGN-group-chat-encryption-fable.md §2–§4, §14.3, §15;
+ * DESIGN-group-chat-wrap-provenance-fable.md §7 (which epoch to seal under) and §10 (old epochs verified lazily);
+ * DESIGN-group-chat-epochs-over-time-fable.md §1 (when to refuse a wrap) and §2 (no roster on reads).
+ *
+ * What the phone keeps, per node and group: each epoch's record as the node served it (no wraps) and MY wrap for it, both
+ * exactly as sent (ciphertext; nothing secret), the highest epoch it has verified or made (it never falls), and the
+ * verdicts of line signatures it has verified (hashes). Opened epoch keys live in memory only, for the app's session,
+ * and are opened from the wraps with the seed in SecureStore when a line under them is first shown (§4; provenance §10
+ * pick 2). Nothing here trusts a node-served roster for reading: a record is opened by its signature and its key
+ * commitment alone. Today's roster is used once, by the member about to seal (rule 3), and to build a new epoch.
+ *
+ * Which epoch a line goes under (provenance §7): the node's current one, and only when (1) it is not below the highest
+ * this phone holds (else "This node is serving an older key…", nothing sent), (2) its record verifies with its maker in
+ * today's roster, it is not stale, and its recipients are exactly today's roster (else this phone rotates first), and
+ * (3) this phone holds its key (else it waits for another member's top-up and sends nothing meanwhile). After a rotation
+ * it made, it seals under that one at once.
+ */
+import type { BeanPoolIdentity } from './identity';
+import { signedGet, signedPost } from './node-post';
+import {
+    makeEpochRecord, openMyKey, verifyGroupEpochRecord, groupEpochCoversExactly, makeTopUp, GroupKeyNotVerifiedError,
+    type GroupEpochProgress, type GroupEpochReason, type GroupEpochRecord, type GroupLineVerifyMemo, type GroupServedWrap,
+} from './group-chat-crypto';
+
+/** Exact words the chat shows (provenance §7 rule 2; epochs-over-time §1, §5). */
+export const GROUP_KEY_ROLLBACK_TEXT = 'This node is serving an older key than one this app already holds.';
+export const GROUP_KEY_WAITING_TEXT = "Waiting for the group's next key.";
+export const GROUP_KEY_MISSING_TEXT = "This chat's key hasn't reached this phone yet. Another member's phone hands it over when they next open the chat.";
+export const GROUP_KEYS_UNOPENABLE_TEXT = "This device can't open your keys.";
+
+export type GroupChatKeyErrorCode = 'rollback' | 'no_key' | 'unopenable' | 'not_member' | 'refused';
+
+/** Why this phone will not seal a line now; `message` is the sentence the chat shows. */
+export class GroupChatKeyError extends Error {
+    constructor(message: string, public code: GroupChatKeyErrorCode) {
+        super(message);
+        this.name = 'GroupChatKeyError';
+    }
+}
+
+/** One epoch as this phone keeps it: the record as served (no wraps) and my wrap, exactly as the node sent them. */
+export interface StoredGroupEpoch {
+    epoch: number;
+    record: GroupEpochRecord;
+    wrap: GroupServedWrap | null;
+}
+
+/** Where a group's keys are kept between sessions (SQLite on the phone, utils/group-chat-store.ts; memory in tests). */
+export interface GroupKeyStore {
+    load(groupId: string): Promise<{ epochs: StoredGroupEpoch[]; highest: number; after: number }>;
+    putEpochs(groupId: string, epochs: StoredGroupEpoch[]): Promise<void>;
+    setCursor(groupId: string, after: number): Promise<void>;
+    /** Store max(stored, epoch): the highest epoch never falls. */
+    raiseHighest(groupId: string, epoch: number): Promise<void>;
+    dropWrap(groupId: string, epoch: number): Promise<void>;
+    loadVerdicts(groupId: string): Promise<string[]>;
+    addVerdict(groupId: string, key: string): Promise<void>;
+    loadSigners(groupId: string): Promise<[string, string][]>;
+    /** The first signer seen for a message id; never overwritten (an edit is compared with it). */
+    putSigner(groupId: string, messageId: string, signer: string): Promise<void>;
+}
+
+/** A store in memory: for tests, and the phone's fallback when SQLite can't be opened. */
+export function memoryGroupKeyStore(): GroupKeyStore {
+    const groups = new Map<string, { epochs: Map<number, StoredGroupEpoch>; highest: number; after: number; verdicts: Set<string>; signers: Map<string, string> }>();
+    const g = (id: string) => {
+        let v = groups.get(id);
+        if (!v) { v = { epochs: new Map(), highest: 0, after: 0, verdicts: new Set(), signers: new Map() }; groups.set(id, v); }
+        return v;
+    };
+    return {
+        async load(id) { const v = g(id); return { epochs: [...v.epochs.values()].map((e) => ({ ...e })), highest: v.highest, after: v.after }; },
+        async putEpochs(id, epochs) { const v = g(id); for (const e of epochs) v.epochs.set(e.epoch, { ...e }); },
+        async setCursor(id, after) { g(id).after = Math.max(g(id).after, after); },
+        async raiseHighest(id, epoch) { g(id).highest = Math.max(g(id).highest, epoch); },
+        async dropWrap(id, epoch) { const e = g(id).epochs.get(epoch); if (e) e.wrap = null; },
+        async loadVerdicts(id) { return [...g(id).verdicts]; },
+        async addVerdict(id, key) { g(id).verdicts.add(key); },
+        async loadSigners(id) { return [...g(id).signers.entries()]; },
+        async putSigner(id, messageId, signer) { const s = g(id).signers; if (!s.has(messageId)) s.set(messageId, signer); },
+    };
+}
+
+/** What GET /api/groups/:id/keys answers (engine/group-keys.ts getGroupKeys). */
+interface KeysAnswer {
+    current: number | null;
+    stale: boolean;
+    fromEpoch: number | null;
+    roster: string[];
+    epochs: (Omit<GroupEpochRecord, 'groupId' | 'wraps'> & { stale?: boolean })[];
+    myWraps: GroupServedWrap[];
+    more: boolean;
+}
+
+/** The chat's lock as the last sync left it. */
+export interface GroupKeysState {
+    current: number | null;
+    stale: boolean;
+    fromEpoch: number | null;
+    /** The node's roster for this group's keys (active rows that are members of this node), sorted. For sealing only. */
+    roster: string[];
+}
+
+/** A node's refusal, with its status, code and the extra fields a 409 carries (current, roster). */
+export class GroupKeysRequestError extends Error {
+    constructor(message: string, public status: number, public body: any) {
+        super(message);
+        this.name = 'GroupKeysRequestError';
+    }
+}
+
+async function answerOf(res: Response): Promise<any> {
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new GroupKeysRequestError(body?.error || `The node answered ${res.status}.`, res.status, body);
+    return body;
+}
+
+// Per app session, across every group: whether any wrap has opened under this identity (an AEAD failure is then the
+// wrap's fault, not the identity's), and how many failed before one did (epochs-over-time §1, phone rule).
+let wrapOpenedThisSession = false;
+let wrapFailuresBeforeAnyOpened = 0;
+
+/** True when every wrap this phone tried failed to open and none ever opened: suspect the identity, refuse nothing. */
+export function groupKeysLookUnopenable(): boolean {
+    return !wrapOpenedThisSession && wrapFailuresBeforeAnyOpened > 0;
+}
+
+/** For tests: a fresh app session. */
+export function _resetGroupKeySessionForTests(): void {
+    wrapOpenedThisSession = false;
+    wrapFailuresBeforeAnyOpened = 0;
+    keyrings.clear();
+}
+
+const HOLE_REFETCH_MS = 60_000;
+
+/** One group's keys on this phone. Get it with groupKeyring() so the opened keys are shared for the session. */
+export class GroupKeyring {
+    private keys = new Map<number, Uint8Array>();
+    private epochs = new Map<number, StoredGroupEpoch>();
+    private highest = 0;
+    private after = 0;
+    private loading: Promise<void> | null = null;
+    private verdicts = new Set<string>();
+    private signers = new Map<string, string>();
+    private lastHoleFetch = 0;
+    /** Epochs whose record didn't verify: nothing under them opens, and no wrap of theirs is refused for it. */
+    private badRecords = new Set<number>();
+    state: GroupKeysState | null = null;
+
+    constructor(public readonly groupId: string, private readonly nodeUrl: string, private readonly identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, private readonly store: GroupKeyStore) {}
+
+    private ensureLoaded(): Promise<void> {
+        if (!this.loading) {
+            this.loading = (async () => {
+                const saved = await this.store.load(this.groupId).catch(() => ({ epochs: [] as StoredGroupEpoch[], highest: 0, after: 0 }));
+                for (const e of saved.epochs) this.epochs.set(e.epoch, e);
+                this.highest = Math.max(this.highest, saved.highest);
+                this.after = Math.max(this.after, saved.after);
+                for (const k of await this.store.loadVerdicts(this.groupId).catch(() => [] as string[])) this.verdicts.add(k);
+                for (const [id, s] of await this.store.loadSigners(this.groupId).catch(() => [] as [string, string][])) this.signers.set(id, s);
+            })();
+        }
+        return this.loading;
+    }
+
+    /** The highest epoch this phone has verified or made (provenance §7 rule 1). */
+    async highestEpoch(): Promise<number> {
+        await this.ensureLoaded();
+        return this.highest;
+    }
+
+    private async raise(epoch: number): Promise<void> {
+        if (epoch > this.highest) this.highest = epoch;
+        await this.store.raiseHighest(this.groupId, epoch).catch(() => { });
+    }
+
+    /** The verify memo for this group's lines (core GroupLineVerifyMemo): in memory, each new verdict written behind. */
+    get memo(): GroupLineVerifyMemo {
+        return {
+            has: (k) => this.verdicts.has(k),
+            add: (k) => { this.verdicts.add(k); this.store.addVerdict(this.groupId, k).catch(() => { }); },
+        };
+    }
+
+    /** The first signer this phone saw for a message id (line-display design §4 rule 3), and remember one. */
+    signerSeen(messageId: string): string | undefined { return this.signers.get(messageId); }
+    rememberSigner(messageId: string, signer: string): void {
+        if (this.signers.has(messageId)) return;
+        this.signers.set(messageId, signer);
+        this.store.putSigner(this.groupId, messageId, signer).catch(() => { });
+    }
+
+    private servedRecord(e: KeysAnswer['epochs'][number]): GroupEpochRecord {
+        return {
+            groupId: this.groupId, epoch: e.epoch, reason: e.reason, subject: e.subject ?? null, createdBy: e.createdBy, createdAt: e.createdAt,
+            keyCommit: e.keyCommit, membersDigest: e.membersDigest, wrapsDigest: e.wrapsDigest, sig: e.sig,
+        };
+    }
+
+    private async fetchKeys(query: string): Promise<KeysAnswer> {
+        return answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys${query}`, this.identity as BeanPoolIdentity));
+    }
+
+    private async absorb(a: KeysAnswer): Promise<number[]> {
+        const wraps = new Map<number, GroupServedWrap>();
+        for (const w of Array.isArray(a.myWraps) ? a.myWraps : []) wraps.set(w.epoch, w);
+        const put: StoredGroupEpoch[] = [];
+        for (const e of Array.isArray(a.epochs) ? a.epochs : []) {
+            const prev = this.epochs.get(e.epoch);
+            const wrap = wraps.get(e.epoch) ?? null;
+            const record = this.servedRecord(e);
+            // A record is the maker's signed header and never changes. One that differs from the copy this phone holds
+            // is the node's doing: the held copy stays.
+            if (prev && JSON.stringify(prev.record) !== JSON.stringify(record)) continue;
+            const wrapChanged = JSON.stringify(prev?.wrap ?? null) !== JSON.stringify(wrap);
+            if (prev && !wrapChanged) continue;
+            if (wrapChanged && prev?.wrap && this.keys.has(e.epoch)) continue; // the key is already open from the old wrap
+            const next: StoredGroupEpoch = { epoch: e.epoch, record, wrap: wrap ?? prev?.wrap ?? null };
+            this.epochs.set(e.epoch, next);
+            put.push(next);
+        }
+        if (put.length) await this.store.putEpochs(this.groupId, put).catch(() => { });
+        return put.map((e) => e.epoch);
+    }
+
+    /**
+     * Bring this phone's copy up to the node: new epochs since the last sync (`?after`), and, at most once a minute, the
+     * epochs this phone holds no wrap for (a top-up may have landed). Raises the highest epoch to the newest record that
+     * verifies. Throws the node's refusal (GroupKeysRequestError).
+     */
+    async sync(): Promise<GroupKeysState> {
+        await this.ensureLoaded();
+        let a: KeysAnswer;
+        let newest = 0;
+        let guard = 0;
+        do {
+            a = await this.fetchKeys(`?after=${this.after}`);
+            await this.absorb(a);
+            const top = (a.epochs || []).reduce((m, e) => Math.max(m, e.epoch), 0);
+            if (top > this.after) { this.after = top; await this.store.setCursor(this.groupId, top).catch(() => { }); }
+            newest = Math.max(newest, top);
+        } while (a.more && ++guard < 50);
+        const from = a.fromEpoch;
+        const holes = [...this.epochs.values()].filter((e) => !e.wrap && (from === null || e.epoch >= from) && !this.keys.has(e.epoch)).map((e) => e.epoch);
+        if (holes.length && Date.now() - this.lastHoleFetch > HOLE_REFETCH_MS) {
+            this.lastHoleFetch = Date.now();
+            await this.absorb(await this.fetchKeys(`?epochs=${holes.slice(-100).join(',')}`)).catch(() => { });
+        }
+        // The highest rises when a record verifies (rule 1): the newest one this phone has, header only, no roster.
+        const top = Math.max(newest, a.current ?? 0);
+        if (top > this.highest) {
+            const rec = this.epochs.get(top)?.record;
+            try {
+                if (rec) { verifyGroupEpochRecord(rec, { groupId: this.groupId, epoch: top }); await this.raise(top); }
+            } catch { this.badRecords.add(top); }
+        }
+        this.state = { current: a.current ?? null, stale: !!a.stale, fromEpoch: a.fromEpoch ?? null, roster: Array.isArray(a.roster) ? a.roster : [] };
+        return this.state;
+    }
+
+    /** The key for an epoch if it is already open (no work): what the line display reads synchronously. */
+    openedKey(epoch: number): Uint8Array | undefined {
+        return this.keys.get(epoch);
+    }
+
+    /** True if this phone holds a wrap for `epoch` it has not yet refused (it may not have opened it yet). */
+    holdsWrap(epoch: number): boolean {
+        return this.keys.has(epoch) || !!this.epochs.get(epoch)?.wrap;
+    }
+
+    /**
+     * The key for `epoch`, opened now if need be (verify the record's signature, open my wrap, check the commitment):
+     * null when this phone holds no wrap for it, or the wrap or record doesn't verify. A wrap that holds another key than
+     * its record commits to is refused on the node at once; one that fails its AEAD is refused only once another wrap
+     * has opened under this identity in this session; when every wrap fails, nothing is refused (epochs-over-time §1).
+     */
+    async keyFor(epoch: number): Promise<Uint8Array | null> {
+        await this.ensureLoaded();
+        const held = this.keys.get(epoch);
+        if (held) return held;
+        const stored = this.epochs.get(epoch);
+        if (!stored?.wrap || this.badRecords.has(epoch)) return null;
+        try {
+            const key = openMyKey(stored.record, stored.wrap, this.identity.privateKey, this.groupId);
+            this.keys.set(epoch, key);
+            wrapOpenedThisSession = true;
+            await this.raise(epoch);
+            return key;
+        } catch (e) {
+            if (!(e instanceof GroupKeyNotVerifiedError)) throw e;
+            const why = e.message;
+            if (why.startsWith('Epoch record refused')) {
+                // The record itself is bad: the node served a header its maker didn't sign. Not the wrap's fault.
+                this.badRecords.add(epoch);
+                return null;
+            }
+            const unambiguous = why.includes('commits to') || why.startsWith('Top-up refused') || why.startsWith('An unsigned wrap');
+            if (unambiguous || wrapOpenedThisSession) await this.refuse(stored);
+            else wrapFailuresBeforeAnyOpened++;
+            return null;
+        }
+    }
+
+    /** Refuse my wrap for one epoch on the node (POST …/keys/:epoch/reject): the slot shows in `missing` again. */
+    private async refuse(stored: StoredGroupEpoch): Promise<void> {
+        const wrap = stored.wrap;
+        if (!wrap) return;
+        stored.wrap = null;
+        await this.store.dropWrap(this.groupId, stored.epoch).catch(() => { });
+        await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/${stored.epoch}/reject`,
+            { wrapper: wrap.wrapper, ephPub: wrap.ephPub }, this.identity as BeanPoolIdentity).catch(() => null);
+    }
+
+    private storeMade(record: GroupEpochRecord, key: Uint8Array): StoredGroupEpoch {
+        const mine = record.wraps!.find((w) => w.recipient === this.identity.publicKey)!;
+        const { wraps: _wraps, ...served } = record;
+        const stored: StoredGroupEpoch = {
+            epoch: record.epoch, record: served,
+            wrap: { epoch: record.epoch, wrapper: this.identity.publicKey, ephPub: mine.ephPub, nonce: mine.nonce, wrapped: mine.wrapped, sig: null },
+        };
+        this.epochs.set(record.epoch, stored);
+        this.keys.set(record.epoch, key);
+        return stored;
+    }
+
+    /** After the node stored an epoch this phone made: keep it, raise the highest, and seal under it at once (rule 6). */
+    async adopt(record: GroupEpochRecord, key: Uint8Array): Promise<void> {
+        await this.ensureLoaded();
+        const stored = this.storeMade(record, key);
+        await this.store.putEpochs(this.groupId, [stored]).catch(() => { });
+        await this.raise(record.epoch);
+        if (record.epoch > this.after) { this.after = record.epoch; await this.store.setCursor(this.groupId, record.epoch).catch(() => { }); }
+        this.state = { current: record.epoch, stale: false, fromEpoch: this.state?.fromEpoch ?? null, roster: this.state?.roster ?? [] };
+    }
+
+    /** Make the next epoch for a membership change or a rotation, wrapped to `recipients` (the maker among them). */
+    async makeRecord(input: { epoch: number; reason: GroupEpochReason; subject?: string | null; recipients: string[] }, progress?: GroupEpochProgress) {
+        return makeEpochRecord({
+            myEdPrivHex: this.identity.privateKey, groupId: this.groupId, epoch: input.epoch, reason: input.reason,
+            subject: input.subject ?? null, createdAt: new Date().toISOString(), recipients: [...new Set(input.recipients)],
+        }, progress);
+    }
+
+    /**
+     * Rotate (§2.3, reason 'rotate', or 'start' for a chat with no epoch yet): a fresh key to exactly today's roster.
+     * A 409 means this phone's roster or epoch was old: once more with the node's. Returns the new epoch and its key.
+     */
+    async rotate(progress?: GroupEpochProgress): Promise<{ epoch: number; key: Uint8Array }> {
+        let state = this.state ?? await this.sync();
+        for (let attempt = 0; ; attempt++) {
+            if (!state.roster.includes(this.identity.publicKey)) throw new GroupChatKeyError('Only members of this group can open its chat', 'not_member');
+            const epoch = (state.current ?? 0) + 1;
+            const { record, groupKey } = await this.makeRecord({ epoch, reason: epoch === 1 ? 'start' : 'rotate', recipients: state.roster }, progress);
+            try {
+                await answerOf(await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/epoch`, { epoch: record }, this.identity as BeanPoolIdentity));
+                await this.adopt(record, groupKey);
+                return { epoch, key: groupKey };
+            } catch (e) {
+                if (attempt === 0 && e instanceof GroupKeysRequestError && e.status === 409 && e.body?.code === 'epoch_conflict') {
+                    state = { ...state, current: e.body.current ?? null, roster: Array.isArray(e.body.roster) ? e.body.roster : state.roster };
+                    continue;
+                }
+                throw e;
+            }
+        }
+    }
+
+    /**
+     * Which epoch to seal under, and its key (provenance §7 rules 1–3, 6). Syncs first. Throws GroupChatKeyError with the
+     * sentence the chat shows when nothing may be sent.
+     */
+    async prepareToSeal(progress?: GroupEpochProgress): Promise<{ epoch: number; key: Uint8Array }> {
+        const state = await this.sync();
+        if (state.current !== null && state.current < this.highest) throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
+        if (state.current === null) return this.rotate(progress);
+        const stored = this.epochs.get(state.current);
+        let fits = !state.stale && !!stored && !this.badRecords.has(state.current);
+        if (fits && stored) {
+            try {
+                // Today's roster, for the epoch about to be sealed under only: its maker must be in it, and it must
+                // cover exactly it (a member added, removed or gone without a rotation means a new key first).
+                verifyGroupEpochRecord(stored.record, { groupId: this.groupId, epoch: state.current, activeMembers: state.roster });
+                fits = groupEpochCoversExactly(stored.record, state.roster);
+            } catch {
+                fits = false;
+            }
+        }
+        if (!fits) return this.rotate(progress);
+        const key = await this.keyFor(state.current);
+        if (!key) {
+            if (groupKeysLookUnopenable()) throw new GroupChatKeyError(GROUP_KEYS_UNOPENABLE_TEXT, 'unopenable');
+            throw new GroupChatKeyError(GROUP_KEY_MISSING_TEXT, 'no_key');
+        }
+        return { epoch: state.current, key };
+    }
+
+    /**
+     * Hand keys I hold to members who lack them (GET …/keys/missing, POST …/keys/wrap; §2.5): newest epochs first, at
+     * most `max` per call (they share the chat's rate limit with sends). A slot already filled, or one my wrap was once
+     * refused on, is left. Returns how many went.
+     */
+    async serveMissing(max = 10): Promise<number> {
+        await this.ensureLoaded();
+        let answer: { missing?: { pubkey: string; epochs: number[] }[] };
+        try {
+            answer = await answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/missing`, this.identity as BeanPoolIdentity));
+        } catch {
+            return 0;
+        }
+        let sent = 0;
+        for (const m of answer.missing ?? []) {
+            if (m.pubkey === this.identity.publicKey) continue;
+            for (const epoch of [...(m.epochs ?? [])].sort((x, y) => y - x)) {
+                if (sent >= max) return sent;
+                const key = await this.keyFor(epoch);
+                if (!key) continue;
+                const t = makeTopUp(key, { myEdPrivHex: this.identity.privateKey, groupId: this.groupId, epoch, recipientPubHex: m.pubkey });
+                const res = await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/wrap`,
+                    { epoch, recipient: t.recipient, ephPub: t.ephPub, nonce: t.nonce, wrapped: t.wrapped, sig: t.sig }, this.identity as BeanPoolIdentity).catch(() => null);
+                if (res?.status === 201) sent++;
+                else if (res?.status === 429) return sent;
+                // 409 wrap_exists / wrap_rejected, 403, 404: this slot is not mine to fill; the loop moves on.
+            }
+        }
+        return sent;
+    }
+}
+
+const keyrings = new Map<string, GroupKeyring>();
+
+/** The keyring for one group on one node for this identity, shared for the app's session (the opened keys with it). */
+export function groupKeyring(nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, groupId: string, store: GroupKeyStore): GroupKeyring {
+    const id = `${nodeUrl.replace(/\/+$/, '')}|${identity.publicKey}|${groupId}`;
+    let k = keyrings.get(id);
+    if (!k) { k = new GroupKeyring(groupId, nodeUrl.replace(/\/+$/, ''), identity, store); keyrings.set(id, k); }
+    return k;
+}
+
+/** Sign-out, a new identity, Delete here: every opened key leaves memory. */
+export function forgetGroupKeys(): void {
+    keyrings.clear();
+}
+
+// ─── Membership changes that carry an epoch (§2.3) ─────────────────────────────────────────────────────────────────
+
+/** What a membership request sends; `epoch` absent sends none (the node then marks the current epoch stale). */
+type MembershipSend = (epoch?: GroupEpochRecord) => Promise<Response>;
+
+/**
+ * A membership change with its epoch, in one request: built from what this phone knows, once more from a 409's
+ * {current, roster}, and, if the node still refuses the epoch, the change alone (nobody is kept out of a group by
+ * crypto: the node marks the epoch stale and the next member to write rotates). Returns the node's answer.
+ */
+async function withEpoch(
+    ring: GroupKeyring, send: MembershipSend, build: (current: number | null, roster: string[]) => { reason: GroupEpochReason; subject: string; recipients: string[] } | null,
+    known: { current: number | null; roster: string[] }, progress?: GroupEpochProgress,
+): Promise<any> {
+    let current = known.current;
+    let roster = known.roster;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const plan = build(current, roster);
+        if (!plan) break;
+        const epoch = (current ?? 0) + 1;
+        const { record, groupKey } = await ring.makeRecord({ epoch, ...plan }, progress);
+        const res = await send(record);
+        const body = await res.clone().json().catch(() => ({}));
+        if (res.ok) {
+            await ring.adopt(record, groupKey).catch(() => { });
+            return body;
+        }
+        if (res.status === 409 && body?.code === 'epoch_conflict') {
+            current = body.current ?? null;
+            roster = Array.isArray(body.roster) ? body.roster : roster;
+            continue;
+        }
+        if (typeof body?.code === 'string' && /^epoch_/.test(body.code)) break;
+        throw new Error(body?.error || `The node answered ${res.status}.`);
+    }
+    return answerOf(await send(undefined));
+}
+
+/**
+ * Join an open group, or accept an invitation (§2.3, §3): the joiner makes the next epoch, wrapped to every active member
+ * and themselves. The joiner can't read the keys before joining, so the first try guesses from the roster it can see
+ * and the node's 409 says the rest. A request to join an approval group lets nobody in yet, so it carries no epoch.
+ */
+export async function joinGroupWithEpoch(
+    nodeUrl: string, identity: BeanPoolIdentity, store: GroupKeyStore,
+    group: { id: string; joinPolicy?: string | null; viewerStatus?: string | null; activeMembers?: string[] }, progress?: GroupEpochProgress,
+): Promise<any> {
+    const path = `/api/groups/${encodeURIComponent(group.id)}/join`;
+    const send: MembershipSend = (epoch) => signedPost(nodeUrl, path, epoch ? { epoch } : {}, identity);
+    const invited = group.viewerStatus === 'invited';
+    if (!invited && group.joinPolicy && group.joinPolicy !== 'open') return answerOf(await send(undefined));
+    const ring = groupKeyring(nodeUrl, identity, group.id, store);
+    const me = identity.publicKey;
+    return withEpoch(ring, send, (_c, roster) => ({ reason: invited ? 'invite' : 'join', subject: me, recipients: [...roster, me] }),
+        { current: null, roster: group.activeMembers ?? [] }, progress);
+}
+
+/** A convenor approves a request (or invites someone who had asked): the approved member's first epoch (§2.3). */
+export async function approveWithEpoch(
+    nodeUrl: string, identity: BeanPoolIdentity, store: GroupKeyStore, groupId: string, subject: string,
+    body: Record<string, unknown>, progress?: GroupEpochProgress,
+): Promise<any> {
+    const ring = groupKeyring(nodeUrl, identity, groupId, store);
+    const state = await ring.sync().catch(() => null);
+    const send: MembershipSend = (epoch) => signedPost(nodeUrl, `/api/groups/${encodeURIComponent(groupId)}/members`, epoch ? { ...body, epoch } : body, identity);
+    if (!state) return answerOf(await send(undefined));
+    return withEpoch(ring, send, (_c, roster) => ({ reason: 'approve', subject, recipients: [...roster.filter((k) => k !== subject), subject] }),
+        { current: state.current, roster: state.roster }, progress);
+}
+
+/** A convenor removes a member: the removal IS the rotation, wrapped to everyone but them (§2.4). */
+export async function removeWithEpoch(
+    nodeUrl: string, identity: BeanPoolIdentity, store: GroupKeyStore, groupId: string, subject: string,
+    sendDelete: (body: Record<string, unknown>) => Promise<Response>, progress?: GroupEpochProgress,
+): Promise<any> {
+    const ring = groupKeyring(nodeUrl, identity, groupId, store);
+    const state = await ring.sync().catch(() => null);
+    const send: MembershipSend = (epoch) => sendDelete(epoch ? { epoch } : {});
+    if (!state) return answerOf(await send(undefined));
+    return withEpoch(ring, send, (_c, roster) => ({ reason: 'remove', subject, recipients: roster.filter((k) => k !== subject) }),
+        { current: state.current, roster: state.roster }, progress);
+}

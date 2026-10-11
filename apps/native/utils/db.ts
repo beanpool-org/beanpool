@@ -413,6 +413,33 @@ async function _doInitDB() {
         );
         CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
 
+        -- Group chat keys (slice 3, utils/group-chat-store.ts): each epoch's record as the node served it and MY wrap,
+        -- exactly as sent (ciphertext, nothing secret); the highest epoch verified or made (never falls); verified line
+        -- signatures (hashes) and the first signer seen per line. Opened keys are never written anywhere.
+        CREATE TABLE IF NOT EXISTS group_chat_epochs (
+            group_id TEXT NOT NULL,
+            epoch INTEGER NOT NULL,
+            record TEXT NOT NULL,
+            wrap TEXT,
+            PRIMARY KEY (group_id, epoch)
+        );
+        CREATE TABLE IF NOT EXISTS group_chat_key_state (
+            group_id TEXT PRIMARY KEY,
+            highest INTEGER NOT NULL DEFAULT 0,
+            after INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS group_line_verdicts (
+            group_id TEXT NOT NULL,
+            k TEXT NOT NULL,
+            PRIMARY KEY (group_id, k)
+        );
+        CREATE TABLE IF NOT EXISTS group_line_signers (
+            group_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            signer TEXT NOT NULL,
+            PRIMARY KEY (group_id, message_id)
+        );
+
         -- 6. Relations (Friends, Ratings, Abuse)
         CREATE TABLE IF NOT EXISTS ratings (
             id TEXT PRIMARY KEY,

@@ -8,7 +8,7 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { getMemberTrustProfile } from './trust.js';
+import { getMemberTrustProfile, washTradingAnalysisSteps, drainSteps } from './trust.js';
 
 type Db = Database.Database;
 
@@ -179,12 +179,55 @@ export function runConservationCheck(db: Db): { sumBalances: number; baseline: n
     return { sumBalances, baseline, drift, strandedEscrows, badBalances, ok };
 }
 
+export interface WashSybilMetrics { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number }
+
 /**
  * Computes metrics for wash trading, Sybil rings, and delinquency.
  * This is a pure computation function that returns the metrics dictionary
  * without persisting it to the DB (persistence is handled by the server runtime).
+ *
+ * In one go: the event loop waits for all of it. The node's timers use computeWashSybilMetricsInSlices, which gives the
+ * same numbers from the same steps.
  */
-export function computeWashSybilMetrics(db: Db): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } {
+export function computeWashSybilMetrics(db: Db): WashSybilMetrics {
+    return drainSteps(washSybilMetricsSteps(db));
+}
+
+/**
+ * computeWashSybilMetrics, giving the event loop a turn (setImmediate) whenever a slice of steps has held it for
+ * `sliceMs` (default 20): one step is one member's floor, one cohort member, or one cluster of the wash-trading analysis,
+ * each well under a millisecond, so no slice holds the loop much past `sliceMs`. In one go it held a node for 20 s at
+ * 20,000 members and 226 s at 100,000 (the global load test, 2026-10-11), answering nothing meanwhile.
+ * `onYield` is called at each turn given (a test counts them). Rows written between slices are read as they stand
+ * when their step comes; the numbers are the one-go numbers on a database nothing writes to meanwhile.
+ */
+export async function computeWashSybilMetricsInSlices(
+    db: Db, opts: { sliceMs?: number; onYield?: () => void } = {},
+): Promise<WashSybilMetrics> {
+    const sliceMs = opts.sliceMs ?? 20;
+    const steps = washSybilMetricsSteps(db);
+    let sliceStart = performance.now();
+    for (;;) {
+        const r = steps.next();
+        if (r.done) return r.value;
+        if (performance.now() - sliceStart >= sliceMs) {
+            opts.onYield?.();
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            sliceStart = performance.now();
+        }
+    }
+}
+
+/**
+ * The metrics, one step at a time (a yield after each step; computeWashSybilMetrics says what a step is).
+ *
+ * The wash-trading analysis every floor reads is taken ONCE, at the start, and every member's floor read with it. Each
+ * floor used to read the one kept for 10 s (trust.ts getWashTradingEnforcement), so a walk over every member made a new
+ * analysis, itself a pass over every member's trades, every 10 s of the walk: the walk's time grows with the members, and
+ * so does each analysis, which made the whole walk grow with their square (10x the time for 5x the members). And each
+ * active member's floor is worked out once, not again for the cohort count.
+ */
+function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
     // 1. Total negative balance
     const totalNegativeRow = db.prepare(`SELECT ABS(SUM(balance)) as s FROM accounts WHERE balance < 0`).get() as any;
     const totalNegative = totalNegativeRow ? (totalNegativeRow.s || 0) : 0;
@@ -193,10 +236,22 @@ export function computeWashSybilMetrics(db: Db): { totalNegative: number; accoun
     let accountsNearFloor = 0;
     let delinquentCount = 0;
 
+    const wash = yield* washTradingAnalysisSteps(db);
+    const floors = new Map<string, number>();
+    const floorOf = (key: string): number => {
+        let floor = floors.get(key);
+        if (floor === undefined) {
+            floor = getMemberTrustProfile(db, key, 0, wash).floor;
+            floors.set(key, floor);
+        }
+        return floor;
+    };
+
     try {
         const activeMembers = db.prepare("SELECT public_key FROM members WHERE status = 'active'").all() as { public_key: string }[];
         for (const member of activeMembers) {
-            const { floor } = getMemberTrustProfile(db, member.public_key);
+            yield;
+            const floor = floorOf(member.public_key);
             if (floor < 0) {
                 const balRow = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(member.public_key) as any;
                 const bal = balRow ? balRow.balance : 0;
@@ -240,7 +295,8 @@ export function computeWashSybilMetrics(db: Db): { totalNegative: number; accoun
 
             let fastGrowingCount = 0;
             for (const key of keys) {
-                const { floor } = getMemberTrustProfile(db, key);
+                yield;
+                const floor = floorOf(key);
                 if (floor <= -600) {
                     const memberRow = db.prepare("SELECT joined_at FROM members WHERE public_key = ?").get(key) as any;
                     if (memberRow?.joined_at) {

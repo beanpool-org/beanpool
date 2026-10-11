@@ -183,6 +183,7 @@ import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     CommonsPotUnknownError,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
+    runWashSybilMetricsAuditInSlices,
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
     exportLedgerFor as exportLedgerForEngine,
@@ -834,13 +835,14 @@ export function initStateEngine(): void {
     }, 24 * 60 * 60 * 1000);
 
     // Daily Wash & Sybil metrics audit (once shortly after boot, then daily). Where Beans are off it returns at once, read
-    // at each run (engine/audit.ts): its numbers are about Beans, and its member walk freezes a large node.
-    setTimeout(() => {
-        try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
-    }, 2.5 * 60 * 1000);
-    setInterval(() => {
-        try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
-    }, 24 * 60 * 60 * 1000);
+    // at each run (engine/audit.ts): its numbers are about Beans. It walks every member a slice at a time, so the node
+    // keeps answering meanwhile.
+    const metricsAudit = () => {
+        try { runWashSybilMetricsAuditInSlices().catch((e) => console.warn('[MetricsAudit] failed:', e)); }
+        catch (e) { console.warn('[MetricsAudit] failed:', e); }
+    };
+    setTimeout(metricsAudit, 2.5 * 60 * 1000);
+    setInterval(metricsAudit, 24 * 60 * 60 * 1000);
 
     if (getNodeRole() === 'primary') runMainServerMigrations();
 

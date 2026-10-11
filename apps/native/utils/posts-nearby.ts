@@ -14,7 +14,8 @@
  *
  * Never dropped by either rule: the member's own listings and the ones tied to them on this phone (one they took, a
  * deal on it, a conversation about it, their answer to an event), whatever the node's set says, so a deal or a chat
- * never loses its listing.
+ * never loses its listing; and the ones the node's answer names `tied` (its own and tied ids of the set), which covers
+ * a tie this phone holds no row for: a deal made on another device, or older than the newest deals it reads.
  *
  * Pure, with no imports (as posts-replace.ts), so a server suite may run the same rule on a node's real answer.
  */
@@ -34,13 +35,19 @@ export interface NearbyHeld {
 export const NEARBY_IDS_PER_READ = 100;
 export const NEARBY_ID_READS_PER_CYCLE = 3;
 
-/** The listings a node's answer says are the member's set, or null when the answer carries none (a node without it). */
-export function nearbySetOf(body: unknown): { posts: any[]; set: string[] } | null {
+const isIds = (v: unknown[]): v is string[] => v.every(id => typeof id === 'string' && id !== '');
+
+/**
+ * The listings a node's answer says are the member's set, or null when the answer carries none (a node without it).
+ * `tied`: the ids of the set the node says are the member's own or tied to them, or null from a node that doesn't say.
+ */
+export function nearbySetOf(body: unknown): { posts: any[]; set: string[]; tied: string[] | null } | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-    const b = body as { posts?: unknown; set?: unknown };
+    const b = body as { posts?: unknown; set?: unknown; tied?: unknown };
     if (!Array.isArray(b.posts) || !Array.isArray(b.set)) return null;
-    if (!b.set.every(id => typeof id === 'string' && id !== '')) return null;
-    return { posts: b.posts, set: b.set as string[] };
+    if (!isIds(b.set)) return null;
+    if (b.tied !== undefined && !(Array.isArray(b.tied) && isIds(b.tied))) return null;
+    return { posts: b.posts, set: b.set, tied: Array.isArray(b.tied) ? b.tied : null };
 }
 
 /**

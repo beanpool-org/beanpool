@@ -363,6 +363,10 @@ async function _doInitDB() {
             PRIMARY KEY (post_id, member_pubkey)
         );
 
+        -- On a community that syncs by area (utils/posts-nearby.ts): the ids its last set read named "tied", the member's
+        -- own and tied listings as the node knows them, which the phone keeps past its cap (keepPostsNearby).
+        CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);
+
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
         CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
 
@@ -536,6 +540,8 @@ async function _doInitDB() {
         // The author's name as the node carried it on the listing, for a listing whose author this phone's directory copy
         // lacks (a community that syncs by area: utils/posts-nearby.ts). The directory's name wins where it has one.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_callsign TEXT;`); } catch (e) {}
+        // The ids a by-area community's last set read named `tied` (keepPostsNearby), for a phone whose schema ran before it.
+        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);`); } catch (e) {}
         // Profile sync: track when a profile was last updated for cache-busting
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0;`); } catch (e) {}
@@ -688,7 +694,7 @@ export async function clearDB() {
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps;');
+        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied;');
     } finally {
         releaseSyncLock();
     }
@@ -3007,11 +3013,13 @@ async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: an
  * without one), each with its poll votes and RSVPs. Never the member's own or one tied to them on this phone: one they
  * took, any deal on it, a conversation about it, their own vote or answer to it. Without the phone's own key it can't
  * tell which are theirs: nothing goes. `fresh`: listings written after the set was worked out (pushes replayed over this
- * cycle), which the set can't speak for.
+ * cycle), which the set can't speak for. `tied`, when this write carries the set's: the ids the node names as the
+ * member's own or tied, kept from now on (nearby_tied) until the next set read says otherwise, so a tie this phone holds
+ * no row for (a deal made elsewhere, or older than the deals it reads) keeps its listing too.
  */
 async function keepPostsNearby(
     txn: SQLite.SQLiteDatabase,
-    nearby: { set?: unknown; area?: { lat: number; lng: number } | null; max?: unknown },
+    nearby: { set?: unknown; tied?: unknown; area?: { lat: number; lng: number } | null; max?: unknown },
     selfPubkey: string | null,
     fresh: ReadonlySet<string>,
 ): Promise<void> {
@@ -3019,13 +3027,23 @@ async function keepPostsNearby(
     const max = typeof nearby.max === 'number' && Number.isFinite(nearby.max) && nearby.max >= 0 ? nearby.max : null;
     const set = Array.isArray(nearby.set) ? nearby.set.filter((id): id is string => typeof id === 'string') : null;
     if (max === null && set === null) return;
+    if (set !== null && Array.isArray(nearby.tied)) {
+        const inSet = new Set(set);
+        const tied = [...new Set(nearby.tied.filter((id): id is string => typeof id === 'string' && inSet.has(id)))];
+        await txn.runAsync('DELETE FROM nearby_tied');
+        for (let i = 0; i < tied.length; i += 500) {
+            const batch = tied.slice(i, i + 500);
+            await txn.runAsync(`INSERT OR IGNORE INTO nearby_tied (id) VALUES ${batch.map(() => '(?)').join(',')}`, batch);
+        }
+    }
     const rows = await txn.getAllAsync<{ id: string; lat: number | null; lng: number | null; at: string | null; kept: number }>(
         `SELECT p.id, p.lat, p.lng, COALESCE(p.updated_at, p.created_at) AS at,
                 (p.author_pubkey = ? OR p.accepted_by = ?
                  OR EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id)
                  OR EXISTS (SELECT 1 FROM conversations c WHERE c.post_id = p.id)
                  OR EXISTS (SELECT 1 FROM event_rsvps r WHERE r.post_id = p.id AND r.member_pubkey = ?)
-                 OR EXISTS (SELECT 1 FROM poll_votes v WHERE v.post_id = p.id AND v.voter_pubkey = ?)) AS kept
+                 OR EXISTS (SELECT 1 FROM poll_votes v WHERE v.post_id = p.id AND v.voter_pubkey = ?)
+                 OR EXISTS (SELECT 1 FROM nearby_tied n WHERE n.id = p.id)) AS kept
          FROM posts p`,
         [selfPubkey, selfPubkey, selfPubkey, selfPubkey]);
     const held: NearbyHeld[] = rows.map(r => ({ id: r.id, lat: r.lat, lng: r.lng, at: r.at, kept: !!r.kept }));

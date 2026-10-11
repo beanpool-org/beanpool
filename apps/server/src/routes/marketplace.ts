@@ -459,8 +459,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
             types, excludeEvents, includeHidden, measureAtMost: ONE_PASS_MAX_MEASURED,
         });
         nearbyWhole = !!updatedAfter && photoUrlsChangedAfter(updatedAfter);
+        // `tied` too: a deal opened on a listing already near the member moves no row of S, but the phone must now keep it.
         const described = [ctx.querystring || '', viewerPubkey, area ? `${area.lat},${area.lng}` : '-', nearbySet.ids.join(','),
-            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : ''].join('\n');
+            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(',')].join('\n');
         nearbyEtag = `W/"near-${crypto.createHash('sha256').update(described).digest('hex').slice(0, 24)}"`;
     }
 
@@ -505,7 +506,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // set is then empty, in its own shape.
         ctx.status = 200;
         ctx.type = 'application/json';
-        ctx.body = nearby ? JSON.stringify({ posts: [], set: [], setHash: nearbySetHash([]) }) : '[]';
+        ctx.body = nearby ? JSON.stringify({ posts: [], set: [], setHash: nearbySetHash([]), tied: [] }) : '[]';
         return;
     }
     // A visitor's posts each go through guestPost below, so the read leaves out what guestPost would replace (`guest`):
@@ -556,11 +557,14 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const shown = guestView ? posts.map(guestPost)
         : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p);
     // A member's set answers its rows and the set's ids, every time (DESIGN-global-sync-by-area §2.3): the phone drops
-    // what it holds outside them and fetches what it lacks by `ids=`. Every other read keeps the bare list.
+    // what it holds outside them and fetches what it lacks by `ids=`. `tied`, the ids of the set that are theirs or tied
+    // to them, which the phone keeps past its cap whatever it holds of the deal or the chat. Every other read keeps the
+    // bare list.
     const bodyStr = JSON.stringify(nearbySet ? {
         posts: shown,
         set: nearbySet.ids,
         setHash: nearbySetHash(nearbySet.ids),
+        tied: nearbySet.tied,
     } : shown);
 
     if (syncPage?.next) ctx.set(POSTS_NEXT_HEADER, syncPage.next);

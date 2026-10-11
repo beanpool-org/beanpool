@@ -381,6 +381,38 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(mem.async.get(epochKey), JSON.stringify(sent.map(r => `${r.status}${r.revalidated ? ' (304)' : ''} ${r.url.slice(0, 110)}`))).toBe(String(epoch));
     }, START_MS);
 
+    it('a deal the phone holds no row for (a restored phone; one older than the 50 it reads): kept past the cap, through pushes', async () => {
+        // The near part holds 500 others, so a far listing the phone can't tie itself is the farthest "other" and goes first.
+        expect([...heldIds()].filter(id => id.startsWith('near-')).length).toBe(500);
+        const now = new Date().toISOString();
+        const sixDaysAgo = new Date(Date.now() - 6 * 86_400_000).toISOString();
+        const MELBOURNE = { lat: -37.81, lng: 144.96 };
+        await control('listings', { rows: [{ id: 'deal-perth', author: authors[1], at: now, ...at(PERTH, 5, 90) }, { id: 'deal-old-melb', author: authors[2], at: sixDaysAgo, ...MELBOURNE }] });
+        await control('deal', { post: 'deal-perth', buyer: me.publicKey, seller: authors[1], status: 'requested' });
+        await control('deal', { post: 'deal-old-melb', buyer: me.publicKey, seller: authors[2], status: 'pending', at: sixDaysAgo });
+        // The phone holds neither deal: its deal rows are read after the listings in a cycle, and only its newest 50.
+        sql.exec('DELETE FROM marketplace_transactions');
+
+        await sync();
+        const held = heldIds();
+        expect(held.has('deal-perth') && held.has('deal-old-melb'), JSON.stringify(idReads().map(r => r.url.slice(0, 120)))).toBe(true);
+        expect([...held].filter(id => id.startsWith('near-')).length).toBe(500);
+
+        // Its deal rows gone again (the 51st newest, or a restored phone), a near push: the node's ties still hold.
+        sql.exec('DELETE FROM marketplace_transactions');
+        const nearPost = { id: 'push-near-2', type: 'offer', category: 'food', title: 'Near', description: '', credits: 0, authorPublicKey: authors[3],
+            lat: BYRON.lat + 0.01, lng: BYRON.lng, status: 'active', active: true, createdAt: now, updatedAt: now };
+        expect(await applyLivePostChange({ kind: 'upsert', post: nearPost as any, created: true }, { anchorUrl: URL_BASE, selfPubkey: me.publicKey })).toBe(true);
+        const afterPush = heldIds();
+        expect(afterPush.has('push-near-2') && afterPush.has('deal-perth') && afterPush.has('deal-old-melb') && afterPush.has('tied-perth')).toBe(true);
+
+        // And the next cycle asks for neither by id: nothing it holds is dropped and fetched again.
+        sql.exec('DELETE FROM marketplace_transactions');
+        await sync();
+        expect(idReads().filter(r => /deal-/.test(r.url))).toEqual([]);
+        expect(heldIds().has('deal-perth') && heldIds().has('deal-old-melb')).toBe(true);
+    }, START_MS);
+
     it('a node with the switch off: today\'s request, byte for byte, and no area read', async () => {
         await control('profileSwitch', { name: 'nearbyListings', value: 'false' });
         expect((await fetchNodeProfile(URL_BASE))?.features.nearbyListings).toBeUndefined();

@@ -774,7 +774,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             }
             // A by-area community's answer carries its member's set (utils/posts-nearby.ts), read below on its own. One that
             // doesn't (the node's switch went off since this phone heard its profile) is read as any other.
-            let nearbyFirst: { posts: any[]; set: string[] } | null = null;
+            let nearbyFirst: { posts: any[]; set: string[]; tied: string[] | null } | null = null;
             let nearbyPlain: any;
             if (nearbyLimits && postsRes.status !== 304) {
                 const body = JSON.parse(await postsRes.text());
@@ -806,6 +806,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     } catch (e) {}
                 };
                 let set = nearbyFirst.set;
+                let tied = nearbyFirst.tied;
                 let rows = nearbyFirst.posts.length;
                 let complete = await writeNear({ posts: nearbyFirst.posts });
                 if (complete) changed();
@@ -820,12 +821,13 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                         break;
                     }
                     set = page.set;
+                    tied = page.tied;
                     rows += page.posts.length;
                     pages++;
                     next = nextPageKeyOf(res);
                 }
                 let fetched = 0;
-                if (!postsUnwritten && await writeNear({ postsNearby: { set, ...keep } })) {
+                if (!postsUnwritten && await writeNear({ postsNearby: { set, ...(tied ? { tied } : {}), ...keep } })) {
                     // The set's listings this phone lacks: one that came into it without changing (a nearer one went), or one
                     // on a page this read didn't reach. NEARBY_IDS_PER_READ a read, NEARBY_ID_READS_PER_CYCLE reads a cycle;
                     // the rest come next cycle. One the node won't hand out is left out, and nothing else changes for it.

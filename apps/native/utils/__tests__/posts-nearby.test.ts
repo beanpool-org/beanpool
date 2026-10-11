@@ -180,7 +180,13 @@ describe('posts-nearby, the edges', () => {
     });
 
     it('an answer\'s set: only the by-area shape, with string ids', () => {
-        expect(nearbySetOf({ posts: [{ id: 'a' }], set: ['a'], setHash: 'x' })).toEqual({ posts: [{ id: 'a' }], set: ['a'] });
+        expect(nearbySetOf({ posts: [{ id: 'a' }], set: ['a'], setHash: 'x' })).toEqual({ posts: [{ id: 'a' }], set: ['a'], tied: null });
+        // `tied` (the review of #1778, finding 2): additive; a node before it says nothing, and a malformed one refuses the answer.
+        expect(nearbySetOf({ posts: [], set: ['a', 'b'], setHash: 'x', tied: ['b'] })).toEqual({ posts: [], set: ['a', 'b'], tied: ['b'] });
+        expect(nearbySetOf({ posts: [], set: ['a'], tied: [] })).toEqual({ posts: [], set: ['a'], tied: [] });
+        expect(nearbySetOf({ posts: [], set: ['a'], tied: 'a' })).toBeNull();
+        expect(nearbySetOf({ posts: [], set: ['a'], tied: [7] })).toBeNull();
+        expect(nearbySetOf({ posts: [], set: ['a'], tied: null })).toBeNull();
         expect(nearbySetOf([{ id: 'a' }])).toBeNull();
         expect(nearbySetOf({ posts: [] })).toBeNull();
         expect(nearbySetOf({ posts: [], set: [1] })).toBeNull();

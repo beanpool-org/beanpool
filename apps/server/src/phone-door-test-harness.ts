@@ -29,6 +29,7 @@
  *   area {key, area}            the member's area set ({lat, lng}) or cleared (null), as POST /api/community/me/area does
  *   listings {rows}             listings, each {id, author, lat, lng, type?, at?}: active, public, changed at `at` (else now)
  *   edit {post, lat?, lng?, status?}  a listing moved or taken off (`cancelled`), changed now
+ *   deal {post, buyer, seller, status, at?}  a deal on a listing (a fixture row: requested or pending is a tie of both)
  *   epoch                       a take-over: the node's identity epoch one higher, as the take-over's role step leaves it
  *   profileSwitch {name, value} a profile switch's override in node_config (`true`/`false`), as an operator sets one
  *   quit                        exit
@@ -173,6 +174,12 @@ async function main(): Promise<void> {
             const now = new Date().toISOString();
             if (lat !== undefined && lng !== undefined) db.prepare('UPDATE posts SET lat = ?, lng = ?, updated_at = ? WHERE id = ?').run(lat, lng, now, String(post));
             if (status === 'cancelled') db.prepare("UPDATE posts SET status = 'cancelled', active = 0, updated_at = ? WHERE id = ?").run(now, String(post));
+            bumpPostsVersion();
+            return true;
+        },
+        deal: ({ post, buyer, seller, status, at }: { post?: string; buyer?: string; seller?: string; status?: string; at?: string }) => {
+            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+                        VALUES (?, ?, ?, ?, 5, ?, ?)`).run(`deal-${String(post)}`, String(post), String(buyer), String(seller), String(status), at ?? new Date().toISOString());
             bumpPostsVersion();
             return true;
         },

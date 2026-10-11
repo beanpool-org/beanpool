@@ -1076,6 +1076,10 @@ export interface NearbySet {
     ids: string[];
     /** near(M): nearest first (NEAREST_ORDER), or the newest first for a member with no area. */
     near: string[];
+    /** The ids of S that are own(M) or ties(M), in the order of `ids`, each once: wherever they are, near or not. A phone
+     *  keeps these past its cap, though it may hold no deal row for one (a restored phone; a deal older than the newest it
+     *  reads), so it never drops a listing the member is tied to (the review of #1778, finding 2). */
+    tied: string[];
     /** Each row of S with its updated_at, each of its authors whose standing ever moved with their
      *  board_standing_changed_at (an author's holiday moves no listing row), and each of its authors as
      *  public_key@members.updated_at (a rename moves no listing row either), in one string: with `ids`, what a read of S
@@ -1186,6 +1190,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         getPostsRankedBy(db, { ...base, sync: true, ids: extra, near: { lat: 0, lng: 0 } }, keep);
     }
     const ids = [...near, ...kept.map(r => r.id)];
+    const ownOrTied = new Set([...own, ...tied]);
     let stamp = [...ranked, ...kept].map(r => `${r.id}@${r.updated_at ?? ''}`).join(',');
     if (ids.length > 0) {
         // The authors of S whose standing ever moved (idx_members_standing_by_key, schema.sql). One whose never has adds
@@ -1204,7 +1209,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
             WHERE public_key IN (SELECT value FROM json_each(?)) ORDER BY public_key`).all(JSON.stringify(authors)) as Array<{ public_key: string; at: string | null }>;
         stamp += `|${touched.map(r => `${r.public_key}@${r.at ?? ''}`).join(',')}`;
     }
-    return { ids, near, stamp };
+    return { ids, near, tied: ids.filter(id => ownOrTied.has(id)), stamp };
 }
 
 /**

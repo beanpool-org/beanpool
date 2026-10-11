@@ -522,6 +522,16 @@ describe('a join that went out is never dropped until the node says its key is n
         expect(atJoin).toMatchObject({ nonce: null, sentAt: expect.any(Number) });
     });
 
+    it('a key with no name yet (a re-key ask left by a closed tab) is checked without an empty name (review N8)', async () => {
+        const t0 = Date.now();
+        await seedPending({ identity: { ...identity, callsign: '' }, provider: null, nonce: null, startedAt: t0 - 4 * MIN, expiresAt: t0 + 6 * MIN, sentAt: t0 });
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 11 * MIN);
+        stubNode({ '/api/community/membership/': () => unreachable() });
+        renderJoin();
+        await waitFor(() => expect(screen.getByTestId('join-checking')).toHaveTextContent("We can't tell yet whether you joined. Your account is kept on this device."));
+        expect(screen.getByTestId('join-checking').textContent).not.toMatch(/joined as/);
+    });
+
     it('reopened after ten minutes with the node unreachable: kept, the page says it is checking, and Try again asks again', async () => {
         const t0 = Date.now();
         await seedPending({ nonce: null, startedAt: t0 - 4 * MIN, expiresAt: t0 + 6 * MIN, sentAt: t0 });

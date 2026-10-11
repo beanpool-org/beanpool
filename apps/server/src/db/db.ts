@@ -1450,6 +1450,53 @@ export function initSchema() {
     // No backfill: the reader takes joined_at for a row that has none.
     try { db.prepare(`ALTER TABLE group_members ADD COLUMN role_since DATETIME`).run(); } catch { }
 
+    // group_key_wraps: its key gains the wrapper and it gains rejected_at (group chats step 2b, DESIGN-group-chat-epochs-
+    // over-time-fable.md §1): a recipient refuses a wrap that does not open, the row stays flagged, and another member's
+    // wrap fills the slot. A key cannot be altered in place, so a table from step 2 is rebuilt, every row kept as it was,
+    // before the schema.sql exec, which makes its indexes again (stampPlainTables its triggers).
+    try {
+        const wrapsSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'group_key_wraps'").get() as { sql: string } | undefined)?.sql;
+        if (wrapsSql && !wrapsSql.includes('rejected_at')) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS group_key_wraps_migration;
+                    CREATE TABLE group_key_wraps_migration (
+                        group_id TEXT NOT NULL, epoch INTEGER NOT NULL, recipient_pubkey TEXT NOT NULL, wrapper_pubkey TEXT NOT NULL,
+                        eph_pub TEXT NOT NULL, nonce TEXT NOT NULL, wrapped TEXT NOT NULL, sig TEXT, created_at TEXT NOT NULL,
+                        updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), rejected_at TEXT,
+                        PRIMARY KEY (group_id, epoch, recipient_pubkey, wrapper_pubkey)
+                    );
+                    INSERT INTO group_key_wraps_migration (group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at, updated_at)
+                        SELECT group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at, updated_at FROM group_key_wraps;
+                    DROP TABLE group_key_wraps;
+                    ALTER TABLE group_key_wraps_migration RENAME TO group_key_wraps;
+                `);
+            })();
+            console.log('[DB] ✅ Migrated group_key_wraps: a refused wrap is kept beside the one that replaces it');
+        }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate group_key_wraps:', err?.message || err);
+    }
+
+    // group_members.from_epoch: the first epoch of the group's chat a membership holds keys from, by number (group chats
+    // step 2b; engine/group-keys.ts). Once, with the column: every active row gets the epoch the old stored_at rule gave
+    // it, or the next one when that gave none. A group with no epoch, which is every group on a node from before the
+    // chat's keys, starts at 1. No row is stamped: the touch trigger is dropped here and schema.sql makes it again.
+    try {
+        db.transaction(() => {
+            db.prepare(`ALTER TABLE group_members ADD COLUMN from_epoch INTEGER`).run();
+            db.exec('DROP TRIGGER IF EXISTS group_members_touch_updated_at');
+            const hasEpochs = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'group_key_epochs'").get();
+            db.prepare(hasEpochs
+                ? `UPDATE group_members SET from_epoch = COALESCE(
+                       (SELECT MIN(e.epoch) FROM group_key_epochs e WHERE e.group_id = group_members.group_id AND e.stored_at >= group_members.joined_at),
+                       (SELECT MAX(e.epoch) + 1 FROM group_key_epochs e WHERE e.group_id = group_members.group_id),
+                       1)
+                   WHERE status = 'active'`
+                : `UPDATE group_members SET from_epoch = 1 WHERE status = 'active'`).run();
+        })();
+    } catch { /* the column is there already, or no table yet (schema.sql makes it with the column) */ }
+
     // Escrow dispute arbitration (§5 item 2, §6 correction 2)
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }
@@ -1810,6 +1857,7 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run(); } catch { }
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_status ON marketplace_transactions(post_id, status)`).run(); } catch { }
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by)`).run(); } catch { }

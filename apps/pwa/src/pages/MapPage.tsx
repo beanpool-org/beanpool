@@ -561,6 +561,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [nearKnown, setNearKnown] = useState(false);
     const [everywhere, setEverywhere] = useState(false);
     const [radiusSetting] = useState(() => loadRadiusSettings());
+    // The member's area could not be read (the node busy or down): a note says so, with Try again, as the Market's line
+    // does, rather than reading from everywhere with no word.
+    const [areaFailed, setAreaFailed] = useState(false);
+    const [areaTry, setAreaTry] = useState(0);
     useEffect(() => {
         // A visitor reads the lobby's list as before, and asks nothing more for it.
         if (visitor) { setNearKnown(true); return; }
@@ -573,14 +577,18 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 const nearby = info?.features?.nearbyListings ?? null;
                 setNearbyListings(nearby);
                 if (nearby && identity?.publicKey) {
-                    const me = await getCommunityMe().catch(() => null);
-                    if (!cancelled) setMemberArea(me?.area ? { lat: me.area.lat, lng: me.area.lng } : null);
+                    let failed = false;
+                    const me = await getCommunityMe().catch(() => { failed = true; return null; });
+                    if (!cancelled) {
+                        setAreaFailed(failed);
+                        setMemberArea(me?.area ? { lat: me.area.lat, lng: me.area.lng } : null);
+                    }
                 }
             })
             .catch(() => {})
             .finally(() => { clearTimeout(timer); known(); });
         return () => { cancelled = true; clearTimeout(timer); };
-    }, [identity?.publicKey, visitor]);
+    }, [identity?.publicKey, visitor, areaTry]);
     const near = useMemo(
         () => nearKnown ? nearRead({ nearbyListings, setting: radiusSetting, area: memberArea, visitor: !!visitor, everywhere }) : null,
         [nearKnown, nearbyListings, radiusSetting, memberArea, visitor, everywhere],
@@ -1512,6 +1520,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     }, [focusPostId, posts, onFocusPostHandled]);
 
     const hasOpenEvents = posts.some(p => p.type === 'event' && isEventOpen(p) && !(p as any)._remoteNode);
+    // The notes about where the pins were read from take the event chips' spot, so while the chips show they sit under
+    // them (#1770): the chips' row is its 48px buttons with 0.25rem above and below, then a 0.25rem gap.
+    const nearNoteTop = hasOpenEvents ? 'top-[calc(5rem+48px)] md:top-[calc(1.5rem+48px)]' : 'top-[4.25rem] md:top-3';
 
     // Shared by the offer/need and event forms.
     function renderLocationPicker() {
@@ -1683,17 +1694,28 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <p
                     role="status"
                     data-testid="map-near-empty"
-                    className="absolute top-[4.25rem] md:top-3 left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2"
+                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
                     <span>{`Nothing within ${formatDistance(near.radiusKm)} ${near.from === 'area' ? 'of your area' : 'of the place you picked'} yet.`}</span>
                     <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">Show everywhere</button>
                 </p>
             )}
 
+            {areaFailed && !near && !everywhere && nearKnown && !showLocationHint && !showNewPost && (
+                <p
+                    role="status"
+                    data-testid="map-area-failed"
+                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                >
+                    <span>Couldn't check your area just now, so this is the newest from everywhere.</span>
+                    <button type="button" onClick={() => setAreaTry(n => n + 1)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">Try again</button>
+                </p>
+            )}
+
             {nearAgain && !showLocationHint && !showNewPost && (
                 <p
                     data-testid="map-near-again"
-                    className="absolute top-[4.25rem] md:top-3 left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2"
+                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
                     <span>Newest from everywhere.</span>
                     <button type="button" onClick={() => setEverywhere(false)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">

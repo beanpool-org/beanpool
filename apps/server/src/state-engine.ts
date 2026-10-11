@@ -391,7 +391,7 @@ import {
     type GroupThreadView,
 } from './engine/group-thread.js';
 export { GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType, canReadGroupThread } from './engine/group-thread.js';
-import { withMembershipEpoch, markGroupEpochsStaleFor, markGroupEpochStale, groupKeyRoster } from './engine/group-keys.js';
+import { withMembershipEpoch, markGroupEpochsStaleFor, markGroupEpochStale, groupKeyRoster, setMembershipFromEpoch } from './engine/group-keys.js';
 import {
     proposeGroupConvenor as proposeGroupConvenorEngine,
     voteGroupConvenor as voteGroupConvenorEngine,
@@ -9660,7 +9660,12 @@ function storableGroupPicture(avatarUrl: string | undefined): string | undefined
 }
 
 export function createGroup(params: CreateGroupParams): Group {
-    const res = createGroupEngine(db, { ...params, avatarUrl: storableGroupPicture(params.avatarUrl) });
+    // The creator holds the chat's keys from its first epoch (engine/group-keys.ts fromEpochOf), written with the row.
+    const res = db.transaction(() => {
+        const made = createGroupEngine(db, { ...params, avatarUrl: storableGroupPicture(params.avatarUrl) });
+        setMembershipFromEpoch(made.id, params.createdBy, 1);
+        return made;
+    })();
     // Every group owns its chat from the start, with its convenor in it (decision 3).
     ensureGroupThread(res.id);
     bumpGroupsVersion();

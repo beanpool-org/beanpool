@@ -40,8 +40,8 @@ import {
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
 import {
-    GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rotateGroupEpoch,
-    storeGroupTopUp,
+    GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
+    rotateGroupEpoch, storeGroupTopUp,
 } from '../engine/group-keys.js';
 import { CONVENOR_POWERS_PAUSED } from '@beanpool/engine';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -578,7 +578,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
         ctx.set('Cache-Control', 'private, no-store');
-        ctx.body = getMissingGroupWraps(ctx.params.id);
+        ctx.body = getMissingGroupWraps(ctx.params.id, actor);
     });
 
     router.get('/api/groups/:id/keys/:epoch/wraps', async (ctx) => {
@@ -621,6 +621,26 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             ctx.status = 201;
             ctx.body = { success: true, ...storeGroupTopUp(ctx.params.id, actor, body) };
+        } catch (e) {
+            if (!respondGroupKeyError(ctx, e)) throw e;
+        }
+    });
+
+    // A member refuses their own wrap that does not open (DESIGN-group-chat-epochs-over-time-fable.md §1): body
+    // `{ wrapper, ephPub }`. The slot shows in …/keys/missing again; the refused wrapper may not fill it.
+    router.post('/api/groups/:id/keys/:epoch/reject', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!chatRateLimit(ctx, actor)) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        if (!/^\d{1,9}$/.test(ctx.params.epoch)) {
+            ctx.status = 400;
+            ctx.body = { error: 'An epoch is a whole number' };
+            return;
+        }
+        const body = (ctx as any).requestBody || {};
+        try {
+            ctx.body = { success: true, ...rejectGroupWrap(ctx.params.id, actor, Number(ctx.params.epoch), body) };
         } catch (e) {
             if (!respondGroupKeyError(ctx, e)) throw e;
         }

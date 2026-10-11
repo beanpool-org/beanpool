@@ -1271,7 +1271,7 @@ async function main(): Promise<void> {
             'GET /api/groups', 'POST /api/groups', 'GET /api/groups/:id', 'PATCH /api/groups/:id', 'GET /api/groups/:id/chat',
             'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/join',
             'GET /api/groups/:id/keys', 'GET /api/groups/:id/keys/:epoch/wraps', 'GET /api/groups/:id/keys/missing', 'POST /api/groups/:id/keys/epoch',
-            'POST /api/groups/:id/keys/wrap', 'POST /api/groups/:id/lead',
+            'POST /api/groups/:id/keys/:epoch/reject', 'POST /api/groups/:id/keys/wrap', 'POST /api/groups/:id/lead',
             'GET /api/groups/:id/members', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
             'PATCH /api/groups/:id/members/:pubkey', 'GET /api/groups/:id/picture', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',

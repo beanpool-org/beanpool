@@ -10,6 +10,7 @@
  *  13. Requests to join (G6).
  *  14. Visitors' rows (members.is_visitor).
  *  15. A standby leaves the marking to its main server.
+ *  16. marketplace_transactions(post_id, status): a listing's open deals are searched, not walked (#1769).
  *
  * The three suites test-schema-upgrade-fresh-shape.ts, test-schema-upgrade-triggers-visitors.ts and
  * test-schema-upgrade-markers-watermarks.ts were one until it took 4m00s-4m56s on CI against the runner's 300 s per
@@ -525,5 +526,51 @@ END`;
             `a standby promoted in-process by a take-over finishing at boot runs the pass then (is_visitor ${flag(d, late).is_visitor})`);
         d.close();
         fs.rmSync(dir3, { recursive: true, force: true });
+    }
+
+    // ── 16. marketplace_transactions(post_id, status), and a listing's open deals are searched (#1769) ─────────────────
+    // On a node that reads by area, a listing's pushes also reach both sides of its open deals (#1765), read on every
+    // listing event; a removal and a hide ask the same of its held deals. No index led with post_id, so each read
+    // searched idx_marketplace_transactions_status_completed for status alone: every open deal on the node, for one
+    // listing. The fixture is a booted node with the index dropped, holding open deals on two listings; it must boot onto
+    // exactly a fresh install's indexes, and each read must search by the listing.
+    console.log('\n--- 16. idx_marketplace_transactions_post_status, and a listing\'s open deals are searched (#1769) ---');
+    {
+        const OPEN_DEAL_SIDES_SQL = "SELECT buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending')";
+        const HOLDS_DEAL_SQL = "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1";
+        const dir = tmp('deals-post-index');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const freshDealIndexes = indexes(d, 'marketplace_transactions');
+        assert(freshDealIndexes.includes('idx_marketplace_transactions_post_status'),
+            `a fresh install has idx_marketplace_transactions_post_status (indexes: ${freshDealIndexes.join(', ')})`);
+        d.pragma('foreign_keys = OFF');
+        d.exec('DROP INDEX IF EXISTS idx_marketplace_transactions_post_status');
+        const deal = d.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 1, ?)`);
+        for (const [i, post, status] of [[1, 'post-a', 'requested'], [2, 'post-a', 'pending'], [3, 'post-b', 'pending'], [4, 'post-b', 'completed']] as const) {
+            deal.run(`deal-${i}`, post, `${i}`.repeat(64), 'ab'.repeat(32), status);
+        }
+        assert(!indexes(d, 'marketplace_transactions').includes('idx_marketplace_transactions_post_status'), 'the fixture genuinely lacks the index');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the node from before the index boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(indexes(after, 'marketplace_transactions')) === JSON.stringify(freshDealIndexes),
+            `ending up with exactly the marketplace_transactions indexes a fresh install has (${indexes(after, 'marketplace_transactions').join(', ')})`);
+        const plan = (sql: string): string[] =>
+            (after.prepare(`EXPLAIN QUERY PLAN ${sql}`).all('post-a') as any[]).map(r => String(r.detail));
+        for (const [what, sql] of [["a listing's open deals (both sides)", OPEN_DEAL_SIDES_SQL], ['whether a listing holds a deal', HOLDS_DEAL_SQL]] as const) {
+            const p = plan(sql);
+            assert(p.some(x => /\bUSING (COVERING )?INDEX idx_marketplace_transactions_post_status \(post_id=\? AND status=\?\)/.test(x))
+                && !p.some(x => /^SCAN marketplace_transactions\b/.test(x)),
+                `${what} searches by the listing and its status (plan: ${p.join(' | ')})`);
+        }
+        const sides = after.prepare(OPEN_DEAL_SIDES_SQL).all('post-a') as { buyer_pubkey: string }[];
+        assert(sides.map(r => r.buyer_pubkey).sort().join() === ['1'.repeat(64), '2'.repeat(64)].join(), `and reads the same rows (${sides.length} open deal(s) on post-a)`);
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
     }
 });

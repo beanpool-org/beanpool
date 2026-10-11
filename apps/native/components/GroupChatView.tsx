@@ -240,6 +240,8 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         lastAnswer.current = answer;
         groupKeyringFor(id)
             .then(async ring => {
+                // Who this screen shows is who a key may go to (utils/group-chat-keys.ts rosterShown).
+                if (rosterRef.current.length) ring.noteShownRoster(rosterRef.current.map(r => r.memberPubkey));
                 const opened = await openGroupThread(ring, answer, rosterRef.current.map(r => ({ memberPubkey: r.memberPubkey, callsign: r.callsign, formerKeys: (r as any).formerKeys })));
                 setThread(opened);
                 if (!servedMissing.current) {

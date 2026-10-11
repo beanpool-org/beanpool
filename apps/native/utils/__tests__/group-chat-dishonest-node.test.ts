@@ -54,7 +54,7 @@ vi.mock('expo-secure-store', () => ({
 import { signedGet, signedPost, signedDelete } from '../node-post';
 import {
     groupKeyring, memoryGroupKeyStore, forgetGroupKeys, joinGroupWithEpoch, _resetGroupKeySessionForTests,
-    GROUP_KEY_ROLLBACK_TEXT, type GroupKeyStore,
+    GROUP_KEY_ROLLBACK_TEXT, GROUP_KEY_ROSTER_TEXT, type GroupKeyStore,
 } from '../group-chat-keys';
 import { sendSealedGroupLine, openGroupThread, chatIsLocked } from '../group-chat-lines';
 import { isSealedGroupLine, type DisplayRosterRow } from '../group-line-display';
@@ -264,6 +264,92 @@ describe('group chats on the phone against a dishonest node', () => {
         expect(grabbed).toEqual([]);
         // Cat holds epoch 3 from her own join: nothing older reached her.
         expect(await sql('SELECT epoch FROM group_key_wraps WHERE group_id = ? AND recipient_pubkey = ? ORDER BY epoch', [g, cat.identity.publicKey])).toEqual([{ epoch: 3 }]);
+    });
+
+    it('recipients (finding 2): a key in the KEYS roster that the members list never shows: nothing is sealed or wrapped to it', async () => {
+        await control('limiters');
+        const g = await newGroup(ana, 'Invisible recipient');
+        await say(ana, g, 'D1');
+        await join_(ben, g);
+        await say(ana, g, 'D2');
+        await control('members', { members: [{ key: eve.identity.publicKey, callsign: 'Eve' }] });
+        await control('groupRows', { groupId: g, keys: [eve.identity.publicKey] });
+        hooks.push(async (r) => {
+            if (r.method === 'GET' && r.path === `/api/groups/${g}/members`) {
+                const a = await nodeAnswer(r);
+                return jsonResponse(a.status, (a.body as any[]).filter((m) => m.memberPubkey !== eve.identity.publicKey));
+            }
+            return undefined;
+        });
+        const before = await sql('SELECT COUNT(*) n FROM messages WHERE conversation_id = ?', [g]);
+        await expect(say(ana, g, 'D3: for Ana and Ben only')).rejects.toThrow(GROUP_KEY_ROSTER_TEXT);
+        hooks.pop();
+        expect(await sql('SELECT COUNT(*) n FROM messages WHERE conversation_id = ?', [g])).toEqual(before);
+        const epochs = await sql('SELECT epoch FROM group_key_epochs WHERE group_id = ? ORDER BY epoch', [g]);
+        expect(epochs.map((e) => e.epoch)).toEqual([1, 2]);
+        expect(await sql('SELECT COUNT(*) n FROM group_key_wraps WHERE group_id = ? AND recipient_pubkey = ?', [g, eve.identity.publicKey])).toEqual([{ n: 0 }]);
+    });
+
+    it('recipients (finding 2): a 409 that names a recipient is never taken: the phone reads both rosters again', async () => {
+        await control('limiters');
+        const g = await newGroup(ana, '409 roster');
+        await say(ana, g, 'R1');
+        await join_(ben, g);
+        await json(await signedDelete(URL_BASE, `/api/groups/${g}/members/${ben.identity.publicKey}`, ben.identity));
+        let n = 0;
+        const records: any[] = [];
+        hooks.push((r) => {
+            if (r.method === 'POST' && r.path === `/api/groups/${g}/keys/epoch` && ++n === 1) {
+                return jsonResponse(409, { code: 'epoch_conflict', error: 'stale roster', current: 2, roster: [ana.identity.publicKey, eve.identity.publicKey] });
+            }
+            if (r.method === 'POST' && r.path === `/api/groups/${g}/keys/epoch`) records.push(r.body.epoch);
+            return undefined;
+        });
+        await say(ana, g, 'R3: Ana alone now');
+        hooks.pop();
+        expect(records.length).toBe(1);
+        expect(records[0].wraps.map((w: any) => w.recipient)).toEqual([ana.identity.publicKey]);
+        expect(() => openGroupEpochRecord(records[0], eve.identity.privateKey, { groupId: g, epoch: records[0].epoch })).toThrow();
+    });
+
+    it('a 409 with a lower `current` is never taken either: the line goes under a new epoch above the highest, and older lines still open', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const g = await newGroup(ana, '409 current');
+        await say(ana, g, 'C1');
+        await join_(ben, g);
+        await say(ben, g, 'C2: Ben under epoch 2');
+        await join_(cat, g);
+        await say(ana, g, 'C3');
+        const c2 = (await shown(ana, g)).visible.find((l) => l.text === 'C2: Ben under epoch 2')!;
+        const highest = await ring(ana, g).highestEpoch();
+        await json(await signedDelete(URL_BASE, `/api/groups/${g}/members/${cat.identity.publicKey}`, cat.identity));
+        let n = 0;
+        hooks.push((r) => {
+            if (r.method === 'POST' && r.path === `/api/groups/${g}/keys/epoch` && ++n === 1) {
+                return jsonResponse(409, { code: 'epoch_conflict', error: 'x', current: 1, roster: [ana.identity.publicKey, ben.identity.publicKey] });
+            }
+            return undefined;
+        });
+        await say(ana, g, 'C4');
+        hooks.pop();
+        const [line] = await sql("SELECT metadata FROM messages WHERE conversation_id = ? AND type = 'text' ORDER BY timestamp DESC LIMIT 1", [g]);
+        expect(JSON.parse(line.metadata).epoch).toBe(highest + 1);
+        forgetGroupKeys();
+        expect((await shown(ana, g)).visible.find((l) => l.id === c2.id)?.name).toBe('Ben');
+    });
+
+    it('an invitee, who may not read the members list, accepts with no epoch; the next writer makes it, and she reads from it', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const g = await newGroup(cat, 'Invite only', 'invite_only');
+        await say(cat, g, 'I1: before Pia was invited');
+        await json(await signedPost(URL_BASE, `/api/groups/${g}/members`, { memberPubkey: pia.identity.publicKey, role: 'member', action: 'invite' }, cat.identity));
+        await joinGroupWithEpoch(URL_BASE, pia.identity, pia.store, { id: g, joinPolicy: 'invite_only', viewerStatus: 'invited' });
+        expect((await sql('SELECT reason FROM group_key_epochs WHERE group_id = ? ORDER BY epoch', [g])).map((e) => e.reason)).toEqual(['start']);
+        await say(cat, g, 'I2: welcome Pia');
+        expect((await sql('SELECT reason FROM group_key_epochs WHERE group_id = ? ORDER BY epoch', [g])).map((e) => e.reason)).toEqual(['start', 'rotate']);
+        expect((await shown(pia, g)).visible.map((l) => [l.name, l.text])).toEqual([['Cat', 'I2: welcome Pia']]);
     });
 
     it('every request stayed on this machine', () => {

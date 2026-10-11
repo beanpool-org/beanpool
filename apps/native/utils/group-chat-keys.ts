@@ -30,8 +30,11 @@ export const GROUP_KEY_ROLLBACK_TEXT = 'This node is serving an older key than o
 export const GROUP_KEY_WAITING_TEXT = "Waiting for the group's next key.";
 export const GROUP_KEY_MISSING_TEXT = "This chat's key hasn't reached this phone yet. Another member's phone hands it over when they next open the chat.";
 export const GROUP_KEYS_UNOPENABLE_TEXT = "This device can't open your keys.";
+/** The node's keys roster names someone its members list doesn't show (review of #1788, finding 2). */
+export const GROUP_KEY_ROSTER_TEXT = "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.";
+export const GROUP_KEY_ROSTER_UNREAD_TEXT = "This phone couldn't check who is in this group just now. Nothing was sent; try again in a moment.";
 
-export type GroupChatKeyErrorCode = 'rollback' | 'no_key' | 'unopenable' | 'not_member' | 'refused';
+export type GroupChatKeyErrorCode = 'rollback' | 'no_key' | 'unopenable' | 'not_member' | 'refused' | 'roster';
 
 /** Why this phone will not seal a line now; `message` is the sentence the chat shows. */
 export class GroupChatKeyError extends Error {
@@ -286,6 +289,27 @@ export class GroupKeyring {
     }
 
     /**
+     * True if every recipient is someone the screen shows as an active member (or one of `extra`: the member a change is
+     * about). The keys roster and a 409's are the node's word; the members list is what everyone in the group sees, so
+     * a recipient nobody can see is never wrapped to (review of #1788, finding 2; the design's limit a). ⊆, not =: an
+     * honest node keeps a pruned account in the members list but not in the keys roster. `fresh` reads the list now;
+     * otherwise the screen's copy is enough when it covers them. Null when the list can't be read.
+     */
+    async rosterShown(recipients: readonly string[], opts: { extra?: readonly (string | null)[]; fresh?: boolean } = {}): Promise<boolean | null> {
+        const extra = new Set((opts.extra ?? []).filter((k): k is string => !!k));
+        const covered = (shown: Set<string>) => recipients.every((k) => shown.has(k) || extra.has(k));
+        if (!opts.fresh && this.shown && covered(this.shown)) return true;
+        const shown = await this.readShownRoster();
+        return shown ? covered(shown) : null;
+    }
+
+    private async requireRosterShown(recipients: readonly string[], fresh: boolean): Promise<void> {
+        const ok = await this.rosterShown(recipients, { fresh });
+        if (ok === null) throw new GroupChatKeyError(GROUP_KEY_ROSTER_UNREAD_TEXT, 'roster');
+        if (!ok) throw new GroupChatKeyError(GROUP_KEY_ROSTER_TEXT, 'roster');
+    }
+
+    /**
      * Who an epoch's maker wrapped it to, by the record's signature: the recipients of its own wraps (unsigned, by its
      * maker; GET …/keys/:epoch/wraps) must be exactly the ones its signed membersDigest names. Not its wrapsDigest: a wrap
      * the node spoiled still names its recipient, and repairing that slot is what a top-up is for. Null when they don't
@@ -396,13 +420,15 @@ export class GroupKeyring {
     }
 
     /**
-     * Rotate (§2.3, reason 'rotate', or 'start' for a chat with no epoch yet): a fresh key to exactly today's roster.
-     * A 409 means this phone's roster or epoch was old: once more with the node's. Returns the new epoch and its key.
+     * Rotate (§2.3, reason 'rotate', or 'start' for a chat with no epoch yet): a fresh key to exactly today's roster, and
+     * only when every one of them is in the members list read just now. A 409 means this phone's roster or epoch was old:
+     * once more after reading both again (never the 409's own roster). Returns the new epoch and its key.
      */
     async rotate(progress?: GroupEpochProgress): Promise<{ epoch: number; key: Uint8Array }> {
         let state = this.state ?? await this.sync();
         for (let attempt = 0; ; attempt++) {
             if (!state.roster.includes(this.identity.publicKey)) throw new GroupChatKeyError('Only members of this group can open its chat', 'not_member');
+            await this.requireRosterShown(state.roster, true);
             const epoch = (state.current ?? 0) + 1;
             const { record, groupKey } = await this.makeRecord({ epoch, reason: epoch === 1 ? 'start' : 'rotate', recipients: state.roster }, progress);
             try {
@@ -411,7 +437,7 @@ export class GroupKeyring {
                 return { epoch, key: groupKey };
             } catch (e) {
                 if (attempt === 0 && e instanceof GroupKeysRequestError && e.status === 409 && e.body?.code === 'epoch_conflict') {
-                    state = { ...state, current: e.body.current ?? null, roster: Array.isArray(e.body.roster) ? e.body.roster : state.roster };
+                    state = await this.sync();
                     continue;
                 }
                 throw e;
@@ -426,6 +452,8 @@ export class GroupKeyring {
     async prepareToSeal(progress?: GroupEpochProgress): Promise<{ epoch: number; key: Uint8Array }> {
         const state = await this.sync();
         if (state.current !== null && state.current < this.highest) throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
+        // Whoever the line goes to must be in the members list the screen shows (finding 2), sealed or rotated.
+        await this.requireRosterShown(state.roster, false);
         if (state.current === null) return this.rotate(progress);
         const stored = this.epochs.get(state.current);
         let fits = !state.stale && !!stored && !this.badRecords.has(state.current);
@@ -513,9 +541,12 @@ export function forgetGroupKeys(): void {
 type MembershipSend = (epoch?: GroupEpochRecord) => Promise<Response>;
 
 /**
- * A membership change with its epoch, in one request: built from what this phone knows, once more from a 409's
- * {current, roster}, and, if the node still refuses the epoch, the change alone (nobody is kept out of a group by
- * crypto: the node marks the epoch stale and the next member to write rotates). Returns the node's answer.
+ * A membership change with its epoch, in one request: built from what this phone knows, once more after a 409 (the
+ * keys read again when this phone may read them; a joiner can't, and takes the 409's), and, if the node still refuses
+ * the epoch, the change alone (nobody is kept out of a group by crypto: the node marks the epoch stale and the next
+ * member to write rotates). The epoch goes only to members the members list shows, read just now, and the member the
+ * change is about (finding 2): otherwise, or when the list can't be read (an invitee may not see it), the change goes
+ * alone. Returns the node's answer.
  */
 async function withEpoch(
     ring: GroupKeyring, send: MembershipSend, build: (current: number | null, roster: string[]) => { reason: GroupEpochReason; subject: string; recipients: string[] } | null,
@@ -526,6 +557,7 @@ async function withEpoch(
     for (let attempt = 0; attempt < 2; attempt++) {
         const plan = build(current, roster);
         if (!plan) break;
+        if (!(await ring.rosterShown(plan.recipients, { extra: [plan.subject], fresh: true }))) break;
         const epoch = (current ?? 0) + 1;
         const { record, groupKey } = await ring.makeRecord({ epoch, ...plan }, progress);
         const res = await send(record);
@@ -535,8 +567,9 @@ async function withEpoch(
             return body;
         }
         if (res.status === 409 && body?.code === 'epoch_conflict') {
-            current = body.current ?? null;
-            roster = Array.isArray(body.roster) ? body.roster : roster;
+            const synced = await ring.sync().catch(() => null);
+            current = synced ? synced.current : (body.current ?? null);
+            roster = synced ? synced.roster : (Array.isArray(body.roster) ? body.roster : roster);
             continue;
         }
         if (typeof body?.code === 'string' && /^epoch_/.test(body.code)) break;

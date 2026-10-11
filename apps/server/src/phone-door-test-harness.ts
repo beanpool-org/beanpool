@@ -76,7 +76,7 @@ async function main(): Promise<void> {
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { probationState } = await import('./engine/probation.js');
-    const { transfer, getBalance } = await import('./state-engine.js');
+    const { transfer, getBalance, bumpGroupsVersion } = await import('./state-engine.js');
     const { setMemberArea } = await import('./engine/member-area.js');
     const { bumpPostsVersion } = await import('./engine/versions.js');
     const { getLocalConfig, updateLocalConfig } = await import('./config/local-config.js');
@@ -171,6 +171,8 @@ async function main(): Promise<void> {
             const add = db.prepare(`INSERT OR IGNORE INTO group_members (group_id, member_pubkey, role, status, joined_at, role_since, updated_at)
                                     VALUES (?, ?, 'member', 'active', ?, ?, ?)`);
             db.transaction(() => { for (const k of keys ?? []) add.run(String(groupId), String(k), now, now, now); })();
+            // As a join does: GET …/members serves a snapshot keyed by the groups version (roster-snapshots.ts).
+            bumpGroupsVersion();
             return (keys ?? []).length;
         },
         sql: ({ sql, params, all }: { sql?: string; params?: unknown[]; all?: boolean }) => {

@@ -117,7 +117,7 @@ export type AlertKey =
     | 'freeze.recovered' | 'freeze.nowatchdog'
     | 'standby.incident'
     | 'tls.fallback'
-    | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more';
+    | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen';
 
 interface Row {
     title: string;
@@ -154,6 +154,8 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.replaced': { title: 'replaced by another server', priority: 5, webhook: true, pushEveryMs: DAY, banner: true },
     'sec.name': { title: 'its address is not its own', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
     'sec.more': { title: 'more security changes', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
+    /** The record of an acknowledgement, kept in the history only: who saw them, as a role, and when. */
+    'sec.seen': { title: 'security alerts marked as seen', priority: 2, webhook: false, pushEveryMs: 0, banner: false },
 };
 
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
@@ -846,15 +848,27 @@ function replacedCondition(s: BookState): Condition[] {
 }
 
 /**
- * An owner's "Seen": the security events told so far leave the banner, and a replaced server's alert ends (told as
- * resolved after the usual hold). A newer replacement, or a new event, is told again.
+ * An owner's "Seen" (an owner's key, or the admin password, which is owner level): the security events told so far
+ * leave the banner, and a replaced server's alert ends (told as resolved after the usual hold). A newer replacement, or
+ * a new event, is told again. Nothing is deleted: the history keeps every event, and a line saying who marked them
+ * seen (by role) and when, which a flood never pushes out.
  */
-export async function acknowledgeSecurityAlerts(): Promise<{ replacedAcknowledged: boolean }> {
+export async function acknowledgeSecurityAlerts(by: 'owner' | 'password' = 'owner'): Promise<{ replacedAcknowledged: boolean }> {
     const s = readState();
+    const t = now();
     let info: ReturnType<typeof getReplacedInfo> = null;
     try { info = getReplacedInfo(); } catch { /* nothing to acknowledge there */ }
+    const seen = recentSecurityEvents(s, t).reduce((n, e) => n + (e.count ?? 1), 0);
+    const replaced = !!info && s.acked.replaced !== info.detectedAt;
     if (info) s.acked.replaced = info.detectedAt;
-    s.acked.oneShotsAt = now();
+    s.acked.oneShotsAt = t;
+    if (seen || replaced) {
+        const what = [seen ? `${seen} security event${seen === 1 ? '' : 's'} of the last day` : '', replaced ? 'this server replaced by another' : ''].filter(Boolean).join(', and ');
+        keepIn(s.history, {
+            key: 'sec.seen', kind: 'raised', at: t, since: t, priority: 2, high: true,
+            detail: `Marked as seen ${by === 'password' ? 'with the admin password' : 'by an owner'}: ${what}. They stay in this history.`,
+        }, MAX_HISTORY, false);
+    }
     await updateAlerts(replacedCondition(s));
     return { replacedAcknowledged: !!info };
 }

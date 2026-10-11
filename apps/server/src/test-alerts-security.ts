@@ -105,6 +105,7 @@ async function main(): Promise<void> {
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { hashPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken, enrolAdminOwnerKey, issueBreakGlassCode, retireBreakGlassCode } = await import('./admin-key-auth.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
     const { getAdminQueue } = await import('./engine/admin-queue.js');
@@ -344,6 +345,18 @@ async function main(): Promise<void> {
     await settle();
     await call('POST', '/api/local/admin/alerts/acknowledge', {}, asOwner);
     assert(banner('owner') === 0, '3. or until an owner acknowledges it');
+    assert(/^Marked as seen by an owner: 1 security event of the last day\./.test(lastHistory('sec.seen')?.detail ?? ''),
+        `3. the history keeps who marked it seen (${lastHistory('sec.seen')?.detail})`);
+    grantNodeRole(helper, 'moderator', 'owner:password');
+    await settle();
+    const tfa = turnOn2faForTests(PW);
+    const ackPw = await call('POST', '/api/local/admin/alerts/acknowledge', {}, tfa.headers());
+    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
+    const hist3 = alerts.getAlertsStatus().history;
+    assert(ackPw.status === 200 && banner('owner') === 0, `3. the admin password may acknowledge (${ackPw.status} ${ackPw.json?.error ?? ''})`);
+    assert(/^Marked as seen with the admin password: 1 security event/.test(hist3[0]?.detail ?? '') && hist3[0].at > 0
+        && hist3.some((e) => /An admin was made a moderator, by the admin password\./.test(e.detail)),
+        `3. but deletes nothing: the history keeps the event, and that the password marked it seen, with the time (${hist3[0]?.detail})`);
 
     // The admin password retired, through the real route (last: it ends password sign-in).
     issueBreakGlassCode(owner, 'a test', 'app');

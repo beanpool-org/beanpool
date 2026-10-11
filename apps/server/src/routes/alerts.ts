@@ -56,10 +56,11 @@ export function createAlertsRoutes(deps: RouteDeps): Router {
         ctx.body = { ...result, status: getAlertsStatus() };
     });
 
-    // "Seen": the security events told so far leave the banner, and a replaced server's urgent alert ends.
+    // "Seen": the security events told so far leave the banner, and a replaced server's urgent alert ends. The history
+    // keeps them, and who marked them seen: an owner's key, or the admin password.
     router.post('/api/local/admin/alerts/acknowledge', async (ctx) => {
         if (!(await ownerOnly(ctx))) return;
-        const result = await acknowledgeSecurityAlerts();
+        const result = await acknowledgeSecurityAlerts((ctx.state as any).isKeySession ? 'owner' : 'password');
         ctx.set('Cache-Control', 'no-store');
         ctx.body = { success: true, ...result, status: getAlertsStatus() };
     });

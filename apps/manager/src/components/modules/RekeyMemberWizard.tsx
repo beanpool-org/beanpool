@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     issueRekeyCodeApi,
     cancelRekeyCodeApi,
@@ -88,6 +88,9 @@ export function RekeyMemberWizard({
     // New pubkey input (folded away under "Paste a key instead"), or the key of the phone bound
     const [newPubkey, setNewPubkey] = useState('');
     const [completing, setCompleting] = useState(false);
+    // Set before the first await, so a second Enter or tap sends nothing while a bind is out (#1783 review C2): each
+    // number sent is a try the node counts.
+    const binding = useRef(false);
     const [showPaste, setShowPaste] = useState(false);
 
     // The phones that asked on the code, read every few seconds while step 2 shows (#1768)
@@ -99,7 +102,8 @@ export function RekeyMemberWizard({
     // Someone is guessing at codes starting like this one (the node's per-prefix count, #1783 review N3).
     const [underAttack, setUnderAttack] = useState<RekeyStatusResponse['codeUnderAttack'] | null>(null);
     // Three wrong numbers stopped the code on the node: like an expired one, only a new code helps.
-    const [codeStopped, setCodeStopped] = useState(false);
+    /** 'wrong': three wrong numbers here. 'elsewhere': the node no longer has the code (stopped or cancelled on another screen). */
+    const [codeStopped, setCodeStopped] = useState<false | 'wrong' | 'elsewhere'>(false);
     // Sign-in copies of the old key the move removed (the node's count): step 3 asks for a new link only when > 0.
     const [signInCopiesRemoved, setSignInCopiesRemoved] = useState(0);
 
@@ -190,6 +194,10 @@ export function RekeyMemberWizard({
                 if (!status.pendingRequest && moved && (status.history?.length ?? 0) > historyLength) {
                     setNewPubkey(moved.new_pubkey);
                     setStep(3);
+                } else if (!status.pendingRequest) {
+                    // No code and no move: it was stopped or cancelled on another screen (#1783 review C3).
+                    setCodeStopped((was) => was || 'elsewhere');
+                    setProposals([]);
                 }
             } catch {
                 // The next read tries again; the cards stay as they were.
@@ -271,6 +279,8 @@ export function RekeyMemberWizard({
             setError('Re-enrolment code is missing');
             return;
         }
+        if (binding.current) return;
+        binding.current = true;
         setCompleting(true);
         setError(null);
         try {
@@ -282,7 +292,7 @@ export function RekeyMemberWizard({
         } catch (err: any) {
             setTypedMatch('');
             if (err instanceof RekeyBindError && err.code === 'code_stopped') {
-                setCodeStopped(true);
+                setCodeStopped('wrong');
                 setProposals([]);
             } else if (err instanceof RekeyBindError && err.code === 'wrong_number') {
                 if (err.triesLeft !== undefined) setWrongNumbers(3 - err.triesLeft);
@@ -291,6 +301,7 @@ export function RekeyMemberWizard({
                 setError(err?.message || 'Failed to complete re-keying');
             }
         } finally {
+            binding.current = false;
             setCompleting(false);
         }
     };
@@ -338,7 +349,7 @@ export function RekeyMemberWizard({
         }
     };
 
-    const codeExpired = Boolean(expiresAt && new Date(expiresAt).getTime() < now) || codeStopped;
+    const codeExpired = Boolean(expiresAt && new Date(expiresAt).getTime() < now) || codeStopped !== false;
 
     const handleCopy = () => {
         if (!issuedCode) return;
@@ -555,9 +566,11 @@ export function RekeyMemberWizard({
                                 {codeExpired ? (
                                     <div data-testid="rekey-code-expired" className="space-y-2">
                                         <p className="text-[11px] text-amber-300 m-0 break-words">
-                                            {codeStopped
+                                            {codeStopped === 'wrong'
                                                 ? 'Three wrong numbers were typed, so this code has stopped and no phone can use it.'
-                                                : 'This code has expired, so no phone can use it.'}
+                                                : codeStopped === 'elsewhere'
+                                                    ? 'This code is no longer active: it was stopped or cancelled on another screen, so no phone can use it.'
+                                                    : 'This code has expired, so no phone can use it.'}
                                         </p>
                                         <button
                                             type="button"

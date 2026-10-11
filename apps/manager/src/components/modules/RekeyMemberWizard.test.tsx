@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { RekeyMemberWizard, rekeyTimeLeft, rekeyLink, REKEY_PROPOSALS_POLL_MS } from './RekeyMemberWizard';
 import * as nodeClient from '../../lib/node-client';
 
@@ -582,5 +582,63 @@ describe('RekeyMemberWizard: the phone asks, the admin binds its number (#1768)'
         } finally {
             vi.useRealTimers();
         }
+    });
+});
+
+describe('RekeyMemberWizard: one try per number, and a code ended elsewhere (#1783 review C2, C3)', () => {
+    const member = { publicKey: 'a'.repeat(64), callsign: 'alice', status: 'suspended' };
+    const phone = 'c'.repeat(64);
+    const pending = () => ({
+        id: 9, code: 'RK-AB12-CD34', old_pubkey: member.publicKey, new_pubkey: null, operator_pubkey: 'b'.repeat(64),
+        expires_at: new Date(Date.now() + 3600000).toISOString(), status: 'pending', created_at: new Date().toISOString(),
+    });
+    const live = { isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(), proposals: [{ newPubkey: phone, proposedAt: new Date().toISOString() }], wrongNumbers: 0, history: [] };
+    beforeEach(() => { vi.restoreAllMocks(); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('Enter twice on a wrong number sends it once, so it spends one try', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue(live as any);
+        const answers: Array<(e: Error) => void> = [];
+        const bind = vi.spyOn(nodeClient, 'bindRekeyByMatchApi').mockImplementation(() => new Promise((_, reject) => { answers.push(reject); }));
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        const box = await screen.findByLabelText('The number on their phone');
+        fireEvent.change(box, { target: { value: '12' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        expect(bind.mock.calls.map((c) => c[3])).toEqual(['12']);
+        await act(async () => { answers[0](new nodeClient.RekeyBindError('No phone waiting on this code shows that number.', 'wrong_number', 2)); });
+        expect(screen.getByTestId('rekey-type-number').textContent).toContain('Wrong so far: 1 of 3');
+        // The answer is in: the next number goes out.
+        fireEvent.change(box, { target: { value: '34' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        expect(bind.mock.calls.map((c) => c[3])).toEqual(['12', '34']);
+    });
+
+    it('Enter twice on the right number: one bind, and the done page with no error under it', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue(live as any);
+        const settle: Array<(v: any) => void> = [];
+        const bind = vi.spyOn(nodeClient, 'bindRekeyByMatchApi').mockImplementation(() => new Promise((ok) => { settle.push(ok); }));
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        const box = await screen.findByLabelText('The number on their phone');
+        fireEvent.change(box, { target: { value: '47' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        await act(async () => { settle[0]({ success: true, oldPubkey: member.publicKey, newPubkey: phone, callsign: 'alice', signInCopiesRemoved: 0 }); });
+        expect(bind).toHaveBeenCalledTimes(1);
+        expect(screen.getByText('Re-Keying Complete!')).toBeTruthy();
+        expect(screen.queryByText(/no re-key code waiting/)).toBeNull();
+    });
+
+    it('a code stopped on another dashboard: this one drops the QR and says it is no longer active', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const read = vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({ ...live, wrongNumbers: 2 } as any);
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        await screen.findByLabelText('The number on their phone');
+        read.mockResolvedValue({ isInvalidated: true, invalidatedInfo: null, pendingRequest: null, proposals: [], wrongNumbers: 0, history: [] } as any);
+        await act(async () => { await vi.advanceTimersByTimeAsync(REKEY_PROPOSALS_POLL_MS * 2 + 50); });
+        expect(screen.queryByTestId('rekey-code-qr')).toBeNull();
+        expect(screen.queryByText(/Waiting for their phone to ask/)).toBeNull();
+        expect(screen.getByTestId('rekey-code-expired').textContent).toContain('no longer active');
+        expect(screen.getByRole('button', { name: 'Make a new code' })).toBeTruthy();
     });
 });

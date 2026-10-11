@@ -200,12 +200,16 @@ describe('posts-nearby, the edges', () => {
 
     it('an answer\'s set: only the by-area shape, with string ids', () => {
         expect(nearbySetOf({ posts: [{ id: 'a' }], set: ['a'], setHash: 'x' })).toEqual({ posts: [{ id: 'a' }], set: ['a'], tied: null });
-        // `tied` (the review of #1778, finding 2): additive; a node before it says nothing, and a malformed one refuses the answer.
+        // `tied` (the review of #1778, finding 2): additive; a node before it says nothing.
         expect(nearbySetOf({ posts: [], set: ['a', 'b'], setHash: 'x', tied: ['b'] })).toEqual({ posts: [], set: ['a', 'b'], tied: ['b'] });
         expect(nearbySetOf({ posts: [], set: ['a'], tied: [] })).toEqual({ posts: [], set: ['a'], tied: [] });
-        expect(nearbySetOf({ posts: [], set: ['a'], tied: 'a' })).toBeNull();
-        expect(nearbySetOf({ posts: [], set: ['a'], tied: [7] })).toBeNull();
-        expect(nearbySetOf({ posts: [], set: ['a'], tied: null })).toBeNull();
+        // An unreadable one (probe 12c: a number in it, a string, null) is read as absent, never as a refused answer: `tied`
+        // only adds keeps, so the phone keeps its stored ties and the read goes on (the confirmation review of #1778, finding 2).
+        expect(nearbySetOf({ posts: [], set: ['a'], tied: 'a' })).toEqual({ posts: [], set: ['a'], tied: null });
+        expect(nearbySetOf({ posts: [], set: ['a', 'b'], tied: ['b', 7] })).toEqual({ posts: [], set: ['a', 'b'], tied: null });
+        expect(nearbySetOf({ posts: [], set: ['a'], tied: null })).toEqual({ posts: [], set: ['a'], tied: null });
+        expect(nearbySetOf({ posts: [], set: ['a'], tied: [''] })).toEqual({ posts: [], set: ['a'], tied: null });
+        expect(nearbySetOf({ posts: [], set: ['a'], tied: { b: true } })).toEqual({ posts: [], set: ['a'], tied: null });
         expect(nearbySetOf([{ id: 'a' }])).toBeNull();
         expect(nearbySetOf({ posts: [] })).toBeNull();
         expect(nearbySetOf({ posts: [], set: [1] })).toBeNull();

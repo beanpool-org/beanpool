@@ -669,6 +669,8 @@ async function main(): Promise<void> {
         const pushed = pushes.length;
         const answered: string[] = [];
         for (const route of swept) {
+            // Over 200 writes now (the group votes' two routes took it there): the purge starts clear, as its own steps do.
+            if (route === 'POST /api/member/purge') resetGatewayRateLimit();
             const [method, path] = route.split(' ') as ['POST' | 'PUT' | 'PATCH' | 'DELETE', string];
             const r = await signedFetch(method, materialise(path, ownPost), key, bodyFor(key, own));
             if (!isRefusal(r, route)) answered.push(`${route} → ${r.status} ${JSON.stringify(r.body ?? null).slice(0, 90)}`);

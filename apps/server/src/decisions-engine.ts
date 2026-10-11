@@ -2829,10 +2829,11 @@ export function groupRollNow(groupId: string): Array<{ pubkey: string; role: str
 }
 
 /** Whether `reader` is in the group now, any role: they see every one of its votes (the post-sight rule, §2.5). */
+/** In the group now, as engine/group-thread.ts asks it: a visitor key has no group, whatever seat it holds from before. */
 function inGroupNow(groupId: string, reader: string): boolean {
     return !!db.prepare(`
         SELECT 1 FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
-        WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.status = 'active' AND m.status = 'active'
+        WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0
     `).get(groupId, reader);
 }
 

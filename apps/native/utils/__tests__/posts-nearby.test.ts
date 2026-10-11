@@ -36,7 +36,7 @@ function world(seed: number): World {
         ? { lat: area.lat + (r() - 0.5) * 6, lng: area.lng + (r() - 0.5) * 6 }
         : { lat: -80 + r() * 160, lng: -180 + r() * 360 });
     const held: NearbyHeld[] = [];
-    for (let i = 0; i < n; i++) held.push({ id: `h${i}`, ...place(), at: r() < 0.05 ? null : at(), kept: r() < 0.08 });
+    for (let i = 0; i < n; i++) held.push({ id: `h${i}`, ...place(), at: r() < 0.05 ? null : at(), kept: r() < 0.08, off: r() < 0.05 });
     // The set: some of what the phone holds (kept or not), some it doesn't, in no order of the phone's.
     const set: string[] = [];
     for (const h of held) if (r() < 0.5) set.push(h.id);
@@ -153,10 +153,14 @@ describe('posts-nearby, 2,000 seeded worlds', { timeout: 60_000 }, () => {
             // Ties (two with no place, two at one time) newest first, then by id: no subtraction, Infinity − Infinity is NaN.
             const cmp = (x: number, y: number) => (x === y ? 0 : x < y ? -1 : 1);
             const time = (h: NearbyHeld) => h.at ?? '';
-            const ranked = [...others].sort((a, b) => cmp(key(a), key(b)) || (time(b) < time(a) ? -1 : time(b) > time(a) ? 1 : 0) || (a.id < b.id ? -1 : 1));
-            const worstKept = Math.max(-Infinity, ...stay.map(key));
-            const bestGone = Math.min(Infinity, ...others.filter(h => gone.has(h.id)).map(key));
+            // A listing taken off (a removal pushed) ranks after every listing still on the board: it goes first.
+            const off = (h: NearbyHeld) => (h.off ? 1 : 0);
+            const ranked = [...others].sort((a, b) => off(a) - off(b) || cmp(key(a), key(b)) || (time(b) < time(a) ? -1 : time(b) > time(a) ? 1 : 0) || (a.id < b.id ? -1 : 1));
+            const live = (rows: NearbyHeld[]) => rows.filter(h => !h.off);
+            const worstKept = Math.max(-Infinity, ...live(stay).map(key));
+            const bestGone = Math.min(Infinity, ...live(others.filter(h => gone.has(h.id))).map(key));
             expect(worstKept <= bestGone, `seed ${seed}`).toBe(true);
+            if (stay.some(h => h.off)) expect(others.filter(h => gone.has(h.id)).every(h => h.off), `seed ${seed}`).toBe(true);
             expect(sorted(ids(stay))).toEqual(sorted(ids(ranked.slice(0, w.max))));
         }
     });
@@ -221,6 +225,15 @@ describe('posts-nearby, the edges', () => {
             const [a, b, c, d] = [-89 + r() * 178, -180 + r() * 360, -89 + r() * 178, -180 + r() * 360];
             expect(Math.abs(nearbyKm(a, b, c, d) - chordKm(a, b, c, d)), `${a},${b} → ${c},${d}`).toBeLessThan(1e-3);
         }
+    });
+
+    it('prune: a listing taken off goes before the farthest one still on the board (the review of #1778, finding 7)', () => {
+        const area = { lat: 0.5, lng: 0.5 };
+        const removed = { ...h('removed-near', false, 0.5, 0.5), off: true };
+        expect(nearbyPrune([removed, h('far', false, 10, 10), h('mid', false, 1, 1)], area, 2)).toEqual(['removed-near']);
+        // Without an area too: the newest taken off goes before the oldest on the board.
+        const newestOff = { ...h('removed-new', false, 0.5, 0.5, '2026-10-09T00:00:00.000Z'), off: true };
+        expect(nearbyPrune([newestOff, h('old', false, 0.5, 0.5, '2026-01-01T00:00:00.000Z')], null, 1)).toEqual(['removed-new']);
     });
 
     it('prune: across the antimeridian a listing 20 km away beats one 300 km away', () => {

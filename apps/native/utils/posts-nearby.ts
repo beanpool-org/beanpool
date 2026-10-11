@@ -29,6 +29,8 @@ export interface NearbyHeld {
     at: string | null;
     /** The member's own, or tied to them on this phone: never dropped. */
     kept: boolean;
+    /** Taken off (a removal pushed: `cancelled`, inactive): no longer on the board, so it goes before any listing that is. */
+    off?: boolean;
 }
 
 /** The most ids one `ids=` read names (the node's IDS_MAX), and the most such reads in one cycle (design §2.4 step 3). */
@@ -95,8 +97,10 @@ function placed(h: NearbyHeld): boolean {
 
 /**
  * The held listings beyond the `max` this phone keeps besides its kept ones: with an area, the nearest `max` stay (a
- * listing with no place counts as the farthest); without one, the newest `max`. Nothing goes while the others number
- * `max` or fewer, so a reconciled set (at most `max` near listings) is never cut by it.
+ * listing with no place counts as the farthest); without one, the newest `max`. One taken off ranks after every one
+ * still on the board, so a removal frees its slot at the next listing pushed past the cap, rather than the farthest live
+ * listing going while the removed one waits for the next reconcile (the review of #1778, finding 7). Nothing goes while
+ * the others number `max` or fewer, so a reconciled set (at most `max` near listings) is never cut by it.
  */
 export function nearbyPrune(held: readonly NearbyHeld[], area: { lat: number; lng: number } | null, max: number): string[] {
     const others = held.filter(h => !h.kept);
@@ -104,13 +108,14 @@ export function nearbyPrune(held: readonly NearbyHeld[], area: { lat: number; ln
     if (others.length <= cap) return [];
     const byTime = (a: NearbyHeld, b: NearbyHeld) => ((b.at ?? '') < (a.at ?? '') ? -1 : (b.at ?? '') > (a.at ?? '') ? 1 : 0)
         || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    const byOff = (a: NearbyHeld, b: NearbyHeld) => (a.off ? 1 : 0) - (b.off ? 1 : 0);
     let ranked: NearbyHeld[];
     if (area && Number.isFinite(area.lat) && Number.isFinite(area.lng)) {
         const measured = others.map(h => ({ h, d: placed(h) ? nearbyKm(area.lat, area.lng, h.lat as number, h.lng as number) : Infinity }));
-        measured.sort((a, b) => (a.d === b.d ? 0 : a.d < b.d ? -1 : 1) || byTime(a.h, b.h));
+        measured.sort((a, b) => byOff(a.h, b.h) || (a.d === b.d ? 0 : a.d < b.d ? -1 : 1) || byTime(a.h, b.h));
         ranked = measured.map(m => m.h);
     } else {
-        ranked = [...others].sort(byTime);
+        ranked = [...others].sort((a, b) => byOff(a, b) || byTime(a, b));
     }
     return ranked.slice(cap).map(h => h.id);
 }

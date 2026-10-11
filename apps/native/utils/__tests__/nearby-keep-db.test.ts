@@ -20,7 +20,7 @@ const adapter = {
 };
 
 const ANCHOR = 'https://test.beanpool.org';
-let activeAnchor: string | null = ANCHOR;
+const activeAnchor: string | null = ANCHOR;
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn(async () => adapter) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
@@ -47,6 +47,7 @@ vi.mock('../nodes', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
 import { applyDelta, getDb } from '../db';
+import { livePostChange } from '@beanpool/core';
 
 const ME = 'me'.padEnd(64, '0');
 const ANN = 'a'.repeat(64);
@@ -78,9 +79,23 @@ describe('the keep rule reads its ties by index', () => {
         const keep = adapter.getAllAsync.mock.calls.find(([q]) => String(q).includes('AS kept'));
         expect(keep, 'the keep rule ran').toBeTruthy();
         const [q, p] = keep! as [string, unknown[]];
-        const plan = (sql.prepare(`EXPLAIN QUERY PLAN ${q}`).all(...(p ?? [])) as Array<{ detail: string }>).map(r => r.detail);
+        const plan = (sql.prepare(`EXPLAIN QUERY PLAN ${q}`).all(...((p ?? []) as any[])) as Array<{ detail: string }>).map(r => r.detail);
         expect(plan.filter(d => /^SCAN (t|c)\b/.test(d)), plan.join(' | ')).toEqual([]);
         expect(plan.some(d => /^SEARCH t USING (COVERING )?INDEX \w+ \(post_id=\?\)/.test(d)), plan.join(' | ')).toBe(true);
         expect(plan.some(d => /^SEARCH c USING (COVERING )?INDEX \w+ \(post_id=\?\)/.test(d)), plan.join(' | ')).toBe(true);
+    });
+});
+
+describe('a removal pushed frees its slot', () => {
+    it('a listing taken off goes at the next push past the cap, not the farthest listing still on the board', async () => {
+        // 5 others held near the member, the cap 5; then one of them removed (a post_removed push) and a new one pushed nearer.
+        const rows = Array.from({ length: 5 }, (_, i) => listing(`near-${i}`, BYRON.lat + 0.01 * (i + 1), BYRON.lng));
+        await applyDelta({ posts: rows, postsNearby: { area: BYRON, max: 5 } });
+        await applyDelta({ liveChanges: [livePostChange({ type: 'post_removed', id: 'near-0', audienceScope: 'public' })!], postsNearby: { area: BYRON, max: 5 } });
+        expect(sql.prepare("SELECT status FROM posts WHERE id = 'near-0'").get()).toEqual({ status: 'cancelled' });
+        const pushed = listing('push-1', BYRON.lat + 0.001, BYRON.lng);
+        await applyDelta({ liveChanges: [livePostChange({ type: 'new_post', post: pushed })!], postsNearby: { area: BYRON, max: 5 } });
+        const held = (sql.prepare('SELECT id FROM posts ORDER BY id').all() as Array<{ id: string }>).map(r => r.id);
+        expect(held).toEqual(['near-1', 'near-2', 'near-3', 'near-4', 'push-1']);
     });
 });

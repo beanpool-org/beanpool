@@ -233,6 +233,15 @@ describe('the Market\'s search in any script (review of #1716, finding 1)', () =
         expect(marketSearchMatches(spade, 'garden')).toBe(true);
     });
 
+    it('parts a Chinese list at its punctuation, so the word after the comma is asked and found mid-run (#1781)', () => {
+        const milk = { title: '新鲜牛奶出售', description: '' };
+        expect(marketSearchQuery('鸡蛋，牛奶')).toBe('鸡蛋 牛奶');
+        expect(marketSearchQuery('鸡蛋、牛奶')).toBe('鸡蛋 牛奶');
+        expect(marketSearchMatches(milk, '鸡蛋，牛奶')).toBe(true);
+        expect(marketSearchMatches(milk, '鸡蛋、牛奶')).toBe(true);
+        expect(marketSearchMatches(spade, '鸡蛋，牛奶')).toBe(false);
+    });
+
     it('the Market screen searches and filters with these, not words of its own', () => {
         const src = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/market.tsx'), 'utf8');
         expect(src).toMatch(/marketSearchQuery\(q\)/);

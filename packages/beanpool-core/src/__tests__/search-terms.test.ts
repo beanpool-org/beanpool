@@ -28,7 +28,18 @@ describe('expandSearchTerms', () => {
         // Any space parts words, a no-break or ideographic one too.
         expect(expandSearchTerms('fresh\u00a0kale\u3000jardín')).toEqual(expect.arrayContaining(['fresh', 'kale', 'jardín']));
         expect(expandSearchTerms('eggs!')).toContain('eggs');
-        expect(expandSearchTerms('NEAR(a b)')).toEqual(['neara']);
+        // Punctuation parts words, as posts_fts's unicode61 parts them: "NEAR(a" is two words, never "neara".
+        expect(expandSearchTerms('NEAR(a b)')).toEqual(['near']);
+    });
+    it('parts words at Chinese and full-width punctuation, so a word between them is found (#1781)', () => {
+        expect(searchTermsFor('鸡蛋，牛奶')).toEqual(['鸡蛋', '牛奶']);
+        expect(searchTermsFor('鸡蛋、牛奶')).toEqual(['鸡蛋', '牛奶']);
+        expect(searchTermsFor('鸡蛋。牛奶；面包：米！鱼？')).toEqual(['鸡蛋', '牛奶', '面包', '米', '鱼']);
+        expect(searchTermsFor('（牛奶）【鸡蛋】「パン」')).toEqual(['牛奶', '鸡蛋', 'パン']);
+        expect(searchTermsFor('鸡蛋＠牛奶＃面包～米｡ﾊﾟﾝ')).toEqual(['鸡蛋', '牛奶', '面包', '米', 'ﾊﾟﾝ']);
+        expect(searchTermsFor('eggs,milk')).toEqual(expect.arrayContaining(['eggs', 'milk']));
+        // The letters inside U+3000–303F stay: 々 repeats the character before it (人々, people).
+        expect(searchTermsFor('人々、時々')).toEqual(['人々', '時々']);
     });
 });
 

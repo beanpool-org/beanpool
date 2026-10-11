@@ -114,6 +114,7 @@ async function main(): Promise<void> {
     const { generateTotpSecret, generateTotpCode } = await import('./totp.js');
     const { readNodeIdentity } = await import('./services/takeover-envelope.js');
     const { noteNameStandingForTests } = await import('./services/registrar-name-watch.js');
+    const { recordRegistrarAnswer } = await import('./engine/registrar-names.js');
     const { deliverRecoverNotices } = await import('./recover-command.js');
     const { setSimulatedDiskUsageForTesting } = await import('./engine/storage-health.js');
     const alerts = await import('./services/alerts.js');
@@ -301,18 +302,20 @@ async function main(): Promise<void> {
         `2. new 2FA backup codes through the real route (${codes.status} ${codes.json?.error ?? ''})`);
     updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
 
-    noteNameStandingForTests('lost-another-key');
+    // Two registrar names on the record, as Settings' claims write them: the alert reads which are lost from it.
+    for (const name of ['first', 'second']) recordRegistrarAnswer({ status: 'live', name, hostname: `${name}.beanpool.org` }, 'claim');
+    noteNameStandingForTests('lost-another-key', 'first.beanpool.org');
     await settle();
     const nm = alerts.getAlertsStatus().active.find((a) => a.key === 'sec.name');
     assert(!!nm && nm.priority === 4 && /names another community's key/.test(nm.detail), `2. the address names another community's key: raised, high (${nm?.priority})`);
-    noteNameStandingForTests('lost-released', 'second.example');
-    noteNameStandingForTests('held', 'second.example');
+    noteNameStandingForTests('lost-released', 'second.beanpool.org');
+    noteNameStandingForTests('held', 'second.beanpool.org');
     await settle();
     advance(16 * MIN);
     await tick();
     assert(alerts.getAlertsStatus().active.some((a) => a.key === 'sec.name') && lastHistory('sec.name')?.kind === 'raised',
         `2. a second address back while the first is still lost: not over (${lastHistory('sec.name')?.kind})`);
-    noteNameStandingForTests('held');
+    noteNameStandingForTests('held', 'first.beanpool.org');
     await settle();
     advance(16 * MIN);
     await tick();

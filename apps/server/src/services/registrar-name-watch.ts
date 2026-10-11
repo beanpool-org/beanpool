@@ -453,13 +453,13 @@ function standingOf(lost: RegistrarNameLost | null, w: NameWatch): Standing {
 
 const key16 = (k: string | null) => (k ? `${k.slice(0, 16)}…` : 'a key it did not name');
 
-/** The watched addresses now lost: the owners' alert lasts while any is, and ends only when none is. */
-const lostHosts = new Set<string>();
-
-/** The owners' alert for a name lost or back (services/alerts.ts sec.name): never the other community's key, nor which address. */
+/**
+ * The owners' alert for a name lost or back (services/alerts.ts sec.name): never the other community's key, nor which
+ * address. It lasts while any recorded name is lost, and ends only when none is. That is read from the record's `lost`
+ * marks, never kept in memory: after a restart a name still lost is in no round's change, and a name gone from the
+ * record is lost no more. `host`'s own mark is written after this, so it is left out.
+ */
 function noteNameStanding(host: string, standing: Standing): void {
-    if (standing === 'lost-another-key' || standing === 'lost-released') lostHosts.add(host);
-    else if (standing === 'held') lostHosts.delete(host);
     if (standing === 'lost-another-key') {
         noteSecurityEvent({
             key: 'sec.name', state: true,
@@ -471,14 +471,16 @@ function noteNameStanding(host: string, standing: Standing): void {
             key: 'sec.name', state: true,
             detail: "This community released its address and the hold is over: what apps sign for it there is refused. Claiming it again brings it back.",
         });
-    } else if (standing === 'held' && lostHosts.size === 0) {
+    } else if (standing === 'held' && !registrarNames().some((e) => e.address !== host && e.lost)) {
         noteSecurityEvent({ key: 'sec.name', state: false, detail: "This community's address is its own again." });
     }
 }
 
-/** The owners' alert as a round tells it, for a suite (test-alerts-security). */
-export function noteNameStandingForTests(standing: Standing, host = 'name.example'): void {
+/** The owners' alert as a round tells it, and the mark the round writes after it, for a suite (test-alerts-security). */
+export function noteNameStandingForTests(standing: Standing, host: string): void {
     noteNameStanding(host, standing);
+    const lost = standing === 'lost-another-key' ? 'another-key' : standing === 'lost-released' ? 'released' : null;
+    if (standing === 'held' || lost) setRegistrarNameLost(host, lost ? { since: new Date().toISOString(), why: lost, holderKey: null } : null);
 }
 
 function logChange(host: string, standing: Standing, w: NameWatch, lost: RegistrarNameLost | null): void {

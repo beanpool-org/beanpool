@@ -53,6 +53,9 @@
  *     (07535a17: 6 hours). The registrar naming K, with nothing answering at the name, for 48 h: never dropped. After a
  *     `you`, Settings' status check says none and K answers there: Settings says so at once, and it is dropped 15 minutes
  *     on (07535a17: nothing due for 6 hours, and Settings says nothing).
+ * P again:
+ * 16. names still lost and the owners' alert on; P restarts; one name comes back: the alert lasts while another is
+ *     still lost (22851459: ended at the first one back).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-registrar-name-watch.ts
  */
@@ -215,6 +218,13 @@ async function child(): Promise<void> {
         },
         // Anna's app (or a stranger's) reads its own standing here, signed (format 2) for each host, over this node's
         // real HTTPS server: each host's status, and a 421's code.
+        // The owners' security alerts as this node holds them: which are on, and how the address alert was told.
+        alerts: async () => {
+            const alerts = await import('./services/alerts.js');
+            await new Promise((r) => setTimeout(r, 300));
+            const s = alerts.getAlertsStatus();
+            return { active: s.active.map((x) => x.key), name: s.history.filter((e) => e.key === 'sec.name').map((e) => e.kind) };
+        },
         bound: async (a: { seedHex: string; hosts: string[] }) => {
             const core = await import('@beanpool/core');
             const { ed25519 } = await import('@noble/curves/ed25519.js');
@@ -931,6 +941,32 @@ async function main(): Promise<void> {
                 `15 minutes on: lost, K its holder (${JSON.stringify(d15)}; 07535a17: 6 hours 10 minutes)`);
             assert((await statusOf(Q, qname)) === 421, 'a request signed for qname.beanpool.org → 421');
             await Q.kill('SIGKILL');
+        });
+
+        // ── 16 ──
+        console.log("\n— 16. P restarts with names still lost; one comes back: the owners' alert lasts while another is lost —");
+        await section('16', async () => {
+            const lostOn = (names: any[]) => names.filter((e: any) => e.lost).map((e: any) => e.address);
+            const before = await P.send('alerts');
+            const lostBefore = lostOn((await P.send('inspect')).registrarNames ?? []);
+            assert(before.active.includes('sec.name') && lostBefore.includes(host('envname')) && lostBefore.length >= 2,
+                `P has ${lostBefore.length} names lost, envname among them, and the owners' address alert is on (${JSON.stringify(before.active)})`);
+
+            await P.kill('SIGKILL');
+            const P2 = await spawnNode(SCRIPT, dirs.p, { ...noAgent, ADMIN_PASSWORD: PW_P, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'p2.test,envname.beanpool.org' });
+            nodes.push(P2);
+            const p2 = await P2.send('start');
+            const restarted = await P2.send('alerts');
+            assert(restarted.active.includes('sec.name'), `after a restart it is still on (${JSON.stringify(restarted.active)})`);
+
+            reg.holder.delete('envname');
+            edge.modes.set(host('envname'), { kind: 'ours', base: p2.http });
+            const back = await rounds(P2, 'envname', [T0 + 11 * MIN]);
+            assert(back[0]?.changed === 'restored', `envname.beanpool.org is this community's again (${JSON.stringify(back[0])})`);
+            const stillLost = lostOn((await P2.send('inspect')).registrarNames ?? []);
+            const after = await P2.send('alerts');
+            assert(stillLost.length >= 1 && after.active.includes('sec.name') && after.name.at(-1) !== 'cleared',
+                `${stillLost.length} still lost: the alert stays on (${JSON.stringify(after)}; 22851459: ended)`);
         });
 
         assert(!reg.calls.some((c) => !/^(GET|POST) \/api\/registrar\/(status|claim|offline|holder)$/.test(c)),

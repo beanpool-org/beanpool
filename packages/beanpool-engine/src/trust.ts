@@ -109,6 +109,7 @@ export function* washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis>
     } catch (e) {
         console.error('Wash analysis (pair net flow) failed:', e);
     }
+    yield;
 
     // --- 2. Cluster insularity (connected components over rolling 30 days) ---
     try {
@@ -118,6 +119,7 @@ export function* washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis>
             WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
               AND completed_at > datetime('now', '-30 days')
         `).all() as { buyer_pubkey: string; seller_pubkey: string; credits: number }[];
+        yield;
 
         const adj = new Map<string, Set<string>>();
         const edgeVol30 = new Map<string, number>();
@@ -159,6 +161,7 @@ export function* washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis>
                 }
             }
             components.push(comp);
+            yield;
         }
 
         if (components.length > 0) {
@@ -177,6 +180,7 @@ export function* washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis>
                     const ageDays = (Date.now() - joined.getTime()) / (1000 * 60 * 60 * 24);
                     memberAges.set(m.public_key, ageDays);
                 }
+                yield;
             }
 
             let compIdx = 0;

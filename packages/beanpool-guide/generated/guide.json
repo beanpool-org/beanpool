@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 120,
-  "hash": "72c8e2eba12698c86fcd06fea0cc8217ee056c91ffcfe096c2bee8bd9a3d5025",
+  "version": 121,
+  "hash": "6f2a1004f2eb0f36b50e8dbc1002b190e76787c5749d1f64306494a21d6bcd10",
   "sections": [
     {
       "id": "about",
@@ -106,9 +106,10 @@
     {
       "id": "settings",
       "title": "Settings and safety",
-      "summary": "Privacy, blocking and reporting, alerts, light and dark, going away, leaving, getting your account back, and checking your 12 words as an owner.",
+      "summary": "Privacy, your area, blocking and reporting, alerts, light and dark, going away, leaving, getting your account back, and checking your 12 words as an owner.",
       "slugs": [
         "privacy",
+        "your-area",
         "what-the-admins-can-see",
         "blocking",
         "reporting",
@@ -729,9 +730,29 @@
         "the-bean",
         "how-it-works",
         "rules",
-        "faq"
+        "faq",
+        "communities"
       ],
       "blocks": [
+        {
+          "type": "h2",
+          "text": "The global community, near you"
+        },
+        {
+          "type": "p",
+          "text": "You get these when the global community's server is updated. On the phone they need an up-to-date app."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The listings near you.** The global community has listings from everywhere. Your phone now keeps the nearest 500 within 250 km of your area, and your own and any listing you have a deal in progress or a conversation about, wherever they are. The Market's search still finds listings from everywhere. See \"More than one community\".",
+            "**Your area.** Joining the global community has one more step after your photo: **Roughly where are you?** Tap **Use my location**, **Type a town or suburb**, or **Skip for now**. It is kept to about 10 km, never your exact spot. Change or clear it in Settings, under **Your area**. See \"Your area\".",
+            "**No area, no problem.** Without one you see the newest listings from everywhere, and a line above the Market says so. On the phone, tap it to set your area.",
+            "**New listings near you.** They come in as they are posted. Ones far away no longer reach your phone.",
+            "**In the web app**, the Market and the Map start from your area, or from a place you pick with **Distance**: nearest first, each listing with how far away it is. See \"Finding things near you\".",
+            "**Polls** have no place of their own, so each is shown at the area of the member who made it."
+          ]
+        },
         {
           "type": "h2",
           "text": "Home"
@@ -1994,11 +2015,12 @@
     {
       "slug": "communities",
       "title": "More than one community",
-      "summary": "Belong to several communities with one account, and switch between them.",
+      "summary": "Belong to several communities with one account, switch between them, and see what the global community shows you.",
       "section": "getting-started",
       "related": [
         "joining",
         "finding-a-community",
+        "your-area",
         "leaving-or-deleting",
         "your-12-words",
         "faq",
@@ -2058,6 +2080,53 @@
         {
           "type": "p",
           "text": "On a new phone with no account yet, use **Explore BeanPool worldwide** on the first screen instead. See \"Joining BeanPool\"."
+        },
+        {
+          "type": "h2",
+          "text": "What the global community shows you"
+        },
+        {
+          "type": "p",
+          "text": "The global community has listings from everywhere, far more than a phone needs to hold. So your phone keeps the ones near you:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "the nearest 500 listings within 250 km of your area, the rough place you gave when you joined. See \"Your area\";",
+            "your own listings, and any listing you have a deal in progress or a conversation about, wherever they are."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The Market's list and the Map on your phone show what your phone keeps. New listings near your area come in as they are posted. If you change your area, your phone swaps in the listings near the new one."
+        },
+        {
+          "type": "p",
+          "text": "Nothing far away is out of reach:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Search** in the Market asks the community, so it finds listings from everywhere, not only near you. Without a connection, it searches what is already on your phone.",
+            "**A listing you open** from a message, a link or Home is fetched from the community, wherever it is. If the community no longer has it, it says **Post not found**.",
+            "**The Map** shows only what your phone keeps, so far from your area it has few pins or none. Search the Market to find things there."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Without an area, your phone keeps the newest 100 listings from everywhere instead, and a line above the Market says **You're seeing the newest listings worldwide. Set your area to see what's near you.** Tap it to set one. You can still post, message and search as before."
+        },
+        {
+          "type": "p",
+          "text": "A poll has no place of its own, so it is shown at the area of the member who made it: the polls you see are mostly ones made near you."
+        },
+        {
+          "type": "p",
+          "text": "In the web app, the Market and the Map ask the community each time: for the listings near your area or near a place you pick, or else the newest from everywhere. See \"Finding things near you\"."
+        },
+        {
+          "type": "p",
+          "text": "Your other communities work as before."
         },
         {
           "type": "h2",
@@ -2971,7 +3040,8 @@
         "browsing-the-market",
         "map-pins",
         "pin-locations",
-        "events"
+        "events",
+        "your-area"
       ],
       "blocks": [
         {
@@ -5057,6 +5127,7 @@
       "section": "settings",
       "related": [
         "your-profile",
+        "your-area",
         "pin-locations",
         "blocking",
         "messages"
@@ -5121,7 +5192,7 @@
           "items": [
             "**Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See \"Your profile\".",
             "**Location:** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how.",
-            "**Your area** (on the global community): in Settings, under **Your area**, see the area you gave, about 10 km around a town or two numbers, or **Not set**. **Clear** removes it. Below it, **Roughly where are you?** sets a new one with **Use my location** or **Type a town or suburb**, and **Cancel** (in a browser, **← Back to Settings**) leaves it as it is. Only the rounded area is ever sent. Other members see how far away you are, and a poll you make is shown at your area. Without one, you see the newest listings worldwide, and members nearby won't see a poll you make in their list, though they can still find it by searching.",
+            "**Your area** (on the global community): in Settings, under **Your area**, see the area you gave, about 10 km around a town or two numbers, or **Not set**. **Clear** removes it. Below it, **Roughly where are you?** sets a new one with **Use my location** or **Type a town or suburb**, and **Cancel** (in a browser, **← Back to Settings**) leaves it as it is. Only the rounded area is ever sent. Other members see how far away you are, and a poll you make is shown at your area. Without one, you see the newest listings worldwide, and members nearby won't see a poll you make in their list, though they can still find it by searching. See \"Your area\".",
             "**App Lock:** asks for your phone's screen lock (its PIN, pattern, password, fingerprint or face) when the app opens, and when you come back to it after 15 seconds or more away. The lock covers the app's screens and pop-ups. On an iPhone it also closes a web page the app opened, such as your community's Settings from **Manage**. It can't cover a web page the app opened on an Android phone, which opens outside the app, or the panel for sharing something on either phone: close them before you put your phone down. Your community's Settings, opened from **Manage**, signs you out after 15 minutes unused. While App Lock is on, the app goes blank as you leave it, and comes back when you return. It needs a screen lock on the phone: without one there is nothing for it to ask.",
             "**Channels:** anything you share to the Pulse is shown with your name, to anyone who opens the Pulse. See \"Sharing your channels\"."
           ]
@@ -5150,6 +5221,97 @@
         {
           "type": "p",
           "text": "In Settings, under **Legal & Privacy**, tap **Privacy Policy**."
+        }
+      ]
+    },
+    {
+      "slug": "your-area",
+      "title": "Your area",
+      "summary": "The rough place the global community uses to show you the listings near you, and how to change or clear it.",
+      "section": "settings",
+      "related": [
+        "communities",
+        "privacy",
+        "near-you",
+        "joining",
+        "browsing-the-market"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What your area is"
+        },
+        {
+          "type": "p",
+          "text": "On the global community, your area is roughly where you are: about 10 km around a town or a spot, never your exact place. The global community uses it to show you what's on offer near you: the nearest 500 listings within 250 km of it. See \"More than one community\"."
+        },
+        {
+          "type": "p",
+          "text": "You give it when you join, at the **Your Area** step, which you can skip. You can change it or clear it any time. It belongs to your account in the global community, so your phone and the web app use the same one."
+        },
+        {
+          "type": "p",
+          "text": "Your other communities don't ask for it. One whose server is set up to work the same way shows **Your area** in its Settings too."
+        },
+        {
+          "type": "h2",
+          "text": "Seeing yours"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open Settings: tap the sliders button at the top right of the screen.",
+            "Under **App Settings**, tap **Your area**. On the phone it is just under **Location**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "It says **About 10 km around** and the town you typed, or two numbers if you used your location, or **Not set**. The town's name is kept only on the phone or in the browser where you typed it, so elsewhere you see the two numbers. If the app can't reach the community, the row says **Couldn't check right now**."
+        },
+        {
+          "type": "h2",
+          "text": "Changing it"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In **Your area**, under **Roughly where are you?**, tap **Use my location**, or **Type a town or suburb** and choose your town from the list.",
+            "Once it is saved, you are back in Settings.",
+            "**Cancel** (in a browser, **← Back to Settings**) leaves it as it was."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Your phone or your browser rounds the place to about 10 km before it is sent, and the community rounds it again, so your exact spot is never sent or kept. **Use my location** takes one reading of where you are. To find a town, what you type is sent to OpenStreetMap, which the list of places comes from."
+        },
+        {
+          "type": "p",
+          "text": "When your area changes, your phone swaps the listings it keeps for the ones near the new area the next time it syncs. If you change it in the web app or on another phone, your phone picks it up within about an hour."
+        },
+        {
+          "type": "h2",
+          "text": "Clearing it"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In **Your area**, tap **Clear**. It is there only while you have an area."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Without an area you still use the global community as before. Your phone keeps the newest 100 listings from everywhere instead of the ones near you, and a line above the Market says **You're seeing the newest listings worldwide. Set your area to see what's near you.** Tap it to set one. In the web app, the Market and the Map show the newest from everywhere: see \"Finding things near you\"."
+        },
+        {
+          "type": "h2",
+          "text": "Who sees what"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Other members see how far away you are, and a poll you make is shown at your area. See \"Your privacy\".",
+            "Without an area, members nearby won't see a poll you make in their list, though they can still find it by searching."
+          ]
         }
       ]
     },

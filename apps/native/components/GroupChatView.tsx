@@ -2,7 +2,10 @@
  * GroupChatView — the chat every Commons group owns, and every enterprise's public discussion thread (groups
  * decisions 3, 8, 9, 12, 13). One screen shape for both: the owner header ("🌻 Garden Crew · group", "🥖 Bakery ·
  * enterprise"), bubbles, grey centred system lines (joins, leaves, role changes), a composer, and an honest notice
- * of who can read it. Both chats are node-readable `plaintext-v1`, unlike DMs. A group's chat is its members' only;
+ * of who can read it. A group's chat is end-to-end encrypted on a node that locks group chats (group chats slice 3:
+ * utils/group-chat-lines.ts seals and opens, utils/group-line-display.ts names each line by the key that signed it, and
+ * lines from before this member's membership are never shown); on an older node it stays node-readable, as it always
+ * was, and is never shown as locked. An enterprise's thread is node-readable `plaintext-v1`. A group's chat is its members' only;
  * an enterprise's thread is readable by any member of the community (the node checks no role on its read) and is
  * the same thread its page shows as "Public coordination for this enterprise".
  *
@@ -23,7 +26,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,8 +40,12 @@ import * as Crypto from 'expo-crypto';
 import {
     getGroupChat, postGroupChatMessage, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi, fetchGroupDetails,
     markThreadReadOnNode, toggleMessageReactionApi, editThreadMessage, deleteMessageApi, removeGroupChatMessage,
-    type GroupItem,
+    groupKeyringFor,
+    type GroupItem, type GroupMemberItem,
 } from '../utils/db';
+import { chatIsLocked, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
+import { isSealedGroupLine, searchShownLines } from '../utils/group-line-display';
+import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GROUP_KEYS_UNOPENABLE_TEXT } from '../utils/group-chat-keys';
 import { decodeEventChatText } from '../utils/events';
 import {
     isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel,
@@ -101,6 +108,16 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const [view, setView] = useState<any | null>(null);
     const [group, setGroup] = useState<GroupItem | null>(null);
     const [memberKeys, setMemberKeys] = useState<Set<string>>(new Set());
+    // The roster as last read (with each row's formerKeys when the node serves them): names a sealed line's signer.
+    const [rosterRows, setRosterRows] = useState<GroupMemberItem[]>([]);
+    // Each sealed line's view (utils/group-line-display.ts), opened on this phone after each read.
+    const [thread, setThread] = useState<OpenedGroupThread | null>(null);
+    // "Securing the chat for N people…" while this phone makes a new key for a big group.
+    const [securing, setSecuring] = useState<{ done: number; total: number } | null>(null);
+    // Why this phone will not send right now (GroupChatKeyError's sentence), until the next send goes through.
+    const [keyNotice, setKeyNotice] = useState<string | null>(null);
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const [invitedCount, setInvitedCount] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
@@ -147,6 +164,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         setMemberKeys(new Set(members
             .filter(m => m.status === 'active' || m.status === 'invited')
             .map(m => m.memberPubkey)));
+        setRosterRows(members.filter(m => m.status === 'active'));
         setInvitedCount(members.filter(m => m.status === 'invited').length);
     }, [kind, id]);
 
@@ -174,6 +192,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 answer = await getGroupChat(id);
                 setView(answer);
                 setMute(m => chatMuteFromAnswer(answer, m));
+                if (chatIsLocked(answer)) openThreadRef.current(answer);
             } else {
                 answer = await getEnterpriseChat(id);
                 setView({ ...answer, canPost: !answer.readOnly, notice: ENTERPRISE_CHAT_NOTICE });
@@ -208,6 +227,32 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         // The group's own details (name, members, invite counts) — not the thread, which the poll reads.
         loadDetails().catch(() => { });
     }, [loadDetails]);
+
+    // Open what the node served (a locked chat): the epochs of the lines shown are opened lazily, each line named by
+    // the key that signed it. Read through a ref so load() never closes over an old roster. Once per visit, this phone
+    // also hands keys it holds to members who lack them (…/keys/missing).
+    const rosterRef = useRef<GroupMemberItem[]>([]);
+    rosterRef.current = rosterRows;
+    const servedMissing = useRef(false);
+    const lastAnswer = useRef<any>(null);
+    const openThreadRef = useRef<(answer: any) => void>(() => { });
+    openThreadRef.current = (answer: any) => {
+        lastAnswer.current = answer;
+        groupKeyringFor(id)
+            .then(async ring => {
+                const opened = await openGroupThread(ring, answer, rosterRef.current.map(r => ({ memberPubkey: r.memberPubkey, callsign: r.callsign, formerKeys: (r as any).formerKeys })));
+                setThread(opened);
+                if (!servedMissing.current) {
+                    servedMissing.current = true;
+                    ring.serveMissing().catch(() => { });
+                }
+            })
+            .catch(e => console.warn('[GroupChat] could not open the chat\'s keys:', e?.message || e));
+    };
+    // A roster that arrives after the lines re-names them (a former member, an earlier key).
+    useEffect(() => {
+        if (lastAnswer.current && chatIsLocked(lastAnswer.current)) openThreadRef.current(lastAnswer.current);
+    }, [rosterRows]);
     // Refreshes only while this screen is focused and the app is in the foreground, with one load the moment
     // either comes back — the DM screen's rule, shared (utils/chat-poll). The poll's first tick is immediate,
     // so dropping load() above costs nothing on open and saves a second read of the same page.
@@ -220,10 +265,29 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const rawMessages: any[] = view?.messages || [];
     const isConvenor = !!view?.isConvenor;
     const canPost = !!view?.canPost && !!me;
+    const locked = kind === 'group' && chatIsLocked(view);
 
     /** The node's messages in the one shape every chat's components speak, plus what this phone still owes. */
     const messages: ChatMessage[] = useMemo(() => {
-        const fromNode = rawMessages.map(m => normaliseThreadMessage(m, decodeEventChatText, me, kind));
+        const fromNode = rawMessages.flatMap((m): ChatMessage[] => {
+            if (!(locked && isSealedGroupLine(m))) return [normaliseThreadMessage(m, decodeEventChatText, me, kind)];
+            const v = thread?.views.get(String(m.id));
+            // Not opened yet: nobody's, no words, for the moment it takes.
+            if (!v) return [{ ...normaliseThreadMessage(m, () => '…', me, kind), authorName: null, unattributed: true }];
+            // From before this member's membership: never shown (design §3).
+            if (v.hidden) return [];
+            const base = normaliseThreadMessage(m, () => v.text, me, kind);
+            // The key that opened the line is its author: never the node's author column (line-display design §4).
+            const senderId = v.signer ?? '';
+            return [{
+                ...base,
+                senderId,
+                outgoing: !!me && senderId === me,
+                authorName: v.name ? (v.nameHint ? `${v.name} · ${v.nameHint}` : v.name) : null,
+                integrityNote: v.details,
+                unattributed: v.unverified || v.waitingKey,
+            }];
+        });
         const mine: ChatMessage[] = pending.map(p => ({
             id: p.clientId,
             senderId: me || '',
@@ -236,14 +300,19 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
             timestamp: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }));
         return [...fromNode, ...mine];
-    }, [rawMessages, pending, me, kind]);
+    }, [rawMessages, pending, me, kind, locked, thread]);
 
     const spokenCount = useMemo(
         () => rawMessages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM').length,
         [rawMessages],
     );
     const messagesById = useMemo(() => new Map(messages.map(m => [m.id, m])), [messages]);
-    const listItems = useMemo(() => buildChatListItems(messages), [messages]);
+    // In-thread search (design §10): the open chat's lines as shown, filtered on this phone. Nothing leaves it.
+    const shownMessages = useMemo(
+        () => (searchOpen && searchQuery.trim() ? searchShownLines(messages.filter(m => m.type !== 'system' && m.senderId !== 'SYSTEM' && !m.unattributed), searchQuery) : messages),
+        [messages, searchOpen, searchQuery],
+    );
+    const listItems = useMemo(() => buildChatListItems(shownMessages), [shownMessages]);
     const showAuthorById = useMemo(() => {
         const map = new Map<string, boolean>();
         messages.forEach((m, i) => map.set(m.id, showsAuthorName(m, messages[i - 1], { kind, myPubkey: me })));
@@ -285,8 +354,16 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     /** Deliver one message. Shared by a first send and by a Resend, so both are the same code path. */
     const deliver = useCallback(async (p: PendingMessage) => {
         try {
-            if (kind === 'group') await postGroupChatMessage(id, p.text, p.clientId, p.replyToId);
-            else await postEnterpriseChatMessage(id, p.text, p.clientId);
+            if (kind === 'group') {
+                const lastSealed = [...rawMessages].reverse().find(m => isSealedGroupLine(m));
+                await postGroupChatMessage(id, p.text, p.clientId, p.replyToId, locked ? {
+                    after: lastSealed ? String(lastSealed.id) : null,
+                    mentionCandidates: rosterRows.map(r => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
+                    onProgress: (done, total) => setSecuring(total >= 10 && done < total ? { done, total } : null),
+                } : undefined);
+                setSecuring(null);
+                setKeyNotice(null);
+            } else await postEnterpriseChatMessage(id, p.text, p.clientId);
             // A poll may be mid-flight with the chat as it was before this message; wait for it, then read again.
             while (inFlight.current) await new Promise(r => setTimeout(r, 100));
             const msgs = await load();
@@ -298,9 +375,12 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         } catch (e: any) {
             // The bubble stays, marked "not delivered" — tapping it offers Resend or Discard, as in a DM.
             setPending(prev => prev.map(x => (x.clientId === p.clientId ? { ...x, state: 'failed' } : x)));
+            setSecuring(null);
+            // A key reason (an older key than this phone holds, a key not here yet) is said above the box.
+            if (e instanceof GroupChatKeyError) setKeyNotice(e.message);
             console.warn('[GroupChat] send failed:', e?.message || e);
         }
-    }, [kind, id, load]);
+    }, [kind, id, load, locked, rawMessages, rosterRows]);
 
     const send = async (text: string) => {
         if (!text || sending) return;
@@ -311,7 +391,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 const target = editingMessage;
                 setEditingMessage(null);
                 try {
-                    await editThreadMessage(target.id, text);
+                    await editThreadMessage(target.id, text, locked ? { groupId: id, metadata: target.metadata } : undefined);
                     await load();
                 } catch (e: any) {
                     await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
@@ -499,11 +579,14 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const menuItems: ChatMenuItem[] = [
         { icon: 'account-plus', label: 'Invite people', hidden: kind !== 'group' || !isConvenor, onPress: () => { setMenuOpen(false); setInviteOpen(true); } },
         { icon: muted ? 'bell-ring-outline' : 'bell-off-outline', label: muteMenuLabel(mute), onPress: () => { setMenuOpen(false); if (muted) setMuteTo('off'); else setMuteOpen(true); } },
+        { icon: 'magnify', label: 'Search this chat', hidden: kind !== 'group', onPress: () => { setMenuOpen(false); setSearchOpen(true); } },
         { icon: 'information-outline', label: kind === 'group' ? 'Group info' : 'Enterprise page', onPress: () => { setMenuOpen(false); openOwner(); } },
     ];
 
     const renderMessage = (item: ChatMessage) => {
         if (item.type === 'system' || item.senderId === 'SYSTEM') return <SystemLine text={item.text} styles={styles} />;
+        // A sealed line that names nobody: one that couldn't be verified ("Unverified"), or one whose key isn't here yet.
+        if (item.unattributed) return <SealedNoticeLine name={item.authorName ?? null} text={item.text} details={item.integrityNote ?? null} styles={styles} />;
 
         const isMe = !!me && item.senderId === me;
         const actions = messageActions(item, viewer);
@@ -594,6 +677,37 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 <Text style={styles.readOnly} numberOfLines={3}>This chat is read-only now.</Text>
             )}
 
+            {locked && (thread?.waitingForNextKey || groupKeysLookUnopenable()) && (
+                <Text style={styles.readOnly} accessibilityRole="text">
+                    {groupKeysLookUnopenable() ? GROUP_KEYS_UNOPENABLE_TEXT : GROUP_KEY_WAITING_TEXT}
+                </Text>
+            )}
+
+            {searchOpen && (
+                <View style={styles.searchRow}>
+                    <MaterialCommunityIcons name="magnify" size={20} color={colors.text.secondary} />
+                    <TextInput
+                        style={styles.searchInput}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        placeholder="Search this chat"
+                        placeholderTextColor={colors.text.muted}
+                        autoFocus
+                        accessibilityLabel="Search this chat"
+                        returnKeyType="search"
+                    />
+                    <Pressable
+                        onPress={() => { setSearchOpen(false); setSearchQuery(''); }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Close search"
+                        style={styles.searchClose}
+                        hitSlop={8}
+                    >
+                        <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />
+                    </Pressable>
+                </View>
+            )}
+
             <ChatMessageList
                 listRef={listRef}
                 items={listItems}
@@ -605,7 +719,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 // Inverted: the footer is what renders at the visual TOP, above the oldest message.
                 ListFooterComponent={showInvitePrompt ? invitePrompt : null}
                 ListEmptyComponent={
-                    showInvitePrompt ? null : (
+                    searchOpen && searchQuery.trim() ? <Text style={chat.empty}>No messages match.</Text> : showInvitePrompt ? null : (
                         <Text style={chat.empty}>
                             {invitedCount > 0 && aloneInGroup
                                 ? `${invitedCount} ${invitedCount === 1 ? 'invitation' : 'invitations'} sent. You'll see people here as they join.`
@@ -630,6 +744,15 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                     text={replyToMessage.text}
                     onCancel={() => setReplyToMessage(null)}
                 />
+            )}
+
+            {securing && (
+                <Text style={styles.securing} accessibilityRole="progressbar" accessibilityLabel={`Securing the chat for ${securing.total} people`}>
+                    Securing the chat for {securing.total} people… {securing.done} of {securing.total}
+                </Text>
+            )}
+            {!!keyNotice && !securing && (
+                <Text style={styles.keyNotice} accessibilityRole="alert">{keyNotice}</Text>
             )}
 
             {canPost && (
@@ -684,6 +807,16 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     );
 }
 
+/** A sealed line drawn as nobody's: "Unverified" (it opened under neither key the node names) or still waiting for its key. */
+function SealedNoticeLine({ name, text, details, styles }: { name: string | null; text: string; details: string | null; styles: ReturnType<typeof makeStyles> }) {
+    return (
+        <View style={styles.systemWrap} accessibilityRole="text">
+            <Text style={styles.sealedText}>{name ? `${name}: ${text}` : text}</Text>
+            {!!details && <Text style={styles.sealedDetails}>{details}</Text>}
+        </View>
+    );
+}
+
 function SystemLine({ text, styles }: { text: string; styles: ReturnType<typeof makeStyles> }) {
     return (
         <View style={styles.systemWrap}>
@@ -715,6 +848,22 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         skipText: { fontSize: 15, fontWeight: '700', color: colors.text.secondary },
         inviteHint: { fontSize: 12, color: colors.text.muted, textAlign: 'center' },
         systemWrap: { alignItems: 'center', marginVertical: 6, paddingHorizontal: 16 },
+        sealedText: {
+            fontSize: 13, color: colors.text.secondary, textAlign: 'center', fontStyle: 'italic', overflow: 'hidden',
+            backgroundColor: colors.surface.subtle, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
+        },
+        sealedDetails: { fontSize: 12, color: colors.text.muted, textAlign: 'center', marginTop: 2 },
+        securing: { marginHorizontal: 12, marginBottom: 6, fontSize: 13, color: colors.text.secondary, textAlign: 'center' },
+        keyNotice: {
+            marginHorizontal: 12, marginBottom: 6, padding: 8, borderRadius: 10, fontSize: 13, textAlign: 'center',
+            backgroundColor: colors.surface.subtle, color: colors.text.body,
+        },
+        searchRow: {
+            flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, marginTop: 8, paddingHorizontal: 10,
+            minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card,
+        },
+        searchInput: { flex: 1, minWidth: 0, fontSize: 15, color: colors.text.body, paddingVertical: 8 },
+        searchClose: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
         systemText: {
             fontSize: 12, color: colors.text.secondary, textAlign: 'center', overflow: 'hidden',
             backgroundColor: colors.surface.subtle, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,

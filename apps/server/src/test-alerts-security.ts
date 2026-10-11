@@ -266,6 +266,7 @@ async function main(): Promise<void> {
     await settle();
     assert(historyOf('sec.password-burst').length === pwEvents, '2. more wrong passwords while it is raised tell nothing new');
     // Many addresses that failed, each asking again: past the node's allowance a minute.
+    const pBurst = ownerPushes().length;
     let nodeRefused = false;
     for (let i = 0; i < 60 && !nodeRefused; i++) {
         const k = `2001:db8:${i.toString(16)}::1`;
@@ -277,6 +278,7 @@ async function main(): Promise<void> {
     await settle();
     pw = alerts.getAlertsStatus().active.find((a) => a.key === 'sec.password-burst');
     assert(nodeRefused && pw?.priority === 4 && /from many addresses/.test(pw.detail), `2. many addresses: raised again as high (${nodeRefused} ${pw?.priority})`);
+    assert(ownerPushes().length === pBurst + 1, `2. and pushed again, inside the day the first push opened (${ownerPushes().length - pBurst})`);
     advance(HOUR + MIN);
     await tick();
     advance(16 * MIN);

@@ -679,9 +679,11 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
             delete r.endedAt;
             r.detail = c.detail;
             if (priority > r.priority) {
-                // Worse than when it was told (an unclean stop whose check then failed): told again now.
+                // Worse than when it was told (an unclean stop whose check then failed): told again now, and pushed again
+                // even inside its push interval (wrong passwords from one address, then from many).
                 r.priority = priority;
                 r.toldAt = t;
+                delete s.pushedAt[c.key];
                 tell({ key: c.key, kind: 'raised', at: t, since: r.since, priority, detail: c.detail });
             } else if (t - r.toldAt >= ALERT_REMIND_MS) {
                 r.toldAt = t;

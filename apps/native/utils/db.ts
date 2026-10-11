@@ -366,8 +366,9 @@ async function _doInitDB() {
         -- On a community that syncs by area (utils/posts-nearby.ts): the ids its last set read named "tied", the member's
         -- own and tied listings as the node knows them, which the phone keeps past its cap (keepPostsNearby).
         CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);
-        -- And the set it last reconciled with, beside the node's hash of it (k = 'set', JSON ids; k = 'hash'), written
-        -- together: the phone sends the hash back and is not sent the set again while it holds (readNearbyHeld). k = 'tag':
+        -- And the set it last reconciled with, beside the node's hash of it (k = 'set', JSON ids; k = 'hash') and the tied ids
+        -- the node hashed with it (k = 'tied', JSON ids), written together: the phone sends the hash back and is not sent the
+        -- set again while it holds, or is sent what changed, which it applies and checks against the node's hash (readNearbyHeld). k = 'tag':
         -- the ETag of its last read that landed whole, sent with the next delta for a 304 (readNearbyTag).
         CREATE TABLE IF NOT EXISTS nearby_held (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 
@@ -3041,14 +3042,19 @@ async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: an
  * carries the node's set: the node's hash of it, stored with the set (nearby_held) in this same transaction, so the hash
  * the phone sends back always names the set it holds; null forgets both (the next read is named the set in full). `tag`:
  * the ETag of a read that has landed whole (every row of its set held), which the phone sends with its next delta and is
- * answered 304 while nothing in the set changed; null forgets it, as the first write of every read does.
+ * answered 304 while nothing in the set changed; null forgets it, as the first write of every read does. The `tied` the
+ * node hashed is stored with the set and its hash (k = 'tied', as the node named it, not nearby_tied's `tied ∩ set`), so a
+ * diff applied to the held set is checked against exactly what the node hashed; a set with no `tied` is stored with no
+ * hash. `forget`: all of it goes (set, hash, tied, tag), as one write: a diff that didn't check out, so the next read
+ * sends no hash and is named the set whole.
  */
 async function keepPostsNearby(
     txn: SQLite.SQLiteDatabase,
-    nearby: { set?: unknown; tied?: unknown; setHash?: unknown; tag?: unknown; area?: { lat: number; lng: number } | null; max?: unknown },
+    nearby: { set?: unknown; tied?: unknown; setHash?: unknown; tag?: unknown; forget?: unknown; area?: { lat: number; lng: number } | null; max?: unknown },
     selfPubkey: string | null,
     fresh: ReadonlySet<string>,
 ): Promise<void> {
+    if (nearby.forget === true) await txn.runAsync('DELETE FROM nearby_held');
     if (!selfPubkey) return;
     if (nearby.tag !== undefined) {
         await txn.runAsync("DELETE FROM nearby_held WHERE k = 'tag'");
@@ -3058,9 +3064,10 @@ async function keepPostsNearby(
     const set = Array.isArray(nearby.set) ? nearby.set.filter((id): id is string => typeof id === 'string') : null;
     if (max === null && set === null) return;
     if (set !== null && nearby.setHash !== undefined) {
-        await txn.runAsync("DELETE FROM nearby_held WHERE k IN ('set', 'hash')");
-        if (typeof nearby.setHash === 'string' && nearby.setHash !== '') {
-            await txn.runAsync("INSERT INTO nearby_held (k, v) VALUES ('set', ?), ('hash', ?)", [JSON.stringify(set), nearby.setHash]);
+        await txn.runAsync("DELETE FROM nearby_held WHERE k IN ('set', 'hash', 'tied')");
+        if (typeof nearby.setHash === 'string' && nearby.setHash !== '' && Array.isArray(nearby.tied)) {
+            const tied = nearby.tied.filter((id): id is string => typeof id === 'string');
+            await txn.runAsync("INSERT INTO nearby_held (k, v) VALUES ('set', ?), ('hash', ?), ('tied', ?)", [JSON.stringify(set), nearby.setHash, JSON.stringify(tied)]);
         }
     }
     if (set !== null && Array.isArray(nearby.tied)) {
@@ -3097,16 +3104,19 @@ async function keepPostsNearby(
 }
 
 /**
- * The set this phone last reconciled with on a community that syncs by area, and the node's hash of it, as
- * keepPostsNearby stored them together; null without one (never synced by area, a cleared copy, a set with no hash).
+ * The set this phone last reconciled with on a community that syncs by area, the `tied` the node hashed with it, and the
+ * node's hash of both, as keepPostsNearby stored them together; null without all three (never synced by area, a cleared
+ * copy, a set with no hash, one stored by a build before `tied` was: its next read is named the set whole, once).
  */
-export async function readNearbyHeld(): Promise<{ set: string[]; hash: string } | null> {
+export async function readNearbyHeld(): Promise<{ set: string[]; tied: string[]; hash: string } | null> {
     try {
-        const rows = await (await getDb()).getAllAsync<{ k: string; v: string }>("SELECT k, v FROM nearby_held WHERE k IN ('set', 'hash')");
+        const rows = await (await getDb()).getAllAsync<{ k: string; v: string }>("SELECT k, v FROM nearby_held WHERE k IN ('set', 'hash', 'tied')");
         const hash = rows.find(r => r.k === 'hash')?.v;
         const set = JSON.parse(rows.find(r => r.k === 'set')?.v ?? 'null');
-        if (!hash || !Array.isArray(set) || !set.every(id => typeof id === 'string')) return null;
-        return { set, hash };
+        const tied = JSON.parse(rows.find(r => r.k === 'tied')?.v ?? 'null');
+        const ids = (v: unknown): v is string[] => Array.isArray(v) && v.every(id => typeof id === 'string');
+        if (!hash || !ids(set) || !ids(tied)) return null;
+        return { set, tied, hash };
     } catch {
         return null;
     }

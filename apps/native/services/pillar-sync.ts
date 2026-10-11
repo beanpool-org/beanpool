@@ -22,6 +22,7 @@ import { postsViewRefusal } from '../utils/posts-view';
 import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
 import { getCachedNodeProfile } from '../utils/node-profile';
 import { nearbyIdReads, nearbyLastSet, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
+import { nearbySetHash } from '../utils/nearby-hash';
 import {
     nextNearbyAreaCopy, readNearbyAreaCopy, sameArea, storeNearbyAreaCopy, NEARBY_AREA_RECHECK_MS, type NearbyArea, type NearbyAreaCopy,
 } from '../utils/nearby-area';
@@ -551,9 +552,11 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // as it always was.
         const nearbyLimits = pubKey ? (await getCachedNodeProfile(anchorUrl))?.features.nearbyListings ?? null : null;
         let nearbyArea: NearbyAreaCopy | null = null;
-        // The set this phone holds and the node's hash of it: the read sends the hash back (`setHash`), and while that is
-        // still the set the node names none, only echoes the hash (utils/posts-nearby.ts nearbyLastSet).
-        let nearbyHeld: { set: string[]; hash: string } | null = null;
+        // The set this phone holds, the `tied` the node hashed with it, and the node's hash of them: the read sends the hash
+        // back (`setHash`), and while that is still the set the node names none, only echoes the hash; once it moved, a node
+        // that knows `setDiff=1` names what changed, which this phone applies and checks against the new hash before it
+        // writes it (utils/posts-nearby.ts nearbyLastSet).
+        let nearbyHeld: { set: string[]; tied: string[]; hash: string } | null = null;
         // The tag of the last read that landed whole: sent with a delta, it is answered 304 while nothing in the set changed,
         // whatever the cursor (the node's tag leaves it out: REPORT-geosync-load-B, item 3).
         let nearbyTag: string | null = null;
@@ -664,8 +667,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // is what keeps builds that predate events from ever caching one.
             // `paged=1` asks for the read paged by key (POSTS_NEXT_HEADER), `pageAfter` for the page below a key. By area,
             // `setOnce=1`: the node names the member's set on the read's last page only (utils/posts-nearby.ts nearbyPageOf),
-            // and with `setHash` not at all while the set this phone holds is still the set.
-            const nearbyQuery = () => `limit=200&sync=true&nearby=1&setOnce=1${nearbyHeld ? `&setHash=${encodeURIComponent(nearbyHeld.hash)}` : ''}`;
+            // and with `setHash` not at all while the set this phone holds is still the set; with `setDiff=1` beside it, as what
+            // changed once it moved (a node before it ignores it and names the set whole).
+            const nearbyQuery = () => `limit=200&sync=true&nearby=1&setOnce=1${nearbyHeld ? `&setHash=${encodeURIComponent(nearbyHeld.hash)}&setDiff=1` : ''}`;
             // `tag`: this phone's own If-None-Match (a by-area delta's first page), where the platform cache knows no URL it
             // never asked; the platform passes its 304 through as one.
             const pullPosts = (cursor: string, after: string | null = null, tag: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? nearbyQuery() : 'limit=1000&sync=true'}&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
@@ -793,13 +797,18 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // list (the node's switch went off since this phone heard its profile) is read as any other. Anything else is
             // an answer this phone can't read: a failed read, so the cursor stays and the next cycle asks again, never a
             // plain read that writes nothing and moves the cursor past what changed (the review of #1778, finding 6). So is
-            // a read's last page that names no set: the first page here when the node hands out no next key.
+            // a read's last page that names no set: the first page here when the node hands out no next key. One that names
+            // what changed but doesn't check out (nearbyLastSet) also forgets the set this phone holds, with its hash, `tied` and
+            // tag, so the next read sends no hash and is named the set whole: never a silently wrong set.
             let nearbyFirst: NearbyPage | null = null;
             let nearbyPlain: any;
             if (nearbyLimits && postsRes.status !== 304) {
                 const body = JSON.parse(await postsRes.text());
                 nearbyFirst = nearbyPageOf(body);
-                if (nearbyFirst && !nextPageKeyOf(postsRes) && !nearbyLastSet(nearbyFirst, nearbyHeld)) nearbyFirst = null;
+                if (nearbyFirst && !nextPageKeyOf(postsRes) && !nearbyLastSet(nearbyFirst, nearbyHeld, nearbySetHash)) {
+                    if (nearbyFirst.diff) await applyDelta({ postsNearby: { forget: true } }, expectedDbName, copyGen).catch(() => false);
+                    nearbyFirst = null;
+                }
                 if (!nearbyFirst && !Array.isArray(body)) {
                     timeouts.clear();
                     result.durationMs = Date.now() - startTime;
@@ -859,7 +868,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     pages++;
                     next = nextPageKeyOf(res);
                 }
-                const ended = complete ? nearbyLastSet(last, nearbyHeld) : null;
+                const ended = complete ? nearbyLastSet(last, nearbyHeld, nearbySetHash) : null;
+                // Every page came, and the last named what changed but it doesn't check out against the set held: that set
+                // goes (set, hash, `tied`, tag) and the cursor stays, so the next read sends no hash and is named the set whole.
+                if (complete && !ended && last.diff) await writeNear({ postsNearby: { forget: true } });
                 if (!ended) complete = false;
                 const read = ended ?? named;
                 let fetched = 0;

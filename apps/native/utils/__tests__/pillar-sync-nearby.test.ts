@@ -288,13 +288,13 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(want.size).toBe(501);
         expect(sorted(heldIds())).toEqual(sorted([...want, 'tied-perth']));
         expect(idReads()).toEqual([]);
-        // The author's name rides on the row (author_callsign), for a listing whose author the directory copy lacks.
+        // The author's name rides on the row (carried_callsign), for a listing whose author the directory copy lacks.
         sql.exec('DELETE FROM members');
-        const row = sql.prepare("SELECT author_callsign FROM posts WHERE id = 'near-000'").get() as { author_callsign: string };
-        expect(row.author_callsign).toMatch(/^Author \d$/);
+        const row = sql.prepare("SELECT carried_callsign FROM posts WHERE id = 'near-000'").get() as { carried_callsign: string };
+        expect(row.carried_callsign).toMatch(/^Author \d$/);
         const { getPosts } = await import('../db');
         const shown = (await getPosts()).find((p: any) => p.id === 'near-000');
-        expect(shown?.author_callsign).toBe(row.author_callsign);
+        expect(shown?.author_callsign).toBe(row.carried_callsign);
     }, START_MS);
 
     it('a delta: what leaves the set goes, what comes in without changing is fetched by ids=, own and tied stay', async () => {

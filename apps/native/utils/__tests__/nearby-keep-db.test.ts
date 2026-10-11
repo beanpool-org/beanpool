@@ -99,3 +99,32 @@ describe('a removal pushed frees its slot', () => {
         expect(held).toEqual(['near-1', 'near-2', 'near-3', 'near-4', 'push-1']);
     });
 });
+
+describe('the author name a listing carries', () => {
+    it('every read of a listing names author_callsign once: the directory\'s name, else the one the node carried (the review of #1778, finding 8)', async () => {
+        const { getPosts, getPost } = await import('../db');
+        sql.exec(`DELETE FROM members WHERE public_key = '${ANN}'`);
+        await applyDelta({ posts: [listing('named-1', BYRON.lat, BYRON.lng)] });
+        // The posts table keeps the carried name under a name of its own, so \`p.*\` never repeats the alias.
+        const columns = (sql.prepare('PRAGMA table_info(posts)').all() as Array<{ name: string }>).map(c => c.name);
+        expect(columns).not.toContain('author_callsign');
+        adapter.getAllAsync.mockClear();
+        adapter.getFirstAsync.mockClear();
+        expect((await getPosts()).find((p: any) => p.id === 'named-1')?.author_callsign).toBe('Ann');
+        expect((await getPost('named-1'))?.author_callsign).toBe('Ann');
+        const reads = [...adapter.getAllAsync.mock.calls, ...adapter.getFirstAsync.mock.calls].map(([q]) => String(q)).filter(q => /as author_callsign/i.test(q));
+        expect(reads.length).toBeGreaterThanOrEqual(2);
+        for (const q of reads) {
+            const stmt = sql.prepare(q) as any;
+            // node:sqlite names a statement's columns from Node 22.16; where it can, author_callsign once. (getPost's
+            // accepted_by_callsign comes twice, from p.* and its own join, as it does on main: not this change's.)
+            if (typeof stmt.columns === 'function') {
+                const names = (stmt.columns() as Array<{ name: string }>).map(c => c.name);
+                expect(names.filter(n => n === 'author_callsign'), q.slice(0, 80)).toEqual(['author_callsign']);
+            }
+        }
+        // The directory's name wins where it has one.
+        sql.prepare(`INSERT INTO members (public_key, callsign) VALUES (?, 'Ann Lee')`).run(ANN);
+        expect((await getPost('named-1'))?.author_callsign).toBe('Ann Lee');
+    });
+});

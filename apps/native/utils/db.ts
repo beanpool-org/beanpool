@@ -311,7 +311,7 @@ async function _doInitDB() {
             event_state TEXT,
             event_going_count INTEGER DEFAULT 0,
             event_interested_count INTEGER DEFAULT 0,
-            author_callsign TEXT
+            carried_callsign TEXT
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -538,8 +538,9 @@ async function _doInitDB() {
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pending_transaction_id TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN completed_at DATETIME;`); } catch (e) {}
         // The author's name as the node carried it on the listing, for a listing whose author this phone's directory copy
-        // lacks (a community that syncs by area: utils/posts-nearby.ts). The directory's name wins where it has one.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_callsign TEXT;`); } catch (e) {}
+        // lacks (a community that syncs by area: utils/posts-nearby.ts). The directory's name wins where it has one; read
+        // as author_callsign, a name the column doesn't take, so `p.*` never repeats it (the review of #1778, finding 8).
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_callsign TEXT;`); } catch (e) {}
         // The ids a by-area community's last set read named `tied` (keepPostsNearby), for a phone whose schema ran before it.
         try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);`); } catch (e) {}
         // The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat
@@ -729,7 +730,7 @@ export async function clearDB() {
 export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean; includeGroupsOf?: string; allScopes?: boolean }) {
     let database = await waitForInit();
     let query = `
-        SELECT p.*, COALESCE(m.callsign, p.author_callsign) as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN groups g ON p.target_group_id = g.id
@@ -873,7 +874,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
 export async function getMyPosts(pubkey: string) {
     const database = await waitForInit();
     const rows = await database.getAllAsync(`
-        SELECT p.*, COALESCE(m.callsign, p.author_callsign) as author_callsign, m.avatar_url as author_avatar, m.joined_at
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, m.avatar_url as author_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE p.author_pubkey = ? AND p.status IN ('active', 'pending', 'completed', 'paused') AND p.type != 'event'
@@ -964,7 +965,7 @@ export async function getPost(id: string) {
     if (anchorUrl) void refreshCachedPost(database, anchorUrl, id).catch(() => false);
 
     const row = await database.getFirstAsync<any>(`
-        SELECT p.*, COALESCE(m.callsign, p.author_callsign) as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key
@@ -2913,7 +2914,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, author_callsign) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT author_callsign FROM posts WHERE id = ?)))',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, carried_callsign) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)))',
         [
             p.id ?? null,
             p.type ?? null,

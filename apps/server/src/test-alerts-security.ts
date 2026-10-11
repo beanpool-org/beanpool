@@ -37,6 +37,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import http from 'node:http';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
 
 let testsRun = 0;
@@ -111,6 +113,7 @@ async function main(): Promise<void> {
     const { generateTotpSecret, generateTotpCode } = await import('./totp.js');
     const { readNodeIdentity } = await import('./services/takeover-envelope.js');
     const { noteNameStandingForTests } = await import('./services/registrar-name-watch.js');
+    const { deliverRecoverNotices } = await import('./recover-command.js');
     const { setSimulatedDiskUsageForTesting } = await import('./engine/storage-health.js');
     const alerts = await import('./services/alerts.js');
     const { initTls } = await import('./services/tls.js');
@@ -435,6 +438,41 @@ async function main(): Promise<void> {
         fs.readFileSync(path.join(dataDir!, 'alerts-state.json'), 'utf8')];
     assert(!flood5.some((p) => [flipped, xav, admin].some((k) => p.includes(k.slice(0, 12))) || /FlipFloS|XavNewOwnerS|AdamAdminS/.test(p)),
         '5. no member or key in the flood\'s lines, the status or the alert book');
+
+    // ── 6. The server's shell: beanpool recover run as a real process, its notice delivered as index.ts's watch does ──
+    alerts.resetAlertsForTests();
+    const recoverCli = (args: string[]) => new Promise<{ code: number; out: string }>((resolve) => {
+        const p = spawn(process.execPath, ['--import', 'tsx', path.join(path.dirname(fileURLToPath(import.meta.url)), 'recover-cli.ts'), ...args], {
+            env: { ...process.env, BEANPOOL_DATA_DIR: dataDir!, NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let out = '';
+        p.stdout.on('data', (d) => { out += d; });
+        p.stderr.on('data', (d) => { out += d; });
+        p.on('exit', (code) => resolve({ code: code ?? -1, out }));
+    });
+    const pS = ownerPushes().length;
+    const hS = topicHits().length;
+    const rec = await recoverCli(['recover', '--key', member]);
+    assert(rec.code === 0 && /is now an owner/.test(rec.out), `6. beanpool recover makes a member an owner from the shell (exit ${rec.code})`);
+    deliverRecoverNotices({ announce: () => undefined, log: () => undefined });
+    await settle(300);
+    assert(/Someone was made an owner, by the server's shell \(beanpool recover\)\./.test(lastHistory('sec.role')?.detail ?? ''),
+        `6. told as a role change, and how (${lastHistory('sec.role')?.detail})`);
+    assert(ownerPushes().length === pS + 1 && topicHits().length === hS + 1, `6. one push and one line (${ownerPushes().length - pS}, ${topicHits().length - hS})`);
+    const rec2 = await recoverCli(['recover', '--key', member]);
+    deliverRecoverNotices({ announce: () => undefined, log: () => undefined });
+    await settle(300);
+    assert(rec2.code === 0 && /A new break-glass code was made for an owner, by the server's shell \(beanpool recover\)/.test(lastHistory('sec.keys')?.detail ?? ''),
+        `6. recover on an owner: a new break-glass code, told (${lastHistory('sec.keys')?.detail})`);
+    assert(!topicHits().slice(hS).some((h) => h.body.includes(CALLSIGNS[3]) || h.body.includes(member.slice(0, 12))), '6. never naming the member');
+
+    // A claim's grant is told once, as the community claimed (claim-code.ts), never also as a role change.
+    // Last: the server left with no owner, as a claim finds it.
+    db.prepare(`DELETE FROM node_roles WHERE role = 'owner'`).run();
+    const roles6 = historyOf('sec.role').length;
+    grantNodeRole(flipped, 'owner', 'claim:claim-test-id');
+    await settle();
+    assert(historyOf('sec.role').length === roles6, `6. the claim's own owner grant is no second alert (${historyOf('sec.role').length - roles6})`);
 
     await ntfy.close();
     console.log(`\n${testsPassed}/${testsRun} passed`);

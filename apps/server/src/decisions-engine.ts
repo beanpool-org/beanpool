@@ -1610,7 +1610,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                             .run(now, GROUP_CLOSED_VOID, now, o.id);
                         cancelledDecisionIds.push(o.id);
                     }
-                    afterCommit.push(() => afterGroupVote(gid, { kind: 'closed', text: '' }));
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'closed', text: GROUP_CLOSED_LINE }));
                     break;
                 }
                 default:
@@ -2794,6 +2794,8 @@ export const GROUP_ALREADY_VOTED = "You have already voted on this. A group's vo
 export const GROUP_OBSERVER_NO_VOTE = 'Observers watch a group’s votes. Only its members and convenors vote.';
 export const GROUP_ONE_OPEN = 'You already have an open vote in this group. Wait for it to close first.';
 export const GROUP_CLOSED_VOID = 'The group is closed';
+/** The line a group's chat takes when its members close it by a vote. */
+export const GROUP_CLOSED_LINE = 'The group was closed by its members’ vote. Its chat stays to read.';
 export const GROUP_GONE = 'The group no longer exists';
 export const GROUP_SUBJECT_OFF_ROLL = 'They are not a member or convenor of this group now';
 export const GROUP_LEAD_UNTOUCHED = 'This vote never changes the lead convenor’s role. To choose a new lead, vote for one.';

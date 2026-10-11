@@ -9841,7 +9841,8 @@ export function afterGroupVote(groupId: string, change: { kind: 'role' | 'lead' 
         if (target) syncGroupThreadMembership(groupId, target);
         const type = change.kind === 'role' ? GroupSystemType.ROLE_CHANGED
             : change.kind === 'lead' ? GroupSystemType.LEAD_HANDED_OVER
-            : change.kind === 'removed' ? GroupSystemType.MEMBER_REMOVED : null;
+            : change.kind === 'removed' ? GroupSystemType.MEMBER_REMOVED
+            : change.kind === 'closed' ? GroupSystemType.CLOSED : null;
         if (type) {
             postGroupSystemLine(getMessagingCb(), groupId, type, change.text, { targetPubkey: target, byVote: true },
                 change.kind === 'removed' && target ? [target] : []);

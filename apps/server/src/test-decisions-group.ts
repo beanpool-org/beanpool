@@ -24,7 +24,7 @@ import { initStateEngine, tickDecisions, removeGroupMember, joinGroup, postGroup
 import { GROUP_CLOSED_TO_POSTS } from './engine/posts.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { GROUP_NOT_ON_ROLL, GROUP_OBSERVER_NO_VOTE, GROUP_CLOSED_VOID, GROUP_ALREADY_VOTED } from './decisions-engine.js';
+import { GROUP_NOT_ON_ROLL, GROUP_OBSERVER_NO_VOTE, GROUP_CLOSED_VOID, GROUP_ALREADY_VOTED, GROUP_CLOSED_LINE } from './decisions-engine.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -253,6 +253,17 @@ async function main(): Promise<void> {
     const closedList = await list(g3, r);
     assert(closedList.status === 200 && !!closedList.body?.closedAt && closedList.body.canPropose === false,
         `the group's votes say it is closed (got ${JSON.stringify({ closedAt: closedList.body?.closedAt, canPropose: closedList.body?.canPropose })})`);
+    // The chat and the group read say so too, and the chat has a line saying it closed (#1777 review N2).
+    const chat3 = await signedFetch('GET', `/api/groups/${g3}/chat`, null, r);
+    const closeLine = (chat3.body?.messages ?? []).find((m: any) => m.systemType === 'GROUP_CLOSED');
+    assert(chat3.status === 200 && chat3.body.canPost === false && chat3.body.readOnly === true && !!chat3.body.closedAt,
+        `the closed group's chat says it takes no line (got ${JSON.stringify({ s: chat3.status, canPost: chat3.body?.canPost, readOnly: chat3.body?.readOnly, closedAt: chat3.body?.closedAt })})`);
+    assert((closeLine?.text ?? closeLine?.ciphertext) === GROUP_CLOSED_LINE, `and it has the line saying the members closed it (got ${JSON.stringify(closeLine ?? null)})`);
+    const info3 = await signedFetch('GET', `/api/groups/${g3}`, null, r);
+    assert(info3.status === 200 && info3.body?.readOnly === true && !!info3.body?.closedAt,
+        `the group read says it is closed (got ${JSON.stringify({ s: info3.status, readOnly: info3.body?.readOnly, closedAt: info3.body?.closedAt })})`);
+    const info1 = await signedFetch('GET', `/api/groups/${g1}`, null, m2);
+    assert(info1.status === 200 && info1.body?.readOnly === false && info1.body?.closedAt === null, `an open group's read says it is open (got ${info1.status} ${info1.body?.readOnly})`);
     const yours = await signedFetch('GET', '/api/your-groups', null, r);
     const items: any[] = Array.isArray(yours.body) ? yours.body : (yours.body?.chats ?? yours.body?.items ?? yours.body?.groups ?? []);
     const mine3 = items.find(i => i.id === g3);

@@ -2649,7 +2649,9 @@ function insertScopedDecision(
  * down or whose account is suspended is off it), one vote each, and final. A replay of the same vote counts once.
  */
 function castScopedVote(decision: Decision, voterPubkey: string, support: boolean, signature?: string): { success: boolean; creditsUsed: number; error?: string } {
-    if (!liveRoll(decision.id).has(voterPubkey)) return { success: false, creditsUsed: 0, error: NOT_ON_ROLL };
+    if (!liveRoll(decision.id).has(voterPubkey)) {
+        return { success: false, creditsUsed: 0, error: decision.scopeKind === 'group' ? GROUP_NOT_ON_ROLL : NOT_ON_ROLL };
+    }
     const now = new Date().toISOString();
     const wrote = db.prepare(`
         INSERT INTO decision_votes (decision_id, voter_pubkey, support, weight, credits_used, signature, created_at, updated_at)
@@ -2786,6 +2788,8 @@ export function openScopedDecisionsFor(member: string): Decision[] {
 /** A group's vote has no admin halt (§5, pick 6): node admins hold no power over groups. */
 export const GROUP_NO_ADMIN_HALT = "A group's vote has no admin halt: node admins hold no power over groups.";
 export const GROUP_ROLL_OF_ONE = 'Nobody else in this group can vote, so there is nobody to vote with.';
+/** Off a group vote's roll: an observer, someone who joined after it opened, or who left during it. */
+export const GROUP_NOT_ON_ROLL = "Only the group's members and convenors on this vote's roll can vote on it. Observers watch.";
 export const GROUP_OBSERVER_NO_VOTE = 'Observers watch a group’s votes. Only its members and convenors vote.';
 export const GROUP_ONE_OPEN = 'You already have an open vote in this group. Wait for it to close first.';
 export const GROUP_CLOSED_VOID = 'The group is closed';

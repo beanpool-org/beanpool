@@ -146,7 +146,9 @@ export type NeedsTarget =
     | { to: 'unread-messages' }
     | { to: 'your-groups' }
     /** An enterprise's own screen, for its keepers' votes (DESIGN-group-decisions §2.8): only to an app that says it opens it. */
-    | { to: 'enterprise'; id: string };
+    | { to: 'enterprise'; id: string }
+    /** A chat group's own screen, for its members' votes (slice S3): only to an app that says it opens it (lands=group). */
+    | { to: 'group'; id: string };
 /** One line of "Needs you", the shape apps/native utils/needs-you.ts builds. `closesAt` on a vote, so an app words it in the member's own time. */
 export interface NeedsItem { kind: NeedsKind; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
@@ -243,8 +245,8 @@ export interface HomeReader {
 }
 
 /** The landings an app may say it opens (`lands=`), beyond the ones every app has. */
-export type HomeLanding = 'enterprise';
-const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise']);
+export type HomeLanding = 'enterprise' | 'group';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group']);
 
 /** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
 export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
@@ -406,7 +408,11 @@ const waitsOn = (t: { status: string; buyerPublicKey: string; sellerPublicKey: s
  * anyone off it. Only for an app that opens an enterprise's own screen (lands=enterprise): an older app's vote line and
  * Decide card land on Commons → Decide, which never lists them.
  */
-const scopedVotesFor = (c: Ctx) => (c.me && c.lands.has('enterprise') ? openScopedDecisionsFor(c.me) : []);
+const scopedVotesFor = (c: Ctx) => (c.me && (c.lands.has('enterprise') || c.lands.has('group'))
+    // A group's vote only to an app that opens a group's own screen (lands=group), an enterprise's only to one that
+    // opens an enterprise's (lands=enterprise): neither ever lands nowhere.
+    ? openScopedDecisionsFor(c.me).filter(d => (d.scopeKind === 'group' ? c.lands.has('group') : c.lands.has('enterprise')))
+    : []);
 
 // ── the cards ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -461,7 +467,8 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
                 kind: 'vote', count: votes.length, accent: Date.parse(soonest) - c.now <= VOTE_ACCENT_WINDOW_MS,
                 label: votes.length === 1 ? `Vote ${when}: ${clip(votes[0].title, TITLE_CHARS)}` : `${votes.length} votes to cast, the first ${when}`,
                 // Where the first one is: an enterprise's own screen for its keepers' vote, else Commons → Decide.
-                target: votes[0].scopeKind === 'enterprise' && votes[0].scopeId ? { to: 'enterprise', id: votes[0].scopeId } : { to: 'decide' },
+                target: votes[0].scopeKind === 'enterprise' && votes[0].scopeId ? { to: 'enterprise', id: votes[0].scopeId }
+                    : votes[0].scopeKind === 'group' && votes[0].scopeId ? { to: 'group', id: votes[0].scopeId } : { to: 'decide' },
                 closesAt: soonest,
             });
         }

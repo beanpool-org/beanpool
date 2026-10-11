@@ -453,8 +453,13 @@ function standingOf(lost: RegistrarNameLost | null, w: NameWatch): Standing {
 
 const key16 = (k: string | null) => (k ? `${k.slice(0, 16)}…` : 'a key it did not name');
 
-/** The owners' alert for a name lost or back (services/alerts.ts sec.name): never the other community's key. */
-function noteNameStanding(standing: Standing): void {
+/** The watched addresses now lost: the owners' alert lasts while any is, and ends only when none is. */
+const lostHosts = new Set<string>();
+
+/** The owners' alert for a name lost or back (services/alerts.ts sec.name): never the other community's key, nor which address. */
+function noteNameStanding(host: string, standing: Standing): void {
+    if (standing === 'lost-another-key' || standing === 'lost-released') lostHosts.add(host);
+    else if (standing === 'held') lostHosts.delete(host);
     if (standing === 'lost-another-key') {
         noteSecurityEvent({
             key: 'sec.name', state: true,
@@ -466,18 +471,18 @@ function noteNameStanding(standing: Standing): void {
             key: 'sec.name', state: true,
             detail: "This community released its address and the hold is over: what apps sign for it there is refused. Claiming it again brings it back.",
         });
-    } else if (standing === 'held') {
+    } else if (standing === 'held' && lostHosts.size === 0) {
         noteSecurityEvent({ key: 'sec.name', state: false, detail: "This community's address is its own again." });
     }
 }
 
 /** The owners' alert as a round tells it, for a suite (test-alerts-security). */
-export function noteNameStandingForTests(standing: Standing): void {
-    noteNameStanding(standing);
+export function noteNameStandingForTests(standing: Standing, host = 'name.example'): void {
+    noteNameStanding(host, standing);
 }
 
 function logChange(host: string, standing: Standing, w: NameWatch, lost: RegistrarNameLost | null): void {
-    noteNameStanding(standing);
+    noteNameStanding(host, standing);
     switch (standing) {
         case 'lost-another-key':
             logger.security('AUTH', `[Names] ${host}: the address service names another community's key (${key16(lost?.holderKey ?? null)}) as its holder, `

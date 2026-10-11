@@ -305,11 +305,18 @@ async function main(): Promise<void> {
     await settle();
     const nm = alerts.getAlertsStatus().active.find((a) => a.key === 'sec.name');
     assert(!!nm && nm.priority === 4 && /names another community's key/.test(nm.detail), `2. the address names another community's key: raised, high (${nm?.priority})`);
+    noteNameStandingForTests('lost-released', 'second.example');
+    noteNameStandingForTests('held', 'second.example');
+    await settle();
+    advance(16 * MIN);
+    await tick();
+    assert(alerts.getAlertsStatus().active.some((a) => a.key === 'sec.name') && lastHistory('sec.name')?.kind === 'raised',
+        `2. a second address back while the first is still lost: not over (${lastHistory('sec.name')?.kind})`);
     noteNameStandingForTests('held');
     await settle();
     advance(16 * MIN);
     await tick();
-    assert(lastHistory('sec.name')?.kind === 'cleared', `2. its own again: resolved after the hold (${lastHistory('sec.name')?.kind})`);
+    assert(lastHistory('sec.name')?.kind === 'cleared', `2. every address its own again: resolved after the hold (${lastHistory('sec.name')?.kind})`);
 
     // ── 3. Replaced, until acknowledged ─────────────────────────────────────────────────────────────────────────────
     alerts.resetAlertsForTests();

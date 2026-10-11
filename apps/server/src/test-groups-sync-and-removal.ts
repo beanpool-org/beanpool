@@ -306,7 +306,7 @@ async function main(): Promise<void> {
     setMemberRole(orchard.id, alice, ivy, 'convenor');
     setMemberRole(orchard.id, alice, lee, 'convenor');
     removeGroupMember(orchard.id, alice, kit);
-    const tenure = (pub: string) => db.prepare(`SELECT role, status, joined_at, role_since, COALESCE(role_since, joined_at) AS since
+    const tenure = (pub: string) => db.prepare(`SELECT role, status, joined_at, role_since, from_epoch, COALESCE(role_since, joined_at) AS since
         FROM group_members WHERE group_id = ? AND member_pubkey = ?`).get(orchard.id, pub) as any;
     const ivyThen = tenure(ivy), judeThen = tenure(jude), kitThen = tenure(kit), leeThen = tenure(lee);
     assert(!!ivyThen?.role_since && ivyThen.role_since > ivyThen.joined_at, 'Ivy\'s appointment is later than her joining');
@@ -317,8 +317,9 @@ async function main(): Promise<void> {
 
     // What an older main sends: no roleSince. Ivy's row unchanged; Jude made a convenor; Kit re-admitted as a
     // convenor and joined again (an older main stamps joined_at on re-admission). Lee's row is a current main's.
+    // Older than from_epoch too (the first epoch a membership holds keys from), which is newer than role_since.
     const olderMain = (pub: string, change: Record<string, unknown> = {}) => {
-        const { roleSince: _r, ...row } = exportedRow(pub) ?? {};
+        const { roleSince: _r, fromEpoch: _f, ...row } = exportedRow(pub) ?? {};
         return { ...row, ...change };
     };
     await new Promise(r => setTimeout(r, 5));
@@ -351,6 +352,9 @@ async function main(): Promise<void> {
         'so their appointment reads as the re-admission, not earlier');
     assert(leeNow?.role === 'convenor' && leeNow.role_since === leeThen.role_since,
         'a current main\'s appointment time replaces the one the replica held');
+    assert(ivyThen.from_epoch != null && ivyNow?.from_epoch === ivyThen.from_epoch,
+        `an older main rewriting the same membership keeps the first epoch it holds keys from (got ${ivyNow?.from_epoch}, held ${ivyThen.from_epoch})`);
+    assert(kitNow?.from_epoch === null, `a membership re-admitted on an older main gets none: the reader falls back to the stored_at rule (got ${kitNow?.from_epoch})`);
 
     console.log(`\n${passed}/${run} passed`);
     await p2pNode.stop();

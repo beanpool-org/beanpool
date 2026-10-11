@@ -23,6 +23,8 @@
  *   F5.   an edit stays under its line's own epoch (Marty's pick 1): Ana's line under 2, Dov joins (3), Ana edits under 2:
  *         200, metadata.epoch still 2, Dov served nothing of it; an edit naming 3 is 409 epoch_not_lines; an edit under 2
  *         while 2 is current and stale is 200; the edit opens under 2 for a member, and its sender is the editor
+ *   Re-key edit. Amy, re-keyed, edits her old line: metadata.sender becomes her new key, and only by it does the edit open
+ *   K11.  a pruned account's group row stays active, and `missing` lists it for nobody (review of #1772, finding 3)
  *   E.    a newcomer hears nothing of a line from before her (review of #1772, finding 2): her socket hears no edit, reaction
  *         or removal of it; her reaction to it by id, and her removal of it once a convenor, are answered as an id nobody
  *         has, with nothing written; a member who holds its epoch hears each, and her own reaction to a line under 2 is heard
@@ -36,7 +38,7 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, createGroup } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createGroup, adminPruneUser } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -433,6 +435,19 @@ async function main(): Promise<void> {
         assert((await call('POST', b, `${kp}/wrap`, makeGroupTopUp(bKey2, { myEdPrivHex: b.seedHex, groupId: g, epoch: 2, recipientPubHex: newA.pk }))).status === 201, 'Bo tops Amy up for epoch 2');
         const aKey2 = openFrom(await keysOf(newA, g), newA, g, 2);
         assert(openAs(servedMeta.sender, aKey2) === words, 'and Amy, on her new key, opens her own old line');
+        // Her edit after the re-key is sealed by her new key: the node must store the editor as sender, or nobody opens it.
+        const edited = 'the seed swap moved to the hall';
+        const ed = await call('POST', newA, '/api/messages/edit', { messageId: line.id,
+            ...sealGroupLine(edited, { myEdPrivHex: newA.seedHex, groupKey: aKey2, groupId: g, epoch: 2, messageId: line.id, part: 'edit' }), metadata: { epoch: 2 } });
+        const after = db.prepare('SELECT ciphertext, nonce, metadata FROM messages WHERE id = ?').get(line.id) as any;
+        const afterMeta = JSON.parse(after.metadata);
+        assert(ed.status === 200 && afterMeta.sender === newA.pk && afterMeta.epoch === 2,
+            `Amy, re-keyed, edits her old line under 2: metadata.sender is now the editor, her new key (got ${ed.status}, ${afterMeta.sender === newA.pk ? 'new' : afterMeta.sender === a.pk ? 'old' : afterMeta.sender})`);
+        const openEdit = (sender: string) => {
+            try { return openGroupLine({ ciphertext: after.ciphertext, nonce: after.nonce }, { groupId: g, epoch: 2, senderPubHex: sender, messageId: line.id, part: 'edit' }, bKey2).text; } catch { return null; }
+        };
+        assert(openEdit(afterMeta.sender ?? stored.author_pubkey) === edited, "Bo opens her edit with metadata.sender ?? author_pubkey: the only way a re-keyed author's edit opens");
+        assert(openEdit(a.pk) === null, "by her old key, the line's first sender, it does not open");
     }
 
     // ── F5. an edit across a join ────────────────────────────────────────────────────────────────────
@@ -473,6 +488,23 @@ async function main(): Promise<void> {
                 openFrom(await keysOf(b, g), b, g, 2)).text;
         } catch { /* refused */ }
         assert(text === 'EDITED after Del joined: the hall is booked for 7' && meta.sender === a.pk, `Bea opens the edit under the epoch the row names, from its sender (got "${text}")`);
+    }
+
+    // ── K11. `missing` asks for no one outside the roster ──────────────────────────────────────────────
+    console.log('\n── K11. a pruned account keeps an active group row, and `missing` never lists it ──');
+    {
+        const [a, b, p] = [member('Abe'), member('Bree'), member('Pru')];
+        const g = createGroup({ name: 'Pruned', joinPolicy: 'open', createdBy: a.pk }).id;
+        const kp = `/api/groups/${g}/keys`;
+        assert((await call('POST', b, `/api/groups/${g}/join`, {})).status === 200, 'Bree joins');
+        assert((await call('POST', a, `${kp}/epoch`, { epoch: epochBy(a, g, 1, 'start', [a, b]).record })).status === 201, 'Abe starts epoch 1 for Abe and Bree');
+        assert((await call('POST', p, `/api/groups/${g}/join`, {})).status === 200 && fromEpochCol(g, p.pk) === 2, 'Pru joins with no epoch: from_epoch 2');
+        adminPruneUser(p.pk, owner.pk);
+        const pRow = db.prepare('SELECT status FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, p.pk) as any;
+        assert(pRow?.status === 'active' && !(await keysOf(a, g)).roster.includes(p.pk), "Pru is pruned: her group row stays active, and she is in no roster");
+        assert((await call('POST', a, `${kp}/epoch`, { epoch: epochBy(a, g, 2, 'rotate', [a, b]).record })).status === 201, "Abe rotates to 2 for today's roster, Abe and Bree");
+        const listed = ((await call('GET', a, `${kp}/missing`)).body.missing as any[]).map((m) => m.pubkey);
+        assert(!listed.includes(p.pk), `\`missing\` leaves out her active row with no wrap for 2: nobody is asked to wrap for someone outside the roster (got ${JSON.stringify(listed)})`);
     }
 
     // ── E. a newcomer hears nothing of the lines from before her ─────────────────────────────────────

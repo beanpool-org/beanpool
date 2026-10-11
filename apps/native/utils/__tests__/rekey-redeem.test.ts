@@ -149,7 +149,7 @@ describe('asking', () => {
         const slot = await beginRekey(MULLUM, CODE, w.deps);
         expect(await pollRekey(slot, w.deps)).toMatchObject({ state: 'waiting', match: '47' });
         expect(await pollRekey(slot, w.deps)).toEqual({ state: 'unreachable' });
-        expect(await pollRekey(slot, w.deps)).toEqual({ state: 'bound', callsign: 'MiaMember', communityName: 'Mullum' });
+        expect(await pollRekey(slot, w.deps)).toEqual({ state: 'bound', callsign: 'MiaMember', communityName: 'Mullum', linkSignInAgain: true });
         expect(w.sent[0].url).toBe(`${MULLUM}/api/member/re-enroll/status?code=${CODE}`);
         expect(w.log).toContain('headers GET');
     });
@@ -199,11 +199,19 @@ describe('finishing', () => {
 });
 
 describe('the next launch (resume)', () => {
+    it('bound with no sign-in copies removed says so: linkSignInAgain is false (review N5)', async () => {
+        const w = world({ answers: [{ status: 200, body: { state: 'bound', callsign: 'MiaMember', communityName: 'Mullum', linkSignInAgain: false } }] });
+        const r = await resumeRekey(w.deps);
+        expect(r).toBeNull();
+        const slot = await beginRekey('https://mullum.example.org', 'RK-AB12-CD34', w.deps);
+        expect(await askRekey(slot, w.deps)).toEqual({ state: 'bound', callsign: 'MiaMember', communityName: 'Mullum', linkSignInAgain: false });
+    });
+
     it('bound while the app was closed: asked once, told bound, the caller saves it', async () => {
         const w = world({ answers: [bound] });
         w.slot = { community: MULLUM, code: CODE, publicKey: id('1').publicKey, madeHere: true, draft: id('1'), startedAt: 1 };
         const r = await resumeRekey(w.deps);
-        expect(r?.answer).toEqual({ state: 'bound', callsign: 'MiaMember', communityName: 'Mullum' });
+        expect(r?.answer).toEqual({ state: 'bound', callsign: 'MiaMember', communityName: 'Mullum', linkSignInAgain: true });
         expect(w.slot).not.toBeNull();
         await finishRekey(r!.slot, { callsign: 'MiaMember' }, w.deps);
         expect(w.phone?.publicKey).toBe(id('1').publicKey);

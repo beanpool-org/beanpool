@@ -227,8 +227,8 @@ async function runTests() {
         const c = await bindByNumber(adminSession, mia.pubKeyHex, code, a.json.match);
         assert(c.status === 200 && c.json.success === true && c.json.newPubkey === phone.pubKeyHex, `typing the phone's number binds that phone (got ${c.status} ${JSON.stringify(c.json)})`);
         const p1 = await poll(phone, code);
-        assert(p1.status === 200 && p1.json.state === 'bound' && p1.json.callsign === 'MiaMember' && p1.json.linkSignInAgain === true,
-            `the phone's poll says bound with the member's name and to link the sign-in again (got ${JSON.stringify(p1.json)})`);
+        assert(p1.status === 200 && p1.json.state === 'bound' && p1.json.callsign === 'MiaMember' && p1.json.linkSignInAgain === false,
+            `the phone's poll says bound with the member's name, and nothing about a sign-in she never linked (got ${JSON.stringify(p1.json)})`);
         assert(before === 7 && getBalance(phone.pubKeyHex).balance === before && !isMember(mia.pubKeyHex), `the balance moved to the new key (${before} → ${getBalance(phone.pubKeyHex).balance} Beans)`);
         const me = await signedReq(phone, 'GET', '/api/community/me');
         assert(me.status === 200, `the new key reads its own account (got ${me.status})`);
@@ -484,6 +484,10 @@ async function runTests() {
         await ask(phone, code);
         const c = await complete(adminSession, kit.pubKeyHex, code, phone.pubKeyHex);
         assert(c.status === 200 && c.json.signInCopiesRemoved === 2, `the move answers the copies it removed (got ${c.json.signInCopiesRemoved})`);
+        const told = await poll(phone, code);
+        assert(told.json.state === 'bound' && told.json.linkSignInAgain === true, `the phone is told to link its sign-in again: copies were removed (got ${JSON.stringify(told.json)})`);
+        const again = await ask(phone, code);
+        assert(again.json.state === 'bound' && again.json.linkSignInAgain === true, `and so is a lost answer asked again (got ${JSON.stringify(again.json)})`);
         const owned = (pk: string) => (db.prepare('SELECT COUNT(*) AS n FROM recovery_shares WHERE owner_pubkey = ?').get(pk) as { n: number }).n;
         assert(owned(kit.pubKeyHex) === 0 && owned(phone.pubKeyHex) === 0, 'neither key owns a recovery copy: the old seed\'s copies are gone');
         const tomb = db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'recovery_shares' AND row_key = ?").get(`${kit.pubKeyHex}|1`);

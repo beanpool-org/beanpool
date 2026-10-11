@@ -447,6 +447,8 @@ export function completeRekey(
                 callsign: member.callsign,
                 operatorPubkey,
                 completedAt: nowIso,
+                // Kept with the move, so the phone that asks again is told to link a sign-in only when one was removed.
+                signInCopiesRemoved,
             })
         );
 

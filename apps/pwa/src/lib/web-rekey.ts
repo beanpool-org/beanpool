@@ -47,7 +47,7 @@ export function rekeyCodeFromSearch(search: string): string | null {
 
 export type WebRekeyAnswer =
     | { state: 'waiting'; match: string; expiresAt: string }
-    | { state: 'bound'; callsign: string; communityName: string }
+    | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
     | { state: 'declined' }
     | { state: 'gone' }
     | { state: 'refused'; message: string; code?: string }
@@ -97,7 +97,7 @@ export async function webRekeyKey(deps: WebRekeyDeps, now = Date.now()): Promise
 function readAnswer(status: number, body: any): WebRekeyAnswer {
     if (status === 200 && body && typeof body.state === 'string') {
         if (body.state === 'waiting' && typeof body.match === 'string') return { state: 'waiting', match: body.match, expiresAt: String(body.expiresAt ?? '') };
-        if (body.state === 'bound') return { state: 'bound', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? '') };
+        if (body.state === 'bound') return { state: 'bound', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), linkSignInAgain: body.linkSignInAgain === true };
         if (body.state === 'declined') return { state: 'declined' };
         if (body.state === 'gone') return { state: 'gone' };
     }

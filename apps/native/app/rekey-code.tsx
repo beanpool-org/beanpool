@@ -108,6 +108,8 @@ export default function RekeyCodeScreen() {
     const [expiresAt, setExpiresAt] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
     const [newWords, setNewWords] = useState<string[] | null>(null);
+    // The node removed sign-in copies of the old key in the move: only then is the member asked to link one again.
+    const [linkSignInAgain, setLinkSignInAgain] = useState(false);
     const [wroteThemDown, setWroteThemDown] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [permission, requestPermission] = useCameraPermissions();
@@ -115,9 +117,10 @@ export default function RekeyCodeScreen() {
     const finishing = useRef(false);
 
     /** The member is bound: save, move onto the community, then the words (a new key) or the sign-in nudge. */
-    const onBound = useCallback(async (s: RekeySlot, answer: { callsign: string; communityName: string }) => {
+    const onBound = useCallback(async (s: RekeySlot, answer: { callsign: string; communityName: string; linkSignInAgain: boolean }) => {
         if (finishing.current) return;
         finishing.current = true;
+        setLinkSignInAgain(answer.linkSignInAgain);
         try {
             const done = await finishRekey(s, answer, deps);
             if (done.newWords) {
@@ -276,6 +279,16 @@ export default function RekeyCodeScreen() {
                 </Pressable>
                 <Pressable style={styles.primary} onPress={() => setPhase('linkAgain')} accessibilityRole="button">
                     <Text style={styles.primaryText}>Continue</Text>
+                </Pressable>
+            </View>
+        );
+    } else if (phase === 'linkAgain' && !linkSignInAgain) {
+        body = (
+            <View>
+                <Text style={styles.title} accessibilityRole="header">You’re in</Text>
+                <Text style={styles.lead}>This phone now holds your account: your Beans, your name and your history.</Text>
+                <Pressable style={styles.primary} onPress={() => router.replace('/(tabs)')} accessibilityRole="button">
+                    <Text style={styles.primaryText}>Done</Text>
                 </Pressable>
             </View>
         );

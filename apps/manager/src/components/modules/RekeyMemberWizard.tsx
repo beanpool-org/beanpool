@@ -98,6 +98,8 @@ export function RekeyMemberWizard({
     const [wrongNumbers, setWrongNumbers] = useState(0);
     // Three wrong numbers stopped the code on the node: like an expired one, only a new code helps.
     const [codeStopped, setCodeStopped] = useState(false);
+    // Sign-in copies of the old key the move removed (the node's count): step 3 asks for a new link only when > 0.
+    const [signInCopiesRemoved, setSignInCopiesRemoved] = useState(0);
 
     // The node left an owner's or admin's pending code out: this phone session is past its step-up window (#1534).
     const [codeNeedsStepUp, setCodeNeedsStepUp] = useState(false);
@@ -269,6 +271,7 @@ export function RekeyMemberWizard({
         setError(null);
         try {
             const res = await bindRekeyByMatchApi(nodeUrl, member.publicKey, issuedCode, match, adminPassword, tfaToken);
+            setSignInCopiesRemoved(res.signInCopiesRemoved ?? 0);
             setNewPubkey(res.newPubkey);
             setStep(3);
             onSuccess?.(res.newPubkey);
@@ -303,7 +306,8 @@ export function RekeyMemberWizard({
         setCompleting(true);
         setError(null);
         try {
-            await completeRekeyApi(nodeUrl, member.publicKey, issuedCode, clean, adminPassword, tfaToken);
+            const res = await completeRekeyApi(nodeUrl, member.publicKey, issuedCode, clean, adminPassword, tfaToken);
+            setSignInCopiesRemoved(res?.signInCopiesRemoved ?? 0);
             setNewPubkey(clean);
             setStep(3);
             onSuccess?.(clean);
@@ -787,7 +791,8 @@ export function RekeyMemberWizard({
                                 All balance, trade history, roles, and keeperships for <strong className="text-white break-all">@{member.callsign}</strong> have been atomically transferred to the new device key.
                             </p>
                             <p className="text-nature-400 text-[11px] m-0">
-                                Their phone shows their new 12 words. A sign-in they had linked for recovery has to be linked again from the new phone.
+                                If their phone made a new key, it shows that key's 12 words.
+                                {signInCopiesRemoved > 0 && ' A sign-in they had linked for recovery protected the old key, so it was removed: they link it again from the new phone.'}
                             </p>
                         </div>
 

@@ -67,12 +67,29 @@ describe('An admin gave me a re-key code', () => {
         expect(screen.getByLabelText('The code')).toHaveValue(CODE);
     });
 
+    it('bound with no sign-in copies removed: "You’re in", and no line about linking a sign-in again (review N5)', async () => {
+        stubNode({
+            '/api/member/re-enroll': () => json(200, { state: 'bound', callsign: 'MiaMember', communityName: 'Mullum', linkSignInAgain: false }),
+        });
+        window.history.replaceState(null, '', `/app?rekey=${CODE}`);
+        const onComplete = vi.fn();
+        render(<WelcomePage onComplete={onComplete} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+        expect(await screen.findByTestId('web-rekey-words')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expect(await screen.findByTestId('web-rekey-done')).toBeTruthy();
+        expect(screen.queryByTestId('web-rekey-link-again')).toBeNull();
+        expect(screen.queryByText(/so it was removed/)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    });
+
     it('a new key is in the pending-join slot, marked sent, before the ask goes; the number shows; bound saves it', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
         let atAsk: PendingJoin | null = null;
         let polls = 0;
         const calls = stubNode({
-            '/api/member/re-enroll/status': () => { polls++; return json(200, { state: 'bound', callsign: 'MiaMember', communityName: 'Mullum' }); },
+            '/api/member/re-enroll/status': () => { polls++; return json(200, { state: 'bound', callsign: 'MiaMember', communityName: 'Mullum', linkSignInAgain: true }); },
             '/api/member/re-enroll': async () => {
                 atAsk = await loadPendingJoin();
                 return json(200, { state: 'waiting', match: '47', expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
@@ -104,6 +121,7 @@ describe('An admin gave me a re-key code', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         expect(await screen.findByTestId('web-rekey-link-again')).toBeTruthy();
+        expect(screen.queryByTestId('web-rekey-done')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
         expect(onComplete.mock.calls[0][0]).toMatchObject({ publicKey: saved.publicKey, callsign: 'MiaMember' });

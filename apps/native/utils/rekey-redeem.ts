@@ -102,7 +102,7 @@ export interface RekeySlotStore {
 
 export type RekeyAnswer =
     | { state: 'waiting'; match: string; expiresAt: string }
-    | { state: 'bound'; callsign: string; communityName: string }
+    | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
     | { state: 'declined' }
     | { state: 'gone' }
     /** The node refused the ask, in its own words (a dead code, a phone with an account here, too many tries). */
@@ -167,7 +167,7 @@ async function keyOf(slot: RekeySlot, deps: RekeyDeps): Promise<BeanPoolIdentity
 function readAnswer(status: number, body: any): RekeyAnswer {
     if (status === 200 && body && typeof body.state === 'string') {
         if (body.state === 'waiting' && typeof body.match === 'string') return { state: 'waiting', match: body.match, expiresAt: String(body.expiresAt ?? '') };
-        if (body.state === 'bound') return { state: 'bound', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? '') };
+        if (body.state === 'bound') return { state: 'bound', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), linkSignInAgain: body.linkSignInAgain === true };
         if (body.state === 'declined') return { state: 'declined' };
         if (body.state === 'gone') return { state: 'gone' };
     }

@@ -56,12 +56,12 @@ export class RekeyRedeemRefusal extends Error {
 
 export type RekeyAsk =
     | { state: 'waiting'; match: string; expiresAt: string }
-    | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: true }
+    | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
     | { state: 'declined' };
 
 export type RekeyRedeemStatus =
     | { state: 'waiting'; match: string; expiresAt: string }
-    | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: true }
+    | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
     | { state: 'declined' }
     | { state: 'gone' };
 
@@ -108,9 +108,16 @@ function isLive(req: RekeyRequestRow | undefined, now: number): req is RekeyRequ
     return !!req && req.status === 'pending' && new Date(req.expires_at).getTime() >= now;
 }
 
-function boundAnswer(newKey: string): { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: true } {
+/**
+ * The bound phone's answer. `linkSignInAgain` only when the move removed sign-in copies of the old key (the count kept in
+ * the move's audit row): most members never linked one, and are not told one was removed (#1783 review N5).
+ */
+function boundAnswer(newKey: string): { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean } {
     const member = db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(newKey) as { callsign: string } | undefined;
-    return { state: 'bound', callsign: member?.callsign ?? '', communityName: getLocalConfig().communityName || '', linkSignInAgain: true };
+    const move = db.prepare('SELECT details FROM rekey_audit_log WHERE new_pubkey = ? ORDER BY id DESC LIMIT 1').get(newKey) as { details: string | null } | undefined;
+    let removed = 0;
+    try { removed = Number(JSON.parse(move?.details || '{}').signInCopiesRemoved) || 0; } catch { /* an older row: none recorded */ }
+    return { state: 'bound', callsign: member?.callsign ?? '', communityName: getLocalConfig().communityName || '', linkSignInAgain: removed > 0 };
 }
 
 function proposalOf(code: string, newKey: string): ProposalRow | undefined {

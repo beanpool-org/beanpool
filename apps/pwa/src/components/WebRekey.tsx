@@ -48,6 +48,8 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
     const [match, setMatch] = useState<string | null>(null);
     const [member, setMember] = useState<BeanPoolIdentity | null>(null);
     const [wroteThemDown, setWroteThemDown] = useState(false);
+    // The node removed sign-in copies of the old key in the move: only then is the member asked to link one again.
+    const [linkSignInAgain, setLinkSignInAgain] = useState(false);
     const key = useRef<WebRekeyKey | null>(null);
     const finishing = useRef(false);
 
@@ -65,6 +67,7 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
             finishing.current = true;
             try {
                 const m = await finishWebRekey(k, answer, deps);
+                setLinkSignInAgain(answer.linkSignInAgain);
                 setMember(m);
                 setPhase(k.madeHere ? 'words' : 'linkAgain');
             } catch (e) {
@@ -139,6 +142,15 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
                     <input type="checkbox" checked={wroteThemDown} onChange={(e) => setWroteThemDown(e.target.checked)} /> I’ve written my 12 words down
                 </label>
                 <button type="button" style={primary} onClick={() => setPhase('linkAgain')}>Continue</button>
+            </div>
+        );
+    }
+    if (phase === 'linkAgain' && member && !linkSignInAgain) {
+        return (
+            <div data-testid="web-rekey-done">
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>You’re in</h3>
+                <p style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>This device now holds your account: your Beans, your name and your history.</p>
+                <button type="button" style={primary} onClick={() => onBound(member)}>Continue</button>
             </div>
         );
     }

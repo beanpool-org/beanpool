@@ -230,6 +230,10 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 **Learning:** `GroupSuccessionPanel.tsx` interactive voting buttons ("Yes", "No"), candidate selection dropdown, and proposal submit button ("Propose") suppressed default focus styling or lacked explicit `focus-visible` ring indicators, making keyboard navigation focus states hard to discern.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2` focus ring styling across interactive controls in `GroupSuccessionPanel.tsx`.
 
+## 2026-10-11 - ConsentText Summary Focus Ring & Accessibility
+**Learning:** `ConsentText.tsx` rendered the collapsible `<summary>` tag ("Read all of it") without explicit keyboard focus-visible ring styling.
+**Action:** Added `className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"` to `<summary>` in `ConsentText.tsx` and created `ConsentText.test.tsx`.
+
 ## 2026-10-06 - MarketplacePage Post-Release Review Modal Accessibility & Focus Rings
 **Learning:** `MarketplacePage.tsx` post-release review modal (`promptReviewForTx`) lacked modal ARIA dialog semantics (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`), star rating buttons lacked `type="button"` and screen reader `aria-label`s (`Rate N stars`), raw decorative emoji (`🎉`) was exposed to screen readers without `aria-hidden="true"`, and star rating buttons and "Skip for now" button suppressed focus outlines (`focus:outline-none` / `outline-none`) without replacement focus ring styling.
 **Action:** Added modal ARIA dialog attributes (`role="dialog"`, `aria-modal="true"`, `aria-labelledby="post-release-review-title"`), `id="post-release-review-title"`, `aria-hidden="true"` on emoji, explicit `type="button"` and `aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}` on star rating buttons, and `focus-visible:outline-none focus-visible:ring-2` focus rings across modal controls in `MarketplacePage.tsx`.

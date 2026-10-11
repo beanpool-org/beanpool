@@ -42,14 +42,18 @@ const isIds = (v: unknown[]): v is string[] => v.every(id => typeof id === 'stri
 /**
  * The listings a node's answer says are the member's set, or null when the answer carries none (a node without it).
  * `tied`: the ids of the set the node says are the member's own or tied to them, or null from a node that doesn't say.
+ *
+ * The contract: `tied` stays string[]; a new shape gets a new field name (the node writes it in apps/server routes/
+ * marketplace.ts). One this phone can't read (not a list, an id not a string) is read as absent, never as a refused
+ * answer: `tied` only adds keeps, so the phone keeps its stored ties (nearby_tied) and nothing goes on its account, where
+ * refusing would stop every listing update on this build (the confirmation review of #1778, finding 2).
  */
 export function nearbySetOf(body: unknown): { posts: any[]; set: string[]; tied: string[] | null } | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
     const b = body as { posts?: unknown; set?: unknown; tied?: unknown };
     if (!Array.isArray(b.posts) || !Array.isArray(b.set)) return null;
     if (!isIds(b.set)) return null;
-    if (b.tied !== undefined && !(Array.isArray(b.tied) && isIds(b.tied))) return null;
-    return { posts: b.posts, set: b.set, tied: Array.isArray(b.tied) ? b.tied : null };
+    return { posts: b.posts, set: b.set, tied: Array.isArray(b.tied) && isIds(b.tied) ? b.tied : null };
 }
 
 /**

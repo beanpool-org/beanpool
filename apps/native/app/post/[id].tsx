@@ -362,6 +362,10 @@ export default function PostDetailModal() {
     // not "Post not found".
     const [postMissing, setPostMissing] = useState(false);
     const notFoundTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    // The id whose last read found no row on the phone, and the id the node said it holds no such listing for (utils/db.ts
+    // post_not_on_node): together, the shown listing goes (utils/shown-post.ts).
+    const readNoRow = React.useRef<string | null>(null);
+    const goneOnNode = React.useRef<string | null>(null);
     const [editMode, setEditMode] = useState(false);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -430,9 +434,12 @@ export default function PostDetailModal() {
                 const singleTxId = Array.isArray(txId) ? txId[0] : txId;
                 const reload = async () => {
                     getPost(singleId).then(p => {
-                        // A read with no row keeps the listing shown: its by-id refetch replaces it (utils/shown-post.ts).
-                        setPost((prev: any) => shownPostAfterReload(prev, p, singleId));
+                        // A read with no row keeps the listing shown: its by-id refetch replaces it (utils/shown-post.ts),
+                        // unless the node has answered that it holds no such listing.
+                        setPost((prev: any) => shownPostAfterReload(prev, p, singleId, goneOnNode.current === singleId));
+                        readNoRow.current = p ? null : singleId;
                         if (p) {
+                            goneOnNode.current = null;
                             if (notFoundTimer.current) { clearTimeout(notFoundTimer.current); notFoundTimer.current = null; }
                             setPostMissing(false);
                             const targetGroupId = p.target_group_id || p.targetGroupId;
@@ -564,8 +571,16 @@ export default function PostDetailModal() {
                 
                 const { DeviceEventEmitter } = require('react-native');
                 const sub = DeviceEventEmitter.addListener('sync_data_updated', reload);
+                // The by-id read found no such listing on the node (utils/db.ts). With no row on the phone either, the
+                // shown listing goes, and the not-found timer's text shows; a row the phone holds stays until the sync drops it.
+                const goneSub = DeviceEventEmitter.addListener('post_not_on_node', (goneId: unknown) => {
+                    if (goneId !== singleId) return;
+                    goneOnNode.current = singleId;
+                    if (readNoRow.current === singleId) setPost((prev: any) => shownPostAfterReload(prev, null, singleId, true));
+                });
                 return () => {
                     sub.remove();
+                    goneSub.remove();
                     if (notFoundTimer.current) { clearTimeout(notFoundTimer.current); notFoundTimer.current = null; }
                 };
             }

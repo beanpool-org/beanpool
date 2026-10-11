@@ -435,7 +435,6 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         for (const bad of [
             (b: any) => ({ ...b, set: [...b.set, 7] }), // an id that isn't a string
             (b: any) => ({ ...b, set: undefined }), // no set at all
-            (b: any) => ({ ...b, tied: 'all' }), // a tied list that isn't one
             (b: any) => ({ rows: b.posts }), // another shape altogether
         ]) {
             tamper = (path, body) => (path.includes('nearby=1') ? JSON.stringify(bad(JSON.parse(body))) : null);
@@ -451,6 +450,44 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(mem.async.get(cursorKey)).not.toBe(cursor);
         expect((sql.prepare('SELECT lat FROM posts WHERE id = ?').get(edited.id) as { lat: number }).lat).toBeCloseTo(edited.lat + 0.001, 6);
         near = near.map(p => (p.id === edited.id ? { ...p, lat: p.lat + 0.001 } : p));
+    }, START_MS);
+
+    it('an unreadable tied (a number in it, a string, null) is read as absent: the read goes on, the stored ties stay', async () => {
+        // Probe 12c of the confirmation review of #1778 (finding 2): it refused the whole answer, every cycle, so a node that
+        // ever changed the field's shape would stop every listing update on this build. `tied` only adds keeps.
+        // Every request here comes from one address: the node's limiters cleared, as the door suites do between steps.
+        await control('limiters');
+        await sync();
+        const cursorKey = [...mem.async.keys()].find(k => k.startsWith('pillar_sync_') && k.endsWith('_last-sync'))!;
+        const storedTies = () => sorted(new Set((sql.prepare('SELECT id FROM nearby_tied').all() as { id: string }[]).map(r => r.id)));
+        const tiesBefore = storedTies();
+        // The node's ties held only by the stored table: the deals of the test above, with no deal row on the phone.
+        expect(tiesBefore).toEqual(expect.arrayContaining(['deal-perth', 'deal-old-melb']));
+        const heldBefore = heldIds();
+        for (const bad of [
+            (b: any) => ({ ...b, tied: [...(b.tied ?? []), 7] }),
+            (b: any) => ({ ...b, tied: 'x' }),
+            (b: any) => ({ ...b, tied: null }),
+        ]) {
+            const cursor = mem.async.get(cursorKey);
+            // A listing near the member changes on the node: the answer that carries it has the odd `tied`.
+            const edited = near.find(p => heldBefore.has(p.id))!;
+            await control('edit', { post: edited.id, lat: edited.lat + 0.001, lng: edited.lng });
+            near = near.map(p => (p.id === edited.id ? { ...p, lat: p.lat + 0.001 } : p));
+            // No deal row on the phone: only the stored ties keep the far deals past the cap.
+            sql.exec('DELETE FROM marketplace_transactions');
+            await control('limiters');
+            tamper = (path, body) => (path.includes('nearby=1') ? JSON.stringify(bad(JSON.parse(body))) : null);
+            const r = await syncAllowingFailure();
+            tamper = null;
+            expect(r.success, r.errorMessage).toBe(true);
+            expect(mem.async.get(cursorKey)).not.toBe(cursor);
+            expect((sql.prepare('SELECT lat FROM posts WHERE id = ?').get(edited.id) as { lat: number }).lat).toBeCloseTo(edited.lat + 0.001, 6);
+            // The phone keeps its stored ties, and nothing goes on their account.
+            expect(storedTies()).toEqual(tiesBefore);
+            expect(sorted(heldIds())).toEqual(sorted(heldBefore));
+        }
+        await control('limiters');
     }, START_MS);
 
     it('a node with the switch off: today\'s request, byte for byte, and no area read', async () => {

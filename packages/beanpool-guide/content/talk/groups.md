@@ -151,9 +151,9 @@ Give it a title and say why, then tap **Open the vote**. A vote never moves Bean
 
 **What you see.** While a vote is open, everyone sees how many have voted, not how. Yes and No show once it closes. A vote can't be changed once cast. Nobody sees who voted how. In a very small group, though, the result and who has voted can show it: if three people all vote and it ends 3–0, everyone knows how everyone voted.
 
-**Being told.** Everyone on the vote but the person who proposed it gets one notification when it opens, unless they muted the group's chat. It names nobody: it says a vote opened in one of your groups. Tap it and the group opens on its **Decisions**. On Home, an open vote you haven't cast shows under **Needs you** and opens the group too.
+**Being told.** Everyone on the vote but the person who proposed it gets one notification when it opens, unless they muted the group's chat or turned chat notifications off. It names nobody: it says a vote opened in one of your groups. Tap it and the group opens on its **Decisions**. On Home, an open vote you haven't cast shows under **Needs you** and opens the group too.
 
-**When people come and go.** Someone who leaves the group during a vote leaves the vote, and their vote goes with them. Someone a convenor removes during a vote keeps the vote they cast: a removal is never a way to swing one. If fewer than two people are left on it, the vote ends without an answer.
+**When people come and go.** Someone who leaves the group during a vote leaves the vote, and their vote goes with them. Someone a convenor removes, or makes an observer, during a vote stays on it: they keep the vote they cast, and can still vote if they haven't. Removing people is never a way to swing a vote. If fewer than two people are left on it, the vote ends without an answer.
 
 **A closed group** says **Closed** on its page, with the line "The group was closed by its members' vote. Its chat stays to read." Its chat, its votes and who was in it stay there to read; nothing new can be added.
 

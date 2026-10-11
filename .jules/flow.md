@@ -131,3 +131,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-08 - Add loading indicator for AlertsPanel
 **Learning:** `AlertsPanel.tsx` rendered an empty card body below the description header while fetching server alerts status (`!status && !loadError`), leaving operators without visual feedback during network requests.
 **Action:** Render an explicit loading indicator with an animated spinner when `!status && !loadError`.
+
+## 2026-12-09 - Replace any types in RekeyMemberWizard catch blocks
+**Learning:** `RekeyMemberWizard.tsx` used `catch (err: any)` across four async handlers, weakening error handling type safety in re-keying flows.
+**Action:** Replace `catch (err: any)` with `catch (err: unknown)` and safe `err instanceof Error ? err.message : String(err)` guards.

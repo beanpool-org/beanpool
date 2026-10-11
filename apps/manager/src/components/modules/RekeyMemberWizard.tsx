@@ -96,6 +96,8 @@ export function RekeyMemberWizard({
     // The number the admin types from the member's phone: the node finds the phone that shows it (#1783 review B2).
     const [typedMatch, setTypedMatch] = useState('');
     const [wrongNumbers, setWrongNumbers] = useState(0);
+    // Someone is guessing at codes starting like this one (the node's per-prefix count, #1783 review N3).
+    const [underAttack, setUnderAttack] = useState<RekeyStatusResponse['codeUnderAttack'] | null>(null);
     // Three wrong numbers stopped the code on the node: like an expired one, only a new code helps.
     const [codeStopped, setCodeStopped] = useState(false);
     // Sign-in copies of the old key the move removed (the node's count): step 3 asks for a new link only when > 0.
@@ -133,6 +135,7 @@ export function RekeyMemberWizard({
         setRekeyStatus(status);
         setProposals(status.proposals ?? []);
         setWrongNumbers(status.wrongNumbers ?? 0);
+        setUnderAttack(status.codeUnderAttack ?? null);
         const pending = status.pendingRequest;
         if (!pending) return;
         const isExpired = new Date(pending.expires_at).getTime() < Date.now();
@@ -182,6 +185,7 @@ export function RekeyMemberWizard({
                 if (!live) return;
                 setProposals(status.proposals ?? []);
                 setWrongNumbers(status.wrongNumbers ?? 0);
+                setUnderAttack(status.codeUnderAttack ?? null);
                 const moved = status.history?.[0];
                 if (!status.pendingRequest && moved && (status.history?.length ?? 0) > historyLength) {
                     setNewPubkey(moved.new_pubkey);
@@ -610,6 +614,14 @@ export function RekeyMemberWizard({
                                 </p>
                             )}
                         </div>
+
+                        {issuedCode && !codeExpired && underAttack && (
+                            <div data-testid="rekey-under-attack" className="p-3 bg-red-950/60 border border-red-800/80 rounded-2xl text-[11px] leading-relaxed text-red-200 break-words">
+                                {underAttack.refusing
+                                    ? 'Someone is guessing at codes like this one, so phones asking with it are turned away for the rest of the hour. Cancel it and make a new code: a new one starts differently.'
+                                    : `Someone has tried ${underAttack.wrongTries} wrong codes like this one in the last hour. A phone you don't recognise is someone else's: press Not theirs.`}
+                            </div>
+                        )}
 
                         {issuedCode && !codeExpired && (
                             <p className="text-[11px] leading-relaxed text-nature-300 m-0 break-words" data-testid="rekey-scan-help">

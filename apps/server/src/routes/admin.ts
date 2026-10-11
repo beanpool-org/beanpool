@@ -93,7 +93,7 @@ import {
     executeOffboard,
     type OffboardOptions,
 } from '../engine/member-wizards.js';
-import { bindRekeyByMatch, declineRekeyProposal, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
+import { bindRekeyByMatch, declineRekeyProposal, rekeyCodeUnderAttack, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
 import { getOffboxHealth } from '../services/offbox-backups.js';
@@ -2463,7 +2463,9 @@ router.get('/api/local/admin/members/:pubkey/rekey/status', async (ctx) => {
         const { pubkey } = ctx.params;
         // An automation token is never a fresh phone session, so it never reads an owner's or admin's code (#1546 review).
         const status = getRekeyStatus(pubkey, viewer, { viewerStepUpDue: !!(ctx.state as any)?.phoneStepUpDue || !!(ctx.state as any)?.viaToken });
-        ctx.body = status;
+        // Beside the code only: whether codes starting like it are being guessed at this hour (#1783 review N3).
+        const underAttack = status.pendingRequest?.code ? rekeyCodeUnderAttack(status.pendingRequest.code) : null;
+        ctx.body = underAttack ? { ...status, codeUnderAttack: underAttack } : status;
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e?.message || 'Failed to fetch re-key status' };

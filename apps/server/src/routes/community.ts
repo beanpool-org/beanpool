@@ -1411,7 +1411,7 @@ router.post('/api/member/re-enroll', async (ctx) => {
 
     try {
         ctx.set('Cache-Control', 'private, no-store');
-        ctx.body = proposeRekey(cleanCode, cleanNew);
+        ctx.body = proposeRekey(cleanCode, cleanNew, clientLimiterKey(ctx));
     } catch (e: any) {
         if (e instanceof RekeyRedeemRefusal) {
             ctx.status = e.status;

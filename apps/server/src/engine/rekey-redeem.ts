@@ -9,8 +9,13 @@
  * own, which the admin never sees on the member's phone (#1783 review B2).
  *
  * - One answer for a code that is unknown, used, expired or cancelled (REKEY_CODE_NOT_VALID): a wrong guess learns
- *   nothing about which codes were ever made. A node-wide ceiling of wrong codes an hour (REKEY_WRONG_CODES), after which
- *   every ask answers 429 for the rest of the hour, with one security line in the log, on top of the auth limiter.
+ *   nothing about which codes were ever made. Wrong codes are counted an hour per address and per code prefix
+ *   (REKEY_WRONG_CODES, on top of the auth limiter), never node-wide: a node-wide ceiling let anyone shut every re-key
+ *   for an hour in under a second (#1783 review N3). A full address bucket refuses that address; a full prefix bucket
+ *   refuses every code starting that way (live or not, the same answer), so one code can be guessed at most perPrefix
+ *   times an hour from any number of addresses, and a lucky guess still only adds a phone the admin must confirm by
+ *   typing its number. The admin's status says when the pending code's prefix is being guessed at
+ *   (rekeyCodeUnderAttack), and a new code starts differently.
  * - At most REKEY_MAX_PROPOSERS keys may propose on one code, and REKEY_MAX_DECLINES declines stop it taking more.
  * - A key that already has a row here (a member, a visitor, a closed account) is refused: merging that row into the
  *   member is out of scope, and a member re-keying someone else would otherwise move their own account under it.
@@ -33,8 +38,10 @@ export const REKEY_CODE_NOT_VALID = 'That code isn’t valid. Ask the admin for 
 export const REKEY_KEY_HAS_ACCOUNT = 'This phone already has an account in this community, so it can’t take over another one. Use a phone with no account here, or ask the admin to paste its key instead.';
 /** A code that has taken all the phones it will. */
 export const REKEY_CODE_FULL = 'This code can’t take any more phones. Ask the admin for a new one.';
-/** The node-wide ceiling on wrong codes. */
-export const REKEY_TOO_MANY_WRONG = 'Too many wrong codes have been tried here in the last hour. Try again later.';
+/** An address's wrong codes this hour are used up. */
+export const REKEY_TOO_MANY_WRONG = 'Too many wrong codes have been tried from here in the last hour. Try again later.';
+/** Codes starting like this one have been guessed at too often this hour. */
+export const REKEY_PREFIX_HAMMERED = 'Too many wrong codes like this one have been tried in the last hour. Ask the admin for a new code, or try again later.';
 
 /** The admin typed digits no phone waiting on the code shows. */
 export const REKEY_WRONG_NUMBER = 'No phone waiting on this code shows that number. Check the number on their phone and type it again.';
@@ -45,7 +52,9 @@ export const REKEY_MAX_PROPOSERS = 5;
 /** Wrong numbers typed on one code before it stops (settings-signin-pairing's PAIRING_CONFIRM_TRIES). */
 export const REKEY_MATCH_TRIES = 3;
 export const REKEY_MAX_DECLINES = 3;
-export const REKEY_WRONG_CODES = { perHour: 60, windowMs: 3_600_000 } as const;
+export const REKEY_WRONG_CODES = { perAddress: 20, perPrefix: 10, windowMs: 3_600_000 } as const;
+/** Wrong tries this hour on the pending code's prefix from which the admin's wizard says it is being guessed at. */
+export const REKEY_UNDER_ATTACK_FROM = 3;
 
 /** A refusal with its HTTP status and a short machine code. */
 export class RekeyRedeemRefusal extends Error {
@@ -67,27 +76,58 @@ export type RekeyRedeemStatus =
 
 interface ProposalRow { code: string; new_pubkey: string; match: string; proposed_at: string; declined_at: string | null }
 
-// ── the node-wide wrong-code ceiling ─────────────────────────────────────────────────────────────────────────────────
+// ── wrong codes, an hour per address and per code prefix ─────────────────────────────────────────────────────────────
 
-let wrongWindow = { startedAt: 0, count: 0, logged: false };
+interface WrongBucket { startedAt: number; count: number; logged: boolean }
+const byAddress = new Map<string, WrongBucket>();
+const byPrefix = new Map<string, WrongBucket>();
 
-function wrongCodesFull(now: number): boolean {
-    if (now - wrongWindow.startedAt >= REKEY_WRONG_CODES.windowMs) return false;
-    return wrongWindow.count >= REKEY_WRONG_CODES.perHour;
+/** The bucket a code counts in: "RK-AB12" of "RK-AB12-CD34" (16 bits); a malformed code counts per address only. */
+export function rekeyCodePrefix(code: string): string | null {
+    return /^RK-[0-9A-F]{4}-[0-9A-F]{4}$/.test(code) ? code.slice(0, 7) : null;
 }
 
-function noteWrongCode(now: number): void {
-    if (now - wrongWindow.startedAt >= REKEY_WRONG_CODES.windowMs) wrongWindow = { startedAt: now, count: 0, logged: false };
-    wrongWindow.count++;
-    if (wrongWindow.count >= REKEY_WRONG_CODES.perHour && !wrongWindow.logged) {
-        wrongWindow.logged = true;
-        logger.security('AUTH', `[Rekey] ${wrongWindow.count} wrong re-key codes tried in the last hour: every re-key ask is refused until the hour is up`);
+function countIn(map: Map<string, WrongBucket>, key: string, now: number): number {
+    const b = map.get(key);
+    return b && now - b.startedAt < REKEY_WRONG_CODES.windowMs ? b.count : 0;
+}
+
+function note(map: Map<string, WrongBucket>, key: string, limit: number, now: number, line: (n: number) => string): void {
+    if (map.size > 5000) for (const [k, v] of map) if (now - v.startedAt >= REKEY_WRONG_CODES.windowMs) map.delete(k);
+    let b = map.get(key);
+    if (!b || now - b.startedAt >= REKEY_WRONG_CODES.windowMs) map.set(key, b = { startedAt: now, count: 0, logged: false });
+    b.count++;
+    if (b.count >= limit && !b.logged) {
+        b.logged = true;
+        logger.security('AUTH', line(b.count));
     }
+}
+
+function noteWrongCode(code: string, address: string, now: number): void {
+    note(byAddress, address, REKEY_WRONG_CODES.perAddress, now,
+        (n) => `[Rekey] ${n} wrong re-key codes from one address in the last hour: its asks are refused until the hour is up`);
+    const prefix = rekeyCodePrefix(code);
+    if (prefix) {
+        note(byPrefix, prefix, REKEY_WRONG_CODES.perPrefix, now,
+            (n) => `[Rekey] ${n} wrong re-key codes starting ${prefix} in the last hour: codes starting that way are refused until the hour is up`);
+    }
+}
+
+/**
+ * The admin's wizard: is the pending code's prefix being guessed at this hour (REKEY_UNDER_ATTACK_FROM wrong tries or
+ * more)? Then phones asking with it may be turned away, and a new code (another prefix) is the way on.
+ */
+export function rekeyCodeUnderAttack(code: string | null | undefined, now = Date.now()): { wrongTries: number; refusing: boolean } | null {
+    const prefix = rekeyCodePrefix(cleanRekeyCode(code));
+    if (!prefix) return null;
+    const n = countIn(byPrefix, prefix, now);
+    return n >= REKEY_UNDER_ATTACK_FROM ? { wrongTries: n, refusing: n >= REKEY_WRONG_CODES.perPrefix } : null;
 }
 
 /** Tests only: a fresh hour. */
 export function resetRekeyWrongCodesForTests(): void {
-    wrongWindow = { startedAt: 0, count: 0, logged: false };
+    byAddress.clear();
+    byPrefix.clear();
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -127,17 +167,25 @@ function proposalOf(code: string, newKey: string): ProposalRow | undefined {
 // ── the phone ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * The replacement phone's ask (POST /api/member/re-enroll, signed by `newKey`, whose statement the route has checked):
- * a proposal and its digits, the same one again for the same key, or `bound` for the key the code was completed with.
- * Throws {@link RekeyRedeemRefusal}.
+ * The replacement phone's ask (POST /api/member/re-enroll, signed by `newKey`, whose statement the route has checked),
+ * from `address` (client-ip.ts clientLimiterKey): a proposal and its digits, the same one again for the same key, or
+ * `bound` for the key the code was completed with. Throws {@link RekeyRedeemRefusal}.
  */
-export function proposeRekey(rawCode: unknown, newKey: string, now = Date.now()): RekeyAsk {
-    if (wrongCodesFull(now)) throw new RekeyRedeemRefusal(429, 'too_many_wrong_codes', REKEY_TOO_MANY_WRONG);
+export function proposeRekey(rawCode: unknown, newKey: string, address: string, now = Date.now()): RekeyAsk {
     const code = cleanRekeyCode(rawCode);
     const req = requestByCode(code);
 
-    // A lost answer: the code was completed with this very key, which is the member now.
+    // A lost answer: the code was completed with this very key, which is the member now. Needs that key, so it is no
+    // guess, and no wrong-code bucket holds it back.
     if (req?.status === 'completed' && req.new_pubkey === newKey) return boundAnswer(newKey);
+
+    if (countIn(byAddress, address, now) >= REKEY_WRONG_CODES.perAddress) {
+        throw new RekeyRedeemRefusal(429, 'too_many_wrong_codes', REKEY_TOO_MANY_WRONG);
+    }
+    const prefix = rekeyCodePrefix(code);
+    if (prefix && countIn(byPrefix, prefix, now) >= REKEY_WRONG_CODES.perPrefix) {
+        throw new RekeyRedeemRefusal(429, 'code_prefix_hammered', REKEY_PREFIX_HAMMERED);
+    }
 
     // Any row here: a member (a member re-keying someone else from their own phone), a visitor's row, a closed account.
     // Asked before the code, whatever the code is, so the answer to such a key says nothing about which codes are live.
@@ -146,7 +194,7 @@ export function proposeRekey(rawCode: unknown, newKey: string, now = Date.now())
         throw new RekeyRedeemRefusal(409, 'key_has_account', REKEY_KEY_HAS_ACCOUNT);
     }
     if (!isLive(req, now)) {
-        noteWrongCode(now);
+        noteWrongCode(code, address, now);
         throw new RekeyRedeemRefusal(404, 'code_not_valid', REKEY_CODE_NOT_VALID);
     }
     // A code for an account deleted or removed since it was made binds nothing (completeRekey refuses it, REKEY_ACCOUNT_GONE),

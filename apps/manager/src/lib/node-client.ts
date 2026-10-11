@@ -2824,6 +2824,8 @@ export interface RekeyStatusResponse {
     proposals?: RekeyProposal[];
     /** Wrong numbers typed on the pending code so far; the third stops it. */
     wrongNumbers?: number;
+    /** Codes starting like the pending one are being guessed at this hour; `refusing`: phones asking with it are turned away. */
+    codeUnderAttack?: { wrongTries: number; refusing: boolean };
     history: Array<{
         id: number;
         old_pubkey: string;

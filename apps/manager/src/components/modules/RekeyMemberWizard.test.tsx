@@ -506,6 +506,31 @@ describe('RekeyMemberWizard: the phone asks, the admin binds its number (#1768)'
         await waitFor(() => expect(screen.getByText(/Operator-Assisted Identity Verification/)).toBeDefined());
     });
 
+    it('says when codes like this one are being guessed at, and when phones are turned away (review N3)', async () => {
+        const read = vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+            isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(), proposals: [], wrongNumbers: 0,
+            codeUnderAttack: { wrongTries: 4, refusing: false }, history: [],
+        });
+        const { unmount } = render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        expect((await screen.findByTestId('rekey-under-attack')).textContent).toMatch(/tried 4 wrong codes like this one/);
+        unmount();
+        read.mockResolvedValue({
+            isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(), proposals: [], wrongNumbers: 0,
+            codeUnderAttack: { wrongTries: 10, refusing: true }, history: [],
+        });
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        expect((await screen.findByTestId('rekey-under-attack')).textContent).toMatch(/turned away for the rest of the hour.*make a new code/);
+    });
+
+    it('says nothing about guessing when the node reports none', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+            isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(), proposals: [], wrongNumbers: 0, history: [],
+        });
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        await screen.findByTestId('rekey-code-qr');
+        expect(screen.queryByTestId('rekey-under-attack')).toBeNull();
+    });
+
     it('Not theirs declines that phone and its card goes', async () => {
         vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
             isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(),

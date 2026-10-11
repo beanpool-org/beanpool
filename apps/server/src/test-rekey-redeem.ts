@@ -49,7 +49,7 @@ import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { cleanRekeyCode, resetRekeyWrongCodesForTests, REKEY_CODE_NOT_VALID, REKEY_KEY_HAS_ACCOUNT, REKEY_TOO_MANY_WRONG, REKEY_CODE_FULL, REKEY_WRONG_NUMBER, REKEY_CODE_STOPPED } from './engine/rekey-redeem.js';
+import { cleanRekeyCode, proposeRekey, resetRekeyWrongCodesForTests, REKEY_CODE_NOT_VALID, REKEY_KEY_HAS_ACCOUNT, REKEY_TOO_MANY_WRONG, REKEY_PREFIX_HAMMERED, REKEY_WRONG_CODES, REKEY_CODE_FULL, REKEY_WRONG_NUMBER, REKEY_CODE_STOPPED } from './engine/rekey-redeem.js';
 import { setNodeRole } from './config/node-role.js';
 import { REKEY_OWN_KEY, REKEY_DECLINED_PHONE } from './engine/member-wizards.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
@@ -237,7 +237,7 @@ async function runTests() {
     }
 
     // ── B ──
-    section('B. Wrong codes: one answer for every kind, the per-address limit, the node-wide ceiling');
+    section('B. Wrong codes: one answer for every kind, the per-address limits, the per-prefix bucket, no node-wide ceiling');
     {
         freshMinute();
         resetRekeyWrongCodesForTests();
@@ -258,26 +258,83 @@ async function runTests() {
 
         freshMinute();
         const statuses: number[] = [];
-        for (let i = 0; i < 16; i++) statuses.push((await ask(phone, `RK-1111-${String(i).padStart(4, '0')}`)).status);
+        // Each a prefix of its own, so this is the per-minute limit and not the prefix bucket.
+        for (let i = 0; i < 16; i++) statuses.push((await ask(phone, `RK-1${String(i).padStart(3, '0')}-0000`)).status);
         assert(statuses.slice(0, 15).every(s => s === 404) && statuses[15] === 429, `the 16th ask in a minute from one address is 429 (${statuses.join(',')})`);
 
-        // The ceiling: 60 wrong codes an hour, node-wide (fresh minutes stand for many addresses).
+        // No node-wide ceiling (#1783 review N3): wrong codes count an hour per address and per code prefix.
+        // ATT-3 as the review measured it: 60 wrong asks from four addresses, then the member's ask from a fifth.
+        resetRekeyWrongCodesForTests();
+        const ben2 = join('BenTwo');
+        const good = (await issue(adminSession, ben2.pubKeyHex)).json.code as string;
+        const otherPrefix = (i: number) => {
+            let c = '';
+            do c = `RK-${crypto.randomBytes(2).toString('hex').toUpperCase()}-${String(i).padStart(4, '0')}`; while (c.slice(0, 7) === good.slice(0, 7));
+            return c;
+        };
+        const t0 = Date.now();
+        for (let i = 0; i < 60; i++) {
+            try { proposeRekey(otherPrefix(i), makeKeypair().pubKeyHex, `198.51.100.${i % 4}`); } catch (e: any) { void e; }
+        }
+        const hammered = Date.now() - t0;
+        const fifth = proposeRekey(good, makeKeypair().pubKeyHex, '198.51.100.77');
+        assert(fifth.state === 'waiting', `60 wrong codes from four addresses (${hammered} ms) shut no one else out: a fifth address's ask on a live code waits (got ${fifth.state})`);
+        for (let i = 60; i < 65; i++) { try { proposeRekey(otherPrefix(i), makeKeypair().pubKeyHex, '198.51.100.0'); } catch { /* wrong */ } }
+        let fromFirst: any = null;
+        try { proposeRekey(good, makeKeypair().pubKeyHex, '198.51.100.0'); } catch (e: any) { fromFirst = e; }
+        assert(fromFirst?.status === 429 && fromFirst.code === 'too_many_wrong_codes' && fromFirst.message === REKEY_TOO_MANY_WRONG,
+            `five more from one of them (20 this hour), and that address is refused, even a live code (got ${fromFirst?.status} ${fromFirst?.code})`);
+
+        // Through the middleware: this machine's own address, 20 wrong codes in fresh minutes, then a live code: 429.
         resetRekeyWrongCodesForTests();
         const logLines = () => (db.prepare("SELECT COUNT(*) AS n FROM system_logs WHERE message LIKE '%wrong re-key codes%'").get() as { n: number }).n;
         const linesBefore = logLines();
         let wrong = 0;
-        while (wrong < 60) {
+        while (wrong < REKEY_WRONG_CODES.perAddress) {
             freshMinute();
-            for (let i = 0; i < 15 && wrong < 60; i++, wrong++) await ask(phone, `RK-2222-${String(wrong).padStart(4, '0')}`);
+            for (let i = 0; i < 15 && wrong < REKEY_WRONG_CODES.perAddress; i++, wrong++) await ask(phone, otherPrefix(wrong));
         }
         freshMinute();
-        const ben2 = join('BenTwo');
-        const good = (await issue(adminSession, ben2.pubKeyHex)).json.code as string;
         const tripped = await ask(makeKeypair(), good);
-        assert(tripped.status === 429 && tripped.json.error === REKEY_TOO_MANY_WRONG, `after 60 wrong codes even a good code is refused for the hour (got ${tripped.status})`);
-        assert(proposalCount(good) === 0, '...and nothing was proposed on it');
-        await ask(phone, 'RK-2222-9999');
-        assert(logLines() - linesBefore === 1, `the log gets one security line, not one per ask (${logLines() - linesBefore})`);
+        assert(tripped.status === 429 && tripped.json.code === 'too_many_wrong_codes', `over HTTPS, the 21st ask from one address is refused (got ${tripped.status} ${tripped.json.code})`);
+        await ask(phone, otherPrefix(99));
+        assert(logLines() - linesBefore === 1, `the log gets one security line for that address, not one per ask (${logLines() - linesBefore})`);
+
+        // A code's prefix: 10 wrong codes starting like the live one, from 10 addresses, refuse every code starting so.
+        resetRekeyWrongCodesForTests();
+        freshMinute();
+        const st0 = await status(adminSession, ben2.pubKeyHex);
+        assert(st0.status === 200 && st0.json.codeUnderAttack === undefined, 'the wizard\'s status says nothing while no one guesses at the code');
+        // A wrong code starting like the live one (never the live one itself).
+        const samePrefix = (i: number) => { const tail = String(i).padStart(4, '0'); return `${good.slice(0, 8)}${tail === good.slice(8) ? 'FFFF' : tail}`; };
+        const guessAt = (from: number, to: number) => { for (let i = from; i < to; i++) { try { proposeRekey(samePrefix(i), makeKeypair().pubKeyHex, `203.0.113.${i}`); } catch { /* wrong */ } } };
+        guessAt(0, 2);
+        const st1 = await status(adminSession, ben2.pubKeyHex);
+        assert(st1.json.codeUnderAttack === undefined, 'two wrong tries on its prefix: still nothing said');
+        guessAt(2, REKEY_WRONG_CODES.perPrefix);
+        const st2 = await status(adminSession, ben2.pubKeyHex);
+        assert(st2.json.codeUnderAttack?.refusing === true && st2.json.codeUnderAttack.wrongTries === REKEY_WRONG_CODES.perPrefix,
+            `the wizard's status says the code is being guessed at, and phones are turned away (got ${JSON.stringify(st2.json.codeUnderAttack)})`);
+        const ownerSt = await status(ownerSession, ben2.pubKeyHex);
+        assert(ownerSt.json.codeUnderAttack?.refusing === true, '...to every reader who sees the code');
+        const prefixRefused = await ask(makeKeypair(), good);
+        assert(prefixRefused.status === 429 && prefixRefused.json.error === REKEY_PREFIX_HAMMERED, `a live code whose prefix took 10 wrong tries is refused for the hour (got ${prefixRefused.status} ${prefixRefused.json.code})`);
+        assert(proposalCount(good) === 1, '...and nothing more was proposed on it (one phone, from the fifth address, before)');
+        const unknownSamePrefix = await ask(makeKeypair(), `${good.slice(0, 8)}${good.slice(8) === 'EEEE' ? 'DDDD' : 'EEEE'}`);
+        assert(unknownSamePrefix.status === 429 && unknownSamePrefix.json.error === REKEY_PREFIX_HAMMERED, 'an unknown code starting so gets the same answer: no oracle');
+
+        // A lost answer is no guess: the phone a code was completed with is told bound from a refused address.
+        resetRekeyWrongCodesForTests();
+        freshMinute();
+        const bea = join('BeaMember');
+        const beaCode = (await issue(adminSession, bea.pubKeyHex)).json.code as string;
+        const beaPhone = makeKeypair();
+        const beaAsk = await ask(beaPhone, beaCode);
+        assert((await bindByNumber(adminSession, bea.pubKeyHex, beaCode, beaAsk.json.match)).status === 200, 'Bea\'s phone is bound by its number');
+        for (let i = 0; i < REKEY_WRONG_CODES.perAddress; i++) { try { proposeRekey(otherPrefix(i), makeKeypair().pubKeyHex, '127.0.0.1'); } catch { /* wrong */ } }
+        const beaAgain = proposeRekey(beaCode, beaPhone.pubKeyHex, '127.0.0.1');
+        assert(beaAgain.state === 'bound', `a bound phone asking again from an address out of tries is told bound (got ${beaAgain.state})`);
+
         resetRekeyWrongCodesForTests();
         freshMinute();
         const after = await ask(makeKeypair(), good);

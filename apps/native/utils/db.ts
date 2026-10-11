@@ -366,6 +366,9 @@ async function _doInitDB() {
         -- On a community that syncs by area (utils/posts-nearby.ts): the ids its last set read named "tied", the member's
         -- own and tied listings as the node knows them, which the phone keeps past its cap (keepPostsNearby).
         CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);
+        -- And the set it last reconciled with, beside the node's hash of it (k = 'set', JSON ids; k = 'hash'), written
+        -- together: the phone sends the hash back and is not sent the set again while it holds (readNearbyHeld).
+        CREATE TABLE IF NOT EXISTS nearby_held (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
         CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
@@ -543,6 +546,8 @@ async function _doInitDB() {
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_callsign TEXT;`); } catch (e) {}
         // The ids a by-area community's last set read named `tied` (keepPostsNearby), for a phone whose schema ran before it.
         try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);`); } catch (e) {}
+        // The set a by-area community's last set read named, and its hash (keepPostsNearby, readNearbyHeld).
+        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_held (k TEXT PRIMARY KEY, v TEXT NOT NULL);`); } catch (e) {}
         // The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat
         // names it: by index, not a scan of each table per listing (the review of #1778, finding 4: 79 ms at 3,000 deals).
         try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_id ON marketplace_transactions(post_id);`); } catch (e) {}
@@ -699,7 +704,7 @@ export async function clearDB() {
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied;');
+        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS nearby_held;');
     } finally {
         releaseSyncLock();
     }
@@ -3031,11 +3036,13 @@ async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: an
  * tell which are theirs: nothing goes. `fresh`: listings written after the set was worked out (pushes replayed over this
  * cycle), which the set can't speak for. `tied`, when this write carries the set's: the ids the node names as the
  * member's own or tied, kept from now on (nearby_tied) until the next set read says otherwise, so a tie this phone holds
- * no row for (a deal made elsewhere, or older than the deals it reads) keeps its listing too.
+ * no row for (a deal made elsewhere, or older than the deals it reads) keeps its listing too. `setHash`, when this write
+ * carries the node's set: the node's hash of it, stored with the set (nearby_held) in this same transaction, so the hash
+ * the phone sends back always names the set it holds; null forgets both (the next read is named the set in full).
  */
 async function keepPostsNearby(
     txn: SQLite.SQLiteDatabase,
-    nearby: { set?: unknown; tied?: unknown; area?: { lat: number; lng: number } | null; max?: unknown },
+    nearby: { set?: unknown; tied?: unknown; setHash?: unknown; area?: { lat: number; lng: number } | null; max?: unknown },
     selfPubkey: string | null,
     fresh: ReadonlySet<string>,
 ): Promise<void> {
@@ -3043,6 +3050,12 @@ async function keepPostsNearby(
     const max = typeof nearby.max === 'number' && Number.isFinite(nearby.max) && nearby.max >= 0 ? nearby.max : null;
     const set = Array.isArray(nearby.set) ? nearby.set.filter((id): id is string => typeof id === 'string') : null;
     if (max === null && set === null) return;
+    if (set !== null && nearby.setHash !== undefined) {
+        await txn.runAsync("DELETE FROM nearby_held WHERE k IN ('set', 'hash')");
+        if (typeof nearby.setHash === 'string' && nearby.setHash !== '') {
+            await txn.runAsync("INSERT INTO nearby_held (k, v) VALUES ('set', ?), ('hash', ?)", [JSON.stringify(set), nearby.setHash]);
+        }
+    }
     if (set !== null && Array.isArray(nearby.tied)) {
         const inSet = new Set(set);
         const tied = [...new Set(nearby.tied.filter((id): id is string => typeof id === 'string' && inSet.has(id)))];
@@ -3074,6 +3087,22 @@ async function keepPostsNearby(
         await txn.runAsync(`DELETE FROM posts WHERE id IN (${marks})`, batch);
     }
     if (ids.length > 0) console.log(`[DB] applyDelta: ${ids.length} listing(s) outside this member's area left this phone`);
+}
+
+/**
+ * The set this phone last reconciled with on a community that syncs by area, and the node's hash of it, as
+ * keepPostsNearby stored them together; null without one (never synced by area, a cleared copy, a set with no hash).
+ */
+export async function readNearbyHeld(): Promise<{ set: string[]; hash: string } | null> {
+    try {
+        const rows = await (await getDb()).getAllAsync<{ k: string; v: string }>("SELECT k, v FROM nearby_held WHERE k IN ('set', 'hash')");
+        const hash = rows.find(r => r.k === 'hash')?.v;
+        const set = JSON.parse(rows.find(r => r.k === 'set')?.v ?? 'null');
+        if (!hash || !Array.isArray(set) || !set.every(id => typeof id === 'string')) return null;
+        return { set, hash };
+    } catch {
+        return null;
+    }
 }
 
 /**

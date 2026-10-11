@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    nearbyReconcile, nearbyIdReads, nearbyPrune, nearbySetOf, nearbyPageOf, nearbyKm, NEARBY_IDS_PER_READ, NEARBY_ID_READS_PER_CYCLE,
+    nearbyReconcile, nearbyIdReads, nearbyPrune, nearbySetOf, nearbyPageOf, nearbyLastSet, nearbyKm, NEARBY_IDS_PER_READ, NEARBY_ID_READS_PER_CYCLE,
     type NearbyHeld,
 } from '../posts-nearby';
 
@@ -233,6 +233,20 @@ describe('posts-nearby, the edges', () => {
         expect(nearbyPageOf([{ id: 'a' }])).toBeNull();
         expect(nearbyPageOf(null)).toBeNull();
         expect(nearbyPageOf({ posts: [], setHash: 7 })).toEqual({ posts: [], set: null, tied: null, setHash: null });
+    });
+
+    it('the set a read ends with: the one named, the one held when the node echoes its hash, else none', () => {
+        const held = { set: ['a', 'b'], hash: 'h1' };
+        const page = (b: unknown) => nearbyPageOf(b)!;
+        // Named: the node's, whatever this phone holds.
+        expect(nearbyLastSet(page({ posts: [], set: ['c'], setHash: 'h2', tied: ['c'] }), held)).toEqual({ set: ['c'], tied: ['c'], setHash: 'h2', named: true });
+        expect(nearbyLastSet(page({ posts: [], set: ['c'] }), null)).toEqual({ set: ['c'], tied: null, setHash: null, named: true });
+        // Unchanged: no set, the hash this phone sent echoed. The stored ties stay (tied: null).
+        expect(nearbyLastSet(page({ posts: [{ id: 'a' }], setHash: 'h1' }), held)).toEqual({ set: ['a', 'b'], tied: null, setHash: 'h1', named: false });
+        // No set and no echo (a node that names none), another hash, or nothing held: no end it can read.
+        expect(nearbyLastSet(page({ posts: [] }), held)).toBeNull();
+        expect(nearbyLastSet(page({ posts: [], setHash: 'h2' }), held)).toBeNull();
+        expect(nearbyLastSet(page({ posts: [], setHash: 'h1' }), null)).toBeNull();
     });
 
     it('distance: known pairs, and the chord oracle over random pairs, across the antimeridian and near the poles', () => {

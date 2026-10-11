@@ -85,6 +85,21 @@ export function nearbyPageOf(body: unknown): NearbyPage | null {
 }
 
 /**
+ * The set a read ends with, from its last page: the one the node names (`named`); or, when the page names none and echoes
+ * the hash this phone sent (`held.hash`, the set it holds), that one, unchanged (REPORT-geosync-load-B, item 2). The echo
+ * is what tells "unchanged" from a node that names no set at all: a page with no set and no echo, or another hash, is no
+ * end this phone can read (null), and the read is cut short there.
+ */
+export function nearbyLastSet(
+    last: NearbyPage,
+    held: { set: string[]; hash: string } | null,
+): { set: string[]; tied: string[] | null; setHash: string | null; named: boolean } | null {
+    if (last.set) return { set: last.set, tied: last.tied, setHash: last.setHash, named: true };
+    if (held && last.setHash !== null && last.setHash === held.hash) return { set: held.set, tied: null, setHash: held.hash, named: false };
+    return null;
+}
+
+/**
  * What the set says to do: `drop`, the held listings outside it that are neither kept nor `fresh` (written after the set
  * was worked out: a push replayed over this cycle, which the next set will name or drop); `missing`, the set's ids this
  * phone doesn't hold, in the set's order (nearest first), each once.

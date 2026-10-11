@@ -305,6 +305,24 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(shown?.author_callsign).toBe(row.carried_callsign);
     }, START_MS);
 
+    it('nothing near changed: the phone sends its set\'s hash, the node answers without the set, and the phone keeps what it holds', async () => {
+        const held = sql.prepare("SELECT k, v FROM nearby_held").all() as { k: string; v: string }[];
+        const hash = held.find(r => r.k === 'hash')?.v;
+        const storedSet = JSON.parse(held.find(r => r.k === 'set')?.v ?? '[]') as string[];
+        expect(hash).toMatch(/^[0-9a-f]{24}$/);
+        expect(sorted(storedSet)).toEqual(sorted(expectedSet(BYRON, near, ['mine-ldn'])));
+        const before = heldIds();
+        await sync();
+        const reads = postsReads();
+        // Every listing here was listed a day ago: a delta of one page, with nothing in it.
+        expect(reads).toHaveLength(1);
+        expect(reads[0].url).toContain(`setHash=${hash}`);
+        expect(reads[0].keys).toEqual(['posts', 'setHash']);
+        expect(idReads()).toEqual([]);
+        expect(sorted(heldIds())).toEqual(sorted(before));
+        expect(sql.prepare("SELECT v FROM nearby_held WHERE k = 'hash'").get()).toEqual({ v: hash });
+    }, START_MS);
+
     it('a delta: what leaves the set goes, what comes in without changing is fetched by ids=, own and tied stay', async () => {
         const before = expectedSet(BYRON, near, ['mine-ldn']);
         const inner = near.filter(p => before.has(p.id)).slice(0, 2);
@@ -324,6 +342,9 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(idReads(), JSON.stringify(sent.map(r => `${r.status} ${r.url.slice(0, 120)}`))).toHaveLength(1);
         expect(sorted(new URL(`${URL_BASE}${idReads()[0].url}`).searchParams.get('ids')!.split(','))).toEqual(sorted(cameIn));
         expect(sorted(heldIds())).toEqual(sorted([...after, 'tied-perth']));
+        // The set moved: the node named it in full, and the phone holds the new one with its new hash.
+        expect(postsReads()[postsReads().length - 1].keys).toEqual(['posts', 'set', 'setHash', 'tied']);
+        expect(sorted(JSON.parse((sql.prepare("SELECT v FROM nearby_held WHERE k = 'set'").get() as { v: string }).v))).toEqual(sorted(after));
         near = left;
     }, START_MS);
 
@@ -442,7 +463,8 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         const before = sql.prepare('SELECT lat, updated_at FROM posts WHERE id = ?').get(edited.id) as { lat: number; updated_at: string };
         for (const bad of [
             (b: any) => ({ ...b, set: [...b.set, 7] }), // an id that isn't a string
-            (b: any) => ({ ...b, set: undefined }), // no set at all
+            (b: any) => ({ ...b, set: undefined, setHash: undefined }), // no set at all, and no hash echoed
+            (b: any) => ({ posts: b.posts, setHash: '0123456789abcdef01234567' }), // no set, and another hash than the one sent
             (b: any) => ({ rows: b.posts }), // another shape altogether
         ]) {
             tamper = (path, body) => (path.includes('nearby=1') ? JSON.stringify(bad(JSON.parse(body))) : null);

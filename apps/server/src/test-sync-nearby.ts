@@ -31,7 +31,9 @@
  *      exactly the brute force's, on every page, so a phone keeps a tie it holds no deal row for (review of #1778, finding
  *      2); a deal opened on a listing already near her changes the tag, though the set doesn't move;
  *  12. a phone that says `setOnce=1` is named the set on the last page of a read only (REPORT-geosync-load-B, item 1):
- *      each page before it answers `{ posts }`; a read without it is answered as before, the set on each page.
+ *      each page before it answers `{ posts }`; a read without it is answered as before, the set on each page;
+ *  13. a phone that sends the hash of the set it holds (`setHash`) is answered `{ posts, setHash }` on that page when the
+ *      set and its `tied` are unchanged (item 2), the hash echoed; another hash, or none, gets the set in full.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-sync-nearby)
  */
@@ -587,6 +589,39 @@ async function main() {
         assert(oneDelta.answers.length === 1 && oneDelta.answers[0].keys.join() === 'posts,set,setHash,tied' && oneDelta.set.join() === each.set.join(),
             'a delta of one page with setOnce=1: that page is the last, and names the set');
         assert(once.answers[0].etag !== each.answers[0].etag, 'a page read with setOnce=1 has a tag of its own (its body is another)');
+    }
+
+    // ── 13. an unchanged set is not sent again ──
+    console.log('\n── 13. a phone that sends the hash of the set it holds is not sent that set again ──');
+    {
+        const busy = members[0].id;
+        const first = await readNearby(busy, undefined, '&setOnce=1');
+        const held = first.answers[first.answers.length - 1];
+        const again = await readNearby(busy, undefined, `&setOnce=1&setHash=${held.setHash}`);
+        const end = again.answers[again.answers.length - 1];
+        assert(end.keys.join() === 'posts,setHash' && end.setHash === held.setHash && again.answers.slice(0, -1).every(a => a.keys.join() === 'posts'),
+            `the set unchanged: the last page answers { posts, setHash }, the hash it was sent echoed (${again.answers.map(a => a.keys.join('+')).join(' / ')})`);
+        assert(again.rows.map(r => r.id).join() === first.rows.map(r => r.id).join(), 'with the same rows');
+        const since = encodeURIComponent(iso(Date.now() - 1000));
+        const old = await get(`${SYNC}&nearby=1&updatedAfter=${since}&paged=1`, busy);
+        const quiet = await get(`${SYNC}&nearby=1&setOnce=1&setHash=${held.setHash}&updatedAfter=${since}&paged=1`, busy);
+        assert(quiet.status === 200 && quiet.keys.join() === 'posts,setHash' && quiet.posts.length === old.posts.length
+            && Buffer.byteLength(old.text) - Buffer.byteLength(quiet.text) >= JSON.stringify(held.set).length,
+            `a delta at a busy town: ${Buffer.byteLength(old.text)} → ${Buffer.byteLength(quiet.text)} bytes raw, the same ${quiet.posts.length} row(s) and no ids`);
+        const other = await get(`${SYNC}&nearby=1&setOnce=1&setHash=0123456789abcdef01234567&updatedAfter=${encodeURIComponent(iso(Date.now() - 1000))}&paged=1`, busy);
+        assert(other.keys.join() === 'posts,set,setHash,tied' && other.set.join() === held.set.join() && other.setHash === held.setHash,
+            'another hash (the set moved since the phone held it): the set, its hash and `tied`, named in full');
+        const without = await get(`${SYNC}&nearby=1&setHash=${held.setHash}&updatedAfter=${encodeURIComponent(iso(Date.now() - 1000))}&paged=1`, busy);
+        assert(without.keys.join() === 'posts,setHash', 'the hash without setOnce=1: the same echo, on the page that would name the set');
+        assert(old.keys.join() === 'posts,set,setHash,tied', 'a phone that sends no hash (one built before it): the set in full, as before');
+        // The hash covers `tied` too: a deal opened on a listing already in her set moves no id, and the phone must learn the tie.
+        const dealt = first.rows.find(r => r.authorPublicKey !== busy.pubKeyHex && !(held.tied ?? []).includes(r.id))!;
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+                    VALUES (?, ?, ?, ?, 5, 'requested', ?)`).run(crypto.randomUUID(), dealt.id, busy.pubKeyHex, dealt.authorPublicKey, iso(Date.now()));
+        const afterDeal = await get(`${SYNC}&nearby=1&setOnce=1&setHash=${held.setHash}&updatedAfter=${encodeURIComponent(iso(Date.now() - 1000))}&paged=1`, busy);
+        assert(afterDeal.keys.join() === 'posts,set,setHash,tied' && afterDeal.set.join() === held.set.join() && afterDeal.setHash !== held.setHash
+            && !!afterDeal.tied?.includes(dealt.id),
+            'a deal opened on a listing already in her set: the same ids, a new hash, and the set named with the listing tied');
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

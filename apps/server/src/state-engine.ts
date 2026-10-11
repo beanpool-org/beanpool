@@ -8545,6 +8545,15 @@ export function exportLedgerFor(publicKey: string): { balancesCsv: string; trans
 
 // ===================== COMMUNITY COMMONS =====================
 
+function parseCommonsProjectsRow(row: { value?: string } | undefined): CommunityProject[] {
+    if (!row?.value) return [];
+    try {
+        return JSON.parse(row.value) as CommunityProject[];
+    } catch {
+        return [];
+    }
+}
+
 export function createProject(proposerPubkey: string, title: string, description: string, requestedAmount: number): CommunityProject | null {
     const member = getMember(proposerPubkey);
     // A2-5: reject non-finite/non-positive requested amounts (NaN/Infinity would
@@ -8565,10 +8574,9 @@ export function createProject(proposerPubkey: string, title: string, description
         status: 'proposed', createdAt: new Date().toISOString()
     };
     
-    // For simplicity, we store projects as JSON in node_config (since they are rare)
-    // Or normally we'd make a table for them. Let's store in config to avoid more schema migrations for now.
+    // Helper to safely parse commons_projects stored as JSON in node_config
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const projects: CommunityProject[] = parseCommonsProjectsRow(row);
     projects.push(project);
     
     // Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3):
@@ -8616,7 +8624,7 @@ export function createProject(proposerPubkey: string, title: string, description
 export function updateProject(proposerPubkey: string, projectId: string, title: string, description: string, requestedAmount: number): boolean {
     if (!title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return false;
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const projects: CommunityProject[] = parseCommonsProjectsRow(row);
     const index = projects.findIndex(p => p.id === projectId);
     if (index === -1) return false;
     if (projects[index].proposerPubkey !== proposerPubkey) return false;
@@ -8648,7 +8656,7 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
 
 export function deleteProject(proposerPubkey: string, projectId: string): boolean {
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const projects: CommunityProject[] = parseCommonsProjectsRow(row);
     const index = projects.findIndex(p => p.id === projectId);
     if (index === -1) return false;
     if (projects[index].proposerPubkey !== proposerPubkey) return false;
@@ -8678,7 +8686,7 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
 
 export function adminRejectProject(projectId: string): boolean {
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const blobProjects: CommunityProject[] = parseCommonsProjectsRow(row);
     const project = blobProjects.find(p => p.id === projectId);
     let found = false;
     if (project) {
@@ -8700,7 +8708,7 @@ export function getProjects(): CommunityProject[] {
 
 export function getAllProjects(): CommunityProject[] {
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const blobProjects: CommunityProject[] = parseCommonsProjectsRow(row);
     const knownIds = new Set(blobProjects.map(p => p.id));
 
     // Unify with bounded enterprises from members table (docs/the-commons.md §2.1, Slice 3)

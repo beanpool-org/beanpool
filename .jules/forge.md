@@ -149,3 +149,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `pruneTombstones` in `apps/server/src/connector-manager.ts` executed database tombstone pruning without a `try/catch` block. When run via periodic `setInterval`, database errors (such as SQLite lock/busy states) threw uncaught exceptions in timer callbacks.
 **Learning:** Functions executed in periodic `setInterval` callbacks must handle internal exceptions with a top-level `try/catch` block to prevent uncaught exceptions from destabilizing or crashing the Node process.
 **Pattern:** Ensure all functions passed directly or indirectly to `setInterval` enclose database or external I/O operations inside `try/catch` blocks.
+
+## 2026-10-11 - [Uncaught JSON.parse exception in commons_projects state-engine functions]
+**Issue:** `createProject`, `updateProject`, `deleteProject`, `adminRejectProject`, and `getAllProjects` in `apps/server/src/state-engine.ts` executed `JSON.parse(row.value)` on `node_config` row `commons_projects` without `try/catch` blocks. Malformed JSON stored in database config threw unhandled exceptions during project operations.
+**Learning:** Parsing JSON strings from database configuration rows without enclosing `JSON.parse` in a `try/catch` block allows corrupted database config values to crash project management functions.
+**Pattern:** Ensure all `JSON.parse` calls on DB config rows are encapsulated in safe helper functions returning fallback default values (e.g. `[]`) on parse failure.

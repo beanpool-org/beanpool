@@ -142,6 +142,9 @@ describe('the member key signs only through core\'s builders and the listed old-
             // The push leave statement: core's signPushLeave builds `0xFF ‖ beanpool-push-leave/2\nHOST\n…` from the
             // key, the phone's own token and stamp, and the host of the address the phone sent the token to.
             'utils/member-statements.ts signPushLeaveStatement',
+            // A re-key ask (utils/rekey-redeem.ts): core's signReEnroll, `0xFF ‖ beanpool-re-enroll/2\nHOST\nCODE`, the host from
+            // audienceOf of a plain address, the code the member typed or scanned, cleaned to the admin's spelling.
+            'utils/member-statements.ts signReEnrollStatement',
             // The claim (utils/node-claim.ts): core's claimText through signedRequestBytes, `0xFF ‖ beanpool-claim/2\nHOST\n…`,
             // the host from audienceOf of a plain address, the code id shape-checked (8 hex), the key the phone's own, the
             // proof the phone's own HMAC. Nothing the node wrote goes in unchecked.

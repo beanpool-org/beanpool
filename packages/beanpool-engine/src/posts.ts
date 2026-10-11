@@ -1048,6 +1048,43 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     });
 }
 
+/**
+ * Letters of the scripts written without spaces between words: Thai, Lao, Myanmar, Khmer, the kana, and the Han characters
+ * (with the supplementary planes' as surrogate pairs). Ranges, not \p{Script=…}, to match core's search-terms.ts.
+ */
+const UNSPACED_SCRIPT = /[฀-໿က-႟ក-៿぀-ヿㇰ-ㇿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ]|[\ud840-\ud87f][\udc00-\udfff]/;
+
+/**
+ * The search, as one condition on `p` and its parameters, for getPosts and getPostCount alike; null for no words. Any
+ * word may match (OR), each as the start of a word in posts_fts, as it always has.
+ *
+ * posts_fts's unicode61 parts words at spaces and punctuation, so a run of Chinese, Japanese or Thai is one token and a
+ * word inside it was never found: "鸡蛋" (eggs) missed "新鲜鸡蛋出售" (fresh eggs for sale) (#1717). A word with letters of
+ * those scripts is also looked for anywhere in the title or the description, as typed: its % _ and \ are escaped, so it
+ * is never a pattern. That reads every listing the rest of the filter leaves (no index helps a LIKE '%…%'), only for such
+ * words; a trigram index would not help the commonest, two characters long (FTS5 trigram matches 3 or more). Words of
+ * spaced languages are asked exactly as before.
+ */
+/**
+ * At most this many unspaced words get the scan (#1776 review, finding 1): each one reads every listing the filter leaves, so without a cap one
+ * public GET with hundreds of them held the event loop for seconds, and past ~495 SQLite refused the expression (a 500). 8 covers any search a
+ * member types (a saved search is 40 characters at most) and bounds the worst read to about what main's worst already costs.
+ */
+const UNSPACED_LIKE_MAX = 8;
+
+function searchCondition(query: string | undefined): { sql: string; params: string[] } | null {
+    const terms = (query ?? '').trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
+    if (terms.length === 0) return null;
+    let sql = `p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
+    const params = [terms.map(t => `"${t}"*`).join(' OR ')];
+    for (const t of [...new Set(terms.filter(t => UNSPACED_SCRIPT.test(t)))].slice(0, UNSPACED_LIKE_MAX)) {
+        const anywhere = `%${t.replace(/[\\%_]/g, c => `\\${c}`)}%`;
+        sql += ` OR p.title LIKE ? ESCAPE '\\' OR p.description LIKE ? ESCAPE '\\'`;
+        params.push(anywhere, anywhere);
+    }
+    return { sql: `(${sql})`, params };
+}
+
 export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     return getPostsRankedBy(db, filter, postRowsNear);
 }
@@ -1417,16 +1454,13 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         }
     }
 
-    if (filter?.query && filter.query.trim()) {
-        const searchTerms = filter.query.trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
-        if (searchTerms.length > 0) {
-            const ftsQuery = searchTerms.map(t => `"${t}"*`).join(' OR ');
-            where += ` AND p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
-            params.push(ftsQuery);
-            // Goods search isolation: searching marketplace keywords must not return polls unless explicitly asked
-            if (filter.type !== 'poll') {
-                where += " AND p.type != 'poll'";
-            }
+    const search = searchCondition(filter?.query);
+    if (search) {
+        where += ` AND ${search.sql}`;
+        params.push(...search.params);
+        // Goods search isolation: searching marketplace keywords must not return polls unless explicitly asked
+        if (filter?.type !== 'poll') {
+            where += " AND p.type != 'poll'";
         }
     }
 
@@ -1870,15 +1904,12 @@ export function getPostCount(db: Db, filter?: {
     if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }
     if (filter?.status) { query += " AND p.status = ?"; params.push(filter.status); }
 
-    if (filter?.query && filter.query.trim()) {
-        const searchTerms = filter.query.trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
-        if (searchTerms.length > 0) {
-            const ftsQuery = searchTerms.map(t => `"${t}"*`).join(' OR ');
-            query += ` AND p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
-            params.push(ftsQuery);
-            if (filter?.type !== 'poll') {
-                query += " AND p.type != 'poll'";
-            }
+    const search = searchCondition(filter?.query);
+    if (search) {
+        query += ` AND ${search.sql}`;
+        params.push(...search.params);
+        if (filter?.type !== 'poll') {
+            query += " AND p.type != 'poll'";
         }
     }
 

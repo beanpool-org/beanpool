@@ -716,10 +716,10 @@ async function main() {
             'the listing posted near and the one moved near are in setAdd; the one taken off and the one moved away in setDrop');
         assert(d.setAdd?.join() === whole.set.filter(id => !dmHeld.set.includes(id)).join(), 'setAdd in the set\'s order (nearest first)');
         const wholeBytes = Buffer.byteLength(whole.text), diffBytes = Buffer.byteLength(diff.text);
-        assert(diff.posts.length === whole.posts.length && wholeBytes - diffBytes >= JSON.stringify(whole.set).length + JSON.stringify(whole.tied).length
-            - JSON.stringify(d.setAdd).length - JSON.stringify(d.setDrop).length - 32,
-            `the same ${diff.posts.length} row(s), ${wholeBytes} → ${diffBytes} bytes raw: the set's ${JSON.stringify(whole.set).length} bytes of ids gone, the diff's ${JSON.stringify(d.setAdd).length + JSON.stringify(d.setDrop).length} in their place`);
-        dmHeld = { ...dmHeld, ...applied, hash: d.setHash ?? '' };
+        const len = (v: unknown) => (JSON.stringify(v) ?? '').length;
+        assert(diff.posts.length === whole.posts.length && !!d.setAdd && wholeBytes - diffBytes >= len(whole.set) + len(whole.tied) - len(d.setAdd) - len(d.setDrop) - 32,
+            `the same ${diff.posts.length} row(s), ${wholeBytes} → ${diffBytes} bytes raw: the set's ${len(whole.set)} bytes of ids gone, the diff's ${len(d.setAdd) + len(d.setDrop)} in their place`);
+        dmHeld = d.setAdd && d.setHash ? { ...dmHeld, ...applied, hash: d.setHash } : await heldOf(dm);
     }
 
     console.log('\n── 16. `tied` rides a diff only where it moved ──');
@@ -734,7 +734,7 @@ async function main() {
             `a deal opened on a listing already in her set: no id moves, and \`tied\` rides the diff with it (${after.keys.join('+')})`);
         const applied = applyDiff(dmHeld, { setAdd: d.setAdd ?? [], setDrop: d.setDrop ?? [], tied: d.tied });
         assert(sameSet(applied.tied, bruteSet(dm).tied) && d.setHash !== dmHeld.hash, 'applied, the ties are the brute force\'s, under a new hash');
-        dmHeld = { ...dmHeld, ...applied, hash: d.setHash ?? '' };
+        dmHeld = d.setAdd && d.setHash ? { ...dmHeld, ...applied, hash: d.setHash } : await heldOf(dm);
     }
 
     console.log('\n── 17. a hash this member wasn\'t sent, no setDiff, or a moved area: the set named whole ──');

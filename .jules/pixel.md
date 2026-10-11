@@ -178,3 +178,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-12-05 - Add dynamic accessibilityLabel and busy state to welcome flow action buttons
 **Learning:** Action buttons in welcome and onboarding flows whose text child is conditionally replaced by an `ActivityIndicator` during loading leave screen readers without accessible text during async operations unless dynamic `accessibilityLabel` and `accessibilityState={{ disabled: loading, busy: loading }}` attributes are provided.
 **Action:** Supply dynamic `accessibilityLabel` and `accessibilityState={{ disabled: loading, busy: loading }}` on primary action buttons that conditionally render an `ActivityIndicator` in place of text when loading.
+
+## 2026-12-12 - Add dynamic accessibilityLabel and hint to propose vote submit buttons in EnterpriseDecisions
+**Learning:** Decision proposal submit buttons whose child text is replaced by an `ActivityIndicator` during creation leave screen reader users without accessible text feedback when submitting unless explicit dynamic `accessibilityLabel` and `accessibilityHint` attributes are supplied.
+**Action:** Provide dynamic `accessibilityLabel` (`busy ? "Opening the vote..." : "Open the vote"`) and `accessibilityHint="Opens a new decision vote"` on decision submit buttons rendering `ActivityIndicator` when busy.

@@ -274,7 +274,10 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
                         {error && <Text style={s.error}>{error}</Text>}
                         <View style={s.voteRow}>
                             <Pressable style={[s.voteBtn, { backgroundColor: colors.brand.primary }, (!ready || busy) && { opacity: 0.5 }]}
-                                disabled={!ready || busy} onPress={send} accessibilityRole="button" accessibilityState={{ disabled: !ready || busy, busy }}>
+                                disabled={!ready || busy} onPress={send} accessibilityRole="button"
+                                accessibilityLabel={busy ? "Opening the vote..." : "Open the vote"}
+                                accessibilityHint="Opens a new decision vote"
+                                accessibilityState={{ disabled: !ready || busy, busy }}>
                                 {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={s.voteYesText}>Open the vote</Text>}
                             </Pressable>
                             <Pressable style={[s.voteBtn, s.voteNo]} onPress={onClose} accessibilityRole="button">
@@ -382,7 +385,10 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
                         {error && <Text style={s.error}>{error}</Text>}
                         <View style={s.voteRow}>
                             <Pressable style={[s.voteBtn, { backgroundColor: colors.brand.primary }, (!ready || busy) && { opacity: 0.5 }]}
-                                disabled={!ready || busy} onPress={send} accessibilityRole="button" accessibilityState={{ disabled: !ready || busy, busy }}>
+                                disabled={!ready || busy} onPress={send} accessibilityRole="button"
+                                accessibilityLabel={busy ? "Opening the vote..." : "Open the vote"}
+                                accessibilityHint="Opens a new decision vote"
+                                accessibilityState={{ disabled: !ready || busy, busy }}>
                                 {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={s.voteYesText}>Open the vote</Text>}
                             </Pressable>
                             <Pressable style={[s.voteBtn, s.voteNo]} onPress={onClose} accessibilityRole="button">

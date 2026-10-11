@@ -23,6 +23,11 @@
  *     admin password then making someone an owner is pushed at once, reaches the channel and stays in the card through
  *     30 more flips; the password flipping that owner is told line by line (high) but pushed 3 times at most; an hour
  *     later each actor's rest is one pushed line ("257 more changes by the same admin").
+ *  5c. A role lost or given back outside grant and revoke, through the real routes: an admin suspends an admin, an owner
+ *     lifts it, an owner removes an admin, an admin suspends a moderator on a report, an admin deletes their account, a
+ *     suspension the community does not keep ends: each told once and pushed to the owners, under the actor's own bound.
+ *  5d. Every security log line is in the history (one line per kind, counted, never its words). A standby takes a role
+ *     grant and tells it on its own channel only; once it is the main server, its standby days leave the card and banner.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts-security.ts
@@ -576,6 +581,51 @@ async function main(): Promise<void> {
         ...ownerPushes().map((p) => p.title + p.body)];
     assert(!c5.some((p) => C5.some((c) => p.includes(c)) || [sue, pru, rpt, del, mia, moe].some((k) => p.includes(k.slice(0, 12)))),
         '5c. no member or key in any of these lines, pushes or the status');
+
+    // ── 5d. The security log, and a standby's own events (the first review's N7 b–d) ─────────────────────────────────
+    const { setNodeRole } = await import('./config/node-role.js');
+    const { logger } = await import('./logger.js');
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    // (d) Every logger.security() line is in the Alerts history (design §3.2): one line per kind, counted, never its words.
+    const pL = ownerPushes().length;
+    const hL = topicHits().length;
+    logger.security('AUTH', `A test line naming @${CALLSIGNS[3]} (key ${member.slice(0, 12)}…)`);
+    logger.security('AUTH', `Another test line naming @${CALLSIGNS[4]}`);
+    logger.security('P2P', '[Backup] A test line from the standby copy');
+    await settle();
+    const logLines = historyOf('sec.log');
+    assert(logLines.length === 2 && logLines.find((e) => /sign-in/.test(e.detail))?.count === 2 && logLines.some((e) => /backups/.test(e.detail)),
+        `5d. every security log line is in the Alerts history, one line per kind, counted (${JSON.stringify(logLines.map((e) => [e.detail, e.count ?? 1]))})`);
+    const st5d = JSON.stringify(alerts.getAlertsStatus());
+    assert(!st5d.includes(CALLSIGNS[3]) && !st5d.includes(CALLSIGNS[4]) && !st5d.includes(member.slice(0, 12)), '5d. never what the line says: no member or key');
+    assert(ownerPushes().length === pL && topicHits().length === hL && banner('owner') === 0, '5d. the history only: no push, no channel line, no banner');
+    // (c) A standby takes a role grant through the route (its own operators' roles; a take-over replaces them): told on its
+    // own channel and in its own card, and pushes nobody, as the first review measured it (M5-G1).
+    const stan = pubkey();
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
+        .run(stan, 'StanStandbyS', new Date().toISOString(), owner, 'TEST');
+    setNodeRole('backup');
+    try {
+        const pB = ownerPushes().length;
+        const hB = topicHits().length;
+        const onStandby = await call('POST', '/api/local/admin/node-roles', { pubkey: stan, role: 'moderator' }, asOwner);
+        await settle(300);
+        assert(onStandby.status === 200 && heldNodeRoleOf(stan) === 'moderator', `5d. a standby takes a role grant through the route (${onStandby.status})`);
+        assert(topicHits().length === hB + 1 && /Someone was made a moderator, by an owner\./.test(topicHits().at(-1)?.body ?? ''),
+            `5d. told on the standby's own channel (${topicHits().length - hB})`);
+        assert(ownerPushes().length === pB, `5d. and pushes nobody: a standby never pushes (${ownerPushes().length - pB})`);
+        assert(banner('owner') === 1 && alerts.getAlertsStatus().recent.length === 1, `5d. in the standby's own card and banner (${banner('owner')})`);
+    } finally {
+        setNodeRole('primary');
+    }
+    // (b) Once it is the main server, its standby days' events leave the card and the banner: they stay in the history.
+    assert(banner('owner') === 0 && alerts.getAlertsStatus().recent.length === 0,
+        `5d. promoted, the standby's own events leave the card and the banner (${banner('owner')}, ${alerts.getAlertsStatus().recent.length})`);
+    assert(historyOf('sec.role').some((e) => /Someone was made a moderator, by an owner\./.test(e.detail)), '5d. and stay in the history');
+    revokeNodeRole(stan, 'moderator', owner);
+    await settle(300);
+    assert(banner('owner') === 1 && alerts.getAlertsStatus().recent.length === 1, `5d. one told on the main server is in both (${banner('owner')})`);
 
     // ── 6. The server's shell: beanpool recover run as a real process, its notice delivered as index.ts's watch does ──
     alerts.resetAlertsForTests();

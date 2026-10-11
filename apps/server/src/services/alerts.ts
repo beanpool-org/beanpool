@@ -54,7 +54,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { writeFileAtomic } from '../write-file-atomic.js';
-import { logger } from '../logger.js';
+import { logger, onSecurityLogLine, type LogCategory } from '../logger.js';
 import { errorMessage } from '../error-message.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
@@ -117,7 +117,8 @@ export type AlertKey =
     | 'freeze.recovered' | 'freeze.nowatchdog'
     | 'standby.incident'
     | 'tls.fallback'
-    | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen';
+    | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
+    | 'sec.log';
 
 interface Row {
     title: string;
@@ -156,6 +157,8 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.more': { title: 'more security changes', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     /** The record of an acknowledgement, kept in the history only: who saw them, as a role, and when. */
     'sec.seen': { title: 'security alerts marked as seen', priority: 2, webhook: false, pushEveryMs: 0, banner: false },
+    /** A logger.security() line was written (design §3.2): kept in the history only, one line per category, counted. */
+    'sec.log': { title: 'security log lines', priority: 1, webhook: false, pushEveryMs: 0, banner: false },
 };
 
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
@@ -196,6 +199,12 @@ export interface AlertEvent {
     high?: boolean;
     /** The same line told this many times while it waited (or, for a security event, in the card). */
     count?: number;
+    /**
+     * In the card only: told while this server was a standby, about its own sign-in (the review's N7 b). A take-over
+     * replaces the roles, password and codes it was about, so once this is the main server it leaves the card and the
+     * banner; the history keeps it.
+     */
+    standby?: true;
 }
 
 /** One actor's hour (raiseSecurity): what went out at once, and what folds into the hour's one line. */
@@ -656,8 +665,9 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
         const security = SECURITY_ONE_SHOTS.has(e.key);
         keepIn(s.history, e, MAX_HISTORY, security);
         if (security) {
-            s.recent = s.recent.filter((x) => t - x.at < SECURITY_BANNER_MS && x.at > (s.acked.oneShotsAt ?? 0));
-            keepIn(s.recent, { ...e }, MAX_RECENT, true);
+            const standby = getNodeRole() === 'backup';
+            s.recent = s.recent.filter((x) => t - x.at < SECURITY_BANNER_MS && x.at > (s.acked.oneShotsAt ?? 0) && (standby || !x.standby));
+            keepIn(s.recent, standby ? { ...e, standby: true } : { ...e }, MAX_RECENT, true);
         }
         if (ROWS[e.key].webhook) s.dropped += keepIn(s.waiting, { ...e }, MAX_WAITING, true);
     };
@@ -812,6 +822,27 @@ function foldedConditions(s: BookState, t: number, only?: string): Condition[] {
     }
     return out;
 }
+
+/** The security log's lines by category, in words: what Settings → Logs holds them under, never what a line says. */
+const LOG_KINDS: Record<LogCategory, string> = {
+    AUTH: 'sign-in, keys and codes', ADMIN: 'admin actions', P2P: 'backups, the standby and other servers', SYS: 'the server itself',
+    TLS: 'certificates', LEDGER: 'the ledger', DB: 'the database',
+};
+
+/**
+ * Every logger.security() line is in the history (design §3.2), so an owner sees there that one was written, even one
+ * never pushed: one line per category, counted, in the server's own words. Never the line itself, which may name a
+ * member; Diagnostics & Logs shows it to whoever may read the logs. Not sent, not pushed, not in the banner.
+ */
+onSecurityLogLine((category) => {
+    const s = readState();
+    const t = now();
+    keepIn(s.history, {
+        key: 'sec.log', kind: 'raised', at: t, since: t, priority: 1,
+        detail: `A line was written to the server's security log (${LOG_KINDS[category] ?? 'the server itself'}). Open Appliance & Data → Diagnostics & Logs to read it.`,
+    }, MAX_HISTORY, true);
+    writeState();
+});
 
 setSecurityAlertHandler((note) => {
     raiseSecurity(note).catch((e) => logger.warn('SYS', `[Alerts] A security alert could not be told: ${errorMessage(e)}`));
@@ -1070,9 +1101,10 @@ export function serverAlertCount(): number {
     }
 }
 
-/** The one-shot security events of the last day that no owner has acknowledged yet, newest first. */
+/** The one-shot security events of the last day that no owner has acknowledged yet, newest first; a standby's own only on it. */
 function recentSecurityEvents(s: BookState, t: number): AlertEvent[] {
-    return s.recent.filter((e) => t - e.at < SECURITY_BANNER_MS && e.at > (s.acked.oneShotsAt ?? 0)).reverse();
+    const standby = getNodeRole() === 'backup';
+    return s.recent.filter((e) => t - e.at < SECURITY_BANNER_MS && e.at > (s.acked.oneShotsAt ?? 0) && (standby || !e.standby)).reverse();
 }
 
 export interface AlertsStatus {

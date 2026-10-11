@@ -588,6 +588,9 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     suspended_member INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
+-- A member's ratings: every trust floor averages them (engine trust.ts, on each spend check and listing row), and so do
+-- getRatings and getAverageRating. Without it each floor scanned the whole table (#1793's review, finding 1).
+CREATE INDEX IF NOT EXISTS idx_ratings_target_pubkey ON ratings(target_pubkey);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated_at);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC);
 -- The reports on one post: auto-hide counts them on every new report (engine/auto-moderation.ts).

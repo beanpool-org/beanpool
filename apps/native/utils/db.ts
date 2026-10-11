@@ -910,7 +910,18 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
     // As in the sync: never the visitors' view over a member's row (utils/posts-view.ts).
     if (viewOf(res) === 'guest' && await postsViewRefusal(res, anchorUrl, (await loadIdentity())?.publicKey)) return false;
     const posts = await res.json();
-    if (!Array.isArray(posts) || posts.length === 0) return false;
+    if (!Array.isArray(posts)) return false;
+    if (posts.length === 0) {
+        // The node answered that it holds no such listing (it deleted the row: a dropped federation peer's listings). Said
+        // apart from a failed read, which says nothing: the listing page keeps what it shows over a read with no row
+        // (utils/shown-post.ts), and only this lets it say "not found" (the confirmation review of #1778, finding 1). Never
+        // deletes the phone's row: that stays applyDelta's job. Only for the community still open, as the write below.
+        if (res.ok && db === database && currentDbName === getDatabaseFilenameForNode(anchorUrl)) {
+            const { DeviceEventEmitter } = require('react-native');
+            DeviceEventEmitter.emit('post_not_on_node', id);
+        }
+        return false;
+    }
     const p = posts[0];
     const before = await database.getFirstAsync<any>(
         'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos FROM posts WHERE id = ?', [id]

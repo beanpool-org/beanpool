@@ -1354,7 +1354,8 @@ router.post('/api/member/purge', async (ctx) => {
 
 // A replacement phone asks to take over a member's account with the admin's RK- code (engine/rekey-redeem.ts, design
 // DESIGN-rekey-redeem-fable.md §4). It binds nothing: it registers a proposal and answers the two digits the phone shows,
-// and the admin binds the key whose digits match the phone in front of them (…/rekey/complete with that key). The
+// and the admin types the number on the phone in front of them: the node binds the waiting phone showing it (…/rekey/complete
+// with { code, match }, bindRekeyByMatch; #1783 review B2). The
 // headers are signed by the asking key (the middleware: replay-proof, its spoof check holds `newPublicKey` to the signer),
 // and the body carries its statement over `beanpool-re-enroll/2\n<host>\n<code>`, so an ask names this community.
 router.post('/api/member/re-enroll', async (ctx) => {

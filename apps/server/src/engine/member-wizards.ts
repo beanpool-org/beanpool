@@ -217,7 +217,7 @@ export function issueRekeyCode(
     // Never a code on the operator's own key. Since #1768 a phone's ask binds nothing: an operator who may binds the number
     // it shows. The code ends this operator's sessions and suspends them, so nobody would be left to bind it, and their
     // account would be held until it expired (24 h). A phone they still have moves by restoring its 12 words on the new
-    // one; a lost or exposed key is re-keyed by another owner or admin (or the password).
+    // one; a lost or exposed key is re-keyed by another owner (assertMayRekey; REKEY_OWN_KEY says the same).
     if (cleanOperator === cleanOld) throw refusal(409, REKEY_OWN_KEY);
     if (isKeyInvalidated(cleanOld)) {
         const info = getInvalidatedKeyInfo(cleanOld);

@@ -20,7 +20,10 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, tickDecisions, removeGroupMember, joinGroup, postGroupThreadMessage, createPost, requestPost, GROUP_CLOSED } from './state-engine.js';
+import {
+    initStateEngine, tickDecisions, removeGroupMember, joinGroup, postGroupThreadMessage, createPost, requestPost, setMemberRole, GROUP_CLOSED,
+    GROUP_LEAD_CANDIDATE_HELD,
+} from './state-engine.js';
 import { GROUP_CLOSED_TO_POSTS } from './engine/posts.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
@@ -291,6 +294,30 @@ async function main(): Promise<void> {
         `"Your groups" shows the closed group as closed (got ${JSON.stringify(mine3 ? { closedAt: mine3.closedAt, readOnly: mine3.readOnly } : yours.body)?.slice(0, 200)})`);
     const open3 = items.find(i => i.id === g1);
     assert(!items.some(i => i.id === g1) || !open3?.closedAt, 'an open group is not shown closed');
+
+    // ── 5. The lead can't remove or demote the person a vote may make the lead (#1777 review N4, decision (a)) ──
+    const [ld, cv, ma, mb, mc] = [makeMember('Lin5'), makeMember('Cyd5'), makeMember('Ada5'), makeMember('Bo5'), makeMember('Cy5')];
+    const g5 = makeGroup('Seed Guild', [{ id: ld, role: 'convenor' }, { id: cv, role: 'convenor' }, { id: ma, role: 'member' }, { id: mb, role: 'member' }, { id: mc, role: 'member' }]);
+    const forBo = (await propose(g5, ma, { effect: 'replace_lead_convenor', subject: mb.pubKeyHex, title: 'Bo leads' })).body?.decision?.id as string;
+    const forCyd = (await propose(g5, mc, { effect: 'replace_lead_convenor', subject: cv.pubKeyHex, title: 'Cyd leads' })).body?.decision?.id as string;
+    assert(!!forBo && !!forCyd, 'two votes on the lead are open in the guild');
+    let removeErr = '', demoteErr = '', toObserverErr = '';
+    try { removeGroupMember(g5, ld.pubKeyHex, mb.pubKeyHex); } catch (e: any) { removeErr = e.message; }
+    try { setMemberRole(g5, ld.pubKeyHex, cv.pubKeyHex, 'member'); } catch (e: any) { demoteErr = e.message; }
+    try { setMemberRole(g5, ld.pubKeyHex, mb.pubKeyHex, 'observer'); } catch (e: any) { toObserverErr = e.message; }
+    assert(removeErr === GROUP_LEAD_CANDIDATE_HELD && roleOf(g5, mb.pubKeyHex)?.status === 'active',
+        `the lead can't remove the candidate of an open lead vote (got ${removeErr || 'removed'})`);
+    assert(demoteErr === GROUP_LEAD_CANDIDATE_HELD && toObserverErr === GROUP_LEAD_CANDIDATE_HELD
+        && roleOf(g5, cv.pubKeyHex)?.role === 'convenor' && roleOf(g5, mb.pubKeyHex)?.role === 'member',
+        `nor lower a candidate's role (got ${demoteErr || 'demoted'} / ${toObserverErr || 'made an observer'})`);
+    let promoteErr = '';
+    try { setMemberRole(g5, ld.pubKeyHex, mb.pubKeyHex, 'convenor'); setMemberRole(g5, ld.pubKeyHex, mc.pubKeyHex, 'observer'); } catch (e: any) { promoteErr = e.message; }
+    assert(!promoteErr && roleOf(g5, mb.pubKeyHex)?.role === 'convenor' && roleOf(g5, mc.pubKeyHex)?.role === 'observer',
+        `raising a candidate, or changing someone who isn't one, is as before (got ${promoteErr || 'ok'})`);
+    for (const v of [ma, mb, cv]) await vote(g5, forBo, v, true);
+    tickDecisions();
+    assert(row(forBo).status === 'executed' && groupRow(g5).lead_pubkey === mb.pubKeyHex,
+        `so the members' vote carries: Bo is the lead (got ${row(forBo).status} ${row(forBo).execution_reason ?? ''})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

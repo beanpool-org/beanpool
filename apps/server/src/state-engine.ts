@@ -9884,9 +9884,28 @@ export function joinGroup(groupId: string, memberPubkey: string, epoch?: unknown
     return res;
 }
 
+/** Why a convenor can't remove or demote the person an open vote may make the group's lead (#1777 review N4). */
+export const GROUP_LEAD_CANDIDATE_HELD = 'The group is voting on making them its lead convenor, so they stay as they are until that vote closes.';
+
+/**
+ * A removal must not be a way to swing a vote (DESIGN-group-decisions §2.6): while a vote to make someone the lead is
+ * open (or passed and not yet carried out), no convenor may remove them or lower their role; the vote would only go
+ * void. Leaving is still their own business, and a vote of the group may still remove them.
+ */
+function assertNotOpenLeadCandidate(groupId: string, actorPubkey: string, subject: string): void {
+    if (actorPubkey === subject) return;
+    const held = db.prepare(`
+        SELECT 1 FROM decisions WHERE scope_kind = 'group' AND scope_id = ? AND effect = 'replace_lead_convenor' AND subject = ?
+          AND status IN ('open', 'passed', 'execution_pending_grace', 'passed_queued_for_funds')
+    `).get(groupId, subject);
+    if (held) throw new Error(GROUP_LEAD_CANDIDATE_HELD);
+}
+
 export function setMemberRole(groupId: string, convenorPubkey: string, targetPubkey: string, newRole: GroupRole): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
     const before = getGroupMemberEngine(db, groupId, targetPubkey);
+    const rank = { observer: 0, member: 1, convenor: 2 } as Record<string, number>;
+    if (before?.status === 'active' && (rank[newRole] ?? 0) < (rank[before.role] ?? 0)) assertNotOpenLeadCandidate(groupId, convenorPubkey, targetPubkey);
     const res = setMemberRoleEngine(db, groupId, convenorPubkey, targetPubkey, newRole);
     try {
         syncGroupThreadMembership(groupId, targetPubkey);
@@ -9907,6 +9926,7 @@ export function setMemberRole(groupId: string, convenorPubkey: string, targetPub
 export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string, epoch?: unknown): boolean {
     // Leaving is anyone's own business; removing someone else is a convenor's.
     if (actorPubkey !== targetPubkey) assertGroupActorIsMember(actorPubkey);
+    assertNotOpenLeadCandidate(groupId, actorPubkey, targetPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
     // A removal is the rotation (§2.4): the convenor's epoch, wrapped to everyone but the removed member, in the same
     // transaction. Leaving carries none (the leaver would know the key): the current epoch goes stale instead.

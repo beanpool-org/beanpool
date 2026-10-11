@@ -469,6 +469,50 @@ async function main(): Promise<void> {
     assert(!flood5.some((p) => [flipped, xav, admin].some((k) => p.includes(k.slice(0, 12))) || /FlipFloS|XavNewOwnerS|AdamAdminS/.test(p)),
         '5. no member or key in the flood\'s lines, the status or the alert book');
 
+    // ── 5b. Past the channel's hourly ceiling, and past the card's 50 lines (the review's d4 H3 and d4c) ──────────────
+    const book = () => JSON.parse(fs.readFileSync(path.join(dataDir!, 'alerts-state.json'), 'utf8'));
+    const filler = async (n: number, tag: string) => {
+        for (let i = 0; i < n; i++) await alerts.updateAlerts([{ key: 'boot.unclean', active: true, oneShot: true, priority: 4, detail: `${tag} ${i}` }]);
+        await settle(300);
+    };
+    const yan = pubkey();
+    const una = pubkey();
+    for (const [pk, callsign] of [[yan, 'YanNewOwnerS'], [una, 'UnaNewAdminS']]) {
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
+            .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
+        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    }
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    const hC = topicHits().length;
+    await filler(70, 'filler before');
+    grantNodeRole(yan, 'owner', 'owner:password');
+    await settle(300);
+    await filler(100, 'filler after');
+    const st5b = book();
+    assert(st5b.dropped > 0 && (st5b.waiting as any[]).some((e) => ownerLine(e.detail)),
+        `5b. the ceiling reached, then an owner made, then 100 more lines: lines were dropped (${st5b.dropped}), the owner line still waits`);
+    assert(alerts.getAlertsStatus().history.some((e) => ownerLine(e.detail)), '5b. and is still in the history');
+    assert(!topicHits().slice(hC).some((h) => ownerLine(h.body)), '5b. held past the ceiling, not sent before the hour');
+    const hD = topicHits().length;
+    advance(HOUR + MIN);
+    await tick();
+    await settle(1500);
+    assert(topicHits().slice(hD).some((h) => ownerLine(h.body)), '5b. the hour over, the owner line is delivered');
+
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    const adminLine = (d: string) => /Someone was made an admin, by the admin password\./.test(d);
+    grantNodeRole(una, 'admin', 'owner:password');
+    await settle(300);
+    await filler(60, 'filler card');
+    assert(!alerts.getAlertsStatus().history.some((e) => adminLine(e.detail)), '5b. an admin made, then 60 other lines: out of the history\'s last 50');
+    assert(alerts.getAlertsStatus().recent.some((e) => adminLine(e.detail)) && banner('owner') >= 1,
+        `5b. but still in the Alerts card and the owners' banner (${banner('owner')})`);
+    revokeNodeRole(una, 'admin', 'owner:password');
+    revokeNodeRole(yan, 'owner', 'owner:password');
+    await settle(300);
+
     // ── 6. The server's shell: beanpool recover run as a real process, its notice delivered as index.ts's watch does ──
     alerts.resetAlertsForTests();
     const recoverCli = (args: string[]) => new Promise<{ code: number; out: string }>((resolve) => {

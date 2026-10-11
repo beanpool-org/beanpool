@@ -29,7 +29,7 @@ import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
 import { tombstoneFields, writeMessageTombstone } from './message-tombstone.js';
 import type { MessagingCallbacks } from './messaging.js';
 import {
-    assertLineEpochIsCurrent, filterDeclaredMentions, fromEpochOf, groupChatEncryption, GroupKeyError, GROUP_CHAT_UPDATE_APP,
+    assertLineEpochIsCurrent, filterDeclaredMentions, fromEpochOf, fromEpochsOf, groupChatEncryption, GroupKeyError, GROUP_CHAT_UPDATE_APP,
 } from './group-keys.js';
 
 // Moved to core (group-crypto.ts): the sending app detects mentions and declares them (§9). Still exported from here.
@@ -248,9 +248,12 @@ function participantKeys(groupId: string): string[] {
         .map(r => r.public_key);
 }
 
-/** Live update to the people in the chat only — never to every socket, as the enterprise thread does. */
+/**
+ * Live update to the people in the chat only — never to every socket, as the enterprise thread does — and of them only
+ * those the line may be served to (groupLineHearers): a new line, an edit, a removal.
+ */
 function broadcastToChat(cb: MessagingCallbacks, groupId: string, message: EventThreadMessage, action?: GroupChatAction, extra: string[] = []): void {
-    const recipients = Array.from(new Set([...participantKeys(groupId), ...extra]));
+    const recipients = groupLineHearers(groupId, message.metadata, Array.from(new Set([...participantKeys(groupId), ...extra])));
     cb.broadcast({
         type: 'new_message',
         conversationId: groupId,
@@ -314,6 +317,17 @@ export function groupLineForReader(metadata: unknown, fromEpoch: number | null):
     try { epoch = (typeof metadata === 'string' ? JSON.parse(metadata) : metadata as any)?.epoch; } catch { epoch = undefined; }
     if (epoch === undefined || epoch === null) return true;
     return fromEpoch !== null && typeof epoch === 'number' && epoch >= fromEpoch;
+}
+
+/**
+ * Of `keys`, the ones a line with this metadata may reach (groupLineForReader, as the reads serve it): a line sealed under
+ * an epoch from before someone's membership reaches them by no path, live or read (review of #1772, finding 2). A line
+ * with no epoch reaches them all.
+ */
+export function groupLineHearers(groupId: string, metadata: unknown, keys: string[]): string[] {
+    if (groupLineForReader(metadata, null)) return keys;
+    const from = fromEpochsOf(groupId);
+    return keys.filter((pk) => groupLineForReader(metadata, from.get(pk) ?? null));
 }
 
 export function getGroupThreadMessages(groupId: string, viewer: string, limit = 50, offset = 0): EventThreadMessage[] {
@@ -505,7 +519,8 @@ export function removeGroupThreadMessage(
     // A convenor whose account is suspended removes nothing until it ends (the route answers 403 for "suspended").
     assertConvenorPowersActive(db, actorPubkey);
     const msgRow = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?').get(messageId, groupId) as any;
-    if (!msgRow) throw new Error('Message not found');
+    // A line from before the convenor's membership is one they were never served: an id nobody has (groupLineHearers).
+    if (!msgRow || !groupLineForReader(msgRow.metadata, fromEpochOf(groupId, actorPubkey))) throw new Error('Message not found');
     if (msgRow.type === 'system') throw new Error('A system line cannot be removed');
     // Already down — a second removal is a no-op success, and must not rewrite who took it down first (an
     // author who deleted their own line stays the author on the record, not this convenor).

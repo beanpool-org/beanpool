@@ -23,6 +23,9 @@
  *   F5.   an edit stays under its line's own epoch (Marty's pick 1): Ana's line under 2, Dov joins (3), Ana edits under 2:
  *         200, metadata.epoch still 2, Dov served nothing of it; an edit naming 3 is 409 epoch_not_lines; an edit under 2
  *         while 2 is current and stale is 200; the edit opens under 2 for a member, and its sender is the editor
+ *   E.    a newcomer hears nothing of a line from before her (review of #1772, finding 2): her socket hears no edit, reaction
+ *         or removal of it; her reaction to it by id, and her removal of it once a convenor, are answered as an id nobody
+ *         has, with nothing written; a member who holds its epoch hears each, and her own reaction to a line under 2 is heard
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-group-keys-over-time node scripts/run-server-suites.mjs
  */
@@ -31,6 +34,7 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
+import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, createGroup } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -110,12 +114,29 @@ function openFrom(keys: any, who: Id, g: string, epoch: number): Uint8Array {
     if (!rec || !wrap) throw new Error(`no record or wrap for epoch ${epoch}`);
     return openMyGroupKey({ groupId: g, ...rec } as GroupEpochRecord, wrap, who.seedHex, { groupId: g });
 }
-async function send(who: Id, g: string, key: Uint8Array, epoch: number, text: string): Promise<{ id: string; status: number; body: any }> {
+async function send(who: Id, g: string, key: Uint8Array, epoch: number, text: string, extra: { replyToId?: string; mentions?: string[] } = {}): Promise<{ id: string; status: number; body: any }> {
     const id = crypto.randomUUID();
     const r = await call('POST', who, `/api/groups/${g}/chat/message`, {
-        ...sealGroupLine(text, { myEdPrivHex: who.seedHex, groupKey: key, groupId: g, epoch, messageId: id }), metadata: { epoch }, clientId: id });
+        ...sealGroupLine(text, { myEdPrivHex: who.seedHex, groupKey: key, groupId: g, epoch, messageId: id, replyToId: extra.replyToId ?? null }),
+        metadata: { epoch, ...extra }, clientId: id });
     return { id, status: r.status, body: r.body };
 }
+/** A member's live socket, signed as the apps sign it; every event it hears, in order. */
+type Sock = { ws: WebSocket; events: any[] };
+function socket(id: Id): Promise<Sock> {
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
+    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(url, { rejectUnauthorized: false });
+        const s: Sock = { ws, events: [] };
+        ws.on('message', (d) => { try { s.events.push(JSON.parse(d.toString())); } catch { /* not JSON */ } });
+        ws.on('open', () => resolve(s));
+        ws.on('error', reject);
+    });
+}
+const settle = () => new Promise((r) => setTimeout(r, 300));
 const chatIds = async (who: Id, g: string): Promise<string[]> => ((await call('GET', who, `/api/groups/${g}/chat`)).body.messages ?? []).map((m: any) => m.id);
 const fromEpochCol = (g: string, pk: string): unknown => {
     try { return (db.prepare('SELECT from_epoch FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, pk) as any)?.from_epoch; } catch { return 'no column'; }
@@ -452,6 +473,71 @@ async function main(): Promise<void> {
                 openFrom(await keysOf(b, g), b, g, 2)).text;
         } catch { /* refused */ }
         assert(text === 'EDITED after Del joined: the hall is booked for 7' && meta.sender === a.pk, `Bea opens the edit under the epoch the row names, from its sender (got "${text}")`);
+    }
+
+    // ── E. a newcomer hears nothing of the lines from before her ─────────────────────────────────────
+    console.log('\n── E. a newcomer hears nothing of a line from before her: live updates, reactions, removals ──');
+    {
+        const [a, c, f] = [member('Ari'), member('Coby'), member('Fen')];
+        const g = createGroup({ name: 'Newcomer', joinPolicy: 'open', createdBy: a.pk }).id;
+        const kp = `/api/groups/${g}/keys`;
+        assert((await call('POST', c, `/api/groups/${g}/join`, {})).status === 200, 'Coby joins');
+        const e1 = epochBy(a, g, 1, 'start', [a, c]);
+        assert((await call('POST', a, `${kp}/epoch`, { epoch: e1.record })).status === 201, 'Ari starts epoch 1 for Ari and Coby');
+        const pre = await send(a, g, e1.groupKey, 1, 'BEFORE-FEN the safe code is 9921', { mentions: [c.pk] });
+        assert(pre.status === 201, 'Ari writes a line under 1, mentioning Coby');
+        const e2 = epochBy(f, g, 2, 'join', [a, c, f], f);
+        assert((await call('POST', f, `/api/groups/${g}/join`, { epoch: e2.record })).status === 200 && (await keysOf(f, g)).fromEpoch === 2, 'Fen joins with her own epoch 2: fromEpoch 2');
+        const [fenSock, cySock] = [await socket(f), await socket(c)];
+        const heard = (s: Sock) => s.events.filter((e) => e?.message?.id === pre.id || e?.messageId === pre.id);
+        const quiet = async () => { await settle(); fenSock.events.length = 0; cySock.events.length = 0; };
+        await quiet();
+
+        // Live updates: an edit.
+        const edit = await call('POST', a, '/api/messages/edit', { messageId: pre.id,
+            ...sealGroupLine('BEFORE-FEN the safe code is 1234', { myEdPrivHex: a.seedHex, groupKey: e1.groupKey, groupId: g, epoch: 1, messageId: pre.id, part: 'edit' }), metadata: { epoch: 1 } });
+        await settle();
+        assert(edit.status === 200 && heard(fenSock).length === 0, `Ari edits her epoch-1 line: Fen's socket hears nothing of it (got ${edit.status}, heard ${heard(fenSock).length}×)`);
+        assert(heard(cySock).some((e) => e.action === 'edited' && JSON.parse(e.message.metadata).epoch === 1), 'Coby, who holds epoch 1, hears the edit');
+
+        // Reactions: Coby's reply under 2 names the old line, so Fen learns its id.
+        const rep = await send(c, g, openFrom(await keysOf(c, g), c, g, 2), 2, 'replying to the old one', { replyToId: pre.id });
+        const servedReply = ((await call('GET', f, `/api/groups/${g}/chat`)).body.messages as any[]).find((m) => m.id === rep.id);
+        assert(rep.status === 201 && JSON.parse(servedReply.metadata).replyToId === pre.id, "Fen is served Coby's reply under 2, which names the old line's id");
+        await quiet();
+        const unknown = await call('POST', f, '/api/messages/react', { messageId: crypto.randomUUID(), authorPubkey: f.pk, emoji: '👀' });
+        const fenReact = await call('POST', f, '/api/messages/react', { messageId: pre.id, authorPubkey: f.pk, emoji: '👀' });
+        await settle();
+        const stored = JSON.parse((db.prepare('SELECT metadata FROM messages WHERE id = ?').get(pre.id) as any).metadata);
+        assert(fenReact.status === unknown.status && JSON.stringify(fenReact.body) === JSON.stringify(unknown.body) && fenReact.status === 404,
+            `Fen reacting to the pre-join line by its id is answered as an id nobody has (got ${fenReact.status} ${JSON.stringify(fenReact.body)}, unknown id ${unknown.status} ${JSON.stringify(unknown.body)})`);
+        assert(!(stored.reactions ?? []).some((r: any) => r?.author === f.pk) && heard(cySock).length === 0 && heard(fenSock).length === 0,
+            'nothing is stored and nobody hears a reaction from her');
+        const cyReact = await call('POST', c, '/api/messages/react', { messageId: pre.id, authorPubkey: c.pk, emoji: '👍' });
+        await settle();
+        assert(cyReact.status === 200 && heard(cySock).some((e) => e.type === 'message_reaction'), `Coby reacts to it: 200, and Coby hears it (got ${cyReact.status})`);
+        assert(heard(fenSock).length === 0, "Fen's socket hears nothing of Coby's reaction to it");
+        const fenOwn = await call('POST', f, '/api/messages/react', { messageId: rep.id, authorPubkey: f.pk, emoji: '👀' });
+        await settle();
+        assert(fenOwn.status === 200 && fenSock.events.some((e) => e?.messageId === rep.id) && cySock.events.some((e) => e?.messageId === rep.id),
+            `Fen reacts to Coby's line under 2: 200, and both hear it (got ${fenOwn.status})`);
+
+        // A convenor who joined later removes nothing she was never served, and learns nothing from trying.
+        db.prepare("UPDATE group_members SET role = 'convenor' WHERE group_id = ? AND member_pubkey = ?").run(g, f.pk);
+        await quiet();
+        const unknownRm = await call('POST', f, `/api/groups/${g}/chat/remove`, { messageId: crypto.randomUUID() });
+        const fenRm = await call('POST', f, `/api/groups/${g}/chat/remove`, { messageId: pre.id });
+        assert(fenRm.status === unknownRm.status && JSON.stringify(fenRm.body) === JSON.stringify(unknownRm.body)
+            && (db.prepare('SELECT type FROM messages WHERE id = ?').get(pre.id) as any).type !== 'removed',
+            `Fen, made a convenor, removing the pre-join line is answered as an id nobody has, and it stays (got ${fenRm.status} ${JSON.stringify(fenRm.body)}, unknown id ${unknownRm.status})`);
+
+        // Live updates: the author's own delete reaches the members who hold its epoch, and not her.
+        const del = await call('POST', a, '/api/messages/delete', { messageId: pre.id });
+        await settle();
+        assert(del.status === 200 && heard(fenSock).length === 0, `Ari deletes the line: Fen's socket hears nothing of it (got ${del.status}, heard ${heard(fenSock).length}×)`);
+        assert(heard(cySock).some((e) => e.action === 'removed'), 'Coby hears the removal');
+        fenSock.ws.close();
+        cySock.ws.close();
     }
 
     console.log(`\n${passed}/${run} passed`);

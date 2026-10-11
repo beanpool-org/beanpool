@@ -85,6 +85,13 @@ export function fromEpochOf(groupId: string, pubkey: string | undefined): number
     return row?.f ?? null;
 }
 
+/** fromEpochOf for every active member of the group, in one query: for a fan-out to the whole chat (groupLineHearers). */
+export function fromEpochsOf(groupId: string): Map<string, number | null> {
+    const rows = db.prepare(`SELECT gm.member_pubkey AS pk, ${FROM_EPOCH_SQL} AS f FROM group_members gm WHERE gm.group_id = ? AND gm.status = 'active'`)
+        .all(groupId) as { pk: string; f: number | null }[];
+    return new Map(rows.map((r) => [r.pk, r.f]));
+}
+
 /** fromEpochOf for the group_members row `gm`, in SQL: its from_epoch, or for a row no code wrote the stored_at rule. */
 const FROM_EPOCH_SQL = `COALESCE(gm.from_epoch,
     (SELECT MIN(e0.epoch) FROM group_key_epochs e0 WHERE e0.group_id = gm.group_id AND e0.stored_at >= gm.joined_at))`;

@@ -559,7 +559,8 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // A member's set answers its rows and the set's ids, every time (DESIGN-global-sync-by-area §2.3): the phone drops
     // what it holds outside them and fetches what it lacks by `ids=`. `tied`, the ids of the set that are theirs or tied
     // to them, which the phone keeps past its cap whatever it holds of the deal or the chat. Every other read keeps the
-    // bare list.
+    // bare list. The contract: `tied` stays string[]; a new shape gets a new field name. A phone reads any other shape as
+    // no `tied` and keeps the ties it stored (apps/native utils/posts-nearby.ts nearbySetOf).
     const bodyStr = JSON.stringify(nearbySet ? {
         posts: shown,
         set: nearbySet.ids,

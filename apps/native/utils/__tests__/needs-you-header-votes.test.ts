@@ -163,7 +163,7 @@ describe('the header reading the node itself (Home\'s answer not fresh): one rul
         profile.features = { beans: true, decisions: true };
         expect(decideOnNode(profile.features)).toBe(true);
         await renderHeader();
-        expect(homeAsks()).toEqual(['/api/home?cards=needs&lands=enterprise']);
+        expect(homeAsks()).toEqual(['/api/home?cards=needs&lands=enterprise,group']);
         expect(voteIcon()).not.toBeNull();
         await act(async () => { (voteIcon()!.closest('button') as HTMLElement).click(); });
         expect(nav.push).toHaveBeenCalledWith({ pathname: '/(tabs)/projects', params: { section: 'decide' } });
@@ -184,7 +184,7 @@ describe("the header reading the node itself: a keepers' vote (review opus-1767 
             profile.features = { beans, decisions: true };
             node.votes = [voteLine({ to: 'enterprise', id: ENT })];
             await renderHeader();
-            expect(homeAsks()).toEqual(['/api/home?cards=needs&lands=enterprise']);
+            expect(homeAsks()).toEqual(['/api/home?cards=needs&lands=enterprise,group']);
             // The same icons drawn from Home's fresh answer: none comes and goes with its age.
             expect(mergeNeeds(node.votes as never, null, Date.now(), profile.features).map(e => e.kind)).toEqual(['vote']);
             expect(voteIcon()).not.toBeNull();

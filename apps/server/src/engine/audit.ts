@@ -14,6 +14,8 @@ import {
     runConservationCheck,
     BROKEN_BALANCE_SQL,
     computeWashSybilMetrics,
+    computeWashSybilMetricsInSlices,
+    type WashSybilMetrics,
     getReplicaConsistency as engineGetReplicaConsistency,
     summariseLedger,
     type LedgerSummary,
@@ -236,24 +238,50 @@ let saidBeansOff = false;
  *
  * Where Beans are off (the global profile, or `nodeProfile.beans=false` on a ledger that has never moved) it does
  * nothing and returns null: every number it computes (negative balances, members near their credit floor, dormant
- * credit-drawn accounts, cohorts at deep floors) is about Beans, and the walk is synchronous over every active member,
- * twice through getMemberTrustProfile: 825 ms at 6,403 members on an M4 (the global load rehearsal, 2026-10-02), with
- * the whole node answering nothing meanwhile, 2.5 minutes after every boot. No system_metrics row is written, so the
+ * credit-drawn accounts, cohorts at deep floors) is about Beans, and the walk goes over every active member through
+ * getMemberTrustProfile: 825 ms at 6,403 members on an M4 (the global load rehearsal, 2026-10-02), with the whole node
+ * answering nothing meanwhile, 2.5 minutes after every boot, before the timers ran it in slices
+ * (runWashSybilMetricsAuditInSlices). No system_metrics row is written, so the
  * health flags that read them (getCommunityHealth: aggregate spike, cohort velocity, delinquency) raise none. The
  * switch is read at every call, so an operator's override takes effect at the next run, with no restart.
  */
-export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null {
+export function runWashSybilMetricsAudit(): WashSybilMetrics | null {
+    if (!metricsAuditRuns()) return null;
+    return saveWashSybilMetrics(computeWashSybilMetrics(db));
+}
+
+/** The run in progress, if any: a second start while one runs joins it rather than walking the members twice at once. */
+let slicedRun: Promise<WashSybilMetrics | null> | null = null;
+
+/**
+ * runWashSybilMetricsAudit as the node's timers run it (state-engine.ts): the same numbers, worked out a slice at a time
+ * with the event loop given a turn between slices (engine audit.ts computeWashSybilMetricsInSlices), so the node keeps
+ * answering while it runs. `onYield` is for a test, which counts the turns.
+ */
+export function runWashSybilMetricsAuditInSlices(opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<WashSybilMetrics | null> {
+    if (slicedRun) return slicedRun;
+    if (!metricsAuditRuns()) return Promise.resolve(null);
+    slicedRun = computeWashSybilMetricsInSlices(db, opts)
+        .then(saveWashSybilMetrics)
+        .finally(() => { slicedRun = null; });
+    return slicedRun;
+}
+
+/** Whether the audit runs now: not where Beans are off (runWashSybilMetricsAudit's doc), which it says once. */
+function metricsAuditRuns(): boolean {
     if (!getProfileSwitches().beans) {
         if (!saidBeansOff) {
             console.log('📊 [MetricsAudit] Beans are off: the daily Wash Trading & Sybil metrics audit does not run here, as every number it computes is about Beans.');
             saidBeansOff = true;
         }
-        return null;
+        return false;
     }
     saidBeansOff = false;
     console.log('📊 [MetricsAudit] Running Wash Trading & Sybil metrics audit...');
-    const metrics = computeWashSybilMetrics(db);
+    return true;
+}
 
+function saveWashSybilMetrics(metrics: WashSybilMetrics): WashSybilMetrics {
     try {
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('total_negative_balance', metrics.totalNegative);
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('accounts_near_floor', metrics.accountsNearFloor);
@@ -263,7 +291,6 @@ export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNea
     } catch (e) {
         console.error('[MetricsAudit] Failed to persist system metrics:', e);
     }
-
     return metrics;
 }
 

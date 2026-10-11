@@ -848,6 +848,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 case 'unread-messages': case 'your-groups': return onNavigate('messages');
                 // A keepers' vote is never in Commons → Decide: it lands on the enterprise, whose Decisions block lists it.
                 case 'enterprise': return onNavigate('enterprise', t.id);
+                // A group's vote lands on the group: its info, where its Decisions block is; never the Messages list.
+                case 'group': return onNavigate('group', t.id);
                 default: return undefined;
             }
         };

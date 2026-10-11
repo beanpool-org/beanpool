@@ -2,8 +2,19 @@
 slug: whats-new
 title: What's new
 summary: What changed in each version of the app, in plain words.
-related: home, the-bean, how-it-works, rules, faq
+related: home, the-bean, how-it-works, rules, faq, communities
 ---
+
+## The global community, near you
+
+You get these when the global community's server is updated. On the phone they need an up-to-date app.
+
+- **The listings near you.** The global community has listings from everywhere. Your phone now keeps the nearest 500 within 250 km of your area, and your own and any listing you have a deal in progress or a conversation about, wherever they are. The Market's search still finds listings from everywhere. See "More than one community".
+- **Your area.** Joining the global community has one more step after your photo: **Roughly where are you?** Tap **Use my location**, **Type a town or suburb**, or **Skip for now**. It is kept to about 10 km, never your exact spot. Change or clear it in Settings, under **Your area**. See "Your area".
+- **No area, no problem.** Without one you see the newest listings from everywhere, and a line above the Market says so. On the phone, tap it to set your area.
+- **New listings near you.** They come in as they are posted. Ones far away no longer reach your phone.
+- **In the web app**, the Market and the Map start from your area, or from a place you pick with **Distance**: nearest first, each listing with how far away it is. See "Finding things near you".
+- **Polls** have no place of their own, so each is shown at the area of the member who made it.
 
 ## Home
 

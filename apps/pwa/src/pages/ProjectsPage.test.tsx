@@ -130,6 +130,9 @@ vi.mock('../lib/api', () => ({
     request: vi.fn(),
     // The enterprise page's Decisions block (components/EnterpriseDecisions.tsx): no keepers' vote here.
     getEnterpriseDecisions: vi.fn(async () => null),
+    getGroupDecisions: vi.fn(async () => null),
+    proposeGroupDecision: vi.fn(async () => ({ success: true })),
+    voteGroupDecision: vi.fn(async () => ({ success: true })),
     proposeEnterpriseDecision: vi.fn(async () => ({ success: true })),
     voteEnterpriseDecision: vi.fn(async () => ({ success: true })),
 }));

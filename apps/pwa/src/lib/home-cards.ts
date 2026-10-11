@@ -51,7 +51,9 @@ export type NeedsTarget =
     | { to: 'unread-messages' }
     | { to: 'your-groups' }
     /** An enterprise's own screen, for its keepers' vote; sent only to an app that asks with `lands=enterprise` (lib/api.ts getHome). */
-    | { to: 'enterprise'; id: string };
+    | { to: 'enterprise'; id: string }
+    /** A chat group's info, for its members' vote; sent only to an app that asks with `lands=group` (lib/api.ts getHome). */
+    | { to: 'group'; id: string };
 export interface NeedsItem { kind: 'admin' | 'deal' | 'vote' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 /**

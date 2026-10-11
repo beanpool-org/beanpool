@@ -34,9 +34,32 @@ describe('the listing page after a reload', () => {
         expect(shownPostAfterReload(shown, null, 'far-2')).toBeNull();
     });
 
+    it("probe 13: the node answered no such listing (utils/db.ts post_not_on_node) and the phone holds no row: it goes", () => {
+        // The page then reads null, and the not-found timer's "Post not found" shows (the confirmation review of #1778, finding 1).
+        expect(shownPostAfterReload(shown, null, 'far-1', true)).toBeNull();
+        expect(shownPostAfterReload(shown, undefined, 'far-1', true)).toBeNull();
+    });
+
+    it('a row the phone holds still wins over the node\'s answer: the sync drops the row, never the page', () => {
+        const row = { ...shown, title: 'Kayak (held)' };
+        expect(shownPostAfterReload(shown, row, 'far-1', true)).toBe(row);
+    });
+
+    it('without that answer (offline, a failed read) the shown listing stays (decision (a))', () => {
+        expect(shownPostAfterReload(shown, null, 'far-1', false)).toBe(shown);
+    });
+
     it('the page sets its listing through it, so a null read never reaches the full-screen spinner', () => {
         const page = fs.readFileSync(path.resolve(__dirname, '../../app/post/[id].tsx'), 'utf-8');
-        expect(page).toMatch(/getPost\(singleId\)\.then\(p => \{\s*(\/\/[^\n]*\n\s*)*setPost\(\(prev: any\) => shownPostAfterReload\(prev, p, singleId\)\);/);
+        expect(page).toMatch(/getPost\(singleId\)\.then\(p => \{\s*(\/\/[^\n]*\n\s*)*setPost\(\(prev: any\) => shownPostAfterReload\(prev, p, singleId, goneOnNode\.current === singleId\)\);/);
         expect(page).not.toMatch(/getPost\(singleId\)\.then\(p => \{\s*setPost\(p\);/);
+    });
+
+    it("the page hears the node's answer for its own listing, and clears it only when its last read found no row", () => {
+        const page = fs.readFileSync(path.resolve(__dirname, '../../app/post/[id].tsx'), 'utf-8');
+        expect(page).toMatch(/addListener\('post_not_on_node', \(goneId: unknown\) => \{\s*if \(goneId !== singleId\) return;\s*goneOnNode\.current = singleId;\s*if \(readNoRow\.current === singleId\) setPost\(\(prev: any\) => shownPostAfterReload\(prev, null, singleId, true\)\);/);
+        expect(page).toMatch(/readNoRow\.current = p \? null : singleId;/);
+        // Removed with the page's other listeners.
+        expect(page).toMatch(/goneSub\.remove\(\);/);
     });
 });

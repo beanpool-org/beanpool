@@ -2,7 +2,7 @@
 slug: near-you
 title: Finding things near you
 summary: Show only posts within a distance of you, or of any place you choose.
-related: browsing-the-market, map-pins, pin-locations, events
+related: browsing-the-market, map-pins, pin-locations, events, your-area
 ---
 
 ## On the Market tab

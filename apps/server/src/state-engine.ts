@@ -183,6 +183,7 @@ import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     CommonsPotUnknownError,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
+    runWashSybilMetricsAuditInSlices,
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
     exportLedgerFor as exportLedgerForEngine,
@@ -307,6 +308,7 @@ import {
     isGroupMember as isGroupMemberEngine,
     getGroupLead as getGroupLeadEngine,
     reconcileGroupLead as reconcileGroupLeadEngine,
+    membershipWriteAt as groupMembershipWriteAt,
     isGroupLead as isGroupLeadEngine,
     handOverGroupLead as handOverGroupLeadEngine,
     getMemberGroupIds as getMemberGroupIdsEngine,
@@ -834,13 +836,14 @@ export function initStateEngine(): void {
     }, 24 * 60 * 60 * 1000);
 
     // Daily Wash & Sybil metrics audit (once shortly after boot, then daily). Where Beans are off it returns at once, read
-    // at each run (engine/audit.ts): its numbers are about Beans, and its member walk freezes a large node.
-    setTimeout(() => {
-        try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
-    }, 2.5 * 60 * 1000);
-    setInterval(() => {
-        try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
-    }, 24 * 60 * 60 * 1000);
+    // at each run (engine/audit.ts): its numbers are about Beans. It walks every member a slice at a time, so the node
+    // keeps answering meanwhile.
+    const metricsAudit = () => {
+        try { runWashSybilMetricsAuditInSlices().catch((e) => console.warn('[MetricsAudit] failed:', e)); }
+        catch (e) { console.warn('[MetricsAudit] failed:', e); }
+    };
+    setTimeout(metricsAudit, 2.5 * 60 * 1000);
+    setInterval(metricsAudit, 24 * 60 * 60 * 1000);
 
     if (getNodeRole() === 'primary') runMainServerMigrations();
 
@@ -8806,6 +8809,11 @@ export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNea
     return runWashSybilMetricsEngine();
 }
 
+/** runWashSybilMetricsAudit a slice at a time, as the node's timers run it (engine/audit.ts). */
+export function runWashSybilMetricsAuditSliced(opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<{ totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null> {
+    return runWashSybilMetricsAuditInSlices(opts);
+}
+
 export type { ReplicaConsistency };
 
 /**
@@ -9778,6 +9786,14 @@ export function groupClosedAt(groupId: string): string | null {
     return (db.prepare('SELECT closed_at FROM group_closures WHERE group_id = ?').get(groupId) as { closed_at: string } | undefined)?.closed_at ?? null;
 }
 
+/** When each of these groups was closed, for those that were, in one read (the group list, #1784 review N4). */
+export function groupClosedAtMany(groupIds: string[]): Map<string, string> {
+    if (groupIds.length === 0) return new Map();
+    const rows = db.prepare('SELECT group_id, closed_at FROM group_closures WHERE group_id IN (SELECT value FROM json_each(?))')
+        .all(JSON.stringify(groupIds)) as Array<{ group_id: string; closed_at: string }>;
+    return new Map(rows.map(r => [r.group_id, r.closed_at]));
+}
+
 function assertGroupNotClosed(groupId: string): void {
     if (groupClosedAt(groupId)) throw new Error(GROUP_CLOSED);
 }
@@ -9799,26 +9815,29 @@ function dropFromOpenGroupRolls(groupId: string, memberPubkey: string): void {
  * The row changes a chat group's passed vote makes (decisions-engine.ts, DESIGN-group-decisions §2.3), inside its
  * transaction. No convenor acts, so no convenor's power is asked for: the vote is the authority, and the preflight has
  * already checked the subject is where the vote left them. Nothing here touches money, trust or a node role.
+ * A membership row's stamp moves strictly past its last one, as every other membership writer's does
+ * (groupMembershipWriteAt): a clock step or a promoted standby behind the main must not let a standby skip it (#1777 R2).
  */
 export function setGroupRoleByVote(groupId: string, subject: string, role: 'convenor' | 'member'): void {
-    const now = new Date().toISOString();
     reconcileGroupLeadEngine(db, groupId);
+    const now = groupMembershipWriteAt(db, groupId, subject);
     db.prepare(
         "UPDATE group_members SET role = ?, role_since = CASE WHEN role = ? THEN role_since ELSE ? END, updated_at = ? WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
     ).run(role, role, now, now, groupId, subject);
 }
 
 export function replaceGroupLeadByVote(groupId: string, subject: string): void {
-    const now = new Date().toISOString();
+    const now = groupMembershipWriteAt(db, groupId, subject);
     db.prepare("UPDATE group_members SET role = 'convenor', role_since = CASE WHEN role = 'convenor' THEN role_since ELSE ? END, updated_at = ? WHERE group_id = ? AND member_pubkey = ? AND status = 'active'")
         .run(now, now, groupId, subject);
-    db.prepare('UPDATE groups SET lead_pubkey = ?, updated_at = ? WHERE id = ?').run(subject, now, groupId);
+    // A groups row is stamped by the clock, as every groups writer stamps it.
+    db.prepare('UPDATE groups SET lead_pubkey = ?, updated_at = ? WHERE id = ?').run(subject, new Date().toISOString(), groupId);
 }
 
 /** The removal a convenor's removal writes (the 'removed' row, so it sticks); the chat's key goes stale, as with no epoch. */
 export function removeGroupMemberByVote(groupId: string, subject: string): void {
     const before = groupKeyRoster(groupId).join(',');
-    const now = new Date().toISOString();
+    const now = groupMembershipWriteAt(db, groupId, subject);
     db.prepare("UPDATE group_members SET status = 'removed', role = 'member', role_since = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?")
         .run(now, now, groupId, subject);
     reconcileGroupLeadEngine(db, groupId);
@@ -9895,14 +9914,20 @@ export const GROUP_LEAD_CANDIDATE_HELD = 'The group is voting on making them its
 /**
  * A removal must not be a way to swing a vote (DESIGN-group-decisions §2.6): while a vote to make someone the lead is
  * open (or passed and not yet carried out), no convenor may remove them or lower their role; the vote would only go
- * void. Leaving is still their own business, and a vote of the group may still remove them.
+ * void. Leaving is still their own business, and a vote of the group may still remove them. The 30-day silence vote's
+ * candidate is held the same way (#1777 R3, the director's call on decision (a)).
+ *
+ * Asked only of a convenor who can act now (not suspended): anyone else is refused by the engine's own authority check, and
+ * answering them first would tell an outsider who a lead vote's candidate is (#1777 R1).
  */
 function assertNotOpenLeadCandidate(groupId: string, actorPubkey: string, subject: string): void {
-    if (actorPubkey === subject) return;
+    if (actorPubkey === subject || !isActingGroupConvenorEngine(db, groupId, actorPubkey)) return;
     const held = db.prepare(`
         SELECT 1 FROM decisions WHERE scope_kind = 'group' AND scope_id = ? AND effect = 'replace_lead_convenor' AND subject = ?
           AND status IN ('open', 'passed', 'execution_pending_grace', 'passed_queued_for_funds')
-    `).get(groupId, subject);
+        UNION ALL
+        SELECT 1 FROM group_convenor_proposals WHERE group_id = ? AND candidate_pubkey = ? AND status = 'active'
+    `).get(groupId, subject, groupId, subject);
     if (held) throw new Error(GROUP_LEAD_CANDIDATE_HELD);
 }
 
@@ -10037,6 +10062,8 @@ export function removeGroupThreadMessage(groupId: string, messageId: string, act
 }
 
 export function proposeGroupConvenor(groupId: string, proposerPubkey: string, candidatePubkey: string) {
+    // A group its members closed takes nothing new, a silence vote for its lead included (#1784 review N3).
+    assertGroupNotClosed(groupId);
     const res = proposeGroupConvenorEngine(getMessagingCb(), groupId, proposerPubkey, candidatePubkey);
     bumpGroupsVersion();
     return res;
@@ -10055,6 +10082,7 @@ export function getGroupSuccession(groupId: string, viewerPubkey?: string) {
     const s = res.silence;
     return {
         ...res,
+        canPropose: res.canPropose && !groupClosedAt(groupId),
         silence: {
             ...s,
             lastActiveAt: s.convenorPubkey ? lastActiveForViewer(s.lastActiveAt, s.convenorPubkey, viewerPubkey) : null,

@@ -4,6 +4,9 @@ import { GroupDetailModal } from './GroupDetailModal';
 import { getGroup, getGroupMembers, getGroupSuccession, type Group, type GroupMember } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
+    getGroupDecisions: vi.fn(async () => null),
+    proposeGroupDecision: vi.fn(async () => ({ success: true })),
+    voteGroupDecision: vi.fn(async () => ({ success: true })),
     getGroup: vi.fn().mockResolvedValue({
         id: 'group-1',
         name: 'Local Food Co-op',

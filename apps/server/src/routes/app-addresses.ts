@@ -60,7 +60,9 @@ export const MAX_OWNER_ADDRESSES = 20;
  */
 export function appAddressesReport(pageHost?: unknown) {
     const usage = signatureUsage();
-    const count = (kind: string, address: string) => usage.find((u) => u.kind === kind && u.address === address);
+    // ⚡ Bolt: index signature usage array into a Map for O(1) lookups by kind and address
+    const usageMap = new Map(usage.map((u) => [`${u.kind}:${u.address}`, u]));
+    const count = (kind: string, address: string) => usageMap.get(`${kind}:${address}`);
     const standings = nameStandings();
     const addresses = configuredAddresses().map((a) => {
         const u = count('own', a.address);

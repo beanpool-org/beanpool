@@ -32,7 +32,17 @@ export type NeedsYouTarget =
      * An enterprise's own screen, for its keepers' vote (DESIGN-group-decisions §2.8). The node sends it only to an app
      * that asks with `lands=enterprise` (utils/home-store.ts homePath); the two ship together.
      */
-    | { to: 'enterprise'; id: string };
+    | { to: 'enterprise'; id: string }
+    /**
+     * A chat group, for its members' vote (slice S3): its chat with the info sheet open, where its Decisions block is. The
+     * node sends it only to an app that asks with `lands=group` (utils/home-store.ts homePath).
+     */
+    | { to: 'group'; id: string };
+
+/** A chat group's vote lands on the group: its chat screen, told it is a group, with its info sheet open (`info=1`). */
+export function groupVoteHref(groupId: string): { pathname: string; params: Record<string, string> } {
+    return { pathname: '/chat/[id]', params: { id: groupId, group: '1', info: '1' } };
+}
 
 /**
  * The screen each landing opens, as `router.push` takes it (components/NeedsYouIcons.tsx `goToNeedsTarget`; Home's Needs
@@ -57,6 +67,8 @@ export function needsTargetHref(target: Exclude<NeedsYouTarget, { to: 'admin' }>
         case 'your-groups': return { pathname: '/(tabs)/chats', params: { view: 'groups' } };
         // A keepers' vote is never in Commons → Decide: it lands on the enterprise, whose Decisions block lists it.
         case 'enterprise': return { pathname: '/treasury-detail', params: { publicKey: target.id } };
+        // A group's vote: the group itself (its chat, the info sheet open on its Decisions block), never Talk's list.
+        case 'group': return groupVoteHref(target.id);
     }
 }
 

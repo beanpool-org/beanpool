@@ -692,9 +692,18 @@ setSecurityAlertHandler((note) => {
     raiseSecurity(note).catch((e) => logger.warn('SYS', `[Alerts] A security alert could not be told: ${errorMessage(e)}`));
 });
 
-/** Wrong passwords or claim proofs: over once an hour went by without another (then held 15 minutes, as every end is). */
+/** Ends a source told (the address its own again), carried through the hold by the tick: words as the end is told. */
+const SECURITY_ENDS: Partial<Record<AlertKey, string>> = { 'sec.name': "This community's address is its own again." };
+
+/**
+ * Wrong passwords or claim proofs: over once an hour went by without another (then held 15 minutes, as every end is).
+ * And an end a source told (sec.name), held and then told here: the source tells it once, the tick sees it through.
+ */
 function securityQuietConditions(s: BookState, t: number): Condition[] {
     const out: Condition[] = [];
+    for (const [key, detail] of Object.entries(SECURITY_ENDS) as Array<[AlertKey, string]>) {
+        if (s.raised[key]?.endedAt !== undefined) out.push({ key, active: false, detail });
+    }
     for (const key of SECURITY_SEEN) {
         if (!s.raised[key] || t - (s.seenAt[key] ?? 0) < SECURITY_QUIET_MS) continue;
         out.push({ key, active: false, detail: key === 'sec.claim-guess' ? 'No wrong claim proof for an hour.' : 'No wrong admin password for an hour.' });

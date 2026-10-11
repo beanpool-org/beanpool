@@ -471,6 +471,11 @@ function noteNameStanding(standing: Standing): void {
     }
 }
 
+/** The owners' alert as a round tells it, for a suite (test-alerts-security). */
+export function noteNameStandingForTests(standing: Standing): void {
+    noteNameStanding(standing);
+}
+
 function logChange(host: string, standing: Standing, w: NameWatch, lost: RegistrarNameLost | null): void {
     noteNameStanding(standing);
     switch (standing) {

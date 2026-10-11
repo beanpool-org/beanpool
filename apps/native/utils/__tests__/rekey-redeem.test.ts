@@ -255,18 +255,20 @@ describe('Back, a second code, and the status first (#1783 review N2, N4)', () =
     const gone = { status: 200, body: { state: 'gone' } };
     const tooMany = { status: 429, body: { error: 'Too many wrong codes have been tried here in the last hour. Try again later.', code: 'too_many_wrong_codes' } };
 
-    it('Back on the number screen leaves the record and its key: the screen\'s stop clears nothing', () => {
+    it('Not now on the number screen leaves the record and its key: the screen\'s stop clears nothing', () => {
         const src = readFileSync(join(__dirname, '../../app/rekey-code.tsx'), 'utf8');
         const stop = src.slice(src.indexOf('const stop = '), src.indexOf('};', src.indexOf('const stop = ')));
         expect(stop.length).toBeGreaterThan(0);
         expect(stop).not.toMatch(/abandonRekey|slot\.clear|setSlot\(null\)/);
+        // ...and the screen asks after a kept record once per visit, so leaving the number stays left.
+        expect(src).toMatch(/if \(fromLink \|\| resumed\.current\) return;\s*resumed\.current = true;/);
     });
 
-    it('the admin binds after Back: the next launch asks the status, is told bound, and the key is still here', async () => {
+    it('the admin binds after Not now: the next launch asks the status, is told bound, and the key is still here', async () => {
         const w = world({ answers: [waiting, bound] });
         const slot = await beginRekey(MULLUM, CODE, w.deps);
         expect((await askRekey(slot, w.deps)).state).toBe('waiting');
-        // Back: nothing on the phone changes. The admin types the number; the next launch:
+        // Not now: nothing on the phone changes. The admin types the number; the next launch:
         const r = await resumeRekey(w.deps);
         expect(r?.answer.state).toBe('bound');
         expect(w.sent.map((s) => s.init?.method)).toEqual(['POST', 'GET']);

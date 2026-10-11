@@ -168,9 +168,12 @@ export default function RekeyCodeScreen() {
         }
     }, [onBound]);
 
-    // An ask left waiting (the app was closed): asked once more, with the same key.
+    // An ask left waiting (the app was closed): asked once more, with the same key. Once per visit to the screen: the
+    // record is kept after Not now, so a second run would put the number back after the member left it.
+    const resumed = useRef(false);
     useEffect(() => {
-        if (fromLink) return;
+        if (fromLink || resumed.current) return;
+        resumed.current = true;
         let alive = true;
         (async () => {
             const r = await resumeRekey(deps);
@@ -210,7 +213,7 @@ export default function RekeyCodeScreen() {
         setPhase((p) => (p === 'asking' ? 'form' : p));
     };
 
-    // Back only leaves the number: the record and its key stay, since the admin may still type this number (#1783 review
+    // Not now only leaves the number: the record and its key stay, since the admin may still type this number (#1783 review
     // N2). Continue with the same code shows the same number, and the next launch asks after it.
     const stop = () => {
         setPhase('form');
@@ -267,7 +270,7 @@ export default function RekeyCodeScreen() {
                 {expiresAt ? <Text style={styles.note}>{timeLeft(expiresAt, now)}</Text> : null}
                 {error ? <Text style={styles.error}>{error}</Text> : null}
                 <Pressable style={styles.secondary} onPress={stop} accessibilityRole="button">
-                    <Text style={styles.secondaryText}>Back</Text>
+                    <Text style={styles.secondaryText}>Not now</Text>
                 </Pressable>
             </View>
         );

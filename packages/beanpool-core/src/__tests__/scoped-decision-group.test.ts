@@ -62,6 +62,11 @@ describe("a chat group's vote, as the apps show it (slice S3)", () => {
         expect(scopedTallyWords({ status: 'executed', tally: { ...tally, yes: 2, no: 1 } })).toBe('Yes 2 · No 1. 3 of 5 voted.');
         expect(scopedOutcomeWords({ status: 'unresolved', scopeKind: 'group' })).toBe('Not enough people voted');
         expect(scopedOutcomeWords({ status: 'unresolved' })).toBe('Not enough keepers voted');
+        // What the node writes when too few voted (#1784 review N5): the card says it in a member's words, never "quorum".
+        expect(scopedOutcomeWords({ status: 'unresolved', executionReason: 'Quorum not met (1/3)', scopeKind: 'group' })).toBe('Not enough people voted');
+        expect(scopedOutcomeWords({ status: 'unresolved', executionReason: 'Quorum not met (1/2)' })).toBe('Not enough keepers voted');
+        expect(scopedOutcomeWords({ status: 'unresolved', executionReason: 'Not enough people are left on its roll to decide it.', scopeKind: 'group' }))
+            .toBe('Not enough people are left on its roll to decide it.');
         expect(scopedOutcomeWords({ status: 'execution_void', executionReason: 'The group is closed', scopeKind: 'group' })).toBe('Passed, but there was nothing to do: The group is closed');
     });
 });

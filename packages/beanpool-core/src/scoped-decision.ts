@@ -35,6 +35,9 @@ export interface ScopedDecisionCard {
     /** Yes and No only once it has closed. */
     tally: { voted: number; roll: number; quorumRequired: number; thresholdRequired: number; yes?: number; no?: number };
     myVote: { support: number | boolean; updatedAt: string } | null;
+    /** Whether the reader may vote on it: open, and on its own roll as frozen when it opened (an observer or someone removed
+     *  since still is; someone who joined since is not). Yes / No are drawn from this, never from who is in the group now. */
+    canVote?: boolean;
 }
 
 export interface ScopedDecisionList {
@@ -42,9 +45,13 @@ export interface ScopedDecisionList {
     /** A keeper (or a group's member or convenor) on a roll of two or more, on a node with Decisions; never in a closed group. */
     canPropose: boolean;
     rollSize: number;
-    /** A group's only: whether the reader is on its roll (an observer watches), and when its members closed it. */
+    /** A group's only: whether the reader is on its roll now or on an open vote's roll, and when its members closed it. */
     onRoll?: boolean;
     closedAt?: string | null;
+    /** A group's only: an observer now who votes on none of its open votes ("You watch this group"). */
+    watching?: boolean;
+    /** A group's only, to someone who may propose: who a vote may name (in the group now, no suspended member). */
+    nameable?: string[];
 }
 
 /** A person on the roll, for the pickers. */
@@ -170,7 +177,10 @@ export function scopedOutcomeWords(d: Pick<ScopedDecisionCard, 'status' | 'execu
         case 'executed': return 'Passed and carried out';
         case 'passed': case 'passed_queued_for_funds': case 'execution_pending_grace': return 'Passed';
         case 'failed': return 'Did not pass';
-        case 'unresolved': return d.executionReason || (d.scopeKind === 'group' ? 'Not enough people voted' : 'Not enough keepers voted');
+        // The node writes "Quorum not met (1/3)" for a vote too few joined: never a member's word (#1784 review N5).
+        case 'unresolved': return d.executionReason && !/^Quorum not met/.test(d.executionReason)
+            ? d.executionReason
+            : (d.scopeKind === 'group' ? 'Not enough people voted' : 'Not enough keepers voted');
         case 'execution_blocked': return `Passed, but not carried out${d.executionReason ? `: ${d.executionReason}` : ''}`;
         case 'execution_void': return `Passed, but there was nothing to do${d.executionReason ? `: ${d.executionReason}` : ''}`;
         default: return 'Closed';

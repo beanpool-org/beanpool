@@ -71,6 +71,14 @@ Restoring a different account replaces the one on this phone, whether you restor
 
 Make sure you have the 12 words for the account you are replacing. If this phone has them, that screen shows them when you tap **Show** (the account's name) **12 words** and pass your phone's lock screen check. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back.
 
-## Lost everything?
+## Lost your phone and your 12 words
 
-Without your 12 words and without a linked sign-in account, only the admins of your community can help, by setting you up again.
+Without your 12 words and without a linked sign-in account, an admin of your community can move your account to a new phone, with your Beans, your name and your history. Go and see them in person: they check it's you first.
+
+- The admin makes a re-key code on their screen. If your old phone still has the app, it gets a notice that an admin started moving your account.
+- On your new phone, open BeanPool, tap **Already a Member? Restore Account**, then **An admin gave me a re-key code**. Scan the QR on the admin's screen, or type the code (it starts RK-) and your community's name.
+- Your phone shows a two-digit number. Show it to the admin: they press **Bind this phone** when it matches the number on your screen. The number makes sure it's your phone they bind, and not someone who saw the code.
+- Your phone then shows the 12 words of your **new** key. Write them down: your old words no longer work, and your old phone stops working for good.
+- If you had linked a sign-in account, link it again in Account Protection: the one you had protected your old key, so it was removed.
+
+The code lasts 24 hours. If your admin says your phone isn't the one they saw, or the code runs out, ask them for a new one.

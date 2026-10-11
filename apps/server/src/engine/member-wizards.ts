@@ -115,7 +115,7 @@ export interface OffboardOptions {
 export const REKEY_CODE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /** issueRekeyCode's refusal of a code on the operator's own key. */
-export const REKEY_OWN_KEY = 'You can’t make a re-key code for your own account: it would end your session, and nobody would be left to confirm your new phone. To move to a phone you still have, use Pair a new device in the app. If your key is lost or exposed, ask another owner or admin to make the code.';
+export const REKEY_OWN_KEY = 'You can’t make a re-key code for your own account: it would end your session, and nobody would be left to confirm your new phone. To move to a new phone while you still have this one, restore your 12 words on it (Settings shows them). If your key is lost or exposed, ask another owner or admin to make the code.';
 
 /** completeRekey's refusal for an account deleted or removed after its code was issued. */
 export const REKEY_ACCOUNT_GONE = 'This account was deleted or removed from this community, so it can’t be moved to a new key.';
@@ -214,8 +214,8 @@ export function issueRekeyCode(
     assertMayRekey(cleanOld, cleanOperator);
     // Never a code on the operator's own key. Since #1768 a phone's ask binds nothing: an operator who may binds the number
     // it shows. The code ends this operator's sessions and suspends them, so nobody would be left to bind it, and their
-    // account would be held until it expired (24 h). A phone they still have moves by Pair a new device; a lost or exposed
-    // key is re-keyed by another owner or admin (or the password).
+    // account would be held until it expired (24 h). A phone they still have moves by restoring its 12 words on the new
+    // one; a lost or exposed key is re-keyed by another owner or admin (or the password).
     if (cleanOperator === cleanOld) throw refusal(409, REKEY_OWN_KEY);
     if (isKeyInvalidated(cleanOld)) {
         const info = getInvalidatedKeyInfo(cleanOld);

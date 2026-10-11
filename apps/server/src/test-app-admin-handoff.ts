@@ -851,7 +851,7 @@ async function main() {
 
         // Self-recovery from Manage: since #1768 an ask binds nothing, and a code on their own key would end the session that
         // could confirm it, so an owner or an admin is refused one on their own key, in plain words, and nothing changes. A
-        // co-owner re-keys them (as above), or Pair a new device moves a phone they still have.
+        // co-owner re-keys them (as above), or their 12 words move them to a phone while they still have this one.
         for (const [who, me, role] of [['an owner', selfOwner, 'owner'], ['an admin', selfAdmin, 'admin']] as const) {
             const mine = await exchange((await requestLink(me)).body.handshakeToken);
             const own = await issue(me.pub, mine);

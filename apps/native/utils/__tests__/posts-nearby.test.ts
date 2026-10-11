@@ -218,13 +218,15 @@ describe('posts-nearby, the edges', () => {
 
     it('a page of a read by area: its rows, and the set only where the page names one (set once a read)', () => {
         // A page before a read's last, from a node that names the set once a read (setOnce=1): its rows alone.
-        expect(nearbyPageOf({ posts: [{ id: 'a' }] })).toEqual({ posts: [{ id: 'a' }], set: null, tied: null, setHash: null });
+        expect(nearbyPageOf({ posts: [{ id: 'a' }] })).toEqual({ posts: [{ id: 'a' }], set: null, tied: null, setHash: null, setUnchanged: null });
         // The last page, or each page from a node before it: the set, its hash and `tied`.
-        expect(nearbyPageOf({ posts: [], set: ['a', 'b'], setHash: 'h', tied: ['b'] })).toEqual({ posts: [], set: ['a', 'b'], tied: ['b'], setHash: 'h' });
-        expect(nearbyPageOf({ posts: [], set: ['a'] })).toEqual({ posts: [], set: ['a'], tied: null, setHash: null });
+        expect(nearbyPageOf({ posts: [], set: ['a', 'b'], setHash: 'h', tied: ['b'] })).toEqual({ posts: [], set: ['a', 'b'], tied: ['b'], setHash: 'h', setUnchanged: null });
+        expect(nearbyPageOf({ posts: [], set: ['a'] })).toEqual({ posts: [], set: ['a'], tied: null, setHash: null, setUnchanged: null });
+        // The set the phone holds is still the set: the hash it sent, in a field of its own.
+        expect(nearbyPageOf({ posts: [], setUnchanged: 'h' })).toEqual({ posts: [], set: null, tied: null, setHash: null, setUnchanged: 'h' });
         // `tied` is read only beside a set; an unreadable one is absent, as nearbySetOf reads it.
-        expect(nearbyPageOf({ posts: [], tied: ['a'] })).toEqual({ posts: [], set: null, tied: null, setHash: null });
-        expect(nearbyPageOf({ posts: [], set: ['a'], tied: [7] })).toEqual({ posts: [], set: ['a'], tied: null, setHash: null });
+        expect(nearbyPageOf({ posts: [], tied: ['a'] })).toEqual({ posts: [], set: null, tied: null, setHash: null, setUnchanged: null });
+        expect(nearbyPageOf({ posts: [], set: ['a'], tied: [7] })).toEqual({ posts: [], set: ['a'], tied: null, setHash: null, setUnchanged: null });
         // A set it can't read, rows that aren't a list, or a bare list (the node's switch off) is no page by area.
         expect(nearbyPageOf({ posts: [], set: [1] })).toBeNull();
         expect(nearbyPageOf({ posts: [], set: 'a' })).toBeNull();
@@ -232,7 +234,7 @@ describe('posts-nearby, the edges', () => {
         expect(nearbyPageOf({ rows: [] })).toBeNull();
         expect(nearbyPageOf([{ id: 'a' }])).toBeNull();
         expect(nearbyPageOf(null)).toBeNull();
-        expect(nearbyPageOf({ posts: [], setHash: 7 })).toEqual({ posts: [], set: null, tied: null, setHash: null });
+        expect(nearbyPageOf({ posts: [], setHash: 7, setUnchanged: 7 })).toEqual({ posts: [], set: null, tied: null, setHash: null, setUnchanged: null });
     });
 
     it('the set a read ends with: the one named, the one held when the node echoes its hash, else none', () => {
@@ -241,12 +243,14 @@ describe('posts-nearby, the edges', () => {
         // Named: the node's, whatever this phone holds.
         expect(nearbyLastSet(page({ posts: [], set: ['c'], setHash: 'h2', tied: ['c'] }), held)).toEqual({ set: ['c'], tied: ['c'], setHash: 'h2', named: true });
         expect(nearbyLastSet(page({ posts: [], set: ['c'] }), null)).toEqual({ set: ['c'], tied: null, setHash: null, named: true });
-        // Unchanged: no set, the hash this phone sent echoed. The stored ties stay (tied: null).
-        expect(nearbyLastSet(page({ posts: [{ id: 'a' }], setHash: 'h1' }), held)).toEqual({ set: ['a', 'b'], tied: null, setHash: 'h1', named: false });
-        // No set and no echo (a node that names none), another hash, or nothing held: no end it can read.
+        // Unchanged: no set, and `setUnchanged` the hash this phone sent. The stored ties stay (tied: null).
+        expect(nearbyLastSet(page({ posts: [{ id: 'a' }], setUnchanged: 'h1' }), held)).toEqual({ set: ['a', 'b'], tied: null, setHash: 'h1', named: false });
+        // No set and nothing said (a node that names none), another hash, or nothing held: no end it can read. Nor an
+        // answer that only lacks its set while its `setHash` equals the held one (a node before setUnchanged, cut short).
         expect(nearbyLastSet(page({ posts: [] }), held)).toBeNull();
-        expect(nearbyLastSet(page({ posts: [], setHash: 'h2' }), held)).toBeNull();
-        expect(nearbyLastSet(page({ posts: [], setHash: 'h1' }), null)).toBeNull();
+        expect(nearbyLastSet(page({ posts: [], setHash: 'h1' }), held)).toBeNull();
+        expect(nearbyLastSet(page({ posts: [], setUnchanged: 'h2' }), held)).toBeNull();
+        expect(nearbyLastSet(page({ posts: [], setUnchanged: 'h1' }), null)).toBeNull();
     });
 
     it('distance: known pairs, and the chord oracle over random pairs, across the antimeridian and near the poles', () => {

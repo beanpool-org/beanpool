@@ -584,14 +584,15 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // A phone that says `setOnce=1` reconciles after a read's last page only, so it is named the set there alone: each page
     // with a next key is `{ posts }`. At a busy town the 500 ids are ~11 KB gzipped (UUIDs barely compress), which rode on
     // each of a first sync's three pages (REPORT-geosync-load-B, item 1). A phone without it gets the set on each page.
-    // A phone that sends the hash of the set it holds (`setHash`) is answered `{ posts, setHash }` where the set would go
-    // while that is still the set (item 2): the echo is how it tells "unchanged" from a node that names no set. At a busy
-    // town an empty delta was ~12 KB of ids; now it is the hash. A phone that sends none, or another, gets the set.
+    // A phone that sends the hash of the set it holds (`setHash`) is answered `{ posts, setUnchanged: <that hash> }` where
+    // the set would go while that is still the set (item 2): a field no node before it sends, so a phone never reads an
+    // answer that merely lacks the set (a node's or a proxy's fault) as "unchanged". At a busy town an edit's delta was ~12 KB
+    // of ids; now it is the hash. A phone that sends none, or another, gets the set.
     const setOnce = ctx.query.setOnce === '1';
     const setHash = nearbySet ? nearbySetHash(nearbySet.ids, nearbySet.tied) : '';
     const bodyStr = JSON.stringify(!nearbySet ? shown
         : setOnce && syncPage?.next ? { posts: shown }
-        : ctx.query.setHash === setHash ? { posts: shown, setHash }
+        : ctx.query.setHash === setHash ? { posts: shown, setUnchanged: setHash }
         : { posts: shown, set: nearbySet.ids, setHash, tied: nearbySet.tied });
 
     if (syncPage?.next) ctx.set(POSTS_NEXT_HEADER, syncPage.next);

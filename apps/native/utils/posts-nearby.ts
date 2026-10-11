@@ -62,6 +62,8 @@ export interface NearbyPage {
     tied: string[] | null;
     /** The node's hash of the set, where it says one. */
     setHash: string | null;
+    /** Where the page names no set because the one this phone holds is still the set: the hash this phone sent. */
+    setUnchanged: string | null;
 }
 
 /**
@@ -72,7 +74,7 @@ export interface NearbyPage {
  */
 export function nearbyPageOf(body: unknown): NearbyPage | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-    const b = body as { posts?: unknown; set?: unknown; tied?: unknown; setHash?: unknown };
+    const b = body as { posts?: unknown; set?: unknown; tied?: unknown; setHash?: unknown; setUnchanged?: unknown };
     if (!Array.isArray(b.posts)) return null;
     if (b.set !== undefined && !(Array.isArray(b.set) && isIds(b.set))) return null;
     const set = Array.isArray(b.set) ? b.set : null;
@@ -81,21 +83,23 @@ export function nearbyPageOf(body: unknown): NearbyPage | null {
         set,
         tied: set && Array.isArray(b.tied) && isIds(b.tied) ? b.tied : null,
         setHash: typeof b.setHash === 'string' && b.setHash !== '' ? b.setHash : null,
+        setUnchanged: typeof b.setUnchanged === 'string' && b.setUnchanged !== '' ? b.setUnchanged : null,
     };
 }
 
 /**
- * The set a read ends with, from its last page: the one the node names (`named`); or, when the page names none and echoes
- * the hash this phone sent (`held.hash`, the set it holds), that one, unchanged (REPORT-geosync-load-B, item 2). The echo
- * is what tells "unchanged" from a node that names no set at all: a page with no set and no echo, or another hash, is no
- * end this phone can read (null), and the read is cut short there.
+ * The set a read ends with, from its last page: the one the node names (`named`); or, when the page names none and says
+ * `setUnchanged` with the hash this phone sent (`held.hash`, the set it holds), that one (REPORT-geosync-load-B, item 2).
+ * A field no node before it sends: an answer that merely lacks the set (a node before it, cut or altered on the way, whose
+ * `setHash` may well equal the held one) is no end this phone can read (null), and the read is cut short there. So is
+ * another hash.
  */
 export function nearbyLastSet(
     last: NearbyPage,
     held: { set: string[]; hash: string } | null,
 ): { set: string[]; tied: string[] | null; setHash: string | null; named: boolean } | null {
     if (last.set) return { set: last.set, tied: last.tied, setHash: last.setHash, named: true };
-    if (held && last.setHash !== null && last.setHash === held.hash) return { set: held.set, tied: null, setHash: held.hash, named: false };
+    if (held && last.setUnchanged !== null && last.setUnchanged === held.hash) return { set: held.set, tied: null, setHash: held.hash, named: false };
     return null;
 }
 

@@ -333,7 +333,7 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         await control('limiters');
     }, START_MS);
 
-    it('a listing in the set edited: a 200 with it, the hash echoed instead of the set, and the phone keeps what it holds', async () => {
+    it('a listing in the set edited: a 200 with it, `setUnchanged` instead of the set, and the phone keeps what it holds', async () => {
         const held = sql.prepare("SELECT k, v FROM nearby_held").all() as { k: string; v: string }[];
         const hash = held.find(r => r.k === 'hash')?.v;
         const tag = held.find(r => r.k === 'tag')?.v;
@@ -348,7 +348,7 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         const reads = postsReads();
         expect(reads).toHaveLength(1);
         expect(reads[0].url).toContain(`setHash=${hash}`);
-        expect(reads[0]).toMatchObject({ status: 200, ifNoneMatch: tag, keys: ['posts', 'setHash'] });
+        expect(reads[0]).toMatchObject({ status: 200, ifNoneMatch: tag, keys: ['posts', 'setUnchanged'] });
         expect(idReads()).toEqual([]);
         expect(sorted(heldIds())).toEqual(sorted(before));
         expect((sql.prepare('SELECT lat FROM posts WHERE id = ?').get(nearest.id) as { lat: number }).lat).toBeCloseTo(nearest.lat + 0.0001, 6);
@@ -502,8 +502,10 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         const before = sql.prepare('SELECT lat, updated_at FROM posts WHERE id = ?').get(edited.id) as { lat: number; updated_at: string };
         for (const bad of [
             (b: any) => ({ ...b, set: [...b.set, 7] }), // an id that isn't a string
-            (b: any) => ({ ...b, set: undefined, setHash: undefined }), // no set at all, and no hash echoed
-            (b: any) => ({ posts: b.posts, setHash: '0123456789abcdef01234567' }), // no set, and another hash than the one sent
+            (b: any) => ({ ...b, set: undefined, setUnchanged: undefined }), // no set at all, and nothing said of it
+            // No set, and the held hash as `setHash`: what a node before setUnchanged sends, cut short. Never "unchanged".
+            (b: any) => ({ posts: b.posts, setHash: (sql.prepare("SELECT v FROM nearby_held WHERE k = 'hash'").get() as { v: string }).v }),
+            (b: any) => ({ posts: b.posts, setUnchanged: '0123456789abcdef01234567' }), // "unchanged", but another hash than the one sent
             (b: any) => ({ rows: b.posts }), // another shape altogether
         ]) {
             tamper = (path, body) => (path.includes('nearby=1') ? JSON.stringify(bad(JSON.parse(body))) : null);

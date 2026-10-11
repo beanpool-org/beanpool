@@ -22,12 +22,29 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, tickDecisions, removeGroupMember, joinGroup, postGroupThreadMessage, createPost, requestPost, setMemberRole, GROUP_CLOSED,
+    setUserStatusRow, registerPushToken,
     GROUP_LEAD_CANDIDATE_HELD,
 } from './state-engine.js';
 import { GROUP_CLOSED_TO_POSTS } from './engine/posts.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { GROUP_NOT_ON_ROLL, GROUP_OBSERVER_NO_VOTE, GROUP_CLOSED_VOID, GROUP_ALREADY_VOTED, GROUP_CLOSED_LINE } from './decisions-engine.js';
+import { GROUP_NOT_ON_ROLL, GROUP_OBSERVER_NO_VOTE, GROUP_CLOSED_VOID, GROUP_ALREADY_VOTED, GROUP_CLOSED_LINE, executeDecision } from './decisions-engine.js';
+import { setChatMute } from './engine/chat-mutes.js';
+import { PUSH_NOTICE_KINDS } from '@beanpool/core';
+
+// Expo is answered here, so the group push is measured without leaving this machine; nothing else off it is reached.
+const realFetch = globalThis.fetch;
+const expo: any[] = [];
+globalThis.fetch = (async (input: any, init?: any) => {
+    const url = String(input?.url ?? input);
+    if (url.startsWith('https://exp.host')) {
+        const msgs = JSON.parse(String(init?.body ?? '[]'));
+        expo.push(...msgs);
+        return new Response(JSON.stringify({ data: msgs.map(() => ({ status: 'ok', id: crypto.randomUUID() })) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (!url.startsWith('https://localhost')) throw new Error(`test-decisions-group: refused a request off this machine: ${url}`);
+    return realFetch(input, init);
+}) as typeof fetch;
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -243,6 +260,12 @@ async function main(): Promise<void> {
     assert(row(other).status === 'execution_void' && row(other).execution_reason === GROUP_CLOSED_VOID,
         `closing voids the group's other open vote (got ${row(other).status} ${row(other).execution_reason})`);
     assert(!!groupRow(g3), 'the group row stays');
+    // A vote the close voided, forced back to passed and carried out after it, is void too: nothing reopens the group.
+    db.prepare("UPDATE decisions SET status = 'passed' WHERE id = ?").run(other);
+    executeDecision(other);
+    assert(row(other).status === 'execution_void' && row(other).execution_reason === GROUP_CLOSED_VOID
+        && !!db.prepare('SELECT 1 FROM group_closures WHERE group_id = ?').get(g3),
+        `a stale passed vote carried out after the close is void; the group stays closed (got ${row(other).status} ${row(other).execution_reason})`);
     const postRow = (id: string) => db.prepare('SELECT active, status, event_state, target_group_id FROM posts WHERE id = ?').get(id) as any;
     const tradeRow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(asked.id) as any;
     assert(postRow(drill!.id).status === 'cancelled' && postRow(drill!.id).active === 0 && postRow(drill!.id).target_group_id === g3
@@ -318,6 +341,39 @@ async function main(): Promise<void> {
     tickDecisions();
     assert(row(forBo).status === 'executed' && groupRow(g5).lead_pubkey === mb.pubKeyHex,
         `so the members' vote carries: Bo is the lead (got ${row(forBo).status} ${row(forBo).execution_reason ?? ''})`);
+
+    // The candidate suspended mid-vote is off the roll by the time it is carried out: void, and the lead is unchanged.
+    const [ld6, cv6, a6, b6, c6] = ['Lin6', 'Cyd6', 'Ada6', 'Bo6', 'Cy6'].map(n => makeMember(n));
+    const g6 = makeGroup('Root Guild', [{ id: ld6, role: 'convenor' }, { id: cv6, role: 'convenor' }, { id: a6, role: 'member' }, { id: b6, role: 'member' }, { id: c6, role: 'member' }]);
+    const forCy = (await propose(g6, a6, { effect: 'replace_lead_convenor', subject: c6.pubKeyHex, title: 'Cy leads' })).body?.decision?.id as string;
+    for (const v of [a6, cv6, b6]) await vote(g6, forCy, v, true);
+    setUserStatusRow(c6.pubKeyHex, 'disabled');
+    tickDecisions();
+    assert(row(forCy).status === 'execution_void' && groupRow(g6).lead_pubkey === ld6.pubKeyHex,
+        `a lead candidate suspended mid-vote: void, the lead unchanged (got ${row(forCy).status} ${row(forCy).execution_reason ?? ''})`);
+    setUserStatusRow(c6.pubKeyHex, 'active');
+
+    // ── 6. The push when a vote opens: one per elector, never the proposer, a muted member or an observer; names nobody ──
+    const [lf, af, bf, cf, of] = ['FLouSecret', 'FAdaSecret', 'FBeaSecret', 'FCySecret', 'FObiSecret'].map(n => makeMember(n));
+    const gf = makeGroup('Secret Weavers', [{ id: lf, role: 'convenor' }, { id: af, role: 'member' }, { id: bf, role: 'member' }, { id: cf, role: 'member' }, { id: of, role: 'observer' }]);
+    for (const [i, k] of [lf, af, bf, cf, of].entries()) registerPushToken(k.pubKeyHex, `ExponentPushToken[gd-${i}-${k.pubKeyHex.slice(0, 6)}]`, 'android');
+    registerPushToken(bf.pubKeyHex, 'ExponentPushToken[gd-bea-second]', 'ios');
+    setChatMute(gf, cf.pubKeyHex, 'always');
+    expo.length = 0;
+    const noticesBefore = (db.prepare("SELECT COUNT(*) AS c FROM push_notices WHERE kind = 'decision.open'").get() as any).c as number;
+    const opened = await propose(gf, af, { effect: 'remove_group_member', subject: bf.pubKeyHex, title: 'Remove FBeaSecret for spam', description: 'FBeaSecret keeps posting spam here.' });
+    for (let i = 0; i < 40 && expo.length < 3; i++) await new Promise(r => setTimeout(r, 25));
+    await new Promise(r => setTimeout(r, 100));
+    const tos = expo.map(m => String(m.to));
+    assert(opened.status === 200 && expo.length === 3 && tos.some(t => t.includes('gd-0-')) && tos.some(t => t.includes('gd-bea-second'))
+        && tos.some(t => t.includes('gd-2-')) && !tos.some(t => /gd-[134]-/.test(t)),
+        `the lead and Bea's two phones are told; not the proposer, the member who muted the chat, or the observer (got ${opened.status}, ${expo.length} messages)`);
+    const wire = JSON.stringify(expo);
+    assert(!/Secret|Weavers|spam/.test(wire) && expo.every(m => m.body === PUSH_NOTICE_KINDS['decision.open'].body),
+        `what reaches Expo names nobody, no group and no title (got ${wire.slice(0, 200)})`);
+    const notices = db.prepare("SELECT recipient, title, body, data FROM push_notices WHERE kind = 'decision.open'").all().slice(noticesBefore) as any[];
+    assert(notices.length === 2 && new Set(notices.map(n => n.recipient)).size === 2 && notices.every(n => !/FBea|spam|FLou|FAda/.test(`${n.title} ${n.body} ${n.data}`)),
+        `one stored notice per elector told, naming nobody (got ${notices.length})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -10,7 +10,7 @@
  *      removal), each sent once through the full loop and once through the index, the frames each socket got compared;
  *      between pushes, at random: a socket connects, disconnects, dies on a send; a member sets, moves or clears their
  *      area; an area changes under the map's refresh as an import's does; a member re-keys and connects with the new
- *      key; a member is removed; someone mid-join joins; the map loads again whole
+ *      key; a member is removed; someone mid-join joins; rows change behind the map and it loads again whole
  *   3. the cost at 3,500 and 10,000 sockets: a push near a dense spot and one in an empty ocean, the full loop against
  *      the index, interleaved, with the host's load (`uptime`) printed with each
  *
@@ -187,7 +187,15 @@ async function main(): Promise<void> {
             se.broadcast({ type: 'member_joined', member: { publicKey: pk } });
             did('mid-join socket joins');
         }
-        else if (r < 0.88) { area.loadMemberAreas(); did('map loaded again whole'); }
+        else if (r < 0.88) {
+            // Rows written behind the map (as a database is before a boot), then the map loaded again whole, as at boot.
+            for (let k = 0; k < 20; k++) {
+                const p = rand() < 0.3 ? null : randomPoint();
+                db.prepare('UPDATE members SET area_lat = ?, area_lng = ? WHERE public_key = ?').run(p?.lat ?? null, p?.lng ?? null, pick(members));
+            }
+            area.loadMemberAreas();
+            did('map loaded again whole');
+        }
         else { did('nothing'); }
     };
 

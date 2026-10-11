@@ -1072,8 +1072,14 @@ const UNSPACED_SCRIPT = /[฀-໿က-႟ក-៿぀-ヿㇰ-ㇿ㐀-䶿一-鿿豈-�
  */
 const UNSPACED_LIKE_MAX = 8;
 
+/** Control characters (C0, DEL, C1): a NUL in a quoted FTS5 string ends it ("unterminated string"), and none is in a word. */
+// eslint-disable-next-line no-control-regex -- matching control characters is the point
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
 function searchCondition(query: string | undefined): { sql: string; params: string[] } | null {
-    const terms = (query ?? '').trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
+    // Control characters part words, as core's searchTermsFor reads them, here too: a raw `q` (the route's, from any
+    // client) carrying a NUL threw and answered 500 (#1781); it now finds what the words without it find.
+    const terms = (query ?? '').replace(CONTROL_CHARACTERS, ' ').trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
     if (terms.length === 0) return null;
     let sql = `p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
     const params = [terms.map(t => `"${t}"*`).join(' OR ')];

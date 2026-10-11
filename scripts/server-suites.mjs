@@ -398,6 +398,7 @@ export const SUITES = [
     'test-event-reminders-http',
     'test-posts-fts-same-ms',
     'test-search-unspaced-scripts',
+    'test-search-http',
     'test-event-scrub',
     'test-migration-projects-enterprises',
     'test-commons-reject-project',

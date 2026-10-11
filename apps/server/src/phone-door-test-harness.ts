@@ -24,6 +24,13 @@
  *                               their names-list entry (fixture rows, as test-names-debts-http's); answers the debt's id
  *   receive {key, beans}        a direct payment to the member (transfer()), whose after-commit hook runs the repayment sweep
  *   debt {key, debtId}          the member's balance and the debt record (repaid, status, how it was settled)
+ * For apps/native/utils/__tests__/pillar-sync-nearby.test.ts (the phone's sync by area, DESIGN-global-sync-by-area §2.4):
+ *   join {key, callsign, area?} a member (active), with an area ({lat, lng}, rounded as the node keeps it) or none
+ *   area {key, area}            the member's area set ({lat, lng}) or cleared (null), as POST /api/community/me/area does
+ *   listings {rows}             listings, each {id, author, lat, lng, type?, at?}: active, public, changed at `at` (else now)
+ *   edit {post, lat?, lng?, status?}  a listing moved or taken off (`cancelled`), changed now
+ *   epoch                       a take-over: the node's identity epoch one higher, as the take-over's role step leaves it
+ *   profileSwitch {name, value} a profile switch's override in node_config (`true`/`false`), as an operator sets one
  *   quit                        exit
  */
 
@@ -63,6 +70,11 @@ async function main(): Promise<void> {
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { probationState } = await import('./engine/probation.js');
     const { transfer, getBalance } = await import('./state-engine.js');
+    const { setMemberArea } = await import('./engine/member-area.js');
+    const { bumpPostsVersion } = await import('./engine/versions.js');
+    const { getLocalConfig, updateLocalConfig } = await import('./config/local-config.js');
+    const { forgetSyncEpochHeaderValue } = await import('./services/identity-epoch.js');
+    const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
 
     await initTls();
     initStateEngine();
@@ -138,6 +150,43 @@ async function main(): Promise<void> {
             record: db.prepare('SELECT amount, repaid, status, settled_how FROM names_debts WHERE id = ?').get(String(debtId)) ?? null,
             links: (db.prepare('SELECT COUNT(*) n FROM names_debt_payments WHERE debt_id = ?').get(String(debtId)) as { n: number }).n,
         }),
+        join: ({ key, callsign, area }: { key?: string; callsign?: string; area?: { lat: number; lng: number } | null }) => {
+            const pk = String(key);
+            db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
+                .run(pk, String(callsign ?? `Member ${pk.slice(0, 4)}`), new Date(Date.now() - 30 * 86_400_000).toISOString());
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+            return area ? setMemberArea(pk, area) : null;
+        },
+        area: ({ key, area }: { key?: string; area?: { lat: number; lng: number } | null }) => setMemberArea(String(key), area ?? null),
+        listings: ({ rows }: { rows?: Array<{ id: string; author: string; lat: number | null; lng: number | null; type?: string; at?: string }> }) => {
+            const now = new Date().toISOString();
+            const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active,
+                                       created_at, updated_at, lat, lng) VALUES (?, ?, 'food', ?, '', 5, ?, 'active', 1, ?, ?, ?, ?)`);
+            db.transaction(() => {
+                for (const r of rows ?? []) insert.run(r.id, r.type ?? 'offer', `Listing ${r.id}`, r.author, r.at ?? now, r.at ?? now, r.lat, r.lng);
+            })();
+            bumpPostsVersion();
+            return (rows ?? []).length;
+        },
+        // `post`, not `id`: `id` is the command's own.
+        edit: ({ post, lat, lng, status }: { post?: string; lat?: number; lng?: number; status?: string }) => {
+            const now = new Date().toISOString();
+            if (lat !== undefined && lng !== undefined) db.prepare('UPDATE posts SET lat = ?, lng = ?, updated_at = ? WHERE id = ?').run(lat, lng, now, String(post));
+            if (status === 'cancelled') db.prepare("UPDATE posts SET status = 'cancelled', active = 0, updated_at = ? WHERE id = ?").run(now, String(post));
+            bumpPostsVersion();
+            return true;
+        },
+        epoch: () => {
+            const next = (Number(getLocalConfig().identityEpoch) || 0) + 1;
+            updateLocalConfig({ identityEpoch: next, identityEpochSince: new Date().toISOString() } as any);
+            forgetSyncEpochHeaderValue();
+            return next;
+        },
+        profileSwitch: ({ name, value }: { name?: string; value?: string }) => {
+            db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+                .run(`${NODE_PROFILE_KEY}.${String(name)}`, String(value));
+            return true;
+        },
         quit: () => process.exit(0),
     };
 

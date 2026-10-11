@@ -513,6 +513,70 @@ async function main(): Promise<void> {
     revokeNodeRole(yan, 'owner', 'owner:password');
     await settle(300);
 
+    // ── 5c. A role lost or given back outside grant and revoke (the first review's N1), through the real routes ──────
+    const C5 = ['SueSuspendS', 'PruPrunedS', 'RepReportedS', 'DelDeletesS', 'MiaModS', 'MoeModS'];
+    const [sue, pru, rpt, del, mia, moe] = C5.map(() => pubkey());
+    for (const [i, pk] of [sue, pru, rpt, del, mia, moe].entries()) {
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
+            .run(pk, C5[i], new Date().toISOString(), owner, 'TEST');
+        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    }
+    for (const pk of [sue, pru, del]) grantNodeRole(pk, 'admin', owner);
+    for (const pk of [rpt, mia, moe]) grantNodeRole(pk, 'moderator', owner);
+    putPushTokenRow(sue, 'ExponentPushToken[sue-admin]', 'android');
+    await settle(300);
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    const hR = topicHits().length;
+    const { heldNodeRoleOf } = await import('./engine/node-roles.js');
+    const { tickDecisions } = await import('./decisions-engine.js');
+    const { purgeMemberSelf } = await import('./state-engine.js');
+    const told = async (what: string, act: () => Promise<{ status: number; json?: any } | void>, words: RegExp, extraTo?: string) => {
+        const p = ownerPushes().length;
+        const n = historyOf('sec.role').length;
+        const res = await act();
+        await settle(300);
+        assert(!res || res.status === 200, `5c. ${what} (${res ? `${res.status} ${res.json?.error ?? ''}` : 'called'})`);
+        assert(historyOf('sec.role').length === n + 1 && words.test(lastHistory('sec.role')?.detail ?? ''),
+            `5c. ${what}: told once, the role and how (${lastHistory('sec.role')?.detail})`);
+        const to = ownerPushes().slice(p).flatMap((x) => x.to);
+        assert(ownerPushes().length === p + 1 && to.includes('ExponentPushToken[olive-owner]') && to.includes('ExponentPushToken[xav-new-owner]')
+            && (!extraTo || to.includes(extraTo)), `5c. ${what}: the owners pushed at once${extraTo ? ', and the one who lost it' : ''} (${JSON.stringify(to)})`);
+    };
+    await told('an admin suspends an admin', () => call('POST', `/api/local/admin/users/${sue}/suspend`, { reason: 'Owners must hear of this one.' }, asAdmin),
+        /^An admin lost that role, suspended by an admin\./, 'ExponentPushToken[sue-admin]');
+    assert(heldNodeRoleOf(sue) === null, '5c. the role is gone while suspended');
+    await told('an owner lifts it', () => call('POST', `/api/local/admin/users/${sue}/status`, { status: 'active' }, asOwner),
+        /^Someone was made an admin again, the suspension lifted by an owner\./);
+    assert(heldNodeRoleOf(sue) === 'admin', '5c. the role is back');
+    await told('an owner removes an admin from the community', () => call('POST', `/api/local/admin/users/${pru}/prune`, {}, asOwner),
+        /^An admin lost that role, removed from the community by an owner\./);
+    db.prepare("INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status) VALUES ('report-5c', ?, ?, 'spam', 'pending')").run(member, rpt);
+    await told('an admin suspends a moderator on a report', () => call('POST', '/api/local/admin/reports/report-5c/action', { suspendUser: true }, asAdmin),
+        /^A moderator lost that role, suspended on a report by an admin\./);
+    await told('an admin deletes their own account', async () => { assert(purgeMemberSelf(del).ok, '5c. the admin deletes their account'); },
+        /^An admin lost that role, by deleting their own account\./);
+    await told('an owner suspends an admin', () => call('POST', `/api/local/admin/users/${sue}/suspend`, { reason: 'A second time, for the vote.' }, asOwner),
+        /^An admin lost that role, suspended by an owner\./, 'ExponentPushToken[sue-admin]');
+    await told('the community does not keep it', async () => { tickDecisions(Date.now() + 8 * 24 * HOUR); },
+        /^Someone was made an admin again, the suspension not kept by a community vote\./);
+    assert(heldNodeRoleOf(sue) === 'admin', '5c. the role is back once more');
+    // The acting person's own bound: the admin's third change is pushed, the fourth only counted for the hour's line.
+    await told('the admin suspends a third member', () => call('POST', `/api/local/admin/users/${mia}/suspend`, { reason: 'Third one this hour, still pushed.' }, asAdmin),
+        /^A moderator lost that role, suspended by an admin\./);
+    const p4 = ownerPushes().length;
+    const s4 = await call('POST', `/api/local/admin/users/${moe}/suspend`, { reason: 'Fourth one this hour, only counted.' }, asAdmin);
+    await settle(300);
+    assert(s4.status === 200 && ownerPushes().length === p4, `5c. the admin's fourth this hour is not pushed: it is their bound, not the server's (${ownerPushes().length - p4})`);
+    advance(HOUR + MIN);
+    await tick();
+    await settle(500);
+    assert(/1 more change by the same admin in the hour/.test(topicHits().slice(hR).map((h) => h.body).join('\n')), '5c. an hour later it is the admin\'s one more change');
+    const c5 = [...topicHits().slice(hR).map((h) => JSON.stringify(h.headers) + h.body), JSON.stringify(alerts.getAlertsStatus()),
+        ...ownerPushes().map((p) => p.title + p.body)];
+    assert(!c5.some((p) => C5.some((c) => p.includes(c)) || [sue, pru, rpt, del, mia, moe].some((k) => p.includes(k.slice(0, 12)))),
+        '5c. no member or key in any of these lines, pushes or the status');
+
     // ── 6. The server's shell: beanpool recover run as a real process, its notice delivered as index.ts's watch does ──
     alerts.resetAlertsForTests();
     const recoverCli = (args: string[]) => new Promise<{ code: number; out: string }>((resolve) => {

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-    nearbyReconcile, nearbyIdReads, nearbyPrune, nearbySetOf, nearbyPageOf, nearbyLastSet, nearbyKm, NEARBY_IDS_PER_READ, NEARBY_ID_READS_PER_CYCLE,
+    nearbyReconcile, nearbyIdReads, nearbyPrune, nearbySetOf, nearbyPageOf, nearbyLastSet, nearbyApplyDiff, nearbyKm, NEARBY_IDS_PER_READ, NEARBY_ID_READS_PER_CYCLE,
     type NearbyHeld,
 } from '../posts-nearby';
+import { nearbySetHash } from '../nearby-hash';
 
 // utils/posts-nearby.ts: what a phone keeps of a community that syncs by area (DESIGN-global-sync-by-area §2.4). Two
 // thousand seeded random worlds: what the phone holds, the node's set, ids the node won't hand out, the member's area.
@@ -286,5 +287,93 @@ describe('posts-nearby, the edges', () => {
     it('prune: nothing goes at or under max, and a listing with no place goes first', () => {
         expect(nearbyPrune([h('a'), h('b')], { lat: 0, lng: 0 }, 2)).toEqual([]);
         expect(nearbyPrune([h('placed'), h('nowhere', false, null, null)], { lat: 0, lng: 0 }, 1)).toEqual(['nowhere']);
+    });
+});
+
+// A changed set sent as what changed (setDiff, scratch/global-node/DESIGN-nearby-set-diff-fable.md §2, §4): the node's diff
+// of a random held set and a random new one, applied by the phone and checked against the node's hash; and the same with
+// one thing tampered, each refused.
+describe('posts-nearby, a set as what changed: 2,000 seeded worlds', { timeout: 60_000 }, () => {
+    it('the hash is the node\'s: the pinned vector (apps/server test-nearby-set-memory.ts pins the same)', () => {
+        expect(nearbySetHash(['b', 'a', 'a'], ['a'])).toBe('b515109816ef8786513b9a68');
+        expect(nearbySetHash(['a', 'b'], ['a'])).toBe(nearbySetHash(['b', 'a'], ['a', 'a']));
+        expect(nearbySetHash(['a,b'], [])).not.toBe(nearbySetHash(['a', 'b'], []));
+    });
+
+    const sameSet = (a: Iterable<string>, b: Iterable<string>) => {
+        const x = new Set(a), y = new Set(b);
+        return x.size === y.size && [...x].every(v => y.has(v));
+    };
+    /** The node's answer (apps/server engine/nearby-set-memory.ts diffNearbySet): setAdd in the new set's order, tied where it moved. */
+    function nodeDiff(held: { set: string[]; tied: string[] }, set: string[], tied: string[]) {
+        const was = new Set(held.set), now = new Set(set);
+        const setAdd = [...new Set(set.filter(id => !was.has(id)))];
+        const setDrop = [...was].filter(id => !now.has(id));
+        return { posts: [], setAdd, setDrop, setHash: nearbySetHash(set, tied), ...(sameSet(held.tied, tied) ? {} : { tied }) };
+    }
+    function diffWorld(seed: number) {
+        const r = rng(seed);
+        let n = 0;
+        const id = () => (r() < 0.2 ? ['x,', 'y\n', 'ä', 'q"'][Math.floor(r() * 4)] : 'p-') + String(n++);
+        const heldSet = Array.from({ length: 1 + Math.floor(r() * 120) }, id);
+        const heldTied = heldSet.filter(() => r() < 0.1);
+        const set = heldSet.filter(() => r() > 0.15);
+        for (let i = Math.floor(r() * 30); i > 0; i--) set.splice(Math.floor(r() * (set.length + 1)), 0, id());
+        if (set.length === 0) set.push(id());
+        const tied = r() < 0.5 ? heldTied.filter(t => set.includes(t)) : set.filter(() => r() < 0.1);
+        const held = { set: heldSet, tied: heldTied, hash: nearbySetHash(heldSet, heldTied) };
+        return { r, held, set, tied };
+    }
+
+    it('applied to the held set, a diff is the node\'s set and tied, under its hash (2,000 worlds)', () => {
+        let tiedRode = 0;
+        for (let seed = 1; seed <= 2000; seed++) {
+            const { held, set, tied } = diffWorld(seed);
+            const body = nodeDiff(held, set, tied);
+            if ('tied' in body) tiedRode++;
+            const page = nearbyPageOf(body)!;
+            const ended = nearbyLastSet(page, held, nearbySetHash);
+            expect(ended, `seed ${seed}`).not.toBeNull();
+            expect(sameSet(ended!.set, set) && sameSet(ended!.tied ?? [], tied) && ended!.setHash === body.setHash && ended!.named, `seed ${seed}`).toBe(true);
+            const applied = nearbyApplyDiff(held, { setAdd: body.setAdd, setDrop: body.setDrop, tied: page.tied });
+            expect(applied.set.length).toBe(new Set(applied.set).size);
+        }
+        expect(tiedRode).toBeGreaterThan(400);
+    });
+
+    it('a tampered setAdd, setDrop, tied or setHash is refused, never written (2,000 worlds)', () => {
+        for (let seed = 1; seed <= 2000; seed++) {
+            const { r, held, set, tied } = diffWorld(seed);
+            const body = nodeDiff(held, set, tied);
+            const refused = (b: unknown) => nearbyLastSet(nearbyPageOf(b)!, held, nearbySetHash) === null;
+            // setAdd: one id flipped (or one added that isn't in the set).
+            const flip = Math.floor(r() * body.setAdd.length);
+            const add = body.setAdd.length > 0 ? body.setAdd.map((x, i) => (i === flip ? `${x}~` : x)) : ['not-in-the-set'];
+            expect(refused({ ...body, setAdd: add }), `seed ${seed}: setAdd`).toBe(true);
+            // setDrop: one left out (a held id stays), or a kept one dropped.
+            const kept = held.set.filter(x => set.includes(x));
+            const drop = body.setDrop.length > 0 ? body.setDrop.slice(1) : kept.length > 0 ? [kept[0]] : null;
+            if (drop) expect(refused({ ...body, setDrop: drop }), `seed ${seed}: setDrop`).toBe(true);
+            // tied: one more than the node's (or the held one's, where the answer names none).
+            expect(refused({ ...body, tied: [...('tied' in body ? body.tied : held.tied), set[0] === 'zz' ? 'zy' : 'zz'] }), `seed ${seed}: tied`).toBe(true);
+            // setHash: one hex digit off.
+            const h = body.setHash;
+            expect(refused({ ...body, setHash: `${h.slice(0, 5)}${h[5] === '0' ? '1' : '0'}${h.slice(6)}` }), `seed ${seed}: setHash`).toBe(true);
+        }
+    });
+
+    it('a diff with nothing to apply it to, or one this phone can\'t read, is no end', () => {
+        const held = { set: ['a', 'b'], tied: ['a'], hash: nearbySetHash(['a', 'b'], ['a']) };
+        const body = { posts: [], setAdd: ['c'], setDrop: ['b'], setHash: nearbySetHash(['a', 'c'], ['a']) };
+        expect(nearbyLastSet(nearbyPageOf(body)!, held, nearbySetHash)).toEqual({ set: ['a', 'c'], tied: ['a'], setHash: body.setHash, named: true });
+        expect(nearbyLastSet(nearbyPageOf(body)!, null, nearbySetHash)).toBeNull();
+        expect(nearbyLastSet(nearbyPageOf(body)!, held)).toBeNull();
+        expect(nearbyLastSet(nearbyPageOf(body)!, { set: held.set, hash: held.hash }, nearbySetHash)).toBeNull();
+        expect(nearbyPageOf({ ...body, setAdd: 'c' })).toEqual({ posts: [], set: null, tied: null, setHash: body.setHash, setUnchanged: null, diff: { setAdd: null, setDrop: ['b'] } });
+        expect(nearbyLastSet(nearbyPageOf({ ...body, setAdd: [7] })!, held, nearbySetHash)).toBeNull();
+        expect(nearbyLastSet(nearbyPageOf({ posts: [], setAdd: ['c'], setHash: body.setHash })!, held, nearbySetHash)).toBeNull();
+        expect(nearbyLastSet(nearbyPageOf({ ...body, setHash: undefined })!, held, nearbySetHash)).toBeNull();
+        // A page with neither field reads as before: no `diff`.
+        expect('diff' in nearbyPageOf({ posts: [], setUnchanged: 'h' })!).toBe(false);
     });
 });

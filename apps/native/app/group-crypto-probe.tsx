@@ -17,8 +17,8 @@ import { useTheme } from './ThemeContext';
  * ## Why the __DEV__ guard
  *
  * expo-router routes every file under `app/`, so this screen exists in a production build too. The measuring code
- * (utils/group-crypto-bench.ts) is loaded only inside a __DEV__ branch, which a production bundle drops, and the screen
- * says so instead of running.
+ * (utils/group-crypto-bench.ts) is required only through a `__DEV__ ? require(…) : null` expression, which a production
+ * bundle folds away, and the screen says so instead of running.
  */
 export default function GroupCryptoProbe(): React.JSX.Element {
     const { colors } = useTheme();
@@ -37,12 +37,15 @@ export default function GroupCryptoProbe(): React.JSX.Element {
     }
 
     async function measure() {
-        if (running) return;
+        // A production build folds `false ? require(…) : null` to null before Metro collects dependencies, so its bundle
+        // never holds the measuring code (checked with `expo export`). Code after an early `if (!__DEV__) return` is NOT
+        // dropped that way: keep this an expression.
+        const bench = __DEV__ ? require('../utils/group-crypto-bench') as typeof import('../utils/group-crypto-bench') : null;
+        if (!bench || running) return;
+        const { runGroupCryptoBench } = bench;
         setRunning(true);
         setError(null);
         setSteps([]);
-        // Loaded here and only here, inside __DEV__: a production bundle never holds the measuring code.
-        const { runGroupCryptoBench } = require('../utils/group-crypto-bench') as typeof import('../utils/group-crypto-bench');
         console.log('[GROUP CRYPTO PROBE] start', JSON.stringify({ hermes: typeof (globalThis as { HermesInternal?: unknown }).HermesInternal === 'object' }));
         try {
             await runGroupCryptoBench({

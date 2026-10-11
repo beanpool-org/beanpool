@@ -128,21 +128,23 @@ A member who deletes their own account is not removed, and nothing about their c
 
 Use Re-Key when someone has lost their phone and their 12 words, and you have checked in person that they are who they say. Someone who still has their 12 words doesn't need it: they restore them on the new phone.
 
-Opening Re-Key changes nothing. It shows the checklist, or the code that is already waiting. Only **Make a re-key code** does something: from that moment their old key stops working, they are signed out everywhere, and they are suspended until you bind their new phone. The code starts RK- and lasts **24 hours**; the window shows how long it has left. If their old phone still has the app, it gets a notice that an admin started moving their account to a new phone, so a member who didn't ask for it can tell an owner.
+Opening Re-Key changes nothing. It shows the checklist, or the code that is already waiting. Only **Make a re-key code** does something: from that moment their old key stops working, they are signed out everywhere, and they are suspended until you bind their new phone. The code starts RK- and lasts **24 hours**; the window shows how long it has left. If their old phone still has the app, it gets a notice that an admin started moving their account to a new phone, so a member who didn't ask for it can tell an owner. Whoever holds the old phone gets that notice, a thief included, and cancelling the code gives the old key back: before you cancel a code because of a call like that, check it is the member, in person.
 
 With them in front of you:
 
 - They open BeanPool on their new phone, tap **Already a Member? Restore Account**, then **An admin gave me a re-key code**, and scan the QR on your screen (or type the code and your community's name or address). In a browser, the QR's link opens the same screen.
-- Their phone shows a two-digit number. On your screen, a card says **A phone asked at** the time, **number** and the start of its key.
-- **The number on their phone must match before you press Bind this phone.** Then their account moves to that phone at once, and their phone says so.
+- Their phone shows a two-digit number, and under it the address of the community it asked: check that is yours. On your screen, a card says **A phone asked at** the time and the start of its key. Your screen never shows the number.
+- **Type the number on their phone**, then press **Bind their phone**. The server binds the phone showing that number: their account moves to it at once, and their phone says so.
 
-A code only ever binds a phone you confirm. Someone who photographed the code or the QR gets a card with a different number: press **Not theirs** on it, and that phone gets nothing. After three phones are turned away, or once five have asked, the code takes no more: make a new one. If you bound the wrong phone, make a new code (type NEW CODE) for the member: the phone you bound by mistake stops working for good.
+A code only ever binds the phone whose number you type. Someone who photographed the code or the QR gets a card too, with a number only their phone shows: press **Not theirs** on it, and that phone gets nothing. A number no waiting phone shows binds nothing and counts as a wrong try; **three wrong numbers stop the code**, and you make a new one with the member there. After three phones are turned away, or once five have asked, the code takes no more: make a new one. If you bound the wrong phone, make a new code (type NEW CODE) for the member: the phone you bound by mistake stops working for good.
 
-The member doesn't need their old 12 words. Their phone shows the 12 words of their new key, and they should write those down. A sign-in they had linked for recovery (Google, Apple or Facebook) protected the old key, so it is removed: they link it again from the new phone, which reminds them.
+If someone keeps trying codes that start like the one on your screen, the window says so. After ten wrong tries in an hour, phones asking with any code that starts that way are turned away until the hour is up: cancel the code and make a new one, which starts differently.
+
+The member doesn't need their old 12 words. If their new phone had no account, it shows the 12 words of their new key, and they should write those down; a phone that already had an account keeps its own 12 words. If they had linked a sign-in for recovery (Google, Apple or Facebook), it protected the old key, so it is removed: their phone asks them to link it again.
 
 **Paste a key instead**, folded under the code, binds a key you paste. Use it only when their new phone can't reach your community from where they are.
 
-You can't make a code for your own account: it would sign you out, with nobody left to confirm your new phone. Another owner or admin makes it for you. To move to a new phone while you still have the old one, restore your 12 words on it (Settings shows them).
+You can't make a code for your own account: it would sign you out, with nobody left to confirm your new phone. For an owner or an admin, another owner makes it (an admin can't re-key an owner or another admin). To move to a new phone while you still have the old one, restore your 12 words on it (Settings shows them).
 
 If they already moved to a new key, the window opens on **Already moved to** that key and the date. A new code would stop the phone they use now, so you type NEW CODE first. Do that only if the new phone is lost too.
 

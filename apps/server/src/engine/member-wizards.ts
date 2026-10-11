@@ -114,10 +114,10 @@ export interface OffboardOptions {
 
 export const REKEY_CODE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-/** issueRekeyCode's refusal of a code on the operator's own key. */
 /** A key whose ask on this code the admins declined (completeRekey). */
 export const REKEY_DECLINED_PHONE = 'That phone was declined for this code, so it can’t be bound with it. Make a new code with the member there.';
-export const REKEY_OWN_KEY = 'You can’t make a re-key code for your own account: it would end your session, and nobody would be left to confirm your new phone. To move to a new phone while you still have this one, restore your 12 words on it (Settings shows them). If your key is lost or exposed, ask another owner or admin to make the code.';
+/** issueRekeyCode's refusal of a code on the operator's own key (only an owner re-keys an owner or admin: assertMayRekey). */
+export const REKEY_OWN_KEY = 'You can’t make a re-key code for your own account: it would end your session, and nobody would be left to confirm your new phone. To move to a new phone while you still have this one, restore your 12 words on it (Settings shows them). If your key is lost or exposed, ask another owner to make the code.';
 
 /** completeRekey's refusal for an account deleted or removed after its code was issued. */
 export const REKEY_ACCOUNT_GONE = 'This account was deleted or removed from this community, so it can’t be moved to a new key.';

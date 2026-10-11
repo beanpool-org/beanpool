@@ -25,12 +25,21 @@ delete process.env.NEARBY_LISTINGS_MAX;
 process.env.NODE_PROFILE = 'global';
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+
+// PUSH_INDEX_REPORT: a file each line below is also appended to (the runner keeps no log of a passing run).
+const REPORT = process.env.PUSH_INDEX_REPORT;
+const RADIUS_TAG = process.env.NEARBY_LISTINGS_RADIUS_KM || 'default';
+function say(line: string, failed = false): void {
+    if (failed) console.error(line); else console.log(line);
+    if (REPORT) fs.appendFileSync(REPORT, `[radius ${RADIUS_TAG}] ${line}\n`);
+}
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
-    if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
+    if (cond) { passed++; say(`✓ ${msg}`); } else say(`✗ ${msg}`, true);
 }
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
@@ -75,7 +84,7 @@ async function main(): Promise<void> {
     se.initStateEngine();
     assert(getProfileSwitches().nearbyListings === true, 'setup: listings sync by area');
     const radiusKm = nearbyListingsLimits().radiusKm;
-    console.log(`   radius ${radiusKm} km`);
+    say(`   radius ${radiusKm} km, seed ${SEED}`);
 
     // ── 1. the world ────────────────────────────────────────────────────────────────────────────
     const members: string[] = [];
@@ -217,8 +226,8 @@ async function main(): Promise<void> {
         }
     }
     se.setListingPushIndex(true);
-    console.log(`   changes between pushes: ${JSON.stringify(changes)}`);
-    for (const d of firstDiffs) console.error(`   ${d}`);
+    say(`   changes between pushes: ${JSON.stringify(changes)}`);
+    for (const d of firstDiffs) say(`   ${d}`, true);
     for (const what of ['connect', 'disconnect', 'dies on a send', 'area set or moved', 'area cleared', 'area imported',
         're-key, the new phone connects', 'member removed', 'mid-join socket joins', 'map loaded again whole']) {
         assert((changes[what] ?? 0) > 0, `the run made the change "${what}" (${changes[what] ?? 0} times)`);
@@ -250,7 +259,7 @@ async function main(): Promise<void> {
                 }
                 se.setListingPushIndex(true);
                 const full = median(times.full), idx = median(times.index);
-                console.log(`   ${n.toLocaleString('en')} sockets, ${what}: full loop ${full.toFixed(3)} ms a push, index ${idx.toFixed(3)} ms (reached ${sentIndex}); medians of 41, interleaved; ${uptime}`);
+                say(`   ${n.toLocaleString('en')} sockets, ${what}: full loop ${full.toFixed(3)} ms a push, index ${idx.toFixed(3)} ms (reached ${sentIndex}); medians of 41, interleaved; ${uptime}`);
                 assert(sentFull === sentIndex, `${n} sockets, ${what}: both reach ${sentIndex}`);
             }
         };
@@ -258,7 +267,7 @@ async function main(): Promise<void> {
         costAt(10000);
     }
 
-    console.log(`\n${passed}/${run} checks passed.`);
+    say(`${passed}/${run} checks passed (seed ${SEED}).`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ listing pushes through the index equal the full loop: PASSED.');
 }

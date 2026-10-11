@@ -66,15 +66,35 @@ beforeEach(() => {
     (globalThis as any).fetch = fetchMock;
 });
 
+/** Each column of an INSERT and the first param its VALUES entry binds, by name (an entry may hold more than one `?`). */
+function paramsByColumn(sql: string, params: unknown[]): Record<string, unknown> {
+    const columns = sql.slice(sql.indexOf('(') + 1, sql.indexOf(')')).split(',').map(c => c.trim());
+    const values = sql.slice(sql.indexOf('VALUES (') + 'VALUES ('.length, sql.lastIndexOf(')'));
+    const entries: string[] = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < values.length; i++) {
+        if (values[i] === '(') depth++;
+        else if (values[i] === ')') depth--;
+        else if (values[i] === ',' && depth === 0) { entries.push(values.slice(start, i)); start = i + 1; }
+    }
+    entries.push(values.slice(start));
+    expect(entries).toHaveLength(columns.length);
+    const out: Record<string, unknown> = {};
+    let at = 0;
+    columns.forEach((c, i) => { out[c] = params[at]; at += (entries[i].match(/\?/g) || []).length; });
+    return out;
+}
+
 describe('events in the local cache', () => {
     it('applyDelta stores the event columns and public counts, never the note or my RSVP', async () => {
         await applyDelta({ posts: [{ ...serverEvent, eventPrivateNote: 'Gate code 1234', myRsvp: 'going' }] });
         const call = mockRunAsync.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('INSERT OR REPLACE INTO posts'));
         expect(call).toBeTruthy();
         const [sql, params] = call!;
-        expect(sql).toContain('event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count)');
         expect((sql.match(/\?/g) || []).length).toBe(params.length);
-        expect(params.slice(-6)).toEqual(['2026-09-26T23:00:00.000Z', '2026-09-27T02:00:00.000Z', 'Bindarrabi Hall', 'scheduled', 7, 3]);
+        const byColumn = paramsByColumn(sql, params);
+        expect(['event_start_at', 'event_end_at', 'event_place_name', 'event_state', 'event_going_count', 'event_interested_count'].map(c => byColumn[c]))
+            .toEqual(['2026-09-26T23:00:00.000Z', '2026-09-27T02:00:00.000Z', 'Bindarrabi Hall', 'scheduled', 7, 3]);
         expect(params).not.toContain('Gate code 1234');
     });
 

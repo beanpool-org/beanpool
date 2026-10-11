@@ -19,6 +19,7 @@ import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAft
 import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
+import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -309,7 +310,8 @@ async function _doInitDB() {
             event_place_name TEXT,
             event_state TEXT,
             event_going_count INTEGER DEFAULT 0,
-            event_interested_count INTEGER DEFAULT 0
+            event_interested_count INTEGER DEFAULT 0,
+            carried_callsign TEXT
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -360,6 +362,10 @@ async function _doInitDB() {
             updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             PRIMARY KEY (post_id, member_pubkey)
         );
+
+        -- On a community that syncs by area (utils/posts-nearby.ts): the ids its last set read named "tied", the member's
+        -- own and tied listings as the node knows them, which the phone keeps past its cap (keepPostsNearby).
+        CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);
 
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
         CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
@@ -531,6 +537,16 @@ async function _doInitDB() {
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN accepted_at DATETIME;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pending_transaction_id TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN completed_at DATETIME;`); } catch (e) {}
+        // The author's name as the node carried it on the listing, for a listing whose author this phone's directory copy
+        // lacks (a community that syncs by area: utils/posts-nearby.ts). The directory's name wins where it has one; read
+        // as author_callsign, a name the column doesn't take, so `p.*` never repeats it (the review of #1778, finding 8).
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_callsign TEXT;`); } catch (e) {}
+        // The ids a by-area community's last set read named `tied` (keepPostsNearby), for a phone whose schema ran before it.
+        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);`); } catch (e) {}
+        // The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat
+        // names it: by index, not a scan of each table per listing (the review of #1778, finding 4: 79 ms at 3,000 deals).
+        try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_id ON marketplace_transactions(post_id);`); } catch (e) {}
+        try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_conversations_post_id ON conversations(post_id);`); } catch (e) {}
         // Profile sync: track when a profile was last updated for cache-busting
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0;`); } catch (e) {}
@@ -683,7 +699,7 @@ export async function clearDB() {
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps;');
+        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied;');
     } finally {
         releaseSyncLock();
     }
@@ -714,7 +730,7 @@ export async function clearDB() {
 export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean; includeGroupsOf?: string; allScopes?: boolean }) {
     let database = await waitForInit();
     let query = `
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN groups g ON p.target_group_id = g.id
@@ -858,7 +874,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
 export async function getMyPosts(pubkey: string) {
     const database = await waitForInit();
     const rows = await database.getAllAsync(`
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, m.avatar_url as author_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE p.author_pubkey = ? AND p.status IN ('active', 'pending', 'completed', 'paused') AND p.type != 'event'
@@ -949,7 +965,7 @@ export async function getPost(id: string) {
     if (anchorUrl) void refreshCachedPost(database, anchorUrl, id).catch(() => false);
 
     const row = await database.getFirstAsync<any>(`
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key
@@ -2925,7 +2941,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, carried_callsign) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)))',
         [
             p.id ?? null,
             p.type ?? null,
@@ -2964,9 +2980,18 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             p.targetGroupId || p.target_group_id || null,
             p.targetPubkey || p.target_pubkey || null,
             p.assignedTo || p.assigned_to || null,
-            ...eventCacheColumns(p)
+            ...eventCacheColumns(p),
+            // A copy without the name (an older node) keeps the one the row has.
+            syncedAuthorCallsign(p),
+            p.id ?? null,
         ]
     );
+}
+
+/** The author's name a listing carries (the node's `authorCallsign`), or null for a copy without one. */
+function syncedAuthorCallsign(p: any): string | null {
+    const name = p.authorCallsign ?? p.author_callsign;
+    return typeof name === 'string' && name.trim() !== '' ? name : null;
 }
 
 /**
@@ -3012,6 +3037,59 @@ async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: an
         await txn.runAsync(`DELETE FROM posts WHERE id IN (${batch.map(() => '?').join(',')})`, batch);
     }
     if (gone.length > 0) console.log(`[DB] applyDelta: ${gone.length} listing(s) the node no longer has left this phone`);
+}
+
+/**
+ * On a community that syncs listings by area (utils/posts-nearby.ts says the rules): the held listings its member's set
+ * no longer names go (`set`, when this write carries one), then all but the `max` others nearest `area` (or the newest,
+ * without one), each with its poll votes and RSVPs. Never the member's own or one tied to them on this phone: one they
+ * took, any deal on it, a conversation about it, their own vote or answer to it. Without the phone's own key it can't
+ * tell which are theirs: nothing goes. `fresh`: listings written after the set was worked out (pushes replayed over this
+ * cycle), which the set can't speak for. `tied`, when this write carries the set's: the ids the node names as the
+ * member's own or tied, kept from now on (nearby_tied) until the next set read says otherwise, so a tie this phone holds
+ * no row for (a deal made elsewhere, or older than the deals it reads) keeps its listing too.
+ */
+async function keepPostsNearby(
+    txn: SQLite.SQLiteDatabase,
+    nearby: { set?: unknown; tied?: unknown; area?: { lat: number; lng: number } | null; max?: unknown },
+    selfPubkey: string | null,
+    fresh: ReadonlySet<string>,
+): Promise<void> {
+    if (!selfPubkey) return;
+    const max = typeof nearby.max === 'number' && Number.isFinite(nearby.max) && nearby.max >= 0 ? nearby.max : null;
+    const set = Array.isArray(nearby.set) ? nearby.set.filter((id): id is string => typeof id === 'string') : null;
+    if (max === null && set === null) return;
+    if (set !== null && Array.isArray(nearby.tied)) {
+        const inSet = new Set(set);
+        const tied = [...new Set(nearby.tied.filter((id): id is string => typeof id === 'string' && inSet.has(id)))];
+        await txn.runAsync('DELETE FROM nearby_tied');
+        for (let i = 0; i < tied.length; i += 500) {
+            const batch = tied.slice(i, i + 500);
+            await txn.runAsync(`INSERT OR IGNORE INTO nearby_tied (id) VALUES ${batch.map(() => '(?)').join(',')}`, batch);
+        }
+    }
+    const rows = await txn.getAllAsync<{ id: string; lat: number | null; lng: number | null; at: string | null; kept: number; off: number }>(
+        `SELECT p.id, p.lat, p.lng, COALESCE(p.updated_at, p.created_at) AS at, (p.active = 0 OR p.status = 'cancelled') AS off,
+                (p.author_pubkey = ? OR p.accepted_by = ?
+                 OR EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id)
+                 OR EXISTS (SELECT 1 FROM conversations c WHERE c.post_id = p.id)
+                 OR EXISTS (SELECT 1 FROM event_rsvps r WHERE r.post_id = p.id AND r.member_pubkey = ?)
+                 OR EXISTS (SELECT 1 FROM poll_votes v WHERE v.post_id = p.id AND v.voter_pubkey = ?)
+                 OR EXISTS (SELECT 1 FROM nearby_tied n WHERE n.id = p.id)) AS kept
+         FROM posts p`,
+        [selfPubkey, selfPubkey, selfPubkey, selfPubkey]);
+    const held: NearbyHeld[] = rows.map(r => ({ id: r.id, lat: r.lat, lng: r.lng, at: r.at, kept: !!r.kept, off: !!r.off }));
+    const gone = new Set(set ? nearbyReconcile(held, set, fresh).drop : []);
+    if (max !== null) for (const id of nearbyPrune(held.filter(h => !gone.has(h.id)), nearby.area ?? null, max)) gone.add(id);
+    const ids = [...gone];
+    for (let i = 0; i < ids.length; i += 500) {
+        const batch = ids.slice(i, i + 500);
+        const marks = batch.map(() => '?').join(',');
+        await txn.runAsync(`DELETE FROM poll_votes WHERE post_id IN (${marks})`, batch);
+        await txn.runAsync(`DELETE FROM event_rsvps WHERE post_id IN (${marks})`, batch);
+        await txn.runAsync(`DELETE FROM posts WHERE id IN (${marks})`, batch);
+    }
+    if (ids.length > 0) console.log(`[DB] applyDelta: ${ids.length} listing(s) outside this member's area left this phone`);
 }
 
 /**
@@ -3201,6 +3279,16 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             for (const change of delta.liveChanges as LivePostChange[]) {
                 await applyLivePostRow(txn, change);
             }
+        }
+
+        // A community that syncs listings by area (services/pillar-sync.ts): after every write of its listings, the phone
+        // keeps its member's set and at most `max` others (utils/posts-nearby.ts). After the pushes above, which it
+        // never drops for a set worked out before them.
+        if (delta.postsNearby && typeof delta.postsNearby === 'object') {
+            const fresh = new Set<string>(Array.isArray(delta.liveChanges)
+                ? (delta.liveChanges as LivePostChange[]).flatMap(c => (c.kind === 'upsert' && c.post?.id ? [String(c.post.id)] : []))
+                : []);
+            await keepPostsNearby(txn, delta.postsNearby, selfPubkey, fresh);
         }
 
         if (delta.marketplaceTransactions !== undefined) {

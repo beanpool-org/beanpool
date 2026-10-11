@@ -164,7 +164,11 @@ export interface GroupLinePayload {
 export interface GroupLineBinding {
     groupId: string;
     epoch: number;
-    /** The sender's Ed25519 public key, lower-case hex, exactly as the node stores it as the line's author. */
+    /**
+     * The key that sealed these bytes, lower-case Ed25519 hex: the node stores it as the line's `metadata.sender` (the
+     * signer of the send, or of the latest edit). A re-key moves the line's `author_pubkey` and leaves `sender` on the
+     * key that sealed it, so the two can differ. A line stored with no `sender` is opened by its `author_pubkey`.
+     */
     senderPubHex: string;
     /** The message id as the node stores it. */
     messageId: string;

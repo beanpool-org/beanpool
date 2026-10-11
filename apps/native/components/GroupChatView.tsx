@@ -43,10 +43,9 @@ import {
     groupKeyringFor,
     type GroupItem, type GroupMemberItem,
 } from '../utils/db';
-import { chatIsLocked, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
+import { chatIsLocked, groupChatShownLines, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
 import { isSealedGroupLine, searchShownLines } from '../utils/group-line-display';
 import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GROUP_KEYS_UNOPENABLE_TEXT } from '../utils/group-chat-keys';
-import { decodeEventChatText } from '../utils/events';
 import {
     isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel,
     ENTERPRISE_CHAT_NOTICE,
@@ -54,7 +53,7 @@ import {
 } from '../utils/your-groups';
 import {
     buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions,
-    normaliseThreadMessage, pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneText,
+    pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneText,
     type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
 import { normaliseTappedUrl } from '../utils/chat-links';
@@ -271,25 +270,8 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
 
     /** The node's messages in the one shape every chat's components speak, plus what this phone still owes. */
     const messages: ChatMessage[] = useMemo(() => {
-        const fromNode = rawMessages.flatMap((m): ChatMessage[] => {
-            if (!(locked && isSealedGroupLine(m))) return [normaliseThreadMessage(m, decodeEventChatText, me, kind)];
-            const v = thread?.views.get(String(m.id));
-            // Not opened yet: nobody's, no words, for the moment it takes.
-            if (!v) return [{ ...normaliseThreadMessage(m, () => '…', me, kind), authorName: null, unattributed: true }];
-            // From before this member's membership: never shown (design §3).
-            if (v.hidden) return [];
-            const base = normaliseThreadMessage(m, () => v.text, me, kind);
-            // The key that opened the line is its author: never the node's author column (line-display design §4).
-            const senderId = v.signer ?? '';
-            return [{
-                ...base,
-                senderId,
-                outgoing: !!me && senderId === me,
-                authorName: v.name ? (v.nameHint ? `${v.name} · ${v.nameHint}` : v.name) : null,
-                integrityNote: v.details,
-                unattributed: v.unverified || v.waitingKey,
-            }];
-        });
+        // A locked chat's lines by the display rule; anything there unsealed is nobody's (utils/group-chat-lines.ts).
+        const fromNode = groupChatShownLines(rawMessages, { locked, thread, me, kind });
         const mine: ChatMessage[] = pending.map(p => ({
             id: p.clientId,
             senderId: me || '',

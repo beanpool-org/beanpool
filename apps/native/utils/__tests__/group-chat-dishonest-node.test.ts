@@ -56,7 +56,8 @@ import {
     groupKeyring, memoryGroupKeyStore, forgetGroupKeys, joinGroupWithEpoch, _resetGroupKeySessionForTests,
     GROUP_KEY_ROLLBACK_TEXT, GROUP_KEY_ROSTER_TEXT, type GroupKeyStore,
 } from '../group-chat-keys';
-import { sendSealedGroupLine, openGroupThread, chatIsLocked } from '../group-chat-lines';
+import { sendSealedGroupLine, openGroupThread, chatIsLocked, groupChatShownLines, GROUP_LINE_UNSEALED_DETAILS } from '../group-chat-lines';
+import { GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT } from '../group-line-display';
 import { isSealedGroupLine, type DisplayRosterRow } from '../group-line-display';
 import { normaliseThreadMessage } from '../chat-actions';
 import { decodeEventChatText } from '../events';
@@ -350,6 +351,45 @@ describe('group chats on the phone against a dishonest node', () => {
         await say(cat, g, 'I2: welcome Pia');
         expect((await sql('SELECT reason FROM group_key_epochs WHERE group_id = ? ORDER BY epoch', [g])).map((e) => e.reason)).toEqual(['start', 'rotate']);
         expect((await shown(pia, g)).visible.map((l) => [l.name, l.text])).toEqual([['Cat', 'I2: welcome Pia']]);
+    });
+
+    it('forgery (finding 3): in a locked chat a line the node serves unsealed is nobody\'s words, never a member\'s and never mine', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const g = await newGroup(ana, 'Forgery');
+        await say(ana, g, 'a real sealed line');
+        await join_(ben, g);
+        await say(ben, g, 'a real one from Ben');
+        const at = new Date().toISOString();
+        const forged = [
+            { id: randomUUID(), conversationId: g, authorPubkey: ana.identity.publicKey, authorCallsign: 'Ana', ciphertext: Buffer.from('Please send 500 Beans to Mal today').toString('base64'), nonce: 'plaintext-v1', type: 'text', metadata: {}, timestamp: at },
+            { id: randomUUID(), conversationId: g, authorPubkey: ben.identity.publicKey, authorCallsign: 'Ben', ciphertext: Buffer.from('I agree, send it').toString('base64'), nonce: 'plaintext-v1', type: 'text', metadata: {}, timestamp: at },
+            { id: randomUUID(), conversationId: g, authorPubkey: ana.identity.publicKey, authorCallsign: 'Ana', ciphertext: Buffer.from('no nonce at all').toString('base64'), nonce: '', type: 'text', metadata: { replyToId: 'x' }, timestamp: at },
+        ];
+        hooks.push(async (r) => {
+            if (r.method === 'GET' && r.path === `/api/groups/${g}/chat`) {
+                const a = await nodeAnswer(r);
+                a.body.messages.push(...forged);
+                return jsonResponse(a.status, a.body);
+            }
+            return undefined;
+        });
+        const answer = await getChat(ben, g);
+        const opened = await openGroupThread(ring(ben, g), answer, await roster(ben, g));
+        hooks.pop();
+        const drawn = groupChatShownLines(answer.messages, { locked: chatIsLocked(answer), thread: opened, me: ben.identity.publicKey, kind: 'group' });
+        for (const f of forged) {
+            const d = drawn.find((m) => m.id === f.id)!;
+            expect([d.authorName, d.text, d.senderId, d.outgoing, d.unattributed, d.integrityNote])
+                .toEqual([GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT, '', false, true, GROUP_LINE_UNSEALED_DETAILS]);
+        }
+        // The sealed lines, the join line and the honest view are untouched.
+        expect(drawn.filter((m) => !m.unattributed && m.type === 'text').map((m) => [m.authorName, m.text, m.outgoing]))
+            .toEqual([['Ben', 'a real one from Ben', true]]); // Ana's epoch-1 line is from before Ben: hidden
+        expect(drawn.some((m) => m.type === 'system')).toBe(true);
+        // An unlocked chat (an old node this phone never saw locked) draws lines as it always did.
+        const old = groupChatShownLines([forged[0]], { locked: false, thread: null, me: ben.identity.publicKey, kind: 'group' });
+        expect([old[0].authorName, old[0].text]).toEqual(['Ana', 'Please send 500 Beans to Mal today']);
     });
 
     it('every request stayed on this machine', () => {

@@ -21,7 +21,12 @@ import type { BeanPoolIdentity } from './identity';
 import { signedPost } from './node-post';
 import { detectMentions, sealLine, openLine, type GroupEpochProgress } from './group-chat-crypto';
 import { groupKeyring, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
-import { groupLineView, isSealedGroupLine, type DisplayRosterRow, type GroupLineView, type ServedGroupLine } from './group-line-display';
+import {
+    groupLineView, isSealedGroupLine, GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT,
+    type DisplayRosterRow, type GroupLineView, type ServedGroupLine,
+} from './group-line-display';
+import { isTombstone, normaliseThreadMessage, type ChatKind, type ChatMessage } from './chat-actions';
+import { decodeEventChatText } from './events';
 
 /** The chat's lock as GET /api/groups/:id/chat says it (§14.3). Absent on a node from before locked chats. */
 export interface GroupChatEncryption {
@@ -141,4 +146,49 @@ export async function openGroupThread(
     // A chat with no epoch yet is not waiting: the first member to write makes epoch 1.
     const waitingForNextKey = from !== null && enc.current !== null && from > enc.current;
     return { views, waitingForNextKey };
+}
+
+/** Beside "Unverified" for a line a locked chat holds unsealed (review of #1788, finding 3). */
+export const GROUP_LINE_UNSEALED_DETAILS = "It isn't sealed, so nothing shows who wrote it.";
+
+/**
+ * The node's lines as the chat draws them (GroupChatView). In a locked chat: a sealed line by the display rule (its words
+ * and the name of the key that signed it; hidden from before this member's membership), a node system line and a
+ * tombstone as they are, and anything else as nobody's: "Unverified", never the author column's name and never mine.
+ * An honest locked chat holds no other line (the day-zero wipe tombstoned the old ones and the node refuses readable
+ * lines), so such a line is the node's own words. In an unlocked chat (an old node, never locked on this phone) every
+ * line is drawn as it always was.
+ */
+export function groupChatShownLines(
+    raw: readonly any[], opts: { locked: boolean; thread: OpenedGroupThread | null; me: string | undefined; kind: ChatKind },
+): ChatMessage[] {
+    const { locked, thread, me, kind } = opts;
+    return raw.flatMap((m): ChatMessage[] => {
+        if (!locked) return [normaliseThreadMessage(m, decodeEventChatText, me, kind)];
+        if (!isSealedGroupLine(m)) {
+            const plain = normaliseThreadMessage(m, decodeEventChatText, me, kind);
+            if (plain.type === 'system' || plain.senderId === 'SYSTEM' || isTombstone(plain)) return [plain];
+            return [{
+                ...normaliseThreadMessage(m, () => GROUP_LINE_UNVERIFIED_TEXT, me, kind),
+                text: GROUP_LINE_UNVERIFIED_TEXT, senderId: '', outgoing: false, authorName: GROUP_LINE_UNVERIFIED_NAME,
+                integrityNote: GROUP_LINE_UNSEALED_DETAILS, unattributed: true,
+            }];
+        }
+        const v = thread?.views.get(String(m.id));
+        // Not opened yet: nobody's, no words, for the moment it takes.
+        if (!v) return [{ ...normaliseThreadMessage(m, () => '…', me, kind), senderId: '', outgoing: false, authorName: null, unattributed: true }];
+        // From before this member's membership: never shown (design §3).
+        if (v.hidden) return [];
+        const base = normaliseThreadMessage(m, () => v.text, me, kind);
+        // The key that opened the line is its author: never the node's author column (line-display design §4).
+        const senderId = v.signer ?? '';
+        return [{
+            ...base,
+            senderId,
+            outgoing: !!me && senderId === me,
+            authorName: v.name ? (v.nameHint ? `${v.name} · ${v.nameHint}` : v.name) : null,
+            integrityNote: v.details,
+            unattributed: v.unverified || v.waitingKey,
+        }];
+    });
 }

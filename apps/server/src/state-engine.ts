@@ -8808,6 +8808,11 @@ export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNea
     return runWashSybilMetricsEngine();
 }
 
+/** runWashSybilMetricsAudit a slice at a time, as the node's timers run it (engine/audit.ts). */
+export function runWashSybilMetricsAuditSliced(opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<{ totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null> {
+    return runWashSybilMetricsAuditInSlices(opts);
+}
+
 export type { ReplicaConsistency };
 
 /**

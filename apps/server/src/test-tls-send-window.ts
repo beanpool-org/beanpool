@@ -87,7 +87,9 @@ async function reader(): Promise<void> {
 }
 
 let failures = 0;
+let checks = 0;
 function assert(ok: boolean, what: string): void {
+    checks++;
     console.log(`  ${ok ? '✅' : '❌'} ${what}`);
     if (!ok) failures++;
 }
@@ -179,12 +181,19 @@ async function main(): Promise<void> {
         const ratio = heavy.per / Math.max(light.per, 1024);
         console.log(`  (a connection after the heavy answer holds ${ratio.toFixed(1)}× one after the light answer)`);
         assert(!light.error && !heavy.error, 'every reader read its whole answer');
-        assert(!light.error && !heavy.error && ratio < 5, `an idle connection after a ~1.5 MB answer holds under 5× one after a light answer, not the answer's size (${ratio.toFixed(1)}×)`);
+        // Only a Mac measures live malloc (vmmap). On Linux the measure is RSS − heap, and glibc reuses the warm-up's freed pages, so
+        // the ratio can come out negative and would pass without measuring anything (#1775 review, finding 2): there it is printed,
+        // and section 1 (the largest TLS write, a count) is the check.
+        if (process.platform === 'darwin') {
+            assert(!light.error && !heavy.error && ratio < 5, `an idle connection after a ~1.5 MB answer holds under 5× one after a light answer, not the answer's size (${ratio.toFixed(1)}×)`);
+        } else {
+            console.log(`  (not asserted on ${process.platform}: the memory measure is only sound on a Mac; section 1 is the check here)`);
+        }
     } finally {
         child.kill();
     }
 
-    console.log(failures ? `\n❌ ${failures} failed` : '\n✅ all passed');
+    console.log(`\n${checks - failures}/${checks} passed`);
     process.exit(failures ? 1 : 0);
 }
 

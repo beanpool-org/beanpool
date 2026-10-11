@@ -93,19 +93,21 @@ The server watches itself every minute and tells its owners when it needs them:
 
 It also tells them when someone gains power on the server, saying what happened and how, never who:
 
-- an owner, admin or moderator role is given or taken away, and how: by an owner, by an admin (moderators only), by the admin password, or with a break-glass code;
+- an owner, admin or moderator role is given or taken away, and how: by an owner, by an admin (moderators only), by the admin password, with a break-glass code, or by the server's shell (beanpool recover);
 - the community is claimed with its one-time claim code;
-- a break-glass code is made, an owner signs out everywhere, the admin password is retired, or new 2FA backup codes are made;
+- a break-glass code is made (also by beanpool recover), an owner signs out everywhere, the admin password is retired, or new 2FA backup codes are made;
 - wrong admin passwords keep arriving from one address (it now waits between tries), or from many addresses (high); over after an hour without another;
 - more than 20 wrong claim proofs arrive in a minute;
-- the address service names another community as the holder of this community's address, or the address was released and its hold is over (high), until it is this community's again;
+- the address service names another community as the holder of this community's address, or the address was released and its hold is over (high), until every address it watches is this community's again;
 - another server took over this community with the same keys, so this one is read-only (urgent): told again every day until an owner taps **Seen** in the Alerts card.
 
-Each owner gets a push for every role change, claim and key change, never folded into an earlier one. They show in the Alerts card and count in the Settings banner for a day, or until an owner taps **Seen**. To see who it was, open Settings: the alert itself never names them.
+For role changes, the claim and key changes, each owner gets a push at once for the first 3 an hour by the same person (or by the admin password), and for up to 3 more that make or remove an owner or use a break-glass code. The rest of that hour comes as one line an hour later, pushed: "40 more changes by the same admin". A change that makes or removes an owner, or uses a break-glass code, is always listed on its own in the channel and the Alerts card, and is never dropped to make room; the same line repeated is shown once with a count (×5). An owner or admin who loses that role gets the push too.
+
+These show in the Alerts card and count in the Settings banner for a day, or until an owner taps **Seen** (an owner, or the admin password with two-factor sign-in). **Seen** deletes nothing: the alert history keeps every event, and a line saying whether an owner or the admin password marked them seen, and when. To see who made a change, open Settings: the alert itself never names them.
 
 Each alert is told once when it starts, again every 24 hours while it lasts, and once when it is resolved: when it has been over for 15 minutes. One that comes back within those 15 minutes is not told again, so something swinging on and off sends one message, not one for each swing.
 
-**Owners always hear.** Each owner gets a push on their phone (one for everything that started in the same minute, and at most one a day for each alert), whatever their Marketplace Activity setting, and a banner in Settings until it is over. Admins and moderators are not told, and only an owner can open **Appliance & Data**, then **Alerts**.
+**Owners always hear.** Each owner gets a push on their phone (one for everything that started in the same minute, and at most one a day for each alert, unless it gets worse; security changes as above), whatever their Marketplace Activity setting, and a banner in Settings until it is over. Admins and moderators are not told, and only an owner can open **Appliance & Data**, then **Alerts**.
 
 **Your own channel, if you want one.** In the Alerts card, add an ntfy topic (for example https://ntfy.sh/ followed by a long name nobody can guess: the topic's name is its password) or any address that takes a JSON POST, with an optional token. Or put ALERTS_WEBHOOK_URL, ALERTS_WEBHOOK_FORMAT (ntfy or json) and ALERTS_WEBHOOK_TOKEN in .env and run docker compose up -d. **Send a test** checks it arrives. The channel is yours: nothing goes through BeanPool, and with no channel set nothing leaves the server.
 

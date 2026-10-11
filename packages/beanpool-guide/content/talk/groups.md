@@ -1,8 +1,8 @@
 ---
 slug: groups
 title: Groups
-summary: Your groups and their chats, talking in them, starting a group, inviting people, and joining by invitation.
-related: messages, mute, mentions, enterprises, event-chat, posting
+summary: Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.
+related: messages, mute, mentions, enterprises, event-chat, posting, decisions, keepers
 ---
 
 ## What a group is
@@ -128,6 +128,34 @@ The group carries on meanwhile. Its members keep chatting and posting, and peopl
 Who votes is the group's **other convenors** — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Anyone who joined the group, or was made a convenor, after that day has no part in the vote. Any of those who vote can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If the quiet lead comes back and does anything in the app, the vote closes at once. While the lead's account is suspended, nothing they do counts. Observers can see the panel but have no vote, and neither does the quiet lead.
 
 The full rules are in "Rules and how decisions work", under "A quiet lead convenor".
+
+**While the group is voting on a new lead.** Whether it is this vote or one of the group's own votes below, no convenor can remove the person it may make the lead, or lower their role, until the vote closes. The app says so in its own words. They can still leave by themselves, and a vote of the group can still remove them.
+
+## Votes in a group
+
+A group's members can vote together on the group's own things. Open the group (tap its name at the top of its chat): its votes are under **Decisions**, high on the page. Only the people in the group see them.
+
+Tap **Propose a vote** and choose what should happen:
+
+- **Choose a new lead convenor**: anyone in the group but an observer, yourself included.
+- **Make someone a convenor**, or **Make a convenor a member**. A vote never changes the lead's role; to change the lead, vote for a new one.
+- **Remove someone** from the group. Not the lead, and not yourself: to go, leave the group.
+- **Change who can join**: open to anyone, people ask and a convenor lets them in, or by invitation only.
+- **Close the group.** Its chat stays to read, but it takes no new messages, posts or members, and its other open votes end.
+
+Give it a title and say why, then tap **Open the vote**. A vote never moves Beans: a group holds none. Nor can it change anyone's standing in the community; that takes a community Decision.
+
+**Who votes.** Everyone who was a member or a convenor of the group when the vote opened, the lead and the person who proposed it included. Observers watch: they see the votes but have no Yes or No. Someone who joins after a vote opens is not on it. A group of one has nobody to vote with, so there is no **Propose a vote** button then. You can have one open vote of your own in a group at a time.
+
+**How it passes.** More than half of those on the vote must vote. Removing someone and closing the group need 60% Yes; the rest need more than half. A vote runs 7 days, or ends sooner once the answer can't change. When it passes, the app carries it out by itself. A new lead, a role change, a removal or a closing shows in the chat as a small grey line; a new join rule shows on the group's page.
+
+**What you see.** While a vote is open, everyone sees how many have voted, not how. Yes and No show once it closes. A vote can't be changed once cast. Nobody sees who voted how. In a very small group, though, the result and who has voted can show it: if three people all vote and it ends 3–0, everyone knows how everyone voted.
+
+**Being told.** Everyone on the vote but the person who proposed it gets one notification when it opens, unless they muted the group's chat. It names nobody: it says a vote opened in one of your groups. Tap it and the group opens on its **Decisions**. On Home, an open vote you haven't cast shows under **Needs you** and opens the group too.
+
+**When people come and go.** Someone who leaves the group during a vote leaves the vote, and their vote goes with them. Someone a convenor removes during a vote keeps the vote they cast: a removal is never a way to swing one. If fewer than two people are left on it, the vote ends without an answer.
+
+**A closed group** says **Closed** on its page, with the line "The group was closed by its members' vote. Its chat stays to read." Its chat, its votes and who was in it stay there to read; nothing new can be added.
 
 ## Coming soon
 

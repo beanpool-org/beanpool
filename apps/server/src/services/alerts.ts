@@ -12,6 +12,13 @@
  * failed integrity check is urgent), the host watchdog restarting a frozen server or going quiet, the standby needing its
  * owners (services/standby-health.ts), and a public server whose Let's Encrypt certificate fell back to self-signed.
  *
+ * And who gains power on it (slice S4, services/security-signal.ts): an owner, admin or moderator role granted or taken
+ * away, and how (by an owner, by the password, break-glass, with the claim code); the community claimed; a break-glass
+ * code made or retired, the admin password retired, new 2FA backup codes; wrong admin passwords or claim proofs arriving
+ * (ended by an hour without another); the community's address naming another community; and this server replaced by
+ * another with the same keys, told urgent and daily until an owner acknowledges it. A one-shot security event counts in
+ * the banner for a day, or until an owner acknowledges it. Each says what happened and how, never who.
+ *
  * A condition that starts is told once (raised), again every 24 hours while it lasts (still), and once when it has been
  * over for 15 minutes (resolved). Back within those 15 minutes, nothing is told: the condition just goes on. One that
  * starts again within 6 hours of a told end is told as `still`, not as new. So a condition that swings back within 15
@@ -59,6 +66,8 @@ import { backupLockState } from './sealed-backup.js';
 import { standbyIncidentOpen } from './standby-health.js';
 import { snapshotFailuresInARow } from './snapshot-scheduler.js';
 import { tlsFellBackToSelfSigned } from './tls.js';
+import { getReplacedInfo } from './identity-epoch.js';
+import { setSecurityAlertHandler, type SecurityNote } from './security-signal.js';
 
 function dataDir(): string {
     return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -105,20 +114,23 @@ export type AlertKey =
     | 'boot.crashloop' | 'boot.unclean'
     | 'freeze.recovered' | 'freeze.nowatchdog'
     | 'standby.incident'
-    | 'tls.fallback';
+    | 'tls.fallback'
+    | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name';
 
 interface Row {
     title: string;
     priority: AlertPriority;
     /** Sent to the operator's channel. `backups.none` is a nudge to the owners only. */
     webhook: boolean;
-    /** How often at most the owners are pushed for it; 0 = never (standby-health pushes its own). */
+    /** How often at most the owners are pushed for it; 0 = never (standby-health pushes its own); EACH = every time. */
     pushEveryMs: number;
     /** Counted in the admin queue's `server_alert` banner (the standby and an unclean stop have banners of their own). */
     banner: boolean;
 }
 
 const DAY = 24 * 60 * 60_000;
+/** Pushed every time it is told: who gains power is never folded into an earlier push. */
+const EACH = -1;
 const ROWS: Record<AlertKey, Row> = {
     'disk.80': { title: 'disk 80% full', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
     'disk.90': { title: 'disk 90% full', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
@@ -132,7 +144,21 @@ const ROWS: Record<AlertKey, Row> = {
     'freeze.nowatchdog': { title: 'watchdog quiet', priority: 2, webhook: true, pushEveryMs: 0, banner: true },
     'standby.incident': { title: 'standby needs attention', priority: 3, webhook: true, pushEveryMs: 0, banner: false },
     'tls.fallback': { title: 'certificate fell back to self-signed', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
+    'sec.role': { title: 'a role changed', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
+    'sec.password-burst': { title: 'wrong admin passwords', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
+    'sec.claim': { title: 'claimed with its claim code', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
+    'sec.claim-guess': { title: 'wrong claim proofs', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
+    'sec.keys': { title: 'a sign-in key or code changed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
+    'sec.replaced': { title: 'replaced by another server', priority: 5, webhook: true, pushEveryMs: DAY, banner: true },
+    'sec.name': { title: 'its address is not its own', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
 };
+
+/** Told once each, counted in the banner for a day or until an owner acknowledges them. */
+const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.role', 'sec.claim', 'sec.keys']);
+/** Going on while it is seen; over after an hour without another (then the usual 15-minute hold). */
+const SECURITY_SEEN: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.password-burst', 'sec.claim-guess']);
+const SECURITY_QUIET_MS = 60 * 60_000;
+const SECURITY_BANNER_MS = DAY;
 
 export const ALERT_KEYS = Object.keys(ROWS) as AlertKey[];
 
@@ -185,12 +211,16 @@ interface BookState {
     dropped: number;
     diskTicks: Record<'80' | '90' | '95', number>;
     watchdogRecoveries: number | null;
+    /** When a 'seen' security row was last seen (wrong passwords): it ends after an hour without another. */
+    seenAt: Partial<Record<AlertKey, number>>;
+    /** What an owner acknowledged: the replaced record (by when it was found), and one-shot security events up to when. */
+    acked: { replaced?: string; oneShotsAt?: number };
 }
 
 const emptyChannel = (): ChannelState => ({ lastOkAt: null, lastTriedAt: null, failedInARow: 0, error: null, nextTryAt: 0 });
 const emptyState = (): BookState => ({
     raised: {}, clearedAt: {}, waiting: [], history: [], pushedAt: {}, sentAt: [], channel: emptyChannel(), dropped: 0,
-    diskTicks: { '80': 0, '90': 0, '95': 0 }, watchdogRecoveries: null,
+    diskTicks: { '80': 0, '90': 0, '95': 0 }, watchdogRecoveries: null, seenAt: {}, acked: {},
 });
 
 let clockOffsetMs = 0;
@@ -552,7 +582,7 @@ function pushOwners(s: BookState, events: readonly AlertEvent[], t: number): voi
     const due = events.filter((e) => {
         const every = ROWS[e.key].pushEveryMs;
         const last = s.pushedAt[e.key];
-        return every > 0 && e.kind !== 'cleared' && (last === undefined || t - last >= every);
+        return every !== 0 && e.kind !== 'cleared' && (every === EACH || last === undefined || t - last >= every);
     });
     if (!due.length) return;
     for (const e of due) s.pushedAt[e.key] = t;
@@ -628,6 +658,75 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
     writeState();
     await flushAlerts();
     return told;
+}
+
+// ── Security events (S4) ───────────────────────────────────────────────────────────────────
+
+/** One event told once (a role changed, the community claimed): pushed to the owners, one line on the channel. */
+export function raiseOnce(key: AlertKey, detail: string, priority?: AlertPriority): Promise<AlertEvent[]> {
+    return updateAlerts([{ key, active: true, oneShot: true, detail, priority }]);
+}
+
+function happened(note: SecurityNote): boolean {
+    if (!note.stillTrue) return true;
+    try { return note.stillTrue(); } catch { return false; }
+}
+
+/**
+ * A note from a security source (services/security-signal.ts). Inside a database transaction it waits until the
+ * transaction is over, and is told only if it happened: a grant inside a claim that rolled back is no grant.
+ */
+export function raiseSecurity(note: SecurityNote): Promise<AlertEvent[]> {
+    if (db.inTransaction) {
+        return new Promise((resolve) => setImmediate(() => { resolve(raiseSecurity(note)); }));
+    }
+    if (!happened(note)) return Promise.resolve([]);
+    if (note.state === undefined) return raiseOnce(note.key, note.detail, note.priority);
+    if (note.state === 'seen') {
+        readState().seenAt[note.key] = now();
+    }
+    return updateAlerts([{ key: note.key, active: note.state !== false, detail: note.detail, priority: note.priority }]);
+}
+
+setSecurityAlertHandler((note) => {
+    raiseSecurity(note).catch((e) => logger.warn('SYS', `[Alerts] A security alert could not be told: ${errorMessage(e)}`));
+});
+
+/** Wrong passwords or claim proofs: over once an hour went by without another (then held 15 minutes, as every end is). */
+function securityQuietConditions(s: BookState, t: number): Condition[] {
+    const out: Condition[] = [];
+    for (const key of SECURITY_SEEN) {
+        if (!s.raised[key] || t - (s.seenAt[key] ?? 0) < SECURITY_QUIET_MS) continue;
+        out.push({ key, active: false, detail: key === 'sec.claim-guess' ? 'No wrong claim proof for an hour.' : 'No wrong admin password for an hour.' });
+    }
+    return out;
+}
+
+/** This server replaced by another with the same keys: urgent, told daily, until an owner acknowledges it. */
+function replacedCondition(s: BookState): Condition[] {
+    let info: ReturnType<typeof getReplacedInfo>;
+    try { info = getReplacedInfo(); } catch { return []; }
+    if (info && s.acked.replaced !== info.detectedAt) {
+        return [{
+            key: 'sec.replaced', active: true, priority: 5,
+            detail: `${info.message} Members' writes are refused here. Open Settings → Home, and acknowledge this in Settings → Alerts.`,
+        }];
+    }
+    return [{ key: 'sec.replaced', active: false, detail: info ? 'An owner acknowledged that this server was replaced.' : 'This server is no longer marked as replaced.' }];
+}
+
+/**
+ * An owner's "Seen": the security events told so far leave the banner, and a replaced server's alert ends (told as
+ * resolved after the usual hold). A newer replacement, or a new event, is told again.
+ */
+export async function acknowledgeSecurityAlerts(): Promise<{ replacedAcknowledged: boolean }> {
+    const s = readState();
+    let info: ReturnType<typeof getReplacedInfo> = null;
+    try { info = getReplacedInfo(); } catch { /* nothing to acknowledge there */ }
+    if (info) s.acked.replaced = info.detectedAt;
+    s.acked.oneShotsAt = now();
+    await updateAlerts(replacedCondition(s));
+    return { replacedAcknowledged: !!info };
 }
 
 // ── The conditions ─────────────────────────────────────────────────────────────────────────
@@ -785,6 +884,8 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             ...watchdogConditions(s, t),
             standbyCondition(),
             tlsCondition(),
+            ...replacedCondition(s),
+            ...securityQuietConditions(s, t),
         ];
         return await updateAlerts(conditions);
     } catch (e) {
@@ -814,7 +915,12 @@ export function stopServerAlerts(): void {
 export function serverAlertCount(): number {
     try {
         const s = readState();
-        return (Object.keys(s.raised) as AlertKey[]).filter((k) => ROWS[k]?.banner && s.raised[k]?.endedAt === undefined).length;
+        const t = now();
+        const active = (Object.keys(s.raised) as AlertKey[]).filter((k) => ROWS[k]?.banner && s.raised[k]?.endedAt === undefined).length;
+        // A role granted, the community claimed, a key changed: counted for a day, or until an owner acknowledges them.
+        const recent = new Set(s.history.filter((e) => SECURITY_ONE_SHOTS.has(e.key) && t - e.at < SECURITY_BANNER_MS
+            && e.at > (s.acked.oneShotsAt ?? 0)).map((e) => e.key));
+        return active + recent.size;
     } catch {
         return 0;
     }

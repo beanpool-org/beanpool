@@ -47,6 +47,7 @@ import {
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
+import { noteSecurityEvent } from '../services/security-signal.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -765,6 +766,10 @@ router.post('/api/local/admin/auth/retire-password', async (ctx) => {
     const ended = endPasswordSessions();
     const who = `${callsign || 'an owner'} (${String(state.actor).slice(0, 12)}…)`;
     logger.security('AUTH', `The admin password was retired for good by ${who}${oneOwner ? ', who accepted being the only owner' : ''}; ${ended} password session(s) ended`);
+    noteSecurityEvent({
+        key: 'sec.keys',
+        detail: `The admin password was retired for good, by an owner; ${ended} password session${ended === 1 ? '' : 's'} ended. Owners now sign in with their keys.`,
+    });
     adminBroadcastAnnouncement('Admin Password Retired',
         `${callsign || 'An owner'} retired this community's admin password. Settings now opens only with an owner's or admin's phone. If you did not expect this, tell your community's owners.`,
         'critical');

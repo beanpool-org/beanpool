@@ -22,6 +22,7 @@ import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession,
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, PASSWORD_RETIRED_CODE, type AdminRole } from '../admin-auth.js';
 import { logger } from '../logger.js';
+import { noteSecurityEvent } from '../services/security-signal.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
 import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
@@ -777,6 +778,10 @@ router.post('/api/local/admin/2fa/backup-codes', async (ctx) => {
     updateLocalConfig({ totpBackupCodesHashes: backupCodes.map(hashBackupCode) });
     const by = (ctx.state as any).isKeySession ? `owner ${String((ctx.state as any).actor).slice(0, 12)}…` : 'the admin password';
     logger.security('AUTH', `New 2FA backup codes were made by ${by}; the old ones no longer work`);
+    noteSecurityEvent({
+        key: 'sec.keys',
+        detail: `New 2FA backup codes for the admin password were made, ${(ctx.state as any).isKeySession ? 'by an owner' : 'with the admin password'}; the old ones no longer work.`,
+    });
     ctx.body = { success: true, backupCodes };
 });
 

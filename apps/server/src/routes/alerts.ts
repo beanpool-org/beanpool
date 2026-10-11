@@ -9,7 +9,7 @@
 import Router from '@koa/router';
 import type { RouteDeps } from './types.js';
 import { requireAdminRole } from '../admin-auth.js';
-import { getAlertsStatus, sendTestAlert, updateAlertChannel } from '../services/alerts.js';
+import { acknowledgeSecurityAlerts, getAlertsStatus, sendTestAlert, updateAlertChannel } from '../services/alerts.js';
 
 export const ALERTS_OWNER_ONLY = "Only an owner of this node can see or change its alerts and where they're sent";
 
@@ -54,6 +54,14 @@ export function createAlertsRoutes(deps: RouteDeps): Router {
         const result = await sendTestAlert();
         ctx.set('Cache-Control', 'no-store');
         ctx.body = { ...result, status: getAlertsStatus() };
+    });
+
+    // "Seen": the security events told so far leave the banner, and a replaced server's urgent alert ends.
+    router.post('/api/local/admin/alerts/acknowledge', async (ctx) => {
+        if (!(await ownerOnly(ctx))) return;
+        const result = await acknowledgeSecurityAlerts();
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = { success: true, ...result, status: getAlertsStatus() };
     });
 
     return router;

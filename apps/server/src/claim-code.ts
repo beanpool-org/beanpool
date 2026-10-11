@@ -38,6 +38,7 @@ import { grantNodeRole, nodeHasOwner } from './engine/node-roles.js';
 import { registerMemberInternal } from './engine/members.js';
 import { BREAK_GLASS_WHILE_BRAKED_MS } from './admin-auth.js';
 import { logger } from './logger.js';
+import { noteSecurityEvent } from './services/security-signal.js';
 
 export const CLAIM_CODE_FILE = 'claim-code.txt';
 const CODE_SHAPE = /^claim-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/;
@@ -243,7 +244,13 @@ function claimLogWindowMs(): number {
 function writeClaimLogSummary(): void {
     if (logSummaryTimer) clearTimeout(logSummaryTimer);
     logSummaryTimer = null;
-    if (logUnwritten > 0) logger.security('AUTH', `…and ${logUnwritten} more wrong claim proofs were refused in that minute, past the ${CLAIM_LOG_BUDGET} logged one by one`);
+    if (logUnwritten > 0) {
+        logger.security('AUTH', `…and ${logUnwritten} more wrong claim proofs were refused in that minute, past the ${CLAIM_LOG_BUDGET} logged one by one`);
+        noteSecurityEvent({
+            key: 'sec.claim-guess', state: 'seen',
+            detail: `${CLAIM_LOG_BUDGET + logUnwritten} wrong claim proofs were refused in one minute: someone is guessing at this community's claim code.`,
+        });
+    }
     logUnwritten = 0;
 }
 
@@ -335,6 +342,7 @@ export function claimNode(params: {
     updateLocalConfig({ claim: { id: claim.id, createdAt: claim.createdAt, claimedBy: pubkey, claimedAt: now } });
     removeClaimFile('This community was claimed');
     logger.security('AUTH', `This community was CLAIMED with its one-time claim code ${claim.id} by @${callsign} (key ${pubkey.slice(0, 12)}…, from ${params.source}${created ? ', who joined with it' : ''}): they are its owner`);
+    noteClaimed('in the app');
     return { ok: true, memberPubkey: pubkey, callsign, role: 'owner', created, again: false };
 }
 
@@ -347,6 +355,15 @@ export function burnClaimFromShell(id: string, pubkey: string): void {
     const c = getLocalConfig().claim;
     if (c && c.id === id && !c.claimedBy) updateLocalConfig({ claim: { id: c.id, createdAt: c.createdAt, claimedBy: pubkey, claimedAt: Date.now() } });
     removeClaimFile('This community was claimed from the server');
+    noteClaimed('from the server (beanpool claim)');
+}
+
+/** Tells the owners the community was claimed: how, never by whom (services/security-signal.ts sec.claim). */
+function noteClaimed(how: string): void {
+    noteSecurityEvent({
+        key: 'sec.claim',
+        detail: `This community was claimed with its one-time claim code, ${how}: whoever used it is its owner now. Open Settings to see who.`,
+    });
 }
 
 /** The key as the community keeps keys (lower-case hex), or null. */

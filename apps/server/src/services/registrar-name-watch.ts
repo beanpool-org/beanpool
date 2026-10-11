@@ -70,6 +70,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../state-engine.js';
 import { logger } from '../logger.js';
+import { noteSecurityEvent } from './security-signal.js';
 import { forgetOwnAddresses } from '../engine/own-addresses.js';
 import { setLostAddressRefusedHandler } from '../engine/member-signature.js';
 import {
@@ -452,7 +453,26 @@ function standingOf(lost: RegistrarNameLost | null, w: NameWatch): Standing {
 
 const key16 = (k: string | null) => (k ? `${k.slice(0, 16)}…` : 'a key it did not name');
 
+/** The owners' alert for a name lost or back (services/alerts.ts sec.name): never the other community's key. */
+function noteNameStanding(standing: Standing): void {
+    if (standing === 'lost-another-key') {
+        noteSecurityEvent({
+            key: 'sec.name', state: true,
+            detail: "The address service names another community's key as the holder of this community's address, and the address "
+                + 'answers as that community: what apps sign for this community there is refused. Open Settings → Public address.',
+        });
+    } else if (standing === 'lost-released') {
+        noteSecurityEvent({
+            key: 'sec.name', state: true,
+            detail: "This community released its address and the hold is over: what apps sign for it there is refused. Claiming it again brings it back.",
+        });
+    } else if (standing === 'held') {
+        noteSecurityEvent({ key: 'sec.name', state: false, detail: "This community's address is its own again." });
+    }
+}
+
 function logChange(host: string, standing: Standing, w: NameWatch, lost: RegistrarNameLost | null): void {
+    noteNameStanding(standing);
     switch (standing) {
         case 'lost-another-key':
             logger.security('AUTH', `[Names] ${host}: the address service names another community's key (${key16(lost?.holderKey ?? null)}) as its holder, `

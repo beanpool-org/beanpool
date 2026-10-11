@@ -13,8 +13,9 @@ import { beginAccountEpoch } from './lib/account-epoch';
 import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
-import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, getGroup, type CommunityInfo, type MarketplaceTransaction, type Group } from './lib/api';
+import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, type CommunityInfo, type MarketplaceTransaction, type Group } from './lib/api';
 import { GroupDetailModal } from './components/GroupDetailModal';
+import { GroupVotesSheet, landOnGroup } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { SyncStatus } from './components/SyncStatus';
@@ -180,6 +181,8 @@ export function App() {
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
     // A chat group's info, opened over whatever is on screen: Home's vote line lands here (DESIGN-group-decisions S3).
     const [openGroup, setOpenGroup] = useState<Group | null>(null);
+    // A group whose own read is refused, but whose votes still hold the reader (removed mid-vote from an invite-only group).
+    const [openGroupVotes, setOpenGroupVotes] = useState<string | null>(null);
     const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
 
     useEffect(() => {
@@ -300,10 +303,14 @@ export function App() {
             return;
         }
         // A group's vote: the group's info, where its Decisions block is. Read first, so the sheet opens whole; a group
-        // that can't be read now opens Commons, where groups are listed.
+        // that can't be read now opens just its votes when they still hold the reader (#1784 review B1), else Commons.
         if (tab === 'group') {
             if (contextId) {
-                getGroup(contextId).then(g => setOpenGroup(g)).catch(() => setActiveTab('projects'));
+                landOnGroup(contextId).then(l => {
+                    if (l.kind === 'group') setOpenGroup(l.group);
+                    else if (l.kind === 'votes') setOpenGroupVotes(l.groupId);
+                    else setActiveTab('projects');
+                });
             }
             return;
         }
@@ -999,6 +1006,9 @@ export function App() {
                             onClose={() => setOpenGroup(null)}
                             myPubkey={identity?.publicKey}
                         />
+                    )}
+                    {openGroupVotes && (
+                        <GroupVotesSheet groupId={openGroupVotes} myPubkey={identity?.publicKey ?? null} onClose={() => setOpenGroupVotes(null)} />
                     )}
 
                     {/* Treasury Detail Overlay */}

@@ -21,6 +21,7 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { generateBreakGlassCode, hashBreakGlassCode } from './break-glass-code.js';
+import { noteSecurityEvent } from './services/security-signal.js';
 
 /** node_roles.granted_by for a grant made by this command. */
 export const RECOVER_ACTOR = 'server:recover';
@@ -154,6 +155,12 @@ export function deliverRecoverNotices(deps: DeliverDeps, dir = dataDir()): numbe
             deps.changed?.();
             deps.announce('Owner added from the server', body, 'critical');
         } catch { /* the log line below still records it */ }
+        // The owners' alert (services/alerts.ts): what and how, never who. A claim is told as the community claimed (burnClaim).
+        if (typeof notice.claimId !== 'string') {
+            noteSecurityEvent(notice.alreadyOwner
+                ? { key: 'sec.keys', detail: "A new break-glass code was made for an owner, by the server's shell (beanpool recover); any earlier code of theirs no longer works.", actor: RECOVER_ACTOR, actorRole: "server's shell", high: true }
+                : { key: 'sec.role', detail: "Someone was made an owner, by the server's shell (beanpool recover). Open Settings to see who.", actor: RECOVER_ACTOR, actorRole: "server's shell", high: true });
+        }
         deps.log(`[RECOVER] ${body} (pubkey: ${notice.pubkey.slice(0, 12)}…, at ${notice.at})`);
         delivered++;
     }

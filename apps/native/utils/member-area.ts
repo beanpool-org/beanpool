@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { roundToArea, AREA_STEP_WORDS, areaWhyLine as coreWhyLine, describeArea } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import type { NodeFeatures } from './node-profile';
+import { noteAreaSent } from './nearby-area';
 
 export type ProfileStep = 'name' | 'avatar' | 'area' | 'guide';
 
@@ -117,7 +118,10 @@ export async function writeMemberArea(
                 return { ok: false, error: typeof data?.error === 'string' ? data.error : `The community said no (${res.status}). Try again later.` };
             }
             const data = await res.json().catch(() => ({}));
-            return { ok: true, area: readArea(data?.area) };
+            const area = readArea(data?.area);
+            // The phone's copy for its sync (utils/nearby-area.ts): the next posts read is the new neighbourhood, whole.
+            await noteAreaSent(url, identity.publicKey, area);
+            return { ok: true, area };
         }, options.timeoutMs ?? AREA_REQUEST_TIMEOUT_MS, options.signal);
     } catch {
         return { ok: false, error: "Couldn't reach the community. Check your connection and try again." };

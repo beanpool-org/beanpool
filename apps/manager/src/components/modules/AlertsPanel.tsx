@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { getAlertsStatus, saveAlertsChannel, sendTestAlert, getTfaSessionToken, type AlertsStatus } from '../../lib/node-client';
+import { acknowledgeAlerts, getAlertsStatus, saveAlertsChannel, sendTestAlert, getTfaSessionToken, type AlertsStatus } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
 
 /**
@@ -78,6 +78,8 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
     const test = () => run(() => sendTestAlert(activeNode.url, ...creds()),
         (r: { ok: boolean; error?: string }) => (r.ok ? 'Test sent: check your phone or channel.' : `The test did not go: ${r.error}.`));
 
+    const seen = () => run(() => acknowledgeAlerts(activeNode.url, ...creds()), 'Marked as seen.');
+
     const remove = () => run(() => saveAlertsChannel(activeNode.url, { remove: true }, ...creds()), 'Channel removed. Owners still get a push and the banner.');
 
     return (
@@ -88,7 +90,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                     <span>Alerts</span>
                 </h3>
                 <p className="text-xs text-nature-400 m-0 mt-0.5">
-                    When the disk fills, backups fail, the server restarts or its standby needs you, the owners get a push and a
+                    When the disk fills, backups fail, the server restarts, its standby needs you or someone gains power on it, the owners get a push and a
                     banner here. Optionally, alerts also go to a channel you choose: an ntfy topic or any webhook. Yours, never
                     BeanPool's. Alerts carry counts and your community's name, never a member's name or words.
                 </p>
@@ -108,7 +110,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                     <div className="space-y-2">
                         <h4 className="text-xs font-bold text-nature-300 m-0">Now</h4>
                         {status.active.length === 0 ? (
-                            <p className="text-xs text-nature-400 m-0">Nothing needs you.</p>
+                            (status.recent ?? []).length === 0 && <p className="text-xs text-nature-400 m-0">Nothing needs you.</p>
                         ) : status.active.map((a) => (
                             <div key={a.key} className="flex flex-wrap items-start gap-2 min-w-0">
                                 <span className={`px-2 py-0.5 rounded-lg text-xs font-bold shrink-0 ${PRIORITY_LABEL[a.priority]?.className ?? ''}`}>
@@ -117,6 +119,20 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                                 <span className="text-xs text-white min-w-0 flex-1 break-words">{a.detail} <span className="text-nature-500">Since {when(a.since)}.</span></span>
                             </div>
                         ))}
+                        {(status.recent ?? []).map((r, i) => (
+                            <div key={`${r.key}-${r.at}-${i}`} className="flex flex-wrap items-start gap-2 min-w-0" data-testid="alerts-recent">
+                                <span className={`px-2 py-0.5 rounded-lg text-xs font-bold shrink-0 ${PRIORITY_LABEL[r.priority]?.className ?? ''}`}>
+                                    {PRIORITY_LABEL[r.priority]?.text ?? r.priority}
+                                </span>
+                                <span className="text-xs text-white min-w-0 flex-1 break-words">{r.detail} <span className="text-nature-500">{when(r.at)}.</span></span>
+                            </div>
+                        ))}
+                        {status.acknowledge && (
+                            <button type="button" disabled={busy} onClick={() => void seen()}
+                                className="px-4 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white disabled:opacity-50">
+                                Seen
+                            </button>
+                        )}
                     </div>
 
                     <div className="space-y-2">

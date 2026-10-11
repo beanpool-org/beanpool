@@ -131,6 +131,7 @@ import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { scrubServerFaults } from './routes/member-error-text.js';
 import { apiCompression, apiGzipFromEnv, API_GZIP_ENV } from './api-compression.js';
+import { tlsSendWindows } from './tls-send-window.js';
 import { CommonsPotUnknownError } from './engine/audit.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createAppleReturnRoutes } from './routes/apple-return.js';
@@ -1163,6 +1164,11 @@ export async function startHttpsServer(port: number): Promise<number> {
         ctx.request.ip = clientIp(ctx);
         await next();
     });
+
+    // A large answer goes to a TLS connection 64 KB at a time, so an idle connection doesn't keep the answer's size in
+    // memory after it has gone (tls-send-window.ts, #1746). Before every middleware that sets or changes a body, so it
+    // sends the final one: its work is after next().
+    app.use(tlsSendWindows());
 
     // An /api answer is gzipped for a reader that asks (api-compression.ts). First of those that set or change a body,
     // so it compresses the final one: its work is after next(). API_GZIP=off in .env leaves it out altogether.

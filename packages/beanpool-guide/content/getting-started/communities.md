@@ -38,7 +38,7 @@ On a new phone with no account yet, use **Explore BeanPool worldwide** on the fi
 The global community has listings from everywhere, far more than a phone needs to hold. So your phone keeps the ones near you:
 
 - the nearest 500 listings within 250 km of your area, the rough place you gave when you joined. See "Your area";
-- your own listings, and any listing you have a deal or a conversation about, wherever they are.
+- your own listings, and any listing you have a deal in progress or a conversation about, wherever they are.
 
 The Market's list and the Map on your phone show what your phone keeps. New listings near your area come in as they are posted. If you change your area, your phone swaps in the listings near the new one.
 

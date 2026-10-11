@@ -2658,7 +2658,7 @@ function castScopedVote(decision: Decision, voterPubkey: string, support: boolea
         VALUES (?, ?, ?, 1, 0, ?, ?, ?)
         ON CONFLICT(decision_id, voter_pubkey) DO NOTHING
     `).run(decision.id, voterPubkey, support ? 1 : 0, signature || null, now, now);
-    if (wrote.changes === 0) return { success: false, creditsUsed: 0, error: SCOPED_ALREADY_VOTED };
+    if (wrote.changes === 0) return { success: false, creditsUsed: 0, error: decision.scopeKind === 'group' ? GROUP_ALREADY_VOTED : SCOPED_ALREADY_VOTED };
     broadcast({ type: 'decision_vote_cast', decisionId: decision.id }, electorsOf(decision.id));
     return { success: true, creditsUsed: 0 };
 }
@@ -2790,6 +2790,7 @@ export const GROUP_NO_ADMIN_HALT = "A group's vote has no admin halt: node admin
 export const GROUP_ROLL_OF_ONE = 'Nobody else in this group can vote, so there is nobody to vote with.';
 /** Off a group vote's roll: an observer, someone who joined after it opened, or who left during it. */
 export const GROUP_NOT_ON_ROLL = "Only the group's members and convenors on this vote's roll can vote on it. Observers watch.";
+export const GROUP_ALREADY_VOTED = "You have already voted on this. A group's vote can't be changed.";
 export const GROUP_OBSERVER_NO_VOTE = 'Observers watch a group’s votes. Only its members and convenors vote.';
 export const GROUP_ONE_OPEN = 'You already have an open vote in this group. Wait for it to close first.';
 export const GROUP_CLOSED_VOID = 'The group is closed';

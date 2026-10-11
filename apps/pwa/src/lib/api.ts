@@ -12,6 +12,8 @@ import {
     buildInviteTicket,
     ed25519Signer,
     type Signer,
+    signReEnroll,
+    audienceOf,
     onboardingEventKey,
     oncePerPersonVariant,
     type PublicCreatorChannel,
@@ -122,6 +124,17 @@ export async function buildOfflineInviteCode(
 ): Promise<string> {
     const ticket = await buildInviteTicket(nodeAddress(), inviterPublicKey, memberSigner(privateKeyHex), { intendedFor });
     return `BP-${ticket.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
+}
+
+/**
+ * A re-key ask's proof of possession (lib/web-rekey.ts, #1768): core's signReEnroll, `0xFF ‖ beanpool-re-enroll/2\nHOST\nCODE`,
+ * for the node this web app talks to, signed by the key the ask wants bound.
+ */
+export async function signReEnrollAsk(code: string, privateKeyHex: string): Promise<{ signature: string; signedFor: string }> {
+    const base = nodeAddress();
+    const host = audienceOf(base);
+    if (!host) throw new Error('Cannot sign a re-key ask: this page names no community');
+    return { signature: await signReEnroll(base, code, memberSigner(privateKeyHex)), signedFor: host };
 }
 
 // Base request helper with auth

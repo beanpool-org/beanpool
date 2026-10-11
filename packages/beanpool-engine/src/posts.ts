@@ -1055,7 +1055,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
 const UNSPACED_SCRIPT = /[฀-໿က-႟ក-៿぀-ヿㇰ-ㇿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ]|[\ud840-\ud87f][\udc00-\udfff]/;
 
 /**
- * The search, as one condition on `p` and its parameters, for getPosts and getPostCount alike; null for no words. Any
+ * The search, as one condition on `p` and its parameters, for getPosts; null for no words. Any
  * word may match (OR), each as the start of a word in posts_fts, as it always has.
  *
  * posts_fts's unicode61 parts words at spaces and punctuation, so a run of Chinese, Japanese or Thai is one token and a
@@ -1871,72 +1871,3 @@ export function getActivePostCount(db: Db): number {
     return row?.c || 0;
 }
 
-export function getPostCount(db: Db, filter?: {
-    type?: string;
-    category?: string;
-    status?: string;
-    query?: string;
-    audienceScope?: AudienceScope | string;
-    viewerPubkey?: string;
-    targetGroupId?: string;
-    includeAllScopes?: boolean;
-}): number {
-    let query = "SELECT COUNT(*) as c FROM posts p WHERE p.active = 1";
-    const params: any[] = [];
-
-    const viewer = filter?.viewerPubkey;
-    if (filter?.includeAllScopes) {
-        // Internal lookup bypasses feed scoping
-    } else if (filter?.audienceScope === 'public') {
-        query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
-    } else if (filter?.audienceScope === 'group') {
-        query += " AND p.audience_scope = 'group'";
-        if (!viewer) {
-            query += " AND 1=0";
-        } else {
-            query += " AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))";
-            params.push(viewer, viewer);
-        }
-    } else if (filter?.audienceScope === 'direct') {
-        query += " AND p.audience_scope = 'direct'";
-        if (!viewer) {
-            query += " AND 1=0";
-        } else {
-            query += " AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?)";
-            params.push(viewer, viewer, viewer);
-        }
-    } else {
-        if (!viewer) {
-            query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
-        } else {
-            query += ` AND (
-                (p.audience_scope IS NULL OR p.audience_scope = 'public')
-                OR (p.audience_scope = 'group' AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active')))
-                OR (p.audience_scope = 'direct' AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?))
-            )`;
-            params.push(viewer, viewer, viewer, viewer, viewer);
-        }
-    }
-
-    // Hidden by reports (G3): counted for its author only, as getPosts lists it.
-    if (!filter?.includeAllScopes) {
-        if (viewer) { query += " AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)"; params.push(viewer); }
-        else query += " AND p.hidden_by_reports_at IS NULL";
-    }
-    if (filter?.targetGroupId) { query += " AND p.target_group_id = ?"; params.push(filter.targetGroupId); }
-    if (filter?.type && filter.type !== 'all') { query += " AND p.type = ?"; params.push(filter.type); }
-    if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }
-    if (filter?.status) { query += " AND p.status = ?"; params.push(filter.status); }
-
-    const search = searchCondition(filter?.query);
-    if (search) {
-        query += ` AND ${search.sql}`;
-        params.push(...search.params);
-        if (filter?.type !== 'poll') {
-            query += " AND p.type != 'poll'";
-        }
-    }
-
-    const row = db.prepare(query).get(...params) as any;
-    return row?.c || 0;
-}

@@ -20,7 +20,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, tickDecisions, removeGroupMember, joinGroup, postGroupThreadMessage, createPost, GROUP_CLOSED } from './state-engine.js';
+import { initStateEngine, tickDecisions, removeGroupMember, joinGroup, postGroupThreadMessage, createPost, requestPost, GROUP_CLOSED } from './state-engine.js';
 import { GROUP_CLOSED_TO_POSTS } from './engine/posts.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
@@ -51,12 +51,12 @@ function makeMember(callsign: string, balance = 50): Id {
     return id;
 }
 
-type Signed = { status: number; body: any; error?: string; replay: () => Promise<{ status: number; body: any }> };
+type Signed = { status: number; body: any; error?: string; etag?: string | null; replay: () => Promise<{ status: number; body: any }> };
 
 /** The replay-proof scheme the real middleware requires: method + path (without its query) + timestamp + nonce + body. */
-async function signedFetch(method: 'GET' | 'POST', path: string, body: unknown, id: Id | null): Promise<Signed> {
+async function signedFetch(method: 'GET' | 'POST', path: string, body: unknown, id: Id | null, extra: Record<string, string> = {}): Promise<Signed> {
     const bodyString = method === 'GET' ? '' : JSON.stringify(body ?? {});
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...extra };
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     if (id) {
         const ts = Date.now();
@@ -71,7 +71,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body: unknown, 
         const res = await fetch(`${BASE}${path}`, { method, headers, body: method === 'GET' ? undefined : bodyString });
         let json: any;
         try { json = await res.json(); } catch { /* not JSON */ }
-        return { status: res.status, body: json };
+        return { status: res.status, body: json, etag: res.headers.get('etag') };
     };
     const first = await send();
     return { ...first, error: first.body?.error, replay: send };
@@ -215,6 +215,19 @@ async function main(): Promise<void> {
     const g3 = makeGroup('Tool Guild', [{ id: p, role: 'convenor' }, { id: q, role: 'member' }, { id: r, role: 'member' }]);
     const other = (await propose(g3, p, { effect: 'set_join_policy', params: { policy: 'request_to_join' } })).body?.decision?.id as string;
     const closeIt = (await propose(g3, q, { effect: 'close_group', title: 'Close the guild' })).body?.decision?.id as string;
+    // The guild's live posts, to see the close cancel them as a delete does (#1777 review N3): an offer someone has asked
+    // for, and an event; and a member's feed, cached before the close.
+    for (const k of [p, q, r]) db.prepare("UPDATE members SET avatar_ref = 'test-photo' WHERE public_key = ?").run(k.pubKeyHex);
+    const groupOnly = { audienceScope: 'group' as const, targetGroupId: g3 };
+    const drill = createPost('offer', 'general', 'Guild drill', 'A drill to lend', 5, 'fixed', p.pubKeyHex, undefined, undefined, undefined, false, undefined, false, groupOnly);
+    createPost('offer', 'general', 'Guild ladder', 'A ladder to lend', 5, 'fixed', q.pubKeyHex, undefined, undefined, undefined, false, undefined, false, groupOnly);
+    const asked = requestPost(drill!.id, q.pubKeyHex);
+    const soon = Date.now() + 3 * 86400_000;
+    const meet = createPost('event', 'general', 'Guild meet', 'The monthly meet', 0, 'fixed', p.pubKeyHex, -28.55, 153.5, undefined, false, undefined, false,
+        { ...groupOnly, eventStartAt: new Date(soon).toISOString(), eventEndAt: new Date(soon + 7200_000).toISOString() });
+    const feedBefore = await signedFetch('GET', '/api/marketplace/posts', null, r);
+    assert(!!drill && !!meet && asked?.status === 'requested' && JSON.stringify(feedBefore.body).includes(drill!.id) && !!feedBefore.etag,
+        `the guild has an offer asked for and an event, and Rae's feed shows them (got ${asked?.status} ${feedBefore.status} ${feedBefore.etag})`);
     assert(!!other && !!closeIt, 'two votes open in the guild');
     await vote(g3, closeIt, p, true);
     tickDecisions();
@@ -227,6 +240,14 @@ async function main(): Promise<void> {
     assert(row(other).status === 'execution_void' && row(other).execution_reason === GROUP_CLOSED_VOID,
         `closing voids the group's other open vote (got ${row(other).status} ${row(other).execution_reason})`);
     assert(!!groupRow(g3), 'the group row stays');
+    const postRow = (id: string) => db.prepare('SELECT active, status, event_state, target_group_id FROM posts WHERE id = ?').get(id) as any;
+    const tradeRow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(asked.id) as any;
+    assert(postRow(drill!.id).status === 'cancelled' && postRow(drill!.id).active === 0 && postRow(drill!.id).target_group_id === g3
+        && postRow(meet!.id).event_state === 'cancelled' && tradeRow?.status === 'rejected',
+        `closing cancels the guild's posts as a delete does: the event too, and the deal asked for is declined (got ${JSON.stringify({ drill: postRow(drill!.id), meet: postRow(meet!.id), trade: tradeRow })})`);
+    const feedAfter = await signedFetch('GET', '/api/marketplace/posts', null, r, { 'If-None-Match': feedBefore.etag! });
+    assert(feedAfter.status === 200 && !JSON.stringify(feedAfter.body).includes(drill!.id) && feedAfter.etag !== feedBefore.etag,
+        `a feed cached before the close is answered afresh, without the posts (got ${feedAfter.status}, ${feedBefore.etag} → ${feedAfter.etag})`);
     let joinErr = '';
     try { joinGroup(g3, outsider.pubKeyHex); } catch (e: any) { joinErr = e.message; }
     assert(joinErr === GROUP_CLOSED, `a closed group takes nobody new (got ${joinErr})`);
@@ -234,7 +255,6 @@ async function main(): Promise<void> {
     try { postGroupThreadMessage(g3, p.pubKeyHex, { text: 'hello' } as any); } catch (e: any) { postErr = e.message; }
     assert(postErr === GROUP_CLOSED, `a closed group takes no new chat line (got ${postErr})`);
     // No new post of any kind: an offer, a need, a poll or an event, from the engine or over HTTP (#1777 review B2).
-    for (const k of [q, r]) db.prepare("UPDATE members SET avatar_ref = 'test-photo' WHERE public_key = ?").run(k.pubKeyHex);
     for (const type of ['offer', 'need', 'poll', 'event'] as const) {
         let err = '', made: unknown = null;
         try {

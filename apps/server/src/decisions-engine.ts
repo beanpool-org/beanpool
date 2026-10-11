@@ -1599,7 +1599,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 }
                 case 'close_group': {
                     const gid = decision.scopeId!;
-                    closeGroupByVote(gid, decision.id);
+                    const cancelledPosts = closeGroupByVote(gid, decision.id);
                     // Every other open vote on the group is void: nothing is left to act on (§2.6).
                     const others = db.prepare(`
                         SELECT id FROM decisions WHERE scope_kind = 'group' AND scope_id = ? AND id != ?
@@ -1610,7 +1610,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                             .run(now, GROUP_CLOSED_VOID, now, o.id);
                         cancelledDecisionIds.push(o.id);
                     }
-                    afterCommit.push(() => afterGroupVote(gid, { kind: 'closed', text: GROUP_CLOSED_LINE }));
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'closed', text: GROUP_CLOSED_LINE, cancelledPosts }));
                     break;
                 }
                 default:

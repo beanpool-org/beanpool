@@ -337,6 +337,8 @@ import {
 import {
     createPost as createPostEngine,
     removePost as removePostEngine,
+    cancelClosedGroupPosts,
+    announceClosedGroupPosts,
     updatePost as updatePostEngine,
     pausePost as pausePostEngine,
     resumePost as resumePostEngine,
@@ -9824,19 +9826,25 @@ export function setGroupJoinPolicyByVote(groupId: string, policy: JoinPolicy): v
 
 /**
  * close_group (§2.3): the row stays and is marked closed, so "Your groups" and its history stay honest; its posts are
- * cancelled as the delete trigger cancels them, but they keep their group, so nobody outside it ever sees them.
+ * cancelled as a delete cancels one (engine/posts.ts cancelClosedGroupPosts), but they keep their group, so nobody
+ * outside it ever sees them. What it returns goes to afterGroupVote, which announces the posts after the commit.
  */
-export function closeGroupByVote(groupId: string, decisionId: string): void {
+export function closeGroupByVote(groupId: string, decisionId: string): ReturnType<typeof cancelClosedGroupPosts> {
     const now = new Date().toISOString();
     db.prepare('INSERT OR IGNORE INTO group_closures (group_id, decision_id, closed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
         .run(groupId, decisionId, now, now, now);
-    db.prepare("UPDATE posts SET active = 0, status = 'cancelled', updated_at = ? WHERE target_group_id = ? AND active = 1").run(now, groupId);
+    const cancelled = cancelClosedGroupPosts(groupId);
     db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, groupId);
+    return cancelled;
 }
 
 /** After a group's vote was carried out (after its commit): the chat follows, the group hears, a line says what changed. */
-export function afterGroupVote(groupId: string, change: { kind: 'role' | 'lead' | 'removed' | 'policy' | 'closed'; target?: string | null; text: string }): void {
+export function afterGroupVote(groupId: string, change: { kind: 'role' | 'lead' | 'removed' | 'policy' | 'closed'; target?: string | null; text: string; cancelledPosts?: ReturnType<typeof cancelClosedGroupPosts> }): void {
     const target = change.target || null;
+    if (change.cancelledPosts) {
+        try { announceClosedGroupPosts(broadcast, change.cancelledPosts, dispatchPushNotification); }
+        catch (e) { console.warn('[Groups] Could not announce a closed group\'s posts:', e); }
+    }
     try {
         if (target) syncGroupThreadMembership(groupId, target);
         const type = change.kind === 'role' ? GroupSystemType.ROLE_CHANGED

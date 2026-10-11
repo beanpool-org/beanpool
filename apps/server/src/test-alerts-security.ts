@@ -146,7 +146,7 @@ async function main(): Promise<void> {
     grantNodeRole(admin, 'admin', owner);
     grantNodeRole(moderator, 'moderator', owner);
     for (const [pk, token] of [[owner, 'ExponentPushToken[olive-owner]'], [admin, 'ExponentPushToken[adam-admin]'],
-        [moderator, 'ExponentPushToken[mo-moderator]'], [member, 'ExponentPushToken[zed-member]']]) {
+        [moderator, 'ExponentPushToken[mo-moderator]'], [member, 'ExponentPushToken[zed-member]'], [helper, 'ExponentPushToken[hal-helper]']]) {
         putPushTokenRow(pk, token, 'android');
     }
     const session = (pk: string, role: 'owner' | 'admin' | 'moderator') => {
@@ -215,6 +215,9 @@ async function main(): Promise<void> {
     assert(revoke.status === 200, `1. the owner takes it away through the real route (${revoke.status})`);
     assert(ownerPushes().length === p0 + 2 && topicHits().length === h0 + 2, `1. one more push and one more line (${ownerPushes().length - p0}, ${topicHits().length - h0})`);
     assert(/An admin lost that role, by an owner\./.test(topicHits().at(-1)?.body ?? ''), '1. naming the role taken away, and how');
+    const lostPush = ownerPushes().at(-1)?.to ?? [];
+    assert(lostPush.length === 2 && lostPush.includes('ExponentPushToken[olive-owner]') && lostPush.includes('ExponentPushToken[hal-helper]'),
+        `1. pushed to the owners and to the admin who lost the role, read before the change (${JSON.stringify(lostPush)})`);
 
     // ── 2. One per source ───────────────────────────────────────────────────────────────────────────────────────────
     grantNodeRole(helper, 'moderator', 'owner:password');
@@ -369,7 +372,9 @@ async function main(): Promise<void> {
     await settle(300);
     // What the phone shows of an owner's push: its title, body and data. The row's recipient is whom it is for (an owner).
     const notices = db.prepare(`SELECT recipient, title, body, data FROM push_notices WHERE kind = 'owner.alert'`).all() as any[];
-    assert(notices.length > 5 && notices.every((n) => n.recipient === owner), `4. ${notices.length} owner.alert notices, every one for the owner`);
+    assert(notices.length > 5 && notices.every((n) => n.recipient === owner || n.recipient === helper)
+        && notices.some((n) => n.recipient === helper),
+        `4. ${notices.length} owner.alert notices, every one for the owner but those for the admin each time they lost that role`);
     const payloads = [
         ...ntfy.hits.map((h) => JSON.stringify(h.headers) + h.body),
         ...ownerPushes().map((p) => p.title + p.body),

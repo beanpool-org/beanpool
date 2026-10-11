@@ -213,8 +213,12 @@ const HOW: Record<string, string> = {
  * Tells the owners a role changed: which role and how, never whose (services/security-signal.ts). Bounded per actor
  * and hour there; an owner made or removed, or break-glass, is high (never folded out of the channel or the card).
  */
-function noteRoleAlert(detail: string, stillTrue: () => boolean, a: { actor?: string; actorRole: string; high: boolean }): void {
-    noteSecurityEvent({ key: 'sec.role', detail: `${detail} Open Settings to see who.`, stillTrue, actor: a.actor || 'SYSTEM', actorRole: a.actorRole, high: a.high });
+function noteRoleAlert(detail: string, stillTrue: () => boolean, a: { actor?: string; actorRole: string; high: boolean; lostBy?: string }): void {
+    noteSecurityEvent({
+        key: 'sec.role', detail: `${detail} Open Settings to see who.`, stillTrue, actor: a.actor || 'SYSTEM', actorRole: a.actorRole, high: a.high,
+        // An owner or admin who lost that role is pushed too: with one owner's key stolen, the other owner hears of it.
+        alsoPush: a.lostBy ? [a.lostBy] : undefined,
+    });
 }
 
 /**
@@ -349,7 +353,8 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
     if (before !== role && !actorPubkey?.startsWith('claim:')) {
         const was = before ? `${withArticle(before).replace(/^a/, 'A')} was made` : 'Someone was made';
         noteRoleAlert(`${was} ${withArticle(role)}, ${howChanged}.`, () => heldNodeRoleOf(targetPubkey) === role,
-            { actor: actorPubkey, actorRole, high: role === 'owner' || before === 'owner' || /break-glass/.test(howChanged) });
+            { actor: actorPubkey, actorRole, high: role === 'owner' || before === 'owner' || /break-glass/.test(howChanged),
+                lostBy: before === 'owner' || before === 'admin' ? targetPubkey : undefined });
     }
 }
 
@@ -412,7 +417,7 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
     noteTakeoverInputsChanged(`${role} role revoked`);
     if (removed) {
         noteRoleAlert(`${withArticle(role).replace(/^a/, 'A')} lost that role, ${HOW[actorRole]}.`, () => heldNodeRoleOf(targetPubkey) !== role,
-            { actor: actorPubkey, actorRole, high: role === 'owner' });
+            { actor: actorPubkey, actorRole, high: role === 'owner', lostBy: role === 'owner' || role === 'admin' ? targetPubkey : undefined });
     }
 }
 

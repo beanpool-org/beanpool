@@ -14,7 +14,12 @@ export function ConsentText({ text, fontSize }: { text: string; fontSize: string
             <p style={p}>{summary}</p>
             {rest.length > 0 && (
                 <details style={{ margin: '0 0 0.5rem' }}>
-                    <summary style={{ fontSize, fontWeight: 700, cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>Read all of it</summary>
+                    <summary
+                        className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                        style={{ fontSize, fontWeight: 700, cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}
+                    >
+                        Read all of it
+                    </summary>
                     {rest.map((b, i) => b.item
                         ? <ul key={i} style={{ ...p, paddingLeft: '1.25rem' }}><li>{b.text}</li></ul>
                         : <p key={i} style={p}>{b.text}</p>)}

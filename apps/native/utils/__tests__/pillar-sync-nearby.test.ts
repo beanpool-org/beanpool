@@ -105,6 +105,8 @@ const realFetch = globalThis.fetch;
 /** Every request the phone made: method, path + query, status as the app saw it, and whether a 304 stood behind it. */
 let sent: { method: string; url: string; status: number; revalidated: boolean }[] = [];
 const elsewhere: string[] = [];
+/** A fault: the body a by-area read answers, rewritten (null leaves it). The node never sends such a body itself. */
+let tamper: ((path: string, body: string) => string | null) | null = null;
 /** The platform HTTP cache: the last 200 per URL, with its ETag. */
 const httpCache = new Map<string, { etag: string; body: string; headers: [string, string][] }>();
 
@@ -143,19 +145,24 @@ function expectedSet(area: { lat: number; lng: number }, places: Place[], own: s
     return new Set([...within, ...own]);
 }
 
-async function sync() {
+/** A cycle that may fail (a fault above): its result, as performSync answers it. */
+async function syncAllowingFailure() {
     sent = [];
     const nodeLoad = (Module as any)._load;
     (Module as any)._load = function (request: string, ...rest: unknown[]) {
         return request === 'react-native' ? { DeviceEventEmitter: { emit: () => {} } } : nodeLoad.call(this, request, ...rest);
     };
     try {
-        const r = await performSync();
-        expect(r.success, r.errorMessage).toBe(true);
-        return r;
+        return await performSync();
     } finally {
         (Module as any)._load = nodeLoad;
     }
+}
+
+async function sync() {
+    const r = await syncAllowingFailure();
+    expect(r.success, r.errorMessage).toBe(true);
+    return r;
 }
 
 beforeAll(async () => {
@@ -216,6 +223,8 @@ beforeAll(async () => {
             return new Response(cached.body, { status: 200, headers: merged });
         }
         sent.push({ method, url: path, status: res.status, revalidated: false });
+        const tampered = tamper && res.status === 200 ? tamper(path, await res.clone().text()) : null;
+        if (tampered !== null) return new Response(tampered, { status: 200, headers: res.headers });
         const etag = res.headers.get('etag');
         if (method === 'GET' && res.status === 200 && etag) {
             const body = await res.clone().text();
@@ -411,6 +420,37 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         await sync();
         expect(idReads().filter(r => /deal-/.test(r.url))).toEqual([]);
         expect(heldIds().has('deal-perth') && heldIds().has('deal-old-melb')).toBe(true);
+    }, START_MS);
+
+    it('a by-area answer that isn\'t the set\'s shape is a failed read: nothing written or dropped, the posts cursor stays', async () => {
+        await sync();
+        const cursorKey = [...mem.async.keys()].find(k => k.startsWith('pillar_sync_') && k.endsWith('_last-sync'))!;
+        const cursor = mem.async.get(cursorKey);
+        expect(cursor).toBeTruthy();
+        const heldBefore = heldIds();
+        // A listing near the member changes on the node; the answer that carries it names a set the phone can't read.
+        const edited = near.find(p => heldBefore.has(p.id))!;
+        await control('edit', { post: edited.id, lat: edited.lat + 0.001, lng: edited.lng });
+        const before = sql.prepare('SELECT lat, updated_at FROM posts WHERE id = ?').get(edited.id) as { lat: number; updated_at: string };
+        for (const bad of [
+            (b: any) => ({ ...b, set: [...b.set, 7] }), // an id that isn't a string
+            (b: any) => ({ ...b, set: undefined }), // no set at all
+            (b: any) => ({ ...b, tied: 'all' }), // a tied list that isn't one
+            (b: any) => ({ rows: b.posts }), // another shape altogether
+        ]) {
+            tamper = (path, body) => (path.includes('nearby=1') ? JSON.stringify(bad(JSON.parse(body))) : null);
+            const r = await syncAllowingFailure();
+            tamper = null;
+            expect(r.success).toBe(false);
+            expect(mem.async.get(cursorKey)).toBe(cursor);
+            expect(sorted(heldIds())).toEqual(sorted(heldBefore));
+            expect(sql.prepare('SELECT lat, updated_at FROM posts WHERE id = ?').get(edited.id)).toEqual(before);
+        }
+        // The next clean cycle reads the change from the same cursor.
+        await sync();
+        expect(mem.async.get(cursorKey)).not.toBe(cursor);
+        expect((sql.prepare('SELECT lat FROM posts WHERE id = ?').get(edited.id) as { lat: number }).lat).toBeCloseTo(edited.lat + 0.001, 6);
+        near = near.map(p => (p.id === edited.id ? { ...p, lat: p.lat + 0.001 } : p));
     }, START_MS);
 
     it('a node with the switch off: today\'s request, byte for byte, and no area read', async () => {

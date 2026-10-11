@@ -772,13 +772,21 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 result.errorMessage = viewRefusal;
                 return result;
             }
-            // A by-area community's answer carries its member's set (utils/posts-nearby.ts), read below on its own. One that
-            // doesn't (the node's switch went off since this phone heard its profile) is read as any other.
+            // A by-area community's answer carries its member's set (utils/posts-nearby.ts), read below on its own. A bare
+            // list (the node's switch went off since this phone heard its profile) is read as any other. Anything else is
+            // an answer this phone can't read: a failed read, so the cursor stays and the next cycle asks again, never a
+            // plain read that writes nothing and moves the cursor past what changed (the review of #1778, finding 6).
             let nearbyFirst: { posts: any[]; set: string[]; tied: string[] | null } | null = null;
             let nearbyPlain: any;
             if (nearbyLimits && postsRes.status !== 304) {
                 const body = JSON.parse(await postsRes.text());
                 nearbyFirst = nearbySetOf(body);
+                if (!nearbyFirst && !Array.isArray(body)) {
+                    timeouts.clear();
+                    result.durationMs = Date.now() - startTime;
+                    result.errorMessage = 'The listings answer by area was not one this phone can read';
+                    return result;
+                }
                 if (!nearbyFirst) nearbyPlain = body;
             }
             if (postsRes.status === 304) {

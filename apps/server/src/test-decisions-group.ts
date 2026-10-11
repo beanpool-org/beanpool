@@ -431,6 +431,78 @@ async function main(): Promise<void> {
         && (PUSH_NOTICE_KINDS['decision.open'].tab as string) !== 'chats',
         `each notice's details name the group's screen and id, nothing else (got ${JSON.stringify(lands)})`);
 
+    // ── 7. Yes / No follow the vote's own roll (#1784 review B1, N1, N2, N3): removed or made an observer mid-vote still
+    //       votes in the apps; a joiner is not offered it; the lead can't outlast a vote by moving voters off the group ──
+    for (const how of ['remove', 'observer'] as const) {
+        const [l7, a7, b7, c7, d7] = ['L', 'A', 'B', 'C', 'D'].map(n => makeMember(`${n}7${how.slice(0, 2)}`));
+        const g7 = makeGroup(`Swing ${how}`, [{ id: l7, role: 'convenor' }, { id: a7, role: 'member' }, { id: b7, role: 'member' }, { id: c7, role: 'member' }, { id: d7, role: 'member' }]);
+        const lead7 = (await propose(g7, a7, { effect: 'replace_lead_convenor', subject: b7.pubKeyHex, title: 'B7 leads' })).body.decision.id;
+        await vote(g7, lead7, a7, true);
+        const moved = [] as number[];
+        for (const t of [c7, d7]) moved.push(how === 'observer'
+            ? (await signedFetch('PATCH', `/api/groups/${g7}/members/${t.pubKeyHex}`, { role: 'observer' }, l7)).status
+            : (await signedFetch('DELETE', `/api/groups/${g7}/members/${t.pubKeyHex}`, {}, l7)).status);
+        const seen = await list(g7, c7);
+        const theirs = seen.body?.decisions?.find((x: any) => x.id === lead7);
+        assert(moved.every(s => s === 200) && seen.status === 200 && theirs?.canVote === true && seen.body?.onRoll === true && seen.body?.watching === false,
+            `${how} mid-vote: their list still offers this vote (canVote ${theirs?.canVote}, onRoll ${seen.body?.onRoll}, watching ${seen.body?.watching})`);
+        const one = await detail(g7, lead7, d7);
+        assert(one.body?.decision?.canVote === true, `${how} mid-vote: the vote's own read says they may vote (${one.body?.decision?.canVote})`);
+        // The apps cast only where canVote is true: as they allow it now, the vote is decided as the node's roll says.
+        for (const t of [c7, d7]) {
+            const card = (await list(g7, t)).body?.decisions?.find((x: any) => x.id === lead7);
+            if (card?.canVote === true) await vote(g7, lead7, t, true);
+        }
+        db.prepare('UPDATE decisions SET closes_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), lead7);
+        tickDecisions();
+        assert(row(lead7).status === 'executed' && groupRow(g7).lead_pubkey === b7.pubKeyHex,
+            `${how}: the lead can't outlast a vote to replace them by moving two voters off the group (got ${row(lead7).status}, ${row(lead7).execution_reason ?? ''})`);
+        const after = (await list(g7, c7)).body?.decisions?.find((x: any) => x.id === lead7);
+        assert(after?.canVote === false, `${how}: once it closed, nobody is offered a vote on it (${after?.canVote})`);
+    }
+
+    const [l7j, a7j, b7j, j7] = ['LJ7', 'AJ7', 'BJ7', 'JJ7'].map(n => makeMember(n));
+    const g7j = makeGroup('Join Seven', [{ id: l7j, role: 'convenor' }, { id: a7j, role: 'member' }, { id: b7j, role: 'member' }]);
+    const join7 = (await propose(g7j, a7j, { effect: 'set_join_policy', params: { policy: 'invite_only' }, title: 'Invite only' })).body.decision.id;
+    const joined7 = await signedFetch('POST', `/api/groups/${g7j}/join`, {}, j7);
+    const jl = await list(g7j, j7);
+    const jCard = jl.body?.decisions?.find((x: any) => x.id === join7);
+    const jVote = await vote(g7j, join7, j7, true);
+    assert(joined7.status === 200 && jCard?.canVote === false && jVote.status === 400 && jVote.body?.error === GROUP_NOT_ON_ROLL && jl.body?.canPropose === true,
+        `joined mid-vote: not offered this vote (canVote ${jCard?.canVote}), the node refuses it (${jVote.status}), and may propose the next one`);
+    const proposerCard = (await list(g7j, a7j)).body?.decisions?.find((x: any) => x.id === join7);
+    assert(proposerCard?.canVote === true, `the proposer on the roll is offered the vote (${proposerCard?.canVote})`);
+
+    const [lw, aw, bw, ow] = ['LW7', 'AW7', 'BW7', 'OW7'].map(n => makeMember(n));
+    const gw = makeGroup('Watch Seven', [{ id: lw, role: 'convenor' }, { id: aw, role: 'member' }, { id: bw, role: 'member' }, { id: ow, role: 'observer' }]);
+    await propose(gw, aw, { effect: 'set_join_policy', params: { policy: 'invite_only' }, title: 'Invite only' });
+    const ol = await list(gw, ow);
+    assert(ol.body?.watching === true && ol.body?.onRoll === false && ol.body?.decisions?.every((x: any) => x.canVote === false) && ol.body?.nameable?.length === 0,
+        `an observer from before the vote watches: no vote offered, nobody to name (watching ${ol.body?.watching})`);
+    // N2: the pickers name only the people the node takes; a suspended member is on no list.
+    const sw = makeMember('SW7');
+    db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, role_since, updated_at) VALUES (?, ?, 'member', 'active', ?, ?, ?)`)
+        .run(gw, sw.pubKeyHex, new Date().toISOString(), new Date().toISOString(), new Date().toISOString());
+    setUserStatusRow(sw.pubKeyHex, 'disabled');
+    const named = new Set<string>((await list(gw, bw)).body?.nameable ?? []);
+    assert(named.size === 4 && [lw, aw, bw, ow].every(k => named.has(k.pubKeyHex)) && !named.has(sw.pubKeyHex),
+        `the form names everyone in the group now (the observer too), never a suspended member (${named.size})`);
+    setUserStatusRow(sw.pubKeyHex, 'active');
+
+    // N3: a closed group takes no silence vote for its lead, and says so.
+    const [lq, aq, bq, cq] = ['LQ7', 'AQ7', 'BQ7', 'CQ7'].map(n => makeMember(n));
+    db.prepare('UPDATE members SET last_active_at = ?, joined_at = ? WHERE public_key = ?').run(new Date(Date.now() - 40 * DAY).toISOString(), new Date(Date.now() - 60 * DAY).toISOString(), lq.pubKeyHex);
+    const gq = makeGroup('Quiet Seven', [{ id: lq, role: 'convenor' }, { id: aq, role: 'member' }, { id: bq, role: 'member' }, { id: cq, role: 'member' }]);
+    // In the group long before the lead went quiet, so they choose (the silence vote's electorate).
+    db.prepare('UPDATE group_members SET joined_at = ?, role_since = ? WHERE group_id = ?').run(new Date(Date.now() - 50 * DAY).toISOString(), new Date(Date.now() - 50 * DAY).toISOString(), gq);
+    const shut = (await propose(gq, aq, { effect: 'close_group', title: 'Close' })).body.decision.id;
+    for (const v of [aq, bq, cq]) await vote(gq, shut, v, true);
+    tickDecisions();
+    const sRead = await signedFetch('GET', `/api/groups/${gq}/succession`, null, aq);
+    const sProp = await signedFetch('POST', `/api/groups/${gq}/succession/propose`, { candidatePubkey: bq.pubKeyHex }, aq);
+    assert(row(shut).status === 'executed' && sRead.body?.canPropose === false && sProp.status === 403 && sProp.body?.error === GROUP_CLOSED,
+        `a closed group takes no silence vote (read canPropose ${sRead.body?.canPropose}; propose ${sProp.status} ${sProp.body?.error ?? ''})`);
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ A CHAT GROUP CAN VOTE ON ITS LEAD, ITS RULES AND CLOSING.');

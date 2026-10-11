@@ -10047,6 +10047,8 @@ export function removeGroupThreadMessage(groupId: string, messageId: string, act
 }
 
 export function proposeGroupConvenor(groupId: string, proposerPubkey: string, candidatePubkey: string) {
+    // A group its members closed takes nothing new, a silence vote for its lead included (#1784 review N3).
+    assertGroupNotClosed(groupId);
     const res = proposeGroupConvenorEngine(getMessagingCb(), groupId, proposerPubkey, candidatePubkey);
     bumpGroupsVersion();
     return res;
@@ -10065,6 +10067,7 @@ export function getGroupSuccession(groupId: string, viewerPubkey?: string) {
     const s = res.silence;
     return {
         ...res,
+        canPropose: res.canPropose && !groupClosedAt(groupId),
         silence: {
             ...s,
             lastActiveAt: s.convenorPubkey ? lastActiveForViewer(s.lastActiveAt, s.convenorPubkey, viewerPubkey) : null,

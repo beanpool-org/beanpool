@@ -11,7 +11,7 @@
 import Router from '@koa/router';
 import {
     createScopedDecision, getScopedDecisions, getScopedDecision, castDecisionVote, getOwnDecisionVotes, publicDecision,
-    scopedTallyForReader, enterpriseRollNow, decisionsOn, ScopedNotFoundError, type Decision,
+    scopedTallyForReader, enterpriseRollNow, decisionsOn, canVoteOnScoped, ScopedNotFoundError, type Decision,
 } from '../decisions-engine.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { FEATURE_OFF } from '../config/node-profile.js';
@@ -30,6 +30,8 @@ function card(d: Decision, actor: string) {
         ...publicDecision(d),
         tally: scopedTallyForReader(d),
         myVote: mine ? { support: mine.support, updatedAt: mine.updatedAt } : null,
+        // Yes / No follow this vote's own roll, frozen when it opened, as the node judges a vote (castScopedVote).
+        canVote: canVoteOnScoped(d, actor),
     };
 }
 

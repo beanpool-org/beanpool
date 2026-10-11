@@ -10,7 +10,7 @@
 import Router from '@koa/router';
 import {
     createScopedDecision, getGroupDecisions, getGroupDecision, castDecisionVote, getOwnDecisionVotes, publicDecision,
-    scopedTallyForReader, groupRollNow, decisionsOn, ScopedNotFoundError, type Decision,
+    scopedTallyForReader, groupRollNow, decisionsOn, canVoteOnScoped, observesGroupNow, groupNameableNow, ScopedNotFoundError, type Decision,
 } from '../decisions-engine.js';
 import { groupClosedAt } from '../state-engine.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -30,6 +30,9 @@ function card(d: Decision, actor: string) {
         ...publicDecision(d),
         tally: scopedTallyForReader(d),
         myVote: mine ? { support: mine.support, updatedAt: mine.updatedAt } : null,
+        // Yes / No follow this vote's own roll, frozen when it opened (§2.6), never the group's roll now: someone removed or
+        // made an observer since still votes on it, someone who joined since does not.
+        canVote: canVoteOnScoped(d, actor),
     };
 }
 
@@ -43,12 +46,20 @@ export function createGroupDecisionRoutes(_deps: RouteDeps): Router {
             const decisions = getGroupDecisions(ctx.params.id, actor);
             const roll = groupRollNow(ctx.params.id);
             const closedAt = groupClosedAt(ctx.params.id);
-            const onRoll = roll.some(k => k.pubkey === actor);
+            const onRollNow = roll.some(k => k.pubkey === actor);
+            const cards = decisions.map(d => card(d, actor));
+            const votesOnOne = cards.some(c => c.canVote);
+            const canPropose = decisionsOn() && !closedAt && roll.length >= 2 && onRollNow;
             ctx.body = {
-                decisions: decisions.map(d => card(d, actor)),
+                decisions: cards,
                 // A roll of one holds no vote (§2.2), an observer proposes nothing, a closed group takes no vote.
-                canPropose: decisionsOn() && !closedAt && roll.length >= 2 && onRoll,
-                onRoll,
+                canPropose,
+                // Who the form may name, only to someone who may propose: the group's people now, less any suspended.
+                nameable: canPropose ? groupNameableNow(ctx.params.id) : [],
+                // On the group's roll now, or on an open vote's roll from before they were removed or made an observer.
+                onRoll: onRollNow || votesOnOne,
+                // "You watch this group": an observer now who votes on none of its open votes.
+                watching: !onRollNow && !votesOnOne && observesGroupNow(ctx.params.id, actor),
                 rollSize: roll.length,
                 closedAt,
             };

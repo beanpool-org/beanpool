@@ -48,11 +48,11 @@ Nothing far away is out of reach:
 - **A listing you open** from a message, a link or Home is fetched from the community, wherever it is. If the community no longer has it, it says **Post not found**.
 - **The Map** shows only what your phone keeps, so far from your area it has few pins or none. Search the Market to find things there.
 
-Without an area, your phone keeps the newest 100 listings from everywhere instead, and a line above the Market says **You're seeing the newest listings worldwide. Set your area to see what's near you.** Tap it to set one. Nothing else changes: you can post, message and search as before.
+Without an area, your phone keeps the newest 100 listings from everywhere instead, and a line above the Market says **You're seeing the newest listings worldwide. Set your area to see what's near you.** Tap it to set one. You can still post, message and search as before.
 
 A poll has no place of its own, so it is shown at the area of the member who made it: the polls you see are mostly ones made near you.
 
-In the web app, the Market and the Map ask the community for the listings near you each time. See "Finding things near you".
+In the web app, the Market and the Map ask the community each time: for the listings near your area or near a place you pick, or else the newest from everywhere. See "Finding things near you".
 
 Your other communities work as before.
 

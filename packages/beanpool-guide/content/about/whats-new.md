@@ -13,7 +13,7 @@ You get these when the global community's server is updated. On the phone they n
 - **Your area.** Joining the global community has one more step after your photo: **Roughly where are you?** Tap **Use my location**, **Type a town or suburb**, or **Skip for now**. It is kept to about 10 km, never your exact spot. Change or clear it in Settings, under **Your area**. See "Your area".
 - **No area, no problem.** Without one you see the newest listings from everywhere, and a line above the Market says so. On the phone, tap it to set your area.
 - **New listings near you.** They come in as they are posted. Ones far away no longer reach your phone.
-- **In the web app**, the Market and the Map start from near you, nearest first, each listing with how far away it is. See "Finding things near you".
+- **In the web app**, the Market and the Map start from your area, or from a place you pick with **Distance**: nearest first, each listing with how far away it is. See "Finding things near you".
 - **Polls** have no place of their own, so each is shown at the area of the member who made it.
 
 ## Home

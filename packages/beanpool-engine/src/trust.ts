@@ -168,8 +168,10 @@ export function* washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis>
             const uniqueNodes = Array.from(nodes30);
             const memberAges = new Map<string, number>();
 
-            for (let i = 0; i < uniqueNodes.length; i += 999) {
-                const chunk = uniqueNodes.slice(i, i + 999);
+            // 100 keys a query, not SQLite's 999: on a cold 100,000-member database a 999-key lookup held the loop for up
+            // to 264 ms, and a slice can't end inside one query (the global load test, 2026-10-11).
+            for (let i = 0; i < uniqueNodes.length; i += 100) {
+                const chunk = uniqueNodes.slice(i, i + 100);
                 const placeholders = chunk.map(() => '?').join(',');
                 const membersRows = db.prepare(`
                     SELECT public_key, joined_at FROM members WHERE public_key IN (${placeholders})

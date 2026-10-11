@@ -231,6 +231,7 @@ function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
     // 1. Total negative balance
     const totalNegativeRow = db.prepare(`SELECT ABS(SUM(balance)) as s FROM accounts WHERE balance < 0`).get() as any;
     const totalNegative = totalNegativeRow ? (totalNegativeRow.s || 0) : 0;
+    yield;
 
     // 2. Count of accounts near floor & Delinquent accounts
     let accountsNearFloor = 0;
@@ -248,8 +249,22 @@ function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
     };
 
     try {
-        const activeMembers = db.prepare("SELECT public_key FROM members WHERE status = 'active'").all() as { public_key: string }[];
-        for (const member of activeMembers) {
+        // The active members a page of rows at a time, in rowid order, so no one query holds the loop for long: all
+        // 100,000 in one query took up to 377 ms on a cold database (the global load test, 2026-10-11). The counts don't
+        // depend on the order.
+        const page = db.prepare('SELECT rowid AS r, public_key, status FROM members WHERE rowid > ? ORDER BY rowid LIMIT 2000');
+        const activeMembers = function* (): Generator<{ public_key: string }> {
+            let after = Number.MIN_SAFE_INTEGER;
+            const seen = new Set<string>();
+            for (;;) {
+                const rows = page.all(after) as { r: number; public_key: string; status: string }[];
+                if (rows.length === 0) return;
+                // A member rewritten between slices (a new rowid) is still counted once.
+                for (const row of rows) if (row.status === 'active' && !seen.has(row.public_key)) { seen.add(row.public_key); yield row; }
+                after = rows[rows.length - 1].r;
+            }
+        };
+        for (const member of activeMembers()) {
             yield;
             const floor = floorOf(member.public_key);
             if (floor < 0) {

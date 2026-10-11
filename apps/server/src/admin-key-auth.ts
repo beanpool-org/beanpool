@@ -825,6 +825,8 @@ export function issueBreakGlassCode(ownerPubkey: string, by: string, madeBy: Bre
     noteSecurityEvent({
         key: 'sec.keys',
         detail: `A new break-glass code was made for an owner, ${BREAK_GLASS_HOW[madeBy] ?? 'from a sign-in'}; any earlier code of theirs no longer works.`,
+        actor: madeBy === 'password' ? 'owner:password' : madeBy === 'recover' ? 'SYSTEM' : ownerPubkey,
+        actorRole: madeBy === 'password' ? 'admin password' : madeBy === 'recover' ? 'server' : 'owner', high: true,
     });
     return code;
 }
@@ -838,7 +840,7 @@ export function retireBreakGlassCode(ownerPubkey: string): boolean {
     if (!getNodeRoleBreakGlassHash(ownerPubkey)) return false;
     setNodeRoleBreakGlassHash(ownerPubkey, null);
     logger.security('AUTH', `Owner ${ownerPubkey.slice(0, 12)}… signed out everywhere: their break-glass code no longer works`);
-    noteSecurityEvent({ key: 'sec.keys', detail: 'An owner signed out everywhere: their break-glass code no longer works.' });
+    noteSecurityEvent({ key: 'sec.keys', detail: 'An owner signed out everywhere: their break-glass code no longer works.', actor: ownerPubkey, actorRole: 'owner' });
     return true;
 }
 

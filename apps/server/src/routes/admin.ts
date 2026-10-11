@@ -769,6 +769,7 @@ router.post('/api/local/admin/auth/retire-password', async (ctx) => {
     noteSecurityEvent({
         key: 'sec.keys',
         detail: `The admin password was retired for good, by an owner; ${ended} password session${ended === 1 ? '' : 's'} ended. Owners now sign in with their keys.`,
+        actor: String(state.actor), actorRole: 'owner', high: true,
     });
     adminBroadcastAnnouncement('Admin Password Retired',
         `${callsign || 'An owner'} retired this community's admin password. Settings now opens only with an owner's or admin's phone. If you did not expect this, tell your community's owners.`,

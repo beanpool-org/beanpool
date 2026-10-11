@@ -781,6 +781,8 @@ router.post('/api/local/admin/2fa/backup-codes', async (ctx) => {
     noteSecurityEvent({
         key: 'sec.keys',
         detail: `New 2FA backup codes for the admin password were made, ${(ctx.state as any).isKeySession ? 'by an owner' : 'with the admin password'}; the old ones no longer work.`,
+        actor: (ctx.state as any).isKeySession ? String((ctx.state as any).actor) : 'owner:password',
+        actorRole: (ctx.state as any).isKeySession ? 'owner' : 'admin password',
     });
     ctx.body = { success: true, backupCodes };
 });

@@ -363,6 +363,7 @@ function noteClaimed(how: string): void {
     noteSecurityEvent({
         key: 'sec.claim',
         detail: `This community was claimed with its one-time claim code, ${how}: whoever used it is its owner now. Open Settings to see who.`,
+        actor: 'claim:code', actorRole: 'claim code', high: true,
     });
 }
 

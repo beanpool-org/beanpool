@@ -51,6 +51,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { writeFileAtomic } from '../write-file-atomic.js';
 import { logger } from '../logger.js';
@@ -67,7 +68,7 @@ import { standbyIncidentOpen } from './standby-health.js';
 import { snapshotFailuresInARow } from './snapshot-scheduler.js';
 import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
-import { setSecurityAlertHandler, type SecurityNote } from './security-signal.js';
+import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, type SecurityNote } from './security-signal.js';
 
 function dataDir(): string {
     return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -95,6 +96,7 @@ export const ALERT_HOURLY_CAP = 20;
 export const ALERT_HOURLY_CEILING = 60;
 const MAX_WAITING = 50;
 const MAX_HISTORY = 50;
+const MAX_RECENT = 50;
 const WEBHOOK_TIMEOUT_MS = 15_000;
 const DISK_TICKS = 3;
 const DISK_HYSTERESIS = 3;
@@ -115,7 +117,7 @@ export type AlertKey =
     | 'freeze.recovered' | 'freeze.nowatchdog'
     | 'standby.incident'
     | 'tls.fallback'
-    | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name';
+    | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more';
 
 interface Row {
     title: string;
@@ -129,7 +131,7 @@ interface Row {
 }
 
 const DAY = 24 * 60 * 60_000;
-/** Pushed every time it is told: who gains power is never folded into an earlier push. */
+/** Pushed every time it is told, under the per-actor bound of raiseSecurity (SECURITY_PUSHES_PER_HOUR). */
 const EACH = -1;
 const ROWS: Record<AlertKey, Row> = {
     'disk.80': { title: 'disk 80% full', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
@@ -151,10 +153,11 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.keys': { title: 'a sign-in key or code changed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.replaced': { title: 'replaced by another server', priority: 5, webhook: true, pushEveryMs: DAY, banner: true },
     'sec.name': { title: 'its address is not its own', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
+    'sec.more': { title: 'more security changes', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
 };
 
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
-const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.role', 'sec.claim', 'sec.keys']);
+const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.role', 'sec.claim', 'sec.keys', 'sec.more']);
 /** Going on while it is seen; over after an hour without another (then the usual 15-minute hold). */
 const SECURITY_SEEN: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.password-burst', 'sec.claim-guess']);
 const SECURITY_QUIET_MS = 60 * 60_000;
@@ -172,6 +175,12 @@ export interface Condition {
     priority?: AlertPriority;
     /** Told once and not kept active (the watchdog restarted us). */
     oneShot?: boolean;
+    /** Never dropped from the channel's queue, the history or the Alerts card to make room (an owner made, break-glass). */
+    high?: boolean;
+    /** false: told on the channel and in the card, not pushed (past its actor's bound). */
+    push?: boolean;
+    /** Members pushed with the owners for it (an owner or admin who lost the role): never kept. */
+    alsoPush?: string[];
 }
 
 export interface AlertEvent {
@@ -181,6 +190,20 @@ export interface AlertEvent {
     since: number;
     priority: AlertPriority;
     detail: string;
+    /** Never dropped to make room (Condition.high; urgent ones too). */
+    high?: boolean;
+    /** The same line told this many times while it waited (or, for a security event, in the card). */
+    count?: number;
+}
+
+/** One actor's hour (raiseSecurity): what went out at once, and what folds into the hour's one line. */
+interface ActorHour {
+    from: number;
+    pushed: number;
+    highPushed: number;
+    folded: number;
+    foldedHigh: number;
+    role: string;
 }
 
 interface Raised {
@@ -215,12 +238,16 @@ interface BookState {
     seenAt: Partial<Record<AlertKey, number>>;
     /** What an owner acknowledged: the replaced record (by when it was found), and one-shot security events up to when. */
     acked: { replaced?: string; oneShotsAt?: number };
+    /** The one-shot security events of the last day for the card and the banner, apart from the history and the queue. */
+    recent: AlertEvent[];
+    /** Each actor's hour of security events, by a hash of who acted (never the key itself). */
+    actors: Record<string, ActorHour>;
 }
 
 const emptyChannel = (): ChannelState => ({ lastOkAt: null, lastTriedAt: null, failedInARow: 0, error: null, nextTryAt: 0 });
 const emptyState = (): BookState => ({
     raised: {}, clearedAt: {}, waiting: [], history: [], pushedAt: {}, sentAt: [], channel: emptyChannel(), dropped: 0,
-    diskTicks: { '80': 0, '90': 0, '95': 0 }, watchdogRecoveries: null, seenAt: {}, acked: {},
+    diskTicks: { '80': 0, '90': 0, '95': 0 }, watchdogRecoveries: null, seenAt: {}, acked: {}, recent: [], actors: {},
 });
 
 let clockOffsetMs = 0;
@@ -436,8 +463,9 @@ export function composeAlert(community: string, events: AlertEvent[], click: str
     const subject = `${community}: ${head}${events.length > 1 ? ` (+${events.length - 1} more)` : ''}`;
     const lines = events.map((e) => {
         const title = ROWS[e.key].title;
-        if (e.kind === 'cleared') return `- RESOLVED (${title}, since ${when(e.since)}): ${e.detail}`;
-        return `- ${e.kind === 'still' ? 'STILL ' : ''}${title.toUpperCase()} since ${when(e.since)}: ${e.detail}`;
+        const times = (e.count ?? 1) > 1 ? ` (×${e.count})` : '';
+        if (e.kind === 'cleared') return `- RESOLVED (${title}, since ${when(e.since)}): ${e.detail}${times}`;
+        return `- ${e.kind === 'still' ? 'STILL ' : ''}${title.toUpperCase()} since ${when(e.since)}: ${e.detail}${times}`;
     });
     const text = [
         `${community}, its BeanPool server:`,
@@ -483,7 +511,7 @@ export async function sendToChannel(c: AlertChannel, m: AlertMessage): Promise<{
             body = JSON.stringify({
                 subject: m.subject, text: `${m.subject}\n\n${m.text}`, content: `${m.subject}\n\n${m.text}`.slice(0, 2000),
                 priority: m.priority, click: m.click,
-                events: m.events.map((e) => ({ condition: e.key, state: e.kind, priority: e.priority, since: new Date(e.since).toISOString(), detail: e.detail })),
+                events: m.events.map((e) => ({ condition: e.key, state: e.kind, priority: e.priority, since: new Date(e.since).toISOString(), detail: e.detail, count: e.count ?? 1 })),
             });
         }
         if (c.token) headers.Authorization = `Bearer ${c.token}`;
@@ -507,6 +535,8 @@ function sentThisHour(s: BookState, t: number): number {
 }
 
 let sending: Promise<void> | null = null;
+/** The events being sent: a line told meanwhile is queued apart, never folded into one already on its way. */
+let inFlight: readonly AlertEvent[] = [];
 
 /** Sends what waits, when a channel is set and a try is due, inside the hourly cap. One send at a time. */
 export function flushAlerts(): Promise<void> {
@@ -516,11 +546,13 @@ export function flushAlerts(): Promise<void> {
     const t = now();
     if (!c || s.waiting.length === 0 || t < s.channel.nextTryAt) return Promise.resolve();
     const events = s.waiting.slice();
+    inFlight = events;
     const top = Math.max(...events.map((e) => (e.kind === 'cleared' ? 2 : e.priority)));
     const count = sentThisHour(s, t);
     // Held, not dropped: they go together once the hour's oldest message is an hour old, or with the next high one. Worked
     // out at every flush, never kept as a retry time, so a high alert is never waiting behind a hold.
-    if (count >= ALERT_HOURLY_CEILING || (count >= ALERT_HOURLY_CAP && top < 4)) return Promise.resolve();
+    if (count >= ALERT_HOURLY_CEILING || (count >= ALERT_HOURLY_CAP && top < 4)) { inFlight = []; return Promise.resolve(); }
+    let more = false;
     sending = (async () => {
         const result = await sendToChannel(c, composeAlert(communityName(), events));
         const after = now();
@@ -529,6 +561,8 @@ export function flushAlerts(): Promise<void> {
             s.waiting = s.waiting.filter((e) => !events.includes(e));
             s.channel = { ...s.channel, lastOkAt: after, failedInARow: 0, error: null, nextTryAt: 0 };
             s.sentAt.push(after);
+            // What was told while this one was on its way goes now, not with the next tick.
+            more = s.waiting.length > 0;
         } else {
             s.channel.failedInARow++;
             s.channel.error = result.error;
@@ -538,6 +572,8 @@ export function flushAlerts(): Promise<void> {
         writeState();
     })().finally(() => {
         sending = null;
+        inFlight = [];
+        if (more) void flushAlerts();
     });
     return sending;
 }
@@ -577,9 +613,11 @@ const DISK_LEVEL: Partial<Record<AlertKey, number>> = { 'disk.80': 80, 'disk.90'
  * One push to the owners for everything this tick told that may push: each condition at most once per its interval, and
  * the disk as one condition (a level under a higher one that is active is counted as told, never named).
  */
-function pushOwners(s: BookState, events: readonly AlertEvent[], t: number): void {
+function pushOwners(s: BookState, events: readonly AlertEvent[], t: number,
+    quiet: ReadonlySet<AlertEvent> = new Set(), also: ReadonlyMap<AlertEvent, string[]> = new Map()): void {
     if (getNodeRole() !== 'primary') return;
     const due = events.filter((e) => {
+        if (quiet.has(e)) return false;
         const every = ROWS[e.key].pushEveryMs;
         const last = s.pushedAt[e.key];
         return every !== 0 && e.kind !== 'cleared' && (every === EACH || last === undefined || t - last >= every);
@@ -591,7 +629,7 @@ function pushOwners(s: BookState, events: readonly AlertEvent[], t: number): voi
     if (!shown.length) return;
     const first = shown[0];
     try {
-        const to = owners();
+        const to = [...new Set([...owners(), ...shown.flatMap((e) => also.get(e) ?? [])])];
         if (to.length) {
             dispatchPushNotification(to, 'SYSTEM', `${communityName()}: ${ROWS[first.key].title}${shown.length > 1 ? ` (+${shown.length - 1} more)` : ''}`,
                 first.detail, { kind: 'server_alert', alert: first.key, section: 'home' }, 'marketplace', 'owner.alert');
@@ -609,23 +647,26 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
     const s = readState();
     const t = now();
     const told: AlertEvent[] = [];
+    const quiet = new Set<AlertEvent>();
+    const also = new Map<AlertEvent, string[]>();
     const tell = (e: AlertEvent) => {
         told.push(e);
-        s.history.push(e);
-        if (s.history.length > MAX_HISTORY) s.history.splice(0, s.history.length - MAX_HISTORY);
-        if (ROWS[e.key].webhook) {
-            s.waiting.push(e);
-            if (s.waiting.length > MAX_WAITING) {
-                s.waiting.shift();
-                s.dropped++;
-            }
+        const security = SECURITY_ONE_SHOTS.has(e.key);
+        keepIn(s.history, e, MAX_HISTORY, security);
+        if (security) {
+            s.recent = s.recent.filter((x) => t - x.at < SECURITY_BANNER_MS && x.at > (s.acked.oneShotsAt ?? 0));
+            keepIn(s.recent, { ...e }, MAX_RECENT, true);
         }
+        if (ROWS[e.key].webhook) s.dropped += keepIn(s.waiting, { ...e }, MAX_WAITING, true);
     };
     for (const c of conditions) {
         const r = s.raised[c.key];
         const priority = c.priority ?? ROWS[c.key].priority;
         if (c.active && c.oneShot) {
-            tell({ key: c.key, kind: 'raised', at: t, since: c.since ?? t, priority, detail: c.detail });
+            const e: AlertEvent = { key: c.key, kind: 'raised', at: t, since: c.since ?? t, priority, detail: c.detail, ...(c.high ? { high: true } : {}) };
+            tell(e);
+            if (c.push === false) quiet.add(e);
+            if (c.alsoPush?.length) also.set(e, c.alsoPush);
         } else if (c.active && !r) {
             const since = c.since ?? t;
             s.raised[c.key] = { since, detail: c.detail, toldAt: t, priority };
@@ -654,10 +695,36 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
             }
         }
     }
-    pushOwners(s, told, t);
+    pushOwners(s, told, t, quiet, also);
     writeState();
     await flushAlerts();
     return told;
+}
+
+const isHigh = (e: AlertEvent) => !!e.high || e.priority >= 5;
+
+/**
+ * Adds `e` to a bounded list: the same line already there (same row, kind and words, and not on its way to the channel)
+ * is counted (×n) and moved last instead, when `coalesce`. Past `max`, the oldest line that is not high makes room; a
+ * high one never does (four times `max` is the last stop for a list of nothing but high lines, which the coalescing
+ * keeps to a handful). Returns how many lines were dropped.
+ */
+function keepIn(list: AlertEvent[], e: AlertEvent, max: number, coalesce: boolean): number {
+    const same = coalesce ? list.findIndex((x) => x.key === e.key && x.kind === e.kind && x.detail === e.detail && !inFlight.includes(x)) : -1;
+    if (same >= 0) {
+        const [x] = list.splice(same, 1);
+        list.push({ ...x, at: e.at, priority: Math.max(x.priority, e.priority) as AlertPriority, count: (x.count ?? 1) + (e.count ?? 1) });
+        return 0;
+    }
+    list.push(e);
+    let dropped = 0;
+    while (list.length > max) {
+        const i = list.findIndex((x) => !isHigh(x) && !inFlight.includes(x));
+        if (i < 0 && list.length <= 4 * max) break;
+        list.splice(Math.max(i, 0), 1);
+        dropped++;
+    }
+    return dropped;
 }
 
 // ── Security events (S4) ───────────────────────────────────────────────────────────────────
@@ -681,11 +748,65 @@ export function raiseSecurity(note: SecurityNote): Promise<AlertEvent[]> {
         return new Promise((resolve) => setImmediate(() => { resolve(raiseSecurity(note)); }));
     }
     if (!happened(note)) return Promise.resolve([]);
-    if (note.state === undefined) return raiseOnce(note.key, note.detail, note.priority);
+    if (note.state === undefined) return raiseBounded(note);
     if (note.state === 'seen') {
         readState().seenAt[note.key] = now();
     }
     return updateAlerts([{ key: note.key, active: note.state !== false, detail: note.detail, priority: note.priority }]);
+}
+
+const HOUR_MS = 60 * 60_000;
+
+function actorId(actor: string): string {
+    return crypto.createHash('sha256').update(`beanpool-alerts-actor:${actor}`).digest('hex').slice(0, 24);
+}
+
+/**
+ * A one-shot security event under its actor's bound: in each actor's hour, the first SECURITY_PUSHES_PER_HOUR are told
+ * and pushed at once, and as many high ones (an owner made or removed, break-glass) besides. Past that, a high one is
+ * still told on the channel and in the card, unpushed; any other is only counted. When the hour is over, what was
+ * counted is told as one line, pushed: "N more changes by the same admin". One admin flipping a moderator 200 times
+ * an hour sends each owner 4 pushes, not 200, and never pushes a real owner grant out of the channel.
+ */
+function raiseBounded(note: SecurityNote): Promise<AlertEvent[]> {
+    const s = readState();
+    const t = now();
+    const id = actorId(note.actor ?? 'server');
+    const before = foldedConditions(s, t, id);
+    const w = s.actors[id] ??= { from: t, pushed: 0, highPushed: 0, folded: 0, foldedHigh: 0, role: note.actorRole ?? 'server' };
+    let push = true;
+    if (note.high && w.highPushed < SECURITY_PUSHES_PER_HOUR) w.highPushed++;
+    else if (!note.high && w.pushed < SECURITY_PUSHES_PER_HOUR) w.pushed++;
+    else {
+        push = false;
+        w.folded++;
+        if (note.high) w.foldedHigh++;
+    }
+    const conditions = [...before];
+    if (push || note.high) {
+        conditions.push({ key: note.key, active: true, oneShot: true, detail: note.detail, priority: note.priority, high: note.high, push, alsoPush: push ? note.alsoPush : undefined });
+    }
+    if (!conditions.length) {
+        writeState();
+        return Promise.resolve([]);
+    }
+    return updateAlerts(conditions);
+}
+
+/** Each actor's hour that is over: what it counted past its pushes, told as one line (pushed), and the hour closed. */
+function foldedConditions(s: BookState, t: number, only?: string): Condition[] {
+    const out: Condition[] = [];
+    for (const [id, w] of Object.entries(s.actors)) {
+        if ((only !== undefined && id !== only) || t - w.from < HOUR_MS) continue;
+        delete s.actors[id];
+        if (w.folded === 0) continue;
+        out.push({
+            key: 'sec.more', active: true, oneShot: true, high: w.foldedHigh > 0,
+            detail: `${w.folded} more change${w.folded === 1 ? '' : 's'} by the same ${w.role} in the hour after its first ones were pushed`
+                + `${w.foldedHigh ? ` (${w.foldedHigh} of them listed on their own)` : ''}. Open Settings to see who.`,
+        });
+    }
+    return out;
 }
 
 setSecurityAlertHandler((note) => {
@@ -895,6 +1016,7 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             tlsCondition(),
             ...replacedCondition(s),
             ...securityQuietConditions(s, t),
+            ...foldedConditions(s, t),
         ];
         return await updateAlerts(conditions);
     } catch (e) {
@@ -934,7 +1056,7 @@ export function serverAlertCount(): number {
 
 /** The one-shot security events of the last day that no owner has acknowledged yet, newest first. */
 function recentSecurityEvents(s: BookState, t: number): AlertEvent[] {
-    return s.history.filter((e) => SECURITY_ONE_SHOTS.has(e.key) && t - e.at < SECURITY_BANNER_MS && e.at > (s.acked.oneShotsAt ?? 0)).reverse();
+    return s.recent.filter((e) => t - e.at < SECURITY_BANNER_MS && e.at > (s.acked.oneShotsAt ?? 0)).reverse();
 }
 
 export interface AlertsStatus {

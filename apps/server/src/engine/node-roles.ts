@@ -194,19 +194,27 @@ export function nodeHasOwner(): boolean {
 
 const withArticle = (role: string) => `${/^[aeiou]/.test(role) ? 'an' : 'a'} ${role}`;
 
-/** How a role was changed, for the owners' alert (services/alerts.ts sec.role): never who. Read before the change. */
-function howRoleChanged(actorPubkey?: string): string {
-    if (actorPubkey === 'owner:password') return 'by the admin password';
-    if (actorPubkey === 'break-glass:enrolment') return 'with a break-glass code';
-    if (!actorPubkey || actorPubkey === 'SYSTEM') return 'by the server itself';
-    if (actorPubkey.startsWith('claim:')) return 'with the community\'s claim code';
-    if (isNodeOwner(actorPubkey)) return 'by an owner';
-    return isNodeAdmin(actorPubkey, false) ? 'by an admin' : 'by a key with no role';
+/** The actor's role, for the owners' alert (services/alerts.ts sec.role): never who. Read before the change. */
+function actorRoleOf(actorPubkey?: string): string {
+    if (actorPubkey === 'owner:password') return 'admin password';
+    if (actorPubkey === 'break-glass:enrolment') return 'break-glass code';
+    if (!actorPubkey || actorPubkey === 'SYSTEM') return 'server';
+    if (actorPubkey.startsWith('claim:')) return 'claim code';
+    if (isNodeOwner(actorPubkey)) return 'owner';
+    return isNodeAdmin(actorPubkey, false) ? 'admin' : 'key with no role';
 }
 
-/** Tells the owners a role changed: which role and how, never whose (services/security-signal.ts). */
-function noteRoleAlert(detail: string, stillTrue: () => boolean): void {
-    noteSecurityEvent({ key: 'sec.role', detail: `${detail} Open Settings to see who.`, stillTrue });
+const HOW: Record<string, string> = {
+    'admin password': 'by the admin password', 'break-glass code': 'with a break-glass code', server: 'by the server itself',
+    'claim code': "with the community's claim code", owner: 'by an owner', admin: 'by an admin', 'key with no role': 'by a key with no role',
+};
+
+/**
+ * Tells the owners a role changed: which role and how, never whose (services/security-signal.ts). Bounded per actor
+ * and hour there; an owner made or removed, or break-glass, is high (never folded out of the channel or the card).
+ */
+function noteRoleAlert(detail: string, stillTrue: () => boolean, a: { actor?: string; actorRole: string; high: boolean }): void {
+    noteSecurityEvent({ key: 'sec.role', detail: `${detail} Open Settings to see who.`, stillTrue, actor: a.actor || 'SYSTEM', actorRole: a.actorRole, high: a.high });
 }
 
 /**
@@ -262,7 +270,8 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
         throw new Error('Only active accounts can hold a node role');
     }
 
-    const howChanged = how ?? howRoleChanged(actorPubkey);
+    const actorRole = actorRoleOf(actorPubkey);
+    const howChanged = how ?? HOW[actorRole];
     let before: string | null = null;
     db.transaction(() => {
         const ownerCount = (db.prepare(
@@ -339,7 +348,8 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
     // A claim's grant is told as the community claimed (claim-code.ts), not twice.
     if (before !== role && !actorPubkey?.startsWith('claim:')) {
         const was = before ? `${withArticle(before).replace(/^a/, 'A')} was made` : 'Someone was made';
-        noteRoleAlert(`${was} ${withArticle(role)}, ${howChanged}.`, () => heldNodeRoleOf(targetPubkey) === role);
+        noteRoleAlert(`${was} ${withArticle(role)}, ${howChanged}.`, () => heldNodeRoleOf(targetPubkey) === role,
+            { actor: actorPubkey, actorRole, high: role === 'owner' || before === 'owner' || /break-glass/.test(howChanged) });
     }
 }
 
@@ -360,7 +370,7 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
         throw new Error("Role must be 'owner', 'admin', or 'moderator'");
     }
 
-    const howChanged = howRoleChanged(actorPubkey);
+    const actorRole = actorRoleOf(actorPubkey);
     let removed = false;
     db.transaction(() => {
         const isOwner = actorPubkey === 'owner:password' || (!!actorPubkey && isNodeOwner(actorPubkey));
@@ -401,7 +411,8 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
     bumpMembersVersion();
     noteTakeoverInputsChanged(`${role} role revoked`);
     if (removed) {
-        noteRoleAlert(`${withArticle(role).replace(/^a/, 'A')} lost that role, ${howChanged}.`, () => heldNodeRoleOf(targetPubkey) !== role);
+        noteRoleAlert(`${withArticle(role).replace(/^a/, 'A')} lost that role, ${HOW[actorRole]}.`, () => heldNodeRoleOf(targetPubkey) !== role,
+            { actor: actorPubkey, actorRole, high: role === 'owner' });
     }
 }
 

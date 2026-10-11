@@ -19,6 +19,10 @@
  *     the banner until an owner acknowledges it (through the real route); then resolved once, after the hold.
  *  4. Nothing per member in any payload: no callsign and no key (nor its first 12 characters) in any message the
  *     channel received, header or body, any push, any push notice kept for the phone, or any answer of the alerts routes.
+ *  5. A flood: one admin flipping a moderator 100 times through the real route pushes the owner 3 times, not 200; the
+ *     admin password then making someone an owner is pushed at once, reaches the channel and stays in the card through
+ *     30 more flips; the password flipping that owner is told line by line (high) but pushed 3 times at most; an hour
+ *     later each actor's rest is one pushed line ("257 more changes by the same admin").
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts-security.ts
@@ -93,7 +97,7 @@ async function main(): Promise<void> {
         throw new Error(`this suite reaches nothing off this machine (${url.hostname})`);
     }) as typeof fetch;
 
-    const { initStateEngine, seedGenesisMember, grantNodeRole } = await import('./state-engine.js');
+    const { initStateEngine, seedGenesisMember, grantNodeRole, revokeNodeRole } = await import('./state-engine.js');
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
@@ -361,6 +365,76 @@ async function main(): Promise<void> {
     assert(payloads.length > 20 && leaks.length === 0, `4. ${payloads.length} payloads (${ntfy.hits.length} channel messages), none names a member or key (${leaks.length})`);
     assert(blocked.length === 0, `4. nothing off this machine was asked (${blocked.join(', ')})`);
     assert(getLocalConfig().communityName === 'Security Test Commons', 'setup unchanged');
+
+    // ── 5. A flood ──────────────────────────────────────────────────────────────────────────────────────────────────
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    const flipped = pubkey();
+    const xav = pubkey();
+    for (const [pk, callsign] of [[flipped, 'FlipFloS'], [xav, 'XavNewOwnerS']]) {
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
+            .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
+        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    }
+    putPushTokenRow(xav, 'ExponentPushToken[xav-new-owner]', 'android');
+    const asAdmin = { 'x-admin-session': session(admin, 'admin') };
+    const pF = ownerPushes().length;
+    const hF = topicHits().length;
+    const toOwner = () => ownerPushes().slice(pF).filter((p) => p.to.includes('ExponentPushToken[olive-owner]')).length;
+    const flip = async (n: number) => {
+        for (let i = 0; i < n; i++) {
+            const g = await call('POST', '/api/local/admin/node-roles', { pubkey: flipped, role: 'moderator' }, asAdmin);
+            const r = await call('DELETE', `/api/local/admin/node-roles/${flipped}/moderator`, {}, asAdmin);
+            if (g.status !== 200 || r.status !== 200) throw new Error(`flood: ${g.status} ${r.status} ${g.json?.error ?? r.json?.error ?? ''}`);
+        }
+        await settle(500);
+    };
+    await flip(100);
+    assert(toOwner() === 3, `5. one admin flips a moderator 100 times through the real route: the owner is pushed 3 times, not 200 (${toOwner()})`);
+    const floodLines = topicHits().slice(hF).reduce((n, h) => n + h.body.split('\n').filter((l) => l.startsWith('- ')).length, 0);
+    assert(floodLines === 3, `5. and 3 lines reach the channel, the rest counted (${floodLines})`);
+    assert(alerts.getAlertsStatus().dropped === 0, `5. nothing dropped (${alerts.getAlertsStatus().dropped})`);
+
+    const ownerLine = (b: string) => /Someone was made an owner, by the admin password\./.test(b);
+    grantNodeRole(xav, 'owner', 'owner:password');
+    await settle(300);
+    assert(toOwner() === 4, `5. then the admin password makes someone an owner: pushed at once (${toOwner()})`);
+    assert(topicHits().slice(hF).some((h) => ownerLine(h.body)), '5. and its line reaches the channel');
+    await flip(30);
+    let st5 = alerts.getAlertsStatus();
+    assert(st5.recent.some((e) => ownerLine(e.detail)) && st5.history.some((e) => ownerLine(e.detail)),
+        `5. 30 more flips leave it in the card's last day and the history (${st5.recent.length}, ${st5.history.length})`);
+    assert(toOwner() === 4, `5. and push nothing more (${toOwner()})`);
+
+    const pX = ownerPushes().length;
+    const hX = topicHits().length;
+    for (let i = 0; i < 5; i++) {
+        revokeNodeRole(xav, 'owner', 'owner:password');
+        grantNodeRole(xav, 'owner', 'owner:password');
+    }
+    await settle(500);
+    const xLines = topicHits().slice(hX).flatMap((h) => h.body.split('\n').filter((l) => /^- /.test(l)));
+    const xCount = xLines.reduce((n, l) => n + Number(/\(×(\d+)\)$/.exec(l)?.[1] ?? 1), 0);
+    assert(xCount === 10, `5. the password flipping that owner 5 times: every one told on the channel (high), ${xLines.length} line(s) for ${xCount}`);
+    assert(ownerPushes().length - pX === 2, `5. pushed only up to the high bound: 3 a hour, one already spent (${ownerPushes().length - pX})`);
+    st5 = alerts.getAlertsStatus();
+    const lost = st5.recent.find((e) => /An owner lost that role, by the admin password\./.test(e.detail));
+    assert(lost?.count === 5, `5. the card keeps one line for the 5 alike, counted (${lost?.count})`);
+
+    advance(HOUR + MIN);
+    await tick();
+    await settle(500);
+    const more = topicHits().slice(hF).map((h) => h.body).join('\n');
+    assert(/257 more changes by the same admin in the hour/.test(more), '5. an hour later the admin\'s rest is one line: "257 more changes by the same admin"');
+    assert(/8 more changes by the same admin password in the hour .*\(8 of them listed on their own\)/.test(more), '5. and the password\'s: 8 more, listed on their own');
+    assert(toOwner() === 7 && ownerPushes().slice(pF).filter((p) => p.to.includes('ExponentPushToken[xav-new-owner]')).length >= 1,
+        `5. both pushed to the owners in one push, the new owner too (${toOwner()})`);
+    st5 = alerts.getAlertsStatus();
+    assert(st5.recent.some((e) => ownerLine(e.detail)) && st5.recent.some((e) => e.key === 'sec.more'), '5. both in the card');
+    const flood5 = [...topicHits().slice(hF).map((h) => JSON.stringify(h.headers) + h.body), JSON.stringify(st5),
+        fs.readFileSync(path.join(dataDir!, 'alerts-state.json'), 'utf8')];
+    assert(!flood5.some((p) => [flipped, xav, admin].some((k) => p.includes(k.slice(0, 12))) || /FlipFloS|XavNewOwnerS|AdamAdminS/.test(p)),
+        '5. no member or key in the flood\'s lines, the status or the alert book');
 
     await ntfy.close();
     console.log(`\n${testsPassed}/${testsRun} passed`);

@@ -14,6 +14,9 @@
 
 export type SecurityAlertKey = 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.name';
 
+/** The first this many one-shot pushes per actor and hour go at once (as many again for high ones); the rest fold into one hourly line. */
+export const SECURITY_PUSHES_PER_HOUR = 3;
+
 export interface SecurityNote {
     key: SecurityAlertKey;
     detail: string;
@@ -26,6 +29,17 @@ export interface SecurityNote {
     state?: boolean | 'seen';
     /** Read once any transaction is over: false means it did not happen after all, and nothing is told. */
     stillTrue?: () => boolean;
+    /**
+     * Who acted (a member's key, 'owner:password', 'break-glass:enrolment'), only to bound the owners' pushes per actor
+     * and hour: kept as a hash, never told. Left out: the server itself.
+     */
+    actor?: string;
+    /** The actor's role in words for the hourly "N more changes by the same …" line: 'owner', 'admin', 'admin password'. */
+    actorRole?: string;
+    /** An owner made or removed, break-glass: never folded out of the channel or the Alerts card, pushed under its own bound. */
+    high?: boolean;
+    /** Members also pushed with this one (an owner or admin who lost the role): never kept, never told. */
+    alsoPush?: string[];
 }
 
 type Handler = (note: SecurityNote) => void;

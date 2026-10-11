@@ -25,9 +25,10 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../utils/db';
-import { MAKE_OBSERVER_MEMBER_FIRST } from '@beanpool/core';
+import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, type GroupPerson } from '@beanpool/core';
 import { MemberAvatar } from './MemberAvatar';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
+import { GroupDecisions } from './EnterpriseDecisions';
 import { buildRosterView } from '../utils/group-roster';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
 
@@ -373,6 +374,14 @@ export function GroupDetailModal({
     // with the PWA and with the engine that enforces it: a convenor never sees Role or ✕ on the lead, or on
     // another convenor.
     const roster = buildRosterView(groupData, members, myPubkey);
+    // Closed by its members' vote (DESIGN-group-decisions §2.3): it stays to read and takes nothing new.
+    const closed = !!groupData.closedAt;
+    // Everyone in the group now, for the Decisions block's names and pickers (the lead as 'lead').
+    const people: GroupPerson[] = activeMembers.map(m => ({
+        pubkey: m.memberPubkey,
+        name: m.callsign || m.memberPubkey.slice(0, 10),
+        role: m.memberPubkey === groupData.leadPubkey ? 'lead' : m.role,
+    }));
 
     const handleJoin = async () => {
         setActionLoading(true);
@@ -653,6 +662,12 @@ export function GroupDetailModal({
                                 <MaterialCommunityIcons name="door-open" size={14} color={colors.text.secondary} />
                                 <Text style={styles.pillText}>{groupData.joinPolicy.replace(/_/g, ' ')}</Text>
                             </View>
+                            {closed && (
+                                <View style={styles.pill} accessibilityLabel="Closed by its members' vote">
+                                    <MaterialCommunityIcons name="lock-outline" size={14} color={colors.text.secondary} />
+                                    <Text style={styles.pillText}>Closed</Text>
+                                </View>
+                            )}
                             {isConvenor && (
                                 <View style={[styles.pill, { backgroundColor: colors.brand.tint, borderColor: colors.brand.primary }]}>
                                     <MaterialCommunityIcons
@@ -686,8 +701,31 @@ export function GroupDetailModal({
                             <Text style={styles.description}>{groupData.description}</Text>
                         ) : null}
 
+                        {closed && (
+                            <View style={styles.infoNotice}>
+                                <MaterialCommunityIcons name="lock-outline" size={16} color={colors.text.secondary} />
+                                <Text style={styles.infoNoticeText}>{GROUP_CLOSED_NOTE}</Text>
+                            </View>
+                        )}
+
+                        {/* The group's votes, high on the sheet: a vote's push and Home's line land here. It draws
+                            nothing for someone the node doesn't answer, or when there is no vote and none can open. */}
+                        {isMember && (
+                            <GroupDecisions
+                                groupId={groupData.id}
+                                myPubkey={myPubkey ?? null}
+                                people={people}
+                                joinPolicy={groupData.joinPolicy}
+                                onChanged={() => {
+                                    // A vote carried out may move the lead, a role or the join rule, or close the group.
+                                    void loadDetails();
+                                    if (onMembershipChanged) onMembershipChanged();
+                                }}
+                            />
+                        )}
+
                         {/* Convenor Tools Section */}
-                        {isConvenor && (
+                        {isConvenor && !closed && (
                             <View style={styles.convenorCard}>
                                 <Text style={styles.convenorTitle}>Convenor Tools</Text>
                                 
@@ -862,7 +900,7 @@ export function GroupDetailModal({
                         )}
 
                         <View style={styles.actionArea}>
-                            {isMember && onPostToGroup && (
+                            {isMember && onPostToGroup && !closed && (
                                 <Pressable
                                     style={styles.postBtn}
                                     accessibilityRole="button"
@@ -889,6 +927,10 @@ export function GroupDetailModal({
                                 >
                                     <Text style={styles.leaveBtnText}>Leave Group</Text>
                                 </Pressable>
+                            ) : closed ? (
+                                <View style={[styles.joinBtn, styles.joinBtnDisabled]}>
+                                    <Text style={styles.joinBtnText}>Closed</Text>
+                                </View>
                             ) : isPending ? (
                                 <View style={[styles.joinBtn, styles.joinBtnDisabled]}>
                                     <Text style={styles.joinBtnText}>Request Pending Approval</Text>

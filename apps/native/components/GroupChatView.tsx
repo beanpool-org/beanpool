@@ -70,6 +70,8 @@ interface Props {
     justCreated?: boolean;
     /** Shown until the chat loads. */
     initialName?: string;
+    /** Open the group's info sheet once the group has loaded: a vote's push or Home's line lands on its Decisions. */
+    openInfo?: boolean;
 }
 
 const GROUP_MESSAGE_MAX = 2000;
@@ -87,7 +89,7 @@ interface PendingMessage {
     timestamp: string;
 }
 
-export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
+export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: Props) {
     const insets = useSafeAreaInsets();
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
@@ -109,6 +111,8 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const [muteOpen, setMuteOpen] = useState(false);
     const [inviteOpen, setInviteOpen] = useState(false);
     const [infoOpen, setInfoOpen] = useState(false);
+    // Opened once on the way in (openInfo), when the group has loaded; closing it then leaves the chat as it is.
+    const infoOpenedOnArrival = useRef(false);
     const [inviteSkipped, setInviteSkipped] = useState(false);
     const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
     const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
@@ -141,6 +145,10 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         const details = await fetchGroupDetails(id);
         if (!details) return;
         setGroup(details.group);
+        if (openInfo && !infoOpenedOnArrival.current) {
+            infoOpenedOnArrival.current = true;
+            setInfoOpen(true);
+        }
         // No roster this time (the node busy, or offline): keep who we knew was in, and the count.
         const members = details.members;
         if (!members) return;
@@ -148,7 +156,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
             .filter(m => m.status === 'active' || m.status === 'invited')
             .map(m => m.memberPubkey)));
         setInvitedCount(members.filter(m => m.status === 'invited').length);
-    }, [kind, id]);
+    }, [kind, id, openInfo]);
 
     // Opening the chat reads it (decision 7: only Talk shows counts, so only reading clears one). The node's marker
     // moves only when there is something new, and "Your groups" drops the count at once and again once the node

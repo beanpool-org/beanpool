@@ -534,6 +534,15 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('decision.open', null)).toBe('/(tabs)');
     });
 
+    it("a group's vote opening lands on the group it names (its chat, the info sheet open), its id in the node's own shape; never Talk (slice S3)", () => {
+        const GROUP = '0f8e2c1a-5b6d-4e7f-9a0b-1c2d3e4f5a6b';
+        expect(noticeRoute('decision.open', { screen: 'group', groupId: GROUP })).toBe(`/chat/${GROUP}?group=1&info=1`);
+        for (const bad of [...FORGED, `${GROUP}?x=1`, GROUP.slice(1), 42, null, ['a'], { a: 1 }]) {
+            expect(noticeRoute('decision.open', { screen: 'group', groupId: bad })).toBe('/(tabs)');
+        }
+        expect(noticeRoute('decision.open', { screen: 'group', groupId: GROUP })).not.toBe('/(tabs)/chats');
+    });
+
     it('a valid notice whose community answers a forged target lands on its kind\'s tab, the target nowhere in the route', async () => {
         for (const bad of FORGED) {
             await tap(push(mullum.notice('market.request', kim.publicKey, { data: { screen: 'post', postId: bad } })));

@@ -452,6 +452,9 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status ON marketpl
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status ON marketplace_transactions(seller_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status_created ON marketplace_transactions(buyer_pubkey, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON marketplace_transactions(seller_pubkey, status, created_at DESC);
+-- A listing's open or held deals: both sides of its open deals hear its pushes on a node that reads by area, and a
+-- removal or hide asks whether it holds one. Without this each read searched every open deal on the node (#1769).
+CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_status ON marketplace_transactions(post_id, status);
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (

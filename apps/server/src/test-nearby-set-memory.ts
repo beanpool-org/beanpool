@@ -241,7 +241,7 @@ function main() {
         } catch { gc = null; }
         const heap = () => { gc?.(); gc?.(); const m = process.memoryUsage(); return m.heapUsed + m.arrayBuffers; };
         const before = heap();
-        let memory: NearbySetMemory | null = new NearbySetMemory(limits);
+        const memory = new NearbySetMemory(limits);
         let maxBytes = 0, maxSets = 0;
         const hex = (n: number, w: number) => n.toString(16).padStart(w, '0');
         for (let i = 0; i < 20_000; i++) {
@@ -257,7 +257,6 @@ function main() {
         assert(held.sets <= 20_000 && maxSets <= 20_000 && held.readers <= 20_000, `at most 20,000 sets and readers (${held.sets} sets, ${held.readers} readers)`);
         assert(held.evictions === 20_000 - held.sets, `the oldest went: ${held.evictions} evictions`);
         assert(grew <= 1.5 * held.bytes, `the heap grew ${(grew / 1048576).toFixed(1)} MB for ${(held.bytes / 1048576).toFixed(1)} MB counted: within 1.5× (${(grew / held.bytes).toFixed(2)}×)`);
-        memory = null;
     }
 
     // ── 5. NEARBY_SET_MEMORY_MB ──

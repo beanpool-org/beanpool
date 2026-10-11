@@ -712,12 +712,18 @@ export function newCopyGeneration(): void {
 }
 
 /**
- * Simple Drop util if the User needs to wipe memory
+ * Simple Drop util if the User needs to wipe memory.
+ *
+ * `identityLeaves`: the identity is going off this phone (Sign Out, the self-delete purge), so what this phone knows of
+ * its groups' keys goes too (the four group key tables), as a new phone starts. Every other wipe (Force Resync, Wipe &
+ * Join Fresh, Wipe & Restart) keeps the identity and keeps that memory, kept per identity: the sticky lock and the
+ * highest verified epoch of each group, with the epochs and the cursor they go with. It is a security fact, not a copy
+ * of the node's (director's decision on the confirmation of #1788, NB3).
  */
-export async function clearDB() {
+export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
     // First, before anything awaits: from here no sync cycle that began before stores a cursor for this copy.
     newCopyGeneration();
-    // Every group key opened this session leaves memory with the copy (sign-out, a new identity, Delete here).
+    // Every group key opened this session leaves memory with the copy; a kept store opens them again from its wraps.
     forgetGroupKeys();
     try {
         const { resetSyncFingerprints } = require('../services/pillar-sync');
@@ -733,7 +739,8 @@ export async function clearDB() {
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers;');
+        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied;'
+            + (opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers;' : ''));
     } finally {
         releaseSyncLock();
     }

@@ -226,4 +226,16 @@ describe('group chats: a held group is locked whatever its row says', () => {
         expect(after).toBe(`refused: ${GROUP_CHAT_LOCK_LOST_TEXT}`);
         expect(readable(from)).toEqual([]);
     });
+
+    it('Sign Out (clearDB identityLeaves: the identity leaves this phone) forgets it, as a new phone starts', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[8];
+        held(g);
+        expect(await seen(g)).toBe(true);
+        store.execs.length = 0;
+        await clearDB({ identityLeaves: true });
+        const drops = store.execs.filter((s) => /DROP TABLE/.test(s)).join(' ');
+        expect(drops).toContain('DROP TABLE IF EXISTS group_chat_key_state;');
+        expect(await seen(g)).toBe(false);
+    });
 });

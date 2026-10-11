@@ -646,7 +646,7 @@ export function groupKeyring(nodeUrl: string, identity: Pick<BeanPoolIdentity, '
     return k;
 }
 
-/** Sign-out, a new identity, Delete here (utils/db.ts clearDB): every opened key leaves memory, and this session's wrap tally. */
+/** Every wipe (utils/db.ts clearDB): every opened key leaves memory, and this session's wrap tally; a kept store reopens them. */
 export function forgetGroupKeys(): void {
     keyrings.clear();
     wrapOpenedThisSession = false;

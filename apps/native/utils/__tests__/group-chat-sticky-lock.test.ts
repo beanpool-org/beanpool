@@ -64,7 +64,7 @@ vi.mock('../crypto', async (orig) => ({
 
 import { insertMessage, postGroupChatMessage, clearDB } from '../db';
 import {
-    groupChatNotice, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_LOCKED_NOTICE, GROUP_CHAT_OLD_NODE_NOTICE,
+    groupChatNotice, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_CHAT_LOCKED_NOTICE, GROUP_CHAT_OLD_NODE_NOTICE,
 } from '../group-chat-lines';
 import { forgetGroupKeys, groupKeyring, memoryGroupKeyStore, GroupChatKeyError } from '../group-chat-keys';
 
@@ -81,6 +81,8 @@ const G = '11111111-2222-4333-8444-555555555555';
 /** A group on a node from before locked chats: its chat answer carries no `encryption`, and it has no keys route. */
 const OLD = '22222222-2222-4333-8444-555555555555';
 const received: { method: string; path: string; body: any }[] = [];
+/** G's chat answer: refused (404, as to a removed member), or served with no `encryption` (a node that dropped the lock). */
+let gChat: 'refused' | 'unlocked' = 'refused';
 function reply(status: number, body: any) { return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body), clone() { return this; } }; }
 (globalThis as any).fetch = vi.fn(async (url: string, init: any = {}) => {
     const path = String(url).replace('https://test.beanpool.org', '');
@@ -90,6 +92,7 @@ function reply(status: number, body: any) { return { ok: status >= 200 && status
     // An honest NEW node's answers: GET …/keys 404 is what requireGroupMember says to someone with no live row in an
     // invite-only group (removed, or left); a readable line is refused, but it has already arrived.
     if (method === 'GET' && path.startsWith(`/api/groups/${G}/keys`)) return reply(404, { error: 'Group not found' });
+    if (method === 'GET' && path.startsWith(`/api/groups/${G}/chat`) && gChat === 'unlocked') return reply(200, { messages: [], canPost: true });
     if (method === 'GET' && path.startsWith(`/api/groups/${OLD}/chat`)) return reply(200, { messages: [], canPost: true, notice: 'anything' });
     if (method === 'POST' && path === `/api/groups/${OLD}/chat/message`) return reply(201, { success: true });
     if (method === 'POST' && path === '/api/messages/send' && body?.conversationId === OLD) return reply(201, { success: true });
@@ -102,11 +105,11 @@ const waitFor = async (pred: () => boolean, ms = 5000) => { const t = Date.now()
 
 const sentReadable = () => received.filter((r) => (r.path.endsWith('/chat/message') && typeof r.body?.text === 'string')
     || (r.path === '/api/messages/send' && r.body?.nonce === 'plaintext-v1'));
-const fresh = () => { forgetGroupKeys(); received.length = 0; store.keyState = null; };
+const fresh = () => { forgetGroupKeys(); received.length = 0; store.keyState = null; gChat = 'refused'; };
 
 describe('a group chat this phone has held a key of stays locked here', () => {
     it('the chat screen: the node drops `encryption` from a group whose key this phone held; nothing readable is sent, and the phone says why', async () => {
-        fresh();
+        fresh(); gChat = 'unlocked';
         store.keyState = { highest: 2, after: 2 };
         const err = await postGroupChatMessage(G, 'C1 our secret plan', randomUUID(), null, undefined).catch((e) => e);
         expect(err).toBeInstanceOf(GroupChatKeyError);
@@ -115,7 +118,7 @@ describe('a group chat this phone has held a key of stays locked here', () => {
     });
 
     it('the conversation path: GET …/keys answers 404 for a group whose key this phone held; nothing is sent', async () => {
-        fresh();
+        fresh(); gChat = 'unlocked';
         store.keyState = { highest: 2, after: 2 };
         store.conversations.set(G, { id: G, type: 'group_thread', created_by: null });
         const err = await insertMessage(G, who.me.publicKey, 'C2 words for the group').catch((e) => e);
@@ -130,6 +133,17 @@ describe('a group chat this phone has held a key of stays locked here', () => {
         store.conversations.set(G, { id: G, type: 'group_thread', created_by: null });
         const err = await insertMessage(G, who.me.publicKey, 'C2 words for the group').catch((e) => e);
         expect(err).toBeInstanceOf(GroupChatKeyError);
+        await waitFor(() => false, 200);
+        expect(sentReadable()).toEqual([]);
+    });
+
+    it('a removed member who held a key (keys 404 and chat 404): refused with "Only members…", never the lock notice, by both paths (confirmation of #1788, 4)', async () => {
+        fresh();
+        store.keyState = { highest: 2, after: 2 };
+        store.conversations.set(G, { id: G, type: 'group_thread', created_by: null });
+        const a = await postGroupChatMessage(G, 'R1', randomUUID(), null, undefined).catch((e) => e);
+        const b = await insertMessage(G, who.me.publicKey, 'R2').catch((e) => e);
+        expect([a?.message, b?.message]).toEqual([GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT]);
         await waitFor(() => false, 200);
         expect(sentReadable()).toEqual([]);
     });
@@ -150,12 +164,22 @@ describe('a group chat this phone has held a key of stays locked here', () => {
         expect(groupChatNotice({ nodeSaysLocked: false, seenLocked: false })).toBe(GROUP_CHAT_OLD_NODE_NOTICE);
     });
 
-    it('a wipe or sign-out (clearDB) drops the four group-key tables and forgets every opened key (finding 8)', async () => {
+    it('sign-out (clearDB identityLeaves) drops the four group-key tables; every wipe forgets every opened key (finding 8)', async () => {
+        const ring = groupKeyring('https://test.beanpool.org', who.me, G, memoryGroupKeyStore());
+        store.execs.length = 0;
+        await clearDB({ identityLeaves: true });
+        const drops = store.execs.filter((s) => /DROP TABLE/.test(s)).join(' ');
+        for (const t of ['group_chat_epochs', 'group_chat_key_state', 'group_line_verdicts', 'group_line_signers']) expect(drops).toContain(`DROP TABLE IF EXISTS ${t};`);
+        expect(groupKeyring('https://test.beanpool.org', who.me, G, memoryGroupKeyStore())).not.toBe(ring);
+    });
+
+    it('a Force Resync or a Wipe (clearDB, the identity kept) keeps the four group-key tables: the sticky lock and the highest epoch (director, NB3)', async () => {
         const ring = groupKeyring('https://test.beanpool.org', who.me, G, memoryGroupKeyStore());
         store.execs.length = 0;
         await clearDB();
         const drops = store.execs.filter((s) => /DROP TABLE/.test(s)).join(' ');
-        for (const t of ['group_chat_epochs', 'group_chat_key_state', 'group_line_verdicts', 'group_line_signers']) expect(drops).toContain(`DROP TABLE IF EXISTS ${t};`);
+        expect(drops).toContain('DROP TABLE IF EXISTS messages;');
+        for (const t of ['group_chat_epochs', 'group_chat_key_state', 'group_line_verdicts', 'group_line_signers']) expect(drops).not.toContain(t);
         expect(groupKeyring('https://test.beanpool.org', who.me, G, memoryGroupKeyStore())).not.toBe(ring);
     });
 });

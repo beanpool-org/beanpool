@@ -250,6 +250,8 @@ async function main(): Promise<void> {
     const feedBefore = await signedFetch('GET', '/api/marketplace/posts', null, r);
     assert(!!drill && !!meet && asked?.status === 'requested' && JSON.stringify(feedBefore.body).includes(drill!.id) && !!feedBefore.etag,
         `the guild has an offer asked for and an event, and Rae's feed shows them (got ${asked?.status} ${feedBefore.status} ${feedBefore.etag})`);
+    // Discovery names a closed group as closed (#1784 review N4), so its row says so before the sheet's own read lands.
+    const discoverBefore = await signedFetch('GET', '/api/groups?limit=50', null, outsider);
     assert(!!other && !!closeIt, 'two votes open in the guild');
     await vote(g3, closeIt, p, true);
     tickDecisions();
@@ -276,6 +278,12 @@ async function main(): Promise<void> {
     const feedAfter = await signedFetch('GET', '/api/marketplace/posts', null, r, { 'If-None-Match': feedBefore.etag! });
     assert(feedAfter.status === 200 && !JSON.stringify(feedAfter.body).includes(drill!.id) && feedAfter.etag !== feedBefore.etag,
         `a feed cached before the close is answered afresh, without the posts (got ${feedAfter.status}, ${feedBefore.etag} → ${feedAfter.etag})`);
+    const discoverAfter = await signedFetch('GET', '/api/groups?limit=50', null, outsider, { 'If-None-Match': discoverBefore.etag! });
+    const listed = (b: any) => (Array.isArray(b) ? b : []) as Array<{ id: string; closedAt?: string | null }>;
+    const g3Before = listed(discoverBefore.body).find(x => x.id === g3), g3After = listed(discoverAfter.body).find(x => x.id === g3);
+    assert(g3Before?.closedAt === null && discoverAfter.status === 200 && typeof g3After?.closedAt === 'string'
+        && listed(discoverAfter.body).filter(x => x.id !== g3).every(x => x.closedAt === null),
+        `discovery lists the guild with closedAt once it closed, the others null, and a list cached before is answered afresh (got ${discoverAfter.status} ${JSON.stringify({ before: g3Before?.closedAt, after: g3After?.closedAt })})`);
     let joinErr = '';
     try { joinGroup(g3, outsider.pubKeyHex); } catch (e: any) { joinErr = e.message; }
     assert(joinErr === GROUP_CLOSED, `a closed group takes nobody new (got ${joinErr})`);

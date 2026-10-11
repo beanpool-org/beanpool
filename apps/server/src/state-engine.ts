@@ -9779,6 +9779,14 @@ export function groupClosedAt(groupId: string): string | null {
     return (db.prepare('SELECT closed_at FROM group_closures WHERE group_id = ?').get(groupId) as { closed_at: string } | undefined)?.closed_at ?? null;
 }
 
+/** When each of these groups was closed, for those that were, in one read (the group list, #1784 review N4). */
+export function groupClosedAtMany(groupIds: string[]): Map<string, string> {
+    if (groupIds.length === 0) return new Map();
+    const rows = db.prepare('SELECT group_id, closed_at FROM group_closures WHERE group_id IN (SELECT value FROM json_each(?))')
+        .all(JSON.stringify(groupIds)) as Array<{ group_id: string; closed_at: string }>;
+    return new Map(rows.map(r => [r.group_id, r.closed_at]));
+}
+
 function assertGroupNotClosed(groupId: string): void {
     if (groupClosedAt(groupId)) throw new Error(GROUP_CLOSED);
 }

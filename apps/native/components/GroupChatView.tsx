@@ -23,7 +23,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -61,6 +61,7 @@ import { hapticTick, hapticSuccess, hapticWarning } from '../utils/haptics';
 import { ChatOwnerHeader } from './ChatOwnerHeader';
 import { InvitePeopleSheet } from './InvitePeopleSheet';
 import { GroupDetailModal } from './GroupDetailModal';
+import { GroupDecisions } from './EnterpriseDecisions';
 
 interface Props {
     kind: 'group' | 'enterprise';
@@ -456,6 +457,13 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 <Pressable style={chat.retryBtn} onPress={() => { setError(null); loadDetails().catch(() => { }); load(); }} accessibilityRole="button">
                     <Text style={chat.retryText}>Try again</Text>
                 </Pressable>
+                {/* Someone removed mid-vote reads no chat, but is still on the vote's roll: a push or Home's line
+                    lands them here (info=1), so the votes the node answers them show below (#1784 review B1). */}
+                {kind === 'group' && openInfo && (
+                    <ScrollView contentContainerStyle={{ padding: 16 }}>
+                        <GroupDecisions groupId={id} myPubkey={me ?? null} people={[]} />
+                    </ScrollView>
+                )}
             </View>
         );
     }

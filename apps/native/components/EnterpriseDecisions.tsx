@@ -78,8 +78,11 @@ export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, refreshK
     return (
         <ScopedDecisions
             read={read} cast={cast} nameOf={nameOf} refreshKey={refreshKey} note={GROUP_DECISIONS_NOTE} onChanged={onChanged}
-            propose={myPubkey ? (close, done) => (
-                <ProposeGroupDecision groupId={groupId} me={myPubkey} people={people} joinPolicy={joinPolicy} onClose={close} onDone={done} />
+            propose={myPubkey ? (close, done, list) => (
+                // Only the people the node takes in a vote (no suspended member, #1784 review N2).
+                <ProposeGroupDecision groupId={groupId} me={myPubkey}
+                    people={list.nameable ? people.filter(p => list.nameable!.includes(p.pubkey)) : people}
+                    joinPolicy={joinPolicy} onClose={close} onDone={done} />
             ) : null}
         />
     );
@@ -93,7 +96,7 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
     note: string;
     lifecycle?: string | null;
     refreshKey?: number;
-    propose: ((close: () => void, done: () => void) => React.ReactNode) | null;
+    propose: ((close: () => void, done: () => void, list: ScopedDecisionList) => React.ReactNode) | null;
     onChanged?: () => void;
 }) {
     const { colors } = useTheme();
@@ -132,7 +135,7 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
         <View style={s.card} accessibilityLabel="Decisions">
             <Text style={s.label} accessibilityRole="header">DECISIONS</Text>
             <Text style={s.note}>{note}</Text>
-            {list.onRoll === false && !list.closedAt && <Text style={s.note}>You watch this group, so you see its votes but don't vote.</Text>}
+            {list.watching === true && !list.closedAt && <Text style={s.note}>You watch this group, so you see its votes but don't vote.</Text>}
             {[...open, ...closed.slice(0, 5)].map(d => {
                 const mine = d.myVote ? (d.myVote.support === true || d.myVote.support === 1 ? 'Yes' : 'No') : null;
                 const isOpen = d.status === 'open';
@@ -144,7 +147,8 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
                         <Text style={s.meta}>Proposed by {nameOf(d.authorPubkey)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}</Text>
                         <Text style={s.tally}>{scopedTallyWords(d)}</Text>
                         {mine && <Text style={s.meta}>You voted {mine}.</Text>}
-                        {isOpen && !mine && list.onRoll !== false && (
+                        {/* The vote's own roll, frozen when it opened, says who votes: never who is in the group now. */}
+                        {isOpen && !mine && d.canVote === true && (
                             <View style={s.voteRow}>
                                 <Pressable
                                     style={[s.voteBtn, { backgroundColor: colors.brand.primary }, busyId === d.id && { opacity: 0.5 }]}
@@ -171,7 +175,7 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
                     <Text style={s.proposeText}>Propose a vote</Text>
                 </Pressable>
             )}
-            {proposing && propose?.(() => setProposing(false), () => { setProposing(false); void load(); onChanged?.(); })}
+            {proposing && propose?.(() => setProposing(false), () => { setProposing(false); void load(); onChanged?.(); }, list)}
         </View>
     );
 }

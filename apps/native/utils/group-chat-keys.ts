@@ -176,6 +176,15 @@ export class GroupKeyring {
         return this.loading;
     }
 
+    /**
+     * True once this phone has held a key of this group (an epoch verified, opened or made): the chat is locked here for
+     * good, whatever a node says later (review of #1788, finding 4; director's decision b).
+     */
+    async seenLocked(): Promise<boolean> {
+        await this.ensureLoaded();
+        return this.highest > 0 || this.keys.size > 0;
+    }
+
     /** The highest epoch this phone has verified or made (provenance §7 rule 1). */
     async highestEpoch(): Promise<number> {
         await this.ensureLoaded();

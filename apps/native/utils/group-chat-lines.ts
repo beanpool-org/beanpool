@@ -15,7 +15,10 @@
  * member's membership are hidden unopened.
  *
  * Old node (§14.3): a chat answer with no `encryption` is a node from before locked chats. The phone then sends and reads
- * as it always did, and never shows the chat as locked: no false success.
+ * as it always did, and never shows the chat as locked: no false success. But once this phone has held a key of the group
+ * (GroupKeyring.seenLocked), the chat stays locked here whatever the node says later: nothing readable is ever sent to
+ * it again, and the screen says why in the phone's own words, never the node's (review of #1788, finding 4; director's
+ * decision b).
  */
 import type { BeanPoolIdentity } from './identity';
 import { signedPost } from './node-post';
@@ -42,6 +45,16 @@ export function chatIsLocked(answer: any): answer is { encryption: GroupChatEncr
 
 /** The notice an old node's chat keeps (the phone never calls such a chat locked). */
 export const GROUP_CHAT_OLD_NODE_NOTICE = "This community's node is older and can read this group's chat. It will be locked once the node is updated.";
+/** A locked chat's notice (design §8), in the phone's own words. */
+export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, and who was mentioned.";
+/** A chat this phone has held a key of, which the node now says isn't locked. */
+export const GROUP_CHAT_LOCK_LOST_TEXT = "This node now says this chat isn't locked, but this phone has held its keys. Nothing is sent until the node locks it again.";
+
+/** The group chat's notice: the phone's own words for what it decided, never the node's text. */
+export function groupChatNotice(state: { nodeSaysLocked: boolean; seenLocked: boolean }): string {
+    if (state.nodeSaysLocked) return GROUP_CHAT_LOCKED_NOTICE;
+    return state.seenLocked ? GROUP_CHAT_LOCK_LOST_TEXT : GROUP_CHAT_OLD_NODE_NOTICE;
+}
 
 const UPDATE_REFUSALS = new Set(['epoch_stale', 'epoch_not_current', 'epoch_needed']);
 

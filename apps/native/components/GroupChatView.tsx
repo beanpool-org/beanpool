@@ -43,7 +43,7 @@ import {
     groupKeyringFor,
     type GroupItem, type GroupMemberItem,
 } from '../utils/db';
-import { chatIsLocked, groupChatShownLines, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
+import { chatIsLocked, groupChatNotice, groupChatShownLines, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
 import { isSealedGroupLine, searchShownLines } from '../utils/group-line-display';
 import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GROUP_KEYS_UNOPENABLE_TEXT } from '../utils/group-chat-keys';
 import {
@@ -115,6 +115,8 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const [securing, setSecuring] = useState<{ done: number; total: number } | null>(null);
     // Why this phone will not send right now (GroupChatKeyError's sentence), until the next send goes through.
     const [keyNotice, setKeyNotice] = useState<string | null>(null);
+    // This phone has held a key of this group: the chat is locked here whatever the node says (group-chat-lines).
+    const [seenLocked, setSeenLocked] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [invitedCount, setInvitedCount] = useState(0);
@@ -191,7 +193,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 answer = await getGroupChat(id);
                 setView(answer);
                 setMute(m => chatMuteFromAnswer(answer, m));
-                if (chatIsLocked(answer)) openThreadRef.current(answer);
+                openThreadRef.current(answer);
             } else {
                 answer = await getEnterpriseChat(id);
                 setView({ ...answer, canPost: !answer.readOnly, notice: ENTERPRISE_CHAT_NOTICE });
@@ -235,10 +237,20 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const servedMissing = useRef(false);
     const lastAnswer = useRef<any>(null);
     const openThreadRef = useRef<(answer: any) => void>(() => { });
-    openThreadRef.current = (answer: any) => {
-        lastAnswer.current = answer;
+    openThreadRef.current = (served: any) => {
+        lastAnswer.current = served;
         groupKeyringFor(id)
             .then(async ring => {
+                const held = await ring.seenLocked();
+                setSeenLocked(held);
+                let answer = served;
+                if (!chatIsLocked(served)) {
+                    // The node says the chat isn't locked. A phone that never held its key believes it (an old node);
+                    // one that did keeps it locked, and reads it by the keys it holds (review of #1788, finding 4).
+                    if (!held) { setThread(null); return; }
+                    const st = await ring.sync().catch(() => null);
+                    answer = { ...served, encryption: { current: st?.current ?? null, stale: st?.stale ?? true, fromEpoch: st?.fromEpoch ?? null } };
+                }
                 // Who this screen shows is who a key may go to (utils/group-chat-keys.ts rosterShown).
                 if (rosterRef.current.length) ring.noteShownRoster(rosterRef.current.map(r => r.memberPubkey));
                 const opened = await openGroupThread(ring, answer, rosterRef.current.map(r => ({ memberPubkey: r.memberPubkey, callsign: r.callsign, formerKeys: (r as any).formerKeys })));
@@ -252,7 +264,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     };
     // A roster that arrives after the lines re-names them (a former member, an earlier key).
     useEffect(() => {
-        if (lastAnswer.current && chatIsLocked(lastAnswer.current)) openThreadRef.current(lastAnswer.current);
+        if (lastAnswer.current) openThreadRef.current(lastAnswer.current);
     }, [rosterRows]);
     // Refreshes only while this screen is focused and the app is in the foreground, with one load the moment
     // either comes back — the DM screen's rule, shared (utils/chat-poll). The poll's first tick is immediate,
@@ -266,7 +278,8 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const rawMessages: any[] = view?.messages || [];
     const isConvenor = !!view?.isConvenor;
     const canPost = !!view?.canPost && !!me;
-    const locked = kind === 'group' && chatIsLocked(view);
+    // Locked by what this phone has verified, not by the node's word alone: once it held a key, always (finding 4).
+    const locked = kind === 'group' && (chatIsLocked(view) || seenLocked);
 
     /** The node's messages in the one shape every chat's components speak, plus what this phone still owes. */
     const messages: ChatMessage[] = useMemo(() => {
@@ -746,7 +759,8 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                     onSend={send}
                     busy={sending}
                     maxLength={GROUP_MESSAGE_MAX}
-                    notice={view.notice}
+                    // The phone's own words for what it decided, never the node's notice (finding 4).
+                    notice={kind === 'group' ? groupChatNotice({ nodeSaysLocked: chatIsLocked(view), seenLocked }) : view.notice}
                     // A long name wrapped the placeholder to three lines at 320dp; short ones read better named.
                     placeholder={name.length <= 18 ? `Message ${name}…` : (kind === 'group' ? 'Message the group…' : 'Message…')}
                     accessibilityLabel={`Message ${name}`}

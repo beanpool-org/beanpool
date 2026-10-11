@@ -29,9 +29,9 @@ import type { GroupSuccessionData } from './group-succession';
 import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, withoutSendState, type LocalMessageRow } from './chat-sync';
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
-import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import { sqliteGroupKeyStore } from './group-chat-store';
-import { sendSealedGroupLine, editSealedGroupLine } from './group-chat-lines';
+import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
@@ -4183,13 +4183,25 @@ async function isNodeReadableConversation(conversationId: string): Promise<boole
  */
 async function lockForConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata?: Record<string, unknown> }> {
     // A group's chat is locked since group chats step 2 (slice 3 here): sealed under the group's key, with its epoch in the
-    // metadata the node checks. A node from before locked chats has no keys route (404) and still reads it as before.
+    // metadata the node checks. Only a node from before locked chats, which this phone never saw locked, still reads it.
     const groupLine = await sealForGroupConversation(conversationId, text, line);
     if (groupLine) return groupLine;
     if (await isNodeReadableConversation(conversationId)) {
         return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
     }
     return lockWith(await requireDmKeyContext(conversationId), text, line);
+}
+
+/** True only when the node answers this group's chat with no `encryption`: a node from before locked chats (§14.3). */
+async function nodeChatIsUnlocked(groupId: string): Promise<boolean> {
+    try {
+        const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=1`);
+        if (!res.ok) return false;
+        const answer = await res.json().catch(() => null);
+        return !!answer && typeof answer === 'object' && !chatIsLocked(answer);
+    } catch {
+        return false;
+    }
 }
 
 /** A group chat line sealed by the keyring's pre-seal rules, or null when this conversation isn't a locked group's. */
@@ -4202,7 +4214,14 @@ async function sealForGroupConversation(conversationId: string, text: string, li
     try {
         sealedUnder = await ring.prepareToSeal();
     } catch (e) {
-        if (e instanceof GroupKeysRequestError && e.status === 404) return null;
+        // A 404 is an old node (no keys route) or a new one refusing this phone its keys (not a member). Readable words go
+        // only to an old node, by its own chat answer (no `encryption`), and only while this phone never held a key of
+        // this group (review of #1788, finding 4; director's decision b).
+        if (e instanceof GroupKeysRequestError && e.status === 404) {
+            if (await ring.seenLocked()) throw new GroupChatKeyError(GROUP_CHAT_LOCK_LOST_TEXT, 'refused');
+            if (await nodeChatIsUnlocked(conversationId)) return null;
+            throw new GroupChatKeyError('Only members of this group can open its chat', 'not_member');
+        }
         throw e;
     }
     const identity = await loadIdentity();
@@ -6349,20 +6368,27 @@ export async function getGroupChat(groupId: string, limit = 50, offset = 0): Pro
 }
 
 /**
- * Send a line in a group's chat. With `lock` (the node's chat answer carried `encryption`): sealed on this phone under
- * the group's key (utils/group-chat-lines.ts sendSealedGroupLine). Without: a node from before locked chats, which takes
- * `{ text }` as it always did (§14.3).
+ * Send a line in a group's chat. With `lock` (the chat is locked), or once this phone has held a key of this group
+ * whatever the node's answer says (review of #1788, finding 4): sealed on this phone under the group's key
+ * (utils/group-chat-lines.ts sendSealedGroupLine), or refused with a sentence. Otherwise a node from before locked chats,
+ * which takes `{ text }` as it always did (§14.3).
  */
 export async function postGroupChatMessage(
     groupId: string, text: string, clientId?: string, replyToId?: string | null,
     lock?: { after?: string | null; mentionCandidates?: { pubkey: string; callsign: string | null | undefined }[]; onProgress?: (done: number, total: number) => void },
 ): Promise<any> {
-    if (lock) {
-        const { nodeUrl, identity } = await groupKeyContext();
-        return sendSealedGroupLine(nodeUrl, identity, groupKeyStore(), {
-            groupId, text, clientId: clientId || Crypto.randomUUID(), replyToId, after: lock.after, mentionCandidates: lock.mentionCandidates,
-            progress: lock.onProgress ? { onProgress: lock.onProgress } : undefined,
-        });
+    const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore());
+    if (lock || await ring.seenLocked()) {
+        try {
+            return await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(), {
+                groupId, text, clientId: clientId || Crypto.randomUUID(), replyToId, after: lock?.after, mentionCandidates: lock?.mentionCandidates,
+                progress: lock?.onProgress ? { onProgress: lock.onProgress } : undefined,
+            });
+        } catch (e) {
+            if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw new GroupChatKeyError(GROUP_CHAT_LOCK_LOST_TEXT, 'refused');
+            throw e;
+        }
     }
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
 }

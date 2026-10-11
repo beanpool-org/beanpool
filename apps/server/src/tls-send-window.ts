@@ -25,8 +25,45 @@ export const TLS_SEND_WINDOW_BYTES = 64 * 1024;
 
 const NO_BODY = new Set([204, 205, 304]);
 
-function* windows(bytes: Buffer, size: number): Generator<Buffer> {
-    for (let at = 0; at < bytes.length; at += size) yield bytes.subarray(at, at + size);
+/** The windowed answers not yet out, each with its body and response: what tlsSendWindowStats counts. */
+const inFlight = new Set<{ body: Readable; res: { writableLength?: number } }>();
+/** The most any one of them held ahead, as each window was handed out (tlsSendWindowStats). */
+let mostAheadBytes = 0;
+
+/**
+ * What the windowed answers in flight hold beyond their bodies, as this middleware counts it: `ahead` is the bytes handed
+ * out but not yet taken by the TLS layer (the stream's buffer and the response's), so a reader who stops reading holds
+ * at most one window and the headers past its body (#1775 fix round 1).
+ */
+export function tlsSendWindowStats(): { sends: number; aheadBytes: number; mostAheadBytes: number } {
+    let aheadBytes = 0;
+    for (const s of inFlight) aheadBytes += s.body.readableLength + (s.res.writableLength ?? 0);
+    return { sends: inFlight.size, aheadBytes, mostAheadBytes };
+}
+
+/**
+ * `bytes` a window at a time, each a view of it (no copy), the next only when the response asks again: Koa pipes it, and
+ * pipe asks only after the socket has drained. A highWaterMark of 0 keeps none read ahead while the socket is full.
+ */
+function windows(bytes: Buffer, size: number, res: { writableLength?: number }): Readable {
+    let at = 0;
+    const body: Readable = new Readable({
+        highWaterMark: 0,
+        read() {
+            if (at >= bytes.length) { this.push(null); return; }
+            const end = Math.min(at + size, bytes.length);
+            const ahead = body.readableLength + (res.writableLength ?? 0) + (end - at);
+            if (ahead > mostAheadBytes) mostAheadBytes = ahead;
+            this.push(bytes.subarray(at, end));
+            at = end;
+        },
+    });
+    const send = { body, res };
+    inFlight.add(send);
+    const done = () => inFlight.delete(send);
+    body.once('end', done);
+    body.once('close', done);
+    return body;
 }
 
 /**
@@ -50,7 +87,7 @@ export function tlsSendWindows(size: number = TLS_SEND_WINDOW_BYTES): Koa.Middle
         }
         const bytes = typeof made === 'string' ? Buffer.from(made) : made;
         // Koa drops the Content-Length when a body becomes a stream; the same bytes go, so it is set again.
-        ctx.body = Readable.from(windows(bytes, size), { objectMode: false });
+        ctx.body = windows(bytes, size, ctx.res);
         ctx.length = bytes.length;
     };
 }

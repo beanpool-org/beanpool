@@ -64,7 +64,26 @@ async function reader(): Promise<void> {
         });
         s.on('error', reject);
     });
-    process.on('message', async (m: { path: string; encoding: string; count: number } | 'close') => {
+    // A reader who stops reading: it takes the headers and the first bytes, then reads no more and keeps the connection.
+    const stallOne = (path: string, encoding: string) => new Promise<void>((resolve, reject) => {
+        const s = tls.connect({ port, host: '127.0.0.1', rejectUnauthorized: false });
+        socks.push(s);
+        const n = ++readers;
+        const from = `10.${(n >> 16) & 255}.${(n >> 8) & 255}.${n & 255}`;
+        s.on('secureConnect', () => s.write(`GET ${path} HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: ${encoding}\r\nConnection: keep-alive\r\nX-Forwarded-For: ${from}\r\n\r\n`));
+        s.once('data', () => { s.pause(); resolve(); });
+        s.on('error', reject);
+    });
+    process.on('message', async (m: { path: string; encoding: string; count: number; stall?: boolean } | 'close') => {
+        if (m !== 'close' && m.stall) {
+            try {
+                await Promise.all(Array.from({ length: m.count }, () => stallOne(m.path, m.encoding)));
+                process.send!({ open: m.count });
+            } catch (e) {
+                process.send!({ error: String(e) });
+            }
+            return;
+        }
         if (m === 'close') {
             for (const s of socks) s.destroy();
             socks.length = 0;
@@ -156,6 +175,25 @@ async function main(): Promise<void> {
         }
         proto._write = write1;
         proto._writev = writev;
+
+        // Readers who stop reading after the first bytes: what the window holds for each beyond the answer's own body is
+        // at most one window and its headers, by the middleware's own count (tlsSendWindowStats), not the RSS. The most
+        // ahead is over every window handed out in this suite, the whole reads above included.
+        console.log('\n— 1b. readers who stop reading: at most one window ahead of the TLS layer —');
+        const { tlsSendWindowStats } = await import('./tls-send-window.js');
+        for (const encoding of ['identity', 'gzip']) {
+            const STALLED = 8;
+            const a = await ask<{ open?: number; error?: string }>({ path: HEAVY_PATH, encoding, count: STALLED, stall: true });
+            await new Promise((r) => setTimeout(r, 1000));
+            const st = tlsSendWindowStats();
+            await ask('close');
+            await new Promise((r) => setTimeout(r, 300));
+            console.log(`  (${encoding}: ${STALLED} readers stopped, ${st.sends} sends still in flight, ${st.aheadBytes} bytes ahead of the TLS layer in all; the most one send held ahead ${st.mostAheadBytes} bytes)`);
+            assert(!a.error, `${encoding}: ${STALLED} readers took the first bytes and stopped (${a.error ?? 'ok'})`);
+            assert(st.aheadBytes <= st.sends * (WINDOW + HEADERS_ALLOWANCE) && st.mostAheadBytes <= WINDOW + HEADERS_ALLOWANCE,
+                `${encoding}: each send holds at most one window and its headers ahead of the TLS layer (${st.aheadBytes} bytes over ${st.sends} sends; at most ${st.mostAheadBytes} in one)`);
+        }
+        assert(tlsSendWindowStats().sends === 0, `every windowed send is let go once its reader hangs up (${tlsSendWindowStats().sends} left)`);
 
         console.log(`\n— 2. what ${READERS} idle keep-alive connections hold after a ~1.5 MB answer, against after a light one —`);
         // The memory outside the JS heap: on Linux the RSS less the heap; on a Mac, whose RSS keeps pages already freed until

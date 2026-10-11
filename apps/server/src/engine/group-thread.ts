@@ -413,9 +413,9 @@ export function assertSealedGroupLine(groupId: string, ciphertext: unknown, nonc
  * The node stores { epoch, sender, replyToId?, mentions? } beside it, the mentions being the ones the app declared, cut to
  * active members other than the author (§9). `sender` is the signed caller, the key the line's associated data and inner
  * signature are bound to: a re-key moves author_pubkey to the new key and leaves metadata alone, so apps open a line with
- * `metadata.sender ?? author_pubkey` and show author_pubkey (DESIGN-group-chat-epochs-over-time-fable.md §2). The node
- * cannot lie here: a wrong sender fails to open. Every other member in the chat gets a push unless they muted it; a mention gets
- * through a mute.
+ * `metadata.sender ?? author_pubkey` (DESIGN-group-chat-epochs-over-time-fable.md §2); a wrong sender fails to open. Which
+ * key an app shows as the line's author is not settled here (display rule: see the line-display design; slice 3). Every
+ * other member in the chat gets a push unless they muted it; a mention gets through a mute.
  */
 export function postGroupThreadMessage(
     cb: MessagingCallbacks,

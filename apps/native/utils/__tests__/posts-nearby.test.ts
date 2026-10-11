@@ -66,6 +66,21 @@ function reconcileCycle(held: NearbyHeld[], set: string[], unfetchable: Set<stri
     return { after, asked };
 }
 
+/**
+ * Great-circle km by another road than the module's haversine (the review of #1778, finding 5: an oracle that is the
+ * module's own nearbyKm can't see a wrong distance): the straight chord between the two points on the unit sphere, then
+ * its arc. Agrees with the haversine to well under a metre; shares none of its arithmetic.
+ */
+function chordKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const v = (lat: number, lng: number) => {
+        const [p, l] = [(lat * Math.PI) / 180, (lng * Math.PI) / 180];
+        return [Math.cos(p) * Math.cos(l), Math.cos(p) * Math.sin(l), Math.sin(p)];
+    };
+    const [a, b] = [v(lat1, lng1), v(lat2, lng2)];
+    const chord = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    return 6371 * 2 * Math.asin(Math.min(1, chord / 2));
+}
+
 const ids = (rows: { id: string }[]) => new Set(rows.map(r => r.id));
 const sorted = (s: Iterable<string>) => [...s].sort();
 
@@ -133,7 +148,7 @@ describe('posts-nearby, 2,000 seeded worlds', { timeout: 60_000 }, () => {
             expect(stay.length, `seed ${seed}`).toBe(Math.min(w.max, others.length));
             // Brute force: rank every other listing, keep the first max.
             const key = (h: NearbyHeld) => (w.area
-                ? (h.lat === null || h.lng === null ? Infinity : nearbyKm(w.area.lat, w.area.lng, h.lat, h.lng))
+                ? (h.lat === null || h.lng === null ? Infinity : chordKm(w.area.lat, w.area.lng, h.lat, h.lng))
                 : -(h.at ? Date.parse(h.at) : -Infinity));
             // Ties (two with no place, two at one time) newest first, then by id: no subtraction, Infinity − Infinity is NaN.
             const cmp = (x: number, y: number) => (x === y ? 0 : x < y ? -1 : 1);
@@ -191,6 +206,21 @@ describe('posts-nearby, the edges', () => {
         expect(nearbySetOf({ posts: [] })).toBeNull();
         expect(nearbySetOf({ posts: [], set: [1] })).toBeNull();
         expect(nearbySetOf(null)).toBeNull();
+    });
+
+    it('distance: known pairs, and the chord oracle over random pairs, across the antimeridian and near the poles', () => {
+        // Sydney to Melbourne, great circle on a 6,371 km sphere: about 713 km.
+        expect(nearbyKm(-33.8688, 151.2093, -37.8136, 144.9631)).toBeGreaterThan(712);
+        expect(nearbyKm(-33.8688, 151.2093, -37.8136, 144.9631)).toBeLessThan(715);
+        // 0.2 degrees of longitude across ±180 at 17.8 S: 0.2 × 111.19 × cos(17.8°) ≈ 21.2 km, never most of the way round.
+        expect(Math.abs(nearbyKm(-17.8, 179.9, -17.8, -179.9) - 21.17)).toBeLessThan(0.05);
+        // A degree of latitude anywhere: 111.19 km.
+        expect(Math.abs(nearbyKm(10, 30, 11, 30) - 111.19)).toBeLessThan(0.01);
+        const r = rng(7);
+        for (let i = 0; i < 5000; i++) {
+            const [a, b, c, d] = [-89 + r() * 178, -180 + r() * 360, -89 + r() * 178, -180 + r() * 360];
+            expect(Math.abs(nearbyKm(a, b, c, d) - chordKm(a, b, c, d)), `${a},${b} → ${c},${d}`).toBeLessThan(1e-3);
+        }
     });
 
     it('prune: across the antimeridian a listing 20 km away beats one 300 km away', () => {

@@ -389,6 +389,19 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         expect(nav).toHaveBeenCalledWith('messages');
     });
 
+    it("a keepers' vote line lands on its enterprise (DESIGN-group-decisions S2), not Commons → Decide", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            needs: { items: [
+                { kind: 'vote', count: 1, accent: false, label: 'Vote by Friday: Pay for the stall repairs', target: { to: 'enterprise', id: 'ent-key' } },
+            ] },
+        })));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const needs = await screen.findByTestId('home-card-needs');
+        fireEvent.click(within(needs).getByRole('button', { name: /Pay for the stall repairs/ }));
+        expect(nav).toHaveBeenCalledWith('enterprise', 'ent-key');
+    });
+
     it('a new member\'s Beans: nothing to repay, how credit opens; the steps link to where each is done', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
             beans: { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false },

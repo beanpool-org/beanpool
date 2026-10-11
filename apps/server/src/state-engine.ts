@@ -11,7 +11,7 @@ import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing }
 import { expoPushHeaders } from './config/expo-access-token.js';
 import { sanitizeMessage } from './sanitize-message.js';
 import {
-    getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory,
+    getNodeProfile, getNodeFeatures, getProfileSwitches, nearbyListingsLimits, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory,
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
@@ -19,6 +19,7 @@ import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
+import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
@@ -658,6 +659,8 @@ export function initStateEngine(): void {
     // accounts, where the node has probation (the global profile; engine/probation.ts pollVotesFromNewOrWords; never on
     // an open vote, nor while a poll is open: @beanpool/engine pollOriginsMayShow). Read with the poll, never stored.
     installPollVoteOriginsAtBoot();
+    // Where listings sync by area, each member's area in memory for the listing pushes (listingReach).
+    if (getProfileSwitches().nearbyListings) loadMemberAreas();
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
@@ -1428,8 +1431,12 @@ export function ringListingDoorbell(type: ListingDoorbell): void {
 // are not announced (node-profile.ts announceProfiles, off on the global node) it goes only to that member's own sockets
 // and to the members who share a conversation with them (cardCircle); the versions move all the same.
 //
+// `listingParties`: members a public listing's own event reaches wherever they are on a node that syncs listings by area,
+// besides those its rows name (listingReach): the sides of the deals a removal closed just before it (engine/posts.ts
+// removePost, adminDeletePost). Never sent.
+//
 // Returns how many open sockets it was written to.
-export interface BroadcastOptions { othersGetDoorbell?: boolean; ownCard?: boolean }
+export interface BroadcastOptions { othersGetDoorbell?: boolean; ownCard?: boolean; listingParties?: string[] }
 export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     // A post hidden by reports (engine/auto-moderation.ts) goes in full to its author only, whatever sent it (an
     // edit, a vote, an RSVP); everyone else gets `{ type, id }`, which no app applies as a listing, so each one's
@@ -1506,6 +1513,56 @@ function isTreasuryKey(pk: string): boolean {
     return !!(db.prepare('SELECT 1 FROM members WHERE public_key = ? AND is_treasury = 1').get(pk));
 }
 
+/**
+ * Everyone who may drive any of these enterprises, in one read: canOperateTreasury's rule for every keeper at once (a
+ * bound keeper whose row is active and no visitor's, holding the switch, members.can_operate, or a node admin).
+ */
+function keepersOf(treasuries: string[]): Set<string> {
+    if (treasuries.length === 0) return new Set();
+    const rows = db.prepare(`SELECT DISTINCT o.member_pubkey AS pk, m.can_operate FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey IN (${treasuries.map(() => '?').join(', ')}) AND m.status = 'active' AND m.is_visitor = 0`)
+        .all(...treasuries) as { pk: string; can_operate: number | null }[];
+    return new Set(rows.filter(r => !!r.can_operate || isAdminPubkey(r.pk)).map(r => r.pk));
+}
+
+/**
+ * Who a public listing's own event (new_post, post_updated, post_removed, sent to no `recipients`) reaches on a node that
+ * syncs by area (the profile's `nearbyListings`; DESIGN-global-sync-by-area §2.5): a socket whose member's area
+ * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it), and the
+ * listing's parties always: its author, the member who took it, both sides of each open deal on it (asked for, or taken
+ * and not yet done: a member's set ties them to it, getNearbySet) or of one a removal just closed (`extraParties`,
+ * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. Every other socket gets nothing, not
+ * even a doorbell (a doorbell sends an app back for every listing): one with no area, or with no member's key, among
+ * them. Their apps have the newest listings and the poll. A listing with no place reaches
+ * its parties alone. The place and the parties are the stored row's, so an event carrying only an id is measured as one
+ * carrying the post. Everything is read once for the event; each socket is then a lookup and a distance, no read.
+ *
+ * Null for an event that names no listing, or one not on this node: it goes as before. That is a bare doorbell for many
+ * listings at once (a burst's hide, engine/burst-cleanup.ts), rare and about no one place.
+ */
+function listingReach(event: any, extraParties: string[] = []): ((pubkey: string | null | undefined) => boolean) | null {
+    const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
+    if (!id) return null;
+    const row = db.prepare('SELECT author_pubkey, accepted_by, lat, lng FROM posts WHERE id = ?').get(id) as
+        { author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null } | undefined;
+    if (!row) return null;
+    const { radiusKm } = nearbyListingsLimits();
+    const placed = row.lat != null && row.lng != null;
+    const deals = db.prepare("SELECT buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending')")
+        .all(id) as { buyer_pubkey: string; seller_pubkey: string }[];
+    const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
+        .filter((k): k is string => !!k);
+    const keepers = keepersOf(sides.filter(isTreasuryKey));
+    return (pubkey) => {
+        if (!pubkey) return false;
+        if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
+        if (!placed) return false;
+        const area = memberAreaFor(pubkey);
+        return !!area && engine.haversineKm(area.lat, area.lng, row.lat!, row.lng!) <= radiusKm;
+    };
+}
+
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
@@ -1549,6 +1606,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
                 bumpPostsVersion();
                 bumpMembersVersion();
                 bumpActivityVersion();
+                // A removal clears the member's area (adminPruneUser, purgeMemberSelf): their pushes by area stop with it.
+                if (typeof event.publicKey === 'string') refreshMemberAreas([event.publicKey]);
                 break;
         }
     }
@@ -1591,6 +1650,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         || (!!pk && [tradePost.authorPublicKey, tradePost.acceptedBy].some(side => !!side && isTreasuryKey(side) && canOperateTreasury(pk, side))));
     let withoutParty: string | null = null;
     let withoutPartyNorVoters: string | null = null;
+    // Where listings sync by area, a public listing's own event reaches only the sockets near it and its parties.
+    const reach = !recipients && LISTING_WS_EVENTS.has(event?.type) && getProfileSwitches().nearbyListings ? listingReach(event, opts?.listingParties) : null;
     // The joined key's standing, asked once, and only if some socket holds that key.
     let joined: SocketStanding | undefined;
     // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.
@@ -1614,6 +1675,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         }
         if (joinToJoinerOnly && !joinersOwn) continue;
         if (toCircle && !(ws._memberPubkey && toCircle.has(ws._memberPubkey))) continue;
+        if (reach && !reach(ws._memberPubkey)) continue;
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;

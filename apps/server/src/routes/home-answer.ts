@@ -660,8 +660,10 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
 
 function decideCard(c: Ctx): HomeCards['decide'] | undefined {
     built('decide');
+    // The community's Decisions only: this card opens Commons → Decide, which never lists a keepers' vote. The Needs-you
+    // line carries those and lands on the enterprise (lands=enterprise).
     const open = decisionsOn()
-        ? [...getOpenDecisions(), ...scopedVotesFor(c)]
+        ? getOpenDecisions()
             .filter(d => !madeWithoutVote(d) && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now)
         : [];
     const soonest = open.map(d => d.closesAt).sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;

@@ -1077,10 +1077,10 @@ export interface NearbySet {
     /** near(M): nearest first (NEAREST_ORDER), or the newest first for a member with no area. */
     near: string[];
     /** Each row of S with its updated_at, each of its authors whose standing ever moved with their
-     *  board_standing_changed_at (an author's holiday moves no listing row), and the newest members.updated_at of its
-     *  authors (a rename moves no listing row either), in one string: with `ids`, what a read of S
-     *  answers depends on (the route's ETag). Every row's own time, not the newest: a row edited to a time below another's (a clock behind, an imported row)
-     *  still changes it. */
+     *  board_standing_changed_at (an author's holiday moves no listing row), and each of its authors as
+     *  public_key@members.updated_at (a rename moves no listing row either), in one string: with `ids`, what a read of S
+     *  answers depends on (the route's ETag). Every row's and every author's own time, not the newest: a row or an author
+     *  edited to a time below another's (a clock behind, an imported row) still changes it. */
     stamp: string;
 }
 
@@ -1194,13 +1194,15 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         const standing = prepared(db, `SELECT public_key, board_standing_changed_at AS at FROM members
             WHERE board_standing_changed_at IS NOT NULL AND public_key IN (SELECT value FROM json_each(?)) ORDER BY public_key`).all(JSON.stringify(authors)) as Array<{ public_key: string; at: string }>;
         stamp += `|${standing.map(r => `${r.public_key}@${r.at}`).join(',')}`;
-        // The newest change to an author's row (members.updated_at, which members_touch_updated_at moves on a rename, a
+        // Each author's last change to their row (members.updated_at, which members_touch_updated_at moves on a rename, a
         // new face, their credit, a vouch, a freeze): every row of S carries its author's name, face and standing, so
         // such a change is a change to what a read of S answers, though no listing row moves. One lookup per author on
-        // the key (the deciding review of b97677d5, N6).
-        const touched = prepared(db, 'SELECT max(updated_at) AS at FROM members WHERE public_key IN (SELECT value FROM json_each(?))')
-            .get(JSON.stringify(authors)) as { at: string | null } | undefined;
-        stamp += `|${touched?.at ?? ''}`;
+        // the key (the deciding review of b97677d5, N6). Each author's own time, not the newest: one author's row dated
+        // ahead (an import from a node whose clock runs fast) would otherwise hide every other author's change until
+        // the clock passed it, as a row's own time does above (the review of #1739, finding 2).
+        const touched = prepared(db, `SELECT public_key, updated_at AS at FROM members
+            WHERE public_key IN (SELECT value FROM json_each(?)) ORDER BY public_key`).all(JSON.stringify(authors)) as Array<{ public_key: string; at: string | null }>;
+        stamp += `|${touched.map(r => `${r.public_key}@${r.at ?? ''}`).join(',')}`;
     }
     return { ids, near, stamp };
 }

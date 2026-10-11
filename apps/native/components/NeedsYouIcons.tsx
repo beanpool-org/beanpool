@@ -5,19 +5,19 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
-import { getUnreadByConversation, getDecisions, getMarketplaceTransactions, signedGet } from '../utils/db';
+import { getUnreadByConversation, getMarketplaceTransactions, signedGet } from '../utils/db';
 import { createRefreshGate } from '../utils/refresh-gate';
 import { anchorUrl } from '../utils/node-post';
 import { cachedNodeRole, canManageNode, fetchAdminQueue, forgetNodeRole } from '../utils/node-admin';
 import { getCachedNodeProfile, decisionsOn, type NodeFeatures } from '../utils/node-profile';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
-    buildNeedsYou, fitNeedsYou, moreLabel, needsTargetHref, needsYouRowOrder, NEEDS_YOU_SLOT,
+    buildNeedsYou, fitNeedsYou, moreLabel, needsTargetHref, needsYouRowOrder, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT,
     type NeedsYouEntry, type NeedsYouInputs, type NeedsYouKind, type NeedsYouTarget,
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
-import { HOME_HEADER_WAIT_MS, homeForHeader, onHomeRead } from '../utils/home-store';
-import { decideOnNode, localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
+import { HOME_HEADER_WAIT_MS, homeForHeader, homePath, onHomeRead } from '../utils/home-store';
+import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
 
 // The slot between the bean and the invite icon holds one small icon per kind of thing that needs the
 // member, only while something of that kind does. No text. What counts, the order, the accent and the
@@ -54,7 +54,13 @@ export function goToNeedsTarget(target: Exclude<NeedsYouTarget, { to: 'admin' }>
 }
 
 type LocalParts = Pick<NeedsYouInputs, 'transactions' | 'conversations'>;
-type NodeParts = Pick<NeedsYouInputs, 'decisions' | 'groupChats' | 'admin'> & { communityName: string | null };
+type NodeParts = Pick<NeedsYouInputs, 'groupChats' | 'admin'> & {
+    communityName: string | null;
+    /** Home's vote line, from the header's own read (loadNode); drawn by Home's rule (mergeNeeds) with the switches beside it. */
+    votes: HomeNeedsItem[] | null;
+    features: HomeAnswer['features'] | null;
+};
+const NO_NODE_PARTS: NodeParts = { groupChats: null, admin: null, communityName: null, votes: null, features: null };
 const settle = <T,>(p: Promise<T>) => p.catch(() => null);
 
 /** From the phone's own database: no request, nothing decrypted. */
@@ -88,21 +94,25 @@ async function switchesHere(): Promise<NodeFeatures | null> {
 }
 
 /**
- * Two signed requests to the node, plus the admin queue for owners and admins. A vote is asked for only where it lands
- * on a screen the node shows, Commons → Decide (home-cards.ts `decideOnNode`: Decisions on, and Beans on so the Commons
- * tab is there), by the same rule as the lines drawn from Home's answer (`mergeNeeds`), so a vote never opens a hidden
- * tab and the icon doesn't come and go with the age of Home's answer (PR #1483 review 4166559525). On the worldwide
- * community nothing is open to a vote, and the 🛡️ words don't say an emergency suspension is being voted on.
+ * Two signed requests to the node, plus the admin queue for owners and admins. The votes are Home's own vote line, asked
+ * as Home asks it (GET /api/home?cards=needs&lands=enterprise): the community's Decisions and the keepers' votes the
+ * member is on the roll of, the line landing where Home's does (an enterprise's own screen for a keepers' vote). It is
+ * drawn by Home's rule (`mergeNeeds`): a vote on Commons → Decide only where that tab is there (home-cards.ts
+ * `decideOnNode`), so a vote never opens a hidden tab, and the icon doesn't come and go with the age of Home's answer
+ * (PR #1483 review 4166559525; review opus-1767 N3). With Decisions off (the worldwide community) nothing is asked, and
+ * the 🛡️ words don't say an emergency suspension is being voted on.
  */
 async function loadNode(identity: BeanPoolIdentity): Promise<NodeParts> {
     const features = await switchesHere();
-    const [decisions, yourGroups, admin] = await Promise.all([
-        decideOnNode({ ...features }) ? settle(getDecisions('open')) : null,
+    const [home, yourGroups, admin] = await Promise.all([
+        decisionsOn(features) ? settle(signedGet(homePath(['needs'])).then(r => (r.ok ? r.json() : null))) : null,
         settle(signedGet('/api/your-groups').then(r => (r.ok ? r.json() : null))),
         settle(loadAdmin(identity)),
     ]);
+    const needs = home?.cards?.needs?.items;
     return {
-        decisions: decisions && { ...decisions, signed: decisions.canPropose !== null },
+        votes: Array.isArray(needs) ? needs.filter((i: HomeNeedsItem) => i?.kind === 'vote') : null,
+        features: features ? { ...features } : null,
         groupChats: Array.isArray(yourGroups?.items) ? yourGroups.items : null,
         admin: admin?.admin ? { ...admin.admin, decisions: decisionsOn(features) } : null,
         communityName: admin?.communityName ?? null,
@@ -138,7 +148,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     const manage = useManageNode();
 
     const local = useRef<LocalParts>({ transactions: null, conversations: null });
-    const node = useRef<NodeParts>({ decisions: null, groupChats: null, admin: null, communityName: null });
+    const node = useRef<NodeParts>(NO_NODE_PARTS);
     /** The node's lines from Home's answer, with the node's switches, while the header draws from it (null: from its own reads). */
     const home = useRef<{ items: HomeNeedsItem[]; features: HomeAnswer['features'] } | null>(null);
     const localBusy = useRef(false);
@@ -155,7 +165,10 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
             setEntries(mergeNeeds(home.current.items, localNeeds(me, now, local.current.transactions, local.current.conversations), now, home.current.features));
             return;
         }
-        setEntries(buildNeedsYou({ me, now, ...local.current, ...node.current }));
+        const { groupChats, admin, votes, features } = node.current;
+        const rank = (k: NeedsYouKind) => NEEDS_YOU_PRIORITY.indexOf(k);
+        setEntries([...buildNeedsYou({ me, now, ...local.current, decisions: null, groupChats, admin }), ...mergeNeeds(votes, null, now, features)]
+            .sort((a, b) => rank(a.kind) - rank(b.kind)));
     }, [me]);
 
     const refreshLocal = useCallback(async () => {
@@ -174,7 +187,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     // A new identity starts from nothing, and gets its own gate.
     useEffect(() => {
         local.current = { transactions: null, conversations: null };
-        node.current = { decisions: null, groupChats: null, admin: null, communityName: null };
+        node.current = NO_NODE_PARTS;
         home.current = null;
         setEntries([]);
         if (!me) return;

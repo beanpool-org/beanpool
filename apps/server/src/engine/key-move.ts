@@ -1,10 +1,12 @@
 // A member's key replaced by a re-key (engine/member-wizards.ts completeRekey): every row that names the old key names the
 // new one, on the main server when the re-key completes, and on its standby when the copy that carries it arrives.
 //
-// A leaf module (the database and nothing else), so the standby's import (engine/sync.ts) and the re-key share one list.
+// A leaf module (the database and the listing pushes' area map, nothing else), so the standby's import (engine/sync.ts)
+// and the re-key share one list.
 
 import { db, deletePlainRows } from '../db/db.js';
 import { dropGroupWrapsOf } from './group-keys.js';
+import { refreshMemberAreas } from './member-area.js';
 
 // ── both ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     } else {
         db.prepare("UPDATE members SET public_key = ?, status = CASE WHEN status = 'disabled' THEN 'disabled' ELSE 'active' END, updated_at = ? WHERE public_key = ?").run(newKey, at, oldKey);
     }
+    // The member's area went with the row: once the transaction commits, the listing pushes' map (member-area.ts) has
+    // it on the new key and nothing on the old, so the new phone hears the listings near it before any restart.
+    refreshMemberAreas([oldKey, newKey]);
 
     // (a2) their avatar, out of the row (member_photos): it goes where the row goes. The row's avatar_ref names it, and
     // its URL is made under the new key.

@@ -772,6 +772,10 @@ async function main(): Promise<void> {
     {
         const wsBase = `${BASE.replace('https', 'wss')}/ws`;
         const sockets = { unsigned: await openSocket(wsBase), outsider: await openSocket(`${wsBase}?${signedWsQuery(outsider)}`), member: await openSocket(`${wsBase}?${signedWsQuery(bob)}`) };
+        // Where listings sync by area (the global profile's `nearbyListings`, DESIGN-global-sync-by-area §2.5), a listing's
+        // own event reaches the members near it and its parties alone (test-ws-nearby-push): Bob's area is near the post.
+        const byArea = getProfileSwitches().nearbyListings;
+        if (byArea) (await import('./engine/member-area.js')).setMemberArea(bob.pk, { lat: 12.3, lng: 45.7 });
         await sleep(200);
         const made = await call('POST', alice, POSTS, { type: 'offer', category: 'other', title: 'Sentinel live offer', description: 'Sentinel live', authorPublicKey: alice.pk, lat: 12.34567, lng: 45.67891 });
         assert(made.status === 200 && made.body?.success, `Alice posts over HTTP (got ${made.status} ${made.text.slice(0, 100)})`);
@@ -780,7 +784,8 @@ async function main(): Promise<void> {
             // The greeting every socket gets on connect is the node's counts (/api/community/info's); after it, doorbells.
             const events = s.raw.map(m => { try { return JSON.parse(m); } catch { return { type: '?' }; } }).filter(e => e.type !== 'state_snapshot');
             const shapes = events.map(e => Object.keys(e).join(','));
-            assert(events.length > 0 && shapes.every(k => k === 'type'), `${who} socket gets doorbells only: { type } (${events.length} after the greeting: ${[...new Set(shapes)].join(' / ')})`);
+            if (byArea) assert(events.length === 0, `${who} socket gets nothing of a listing where listings sync by area: it has no area (${events.length} after the greeting: ${[...new Set(shapes)].join(' / ')})`);
+            else assert(events.length > 0 && shapes.every(k => k === 'type'), `${who} socket gets doorbells only: { type } (${events.length} after the greeting: ${[...new Set(shapes)].join(' / ')})`);
             assert(!s.raw.some(m => m.includes(alice.pk) || m.includes('Sentinel')), `${who} socket is sent nothing of the post or its author`);
         }
         assert(sockets.member.raw.some(m => m.includes('Sentinel live offer')), "a member's socket gets the post, as always");

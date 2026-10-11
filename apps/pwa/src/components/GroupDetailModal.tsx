@@ -303,9 +303,10 @@ export function GroupDetailModal({
                         </p>
                     )}
 
-                    {/* The group's votes, high on the sheet: Home's vote line lands here. It draws nothing for someone the
-                        node doesn't answer, or when there is no vote and none can open. */}
-                    {isMember && (
+                    {/* The group's votes, high on the sheet: Home's vote line lands here. Drawn for anyone the node answers,
+                        members or not: someone removed or made an observer mid-vote still votes on it (#1784 review B1). It
+                        draws nothing for someone the node doesn't answer, or when there is no vote and none can open. */}
+                    {(
                         <GroupDecisions
                             groupId={groupData.id}
                             myPubkey={myPubkey ?? null}
@@ -395,7 +396,7 @@ export function GroupDetailModal({
 
                     {/* The quiet-lead vote, beside the roster it is about. It draws nothing unless the lead is
                         eligible for replacement or a vote has been held, so a healthy group sees no change. */}
-                    {isMember && (
+                    {isMember && !closed && (
                         <GroupSuccessionPanel
                             groupId={groupData.id}
                             members={members}

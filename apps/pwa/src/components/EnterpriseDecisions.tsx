@@ -73,8 +73,11 @@ export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, onChange
     return (
         <ScopedDecisions
             id="group-decisions" read={read} cast={cast} nameOf={nameOf} note={GROUP_DECISIONS_NOTE} onChanged={onChanged}
-            propose={myPubkey ? (close, done) => (
-                <ProposeGroupDecision groupId={groupId} me={myPubkey} people={people} joinPolicy={joinPolicy} onClose={close} onDone={done} />
+            propose={myPubkey ? (close, done, list) => (
+                // Only the people the node takes in a vote (no suspended member, #1784 review N2).
+                <ProposeGroupDecision groupId={groupId} me={myPubkey}
+                    people={list.nameable ? people.filter(p => list.nameable!.includes(p.pubkey)) : people}
+                    joinPolicy={joinPolicy} onClose={close} onDone={done} />
             ) : null}
         />
     );
@@ -88,7 +91,7 @@ function ScopedDecisions({ id, read, cast, nameOf, note, lifecycle, propose, onC
     nameOf: (pubkey: string) => string;
     note: ReactNode;
     lifecycle?: string | null;
-    propose: ((close: () => void, done: () => void) => ReactNode) | null;
+    propose: ((close: () => void, done: () => void, list: ScopedDecisionList) => ReactNode) | null;
     onChanged?: () => void;
 }) {
     const [list, setList] = useState<ScopedDecisionList | null>(null);
@@ -127,7 +130,7 @@ function ScopedDecisions({ id, read, cast, nameOf, note, lifecycle, propose, onC
             className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 rounded-2xl p-4 space-y-3 min-w-0">
             <h3 id={`${id}-heading`} className="m-0 text-xs font-black tracking-wide text-nature-600 dark:text-nature-300">DECISIONS</h3>
             <p className="m-0 text-sm text-nature-700 dark:text-nature-300 break-words">{note}</p>
-            {list.onRoll === false && !list.closedAt && (
+            {list.watching === true && !list.closedAt && (
                 <p className="m-0 text-sm text-nature-700 dark:text-nature-300 break-words">You watch this group, so you see its votes but don't vote.</p>
             )}
             {[...open, ...closed].map(d => {
@@ -145,7 +148,8 @@ function ScopedDecisions({ id, read, cast, nameOf, note, lifecycle, propose, onC
                         </p>
                         <p className="m-0 mt-1 text-sm font-semibold text-nature-900 dark:text-nature-100 break-words" data-testid="scoped-tally">{scopedTallyWords(d)}</p>
                         {mine && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">You voted {mine}.</p>}
-                        {isOpen && !mine && list.onRoll !== false && (
+                        {/* The vote's own roll, frozen when it opened, says who votes: never who is in the group now. */}
+                        {isOpen && !mine && d.canVote === true && (
                             <div className="flex flex-wrap gap-2 mt-2">
                                 <button type="button" className={`${btnYes} flex-1 min-w-[6rem]`} disabled={busyId === d.id}
                                     onClick={() => vote(d, true)} aria-label={`Vote Yes on ${d.title}`}>Yes</button>
@@ -161,7 +165,7 @@ function ScopedDecisions({ id, read, cast, nameOf, note, lifecycle, propose, onC
             {list.canPropose && !!propose && !proposing && (
                 <button type="button" className={`${btnNo} w-full`} onClick={() => setProposing(true)}>Propose a vote</button>
             )}
-            {proposing && propose?.(() => setProposing(false), () => { setProposing(false); void load(); onChanged?.(); })}
+            {proposing && propose?.(() => setProposing(false), () => { setProposing(false); void load(); onChanged?.(); }, list)}
         </section>
     );
 }

@@ -33,7 +33,9 @@ beforeEach(() => {
 describe("a chat group's Decisions block (DESIGN-group-decisions S3)", () => {
     it('open: turnout only and Yes / No; closed: the split, in the group\'s words', async () => {
         vi.mocked(api.getGroupDecisions).mockResolvedValue({
-            decisions: [card(), card({ id: 'g2', title: 'Close it', effect: 'close_group', subject: null, status: 'unresolved', executionReason: null,
+            decisions: [card({ canVote: true }), card({ id: 'g2', title: 'Close it', effect: 'close_group', subject: null, status: 'unresolved',
+                // What the node writes when too few voted: the card says it in plain words (#1784 review N5).
+                executionReason: 'Quorum not met (1/3)', canVote: false,
                 tally: { voted: 1, roll: 4, quorumRequired: 3, thresholdRequired: 0.6, yes: 1, no: 0 } })] as never,
             canPropose: true, rollSize: 4, onRoll: true, closedAt: null,
         });
@@ -52,7 +54,7 @@ describe("a chat group's Decisions block (DESIGN-group-decisions S3)", () => {
     });
 
     it('an observer sees the votes but no Yes / No and no propose button', async () => {
-        vi.mocked(api.getGroupDecisions).mockResolvedValue({ decisions: [card()] as never, canPropose: false, rollSize: 4, onRoll: false, closedAt: null });
+        vi.mocked(api.getGroupDecisions).mockResolvedValue({ decisions: [card({ canVote: false })] as never, canPropose: false, rollSize: 4, onRoll: false, watching: true, closedAt: null });
         render(<GroupDecisions groupId="grp" myPubkey="obi" people={people} />);
         const block = await screen.findByTestId('group-decisions');
         expect(within(block).getByText(/You watch this group/)).toBeInTheDocument();

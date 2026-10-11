@@ -74,7 +74,13 @@ function makeRepo() {
     git(work, 'commit', '-q', '-m', 'base');
     git(work, 'remote', 'add', 'origin', path.join(root, 'origin.git'));
     git(work, 'push', '-q', '-u', 'origin', 'main');
-    return { root, work, cleanup: () => fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) };
+    return { root, work, cleanup: () => {
+        try {
+            fs.rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+        } catch {
+            // Non-blocking best-effort cleanup of temporary test repository
+        }
+    } };
 }
 
 /** Add a paragraph to a page (a path under the guide package). */

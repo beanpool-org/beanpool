@@ -133,6 +133,10 @@ export function proposeRekey(rawCode: unknown, newKey: string, now = Date.now())
         noteWrongCode(now);
         throw new RekeyRedeemRefusal(404, 'code_not_valid', REKEY_CODE_NOT_VALID);
     }
+    // A code for an account deleted or removed since it was made binds nothing (completeRekey refuses it, REKEY_ACCOUNT_GONE),
+    // so no phone waits on it: the same one sentence, and nothing written.
+    const account = db.prepare('SELECT status FROM members WHERE public_key = ?').get(req.old_pubkey) as { status: string } | undefined;
+    if (!account || account.status === 'pruned') throw new RekeyRedeemRefusal(404, 'code_not_valid', REKEY_CODE_NOT_VALID);
     assertPlainTablesWritable();
 
     return db.transaction((): RekeyAsk => {

@@ -39,7 +39,7 @@ export function pruneAuthAttempts(now = Date.now()): void {
     for (const [ip, entry] of authAttempts) {
         if (now >= entry.resetAt) authAttempts.delete(ip);
     }
-    for (const map of [doorByKey, doorByAddress]) {
+    for (const map of [doorByKey, doorByAddress, rekeyStatusByAddress]) {
         for (const [id, entry] of map) if (now >= entry.resetAt) map.delete(id);
     }
 }

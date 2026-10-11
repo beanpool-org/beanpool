@@ -427,6 +427,34 @@ describe('group chats on the phone against a dishonest node', () => {
         expect((await shown(dov, g)).visible.find((l) => l.id === n1.id)?.text).toBe('N1: under the first epoch 1');
     });
 
+    it('highest (finding 6): a record signed by a key that is nobody the screen shows never raises the highest epoch', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const g = await newGroup(ana, 'Highest pushed');
+        await say(ana, g, 'one');
+        const { record } = makeGroupEpochRecord({ myEdPrivHex: eve.identity.privateKey, groupId: g, epoch: 9000, reason: 'rotate', subject: null, createdAt: new Date().toISOString(), recipients: [eve.identity.publicKey, ana.identity.publicKey] });
+        const anaWrap = record.wraps!.find((w) => w.recipient === ana.identity.publicKey)!;
+        hooks.push(async (r) => {
+            if (r.method === 'GET' && r.path === `/api/groups/${g}/keys`) {
+                const a = await nodeAnswer(r);
+                const { wraps: _w, groupId: _g, ...served } = record;
+                a.body.epochs.push(served);
+                a.body.myWraps.push({ epoch: 9000, wrapper: eve.identity.publicKey, ephPub: anaWrap.ephPub, nonce: anaWrap.nonce, wrapped: anaWrap.wrapped, sig: null });
+                return jsonResponse(a.status, a.body);
+            }
+            return undefined;
+        });
+        await ring(ana, g).sync();
+        await ring(ana, g).keyFor(9000);
+        hooks.pop();
+        expect(await ring(ana, g).highestEpoch()).toBe(1);
+        // The node honest again: Ana's phone sends, also after a restart.
+        await say(ana, g, 'two');
+        forgetGroupKeys();
+        await say(ana, g, 'three');
+        expect((await sql("SELECT COUNT(*) n FROM messages WHERE conversation_id = ? AND type = 'text'", [g]))[0].n).toBe(3);
+    });
+
     it('every request stayed on this machine', () => {
         expect(elsewhere).toEqual([]);
     });

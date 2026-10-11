@@ -184,7 +184,16 @@ export class GroupKeyring {
      */
     async seenLocked(): Promise<boolean> {
         await this.ensureLoaded();
-        return this.highest > 0 || this.keys.size > 0;
+        return this.highest > 0 || this.keys.size > 0 || [...this.epochs.values()].some((e) => !!e.wrap);
+    }
+
+    /**
+     * True if a record's maker is this phone or someone the screen shows as a member: only such a record raises the
+     * highest epoch. Any key can sign a record, and a raise is for good, so one the node made would stop this phone
+     * sending in the group ever again (review of #1788, finding 6). Reading still needs no roster.
+     */
+    private makerShown(record: GroupEpochRecord): boolean {
+        return record.createdBy === this.identity.publicKey || !!this.shown?.has(record.createdBy);
     }
 
     /**
@@ -301,12 +310,13 @@ export class GroupKeyring {
             this.lastHoleFetch = Date.now();
             await this.absorb(await this.fetchKeys(`?epochs=${holes.slice(-100).join(',')}`)).catch(() => { });
         }
-        // The highest rises when a record verifies (rule 1): the newest one this phone has, header only, no roster.
+        // The highest rises when a record verifies (rule 1): the newest one this phone has, by its header, made by someone
+        // the screen shows (finding 6).
         const top = Math.max(newest, a.current ?? 0);
         if (top > this.highest) {
             const rec = this.epochs.get(top)?.record;
             try {
-                if (rec) { verifyGroupEpochRecord(rec, { groupId: this.groupId, epoch: top }); await this.raise(top); }
+                if (rec && this.makerShown(rec)) { verifyGroupEpochRecord(rec, { groupId: this.groupId, epoch: top }); await this.raise(top); }
             } catch { this.badRecords.add(top); }
         }
         this.state = { current: a.current ?? null, stale: !!a.stale, fromEpoch: a.fromEpoch ?? null, roster: Array.isArray(a.roster) ? a.roster : [] };
@@ -402,7 +412,7 @@ export class GroupKeyring {
             const key = openMyKey(stored.record, stored.wrap, this.identity.privateKey, this.groupId);
             this.keys.set(epoch, key);
             wrapOpenedThisSession = true;
-            await this.raise(epoch);
+            if (this.makerShown(stored.record)) await this.raise(epoch);
             return key;
         } catch (e) {
             if (!(e instanceof GroupKeyNotVerifiedError)) throw e;
@@ -535,6 +545,8 @@ export class GroupKeyring {
             }
         }
         if (!fits) return this.rotate(progress);
+        // Verified with its maker in today's roster, which the screen shows: the highest is at least this one.
+        await this.raise(state.current);
         const key = await this.keyFor(state.current);
         if (!key) {
             if (groupKeysLookUnopenable()) throw new GroupChatKeyError(GROUP_KEYS_UNOPENABLE_TEXT, 'unopenable');

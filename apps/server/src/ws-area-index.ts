@@ -105,7 +105,9 @@ export class WsClients extends Set<any> {
         if (super.has(ws)) return this;
         super.add(ws);
         const key = ws._memberPubkey;
-        const clients = this;
+        const refile = (socket: any, old: unknown, value: unknown) => {
+            if (this.has(socket)) { this.unlink(socket, old); this.link(socket, value); }
+        };
         Object.defineProperty(ws, '_memberPubkey', {
             configurable: true,
             enumerable: true,
@@ -113,7 +115,7 @@ export class WsClients extends Set<any> {
             set(value: unknown) {
                 const old = this[KEY];
                 this[KEY] = value;
-                if (old !== value && clients.has(this)) { clients.unlink(this, old); clients.link(this, value); }
+                if (old !== value) refile(this, old, value);
             },
         });
         ws[KEY] = key;

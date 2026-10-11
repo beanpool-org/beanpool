@@ -10,6 +10,8 @@
  *    groups" shows it closed.
  *  - A former member (left, or removed) reads only the votes they were on; one opened after they went is 404.
  *  - Home's vote line lands on the group for an app that opens it (lands=group), and an older app gets none.
+ *  - The candidate guard answers only a convenor: an outsider or a member is refused as for anyone (#1777 R1); the 30-day
+ *    silence vote's candidate is held as a lead vote's is (R3); the vote's membership writes stamp past the row (R2).
  *
  * Local only — it talks to the server it starts on localhost and nothing else.
  */
@@ -23,7 +25,7 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, tickDecisions, removeGroupMember, joinGroup, postGroupThreadMessage, createPost, requestPost, setMemberRole, GROUP_CLOSED,
     setUserStatusRow, registerPushToken,
-    GROUP_LEAD_CANDIDATE_HELD,
+    GROUP_LEAD_CANDIDATE_HELD, setGroupRoleByVote, replaceGroupLeadByVote, removeGroupMemberByVote,
 } from './state-engine.js';
 import { GROUP_CLOSED_TO_POSTS } from './engine/posts.js';
 import { startHttpsServer } from './https-server.js';
@@ -74,7 +76,7 @@ function makeMember(callsign: string, balance = 50): Id {
 type Signed = { status: number; body: any; error?: string; etag?: string | null; replay: () => Promise<{ status: number; body: any }> };
 
 /** The replay-proof scheme the real middleware requires: method + path (without its query) + timestamp + nonce + body. */
-async function signedFetch(method: 'GET' | 'POST', path: string, body: unknown, id: Id | null, extra: Record<string, string> = {}): Promise<Signed> {
+async function signedFetch(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body: unknown, id: Id | null, extra: Record<string, string> = {}): Promise<Signed> {
     const bodyString = method === 'GET' ? '' : JSON.stringify(body ?? {});
     const headers: Record<string, string> = { ...extra };
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
@@ -341,6 +343,55 @@ async function main(): Promise<void> {
     tickDecisions();
     assert(row(forBo).status === 'executed' && groupRow(g5).lead_pubkey === mb.pubKeyHex,
         `so the members' vote carries: Bo is the lead (got ${row(forBo).status} ${row(forBo).execution_reason ?? ''})`);
+
+    // R1: only a convenor is answered with the hold. Anyone else gets what they get for anyone (403), so a refusal tells an
+    // outsider nothing about who an open lead vote's candidate is. forCyd is still open, with Cyd its candidate.
+    const out5 = makeMember('Out5');
+    const outDelCand = await signedFetch('DELETE', `/api/groups/${g5}/members/${cv.pubKeyHex}`, {}, out5);
+    const outDelOther = await signedFetch('DELETE', `/api/groups/${g5}/members/${ma.pubKeyHex}`, {}, out5);
+    const outPatchCand = await signedFetch('PATCH', `/api/groups/${g5}/members/${cv.pubKeyHex}`, { role: 'member' }, out5);
+    const outPatchOther = await signedFetch('PATCH', `/api/groups/${g5}/members/${ld.pubKeyHex}`, { role: 'member' }, out5);
+    assert(row(forCyd).status === 'open' && outDelCand.status === 403 && outDelCand.status === outDelOther.status && outDelCand.error === outDelOther.error
+        && outPatchCand.status === 403 && outPatchCand.status === outPatchOther.status && outPatchCand.error === outPatchOther.error,
+        `an outsider removing or demoting the candidate is answered as for anyone else (got ${outDelCand.status}/${outDelOther.status}, ${outPatchCand.status}/${outPatchOther.status}: ${outDelCand.error})`);
+    const memPatchCand = await signedFetch('PATCH', `/api/groups/${g5}/members/${cv.pubKeyHex}`, { role: 'member' }, ma);
+    const memPatchOther = await signedFetch('PATCH', `/api/groups/${g5}/members/${ld.pubKeyHex}`, { role: 'member' }, ma);
+    assert(memPatchCand.status === 403 && memPatchCand.status === memPatchOther.status && memPatchCand.error === memPatchOther.error,
+        `so is a plain member (got ${memPatchCand.status}/${memPatchOther.status})`);
+    const convDelCand = await signedFetch('DELETE', `/api/groups/${g5}/members/${cv.pubKeyHex}`, {}, mb);
+    assert(convDelCand.status === 400 && convDelCand.error === GROUP_LEAD_CANDIDATE_HELD && roleOf(g5, cv.pubKeyHex)?.status === 'active',
+        `a convenor is still held, over HTTP (got ${convDelCand.status} ${convDelCand.error})`);
+
+    // R3: the 30-day silence vote's candidate is held the same way, while that vote is active.
+    const [l7, c7, a7, q7] = ['Lin7', 'Cyd7', 'Ada7', 'Quin7'].map(n => makeMember(n));
+    const g7 = makeGroup('Quiet Guild', [{ id: l7, role: 'convenor' }, { id: c7, role: 'convenor' }, { id: a7, role: 'member' }, { id: q7, role: 'member' }]);
+    const silenceId = crypto.randomUUID();
+    db.prepare(`INSERT INTO group_convenor_proposals (id, group_id, convenor_pubkey, candidate_pubkey, proposer_pubkey, status, deadline_at)
+                VALUES (?, ?, ?, ?, ?, 'active', ?)`).run(silenceId, g7, l7.pubKeyHex, q7.pubKeyHex, a7.pubKeyHex, new Date(Date.now() + 14 * DAY).toISOString());
+    let silRemoveErr = '', silDemoteErr = '';
+    try { removeGroupMember(g7, c7.pubKeyHex, q7.pubKeyHex); } catch (e: any) { silRemoveErr = e.message; }
+    try { setMemberRole(g7, c7.pubKeyHex, q7.pubKeyHex, 'observer'); } catch (e: any) { silDemoteErr = e.message; }
+    assert(silRemoveErr === GROUP_LEAD_CANDIDATE_HELD && silDemoteErr === GROUP_LEAD_CANDIDATE_HELD
+        && roleOf(g7, q7.pubKeyHex)?.status === 'active' && roleOf(g7, q7.pubKeyHex)?.role === 'member',
+        `no convenor can remove or demote the silence vote's candidate (got ${silRemoveErr || 'removed'} / ${silDemoteErr || 'demoted'})`);
+    db.prepare("UPDATE group_convenor_proposals SET status = 'cancelled', closed_reason = 'convenor_returned' WHERE id = ?").run(silenceId);
+    let silAfterErr = '';
+    try { setMemberRole(g7, c7.pubKeyHex, q7.pubKeyHex, 'observer'); } catch (e: any) { silAfterErr = e.message; }
+    assert(!silAfterErr && roleOf(g7, q7.pubKeyHex)?.role === 'observer', `once that vote has closed, they change as before (got ${silAfterErr || 'ok'})`);
+
+    // R2: a vote's membership writes stamp the row strictly past its last stamp, as every membership writer does: a row
+    // stamped ahead (a clock step, a promoted standby behind the main) must not leave the vote's change behind it.
+    const [l8, b8, c8, d8] = ['Lin8', 'Bo8', 'Cy8', 'Dee8'].map(n => makeMember(n));
+    const g8 = makeGroup('Stamp Guild', [{ id: l8, role: 'convenor' }, { id: b8, role: 'member' }, { id: c8, role: 'member' }, { id: d8, role: 'member' }]);
+    const ahead = new Date(Date.now() + 5 * 60_000).toISOString();
+    const stampOf = (pk: string) => (db.prepare('SELECT updated_at FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g8, pk) as any).updated_at as string;
+    for (const k of [b8, c8, d8]) db.prepare('UPDATE group_members SET updated_at = ? WHERE group_id = ? AND member_pubkey = ?').run(ahead, g8, k.pubKeyHex);
+    setGroupRoleByVote(g8, b8.pubKeyHex, 'convenor');
+    replaceGroupLeadByVote(g8, c8.pubKeyHex);
+    removeGroupMemberByVote(g8, d8.pubKeyHex);
+    assert(stampOf(b8.pubKeyHex) > ahead && stampOf(c8.pubKeyHex) > ahead && stampOf(d8.pubKeyHex) > ahead
+        && roleOf(g8, b8.pubKeyHex)?.role === 'convenor' && roleOf(g8, d8.pubKeyHex)?.status === 'removed',
+        `a role vote, a lead vote and a removal by vote each stamp past the row's ${ahead} (got ${stampOf(b8.pubKeyHex)}, ${stampOf(c8.pubKeyHex)}, ${stampOf(d8.pubKeyHex)})`);
 
     // The candidate suspended mid-vote is off the roll by the time it is carried out: void, and the lead is unchanged.
     const [ld6, cv6, a6, b6, c6] = ['Lin6', 'Cyd6', 'Ada6', 'Bo6', 'Cy6'].map(n => makeMember(n));

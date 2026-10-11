@@ -115,6 +115,8 @@ export interface OffboardOptions {
 export const REKEY_CODE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /** issueRekeyCode's refusal of a code on the operator's own key. */
+/** A key whose ask on this code the admins declined (completeRekey). */
+export const REKEY_DECLINED_PHONE = 'That phone was declined for this code, so it can’t be bound with it. Make a new code with the member there.';
 export const REKEY_OWN_KEY = 'You can’t make a re-key code for your own account: it would end your session, and nobody would be left to confirm your new phone. To move to a new phone while you still have this one, restore your 12 words on it (Settings shows them). If your key is lost or exposed, ask another owner or admin to make the code.';
 
 /** completeRekey's refusal for an account deleted or removed after its code was issued. */
@@ -352,6 +354,12 @@ export function completeRekey(
     }
     if (req.status !== 'pending') {
         throw new Error(`Re-enrolment code is no longer active (status: ${req.status})`);
+    }
+    // A phone the admins said is not the member's (declineRekeyProposal) is never bound with this code, by its number or
+    // by a pasted key: a stale card on a second dashboard or a second admin can't undo a decline, and the declined phone
+    // has already let its key go (#1783 review N1).
+    if (db.prepare('SELECT 1 FROM rekey_proposals WHERE code = ? AND new_pubkey = ? AND declined_at IS NOT NULL').get(req.code, cleanNew)) {
+        throw refusal(409, REKEY_DECLINED_PHONE);
     }
     // The operator as this call names it: the admin route's session, or the issuer the member's own completion reads
     // from the code (routes/community.ts), which is the old key itself when a member re-keyed themselves.
@@ -629,8 +637,12 @@ export function cancelRekeyCode(
  * `codeNeedsStepUp` says the viewer may read it after Manage again (the phone's step-up).
  */
 export type RekeyRequestView = Omit<RekeyRequestRow, 'code'> & { code?: string; codeNeedsStepUp?: true };
-/** A phone that asked on the pending code (engine/rekey-redeem.ts): its key, the digits it shows, when it asked. */
-export interface RekeyProposalRow { newPubkey: string; match: string; proposedAt: string }
+/**
+ * A phone that asked on the pending code (engine/rekey-redeem.ts): its key (the card shows a prefix, and "Not theirs"
+ * names it) and when it asked. Never its digits: the admin types the number on the member's phone and the node finds the
+ * phone (bindRekeyByMatch), so a card can't be bound by a press (#1783 review B2).
+ */
+export interface RekeyProposalRow { newPubkey: string; proposedAt: string }
 /** A finished re-key as the status answer gives it: its spent code stays in the audit log. */
 export type RekeyAuditLogView = Omit<RekeyAuditLogRow, 'reenrollment_code'>;
 
@@ -654,6 +666,8 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
     pendingRequest: RekeyRequestView | null;
     /** The phones waiting on the pending code, oldest first: only beside the code itself, to a viewer who may read it. */
     proposals: RekeyProposalRow[];
+    /** Wrong numbers typed on the pending code so far (bindRekeyByMatch stops it at REKEY_MATCH_TRIES); beside the code only. */
+    wrongNumbers: number;
     history: RekeyAuditLogView[];
 } {
     const cleanPub = publicKey.trim().toLowerCase();
@@ -680,10 +694,13 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
     }
     // The phones that asked, for the wizard's "Bind this phone" cards: to whoever reads the code, as binding asks the same.
     const proposals: RekeyProposalRow[] = pendingRequest?.code
-        ? (db.prepare('SELECT new_pubkey, match, proposed_at FROM rekey_proposals WHERE code = ? AND declined_at IS NULL ORDER BY proposed_at, new_pubkey')
-            .all(pendingRequest.code) as { new_pubkey: string; match: string; proposed_at: string }[])
-            .map((p) => ({ newPubkey: p.new_pubkey, match: p.match, proposedAt: p.proposed_at }))
+        ? (db.prepare('SELECT new_pubkey, proposed_at FROM rekey_proposals WHERE code = ? AND declined_at IS NULL ORDER BY proposed_at, new_pubkey')
+            .all(pendingRequest.code) as { new_pubkey: string; proposed_at: string }[])
+            .map((p) => ({ newPubkey: p.new_pubkey, proposedAt: p.proposed_at }))
         : [];
+    const wrongNumbers = pendingRequest?.code
+        ? ((db.prepare('SELECT wrong_matches FROM rekey_requests WHERE id = ?').get(pending!.id) as { wrong_matches: number | null } | undefined)?.wrong_matches ?? 0)
+        : 0;
 
     const history = (db.prepare(`
         SELECT id, old_pubkey, new_pubkey, operator_pubkey, performed_at, completed_at, details
@@ -695,6 +712,7 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
         invalidatedInfo,
         pendingRequest,
         proposals,
+        wrongNumbers,
         history,
     };
 }

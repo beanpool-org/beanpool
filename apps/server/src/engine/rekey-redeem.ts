@@ -1,10 +1,12 @@
 /**
  * The member's side of a re-key (#1768; design scratch/global-node/DESIGN-rekey-redeem-fable.md §2–§4, decided by Marty
  * 2026-10-11): the replacement phone scans or types the admin's RK- code, and that binds nothing. It registers a
- * PROPOSAL (this key wants this code) and gets two digits to show; the admin, looking at the dashboard, binds the key
- * whose digits match the phone in front of them (`POST …/rekey/complete` with that key) or declines it. The number match
- * of the settings sign-in (settings-signin-pairing.ts), so a stolen or guessed code buys nothing on its own: a thief's
- * scan only adds a proposal with digits of its own, which the admin never sees on the member's phone.
+ * PROPOSAL (this key wants this code) and gets two digits to show; the admin TYPES the number on the phone in front of
+ * them (`POST …/rekey/complete` with `{ code, match }`), and the node binds the live, undeclined proposal with those
+ * digits (bindRekeyByMatch), or the admin declines a phone. The number match of the settings sign-in
+ * (settings-signin-pairing.ts confirmPairing): the dashboard never shows the digits, and three wrong numbers stop the
+ * code. So a stolen or guessed code buys nothing on its own: a thief's scan only adds a proposal with digits of its
+ * own, which the admin never sees on the member's phone (#1783 review B2).
  *
  * - One answer for a code that is unknown, used, expired or cancelled (REKEY_CODE_NOT_VALID): a wrong guess learns
  *   nothing about which codes were ever made. A node-wide ceiling of wrong codes an hour (REKEY_WRONG_CODES), after which
@@ -23,7 +25,7 @@ import { db } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { logger } from '../logger.js';
-import { assertMayRekey, type RekeyRequestRow } from './member-wizards.js';
+import { assertMayRekey, completeRekey, type RekeyRequestRow } from './member-wizards.js';
 
 /** The one sentence for a code that is unknown, used, expired or cancelled. */
 export const REKEY_CODE_NOT_VALID = 'That code isn’t valid. Ask the admin for a new one.';
@@ -34,7 +36,14 @@ export const REKEY_CODE_FULL = 'This code can’t take any more phones. Ask the 
 /** The node-wide ceiling on wrong codes. */
 export const REKEY_TOO_MANY_WRONG = 'Too many wrong codes have been tried here in the last hour. Try again later.';
 
+/** The admin typed digits no phone waiting on the code shows. */
+export const REKEY_WRONG_NUMBER = 'No phone waiting on this code shows that number. Check the number on their phone and type it again.';
+/** The third wrong number: the code stops. */
+export const REKEY_CODE_STOPPED = 'Three wrong numbers were typed, so this code has stopped. Make a new code with the member there.';
+
 export const REKEY_MAX_PROPOSERS = 5;
+/** Wrong numbers typed on one code before it stops (settings-signin-pairing's PAIRING_CONFIRM_TRIES). */
+export const REKEY_MATCH_TRIES = 3;
 export const REKEY_MAX_DECLINES = 3;
 export const REKEY_WRONG_CODES = { perHour: 60, windowMs: 3_600_000 } as const;
 
@@ -199,4 +208,47 @@ export function declineRekeyProposal(oldPublicKey: string, newPublicKey: string,
     const declines = (db.prepare('SELECT COUNT(*) AS n FROM rekey_proposals WHERE code = ? AND declined_at IS NOT NULL').get(req.code) as { n: number }).n;
     logger.info('AUTH', `[Rekey] A phone (${shortKey(cleanNew)}) declined by ${/^[0-9a-f]{64}$/.test(cleanOperator) ? shortKey(cleanOperator) : cleanOperator}`);
     return { declined: true, declines };
+}
+
+/**
+ * The admin's bind (POST …/rekey/complete with `{ code, match }`): the number typed is the number on the member's phone,
+ * and the node finds the live, undeclined proposal on this code with those digits and binds its key (completeRekey). A
+ * number no waiting phone shows is a wrong try, kept on the code's row (wrong_matches); the third stops the code
+ * (status 'expired': the member stays held, as a lapsed code leaves them, and a new code is made with them there). Who
+ * may make the code may bind it (assertMayRekey), asked before a try is counted. Throws {@link RekeyRedeemRefusal}, or
+ * completeRekey's errors.
+ */
+export function bindRekeyByMatch(oldPublicKey: string, rawCode: unknown, rawMatch: unknown, operator: string, now = Date.now()):
+    ReturnType<typeof completeRekey> {
+    assertPlainTablesWritable();
+    const cleanOld = (oldPublicKey || '').trim().toLowerCase();
+    const cleanOperator = (operator || '').trim().toLowerCase() || 'owner:password';
+    const code = cleanRekeyCode(rawCode);
+    const req = requestByCode(code);
+    if (!req || req.old_pubkey !== cleanOld || !isLive(req, now)) {
+        throw new RekeyRedeemRefusal(404, 'no_live_code', 'This member has no re-key code waiting. Make a new code.');
+    }
+    assertMayRekey(cleanOld, cleanOperator);
+    const match = typeof rawMatch === 'string' ? rawMatch.trim() : '';
+    if (!/^\d{2}$/.test(match)) throw new RekeyRedeemRefusal(400, 'match_required', 'Type the two digits on their phone.');
+
+    const found = db.prepare('SELECT new_pubkey FROM rekey_proposals WHERE code = ? AND match = ? AND declined_at IS NULL').get(code, match) as { new_pubkey: string } | undefined;
+    if (found) return completeRekey(cleanOld, found.new_pubkey, code, cleanOperator);
+
+    const tries = db.transaction((): number => {
+        db.prepare('UPDATE rekey_requests SET wrong_matches = COALESCE(wrong_matches, 0) + 1 WHERE id = ?').run(req.id);
+        const n = (db.prepare('SELECT wrong_matches FROM rekey_requests WHERE id = ?').get(req.id) as { wrong_matches: number }).wrong_matches;
+        if (n >= REKEY_MATCH_TRIES) db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ? AND status = 'pending'").run(req.id);
+        return n;
+    })();
+    const who = /^[0-9a-f]{64}$/.test(cleanOperator) ? shortKey(cleanOperator) : cleanOperator;
+    if (tries >= REKEY_MATCH_TRIES) {
+        const member = db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(cleanOld) as { callsign: string } | undefined;
+        logger.security('AUTH', `[Rekey] ${member?.callsign ?? 'A member'}'s re-key code stopped after ${tries} wrong numbers typed by ${who}`);
+        throw new RekeyRedeemRefusal(409, 'code_stopped', REKEY_CODE_STOPPED);
+    }
+    logger.info('AUTH', `[Rekey] A wrong number typed by ${who} (${tries} of ${REKEY_MATCH_TRIES})`);
+    const err = new RekeyRedeemRefusal(409, 'wrong_number', REKEY_WRONG_NUMBER);
+    (err as RekeyRedeemRefusal & { triesLeft?: number }).triesLeft = REKEY_MATCH_TRIES - tries;
+    throw err;
 }

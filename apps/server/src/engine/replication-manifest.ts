@@ -402,7 +402,7 @@ export const TABLES: Record<string, TableEntry> = {
     // Every invite already sent, and who used which.
     invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome updated_at'),
     // A replacement phone's code an operator issued.
-    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status'),
+    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status wrong_matches'),
     // The phones that asked for a code, and the digits each shows (engine/rekey-redeem.ts): a promoted standby shows the admin
     // the same phones, so the one they bind is the one they saw.
     rekey_proposals: plain('code new_pubkey match proposed_at declined_at updated_at'),

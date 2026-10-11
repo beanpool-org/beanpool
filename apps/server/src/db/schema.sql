@@ -2490,7 +2490,9 @@ CREATE TABLE IF NOT EXISTS rekey_requests (
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- The member’s status before the code suspended them; a cancelled code puts it back (NULL on a code made before it was kept).
-    prior_status     TEXT
+    prior_status     TEXT,
+    -- Wrong numbers the admin typed for this code's phones (engine/rekey-redeem.ts bindRekeyByMatch); the third stops the code.
+    wrong_matches    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_code ON rekey_requests(code);
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_old ON rekey_requests(old_pubkey);

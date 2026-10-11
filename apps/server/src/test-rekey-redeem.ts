@@ -48,9 +48,10 @@ import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } 
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
-import { cleanRekeyCode, resetRekeyWrongCodesForTests, REKEY_CODE_NOT_VALID, REKEY_KEY_HAS_ACCOUNT, REKEY_TOO_MANY_WRONG, REKEY_CODE_FULL } from './engine/rekey-redeem.js';
+import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { cleanRekeyCode, resetRekeyWrongCodesForTests, REKEY_CODE_NOT_VALID, REKEY_KEY_HAS_ACCOUNT, REKEY_TOO_MANY_WRONG, REKEY_CODE_FULL, REKEY_WRONG_NUMBER, REKEY_CODE_STOPPED } from './engine/rekey-redeem.js';
 import { setNodeRole } from './config/node-role.js';
-import { REKEY_OWN_KEY } from './engine/member-wizards.js';
+import { REKEY_OWN_KEY, REKEY_DECLINED_PHONE } from './engine/member-wizards.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { registerVisitor } from './engine/members.js';
 
@@ -97,7 +98,8 @@ function keySession(kp: Keypair): string {
 }
 
 /** A fresh minute for every per-address limiter (the suite's requests all come from one address). */
-const freshMinute = () => pruneAuthAttempts(Date.now() + 61_000);
+// A new minute for the limiters: the auth limiter's and the gateway's (this suite makes more than a minute's worth of requests).
+const freshMinute = () => { pruneAuthAttempts(Date.now() + 61_000); resetGatewayRateLimit(); };
 
 let BASE = '';
 
@@ -171,6 +173,8 @@ async function as(session: string | null, method: string, path: string, body?: u
 const issue = (session: string, pk: string) => as(session, 'POST', `/api/local/admin/members/${pk}/rekey/issue-code`, {});
 const status = (session: string, pk: string) => as(session, 'GET', `/api/local/admin/members/${pk}/rekey/status`);
 const complete = (session: string, pk: string, code: string, newPubkey: string) => as(session, 'POST', `/api/local/admin/members/${pk}/rekey/complete`, { code, newPubkey });
+/** The wizard's step 2: the number the admin typed from the member's phone. */
+const bindByNumber = (session: string, pk: string, code: string, match: unknown) => as(session, 'POST', `/api/local/admin/members/${pk}/rekey/complete`, { code, match });
 const decline = (session: string, pk: string, newPubkey: string) => as(session, 'POST', `/api/local/admin/members/${pk}/rekey/proposals/${newPubkey}/decline`, {});
 
 const proposalCount = (code: string) => (db.prepare('SELECT COUNT(*) AS n FROM rekey_proposals WHERE code = ?').get(code) as { n: number }).n;
@@ -198,7 +202,7 @@ async function runTests() {
     const adminSession = keySession(admin);
 
     // ── A ──
-    section('A. Happy path: ask, the admin sees the number, binds that key, the phone is told bound');
+    section('A. Happy path: ask, the admin types the number on the phone, the node binds that phone, the phone is told bound');
     {
         const mia = join('MiaMember');
         // Seven Beans she holds, from a trade with Ada (a conserving pair of rows, read into the ledger).
@@ -217,10 +221,11 @@ async function runTests() {
         assert(p0.status === 200 && p0.json.state === 'waiting' && p0.json.match === a.json.match, `the poll says waiting, same digits (got ${JSON.stringify(p0.json)})`);
         const st = await status(adminSession, mia.pubKeyHex);
         const props = st.json.proposals as any[];
-        assert(st.status === 200 && props?.length === 1 && props[0].newPubkey === phone.pubKeyHex && props[0].match === a.json.match && !!props[0].proposedAt,
-            'the admin\'s status shows the phone: its key, the same two digits, when it asked');
-        const c = await complete(adminSession, mia.pubKeyHex, code, props[0].newPubkey);
-        assert(c.status === 200 && c.json.success === true && c.json.newPubkey === phone.pubKeyHex, `Bind this phone completes with the key shown (got ${c.status})`);
+        assert(st.status === 200 && props?.length === 1 && props[0].newPubkey === phone.pubKeyHex && !!props[0].proposedAt && st.json.wrongNumbers === 0,
+            'the admin\'s status shows the phone: its key and when it asked');
+        assert(!JSON.stringify(st.json).includes(`"match"`) && !('match' in props[0]), 'and never its digits: the admin reads them off the phone');
+        const c = await bindByNumber(adminSession, mia.pubKeyHex, code, a.json.match);
+        assert(c.status === 200 && c.json.success === true && c.json.newPubkey === phone.pubKeyHex, `typing the phone's number binds that phone (got ${c.status} ${JSON.stringify(c.json)})`);
         const p1 = await poll(phone, code);
         assert(p1.status === 200 && p1.json.state === 'bound' && p1.json.callsign === 'MiaMember' && p1.json.linkSignInAgain === true,
             `the phone's poll says bound with the member's name and to link the sign-in again (got ${JSON.stringify(p1.json)})`);
@@ -512,6 +517,70 @@ async function runTests() {
         await ask(phone, code);
         await complete(adminSession, max.pubKeyHex, code, phone.pubKeyHex);
         assert(!(db.prepare('SELECT 1 FROM push_tokens WHERE public_key = ?').get(max.pubKeyHex)), 'the old phone\'s tokens go with the move');
+    }
+
+    // ── K ──
+    section('K. The number decides (#1783 review B2, N1): a wrong number counts, three stop the code, a declined phone never binds');
+    {
+        freshMinute();
+        const kim = join('KimMember');
+        const code = (await issue(adminSession, kim.pubKeyHex)).json.code as string;
+        const thief = makeKeypair();
+        const phone = makeKeypair();
+        const t = await ask(thief, code);
+        const m = await ask(phone, code);
+        assert(t.json.state === "waiting" && m.json.state === "waiting", `two phones wait (got ${JSON.stringify(t.json)} ${JSON.stringify(m.json)})`);
+        const unused = [...Array(100).keys()].map(n => String(n).padStart(2, '0')).filter(n => n !== t.json.match && n !== m.json.match);
+
+        const neither = await as(adminSession, 'POST', `/api/local/admin/members/${kim.pubKeyHex}/rekey/complete`, { code });
+        const both = await as(adminSession, 'POST', `/api/local/admin/members/${kim.pubKeyHex}/rekey/complete`, { code, match: m.json.match, newPubkey: phone.pubKeyHex });
+        assert(neither.status === 400 && both.status === 400, `a bind names a number or a pasted key, exactly one (got ${neither.status}, ${both.status})`);
+        const blank = await bindByNumber(adminSession, kim.pubKeyHex, code, '7');
+        assert(blank.status === 400 && blank.json.code === 'match_required', `one digit is no number, and isn't counted (got ${blank.status} ${blank.json.code})`);
+
+        const w1 = await bindByNumber(adminSession, kim.pubKeyHex, code, unused[0]);
+        assert(w1.status === 409 && w1.json.code === 'wrong_number' && w1.json.error === REKEY_WRONG_NUMBER && w1.json.triesLeft === 2,
+            `a number no phone shows binds nothing and counts (got ${w1.status} ${JSON.stringify(w1.json)})`);
+        assert(!isMember(thief.pubKeyHex) && !isMember(phone.pubKeyHex) && isMember(kim.pubKeyHex), '...and the account stays where it was');
+        assert((await status(adminSession, kim.pubKeyHex)).json.wrongNumbers === 1, 'the wizard reads the wrong try');
+
+        // N1: declined, then bound from a stale card or a second admin, by its number or by its key: refused.
+        await decline(adminSession, kim.pubKeyHex, thief.pubKeyHex);
+        const byKey = await complete(ownerSession, kim.pubKeyHex, code, thief.pubKeyHex);
+        assert(byKey.status === 409 && byKey.json.error === REKEY_DECLINED_PHONE && !isMember(thief.pubKeyHex),
+            `a declined phone's pasted key is refused (got ${byKey.status} ${byKey.json.error})`);
+        const byNumber = await bindByNumber(ownerSession, kim.pubKeyHex, code, t.json.match);
+        assert(byNumber.status === 409 && byNumber.json.code === 'wrong_number' && byNumber.json.triesLeft === 1 && !isMember(thief.pubKeyHex),
+            `a declined phone's number is a wrong number (got ${byNumber.status} ${JSON.stringify(byNumber.json)})`);
+
+        const w3 = await bindByNumber(adminSession, kim.pubKeyHex, code, unused[1]);
+        assert(w3.status === 409 && w3.json.code === 'code_stopped' && w3.json.error === REKEY_CODE_STOPPED, `the third wrong number stops the code (got ${w3.status} ${w3.json.code})`);
+        const row = db.prepare('SELECT status, wrong_matches FROM rekey_requests WHERE code = ?').get(code) as { status: string; wrong_matches: number };
+        assert(row.status === 'expired' && row.wrong_matches === 3, `the code is spent, as a lapsed one (${row.status}, ${row.wrong_matches})`);
+        const late = await bindByNumber(adminSession, kim.pubKeyHex, code, m.json.match);
+        assert(late.status === 404 && !isMember(phone.pubKeyHex), `even the right number binds nothing on a stopped code (got ${late.status})`);
+        const kimRow = db.prepare('SELECT status FROM members WHERE public_key = ?').get(kim.pubKeyHex) as { status: string };
+        assert(kimRow.status === 'suspended', `the member stays held, as a lapsed code leaves them (${kimRow.status})`);
+        const mp = await poll(phone, code);
+        assert(mp.json.state === 'gone', `the member's phone is told the code is gone (got ${mp.json.state})`);
+
+        // A new code, the member there: the right number binds.
+        freshMinute();
+        const code2 = (await issue(adminSession, kim.pubKeyHex)).json.code as string;
+        const m2 = await ask(phone, code2);
+        const ok = await bindByNumber(adminSession, kim.pubKeyHex, code2, m2.json.match);
+        assert(ok.status === 200 && isMember(phone.pubKeyHex) && !isMember(kim.pubKeyHex), `a new code and the right number bind the member's phone (got ${ok.status})`);
+
+        // Who may: an admin can't type a number on an owner's code, and the try isn't counted.
+        freshMinute();
+        const olly = join('OllyOwnerTwo');
+        grantNodeRole(olly.pubKeyHex, 'owner', owner.pubKeyHex);
+        const oc = (await issue(ownerSession, olly.pubKeyHex)).json.code as string;
+        const op = makeKeypair();
+        const oa = await ask(op, oc);
+        const refused = await bindByNumber(adminSession, olly.pubKeyHex, oc, oa.json.match);
+        const ow = (db.prepare('SELECT wrong_matches FROM rekey_requests WHERE code = ?').get(oc) as { wrong_matches: number }).wrong_matches;
+        assert(refused.status === 403 && !isMember(op.pubKeyHex) && ow === 0, `an admin can't bind an owner's code by number (got ${refused.status}, tries ${ow})`);
     }
 
     console.log(`\n${passed}/${run} passed`);

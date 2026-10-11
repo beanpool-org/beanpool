@@ -15,9 +15,16 @@ import {
     WEB_REKEY_TEXT, type WebRekeyAnswer, type WebRekeyDeps, type WebRekeyKey,
 } from '../lib/web-rekey';
 
+// Each default reads its import only when called: other screens' tests mock ../lib/identity and ../lib/api without
+// these exports, and a read at module load would fail every file that renders WelcomePage.
 const defaultDeps: WebRekeyDeps = {
-    loadIdentity, loadPendingJoin, markPendingJoinSent, completePendingJoin,
-    releaseSentPendingJoin: (r) => releaseSentPendingJoin(r), signReEnrollAsk, signedFetchWithKey,
+    loadIdentity: () => loadIdentity(),
+    loadPendingJoin: () => loadPendingJoin(),
+    markPendingJoinSent: (pending, at) => markPendingJoinSent(pending, at),
+    completePendingJoin: (identity) => completePendingJoin(identity),
+    releaseSentPendingJoin: (r) => releaseSentPendingJoin(r),
+    signReEnrollAsk: (code, privateKeyHex) => signReEnrollAsk(code, privateKeyHex),
+    signedFetchWithKey: (method, path, body, privateKeyHex, publicKeyHex) => signedFetchWithKey(method, path, body, privateKeyHex, publicKeyHex),
 };
 
 interface Props {

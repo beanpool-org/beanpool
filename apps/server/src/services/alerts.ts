@@ -924,15 +924,17 @@ export function stopServerAlerts(): void {
 export function serverAlertCount(): number {
     try {
         const s = readState();
-        const t = now();
         const active = (Object.keys(s.raised) as AlertKey[]).filter((k) => ROWS[k]?.banner && s.raised[k]?.endedAt === undefined).length;
         // A role granted, the community claimed, a key changed: counted for a day, or until an owner acknowledges them.
-        const recent = new Set(s.history.filter((e) => SECURITY_ONE_SHOTS.has(e.key) && t - e.at < SECURITY_BANNER_MS
-            && e.at > (s.acked.oneShotsAt ?? 0)).map((e) => e.key));
-        return active + recent.size;
+        return active + new Set(recentSecurityEvents(s, now()).map((e) => e.key)).size;
     } catch {
         return 0;
     }
+}
+
+/** The one-shot security events of the last day that no owner has acknowledged yet, newest first. */
+function recentSecurityEvents(s: BookState, t: number): AlertEvent[] {
+    return s.history.filter((e) => SECURITY_ONE_SHOTS.has(e.key) && t - e.at < SECURITY_BANNER_MS && e.at > (s.acked.oneShotsAt ?? 0)).reverse();
 }
 
 export interface AlertsStatus {
@@ -949,6 +951,10 @@ export interface AlertsStatus {
     hourlyCap: number;
     active: Array<{ key: AlertKey; title: string; priority: AlertPriority; since: number; detail: string }>;
     history: Array<AlertEvent & { title: string }>;
+    /** Security events of the last day not yet acknowledged (a role granted, the community claimed, a key changed). */
+    recent: Array<AlertEvent & { title: string }>;
+    /** Whether an owner has something to acknowledge: those, or this server replaced. */
+    acknowledge: boolean;
 }
 
 export function getAlertsStatus(): AlertsStatus {
@@ -964,5 +970,7 @@ export function getAlertsStatus(): AlertsStatus {
         sentLastHour: sentThisHour(s, t), hourlyCap: ALERT_HOURLY_CAP,
         active: (Object.entries(s.raised) as Array<[AlertKey, Raised]>).filter(([, r]) => r.endedAt === undefined).map(([key, r]) => ({ key, title: ROWS[key].title, priority: r.priority, since: r.since, detail: r.detail })),
         history: s.history.slice().reverse().map((e) => ({ ...e, title: ROWS[e.key].title })),
+        recent: recentSecurityEvents(s, t).map((e) => ({ ...e, title: ROWS[e.key].title })),
+        acknowledge: recentSecurityEvents(s, t).length > 0 || (!!s.raised['sec.replaced'] && s.raised['sec.replaced'].endedAt === undefined),
     };
 }

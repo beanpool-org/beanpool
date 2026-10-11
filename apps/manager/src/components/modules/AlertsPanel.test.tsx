@@ -48,6 +48,27 @@ describe('AlertsPanel', () => {
         await waitFor(() => expect(calls.some((c) => c.endsWith('/api/local/admin/alerts/test'))).toBe(true));
     });
 
+    it('shows a security event of the last day, and "Seen" acknowledges it', async () => {
+        const s = status({
+            recent: [{ key: 'sec.role', title: 'a role changed', priority: 4, at: Date.UTC(2026, 9, 11, 1), detail: 'Someone was made an admin, by an owner. Open Settings to see who.' }],
+            acknowledge: true,
+        });
+        const calls: string[] = [];
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+            calls.push(String(url));
+            if (String(url).endsWith('/alerts/acknowledge')) return json({ success: true, status: status({ recent: [], acknowledge: false }) });
+            return json(s);
+        }));
+        render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByText(/Someone was made an admin, by an owner./)).toBeInTheDocument();
+        expect(screen.queryByText('Nothing needs you.')).toBeNull();
+        await userEvent.click(screen.getByText('Seen'));
+        await waitFor(() => expect(calls.some((c) => c.endsWith('/api/local/admin/alerts/acknowledge'))).toBe(true));
+        expect(await screen.findByText('Marked as seen.')).toBeInTheDocument();
+        expect(screen.queryByText('Seen')).toBeNull();
+        expect(screen.getByText('Nothing needs you.')).toBeInTheDocument();
+    });
+
     it('says the owners still get the app alerts when no channel is set', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => json(status({}))));
         render(<AlertsPanel activeNode={node} />);

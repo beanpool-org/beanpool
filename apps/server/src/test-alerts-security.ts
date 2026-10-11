@@ -194,6 +194,9 @@ async function main(): Promise<void> {
     assert(!line.body.includes(CALLSIGNS[4]) && !line.body.includes(helper.slice(0, 12)), '1. and never the member');
     assert(banner('owner') >= 1, `1. the owner's admin queue shows the banner (${banner('owner')})`);
     assert(banner('admin') === 0, `1. an admin's shows none (${banner('admin')})`);
+    const st1 = await call('POST', '/api/local/admin/alerts/status', {}, asOwner);
+    assert(st1.json?.recent?.length === 1 && st1.json.recent[0].key === 'sec.role' && st1.json.acknowledge === true,
+        `1. the Alerts card lists it under the last day's security events, to acknowledge (${st1.json?.recent?.length})`);
 
     const again = await call('POST', '/api/local/admin/node-roles', { pubkey: helper, role: 'admin' }, asOwner);
     await settle(300);

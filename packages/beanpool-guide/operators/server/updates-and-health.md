@@ -91,6 +91,18 @@ The server watches itself every minute and tells its owners when it needs them:
 - the standby needs attention;
 - the Let's Encrypt certificate could not be renewed and browsers see a self-signed one.
 
+It also tells them when someone gains power on the server, saying what happened and how, never who:
+
+- an owner, admin or moderator role is given or taken away, and how: by an owner, by an admin (moderators only), by the admin password, or with a break-glass code;
+- the community is claimed with its one-time claim code;
+- a break-glass code is made, an owner signs out everywhere, the admin password is retired, or new 2FA backup codes are made;
+- wrong admin passwords keep arriving from one address (it now waits between tries), or from many addresses (high); over after an hour without another;
+- more than 20 wrong claim proofs arrive in a minute;
+- the address service names another community as the holder of this community's address, or the address was released and its hold is over (high), until it is this community's again;
+- another server took over this community with the same keys, so this one is read-only (urgent): told again every day until an owner taps **Seen** in the Alerts card.
+
+Each owner gets a push for every role change, claim and key change, never folded into an earlier one. They show in the Alerts card and count in the Settings banner for a day, or until an owner taps **Seen**. To see who it was, open Settings: the alert itself never names them.
+
 Each alert is told once when it starts, again every 24 hours while it lasts, and once when it is resolved: when it has been over for 15 minutes. One that comes back within those 15 minutes is not told again, so something swinging on and off sends one message, not one for each swing.
 
 **Owners always hear.** Each owner gets a push on their phone (one for everything that started in the same minute, and at most one a day for each alert), whatever their Marketplace Activity setting, and a banner in Settings until it is over. Admins and moderators are not told, and only an owner can open **Appliance & Data**, then **Alerts**.

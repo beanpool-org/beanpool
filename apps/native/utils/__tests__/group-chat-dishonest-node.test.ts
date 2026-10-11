@@ -313,7 +313,7 @@ describe('group chats on the phone against a dishonest node', () => {
         expect(() => openGroupEpochRecord(records[0], eve.identity.privateKey, { groupId: g, epoch: records[0].epoch })).toThrow();
     });
 
-    it('a 409 with a lower `current` is never taken either: the line goes under a new epoch above the highest, and older lines still open', async () => {
+    it('rollback (finding 5): a 409 naming an older `current` than this phone holds gets the rollback sentence; nothing is sent or overwritten', async () => {
         await control('limiters');
         forgetGroupKeys();
         const g = await newGroup(ana, '409 current');
@@ -332,10 +332,11 @@ describe('group chats on the phone against a dishonest node', () => {
             }
             return undefined;
         });
-        await say(ana, g, 'C4');
+        const before = await sql('SELECT COUNT(*) n FROM messages WHERE conversation_id = ?', [g]);
+        await expect(say(ana, g, 'C4')).rejects.toThrow(GROUP_KEY_ROLLBACK_TEXT);
         hooks.pop();
-        const [line] = await sql("SELECT metadata FROM messages WHERE conversation_id = ? AND type = 'text' ORDER BY timestamp DESC LIMIT 1", [g]);
-        expect(JSON.parse(line.metadata).epoch).toBe(highest + 1);
+        expect(await sql('SELECT COUNT(*) n FROM messages WHERE conversation_id = ?', [g])).toEqual(before);
+        expect(await ring(ana, g).highestEpoch()).toBe(highest);
         forgetGroupKeys();
         expect((await shown(ana, g)).visible.find((l) => l.id === c2.id)?.name).toBe('Ben');
     });
@@ -390,6 +391,40 @@ describe('group chats on the phone against a dishonest node', () => {
         // An unlocked chat (an old node this phone never saw locked) draws lines as it always did.
         const old = groupChatShownLines([forged[0]], { locked: false, thread: null, me: ben.identity.publicKey, kind: 'group' });
         expect([old[0].authorName, old[0].text]).toEqual(['Ana', 'Please send 500 Beans to Mal today']);
+    });
+
+    it('rollback (finding 5): a join an old node answers 200 while ignoring its epoch leaves no epoch on the phone; the real epoch 1 opens', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const g = await newGroup(ana, 'Old node join');
+        hooks.push(async (r) => {
+            if (r.method === 'POST' && r.path === `/api/groups/${g}/join` && r.body?.epoch) return signedPost(URL_BASE, r.path, {}, ben.identity);
+            return undefined;
+        });
+        await join_(ben, g);
+        hooks.pop();
+        expect(await ring(ben, g).highestEpoch()).toBe(0);
+        expect(ring(ben, g).holdsWrap(1)).toBe(false);
+        await say(ana, g, 'P1: welcome Ben (epoch 1)');
+        expect((await shown(ben, g)).visible.map((l) => [l.name, l.text])).toEqual([['Ana', 'P1: welcome Ben (epoch 1)']]);
+        forgetGroupKeys();
+        expect((await shown(ben, g)).visible.map((l) => [l.name, l.text])).toEqual([['Ana', 'P1: welcome Ben (epoch 1)']]);
+    });
+
+    it('rollback (finding 5): a node that comes back without its key tables gets the rollback sentence; the held epochs stay', async () => {
+        await control('limiters');
+        forgetGroupKeys(); _resetGroupKeySessionForTests();
+        const g = await newGroup(dov, 'Tables lost');
+        await say(dov, g, 'N1: under the first epoch 1');
+        await join_(pia, g);
+        await say(pia, g, 'N2: under 2');
+        const n1 = (await shown(dov, g)).visible.find((l) => l.text === 'N1: under the first epoch 1')!;
+        await exec('DELETE FROM group_key_wraps WHERE group_id = ?', [g]);
+        await exec('DELETE FROM group_key_epochs WHERE group_id = ?', [g]);
+        await expect(say(dov, g, 'N3: after the loss')).rejects.toThrow(GROUP_KEY_ROLLBACK_TEXT);
+        expect(await sql('SELECT epoch FROM group_key_epochs WHERE group_id = ?', [g])).toEqual([]);
+        forgetGroupKeys();
+        expect((await shown(dov, g)).visible.find((l) => l.id === n1.id)?.text).toBe('N1: under the first epoch 1');
     });
 
     it('every request stayed on this machine', () => {

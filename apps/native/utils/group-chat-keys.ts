@@ -158,6 +158,8 @@ export class GroupKeyring {
     private shown: Set<string> | null = null;
     /** Each epoch's recipients by its signed record (…/keys/:epoch/wraps, digests re-derived): who may be topped up. */
     private recordRecipients = new Map<number, Set<string>>();
+    /** Epochs this phone made and the node said it stored, not yet served back: a served record that verifies replaces one. */
+    private unconfirmed = new Set<number>();
     state: GroupKeysState | null = null;
 
     constructor(public readonly groupId: string, private readonly nodeUrl: string, private readonly identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, private readonly store: GroupKeyStore) {}
@@ -183,6 +185,26 @@ export class GroupKeyring {
     async seenLocked(): Promise<boolean> {
         await this.ensureLoaded();
         return this.highest > 0 || this.keys.size > 0;
+    }
+
+    /**
+     * True when the node's `current` is older than what this phone holds (provenance §7 rule 1): below the highest, or
+     * none at all once this phone has held a key of the group (a node that came back without its key tables). Nothing is
+     * made or sealed then (review of #1788, finding 5).
+     */
+    private rolledBack(current: number | null): boolean {
+        return current === null ? (this.highest > 0 || this.keys.size > 0) : current < this.highest;
+    }
+
+    /** True if this phone may not make or take `epoch`: at or below the highest, or one it holds (finding 5). */
+    refusesEpoch(epoch: number): boolean {
+        if (epoch <= this.highest || this.keys.has(epoch)) return true;
+        const held = this.epochs.get(epoch);
+        return !!held && this.verifies(held.record, epoch);
+    }
+
+    private verifies(record: GroupEpochRecord, epoch: number): boolean {
+        try { verifyGroupEpochRecord(record, { groupId: this.groupId, epoch }); return true; } catch { return false; }
     }
 
     /** The highest epoch this phone has verified or made (provenance §7 rule 1). */
@@ -231,9 +253,20 @@ export class GroupKeyring {
             const prev = this.epochs.get(e.epoch);
             const wrap = wraps.get(e.epoch) ?? null;
             const record = this.servedRecord(e);
-            // A record is the maker's signed header and never changes. One that differs from the copy this phone holds
-            // is the node's doing: the held copy stays.
-            if (prev && JSON.stringify(prev.record) !== JSON.stringify(record)) continue;
+            if (prev && sameRecord(prev.record, record)) this.unconfirmed.delete(e.epoch);
+            else if (prev) {
+                // A record is the maker's signed header and never changes. One that differs from the copy this phone
+                // holds is the node's doing: the held copy stays, unless it doesn't verify, or this phone made it and
+                // the node never served it back, and the served one does (review of #1788, findings 5 and 7).
+                if (!((this.unconfirmed.has(e.epoch) || !this.verifies(prev.record, e.epoch)) && this.verifies(record, e.epoch))) continue;
+                for (const held of [this.keys, this.recordRecipients]) held.delete(e.epoch);
+                this.badRecords.delete(e.epoch);
+                this.unconfirmed.delete(e.epoch);
+                const next: StoredGroupEpoch = { epoch: e.epoch, record, wrap };
+                this.epochs.set(e.epoch, next);
+                put.push(next);
+                continue;
+            }
             const wrapChanged = JSON.stringify(prev?.wrap ?? null) !== JSON.stringify(wrap);
             if (prev && !wrapChanged) continue;
             if (wrapChanged && prev?.wrap && this.keys.has(e.epoch)) continue; // the key is already open from the old wrap
@@ -410,14 +443,33 @@ export class GroupKeyring {
         return stored;
     }
 
-    /** After the node stored an epoch this phone made: keep it, raise the highest, and seal under it at once (rule 6). */
+    /**
+     * After the node stored an epoch this phone made: keep it, raise the highest, and seal under it at once (rule 6). Never
+     * over an epoch this phone holds, or at or below its highest (finding 5).
+     */
     async adopt(record: GroupEpochRecord, key: Uint8Array): Promise<void> {
         await this.ensureLoaded();
+        if (this.refusesEpoch(record.epoch)) throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
         const stored = this.storeMade(record, key);
         await this.store.putEpochs(this.groupId, [stored]).catch(() => { });
         await this.raise(record.epoch);
         if (record.epoch > this.after) { this.after = record.epoch; await this.store.setCursor(this.groupId, record.epoch).catch(() => { }); }
         this.state = { current: record.epoch, stale: false, fromEpoch: this.state?.fromEpoch ?? null, roster: this.state?.roster ?? [] };
+    }
+
+    /**
+     * After a membership change the node answered 2xx: an answer that carries no epoch looks the same from an old node
+     * that ignored it, so the key this phone made is taken only once a sync serves the same record back (finding 5).
+     * Otherwise it is dropped, and the change went alone, as designed.
+     */
+    async confirmMade(record: GroupEpochRecord, key: Uint8Array): Promise<boolean> {
+        await this.sync().catch(() => null);
+        const held = this.epochs.get(record.epoch);
+        const { wraps: _wraps, ...served } = record;
+        if (!held || !sameRecord(held.record, served) || this.keys.has(record.epoch)) return false;
+        this.keys.set(record.epoch, key);
+        await this.raise(record.epoch);
+        return true;
     }
 
     /** Make the next epoch for a membership change or a rotation, wrapped to `recipients` (the maker among them). */
@@ -439,13 +491,19 @@ export class GroupKeyring {
             if (!state.roster.includes(this.identity.publicKey)) throw new GroupChatKeyError('Only members of this group can open its chat', 'not_member');
             await this.requireRosterShown(state.roster, true);
             const epoch = (state.current ?? 0) + 1;
+            if (this.rolledBack(state.current) || this.refusesEpoch(epoch)) throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
             const { record, groupKey } = await this.makeRecord({ epoch, reason: epoch === 1 ? 'start' : 'rotate', recipients: state.roster }, progress);
             try {
                 await answerOf(await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/epoch`, { epoch: record }, this.identity as BeanPoolIdentity));
                 await this.adopt(record, groupKey);
+                this.unconfirmed.add(epoch);
                 return { epoch, key: groupKey };
             } catch (e) {
                 if (attempt === 0 && e instanceof GroupKeysRequestError && e.status === 409 && e.body?.code === 'epoch_conflict') {
+                    // A 409 naming an older current than this phone holds is a rollback, whatever a sync says next.
+                    if (typeof e.body.current === 'number' ? e.body.current < this.highest : this.rolledBack(null)) {
+                        throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
+                    }
                     state = await this.sync();
                     continue;
                 }
@@ -460,7 +518,7 @@ export class GroupKeyring {
      */
     async prepareToSeal(progress?: GroupEpochProgress): Promise<{ epoch: number; key: Uint8Array }> {
         const state = await this.sync();
-        if (state.current !== null && state.current < this.highest) throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
+        if (this.rolledBack(state.current)) throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
         // Whoever the line goes to must be in the members list the screen shows (finding 2), sealed or rotated.
         await this.requireRosterShown(state.roster, false);
         if (state.current === null) return this.rotate(progress);
@@ -529,6 +587,13 @@ export class GroupKeyring {
     }
 }
 
+/** Two copies of an epoch record's signed header are the same record. */
+function sameRecord(a: Omit<GroupEpochRecord, 'wraps'>, b: Omit<GroupEpochRecord, 'wraps'>): boolean {
+    return a.epoch === b.epoch && a.reason === b.reason && (a.subject ?? null) === (b.subject ?? null) && a.createdBy === b.createdBy
+        && a.createdAt === b.createdAt && a.keyCommit === b.keyCommit && a.membersDigest === b.membersDigest
+        && a.wrapsDigest === b.wrapsDigest && a.sig === b.sig;
+}
+
 const keyrings = new Map<string, GroupKeyring>();
 
 /** The keyring for one group on one node for this identity, shared for the app's session (the opened keys with it). */
@@ -568,11 +633,13 @@ async function withEpoch(
         if (!plan) break;
         if (!(await ring.rosterShown(plan.recipients, { extra: [plan.subject], fresh: true }))) break;
         const epoch = (current ?? 0) + 1;
+        // Never an epoch at or below the highest this phone holds, or one it holds (finding 5): the change goes alone.
+        if (ring.refusesEpoch(epoch)) break;
         const { record, groupKey } = await ring.makeRecord({ epoch, ...plan }, progress);
         const res = await send(record);
         const body = await res.clone().json().catch(() => ({}));
         if (res.ok) {
-            await ring.adopt(record, groupKey).catch(() => { });
+            await ring.confirmMade(record, groupKey).catch(() => false);
             return body;
         }
         if (res.status === 409 && body?.code === 'epoch_conflict') {
@@ -602,8 +669,10 @@ export async function joinGroupWithEpoch(
     if (!invited && group.joinPolicy && group.joinPolicy !== 'open') return answerOf(await send(undefined));
     const ring = groupKeyring(nodeUrl, identity, group.id, store);
     const me = identity.publicKey;
+    // The joiner can't read the keys yet: the first try guesses past the highest it holds (a member coming back), and the
+    // node's 409 says the rest.
     return withEpoch(ring, send, (_c, roster) => ({ reason: invited ? 'invite' : 'join', subject: me, recipients: [...roster, me] }),
-        { current: null, roster: group.activeMembers ?? [] }, progress);
+        { current: (await ring.highestEpoch()) || null, roster: group.activeMembers ?? [] }, progress);
 }
 
 /** A convenor approves a request (or invites someone who had asked): the approved member's first epoch (§2.3). */

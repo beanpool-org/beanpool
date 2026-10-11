@@ -670,7 +670,8 @@ async function main(): Promise<void> {
         const pushed = pushes.length;
         const answered: string[] = [];
         for (const [i, route] of swept.entries()) {
-            if (i > 0 && i % 100 === 0) resetGatewayRateLimit();
+            // Over 200 writes now: the limiter is reset every 100 routes, and the purge starts clear, as its own steps do.
+            if ((i > 0 && i % 100 === 0) || route === 'POST /api/member/purge') resetGatewayRateLimit();
             const [method, path] = route.split(' ') as ['POST' | 'PUT' | 'PATCH' | 'DELETE', string];
             const r = await signedFetch(method, materialise(path, ownPost), key, bodyFor(key, own));
             if (!isRefusal(r, route)) answered.push(`${route} → ${r.status} ${JSON.stringify(r.body ?? null).slice(0, 90)}`);

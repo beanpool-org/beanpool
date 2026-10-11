@@ -78,6 +78,8 @@ export const GroupSystemType = {
     POLL_POSTED: 'GROUP_POLL_POSTED',
     /** Once per group, when the node switched to locked lines and removed the readable ones (§14.1). */
     CHAT_LOCKED: 'GROUP_CHAT_LOCKED',
+    /** Its members closed the group by a vote (close_group): the chat stays to read and takes no new line. */
+    CLOSED: 'GROUP_CLOSED',
 } as const;
 export type GroupSystemTypeVal = typeof GroupSystemType[keyof typeof GroupSystemType];
 
@@ -87,6 +89,9 @@ export interface GroupThreadView {
     group: { id: string; name: string; slug: string; category: string; joinPolicy: string; avatarUrl: string | null };
     role: GroupRole;
     canPost: boolean;
+    /** When its members closed the group by a vote (group_closures), or null; a closed group's chat takes no new line. */
+    closedAt: string | null;
+    readOnly: boolean;
     isConvenor: boolean;
     notice: string;
     mute: ChatMute | null;
@@ -335,6 +340,7 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
     const role = groupChatRole(groupId, viewerPubkey);
     if (!role) throw new Error(GROUP_CHAT_FORBIDDEN);
     const conversation = ensureGroupThread(groupId);
+    const closedAt = (db.prepare('SELECT closed_at FROM group_closures WHERE group_id = ?').get(groupId) as { closed_at: string } | undefined)?.closed_at ?? null;
     return {
         conversation,
         messages: getGroupThreadMessages(groupId, viewerPubkey!, limit, offset),
@@ -343,7 +349,9 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
             joinPolicy: group.join_policy, avatarUrl: groupPictureUrlOf(group.id, group.avatar_ref),
         },
         role,
-        canPost: role !== 'observer',
+        canPost: role !== 'observer' && !closedAt,
+        closedAt,
+        readOnly: !!closedAt,
         isConvenor: role === 'convenor',
         notice: GROUP_THREAD_NOTICE,
         mute: getChatMute(groupId, viewerPubkey!),

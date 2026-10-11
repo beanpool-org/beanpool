@@ -81,16 +81,26 @@ import {
     keeperRemovalByVoteRefusal,
     removeKeeperByVote,
     replaceLeadByVote,
+    getGroupLead,
+    groupClosedAt,
+    GROUP_CLOSED,
+    setGroupRoleByVote,
+    replaceGroupLeadByVote,
+    removeGroupMemberByVote,
+    setGroupJoinPolicyByVote,
+    closeGroupByVote,
+    afterGroupVote,
 } from './state-engine.js';
 
 /** What a Decision touches: a member, the Commons pool, or only its own scope's things (an enterprise's account and keepers). */
 export type DecisionTouch = 'member' | 'pool' | 'scope';
 
 /**
- * Whose Decision it is (DESIGN-group-decisions §2.1): the whole community, or one enterprise's keepers (`scopeId` = the
- * enterprise's pubkey). A scoped Decision's roll is frozen when it opens (decision_electors).
+ * Whose Decision it is (DESIGN-group-decisions §2.1): the whole community, one enterprise's keepers (`scopeId` = the
+ * enterprise's pubkey), or one chat group's members and convenors (`scopeId` = the group's id, slice S3). A scoped
+ * Decision's roll is frozen when it opens (decision_electors).
  */
-export type DecisionScopeKind = 'community' | 'enterprise';
+export type DecisionScopeKind = 'community' | 'enterprise' | 'group';
 
 export type DecisionFranchise = '1m1v' | 'quadratic_trade';
 
@@ -130,7 +140,15 @@ export type DecisionEffect =
     // remove a keeper, make another keeper the lead (an ongoing enterprise only, never a project)
     | 'pay_out'
     | 'remove_keeper'
-    | 'replace_lead';
+    | 'replace_lead'
+    // A chat group's members only (scope 'group', DESIGN-group-decisions §2.3, slice S3): make or unmake a convenor, choose
+    // the lead convenor, remove someone from the group (never from the community), set who may join, close the group.
+    // No money, no trust, no node role: a group holds none of them.
+    | 'set_group_role'
+    | 'replace_lead_convenor'
+    | 'remove_group_member'
+    | 'set_join_policy'
+    | 'close_group';
 
 /**
  * The effects that move Beans, all of them out of the Commons pot. Only these need the pot to be a finite number: while
@@ -365,10 +383,24 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
     pay_out: 'scope',
     remove_keeper: 'scope',
     replace_lead: 'scope',
+    set_group_role: 'scope',
+    replace_lead_convenor: 'scope',
+    remove_group_member: 'scope',
+    set_join_policy: 'scope',
+    close_group: 'scope',
 };
 
 /** The effects only a scoped Decision carries out (TOUCHES_FOR_EFFECT 'scope'); a community Decision never does. */
-export const SCOPED_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['pay_out', 'remove_keeper', 'replace_lead']);
+export const SCOPED_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>([
+    'pay_out', 'remove_keeper', 'replace_lead',
+    'set_group_role', 'replace_lead_convenor', 'remove_group_member', 'set_join_policy', 'close_group',
+]);
+/** The effects an enterprise's keepers' vote carries out (slice S1). */
+export const ENTERPRISE_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['pay_out', 'remove_keeper', 'replace_lead']);
+/** The effects a chat group's vote carries out (slice S3). */
+export const GROUP_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>([
+    'set_group_role', 'replace_lead_convenor', 'remove_group_member', 'set_join_policy', 'close_group',
+]);
 
 /** Effects the node opens by itself; a member can never propose one. */
 const SYSTEM_ONLY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['keep_suspension']);
@@ -394,7 +426,7 @@ function switchOffFor(effect: DecisionEffect): ProfileSwitch | null {
     const s = getProfileSwitches();
     if (!s.decisions) return 'decisions';
     if ((TOUCHES_FOR_EFFECT[effect] === 'pool' || effect === 'pay_out') && !s.beans) return 'beans';
-    if ((effect === 'remove_lead_keeper' || SCOPED_EFFECTS.has(effect)) && !(s.enterprises && s.treasuries)) return 'enterprises';
+    if ((effect === 'remove_lead_keeper' || ENTERPRISE_EFFECTS.has(effect)) && !(s.enterprises && s.treasuries)) return 'enterprises';
     return null;
 }
 
@@ -1332,6 +1364,8 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         const cancelledDecisionIds: string[] = [];
         const touchedEnterprises: string[] = [];
         const touchedProfiles: string[] = [];
+        // A chat group's vote: the chat's lines and the group's live updates, once the change has committed.
+        const afterCommit: Array<() => void> = [];
 
         // Beans move only for POT_EFFECTS, which need the pot's pre-flush and the in-memory unwind. Every other effect is
         // row changes alone, so it runs in a plain transaction and is carried out whatever the pot is (#1465 review, NB-1).
@@ -1532,6 +1566,53 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     touchedEnterprises.push(ent);
                     break;
                 }
+                case 'set_group_role': {
+                    const gid = decision.scopeId!;
+                    const subject = decision.subject!;
+                    const role = decision.params?.role === 'convenor' ? 'convenor' : 'member';
+                    setGroupRoleByVote(gid, subject, role);
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'role', target: subject,
+                        text: `By the group's vote, ${nameOf(subject)} is now ${role === 'convenor' ? 'a convenor' : 'a member'}` }));
+                    break;
+                }
+                case 'replace_lead_convenor': {
+                    const gid = decision.scopeId!;
+                    const subject = decision.subject!;
+                    replaceGroupLeadByVote(gid, subject);
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'lead', target: subject,
+                        text: `By the group's vote, ${nameOf(subject)} is now the group's lead convenor` }));
+                    break;
+                }
+                case 'remove_group_member': {
+                    const gid = decision.scopeId!;
+                    const subject = decision.subject!;
+                    removeGroupMemberByVote(gid, subject);
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'removed', target: subject,
+                        text: `By the group's vote, ${nameOf(subject)} was removed from the group` }));
+                    break;
+                }
+                case 'set_join_policy': {
+                    const gid = decision.scopeId!;
+                    setGroupJoinPolicyByVote(gid, decision.params.policy as engine.JoinPolicy);
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'policy', text: '' }));
+                    break;
+                }
+                case 'close_group': {
+                    const gid = decision.scopeId!;
+                    const cancelledPosts = closeGroupByVote(gid, decision.id);
+                    // Every other open vote on the group is void: nothing is left to act on (§2.6).
+                    const others = db.prepare(`
+                        SELECT id FROM decisions WHERE scope_kind = 'group' AND scope_id = ? AND id != ?
+                          AND status IN ('open', 'passed', 'execution_pending_grace', 'passed_queued_for_funds')
+                    `).all(gid, decision.id) as Array<{ id: string }>;
+                    for (const o of others) {
+                        db.prepare("UPDATE decisions SET status = 'execution_void', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?")
+                            .run(now, GROUP_CLOSED_VOID, now, o.id);
+                        cancelledDecisionIds.push(o.id);
+                    }
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'closed', text: GROUP_CLOSED_LINE, cancelledPosts }));
+                    break;
+                }
                 default:
                     throw new Error(`Unsupported effect: ${decision.effect}`);
             }
@@ -1551,6 +1632,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             return { success: true, status: current?.status || 'executed' };
         }
         noteCarriedOutAfterWait(decision);
+        for (const fn of afterCommit) fn();
 
         for (const ent of touchedEnterprises) {
             clearEnterpriseFloorCache(ent);
@@ -1585,6 +1667,9 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
     assertPlainTablesWritable();
     if (getDecision(decisionId)?.scopeKind === 'enterprise') {
         return { success: false, status: 403, error: SCOPED_NO_ADMIN_HALT };
+    }
+    if (getDecision(decisionId)?.scopeKind === 'group') {
+        return { success: false, status: 403, error: GROUP_NO_ADMIN_HALT };
     }
     if (!isAdminActor(adminPubkey)) {
         return { success: false, status: 403, error: 'Unauthorized: admin required to halt decision' };
@@ -1649,6 +1734,9 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
     assertPlainTablesWritable();
     if (getDecision(decisionId)?.scopeKind === 'enterprise') {
         return { success: false, status: 403, error: SCOPED_NO_ADMIN_HALT };
+    }
+    if (getDecision(decisionId)?.scopeKind === 'group') {
+        return { success: false, status: 403, error: GROUP_NO_ADMIN_HALT };
     }
     if (!isAdminActor(adminPubkey)) {
         return { success: false, status: 403, error: 'Unauthorized: admin required to accelerate decision' };
@@ -2350,8 +2438,13 @@ export function scopedQuorum(rollSize: number): number {
     return Math.max(2, Math.floor(rollSize / 2) + 1);
 }
 
+/** A simple majority puts someone in or sets a rule; money and a removal or a closing need 60% (§2.4). */
+const SCOPED_MAJORITY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>([
+    'replace_lead', 'set_group_role', 'replace_lead_convenor', 'set_join_policy',
+]);
+
 export function scopedThreshold(effect: DecisionEffect): number {
-    return effect === 'replace_lead' ? 0.50 : 0.60;
+    return SCOPED_MAJORITY_EFFECTS.has(effect) ? 0.50 : 0.60;
 }
 
 function scopedCounts(decision: Decision): { roll: Set<string>; yes: number; no: number; voters: number } {
@@ -2417,7 +2510,7 @@ export function scopedTallyForReader(decision: Decision): { voted: number; roll:
 }
 
 export interface CreateScopedDecisionOptions {
-    scopeKind: 'enterprise';
+    scopeKind: 'enterprise' | 'group';
     scopeId: string;
     authorPubkey: string;
     title: string;
@@ -2461,6 +2554,7 @@ export function noticeScopedVoteOpened(d: Decision, electors: string[], push: Sc
 export function createScopedDecision(opts: CreateScopedDecisionOptions, push: ScopedVotePush = dispatchPushNotification): Decision {
     assertPlainTablesWritable();
     assertDecisionsOn();
+    if (opts.scopeKind === 'group') return createGroupDecision(opts, push);
     if (opts.scopeKind !== 'enterprise') throw new Error('Unknown scope');
     const ent = enterpriseRow(opts.scopeId);
     if (!ent) throw new ScopedNotFoundError();
@@ -2518,6 +2612,16 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions, push: Sc
         throw new Error(SCOPED_ONE_OPEN);
     }
 
+    const decision = insertScopedDecision('enterprise', opts.scopeId, opts.authorPubkey, title, description, opts.effect, subject, params, roll);
+    noticeScopedVoteOpened(decision, roll.map(k => k.pubkey), push);
+    return decision;
+}
+
+/** The row and its roll, frozen now, in one transaction; told to the roll alone (§2.5). 7 days, closing early. */
+function insertScopedDecision(
+    kind: 'enterprise' | 'group', scopeId: string, author: string, title: string, description: string, effect: DecisionEffect,
+    subject: string | null, params: Record<string, unknown> | null, roll: Array<{ pubkey: string; role: string }>,
+): Decision {
     const id = crypto.randomUUID();
     const opensAt = new Date().toISOString();
     const closesAt = new Date(Date.now() + 7 * DAY_MS).toISOString();
@@ -2526,9 +2630,9 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions, push: Sc
             INSERT INTO decisions (
                 id, author_pubkey, title, description, touches, effect, subject, params,
                 franchise, status, opens_at, closes_at, created_at, updated_at, scope_kind, scope_id
-            ) VALUES (?, ?, ?, ?, 'scope', ?, ?, ?, '1m1v', 'open', ?, ?, ?, ?, 'enterprise', ?)
-        `).run(id, opts.authorPubkey, title, description, opts.effect, subject, params ? JSON.stringify(params) : null,
-            opensAt, closesAt, opensAt, opensAt, opts.scopeId);
+            ) VALUES (?, ?, ?, ?, 'scope', ?, ?, ?, '1m1v', 'open', ?, ?, ?, ?, ?, ?)
+        `).run(id, author, title, description, effect, subject, params ? JSON.stringify(params) : null,
+            opensAt, closesAt, opensAt, opensAt, kind, scopeId);
         const elector = db.prepare(
             "INSERT INTO decision_electors (decision_id, member_pubkey, role_at_open, status, created_at, updated_at) VALUES (?, ?, ?, 'on', ?, ?)"
         );
@@ -2536,8 +2640,7 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions, push: Sc
     })();
 
     const decision = getDecision(id)!;
-    broadcast({ type: 'decision_created', decision: publicDecision(decision), scopeKind: 'enterprise', scopeId: opts.scopeId }, roll.map(k => k.pubkey));
-    noticeScopedVoteOpened(decision, roll.map(k => k.pubkey), push);
+    broadcast({ type: 'decision_created', decision: publicDecision(decision), scopeKind: kind, scopeId }, roll.map(k => k.pubkey));
     return decision;
 }
 
@@ -2546,14 +2649,16 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions, push: Sc
  * down or whose account is suspended is off it), one vote each, and final. A replay of the same vote counts once.
  */
 function castScopedVote(decision: Decision, voterPubkey: string, support: boolean, signature?: string): { success: boolean; creditsUsed: number; error?: string } {
-    if (!liveRoll(decision.id).has(voterPubkey)) return { success: false, creditsUsed: 0, error: NOT_ON_ROLL };
+    if (!liveRoll(decision.id).has(voterPubkey)) {
+        return { success: false, creditsUsed: 0, error: decision.scopeKind === 'group' ? GROUP_NOT_ON_ROLL : NOT_ON_ROLL };
+    }
     const now = new Date().toISOString();
     const wrote = db.prepare(`
         INSERT INTO decision_votes (decision_id, voter_pubkey, support, weight, credits_used, signature, created_at, updated_at)
         VALUES (?, ?, ?, 1, 0, ?, ?, ?)
         ON CONFLICT(decision_id, voter_pubkey) DO NOTHING
     `).run(decision.id, voterPubkey, support ? 1 : 0, signature || null, now, now);
-    if (wrote.changes === 0) return { success: false, creditsUsed: 0, error: SCOPED_ALREADY_VOTED };
+    if (wrote.changes === 0) return { success: false, creditsUsed: 0, error: decision.scopeKind === 'group' ? GROUP_ALREADY_VOTED : SCOPED_ALREADY_VOTED };
     broadcast({ type: 'decision_vote_cast', decisionId: decision.id }, electorsOf(decision.id));
     return { success: true, creditsUsed: 0 };
 }
@@ -2583,6 +2688,7 @@ function preflightScoped(decision: Decision): { status: 'ok' | 'void' | 'blocked
     const off = switchOffFor(decision.effect);
     if (off === 'decisions') return { status: 'blocked', reason: DECISIONS_OFF_NOT_CARRIED_OUT };
     if (off) return { status: 'blocked', reason: `${off} is switched off on this node` };
+    if (decision.scopeKind === 'group') return preflightGroup(decision);
     const ent = decision.scopeId ? enterpriseRow(decision.scopeId) : null;
     if (!ent || ent.status === 'pruned' || ent.status === 'deleted') return { status: 'void', reason: 'The enterprise no longer exists' };
     if (ent.status === 'winding_up' || ent.status === 'completed') return { status: 'void', reason: WINDING_UP_VOID };
@@ -2622,6 +2728,14 @@ function preflightScoped(decision: Decision): { status: 'ok' | 'void' | 'blocked
     return { status: 'ok' };
 }
 
+/** Why an enterprise's open votes can no longer be carried out (it winds up or is gone), or null. */
+function enterpriseGoneReason(scopeId: string | null): string | null {
+    const ent = scopeId ? enterpriseRow(scopeId) : null;
+    if (!ent || ent.status === 'pruned' || ent.status === 'deleted') return 'The enterprise no longer exists';
+    if (ent.status === 'winding_up' || ent.status === 'completed') return WINDING_UP_VOID;
+    return null;
+}
+
 /**
  * The tick's first step for scoped votes (§2.4, §2.6): a member whose account is suspended leaves the roll and their vote
  * is dropped; a vote on an enterprise winding up is void; a roll below two closes unresolved; a vote whose result can no
@@ -2636,10 +2750,10 @@ function settleOpenScopedDecisions(nowIso: string): void {
             WHERE decision_id = ? AND status = 'on'
               AND member_pubkey NOT IN (SELECT public_key FROM members WHERE status = 'active')
         `).run(nowIso, d.id);
-        const ent = d.scopeId ? enterpriseRow(d.scopeId) : null;
-        if (!ent || ent.status === 'winding_up' || ent.status === 'completed' || ent.status === 'pruned' || ent.status === 'deleted') {
+        const gone = d.scopeKind === 'group' ? groupGoneReason(d.scopeId) : enterpriseGoneReason(d.scopeId);
+        if (gone) {
             db.prepare("UPDATE decisions SET status = 'execution_void', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?")
-                .run(nowIso, ent ? WINDING_UP_VOID : 'The enterprise no longer exists', nowIso, d.id);
+                .run(nowIso, gone, nowIso, d.id);
             announceDecisionUpdated(d.id);
             continue;
         }
@@ -2667,4 +2781,215 @@ export function openScopedDecisionsFor(member: string): Decision[] {
         WHERE d.status = 'open' AND d.scope_kind != 'community'
         ORDER BY d.closes_at ASC
     `).all(member) as any[]).map(rowToDecision);
+}
+
+// ── Scoped Decisions: a chat group's members (DESIGN-group-decisions §2.2–§2.6, slice S3) ───────────────────────────
+
+/** A group's vote has no admin halt (§5, pick 6): node admins hold no power over groups. */
+export const GROUP_NO_ADMIN_HALT = "A group's vote has no admin halt: node admins hold no power over groups.";
+export const GROUP_ROLL_OF_ONE = 'Nobody else in this group can vote, so there is nobody to vote with.';
+/** Off a group vote's roll: an observer, someone who joined after it opened, or who left during it. */
+export const GROUP_NOT_ON_ROLL = "Only the group's members and convenors on this vote's roll can vote on it. Observers watch.";
+export const GROUP_ALREADY_VOTED = "You have already voted on this. A group's vote can't be changed.";
+export const GROUP_OBSERVER_NO_VOTE = 'Observers watch a group’s votes. Only its members and convenors vote.';
+export const GROUP_ONE_OPEN = 'You already have an open vote in this group. Wait for it to close first.';
+export const GROUP_CLOSED_VOID = 'The group is closed';
+/** The line a group's chat takes when its members close it by a vote. */
+export const GROUP_CLOSED_LINE = 'The group was closed by its members’ vote. Its chat stays to read.';
+export const GROUP_GONE = 'The group no longer exists';
+export const GROUP_SUBJECT_OFF_ROLL = 'They are not a member or convenor of this group now';
+export const GROUP_LEAD_UNTOUCHED = 'This vote never changes the lead convenor’s role. To choose a new lead, vote for one.';
+const JOIN_POLICIES = new Set(['open', 'request_to_join', 'invite_only']);
+
+function nameOf(pubkey: string): string {
+    return getMember(pubkey)?.callsign || 'A member';
+}
+
+function groupExists(groupId: string | null | undefined): boolean {
+    return !!groupId && !!db.prepare('SELECT 1 FROM groups WHERE id = ?').get(groupId);
+}
+
+function groupGoneReason(groupId: string | null): string | null {
+    if (!groupExists(groupId)) return GROUP_GONE;
+    if (groupClosedAt(groupId!)) return GROUP_CLOSED_VOID;
+    return null;
+}
+
+/**
+ * A chat group's roll now (§2.2): its active members and convenors, the lead included, whose account is active and who is
+ * no visitor. Observers watch and are off it (the group poll rule, engine/posts.ts). The lead's role reads 'lead'.
+ */
+export function groupRollNow(groupId: string): Array<{ pubkey: string; role: string }> {
+    const lead = getGroupLead(groupId);
+    return (db.prepare(`
+        SELECT gm.member_pubkey AS pubkey, gm.role AS role FROM group_members gm
+        JOIN members m ON m.public_key = gm.member_pubkey
+        WHERE gm.group_id = ? AND gm.status = 'active' AND gm.role IN ('convenor', 'member')
+          AND m.status = 'active' AND m.is_visitor = 0 AND COALESCE(m.is_treasury, 0) = 0
+        ORDER BY gm.joined_at ASC
+    `).all(groupId) as Array<{ pubkey: string; role: string }>).map(r => (r.pubkey === lead ? { ...r, role: 'lead' } : r));
+}
+
+/** Whether `reader` is in the group now, any role: they see every one of its votes (the post-sight rule, §2.5). */
+/** In the group now, as engine/group-thread.ts asks it: a visitor key has no group, whatever seat it holds from before. */
+function inGroupNow(groupId: string, reader: string): boolean {
+    return !!db.prepare(`
+        SELECT 1 FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
+        WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0
+    `).get(groupId, reader);
+}
+
+/**
+ * A group's votes, newest first, as `reader` may see them. Its members now (observers included) see them all; anyone else
+ * only the votes whose roll they were on, matched by the vote: someone who left or was removed sees nothing opened after.
+ */
+export function getGroupDecisions(groupId: string, reader: string | null | undefined): Decision[] {
+    if (!reader || !groupExists(groupId)) throw new ScopedNotFoundError();
+    if (inGroupNow(groupId, reader)) {
+        return (db.prepare("SELECT * FROM decisions WHERE scope_kind = 'group' AND scope_id = ? ORDER BY created_at DESC")
+            .all(groupId) as any[]).map(rowToDecision);
+    }
+    const theirs = db.prepare(`
+        SELECT d.* FROM decisions d JOIN decision_electors e ON e.decision_id = d.id AND e.member_pubkey = ?
+        WHERE d.scope_kind = 'group' AND d.scope_id = ? ORDER BY d.created_at DESC
+    `).all(reader, groupId) as any[];
+    if (theirs.length === 0) throw new ScopedNotFoundError();
+    return theirs.map(rowToDecision);
+}
+
+/** One of a group's votes, as `reader` may see it; anything else is ScopedNotFoundError (never a refusal). */
+export function getGroupDecision(groupId: string, decisionId: string, reader: string | null | undefined): Decision {
+    const d = getDecision(decisionId);
+    if (!reader || !d || d.scopeKind !== 'group' || d.scopeId !== groupId || !groupExists(groupId)) throw new ScopedNotFoundError();
+    if (inGroupNow(groupId, reader)) return d;
+    if (!db.prepare('SELECT 1 FROM decision_electors WHERE decision_id = ? AND member_pubkey = ?').get(d.id, reader)) throw new ScopedNotFoundError();
+    return d;
+}
+
+/**
+ * A group's vote opened: one push to each person on its roll but the proposer, unless they muted the group's chat (its
+ * conversation id is the group's id). The push names nobody; the details name the group's screen and nothing about the vote.
+ */
+export function noticeGroupVoteOpened(d: Decision, electors: string[], push: ScopedVotePush): void {
+    const name = (db.prepare('SELECT name FROM groups WHERE id = ?').get(d.scopeId) as { name?: string } | undefined)?.name || 'Your group';
+    try {
+        const told = unmutedRecipients(d.scopeId ?? '', electors);
+        if (!told.some(pk => pk !== d.authorPubkey)) return;
+        push(told, d.authorPubkey, `🗳️ ${name}`, 'A vote opened. Open the group to see it.', { screen: 'group', groupId: d.scopeId }, 'chat', 'decision.open');
+    } catch (err) {
+        console.warn('[Decisions] group vote-opened push failed:', err);
+    }
+}
+
+/**
+ * Opens a chat group's vote (§2.2–§2.4): the proposer is on its roll (an observer watches and proposes nothing); the roll,
+ * frozen now, needs two people; one open vote per proposer per group; a closed group takes none. Anyone not in the group
+ * is answered as if it were missing.
+ */
+function createGroupDecision(opts: CreateScopedDecisionOptions, push: ScopedVotePush): Decision {
+    const groupId = opts.scopeId;
+    if (!groupExists(groupId) || !inGroupNow(groupId, opts.authorPubkey)) throw new ScopedNotFoundError();
+    const roll = groupRollNow(groupId);
+    if (!roll.some(k => k.pubkey === opts.authorPubkey)) throw new Error(GROUP_OBSERVER_NO_VOTE);
+    if (!GROUP_EFFECTS.has(opts.effect)) throw new Error(`Unknown decision effect '${opts.effect}'`);
+    assertEffectAllowedHere(opts.effect);
+    if (groupClosedAt(groupId)) throw new Error(GROUP_CLOSED);
+    if (roll.length < 2) throw new Error(GROUP_ROLL_OF_ONE);
+
+    const title = typeof opts.title === 'string' ? replaceLoneSurrogates(opts.title).trim() : '';
+    const description = typeof opts.description === 'string' ? replaceLoneSurrogates(opts.description).trim() : '';
+    if (!title) throw new Error('A vote needs a title.');
+    if (description.length < 10) throw new Error('Say why, in at least 10 characters.');
+    if (!fitsTextLimit(title, DECISION_TITLE_LIMIT)) throw new Error(DECISION_TITLE_TOO_LONG);
+    if (!fitsTextLimit(description, DECISION_DESCRIPTION_LIMIT)) throw new Error(DECISION_DESCRIPTION_TOO_LONG);
+
+    const lead = getGroupLead(groupId);
+    let subject: string | null = null;
+    let params: Record<string, unknown> | null = null;
+    const onRoll = (pk: string | null) => !!pk && roll.some(k => k.pubkey === pk);
+    switch (opts.effect) {
+        case 'set_group_role': {
+            subject = typeof opts.subject === 'string' ? opts.subject : null;
+            const role = opts.params?.role;
+            if (role !== 'convenor' && role !== 'member') throw new Error('Choose convenor or member.');
+            if (!onRoll(subject)) throw new Error('Name a member or convenor of this group.');
+            if (subject === lead) throw new Error(GROUP_LEAD_UNTOUCHED);
+            if (roll.find(k => k.pubkey === subject)!.role === role) throw new Error(role === 'convenor' ? 'They are already a convenor.' : 'They are already a member.');
+            params = { role };
+            break;
+        }
+        case 'replace_lead_convenor': {
+            subject = typeof opts.subject === 'string' ? opts.subject : null;
+            if (!onRoll(subject)) throw new Error('Name a member or convenor of this group.');
+            if (subject === lead) throw new Error('They already lead this group.');
+            break;
+        }
+        case 'remove_group_member': {
+            subject = typeof opts.subject === 'string' ? opts.subject : null;
+            if (!subject || !inGroupNow(groupId, subject)) throw new Error('Name someone in this group.');
+            if (subject === opts.authorPubkey) throw new Error('To leave, leave the group instead.');
+            if (subject === lead) throw new Error('The lead convenor is replaced, not removed. Vote for a new lead first.');
+            break;
+        }
+        case 'set_join_policy': {
+            const policy = opts.params?.policy;
+            if (typeof policy !== 'string' || !JOIN_POLICIES.has(policy)) throw new Error('Choose open, ask to join, or invite only.');
+            const now = (db.prepare('SELECT join_policy FROM groups WHERE id = ?').get(groupId) as { join_policy: string }).join_policy;
+            if (now === policy) throw new Error('The group already has that join policy.');
+            params = { policy };
+            break;
+        }
+        case 'close_group':
+            break;
+    }
+
+    if (db.prepare("SELECT 1 FROM decisions WHERE author_pubkey = ? AND status = 'open' AND scope_kind = 'group' AND scope_id = ?")
+        .get(opts.authorPubkey, groupId)) {
+        throw new Error(GROUP_ONE_OPEN);
+    }
+
+    const decision = insertScopedDecision('group', groupId, opts.authorPubkey, title, description, opts.effect, subject, params, roll);
+    noticeGroupVoteOpened(decision, roll.map(k => k.pubkey), push);
+    return decision;
+}
+
+/**
+ * Before a group's vote is carried out (§2.3, §2.6): only the group's own rows. The subject must be where the vote left
+ * them, by the roll's own test; the lead is never unmade by a role vote; a closed or missing group voids it.
+ */
+function preflightGroup(decision: Decision): { status: 'ok' | 'void' | 'blocked'; reason?: string } {
+    const gid = decision.scopeId!;
+    const gone = groupGoneReason(gid);
+    if (gone) return { status: 'void', reason: gone };
+    const subject = decision.subject || '';
+    const lead = getGroupLead(gid);
+    const roll = groupRollNow(gid);
+    switch (decision.effect) {
+        case 'set_group_role': {
+            const now = roll.find(k => k.pubkey === subject);
+            if (!now) return { status: 'void', reason: GROUP_SUBJECT_OFF_ROLL };
+            if (subject === lead) return { status: 'void', reason: GROUP_LEAD_UNTOUCHED };
+            if (now.role === decision.params?.role) return { status: 'void', reason: 'They already hold that role' };
+            return { status: 'ok' };
+        }
+        case 'replace_lead_convenor':
+            if (!roll.some(k => k.pubkey === subject)) return { status: 'void', reason: GROUP_SUBJECT_OFF_ROLL };
+            if (subject === lead) return { status: 'void', reason: 'They already lead this group' };
+            return { status: 'ok' };
+        case 'remove_group_member':
+            if (!db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(gid, subject)) {
+                return { status: 'void', reason: 'They are no longer in this group' };
+            }
+            if (subject === lead) return { status: 'void', reason: 'They lead the group now; the lead is replaced, not removed' };
+            return { status: 'ok' };
+        case 'set_join_policy': {
+            const policy = decision.params?.policy;
+            if (typeof policy !== 'string' || !JOIN_POLICIES.has(policy)) return { status: 'blocked', reason: 'Invalid join policy' };
+            return { status: 'ok' };
+        }
+        case 'close_group':
+            return { status: 'ok' };
+        default:
+            return { status: 'blocked', reason: 'That is not a group’s vote' };
+    }
 }

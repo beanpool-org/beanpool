@@ -385,6 +385,8 @@ export const TABLES: Record<string, TableEntry> = {
     decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
     // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
     decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at'),
+    // A chat group closed by its members' Decision (decisions-engine.ts closeGroupByVote, DESIGN-group-decisions §2.3).
+    group_closures: plain('group_id decision_id closed_at created_at updated_at'),
     // A role held aside by a suspension or by a removal in its grace period (decisions-engine.ts). A row whose Decision
     // closes is deleted, with a tombstone.
     suspended_node_roles: plain('decision_id member_pubkey role granted_at granted_by session_epoch updated_at', { except: {

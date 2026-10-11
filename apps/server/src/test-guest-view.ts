@@ -1212,6 +1212,10 @@ async function main(): Promise<void> {
             'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
                 params: { to: alice.pk, amount: 1 } },
             'POST /api/enterprise/:treasury/decisions/:id/vote': { support: true },
+            // A chat group's vote: removing Alice from the group, and a yes on a vote.
+            'POST /api/groups/:id/decisions': { title: 'Sentinel removal', description: 'A sentinel removal of Alice.', effect: 'remove_group_member',
+                subject: alice.pk },
+            'POST /api/groups/:id/decisions/:decisionId/vote': { support: true },
         };
         /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
         const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
@@ -1271,6 +1275,9 @@ async function main(): Promise<void> {
             'GET /api/groups/:id/members', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
             'PATCH /api/groups/:id/members/:pubkey', 'GET /api/groups/:id/picture', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',
+            // A chat group's votes (routes/group-decisions.ts): its members see them, everyone else 404.
+            'GET /api/groups/:id/decisions', 'POST /api/groups/:id/decisions', 'GET /api/groups/:id/decisions/:decisionId',
+            'POST /api/groups/:id/decisions/:decisionId/vote',
             'GET /api/home',
             'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'POST /api/invite/redeem',
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',

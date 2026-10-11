@@ -2211,9 +2211,10 @@ CREATE TABLE IF NOT EXISTS decisions (
     admin_halted_by      TEXT REFERENCES members(public_key) ON DELETE SET NULL,
     admin_halt_reason    TEXT,
     updated_at           DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    -- Whose Decision it is (DESIGN-group-decisions §2.1): the whole community, or one enterprise's keepers (scope_id = the
-    -- enterprise's pubkey). A scoped Decision touches only its own scope ('scope') and its roll is frozen in decision_electors.
-    scope_kind           TEXT NOT NULL DEFAULT 'community' CHECK (scope_kind IN ('community', 'enterprise')),
+    -- Whose Decision it is (DESIGN-group-decisions §2.1): the whole community, one enterprise's keepers (scope_id = the
+    -- enterprise's pubkey) or one chat group's members (scope_id = the group's id, slice S3). A scoped Decision touches only
+    -- its own scope ('scope') and its roll is frozen in decision_electors.
+    scope_kind           TEXT NOT NULL DEFAULT 'community' CHECK (scope_kind IN ('community', 'enterprise', 'group')),
     scope_id             TEXT,
     CHECK ((scope_kind = 'community') = (scope_id IS NULL)),
     CHECK ((scope_kind = 'community') = (touches != 'scope'))
@@ -2255,6 +2256,18 @@ CREATE TABLE IF NOT EXISTS decision_electors (
     PRIMARY KEY (decision_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_decision_electors_member ON decision_electors(member_pubkey);
+
+-- A chat group its members closed by a Decision (close_group, DESIGN-group-decisions §2.3, slice S3). The group's row stays,
+-- so "Your groups" and its history stay honest: it is shown closed, its chat is read-only, it takes nobody new and no new
+-- vote, and its posts are cancelled. Written only by decisions-engine (closeGroupByVote). A plain table: copied to a standby
+-- verbatim (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS group_closures (
+    group_id      TEXT PRIMARY KEY REFERENCES groups(id) ON DELETE CASCADE,
+    decision_id   TEXT NOT NULL,
+    closed_at     DATETIME NOT NULL,
+    created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
 
 -- 24. Enterprise Backing Pledges (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4)
 -- A keeper pledges a portion of their own earned credit to back an enterprise's credit floor.

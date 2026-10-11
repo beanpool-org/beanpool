@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 import {
     createGroup,
     getGroup,
+    groupClosedAt,
     listGroups,
     getGroupMembers,
     getGroupMember,
@@ -222,8 +223,10 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Group not found' };
             return;
         }
+        // Closed by its members' vote: the group stays to read, as "Your groups" shows it (closedAt, readOnly).
+        const closedAt = groupClosedAt(group.id);
         ctx.status = 200;
-        ctx.body = group;
+        ctx.body = { ...group, closedAt, readOnly: !!closedAt };
     });
 
     // 3. Create a group

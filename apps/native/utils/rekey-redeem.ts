@@ -31,6 +31,9 @@ import { looksLikeNodeAddress, normalizeNodeUrl, plainOriginOf, isPlainNodeAddre
 /** How often the screen asks whether the admin has bound this phone. */
 export const REKEY_POLL_MS = 3000;
 
+/** A code's life (server engine/member-wizards.ts REKEY_CODE_TTL_MS): a record older than this can no longer be bound. */
+export const REKEY_ASK_LIFE_MS = 24 * 60 * 60 * 1000;
+
 /** A code as the admin's screen shows it: `RK-` and two groups of four hex digits. */
 const CODE = /^RK-[0-9A-F]{4}-[0-9A-F]{4}$/;
 
@@ -92,6 +95,11 @@ export interface RekeySlot {
     madeHere: boolean;
     draft?: BeanPoolIdentity;
     startedAt: number;
+    /**
+     * True once a node answered with a number for this ask, written before the screen shows it. The admin binds only by
+     * typing that number (#1783 review B2), so an ask whose number never showed can't be bound (#1783 review C1).
+     */
+    shown?: boolean;
 }
 
 export interface RekeySlotStore {
@@ -131,11 +139,21 @@ export const REKEY_TEXT = {
     changedAccount: 'This phone’s account changed while you waited, so nothing was saved. Start again.',
 } as const;
 
+/** Refused because an earlier ask may still be bound: the screen offers to forget it ({@link abandonRekey}). */
+export class RekeyHeldError extends Error {
+    constructor(message: string, readonly host: string) {
+        super(message);
+        this.name = 'RekeyHeldError';
+    }
+}
+
 /**
  * Starts (or resumes) an ask: the key this phone asks with, written down with the community and the code BEFORE the
  * caller sends anything. A record already here for the same community and code keeps its key: the same proposal, the
  * same number. A record for another community or code is never re-pointed while its node may still bind it (#1783
  * review N2): it is asked first, let go only once its node says it has ended, and otherwise this ask is refused.
+ * Only an ask that showed a number within a code's life may still be bound: any other (a typo in the name, an address
+ * that isn't a BeanPool node, a day old) is re-pointed here, keeping its key (#1783 review C1).
  */
 export async function beginRekey(community: string, rawCode: string, deps: RekeyDeps): Promise<RekeySlot> {
     const code = cleanRekeyCode(rawCode);
@@ -144,14 +162,15 @@ export async function beginRekey(community: string, rawCode: string, deps: Rekey
     if (!url) throw new Error('That isn’t a community address the app can use.');
     let held = await deps.slot.get();
     const stored = await deps.loadIdentity();
-    if (held?.madeHere && held.draft && (held.community !== url || held.code !== code)) {
+    if (held?.madeHere && held.draft && (held.community !== url || held.code !== code)
+        && held.shown && Date.now() - held.startedAt < REKEY_ASK_LIFE_MS) {
         const answer = await pollRekey(held, deps);
         if (!endsRekey(answer)) {
             const open = held;
             const where = (() => { try { return new URL(open.community).host; } catch { return open.community; } })();
-            throw new Error(answer.state === 'unreachable'
-                ? `Couldn’t check the re-key you started at ${where}. Try again when you’re connected.`
-                : `The re-key you started at ${where} with ${open.code} is still open. Type that code to continue it, or ask your admin to decline this phone, then try again.`);
+            throw new RekeyHeldError(answer.state === 'unreachable'
+                ? `This phone showed a number for a re-key at ${where}, and ${where} isn’t answering. Try again later, or forget that re-key.`
+                : `The re-key you started at ${where} with ${open.code} is still open. Type that code to continue it, or ask your admin to decline this phone, then try again.`, where);
         }
         await abandonRekey(deps);
         held = null;
@@ -161,7 +180,8 @@ export async function beginRekey(community: string, rawCode: string, deps: Rekey
         // One identity per device: the phone's own key, never a new one beside it.
         slot = { community: url, code, publicKey: stored.publicKey, madeHere: false, startedAt: Date.now() };
     } else if (held?.madeHere && held.draft) {
-        slot = held;
+        // The same ask, or one that can't be bound any more (above): the same key, pointed at this community and code.
+        slot = held.community === url && held.code === code ? held : { ...held, community: url, code, startedAt: Date.now(), shown: false };
     } else {
         const draft = await deps.draftIdentity();
         slot = { community: url, code, publicKey: draft.publicKey, madeHere: true, draft, startedAt: Date.now() };
@@ -202,10 +222,20 @@ export async function askRekey(slot: RekeySlot, deps: RekeyDeps): Promise<RekeyA
         const body = JSON.stringify({ code: slot.code, newPublicKey: key.publicKey, signature, signedFor });
         const headers = await deps.signedHeaders('POST', url, body, key.privateKey, key.publicKey);
         const res = await deps.fetch(url, { method: 'POST', headers, body });
-        return readAnswer(res.status, await res.json().catch(() => null));
+        return await marked(slot, readAnswer(res.status, await res.json().catch(() => null)), deps);
     } catch {
         return { state: 'unreachable' };
     }
+}
+
+/** A number is about to show: the record says so first, so this ask is never re-pointed while it may be bound. */
+async function marked(slot: RekeySlot, answer: RekeyAnswer, deps: RekeyDeps): Promise<RekeyAnswer> {
+    if (answer.state !== 'waiting') return answer;
+    const held = await deps.slot.get();
+    if (held && !held.shown && held.community === slot.community && held.code === slot.code && held.publicKey === slot.publicKey) {
+        await deps.slot.set({ ...held, shown: true });
+    }
+    return answer;
 }
 
 /** Where the ask stands. A 429 or no answer is `unreachable`: the screen keeps waiting and asks again. */
@@ -217,7 +247,7 @@ export async function pollRekey(slot: RekeySlot, deps: RekeyDeps): Promise<Rekey
         const headers = await deps.signedHeaders('GET', url, '', key.privateKey, key.publicKey);
         const res = await deps.fetch(url, { method: 'GET', headers });
         if (res.status === 429) return { state: 'unreachable' };
-        return readAnswer(res.status, await res.json().catch(() => null));
+        return await marked(slot, readAnswer(res.status, await res.json().catch(() => null)), deps);
     } catch {
         return { state: 'unreachable' };
     }

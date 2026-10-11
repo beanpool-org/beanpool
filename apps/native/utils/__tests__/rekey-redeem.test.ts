@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
     abandonRekey, askRekey, beginRekey, cleanRekeyCode, finishRekey, isRekeyCode, parseRekeyLink, pollRekey,
-    rekeyCommunityUrl, resumeRekey, REKEY_TEXT, type RekeyDeps, type RekeySlot,
+    rekeyCommunityUrl, resumeRekey, REKEY_ASK_LIFE_MS, REKEY_TEXT, RekeyHeldError, type RekeyDeps, type RekeySlot,
 } from '../rekey-redeem';
 import type { BeanPoolIdentity } from '../identity';
 
@@ -300,7 +300,7 @@ describe('Back, a second code, and the status first (#1783 review N2, N4)', () =
         const w = world({ answers: [waiting, 'offline'] });
         const first = await beginRekey(MULLUM, CODE, w.deps);
         await askRekey(first, w.deps);
-        await expect(beginRekey('https://bellingen.example.org', 'RK-EEEE-FFFF', w.deps)).rejects.toThrow(/Couldn’t check the re-key you started at mullum\.example\.org/);
+        await expect(beginRekey('https://bellingen.example.org', 'RK-EEEE-FFFF', w.deps)).rejects.toThrow(/showed a number for a re-key at mullum\.example\.org, and mullum\.example\.org isn’t answering/);
         expect(w.slot?.publicKey).toBe(first.publicKey);
     });
 
@@ -339,5 +339,67 @@ describe('Back, a second code, and the status first (#1783 review N2, N4)', () =
         const r = await resumeRekey(w.deps);
         expect(r?.answer.state).toBe('waiting');
         expect(w.sent.map((s) => s.init?.method)).toEqual(['GET', 'POST']);
+    });
+});
+
+describe('an ask that never showed a number is never held (#1783 review C1)', () => {
+    const htmlPage = { status: 200, body: '<!doctype html><html></html>' };
+
+    it('a typo in the name that nothing answers, then the right name: the right one is asked, with the same key', async () => {
+        const w = world({ answers: ['offline', waiting] });
+        const typo = await beginRekey('https://mulum.example.org', CODE, w.deps);
+        expect((await askRekey(typo, w.deps)).state).toBe('unreachable');
+        expect(w.slot?.shown).toBeFalsy();
+        const right = await beginRekey(MULLUM, CODE, w.deps);
+        expect(right.community).toBe(MULLUM);
+        expect(right.publicKey).toBe(typo.publicKey);
+        expect((await askRekey(right, w.deps)).state).toBe('waiting');
+        expect(w.sent.map((x) => new URL(x.url).host)).toEqual(['mulum.example.org', 'mullum.example.org']);
+        expect(w.log.filter((l) => l === 'draft').length).toBe(1);
+    });
+
+    it('an address that is some other web server (HTML 200, a JSON 404) holds nothing either', async () => {
+        for (const reply of [htmlPage, { status: 404, body: { error: 'Not Found' } }]) {
+            const w = world({ answers: [reply] });
+            const wrong = await beginRekey('https://mullum.org', CODE, w.deps);
+            expect((await askRekey(wrong, w.deps)).state).not.toBe('waiting');
+            const right = await beginRekey(MULLUM, 'RK-EEEE-FFFF', w.deps);
+            expect(right).toMatchObject({ community: MULLUM, code: 'RK-EEEE-FFFF', publicKey: wrong.publicKey, shown: false });
+            expect(w.sent.length).toBe(1); // nothing asked of the held address: it never showed a number
+        }
+    });
+
+    it('the record says a number showed before the number reaches the screen, from the ask or the poll', async () => {
+        const w = world({ answers: [{ status: 503, body: null }, waiting] });
+        const slot = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(slot, w.deps);
+        expect(w.slot?.shown).toBeFalsy();
+        const answer = await pollRekey(slot, w.deps);
+        expect(answer.state).toBe('waiting');
+        expect(w.slot?.shown).toBe(true);
+        expect(w.log.slice(-2)).toEqual(['slot.get', 'slot.set']);
+    });
+
+    it('a number that showed is still held while its code may live: refused, with a way to forget it', async () => {
+        const w = world({ answers: [waiting, 'offline'] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        const err = await beginRekey('https://bellingen.example.org', CODE, w.deps).catch((e) => e);
+        expect(err).toBeInstanceOf(RekeyHeldError);
+        expect(err.host).toBe('mullum.example.org');
+        expect(w.slot).toMatchObject({ community: MULLUM, publicKey: first.publicKey, shown: true });
+        await abandonRekey(w.deps); // the form's "Forget the re-key at mullum.example.org", after its warning
+        const next = await beginRekey('https://bellingen.example.org', CODE, w.deps);
+        expect(next.publicKey).not.toBe(first.publicKey);
+    });
+
+    it('a number that showed more than a code\'s life ago can no longer be bound: the next ask goes through', async () => {
+        const w = world({ answers: [waiting] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        w.slot!.startedAt -= REKEY_ASK_LIFE_MS + 1;
+        const next = await beginRekey(MULLUM, 'RK-EEEE-FFFF', w.deps);
+        expect(next).toMatchObject({ code: 'RK-EEEE-FFFF', publicKey: first.publicKey, shown: false });
+        expect(w.sent.length).toBe(1);
     });
 });

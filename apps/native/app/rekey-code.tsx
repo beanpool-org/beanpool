@@ -27,7 +27,7 @@ import { signReEnrollStatement } from '../utils/member-statements';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import {
     abandonRekey, askRekey, beginRekey, endsRekey, finishRekey, parseRekeyLink, pollRekey, rekeyCommunityUrl, resumeRekey,
-    REKEY_POLL_MS, REKEY_TEXT, type RekeyAnswer, type RekeyDeps, type RekeySlot,
+    REKEY_POLL_MS, REKEY_TEXT, RekeyHeldError, type RekeyAnswer, type RekeyDeps, type RekeySlot,
 } from '../utils/rekey-redeem';
 
 type Phase = 'form' | 'asking' | 'waiting' | 'words' | 'linkAgain' | 'ended';
@@ -109,6 +109,8 @@ export default function RekeyCodeScreen() {
     const [code, setCode] = useState(fromLink?.code ?? '');
     const [phase, setPhase] = useState<Phase>('form');
     const [error, setError] = useState<string | null>(null);
+    /** An earlier ask showed a number and can't be checked now: the form offers to forget it (#1783 review C1). */
+    const [heldHost, setHeldHost] = useState<string | null>(null);
     const [slot, setSlot] = useState<RekeySlot | null>(null);
     const [match, setMatch] = useState<string | null>(null);
     const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -199,6 +201,7 @@ export default function RekeyCodeScreen() {
 
     const ask = async () => {
         setError(null);
+        setHeldHost(null);
         const url = rekeyCommunityUrl(community);
         if (!url) { setError('Type your community’s name or address, as your admin gave it.'); return; }
         setPhase('asking');
@@ -208,9 +211,19 @@ export default function RekeyCodeScreen() {
             await apply(s, await askRekey(s, deps));
         } catch (e) {
             setError(e instanceof Error ? e.message : REKEY_TEXT.unreachable);
+            if (e instanceof RekeyHeldError) setHeldHost(e.host);
             setPhase('form');
         }
         setPhase((p) => (p === 'asking' ? 'form' : p));
+    };
+
+    // The way out when an earlier ask can't be checked: its record and key go, after one warning.
+    const forgetHeld = () => {
+        if (!heldHost) return;
+        Alert.alert(`Forget the re-key at ${heldHost}?`, 'If your admin there already typed its number, your account moved to that phone key and only a new code from them gets you back in.', [
+            { text: 'Keep it', style: 'cancel' },
+            { text: 'Forget it', style: 'destructive', onPress: async () => { await abandonRekey(deps); setHeldHost(null); setError(null); } },
+        ]);
     };
 
     // Not now only leaves the number: the record and its key stay, since the admin may still type this number (#1783 review
@@ -352,6 +365,11 @@ export default function RekeyCodeScreen() {
                 <Pressable style={styles.primary} onPress={ask} disabled={phase === 'asking'} accessibilityRole="button">
                     {phase === 'asking' ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryText}>{phase === 'ended' ? 'Try again' : 'Continue'}</Text>}
                 </Pressable>
+                {heldHost ? (
+                    <Pressable style={styles.secondary} onPress={forgetHeld} accessibilityRole="button">
+                        <Text style={styles.secondaryText}>Forget the re-key at {heldHost}</Text>
+                    </Pressable>
+                ) : null}
             </View>
         );
     }

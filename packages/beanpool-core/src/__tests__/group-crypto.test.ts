@@ -10,7 +10,7 @@ import {
     makeGroupTopUp, openGroupEpochRecord, openGroupKeyWrapUnverified, openGroupLine, openGroupLineWithMessageKey, openGroupTopUp, sealGroupLine,
     verifyGroupEpochRecord, verifyGroupTopUp, wrapGroupKey, GroupKeyNotVerifiedError, GroupLineNotVerifiedError, GROUP_NONCE_PREFIX,
     groupEpochCoversExactly, groupKeyCommit, groupMembersDigest, groupWrapsDigest, openGroupKeyWrap, openMyGroupKey,
-    type GroupEpochRecord, type GroupLineBinding, type GroupLinePayload,
+    type GroupEpochCheck, type GroupEpochRecord, type GroupKeyOpenCheck, type GroupLineBinding, type GroupLinePayload,
 } from '../group-crypto.js';
 import { DM_NONCE_PREFIX, dmPublicKeyOf, identityX25519Secret, isDmEncryptedNonce } from '../dm-crypto.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
@@ -293,14 +293,16 @@ describe('top-ups', () => {
         expect(() => verifyGroupTopUp(GROUP, { ...topUp, wrapped: flip(topUp.wrapped) })).toThrow(/signature/);
     });
 
-    it('refuses a wrapper or a recipient outside the roster the app holds, though the signature is good (§2.5)', () => {
+    it('refuses a wrapper or a recipient outside the roster when stored (§2.5); reading needs no roster: the commitment refuses a key of their own', () => {
         const roster = [ana.publicKey, ben.publicKey, cat.publicKey, dov.publicKey];
         expect(() => verifyGroupTopUp(GROUP, topUp, { activeMembers: roster })).not.toThrow();
-        expect(bytesToHex(openGroupTopUp(GROUP, topUp, dov.seedHex, commit, { activeMembers: roster }))).toBe(bytesToHex(groupKey));
-        // Someone in no roster signs a top-up of a key of their own choosing: without the roster it would open for Dov.
+        expect(bytesToHex(openGroupTopUp(GROUP, topUp, dov.seedHex, commit))).toBe(bytesToHex(groupKey));
+        // Someone in no roster signs a top-up of a key of their own choosing: the node's check refuses to store it, and if
+        // the node serves it anyway, Dov's open refuses it by the commitment.
         const eve = person('Eve');
         const eves = makeGroupTopUp(new Uint8Array(32).fill(9), { myEdPrivHex: eve.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
-        expect(() => openGroupTopUp(GROUP, eves, dov.seedHex, commit, { activeMembers: roster })).toThrow(/wrapper is not an active member/);
+        expect(() => verifyGroupTopUp(GROUP, eves, { activeMembers: roster })).toThrow(/wrapper is not an active member/);
+        expect(() => openGroupTopUp(GROUP, eves, dov.seedHex, commit)).toThrow(/commits to/);
         // A top-up to someone no longer in the group.
         expect(() => verifyGroupTopUp(GROUP, topUp, { activeMembers: [ana.publicKey, ben.publicKey, cat.publicKey] })).toThrow(/recipient is not an active member/);
     });
@@ -322,11 +324,11 @@ describe('wrap provenance: the record commits to the key (provenance design §5,
         expect(bytesToHex(openGroupKeyWrapUnverified(rogue, { groupId: GROUP, epoch: 2, wrapperPubHex: cat.publicKey }, ana.seedHex))).toBe(bytesToHex(rogueKey));
         const at = { groupId: GROUP, epoch: 2, wrapperPubHex: cat.publicKey, keyCommit: record.keyCommit };
         expect(() => openGroupKeyWrap(rogue, at, ana.seedHex)).toThrow(/does not hold the key the epoch record commits to/);
-        expect(() => openMyGroupKey(served, servedOf(rogue), ana.seedHex, { groupId: GROUP, activeMembers: all })).toThrow(/commits to/);
+        expect(() => openMyGroupKey(served, servedOf(rogue), ana.seedHex, { groupId: GROUP })).toThrow(/commits to/);
         // The same box made around the real key opens.
         const honest = wrapGroupKey(groupKey, { groupId: GROUP, epoch: 2, recipientPubHex: ana.publicKey, wrapperPubHex: cat.publicKey });
         expect(bytesToHex(openGroupKeyWrap(honest, at, ana.seedHex))).toBe(bytesToHex(groupKey));
-        expect(bytesToHex(openMyGroupKey(served, servedOf(honest), ana.seedHex, { groupId: GROUP, activeMembers: all }))).toBe(bytesToHex(groupKey));
+        expect(bytesToHex(openMyGroupKey(served, servedOf(honest), ana.seedHex, { groupId: GROUP }))).toBe(bytesToHex(groupKey));
     });
 
     it('a record with keyCommit, membersDigest or wrapsDigest changed fails its signature (served shape)', () => {
@@ -349,24 +351,56 @@ describe('wrap provenance: the record commits to the key (provenance design §5,
         expect(() => verifyGroupEpochRecord(served, { groupId: GROUP, epoch: 2, activeMembers: all })).not.toThrow();
         for (const p of [ana, ben, cat]) {
             const w = record.wraps!.find((x) => x.recipient === p.publicKey)!;
-            expect(bytesToHex(openMyGroupKey(served, servedOf(w), p.pkcs8Hex, { groupId: GROUP, activeMembers: all }))).toBe(bytesToHex(groupKey));
+            expect(bytesToHex(openMyGroupKey(served, servedOf(w), p.pkcs8Hex, { groupId: GROUP, epoch: 2 }))).toBe(bytesToHex(groupKey));
         }
         expect(() => openMyGroupKey(served, servedOf(anaWrap, ben.publicKey), ana.seedHex, { groupId: GROUP })).toThrow(/maker/);
         expect(() => openMyGroupKey(served, { ...servedOf(anaWrap), epoch: 3 }, ana.seedHex, { groupId: GROUP })).toThrow(/another epoch/);
         expect(() => openGroupEpochRecord(served, ana.seedHex, { groupId: GROUP })).toThrow(/no wraps/);
     });
 
-    it('top-ups: by a key in no roster refused (roster given); by a member holding another key refused by commitment; the right key opens', () => {
+    it('top-ups: by a key in no roster refused when stored; by a member holding another key refused by commitment; the right key opens', () => {
         const roster = [...all, dov.publicKey];
         const eve = person('Eve');
         const eves = makeGroupTopUp(groupKey, { myEdPrivHex: eve.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
-        expect(() => openGroupTopUp(GROUP, eves, dov.seedHex, record.keyCommit, { activeMembers: roster })).toThrow(/wrapper is not an active member/);
-        expect(() => openMyGroupKey(served, servedOf(eves, eve.publicKey, eves.sig), dov.seedHex, { groupId: GROUP, activeMembers: roster })).toThrow(/wrapper is not an active member/);
+        expect(() => verifyGroupTopUp(GROUP, eves, { activeMembers: roster })).toThrow(/wrapper is not an active member/);
         const bens = makeGroupTopUp(new Uint8Array(32).fill(5), { myEdPrivHex: ben.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
-        expect(() => openGroupTopUp(GROUP, bens, dov.seedHex, record.keyCommit, { activeMembers: roster })).toThrow(/commits to/);
-        expect(() => openMyGroupKey(served, servedOf(bens, ben.publicKey, bens.sig), dov.seedHex, { groupId: GROUP, activeMembers: roster })).toThrow(/commits to/);
+        expect(() => openGroupTopUp(GROUP, bens, dov.seedHex, record.keyCommit)).toThrow(/commits to/);
+        expect(() => openMyGroupKey(served, servedOf(bens, ben.publicKey, bens.sig), dov.seedHex, { groupId: GROUP })).toThrow(/commits to/);
         const anas = makeGroupTopUp(groupKey, { myEdPrivHex: ana.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
-        expect(bytesToHex(openMyGroupKey(served, servedOf(anas, ana.publicKey, anas.sig), dov.seedHex, { groupId: GROUP, activeMembers: roster }))).toBe(bytesToHex(groupKey));
+        expect(bytesToHex(openMyGroupKey(served, servedOf(anas, ana.publicKey, anas.sig), dov.seedHex, { groupId: GROUP }))).toBe(bytesToHex(groupKey));
+    });
+
+    // Epochs over time (DESIGN-group-chat-epochs-over-time-fable.md §2): the roster is checked for the epoch about to be
+    // sealed under, never when reading. Every joiner makes their own epoch, so a check against today's roster on reading
+    // would cost every member an epoch the moment its maker leaves or is re-keyed.
+    it('a record by a maker outside the roster is refused before sealing and opened when reading', () => {
+        const withoutCat = [ana.publicKey, ben.publicKey];
+        expect(() => verifyGroupEpochRecord(served, { groupId: GROUP, epoch: 2, activeMembers: withoutCat })).toThrow(/maker is not an active member/);
+        const w = record.wraps!.find((x) => x.recipient === ana.publicKey)!;
+        expect(bytesToHex(openMyGroupKey(served, servedOf(w), ana.seedHex, { groupId: GROUP }))).toBe(bytesToHex(groupKey));
+        expect(bytesToHex(openGroupEpochRecord(record, ana.seedHex, { groupId: GROUP, epoch: 2 }))).toBe(bytesToHex(groupKey));
+    });
+
+    it('a top-up by a wrapper outside the roster (who has since left) is refused when stored and opened when reading', () => {
+        const anas = makeGroupTopUp(groupKey, { myEdPrivHex: ana.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
+        expect(() => verifyGroupTopUp(GROUP, anas, { activeMembers: [ben.publicKey, cat.publicKey, dov.publicKey] })).toThrow(/wrapper is not an active member/);
+        expect(bytesToHex(openGroupTopUp(GROUP, anas, dov.seedHex, record.keyCommit))).toBe(bytesToHex(groupKey));
+        expect(bytesToHex(openMyGroupKey(served, servedOf(anas, ana.publicKey, anas.sig), dov.seedHex, { groupId: GROUP }))).toBe(bytesToHex(groupKey));
+    });
+
+    it('the read path has no roster parameter: by type, and a roster smuggled in at run time is ignored', () => {
+        const w = record.wraps!.find((x) => x.recipient === ana.publicKey)!;
+        // @ts-expect-error GroupKeyOpenCheck takes no roster: reading never checks one.
+        expect(bytesToHex(openMyGroupKey(served, servedOf(w), ana.seedHex, { groupId: GROUP, activeMembers: [ben.publicKey] }))).toBe(bytesToHex(groupKey));
+        // @ts-expect-error neither does the full record's opener.
+        expect(bytesToHex(openGroupEpochRecord(record, ana.seedHex, { groupId: GROUP, activeMembers: [ben.publicKey] }))).toBe(bytesToHex(groupKey));
+        const anas = makeGroupTopUp(groupKey, { myEdPrivHex: ana.seedHex, groupId: GROUP, epoch: 2, recipientPubHex: dov.publicKey });
+        // @ts-expect-error nor the top-up's.
+        expect(bytesToHex(openGroupTopUp(GROUP, anas, dov.seedHex, record.keyCommit, { activeMembers: [ben.publicKey] }))).toBe(bytesToHex(groupKey));
+        const write: GroupEpochCheck = { groupId: GROUP, activeMembers: [ben.publicKey] };
+        // @ts-expect-error a write-time check, roster and all, is not a read-time one.
+        const read: GroupKeyOpenCheck = write;
+        expect(read.groupId).toBe(GROUP);
     });
 
     it('groupEpochCoversExactly: the exact set in any order with duplicates; not one extra, one missing, or a removed subject still present', () => {

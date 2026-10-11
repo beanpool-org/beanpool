@@ -329,7 +329,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     group_members: {
         kind: 'replicated', payload: 'groupMembers', watermark: 'updated_at',
-        columns: cols('group_id member_pubkey role status joined_at invited_by updated_at role_since'),
+        columns: cols('group_id member_pubkey role status joined_at invited_by updated_at role_since from_epoch'),
     },
     open_joins: {
         kind: 'replicated-except', payload: 'openJoins', watermark: 'updated_at',
@@ -462,7 +462,7 @@ export const TABLES: Record<string, TableEntry> = {
     // node can open, so a server that takes over serves members the keys their phones made. A re-key's delete of the old
     // key's wraps is followed on the standby itself (engine/key-move.ts), as push_tokens' is.
     group_key_epochs: plain('group_id epoch created_by reason subject_pubkey created_at key_commit members_digest wraps_digest sig stored_at stale_since updated_at'),
-    group_key_wraps: plain('group_id epoch recipient_pubkey wrapper_pubkey eph_pub nonce wrapped sig created_at updated_at'),
+    group_key_wraps: plain('group_id epoch recipient_pubkey wrapper_pubkey eph_pub nonce wrapped sig created_at updated_at rejected_at'),
     // Every event reminder the main server sent, so one is never sent twice (engine/event-reminders.ts).
     event_reminders_sent: plain('post_id member_pubkey offset_min sent_at updated_at'),
     // The activity list, ids included: a server that takes over numbers its next line after the last one it copied. Its

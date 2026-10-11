@@ -335,6 +335,98 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 8b. group_members.from_epoch (group chats step 2b) ──────────────────────────────────────────
+    // The first epoch a membership holds keys from, by number. Once, with the column: a group with no epoch (every group
+    // on a node from before the chat's keys) starts its active rows at 1; a group that already has epochs gives each the
+    // epoch the old stored_at rule gave, or the next one. Not a pending row, and no row stamped.
+    console.log('\n--- 8b. group_members gains from_epoch ---');
+    {
+        const dir = tmp('group-members-from-epoch');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TABLE group_members; ${legacyDdl('group_members', ['from_epoch'])}`);
+        const pk = (c: string) => c.repeat(64);
+        const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+        const stamp = daysAgo(90);
+        for (const c of ['a', 'b', 'c', 'd', 'e']) d.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, ?)`).run(pk(c), c, stamp);
+        d.prepare(`INSERT INTO groups (id, name, slug, created_by) VALUES ('g1', 'Garden', 'garden', ?), ('g2', 'Shed', 'shed', ?)`).run(pk('a'), pk('a'));
+        const gm = d.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at) VALUES (?, ?, 'member', ?, ?, ?)`);
+        gm.run('g1', pk('a'), 'active', stamp, stamp);
+        gm.run('g1', pk('b'), 'pending_approval', stamp, stamp);
+        const ep = d.prepare(`INSERT INTO group_key_epochs (group_id, epoch, created_by, reason, created_at, key_commit, members_digest, wraps_digest, sig, stored_at)
+                              VALUES ('g2', ?, ?, 'rotate', 'x', 'k', 'm', 'w', 's', ?)`);
+        ep.run(1, pk('a'), daysAgo(60));
+        ep.run(2, pk('a'), daysAgo(30));
+        gm.run('g2', pk('a'), 'active', daysAgo(75), stamp);
+        gm.run('g2', pk('c'), 'active', daysAgo(45), stamp);
+        gm.run('g2', pk('d'), 'active', daysAgo(15), stamp);
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the node from before the column boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        const f = (g: string, c: string) => (after.prepare('SELECT from_epoch, updated_at FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, pk(c)) as any);
+        assert(f('g1', 'a').from_epoch === 1, `a group with no epoch: its active row starts at 1 (got ${f('g1', 'a').from_epoch})`);
+        assert(f('g1', 'b').from_epoch === null, 'a pending request gets none');
+        assert(f('g2', 'a').from_epoch === 1 && f('g2', 'c').from_epoch === 2 && f('g2', 'd').from_epoch === 3,
+            `a group with epochs: the old rule's epoch each, or the next one (got ${f('g2', 'a').from_epoch}, ${f('g2', 'c').from_epoch}, ${f('g2', 'd').from_epoch})`);
+        assert(['a', 'c', 'd'].every((c) => f('g2', c).updated_at === stamp) && f('g1', 'a').updated_at === stamp, 'no row is stamped by it');
+        after.prepare(`UPDATE group_members SET role = 'convenor' WHERE group_id = 'g1' AND member_pubkey = ?`).run(pk('a'));
+        assert(f('g1', 'a').updated_at > stamp, 'the updated_at touch trigger is back');
+        after.prepare(`UPDATE group_members SET from_epoch = NULL WHERE group_id = 'g2' AND member_pubkey = ?`).run(pk('c'));
+        after.close();
+        assert(bootInto(dir).ok, 'a second boot');
+        const again = new Database(path.join(dir, 'state.db'), { readonly: true });
+        assert((again.prepare('SELECT from_epoch FROM group_members WHERE group_id = ? AND member_pubkey = ?').get('g2', pk('c')) as any).from_epoch === null,
+            'and it runs only once: a row left NULL since stays NULL (the reader falls back)');
+        again.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // ── 8c. group_key_wraps: its key gains the wrapper, and rejected_at (group chats step 2b) ──────────
+    // A key cannot be altered in place, so db.ts rebuilds a table from step 2: every row kept as it was, the key and the
+    // live index and the plain table's triggers as a fresh install has them.
+    console.log('\n--- 8c. group_key_wraps from step 2 ---');
+    {
+        const dir = tmp('group-key-wraps');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const oldDdl = legacyDdl('group_key_wraps', ['rejected_at'])
+            .replace('PRIMARY KEY (group_id, epoch, recipient_pubkey, wrapper_pubkey)', 'PRIMARY KEY (group_id, epoch, recipient_pubkey)');
+        assert(!oldDdl.includes('rejected_at') && !oldDdl.includes('recipient_pubkey, wrapper_pubkey)'), 'the fixture DDL is step 2\'s: no rejected_at, keyed by recipient');
+        d.exec(`DROP TABLE group_key_wraps; ${oldDdl}`);
+        const at = new Date(Date.now() - 3 * 86_400_000).toISOString();
+        const w = d.prepare(`INSERT INTO group_key_wraps (group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at, updated_at)
+                             VALUES ('g1', ?, ?, ?, 'e', 'n', 'w', ?, ?, ?)`);
+        w.run(1, 'a'.repeat(64), 'a'.repeat(64), null, at, at);
+        w.run(1, 'b'.repeat(64), 'c'.repeat(64), 'sig', at, at);
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok && /Migrated group_key_wraps/.test(result.output), 'the node from step 2 boots and rebuilds the table');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        const rows = after.prepare('SELECT * FROM group_key_wraps ORDER BY recipient_pubkey').all() as any[];
+        assert(rows.length === 2 && rows.every((r) => r.updated_at === at && r.created_at === at && r.rejected_at === null) && rows[1].sig === 'sig' && rows[1].wrapper_pubkey === 'c'.repeat(64),
+            'every row kept as it was, rejected_at NULL');
+        const key = (after.prepare("SELECT name FROM pragma_table_info('group_key_wraps') WHERE pk > 0 ORDER BY pk").all() as any[]).map((c) => c.name).join(',');
+        assert(key === 'group_id,epoch,recipient_pubkey,wrapper_pubkey', `the key gains the wrapper (got ${key})`);
+        assert(JSON.stringify(indexes(after, 'group_key_wraps')) === JSON.stringify(indexes(freshDb, 'group_key_wraps')), 'its indexes are a fresh install\'s, the live one among them');
+        const triggers = (db: Database.Database) => (db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'group_key_wraps' ORDER BY name").all() as any[]).map((r) => r.name).join(',');
+        assert(triggers(after) === triggers(freshDb) && triggers(after).length > 0, `and so are its triggers (${triggers(after)})`);
+        after.prepare("UPDATE group_key_wraps SET rejected_at = ? WHERE recipient_pubkey = ?").run(new Date().toISOString(), 'b'.repeat(64));
+        let second = true;
+        try { after.prepare(`INSERT INTO group_key_wraps (group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at) VALUES ('g1', 1, ?, ?, 'e', 'n', 'w', 's', ?)`).run('b'.repeat(64), 'd'.repeat(64), at); } catch { second = false; }
+        let third = false;
+        try { after.prepare(`INSERT INTO group_key_wraps (group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at) VALUES ('g1', 1, ?, ?, 'e', 'n', 'w', 's', ?)`).run('b'.repeat(64), 'e'.repeat(64), at); third = true; } catch { /* refused */ }
+        assert(second && !third, 'a refused wrap\'s slot takes one more live wrap from another wrapper, and no second live one');
+        after.close();
+        assert(!/Migrated group_key_wraps/.test(bootInto(dir).output), 'a second boot does not rebuild again');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     // ── accounts.balance NOT NULL (review FABLE-sec-input F1, 2026-10-01) ─────────────────────────
     // better-sqlite3 binds NaN as NULL, and the column was nullable, so a NaN balance was written as NULL without a word.
     // A fresh install declares it NOT NULL; a node whose table predates that is rebuilt at boot, unless a balance there

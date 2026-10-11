@@ -663,12 +663,14 @@ async function main(): Promise<void> {
     /** Every write in `swept`, signed by `key`: the ones not answered as `isRefusal` says, and whether any table changed or anyone was pushed. */
     const sweepAs = async (key: Id, isRefusal: (r: { status: number; body: any }, route: string) => boolean, ownPost?: string, own?: Record<string, unknown>) => {
         // Each refusal is charged to the caller's address as an unsigned request would be (gateway-rate-limit.ts
-        // gatewaySettle, as for a bad signature). This many from one address would trip it, so each pass starts clear.
+        // gatewaySettle, as for a bad signature). This many from one address would trip it, so each pass starts clear, and
+        // is cleared again every 100 writes: a pass of 200 (group chats 2b's reject route made it so) crossed one window's.
         resetGatewayRateLimit();
         const before = snapshot();
         const pushed = pushes.length;
         const answered: string[] = [];
-        for (const route of swept) {
+        for (const [i, route] of swept.entries()) {
+            if (i > 0 && i % 100 === 0) resetGatewayRateLimit();
             const [method, path] = route.split(' ') as ['POST' | 'PUT' | 'PATCH' | 'DELETE', string];
             const r = await signedFetch(method, materialise(path, ownPost), key, bodyFor(key, own));
             if (!isRefusal(r, route)) answered.push(`${route} → ${r.status} ${JSON.stringify(r.body ?? null).slice(0, 90)}`);

@@ -29,7 +29,9 @@
  *      the next nearest;
  *  11. every nearby answer names `tied`: the ids of the set that are her own or tied to her (an open deal, a conversation),
  *      exactly the brute force's, on every page, so a phone keeps a tie it holds no deal row for (review of #1778, finding
- *      2); a deal opened on a listing already near her changes the tag, though the set doesn't move.
+ *      2); a deal opened on a listing already near her changes the tag, though the set doesn't move;
+ *  12. a phone that says `setOnce=1` is named the set on the last page of a read only (REPORT-geosync-load-B, item 1):
+ *      each page before it answers `{ posts }`; a read without it is answered as before, the set on each page.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-sync-nearby)
  */
@@ -77,7 +79,7 @@ const SYNC = `/api/marketplace/posts?limit=200&sync=true&types=${TYPES}`;
 const EPOCH = 'x-beanpool-epoch';
 
 type Row = { id: string; title: string; status: string; lat: number | null; lng: number | null; authorPublicKey: string; authorCallsign: string };
-type Answer = { status: number; next: string | null; etag: string | null; epoch: string | null; text: string; posts: Row[]; set: string[]; setHash: string; tied: string[] | undefined };
+type Answer = { status: number; next: string | null; etag: string | null; epoch: string | null; text: string; posts: Row[]; set: string[]; setHash: string; tied: string[] | undefined; keys: string[] };
 
 async function get(path: string, id: Id | null, headers: Record<string, string> = {}): Promise<Answer> {
     const res = await localFetch(`${BASE}${path}`, { headers: { ...(id ? signedHeaders('GET', path, '', id) : {}), ...headers } });
@@ -93,17 +95,18 @@ async function get(path: string, id: Id | null, headers: Record<string, string> 
         set: body?.set ?? [],
         setHash: body?.setHash ?? '',
         tied: body && !Array.isArray(body) ? body.tied : undefined,
+        keys: body && !Array.isArray(body) ? Object.keys(body).sort() : [],
     };
 }
 
-/** Every page of a nearby read: the rows in the order they came, the last page's set, each answer. */
-async function readNearby(id: Id, since?: string) {
+/** Every page of a nearby read: the rows in the order they came, the last page's set, each answer. `extra`: what a phone adds. */
+async function readNearby(id: Id, since?: string, extra = '') {
     const cursor = since ? `&updatedAfter=${encodeURIComponent(since)}` : '';
     const answers: Answer[] = [];
-    let page = await get(`${SYNC}&nearby=1${cursor}&paged=1`, id);
+    let page = await get(`${SYNC}&nearby=1${extra}${cursor}&paged=1`, id);
     answers.push(page);
     while (page.status === 200 && page.next) {
-        page = await get(`${SYNC}&nearby=1${cursor}&pageAfter=${encodeURIComponent(page.next)}`, id);
+        page = await get(`${SYNC}&nearby=1${extra}${cursor}&pageAfter=${encodeURIComponent(page.next)}`, id);
         answers.push(page);
     }
     if (answers.some(a => a.status !== 200)) throw new Error(`a nearby page answered ${answers.map(a => a.status).join(',')}`);
@@ -561,6 +564,30 @@ async function main() {
         `she blocks that author: 200, none of the 60 in her set, which is the nearest 500 of everyone else's (${blockedRead.status}, ${blockedRead.set.filter(id => crowded.includes(id)).length} of the 60 left)`);
     const otherBusy = members[1].id;
     assert(sameSet((await get(`${SYNC}&nearby=1`, otherBusy)).set, bruteSet(otherBusy).all), 'another member\'s set is untouched by her blocks');
+
+    // ── 12. the set once a read ──
+    console.log('\n── 12. a phone that says setOnce=1 is named the set on the last page of a read only ──');
+    {
+        const busy = members[0].id;
+        const each = await readNearby(busy);
+        const once = await readNearby(busy, undefined, '&setOnce=1');
+        const last = once.answers[once.answers.length - 1];
+        assert(once.answers.length >= 3 && once.answers.slice(0, -1).every(a => a.keys.join() === 'posts'),
+            `a whole read in ${once.answers.length} pages: each page before the last answers its rows alone (${once.answers.map(a => a.keys.join('+')).join(' / ')})`);
+        assert(last.keys.join() === 'posts,set,setHash,tied' && last.set.join() === each.set.join() && last.setHash === each.answers[0].setHash
+            && last.tied?.join() === each.answers[0].tied?.join(),
+            'the last page names the set, its hash and `tied`, as each page of a read without setOnce=1 does');
+        assert(once.rows.map(r => r.id).join() === each.rows.map(r => r.id).join(), `and the rows are the same rows in the same order (${once.rows.length})`);
+        const raw = (r: { answers: Answer[] }) => r.answers.reduce((n, a) => n + Buffer.byteLength(a.text), 0);
+        assert(raw(each) - raw(once) >= (each.answers.length - 1) * JSON.stringify(each.set).length,
+            `the set's ids go once, not ${each.answers.length} times (${raw(each)} → ${raw(once)} bytes raw)`);
+        assert(each.answers.every(a => a.keys.join() === 'posts,set,setHash,tied'),
+            'a read without setOnce=1 (a phone built before it): each page names the set, as before');
+        const oneDelta = await readNearby(busy, iso(Date.now() - 1000), '&setOnce=1');
+        assert(oneDelta.answers.length === 1 && oneDelta.answers[0].keys.join() === 'posts,set,setHash,tied' && oneDelta.set.join() === each.set.join(),
+            'a delta of one page with setOnce=1: that page is the last, and names the set');
+        assert(once.answers[0].etag !== each.answers[0].etag, 'a page read with setOnce=1 has a tag of its own (its body is another)');
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

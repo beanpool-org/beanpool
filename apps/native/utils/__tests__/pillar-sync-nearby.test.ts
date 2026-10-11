@@ -103,7 +103,7 @@ const replies = new Map<number, (r: { result?: any; error?: string }) => void>()
 let nextId = 1;
 const realFetch = globalThis.fetch;
 /** Every request the phone made: method, path + query, status as the app saw it, and whether a 304 stood behind it. */
-let sent: { method: string; url: string; status: number; revalidated: boolean }[] = [];
+let sent: { method: string; url: string; status: number; revalidated: boolean; keys?: string[] }[] = [];
 const elsewhere: string[] = [];
 /** A fault: the body a by-area read answers, rewritten (null leaves it). The node never sends such a body itself. */
 let tamper: ((path: string, body: string) => string | null) | null = null;
@@ -213,6 +213,7 @@ beforeAll(async () => {
         if (cached) headers['If-None-Match'] = cached.etag;
         const { signal: _drop, ...rest } = init ?? {};
         const res = await realFetch(href, { ...rest, method, headers });
+        const bodyCopy = res.status === 200 && href.includes('/api/marketplace/posts?') ? await res.clone().text() : null;
 
         const path = href.slice(URL_BASE.length);
         if (res.status === 304 && cached) {
@@ -222,7 +223,10 @@ beforeAll(async () => {
             for (const [k, v] of res.headers.entries()) merged.set(k, v);
             return new Response(cached.body, { status: 200, headers: merged });
         }
-        sent.push({ method, url: path, status: res.status, revalidated: false });
+        // A posts read's answer: which fields it carried (the set once a read names it on the last page only).
+        const keys = res.status === 200 && path.startsWith('/api/marketplace/posts?')
+            ? (() => { const b = JSON.parse(String(Buffer.from(bodyCopy ?? ''))); return b && !Array.isArray(b) ? Object.keys(b).sort() : []; })() : undefined;
+        sent.push({ method, url: path, status: res.status, revalidated: false, keys });
         const tampered = tamper && res.status === 200 ? tamper(path, await res.clone().text()) : null;
         if (tampered !== null) return new Response(tampered, { status: 200, headers: res.headers });
         const etag = res.headers.get('etag');
@@ -281,6 +285,10 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(reads.every(r => r.url.includes('nearby=1') && r.url.includes('limit=200') && !r.url.includes('updatedAfter'))).toBe(true);
         expect(reads[0].url).toContain('paged=1');
         expect(reads.slice(1).every(r => r.url.includes('pageAfter='))).toBe(true);
+        // The set once a read (REPORT-geosync-load-B, item 1): the phone says setOnce=1, and the node names the set on the
+        // last page only, which is the one the phone reconciles with.
+        expect(reads.every(r => r.url.includes('setOnce=1'))).toBe(true);
+        expect(reads.map(r => r.keys?.join('+'))).toEqual(['posts', 'posts', 'posts+set+setHash+tied']);
         // The area was asked of the node once (the copy is new) and is kept per community.
         expect(sent.filter(r => r.url === '/api/community/me')).toHaveLength(1);
         expect(await readNearbyAreaCopy(URL_BASE, me.publicKey)).toMatchObject({ area: BYRON, whole: false });

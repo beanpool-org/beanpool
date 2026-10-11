@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    nearbyReconcile, nearbyIdReads, nearbyPrune, nearbySetOf, nearbyKm, NEARBY_IDS_PER_READ, NEARBY_ID_READS_PER_CYCLE,
+    nearbyReconcile, nearbyIdReads, nearbyPrune, nearbySetOf, nearbyPageOf, nearbyKm, NEARBY_IDS_PER_READ, NEARBY_ID_READS_PER_CYCLE,
     type NearbyHeld,
 } from '../posts-nearby';
 
@@ -214,6 +214,25 @@ describe('posts-nearby, the edges', () => {
         expect(nearbySetOf({ posts: [] })).toBeNull();
         expect(nearbySetOf({ posts: [], set: [1] })).toBeNull();
         expect(nearbySetOf(null)).toBeNull();
+    });
+
+    it('a page of a read by area: its rows, and the set only where the page names one (set once a read)', () => {
+        // A page before a read's last, from a node that names the set once a read (setOnce=1): its rows alone.
+        expect(nearbyPageOf({ posts: [{ id: 'a' }] })).toEqual({ posts: [{ id: 'a' }], set: null, tied: null, setHash: null });
+        // The last page, or each page from a node before it: the set, its hash and `tied`.
+        expect(nearbyPageOf({ posts: [], set: ['a', 'b'], setHash: 'h', tied: ['b'] })).toEqual({ posts: [], set: ['a', 'b'], tied: ['b'], setHash: 'h' });
+        expect(nearbyPageOf({ posts: [], set: ['a'] })).toEqual({ posts: [], set: ['a'], tied: null, setHash: null });
+        // `tied` is read only beside a set; an unreadable one is absent, as nearbySetOf reads it.
+        expect(nearbyPageOf({ posts: [], tied: ['a'] })).toEqual({ posts: [], set: null, tied: null, setHash: null });
+        expect(nearbyPageOf({ posts: [], set: ['a'], tied: [7] })).toEqual({ posts: [], set: ['a'], tied: null, setHash: null });
+        // A set it can't read, rows that aren't a list, or a bare list (the node's switch off) is no page by area.
+        expect(nearbyPageOf({ posts: [], set: [1] })).toBeNull();
+        expect(nearbyPageOf({ posts: [], set: 'a' })).toBeNull();
+        expect(nearbyPageOf({ posts: 'a', set: ['a'] })).toBeNull();
+        expect(nearbyPageOf({ rows: [] })).toBeNull();
+        expect(nearbyPageOf([{ id: 'a' }])).toBeNull();
+        expect(nearbyPageOf(null)).toBeNull();
+        expect(nearbyPageOf({ posts: [], setHash: 7 })).toEqual({ posts: [], set: null, tied: null, setHash: null });
     });
 
     it('distance: known pairs, and the chord oracle over random pairs, across the antimeridian and near the poles', () => {

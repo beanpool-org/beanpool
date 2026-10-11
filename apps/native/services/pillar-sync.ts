@@ -21,7 +21,7 @@ import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-u
 import { postsViewRefusal } from '../utils/posts-view';
 import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
 import { getCachedNodeProfile } from '../utils/node-profile';
-import { nearbyIdReads, nearbySetOf } from '../utils/posts-nearby';
+import { nearbyIdReads, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
 import {
     nextNearbyAreaCopy, readNearbyAreaCopy, sameArea, storeNearbyAreaCopy, NEARBY_AREA_RECHECK_MS, type NearbyArea, type NearbyAreaCopy,
 } from '../utils/nearby-area';
@@ -654,8 +654,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         try {
             // `types=` opts in to events (docs/events-on-the-map.md §2.6). Without it the node leaves them out, which
             // is what keeps builds that predate events from ever caching one.
-            // `paged=1` asks for the read paged by key (POSTS_NEXT_HEADER), `pageAfter` for the page below a key.
-            const pullPosts = (cursor: string, after: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? 'limit=200&sync=true&nearby=1' : 'limit=1000&sync=true'}&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
+            // `paged=1` asks for the read paged by key (POSTS_NEXT_HEADER), `pageAfter` for the page below a key. By area,
+            // `setOnce=1`: the node names the member's set on the read's last page only (utils/posts-nearby.ts nearbyPageOf).
+            const pullPosts = (cursor: string, after: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? 'limit=200&sync=true&nearby=1&setOnce=1' : 'limit=1000&sync=true'}&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: timeouts.signal(30000)
@@ -775,12 +776,14 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // A by-area community's answer carries its member's set (utils/posts-nearby.ts), read below on its own. A bare
             // list (the node's switch went off since this phone heard its profile) is read as any other. Anything else is
             // an answer this phone can't read: a failed read, so the cursor stays and the next cycle asks again, never a
-            // plain read that writes nothing and moves the cursor past what changed (the review of #1778, finding 6).
-            let nearbyFirst: { posts: any[]; set: string[]; tied: string[] | null } | null = null;
+            // plain read that writes nothing and moves the cursor past what changed (the review of #1778, finding 6). So is
+            // a read's last page that names no set: the first page here when the node hands out no next key.
+            let nearbyFirst: NearbyPage | null = null;
             let nearbyPlain: any;
             if (nearbyLimits && postsRes.status !== 304) {
                 const body = JSON.parse(await postsRes.text());
-                nearbyFirst = nearbySetOf(body);
+                nearbyFirst = nearbyPageOf(body);
+                if (nearbyFirst && !nearbyFirst.set && !nextPageKeyOf(postsRes)) nearbyFirst = null;
                 if (!nearbyFirst && !Array.isArray(body)) {
                     timeouts.clear();
                     result.durationMs = Date.now() - startTime;
@@ -795,9 +798,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 postsNotModified = true;
             } else if (nearbyLimits && nearbyFirst) {
                 // The member's set, paged by key until the node hands out no next key. Each page is written as it comes, and
-                // each names the whole set: the last one read is the set this phone keeps. Then what it holds outside the
-                // set goes (never the member's own or tied), what it lacks comes by `ids=`, and it keeps at most `max`
-                // others. After a take-over this is the replace: exact, where utils/posts-replace.ts's recency rule guesses.
+                // the last one names the whole set (a node before `setOnce` names it on each): that is the set this phone
+                // keeps. Then what it holds outside the set goes (never the member's own or tied), what it lacks comes by
+                // `ids=`, and it keeps at most `max` others. After a take-over this is the replace: exact, where
+                // utils/posts-replace.ts's recency rule guesses. A read whose last page names no set is cut short.
                 const keep = { area: nearbyArea?.area ?? null, max: nearbyLimits.max };
                 const writeNear = async (delta: any): Promise<boolean> => {
                     const wrote = await applyDelta({ ...delta, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName, copyGen);
@@ -815,6 +819,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 };
                 let set = nearbyFirst.set;
                 let tied = nearbyFirst.tied;
+                let lastNamed = !!nearbyFirst.set;
                 let rows = nearbyFirst.posts.length;
                 let complete = await writeNear({ posts: nearbyFirst.posts });
                 if (complete) changed();
@@ -823,19 +828,25 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 while (complete && next) {
                     const res = pages < POSTS_PAGE_CAP ? await pullPosts(postsSyncParam, next).catch(() => null) : null;
                     const page = res && res.ok && epochOf(res) === epochNow && !(await postsViewRefusal(res, anchorUrl, pubKey))
-                        ? nearbySetOf(await res.json().catch(() => null)) : null;
+                        ? nearbyPageOf(await res.json().catch(() => null)) : null;
                     if (!res || !page || !(await writeNear({ posts: page.posts }))) {
                         complete = false;
                         break;
                     }
-                    set = page.set;
-                    tied = page.tied;
+                    if (page.set) {
+                        set = page.set;
+                        tied = page.tied;
+                    }
+                    lastNamed = !!page.set;
                     rows += page.posts.length;
                     pages++;
                     next = nextPageKeyOf(res);
                 }
+                if (!lastNamed) complete = false;
                 let fetched = 0;
-                if (!postsUnwritten && await writeNear({ postsNearby: { set, ...(tied ? { tied } : {}), ...keep } })) {
+                // A read cut short before any page named the set: only the cap's prune, nothing dropped by a set.
+                if (!postsUnwritten && !set) await writeNear({ postsNearby: keep });
+                if (!postsUnwritten && set && await writeNear({ postsNearby: { set, ...(tied ? { tied } : {}), ...keep } })) {
                     // The set's listings this phone lacks: one that came into it without changing (a nearer one went), or one
                     // on a page this read didn't reach. NEARBY_IDS_PER_READ a read, NEARBY_ID_READS_PER_CYCLE reads a cycle;
                     // the rest come next cycle. One the node won't hand out is left out, and nothing else changes for it.
@@ -864,7 +875,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 }
                 if (!complete) postsCursorStays = true;
                 postsWrittenEarly = true;
-                console.log(`[Pillar Sync] Received ${rows} listing(s) of this member's set of ${set.length} in ${pages} page(s), ${fetched} more by id${complete ? '' : '; the read stopped, the cursor stays'}`);
+                console.log(`[Pillar Sync] Received ${rows} listing(s) of this member's set of ${set ? set.length : '?'} in ${pages} page(s), ${fetched} more by id${complete ? '' : '; the read stopped, the cursor stays'}`);
             } else {
                 postsData = nearbyLimits ? nearbyPlain : await parseIfChanged(postsRes, anchorUrl, 'posts', rawGated);
                 // A whole read that isn't a take-over's is written as it comes (review of PR #1719, NB3): its first page

@@ -556,17 +556,21 @@ router.get('/api/marketplace/posts', async (ctx) => {
         || (!!reader && !!p.acceptedBy && isTreasury(p.acceptedBy) && canOperateTreasury(reader, p.acceptedBy));
     const shown = guestView ? posts.map(guestPost)
         : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p);
-    // A member's set answers its rows and the set's ids, every time (DESIGN-global-sync-by-area §2.3): the phone drops
-    // what it holds outside them and fetches what it lacks by `ids=`. `tied`, the ids of the set that are theirs or tied
-    // to them, which the phone keeps past its cap whatever it holds of the deal or the chat. Every other read keeps the
-    // bare list. The contract: `tied` stays string[]; a new shape gets a new field name. A phone reads any other shape as
-    // no `tied` and keeps the ties it stored (apps/native utils/posts-nearby.ts nearbySetOf).
-    const bodyStr = JSON.stringify(nearbySet ? {
+    // A member's set answers its rows and the set's ids (DESIGN-global-sync-by-area §2.3): the phone drops what it holds
+    // outside them and fetches what it lacks by `ids=`. `tied`, the ids of the set that are theirs or tied to them, which
+    // the phone keeps past its cap whatever it holds of the deal or the chat. Every other read keeps the bare list. The
+    // contract: `tied` stays string[]; a new shape gets a new field name. A phone reads any other shape as no `tied` and
+    // keeps the ties it stored (apps/native utils/posts-nearby.ts nearbyPageOf).
+    // A phone that says `setOnce=1` reconciles after a read's last page only, so it is named the set there alone: each page
+    // with a next key is `{ posts }`. At a busy town the 500 ids are ~11 KB gzipped (UUIDs barely compress), which rode on
+    // each of a first sync's three pages (REPORT-geosync-load-B, item 1). A phone without it gets the set on each page.
+    const setOnce = ctx.query.setOnce === '1';
+    const bodyStr = JSON.stringify(!nearbySet ? shown : setOnce && syncPage?.next ? { posts: shown } : {
         posts: shown,
         set: nearbySet.ids,
         setHash: nearbySetHash(nearbySet.ids),
         tied: nearbySet.tied,
-    } : shown);
+    });
 
     if (syncPage?.next) ctx.set(POSTS_NEXT_HEADER, syncPage.next);
     ctx.status = 200;

@@ -32,6 +32,7 @@ import { colors, palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EventDetail } from '../../components/EventDetail';
 import { isHiddenAuthor } from '../../utils/posts-view';
+import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE } from '../../utils/market-global';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
@@ -429,7 +430,8 @@ export default function PostDetailModal() {
                 const singleTxId = Array.isArray(txId) ? txId[0] : txId;
                 const reload = async () => {
                     getPost(singleId).then(p => {
-                        setPost(p);
+                        // A read with no row keeps the listing shown: its by-id refetch replaces it (utils/shown-post.ts).
+                        setPost((prev: any) => shownPostAfterReload(prev, p, singleId));
                         if (p) {
                             if (notFoundTimer.current) { clearTimeout(notFoundTimer.current); notFoundTimer.current = null; }
                             setPostMissing(false);

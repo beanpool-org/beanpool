@@ -26,7 +26,10 @@
  *      an offer, and a poll (which never keeps a pin of its own, so one sent with a pin takes the area too); an edit
  *      that takes a listing's pin away puts it back at its author's area;
  *  10. a member's set leaves out the authors she blocked: blocking the author of her 60 nearest listings fills it with
- *      the next nearest.
+ *      the next nearest;
+ *  11. every nearby answer names `tied`: the ids of the set that are her own or tied to her (an open deal, a conversation),
+ *      exactly the brute force's, on every page, so a phone keeps a tie it holds no deal row for (review of #1778, finding
+ *      2); a deal opened on a listing already near her changes the tag, though the set doesn't move.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-sync-nearby)
  */
@@ -74,7 +77,7 @@ const SYNC = `/api/marketplace/posts?limit=200&sync=true&types=${TYPES}`;
 const EPOCH = 'x-beanpool-epoch';
 
 type Row = { id: string; title: string; status: string; lat: number | null; lng: number | null; authorPublicKey: string; authorCallsign: string };
-type Answer = { status: number; next: string | null; etag: string | null; epoch: string | null; text: string; posts: Row[]; set: string[]; setHash: string };
+type Answer = { status: number; next: string | null; etag: string | null; epoch: string | null; text: string; posts: Row[]; set: string[]; setHash: string; tied: string[] | undefined };
 
 async function get(path: string, id: Id | null, headers: Record<string, string> = {}): Promise<Answer> {
     const res = await localFetch(`${BASE}${path}`, { headers: { ...(id ? signedHeaders('GET', path, '', id) : {}), ...headers } });
@@ -89,6 +92,7 @@ async function get(path: string, id: Id | null, headers: Record<string, string> 
         posts: Array.isArray(body) ? body : body?.posts ?? [],
         set: body?.set ?? [],
         setHash: body?.setHash ?? '',
+        tied: body && !Array.isArray(body) ? body.tied : undefined,
     };
 }
 
@@ -221,7 +225,7 @@ async function main() {
     // ── The brute force: every post, every rule, in JavaScript ──
     const nowIso = () => new Date().toISOString();
     /** With `bound`: the nearest of the newest `bound` listings in the radius's box (the engine's measureAtMost). */
-    function bruteSet(m: Id, bound?: number): { near: string[]; all: Set<string> } {
+    function bruteSet(m: Id, bound?: number): { near: string[]; all: Set<string>; tied: Set<string> } {
         const me = db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?').get(m.pubKeyHex) as { area_lat: number | null; area_lng: number | null };
         const rows = db.prepare(`SELECT p.id, p.type, p.status, p.active, p.lat, p.lng, p.updated_at, p.created_at, p.author_pubkey, p.audience_scope,
                     p.target_group_id, p.target_pubkey, p.assigned_to, p.hidden_by_reports_at, p.event_end_at, p.origin_node FROM posts p`).all() as any[];
@@ -260,12 +264,12 @@ async function main() {
         const talks = new Set((db.prepare(`SELECT c.post_id FROM conversations c JOIN conversation_participants cp ON cp.conversation_id = c.id WHERE cp.public_key = ? AND c.post_id IS NOT NULL`).all(m.pubKeyHex) as any[]).map(r => r.post_id));
         const extra = rows.filter(p => types.includes(p.type) && mayRead(p)
             && ((p.author_pubkey === m.pubKeyHex && !p.origin_node) || deals.has(p.id) || talks.has(p.id))).map(p => p.id);
-        return { near, all: new Set([...near, ...extra]) };
+        return { near, all: new Set([...near, ...extra]), tied: new Set(extra) };
     }
 
     // ── 1. brute force, 30 members, three densities ──
     console.log('── 1. the set is the brute-force set, for 30 members at three densities ──');
-    let equal = 0, orderEqual = 0;
+    let equal = 0, orderEqual = 0, tiedEqual = 0;
     const sizes: Record<string, number[]> = { busy: [], small: [], empty: [] };
     for (const m of members) {
         const want = bruteSet(m.id);
@@ -273,10 +277,13 @@ async function main() {
         if (got.status === 200 && sameSet(got.set, want.all)) equal++;
         else console.error(`  ${m.kind}: ${got.status}, ${got.set.length} named, ${want.all.size} wanted`);
         if (got.set.slice(0, want.near.length).join() === want.near.join()) orderEqual++;
+        if (Array.isArray(got.tied) && got.tied.length === new Set(got.tied).size && sameSet(got.tied, want.tied) && got.tied.every(id => got.set.includes(id))) tiedEqual++;
+        else console.error(`  ${m.kind}: tied ${JSON.stringify(got.tied)?.slice(0, 120)}, ${want.tied.size} wanted`);
         sizes[m.kind].push(want.near.length);
     }
     assert(equal === 30, `each of the 30 members is named exactly the brute-force set (${equal}/30)`);
     assert(orderEqual === 30, `its near part comes nearest first, in the brute-force order (${orderEqual}/30)`);
+    assert(tiedEqual === 30, `each is told which ids of the set are her own or tied (\`tied\`), exactly the brute force's, each once (${tiedEqual}/30)`);
     assert(sizes.busy.every(s => s === 500) && sizes.small.every(s => s > 0 && s < 500) && sizes.empty.every(s => s === 0),
         `the three densities are what they claim: busy ${sizes.busy.join('/')}, small ${sizes.small.join('/')}, empty ${sizes.empty.join('/')}`);
     const anaSet = new Set((await get(`${SYNC}&nearby=1`, ana)).set);
@@ -328,6 +335,11 @@ async function main() {
     assert(anaSet.has(farOwn), 'her own paused listing 16,000 km away is in her set');
     assert(anaSet.has(farDeal), 'a listing 16,000 km away she has an open deal on is in her set');
     assert(anaSet.has(farTalk), 'a listing 17,000 km away she has a conversation about is in her set');
+    // 11. the node names them, so a phone that holds no deal row for one (a restored phone, a deal older than the 50 it
+    // reads) still keeps it past its cap.
+    const anaTied = new Set((await get(`${SYNC}&nearby=1`, ana)).tied ?? []);
+    assert([farOwn, farDeal, farTalk].every(x => anaTied.has(x)) && !anaTied.has(doneDeal),
+        'and the answer names those three as tied, and not the finished deal');
 
     // ── 2. whole in pages ──
     console.log('\n── 2. a whole read in pages brings the set ──');
@@ -342,6 +354,8 @@ async function main() {
     // ── 8. the epoch on every answer ──
     const ep = await readNearby(members[2].id);
     const ep304 = await get(`${SYNC}&nearby=1&paged=1`, members[2].id, { 'If-None-Match': ep.answers[0].etag || '' });
+    assert(ep.answers.length > 1 && ep.answers.every(a => Array.isArray(a.tied) && a.tied.join() === ep.answers[0].tied!.join()),
+        `every page of a whole read names the same \`tied\` (${ep.answers.length} pages)`);
     assert(ep.answers.every(a => !!a.epoch) && ep304.status === 304 && !!ep304.epoch,
         `the identity epoch header is on every page and on the 304 (${ep.answers.length} pages, 304: ${ep304.status})`);
 
@@ -440,6 +454,15 @@ async function main() {
     assert(afterLaterRename.status === 200 && afterLaterRename.posts.some(r => r.authorPublicKey === renamedNext && r.authorCallsign === 'Renamed later'),
         `then another author renamed: 200, the new name on their rows, not hidden by the row dated ahead (${afterLaterRename.status})`);
     db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(iso(Date.now()), ahead);
+    // A deal opened on a listing already in her near part moves no row of the set and adds no id, but it adds a tie the
+    // phone must keep: the tag changes, so a 304 never hands back a `tied` without it.
+    const beforeDeal = await get(`${SYNC}&nearby=1&paged=1`, bea);
+    const dealt = beforeDeal.posts.find(r => r.authorPublicKey !== bea.pubKeyHex && !(beforeDeal.tied ?? []).includes(r.id))!;
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+                VALUES (?, ?, ?, ?, 5, 'requested', ?)`).run(crypto.randomUUID(), dealt.id, bea.pubKeyHex, dealt.authorPublicKey, iso(Date.now()));
+    const afterDeal = await get(`${SYNC}&nearby=1&paged=1`, bea, { 'If-None-Match': beforeDeal.etag || '' });
+    assert(afterDeal.status === 200 && afterDeal.etag !== beforeDeal.etag && sameSet(afterDeal.set, beforeDeal.set) && !!afterDeal.tied?.includes(dealt.id),
+        `a deal opened on a listing already near her: 200 with a new tag, the same set, the listing now tied (${afterDeal.status})`);
 
     // ── 6. a visitor's, an unsigned and a switched-off read unchanged ──
     console.log('\n── 6. reads that aren\'t a member\'s by-area sync are answered as before ──');

@@ -13,7 +13,8 @@ import { beginAccountEpoch } from './lib/account-epoch';
 import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
-import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, type CommunityInfo, type MarketplaceTransaction } from './lib/api';
+import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, getGroup, type CommunityInfo, type MarketplaceTransaction, type Group } from './lib/api';
+import { GroupDetailModal } from './components/GroupDetailModal';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { SyncStatus } from './components/SyncStatus';
@@ -177,6 +178,8 @@ export function App() {
     const clearEditEventPost = useCallback(() => setEditEventPostId(null), []);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
+    // A chat group's info, opened over whatever is on screen: Home's vote line lands here (DESIGN-group-decisions S3).
+    const [openGroup, setOpenGroup] = useState<Group | null>(null);
     const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
 
     useEffect(() => {
@@ -294,6 +297,14 @@ export function App() {
         }
         if (tab === 'enterprise' || tab === 'treasury') {
             if (contextId) setOpenTreasuryPubkey(contextId);
+            return;
+        }
+        // A group's vote: the group's info, where its Decisions block is. Read first, so the sheet opens whole; a group
+        // that can't be read now opens Commons, where groups are listed.
+        if (tab === 'group') {
+            if (contextId) {
+                getGroup(contextId).then(g => setOpenGroup(g)).catch(() => setActiveTab('projects'));
+            }
             return;
         }
         // From Home's cards: People's community list or its invites, and Settings at the profile.
@@ -979,6 +990,15 @@ export function App() {
                                 />
                             )}
                         </>
+                    )}
+
+                    {openGroup && (
+                        <GroupDetailModal
+                            group={openGroup}
+                            isOpen
+                            onClose={() => setOpenGroup(null)}
+                            myPubkey={identity?.publicKey}
+                        />
                     )}
 
                     {/* Treasury Detail Overlay */}

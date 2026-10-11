@@ -1065,12 +1065,19 @@ const UNSPACED_SCRIPT = /[฀-໿က-႟ក-៿぀-ヿㇰ-ㇿ㐀-䶿一-鿿豈-�
  * words; a trigram index would not help the commonest, two characters long (FTS5 trigram matches 3 or more). Words of
  * spaced languages are asked exactly as before.
  */
+/**
+ * At most this many unspaced words get the scan (#1776 review, finding 1): each one reads every listing the filter leaves, so without a cap one
+ * public GET with hundreds of them held the event loop for seconds, and past ~495 SQLite refused the expression (a 500). 8 covers any search a
+ * member types (a saved search is 40 characters at most) and bounds the worst read to about what main's worst already costs.
+ */
+const UNSPACED_LIKE_MAX = 8;
+
 function searchCondition(query: string | undefined): { sql: string; params: string[] } | null {
     const terms = (query ?? '').trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
     if (terms.length === 0) return null;
     let sql = `p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
     const params = [terms.map(t => `"${t}"*`).join(' OR ')];
-    for (const t of new Set(terms.filter(t => UNSPACED_SCRIPT.test(t)))) {
+    for (const t of [...new Set(terms.filter(t => UNSPACED_SCRIPT.test(t)))].slice(0, UNSPACED_LIKE_MAX)) {
         const anywhere = `%${t.replace(/[\\%_]/g, c => `\\${c}`)}%`;
         sql += ` OR p.title LIKE ? ESCAPE '\\' OR p.description LIKE ? ESCAPE '\\'`;
         params.push(anywhere, anywhere);

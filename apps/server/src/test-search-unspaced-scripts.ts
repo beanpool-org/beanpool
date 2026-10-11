@@ -100,6 +100,16 @@ async function main(): Promise<void> {
     assert(finds('duck', 'Fresh duck eggs') && !finds('duck', '新鲜鸡蛋出售'), '"duck" finds the duck eggs, and not the Chinese listing');
     assert(JSON.stringify(found('organic')) === JSON.stringify(['Rice 100% organic']), '"organic" finds exactly the listing that says it');
 
+    console.log('\n— Unspaced words are capped, so one search cannot make the read scan without end (#1776 review)');
+    const rare = Array.from({ length: 1000 }, (_, i) => String.fromCodePoint(0x3400 + i)).join(' ');
+    let threw = '';
+    let many: string[] = [];
+    try { many = getPosts({ query: rare, limit: 500 }).map(p => p.title); } catch (e) { threw = (e as Error).message; }
+    assert(threw === '' && many.length === 0, `1,000 unspaced words: the read answers (no error), finding nothing${threw ? ` (threw: ${threw})` : ''}`);
+    const eightRare = Array.from({ length: 8 }, (_, i) => String.fromCodePoint(0x3400 + i)).join(' ');
+    assert(!getPosts({ query: `${eightRare} 鸡蛋`, limit: 500 }).some(p => p.title === '新鲜鸡蛋出售'), 'only the first 8 unspaced words are looked for inside a run: a 9th, "鸡蛋", is not');
+    assert(getPosts({ query: `${Array.from({ length: 7 }, (_, i) => String.fromCodePoint(0x3400 + i)).join(' ')} 鸡蛋`, limit: 500 }).some(p => p.title === '新鲜鸡蛋出售'), '"鸡蛋" as the 8th still finds it');
+
     console.log('\n— The count a read gives agrees with the read');
     assert(getPostCount(db, { query: '鸡蛋' }) === 1, 'getPostCount: "鸡蛋" counts the one listing');
     assert(getPostCount(db, { query: 'ไข่ไก่ 自行车' }) === 2, 'getPostCount: a Thai word and a Chinese word count two');

@@ -2788,6 +2788,13 @@ export async function liftMemberSuspension(nodeUrl: string, pubkey: string, admi
 
 // ===================== MEMBER WIZARDS (docs/settings-ia.md §5 items 1 & 4, Item 9b) =====================
 
+/** A phone that asked on a re-key code: the key it wants bound, the two digits it shows, when it asked. */
+export interface RekeyProposal {
+    newPubkey: string;
+    match: string;
+    proposedAt: string;
+}
+
 export interface RekeyStatusResponse {
     isInvalidated: boolean;
     invalidatedInfo: {
@@ -2811,6 +2818,8 @@ export interface RekeyStatusResponse {
         created_at: string;
         expires_at: string;
     } | null;
+    /** The phones that asked on the pending code (#1768), oldest first: only beside the code itself. */
+    proposals?: RekeyProposal[];
     history: Array<{
         id: number;
         old_pubkey: string;
@@ -2924,6 +2933,23 @@ export async function cancelRekeyCodeApi(
         const body = await res.json().catch(() => ({}));
         // A node before the cancel answers 404 with no message.
         throw new Error(body.error || (res.status === 404 ? 'This node can’t cancel a re-key code yet: update it first.' : `HTTP ${res.status}: ${res.statusText}`));
+    }
+    return res.json();
+}
+
+/** "Not theirs": declines a phone that asked on the member's code (#1768). */
+export async function declineRekeyProposalApi(
+    nodeUrl: string,
+    pubkey: string,
+    newPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; declined: boolean; declines: number }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/proposals/${encodeURIComponent(newPubkey)}/decline`);
+    const res = await fetch(endpoint, { method: 'POST', headers: buildAdminHeaders(adminPassword, tfaToken), body: JSON.stringify({}) });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }

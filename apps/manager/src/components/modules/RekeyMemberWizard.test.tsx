@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RekeyMemberWizard, rekeyTimeLeft } from './RekeyMemberWizard';
+import { RekeyMemberWizard, rekeyTimeLeft, rekeyLink, REKEY_PROPOSALS_POLL_MS } from './RekeyMemberWizard';
 import * as nodeClient from '../../lib/node-client';
 
 describe('RekeyMemberWizard', () => {
@@ -93,7 +93,9 @@ describe('RekeyMemberWizard', () => {
                 undefined
             );
             expect(screen.getByText('RK-1234-5678')).toBeDefined();
-            expect(screen.getByPlaceholderText(/64 hex characters/)).toBeDefined();
+            // Pasting a key is folded away (#1768): the button that opens it shows, the box doesn't.
+            expect(screen.getByRole('button', { name: 'Paste a key instead' })).toBeDefined();
+            expect(screen.queryByPlaceholderText(/64 hex characters/)).toBeNull();
             expect(screen.getByText(/Trades with other villages will need re-linking/)).toBeDefined();
         });
     });
@@ -136,6 +138,9 @@ describe('RekeyMemberWizard', () => {
             expect(screen.getByText('RK-1234-5678')).toBeDefined();
         });
 
+        // Pasting a key is folded away (#1768): opened first.
+        expect(screen.queryByPlaceholderText(/64 hex characters/)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Paste a key instead' }));
         const input = screen.getByPlaceholderText(/64 hex characters/);
         fireEvent.change(input, { target: { value: newPk } });
 
@@ -253,6 +258,7 @@ describe('RekeyMemberWizard', () => {
             expect(screen.getByText(/Press Manage in the BeanPool app again/)).toBeDefined();
         });
         expect(screen.queryByText('RK-AFTER-STEPUP')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Paste a key instead' }));
         fireEvent.change(screen.getByPlaceholderText(/64 hex characters/), { target: { value: 'c'.repeat(64) } });
         expect((screen.getByRole('button', { name: /Complete Re-Keying/ }) as HTMLButtonElement).disabled).toBe(true);
 
@@ -395,5 +401,112 @@ it('opening the wizard makes no code: it only reads the status (queue item 22)',
         expect(rekeyTimeLeft('2026-10-04T00:12:00.000Z', t0)).toBe('12 min left');
         expect(rekeyTimeLeft('2026-10-04T00:00:20.000Z', t0)).toBe('1 min left');
         expect(rekeyTimeLeft('2026-10-03T23:59:00.000Z', t0)).toBe('Expired');
+    });
+});
+
+describe('RekeyMemberWizard: the phone asks, the admin binds its number (#1768)', () => {
+    const member = { publicKey: 'a'.repeat(64), callsign: 'alice', status: 'suspended' };
+    const pending = (code = 'RK-AB12-CD34', expiresInMs = 3600000) => ({
+        id: 9, code, old_pubkey: member.publicKey, new_pubkey: null, operator_pubkey: 'b'.repeat(64),
+        expires_at: new Date(Date.now() + expiresInMs).toISOString(), status: 'pending', created_at: new Date().toISOString(),
+    });
+    const phone = 'c'.repeat(64);
+    const thief = 'd'.repeat(64);
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('the QR holds the node\'s own address with ?rekey=<code>', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+            isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(), proposals: [], history: [],
+        });
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        const qr = await screen.findByTestId('rekey-code-qr');
+        expect(qr.getAttribute('data-qr-value')).toBe('https://mullum.example.org/?rekey=RK-AB12-CD34');
+        expect(qr.getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
+        expect(rekeyLink('https://mullum.example.org/', 'RK-AB12-CD34')).toBe('https://mullum.example.org/?rekey=RK-AB12-CD34');
+        expect(screen.getByTestId('rekey-scan-help').textContent).toMatch(/An admin gave me a re-key code/);
+        expect(screen.queryByText(/can also scan the code on their replacement phone/)).toBeNull();
+        expect(screen.getByText(/Waiting for their phone to ask/)).toBeDefined();
+    });
+
+    it('shows each phone that asked with its number, and Bind this phone sends the key that card showed', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+            isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(),
+            proposals: [
+                { newPubkey: thief, match: '13', proposedAt: new Date().toISOString() },
+                { newPubkey: phone, match: '47', proposedAt: new Date().toISOString() },
+            ],
+            history: [],
+        });
+        const complete = vi.spyOn(nodeClient, 'completeRekeyApi').mockResolvedValue({ success: true, oldPubkey: member.publicKey, newPubkey: phone, callsign: 'alice' });
+        const onSuccess = vi.fn();
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onSuccess={onSuccess} onClose={() => {}} />);
+        const cards = await screen.findAllByTestId('rekey-proposal');
+        expect(cards.length).toBe(2);
+        expect(cards[1].textContent).toMatch(/number\s*47/);
+        expect(cards[1].textContent).toContain(`${phone.slice(0, 6)}…`);
+        expect(screen.getByText(/The number on their phone must match before you press Bind/)).toBeDefined();
+        fireEvent.click(cards[1].querySelector('button')!);
+        await waitFor(() => {
+            expect(complete).toHaveBeenCalledWith('https://mullum.example.org', member.publicKey, 'RK-AB12-CD34', phone, undefined, undefined);
+            expect(screen.getByText('Re-Keying Complete!')).toBeDefined();
+            expect(onSuccess).toHaveBeenCalledWith(phone);
+        });
+        expect(screen.getByText(/has to be linked again/)).toBeDefined();
+    });
+
+    it('Not theirs declines that phone and its card goes', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+            isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(),
+            proposals: [{ newPubkey: thief, match: '13', proposedAt: new Date().toISOString() }],
+            history: [],
+        });
+        const decline = vi.spyOn(nodeClient, 'declineRekeyProposalApi').mockResolvedValue({ success: true, declined: true, declines: 1 });
+        const complete = vi.spyOn(nodeClient, 'completeRekeyApi');
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Not theirs' }));
+        await waitFor(() => expect(decline).toHaveBeenCalledWith('https://mullum.example.org', member.publicKey, thief, undefined, undefined));
+        await waitFor(() => expect(screen.queryAllByTestId('rekey-proposal').length).toBe(0));
+        expect(complete).not.toHaveBeenCalled();
+    });
+
+    it('reads the phones every few seconds while the code shows', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            const read = vi.spyOn(nodeClient, 'fetchRekeyStatusApi')
+                .mockResolvedValueOnce({ isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(), proposals: [], history: [] })
+                .mockResolvedValue({
+                    isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(),
+                    proposals: [{ newPubkey: phone, match: '47', proposedAt: new Date().toISOString() }], history: [],
+                });
+            render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+            await screen.findByText(/Waiting for their phone to ask/);
+            await vi.advanceTimersByTimeAsync(REKEY_PROPOSALS_POLL_MS + 10);
+            await waitFor(() => expect(screen.getAllByTestId('rekey-proposal').length).toBe(1));
+            expect(read.mock.calls.length).toBeGreaterThanOrEqual(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('an expired code hides the QR and offers Make a new code', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+                isInvalidated: true, invalidatedInfo: null, pendingRequest: pending('RK-AB12-CD34', 60_000), proposals: [], history: [],
+            });
+            render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+            await screen.findByTestId('rekey-code-qr');
+            await vi.advanceTimersByTimeAsync(91_000);
+            await waitFor(() => expect(screen.queryByTestId('rekey-code-qr')).toBeNull());
+            expect(screen.getByTestId('rekey-code-expired')).toBeDefined();
+            expect(screen.queryByTestId('rekey-proposals')).toBeNull();
+            fireEvent.click(screen.getByRole('button', { name: 'Make a new code' }));
+            await waitFor(() => expect(screen.getByText(/Operator-Assisted Identity Verification/)).toBeDefined());
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

@@ -329,6 +329,9 @@ function placelessListingArea(authorPublicKey: string): { lat: number; lng: numb
     return area ? { lat: area.lat, lng: area.lng } : null;
 }
 
+/** What a closed group answers a new post (state-engine GROUP_CLOSED is its chat's and its door's words). */
+export const GROUP_CLOSED_TO_POSTS = 'This group was closed by a vote of its members. It takes no new posts.';
+
 export function createPost(
     broadcast: BroadcastFn,
     type: 'offer' | 'need' | 'poll' | 'event',
@@ -422,6 +425,10 @@ export function createPost(
         ).get(options.targetGroupId, authorPublicKey);
         if (!isMem) {
             throw new Error('UNAUTHORIZED: Must be an active convenor or member to post to a group');
+        }
+        // A group its members closed by a vote takes no new post: offers, needs, polls and events (close_group, §2.3).
+        if (db.prepare('SELECT 1 FROM group_closures WHERE group_id = ?').get(options.targetGroupId)) {
+            throw new Error(GROUP_CLOSED_TO_POSTS);
         }
     } else if (audienceScope === 'direct') {
         if (!options?.targetPubkey && !options?.assignedTo) {

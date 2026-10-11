@@ -15,6 +15,7 @@ vi.mock('expo-secure-store', () => ({
     getItemAsync: vi.fn(),
     setItemAsync: vi.fn(),
     deleteItemAsync: vi.fn(),
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
 }));
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -32,6 +33,8 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuth from '../LocalAuth';
 import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../LocalAuth';
+
+const KEY_ITEM_OPTIONS = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
 
 // The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
 // (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
@@ -62,13 +65,13 @@ describe('LocalAuth - getAppLockEnabled & setAppLockEnabled', () => {
         const enabled = await getAppLockEnabled();
 
         expect(enabled).toBe(true);
-        expect(SecureStore.setItemAsync).toHaveBeenCalledWith('beanpool_app_lock_enabled', 'true');
+        expect(SecureStore.setItemAsync).toHaveBeenCalledWith('beanpool_app_lock_enabled', 'true', KEY_ITEM_OPTIONS);
         expect(AsyncStorage.removeItem).toHaveBeenCalledWith('beanpool_app_lock_enabled');
     });
 
     it('saves setting to SecureStore in setAppLockEnabled', async () => {
         await setAppLockEnabled(true);
-        expect(SecureStore.setItemAsync).toHaveBeenCalledWith('beanpool_app_lock_enabled', 'true');
+        expect(SecureStore.setItemAsync).toHaveBeenCalledWith('beanpool_app_lock_enabled', 'true', KEY_ITEM_OPTIONS);
         expect(AsyncStorage.removeItem).toHaveBeenCalledWith('beanpool_app_lock_enabled');
     });
 });

@@ -8,7 +8,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -42,7 +42,7 @@ describe('the Market\'s no-area line at 320 dp, text at 1.3x', () => {
         const host = document.createElement('div');
         document.body.appendChild(host);
         const pressed = vi.fn();
-        await act(async () => { createRoot(host).render(createElement(NoAreaLine, { onPress: pressed })); });
+        await act(async () => { createRoot(host).render(createElement(NoAreaLine, { onPress: pressed }) as unknown as Parameters<Root['render']>[0]); });
 
         const line = host.querySelector('[data-testid="market-no-area-line"]') as HTMLElement;
         expect(line.textContent).toBe("📍 You're seeing the newest listings worldwide. Set your area to see what's near you.");
@@ -54,7 +54,7 @@ describe('the Market\'s no-area line at 320 dp, text at 1.3x', () => {
 
         // One target, at least 44 high; nothing fixed-width or cut to a line count anywhere in it.
         expect(JSON.parse(line.getAttribute('data-style')!).minHeight).toBeGreaterThanOrEqual(44);
-        for (const node of [line, ...line.querySelectorAll('*')]) {
+        for (const node of [line, ...Array.from(line.querySelectorAll('*'))]) {
             const style = JSON.parse(node.getAttribute('data-style') ?? '{}');
             expect(style.width, node.outerHTML.slice(0, 80)).toBeUndefined();
             expect(style.height).toBeUndefined();

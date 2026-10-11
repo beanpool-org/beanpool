@@ -281,6 +281,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
         target_archetypes: null, // dormant: the node never sends it and nothing reads it
         event_start_at: null, event_end_at: null, event_place_name: null, event_state: null,
         event_going_count: 0, event_interested_count: 0,
+        author_callsign: 'Ann', // the author's name as the node sent it, for a listing whose author the directory doesn't hold
     };
     const directNeed = (extra: Record<string, unknown> = {}) => offer({
         id: 'post-d', type: 'need', title: 'Lift to the station', audienceScope: 'direct', targetPubkey: ME, assignedTo: ME, ...extra,

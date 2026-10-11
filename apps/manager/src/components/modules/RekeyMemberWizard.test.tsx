@@ -431,36 +431,85 @@ describe('RekeyMemberWizard: the phone asks, the admin binds its number (#1768)'
         expect(screen.getByText(/Waiting for their phone to ask/)).toBeDefined();
     });
 
-    it('shows each phone that asked with its number, and Bind this phone sends the key that card showed', async () => {
+    it('cards never show a phone\'s number and have no bind of their own; the typed number binds (review B2)', async () => {
         vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
             isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(),
             proposals: [
-                { newPubkey: thief, match: '13', proposedAt: new Date().toISOString() },
-                { newPubkey: phone, match: '47', proposedAt: new Date().toISOString() },
+                { newPubkey: thief, proposedAt: new Date().toISOString() },
+                { newPubkey: phone, proposedAt: new Date().toISOString() },
             ],
+            wrongNumbers: 0,
             history: [],
         });
-        const complete = vi.spyOn(nodeClient, 'completeRekeyApi').mockResolvedValue({ success: true, oldPubkey: member.publicKey, newPubkey: phone, callsign: 'alice' });
+        const byMatch = vi.spyOn(nodeClient, 'bindRekeyByMatchApi').mockResolvedValue({ success: true, oldPubkey: member.publicKey, newPubkey: phone, callsign: 'alice' });
+        const byKey = vi.spyOn(nodeClient, 'completeRekeyApi');
         const onSuccess = vi.fn();
         render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onSuccess={onSuccess} onClose={() => {}} />);
         const cards = await screen.findAllByTestId('rekey-proposal');
         expect(cards.length).toBe(2);
-        expect(cards[1].textContent).toMatch(/number\s*47/);
         expect(cards[1].textContent).toContain(`${phone.slice(0, 6)}…`);
-        expect(screen.getByText(/The number on their phone must match before you press Bind/)).toBeDefined();
-        fireEvent.click(cards[1].querySelector('button')!);
+        expect(cards[1].textContent).not.toMatch(/number/);
+        // Each card's only button is Not theirs: nothing binds a card by a press.
+        for (const card of cards) {
+            const buttons = Array.from(card.querySelectorAll('button')).map((el) => el.textContent);
+            expect(buttons).toEqual(['Not theirs']);
+        }
+        expect(screen.queryByRole('button', { name: 'Bind this phone' })).toBeNull();
+        const bind = screen.getByRole('button', { name: 'Bind their phone' }) as HTMLButtonElement;
+        expect(bind.disabled).toBe(true);
+        const box = screen.getByLabelText('The number on their phone');
+        fireEvent.change(box, { target: { value: '4a7' } });
+        expect((box as HTMLInputElement).value).toBe('47');
+        expect(bind.disabled).toBe(false);
+        fireEvent.click(bind);
         await waitFor(() => {
-            expect(complete).toHaveBeenCalledWith('https://mullum.example.org', member.publicKey, 'RK-AB12-CD34', phone, undefined, undefined);
+            expect(byMatch).toHaveBeenCalledWith('https://mullum.example.org', member.publicKey, 'RK-AB12-CD34', '47', undefined, undefined);
             expect(screen.getByText('Re-Keying Complete!')).toBeDefined();
             expect(onSuccess).toHaveBeenCalledWith(phone);
         });
-        expect(screen.getByText(/has to be linked again/)).toBeDefined();
+        expect(byKey).not.toHaveBeenCalled();
+    });
+
+    it('a wrong number says so with the tries left and clears the box', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+            isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(),
+            proposals: [{ newPubkey: phone, proposedAt: new Date().toISOString() }], wrongNumbers: 0, history: [],
+        });
+        vi.spyOn(nodeClient, 'bindRekeyByMatchApi').mockRejectedValue(
+            new nodeClient.RekeyBindError('No phone waiting on this code shows that number. Check the number on their phone and type it again.', 'wrong_number', 1));
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        const box = await screen.findByLabelText('The number on their phone');
+        fireEvent.change(box, { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Bind their phone' }));
+        await screen.findByText(/No phone waiting on this code shows that number.*One more wrong number stops this code/);
+        expect((box as HTMLInputElement).value).toBe('');
+        expect(screen.getByTestId('rekey-type-number').textContent).toMatch(/Wrong so far: 2 of 3/);
+        expect(screen.getByText('Re-Key Member (Lost Phone)')).toBeDefined();
+        expect(screen.queryByText('Re-Keying Complete!')).toBeNull();
+    });
+
+    it('the third wrong number: the code reads as stopped, the QR and cards go, and a new code is offered', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+            isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(),
+            proposals: [{ newPubkey: phone, proposedAt: new Date().toISOString() }], wrongNumbers: 2, history: [],
+        });
+        vi.spyOn(nodeClient, 'bindRekeyByMatchApi').mockRejectedValue(
+            new nodeClient.RekeyBindError('Three wrong numbers were typed, so this code has stopped. Make a new code with the member there.', 'code_stopped'));
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        expect((await screen.findByTestId('rekey-type-number')).textContent).toMatch(/Wrong so far: 2 of 3/);
+        fireEvent.change(screen.getByLabelText('The number on their phone'), { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Bind their phone' }));
+        await waitFor(() => expect(screen.getByTestId('rekey-code-expired').textContent).toMatch(/this code has stopped/));
+        expect(screen.queryByTestId('rekey-code-qr')).toBeNull();
+        expect(screen.queryByTestId('rekey-proposals')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Make a new code' }));
+        await waitFor(() => expect(screen.getByText(/Operator-Assisted Identity Verification/)).toBeDefined());
     });
 
     it('Not theirs declines that phone and its card goes', async () => {
         vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
             isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(),
-            proposals: [{ newPubkey: thief, match: '13', proposedAt: new Date().toISOString() }],
+            proposals: [{ newPubkey: thief, proposedAt: new Date().toISOString() }],
             history: [],
         });
         const decline = vi.spyOn(nodeClient, 'declineRekeyProposalApi').mockResolvedValue({ success: true, declined: true, declines: 1 });
@@ -479,7 +528,7 @@ describe('RekeyMemberWizard: the phone asks, the admin binds its number (#1768)'
                 .mockResolvedValueOnce({ isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(), proposals: [], history: [] })
                 .mockResolvedValue({
                     isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(),
-                    proposals: [{ newPubkey: phone, match: '47', proposedAt: new Date().toISOString() }], history: [],
+                    proposals: [{ newPubkey: phone, proposedAt: new Date().toISOString() }], history: [],
                 });
             render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
             await screen.findByText(/Waiting for their phone to ask/);

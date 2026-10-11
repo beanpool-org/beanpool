@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     issueRekeyCodeApi,
     cancelRekeyCodeApi,
+    bindRekeyByMatchApi,
     completeRekeyApi,
     declineRekeyProposalApi,
+    RekeyBindError,
     fetchRekeyStatusApi,
     normalizeNodeUrl,
     type RekeyProposal,
@@ -91,6 +93,11 @@ export function RekeyMemberWizard({
     // The phones that asked on the code, read every few seconds while step 2 shows (#1768)
     const [proposals, setProposals] = useState<RekeyProposal[]>([]);
     const [declining, setDeclining] = useState<string | null>(null);
+    // The number the admin types from the member's phone: the node finds the phone that shows it (#1783 review B2).
+    const [typedMatch, setTypedMatch] = useState('');
+    const [wrongNumbers, setWrongNumbers] = useState(0);
+    // Three wrong numbers stopped the code on the node: like an expired one, only a new code helps.
+    const [codeStopped, setCodeStopped] = useState(false);
 
     // The node left an owner's or admin's pending code out: this phone session is past its step-up window (#1534).
     const [codeNeedsStepUp, setCodeNeedsStepUp] = useState(false);
@@ -123,6 +130,7 @@ export function RekeyMemberWizard({
     const applyStatus = useCallback((status: RekeyStatusResponse) => {
         setRekeyStatus(status);
         setProposals(status.proposals ?? []);
+        setWrongNumbers(status.wrongNumbers ?? 0);
         const pending = status.pendingRequest;
         if (!pending) return;
         const isExpired = new Date(pending.expires_at).getTime() < Date.now();
@@ -171,6 +179,7 @@ export function RekeyMemberWizard({
                 const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
                 if (!live) return;
                 setProposals(status.proposals ?? []);
+                setWrongNumbers(status.wrongNumbers ?? 0);
                 const moved = status.history?.[0];
                 if (!status.pendingRequest && moved && (status.history?.length ?? 0) > historyLength) {
                     setNewPubkey(moved.new_pubkey);
@@ -242,7 +251,44 @@ export function RekeyMemberWizard({
         }
     };
 
-    /** Binds a key: the one a proposal card showed (Bind this phone), or the one pasted. Never a key read after the press. */
+    /**
+     * Binds the phone in front of the admin by the number it shows: the node binds the waiting phone with those digits,
+     * so no card can be bound by a press, and a thief's phone (another number) can't be picked by mistake.
+     */
+    const handleBindByMatch = async () => {
+        const match = typedMatch.trim();
+        if (!/^\d{2}$/.test(match)) {
+            setError('Type the two digits on their phone.');
+            return;
+        }
+        if (!issuedCode) {
+            setError('Re-enrolment code is missing');
+            return;
+        }
+        setCompleting(true);
+        setError(null);
+        try {
+            const res = await bindRekeyByMatchApi(nodeUrl, member.publicKey, issuedCode, match, adminPassword, tfaToken);
+            setNewPubkey(res.newPubkey);
+            setStep(3);
+            onSuccess?.(res.newPubkey);
+        } catch (err: any) {
+            setTypedMatch('');
+            if (err instanceof RekeyBindError && err.code === 'code_stopped') {
+                setCodeStopped(true);
+                setProposals([]);
+            } else if (err instanceof RekeyBindError && err.code === 'wrong_number') {
+                if (err.triesLeft !== undefined) setWrongNumbers(3 - err.triesLeft);
+                setError(`${err.message}${err.triesLeft !== undefined ? ` ${err.triesLeft === 1 ? 'One more wrong number stops this code.' : `${err.triesLeft} tries left.`}` : ''}`);
+            } else {
+                setError(err?.message || 'Failed to complete re-keying');
+            }
+        } finally {
+            setCompleting(false);
+        }
+    };
+
+    /** "Paste a key instead": binds the key pasted, for a phone that can't ask on the code. */
     const bindKey = async (key: string) => {
         const clean = key.trim().toLowerCase();
         if (!clean || !/^[0-9a-f]{64}$/.test(clean)) {
@@ -284,7 +330,7 @@ export function RekeyMemberWizard({
         }
     };
 
-    const codeExpired = Boolean(expiresAt && new Date(expiresAt).getTime() < now);
+    const codeExpired = Boolean(expiresAt && new Date(expiresAt).getTime() < now) || codeStopped;
 
     const handleCopy = () => {
         if (!issuedCode) return;
@@ -500,7 +546,11 @@ export function RekeyMemberWizard({
                                 </div>
                                 {codeExpired ? (
                                     <div data-testid="rekey-code-expired" className="space-y-2">
-                                        <p className="text-[11px] text-amber-300 m-0">This code has expired, so no phone can use it.</p>
+                                        <p className="text-[11px] text-amber-300 m-0 break-words">
+                                            {codeStopped
+                                                ? 'Three wrong numbers were typed, so this code has stopped and no phone can use it.'
+                                                : 'This code has expired, so no phone can use it.'}
+                                        </p>
                                         <button
                                             type="button"
                                             onClick={() => {
@@ -508,6 +558,9 @@ export function RekeyMemberWizard({
                                                 setCodeNeedsStepUp(false);
                                                 setExpiresAt(null);
                                                 setProposals([]);
+                                                setCodeStopped(false);
+                                                setTypedMatch('');
+                                                setWrongNumbers(0);
                                                 resetChecklist();
                                                 setStep(1);
                                             }}
@@ -545,7 +598,7 @@ export function RekeyMemberWizard({
                                 Only the person who issued this code, or an owner, can see it.
                             </p>
                             )}
-                            {expiresAt && (
+                            {expiresAt && !codeStopped && (
                                 <p className={`text-[10px] m-0 ${codeExpired ? 'text-amber-400 font-bold' : 'text-nature-400'}`}>
                                     {codeExpired
                                         ? '⚠️ Code has expired'
@@ -560,41 +613,67 @@ export function RekeyMemberWizard({
                             </p>
                         )}
 
-                        {/* The phones that asked: bind the one whose number is on the phone in front of you */}
+                        {/* The phones that asked: the admin types the number on the phone in front of them; the node finds that phone */}
                         {issuedCode && !codeExpired && (
                             <div className="space-y-2" data-testid="rekey-proposals">
                                 {proposals.length === 0 ? (
                                     <p className="text-[11px] text-nature-400 m-0">Waiting for their phone to ask…</p>
                                 ) : (
                                     <>
-                                        <p className="text-[11px] text-amber-200 m-0 break-words">
-                                            The number on their phone must match before you press Bind. A phone you don't recognise is someone else's: press Not theirs.
+                                        <label className="block space-y-1.5" data-testid="rekey-type-number">
+                                            <span className="block font-bold text-amber-200 break-words">
+                                                Type the number on their phone:
+                                            </span>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    autoComplete="off"
+                                                    maxLength={2}
+                                                    value={typedMatch}
+                                                    onChange={(e) => setTypedMatch(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleBindByMatch();
+                                                    }}
+                                                    aria-label="The number on their phone"
+                                                    placeholder="00"
+                                                    className="w-20 bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-lg text-center text-white font-mono tracking-widest placeholder:text-nature-600 focus:outline-none focus:border-amber-500"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={completing || declining !== null || !/^\d{2}$/.test(typedMatch)}
+                                                    onClick={handleBindByMatch}
+                                                    className={`px-3 py-2 rounded-xl text-xs font-bold ${
+                                                        !completing && /^\d{2}$/.test(typedMatch)
+                                                            ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                                                            : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
+                                                    }`}
+                                                >
+                                                    {completing ? 'Moving the account…' : 'Bind their phone'}
+                                                </button>
+                                            </div>
+                                            <span className="block text-[11px] text-nature-400 break-words">
+                                                Read it off the phone in front of you; this page never shows it. Three wrong numbers stop this code.
+                                                {wrongNumbers > 0 && ` Wrong so far: ${wrongNumbers} of 3.`}
+                                            </span>
+                                        </label>
+                                        <p className="text-[11px] text-nature-300 m-0 break-words">
+                                            {proposals.length === 1 ? 'One phone has asked.' : `${proposals.length} phones have asked.`} More than theirs means someone else has the code: press Not theirs on any you don't recognise, or cancel the code and make a new one with them here.
                                         </p>
                                         {proposals.map((p) => (
-                                            <div key={p.newPubkey} data-testid="rekey-proposal" className="p-3 bg-nature-900/80 border border-nature-700/80 rounded-2xl space-y-2">
-                                                <p className="text-nature-200 m-0 break-words">
-                                                    A phone asked at {askedAt(p.proposedAt)} · number{' '}
-                                                    <strong className="text-lg font-mono text-amber-300">{p.match}</strong> · key{' '}
+                                            <div key={p.newPubkey} data-testid="rekey-proposal" className="p-3 bg-nature-900/80 border border-nature-700/80 rounded-2xl flex flex-wrap items-center justify-between gap-2">
+                                                <p className="text-nature-200 m-0 break-words min-w-0">
+                                                    A phone asked at {askedAt(p.proposedAt)} · key{' '}
                                                     <span className="font-mono">{p.newPubkey.slice(0, 6)}…</span>
                                                 </p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    <button
-                                                        type="button"
-                                                        disabled={completing || declining !== null}
-                                                        onClick={() => bindKey(p.newPubkey)}
-                                                        className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold"
-                                                    >
-                                                        {completing ? 'Moving the account…' : 'Bind this phone'}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={completing || declining !== null}
-                                                        onClick={() => handleDecline(p.newPubkey)}
-                                                        className="px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 text-xs font-semibold"
-                                                    >
-                                                        {declining === p.newPubkey ? 'Declining…' : 'Not theirs'}
-                                                    </button>
-                                                </div>
+                                                <button
+                                                    type="button"
+                                                    disabled={completing || declining !== null}
+                                                    onClick={() => handleDecline(p.newPubkey)}
+                                                    className="shrink-0 px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 text-xs font-semibold"
+                                                >
+                                                    {declining === p.newPubkey ? 'Declining…' : 'Not theirs'}
+                                                </button>
                                             </div>
                                         ))}
                                     </>
@@ -658,6 +737,9 @@ export function RekeyMemberWizard({
                                         setCodeNeedsStepUp(false);
                                         setExpiresAt(null);
                                         setProposals([]);
+                                        setCodeStopped(false);
+                                        setTypedMatch('');
+                                        setWrongNumbers(0);
                                         resetChecklist();
                                         setStep(1);
                                     }}

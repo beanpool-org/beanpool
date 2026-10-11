@@ -5,6 +5,9 @@
  *    ("unterminated string"), getPosts threw and the route answered 500. The engine's search (posts.ts searchCondition),
  *    which the route, Home's saved-search card and the phone all reach, now reads them as spaces, so the answer is a 200
  *    with the listings the words without them find.
+ * 2. A search leaves out the listings of the authors the reader blocked (member_blocks, their own rows: the direction the
+ *    nearby set reads, through the same helper), in the Chinese words' scan too. A reader who blocked nobody, and a read
+ *    for nobody in particular, find them as before; a read that is not a search is unchanged (the phone hides them).
  *
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-search-http.ts
  */
@@ -17,6 +20,9 @@ import { initStateEngine, createPost } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { addBlocks } from './engine/member-blocks.js';
+import { getPosts } from './state-engine.js';
+import { searchTermsFor } from '@beanpool/core';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -74,6 +80,10 @@ async function main(): Promise<void> {
     post('Fresh bread', mei);
     post('新鲜鸡蛋出售', mei);
     post('Garden spade', mei);
+    const bo = makeMember('Bo');
+    const other = makeMember('Other');
+    post('Fresh milk', bo);
+    post('新鲜牛奶出售', bo);
 
     // ── 1. Control characters in a raw q ────────────────────────────────────────
     const asked: Array<[string, string]> = [
@@ -95,6 +105,29 @@ async function main(): Promise<void> {
     const none = await search(null, reader);
     assert(onlyNul.status === 200 && JSON.stringify(onlyNul.titles) === JSON.stringify(none.titles),
         `q=NUL alone answers 200 with what no q answers (${onlyNul.status}, ${onlyNul.titles.length} vs ${none.titles.length})`);
+
+    // ── 2. The authors the reader blocked ───────────────────────────────────────
+    addBlocks(reader.pubKeyHex, [bo.pubKeyHex]);
+    const blockedSees = await search('fresh', reader);
+    assert(blockedSees.status === 200 && !blockedSees.titles.includes('Fresh milk') && blockedSees.titles.includes('Fresh eggs'),
+        `a reader who blocked Bo finds Mei's listings and not Bo's (${JSON.stringify(blockedSees.titles)})`);
+    const cjk = await search('牛奶', reader);
+    assert(cjk.status === 200 && cjk.titles.length === 0, `nor Bo's listing through the Chinese words' scan (${JSON.stringify(cjk.titles)})`);
+    // As the phone, the web and Home ask: the member's words through core's searchTermsFor.
+    const asTyped = searchTermsFor('鸡蛋，牛奶').join(' ');
+    const both = await search(asTyped, reader);
+    assert(JSON.stringify(both.titles) === JSON.stringify(['新鲜鸡蛋出售']), `"鸡蛋，牛奶" finds Mei's eggs, not Bo's milk (${JSON.stringify(both.titles)})`);
+    const otherSees = await search('fresh', other);
+    assert(otherSees.titles.includes('Fresh milk'), `a reader who blocked nobody still finds Bo's listing (${JSON.stringify(otherSees.titles)})`);
+    const otherCjk = await search(asTyped, other);
+    assert(otherCjk.titles.length === 2, `and finds both through "鸡蛋，牛奶" (${JSON.stringify(otherCjk.titles)})`);
+    const boSees = await search('fresh', bo);
+    assert(boSees.titles.includes('Fresh eggs') && boSees.titles.includes('Fresh milk'), 'Bo, the one blocked, still finds everything: one direction, as the nearby set');
+    const notSearch = await search(null, reader);
+    assert(notSearch.titles.includes('Fresh milk'), 'a read that is not a search is unchanged: the phone hides a blocked author itself');
+    assert(getPosts({ query: 'fresh', limit: 50 }).some(p => p.title === 'Fresh milk'), 'a search for nobody in particular still finds Bo\'s listing');
+    assert(!getPosts({ query: 'fresh', viewerPubkey: reader.pubKeyHex, limit: 50 }).some(p => p.title === 'Fresh milk'),
+        "the engine's read (Home's saved-search card asks with it) leaves it out for the reader");
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

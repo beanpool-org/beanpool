@@ -1095,6 +1095,17 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     return getPostsRankedBy(db, filter, postRowsNear);
 }
 
+/** The authors this member blocked: their own list, read for them alone (schema.sql's member_blocks). The nearby set and
+ *  the search leave out these authors' listings. */
+function authorsBlockedBy(db: Db, member: string): string[] {
+    try {
+        return (prepared(db, 'SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = ?').all(member) as Array<{ blocked_pubkey: string }>).map(r => r.blocked_pubkey);
+    } catch {
+        // No member_blocks table: an engine-only database.
+        return [];
+    }
+}
+
 /** What a member's set is worked out from (getNearbySet). */
 export interface NearbySetQuery {
     /** The member's stored coarse area (members.area_lat / area_lng), or null when they have none. */
@@ -1163,13 +1174,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     } catch {
         // No conversations table: an engine-only database.
     }
-    // The authors this member blocked: their own list, read for them alone (schema.sql's member_blocks).
-    let blocked: string[] = [];
-    try {
-        blocked = (prepared(db, 'SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = ?').all(member) as Array<{ blocked_pubkey: string }>).map(r => r.blocked_pubkey);
-    } catch {
-        // No member_blocks table: an engine-only database.
-    }
+    const blocked = authorsBlockedBy(db, member);
     const base: PostFilter = { viewerPubkey: member, types: q.types, excludeEvents: q.excludeEvents, includeHidden: q.includeHidden };
 
     // near(M): the rows are never read in full; the hook keeps what the lean pass ranked. `m` stays joined for any
@@ -1472,6 +1477,14 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // Goods search isolation: searching marketplace keywords must not return polls unless explicitly asked
         if (filter?.type !== 'poll') {
             where += " AND p.type != 'poll'";
+        }
+        // A search leaves out the listings of the authors the reader blocked, as their nearby set does (#1781): the phone
+        // hides those, so they would only take the places of listings it shows, and the web and Home show them otherwise.
+        // A read for nobody in particular has no list.
+        const blocked = viewer && !filter?.includeAllScopes ? authorsBlockedBy(db, viewer) : [];
+        if (blocked.length > 0) {
+            where += ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))';
+            params.push(JSON.stringify(blocked));
         }
     }
 

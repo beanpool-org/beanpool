@@ -5,6 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
     abandonRekey, askRekey, beginRekey, cleanRekeyCode, finishRekey, isRekeyCode, parseRekeyLink, pollRekey,
     rekeyCommunityUrl, resumeRekey, REKEY_TEXT, type RekeyDeps, type RekeySlot,
@@ -246,5 +248,94 @@ describe('the next launch (resume)', () => {
         const w = world();
         expect(await resumeRekey(w.deps)).toBeNull();
         expect(w.sent.length).toBe(0);
+    });
+});
+
+describe('Back, a second code, and the status first (#1783 review N2, N4)', () => {
+    const gone = { status: 200, body: { state: 'gone' } };
+    const tooMany = { status: 429, body: { error: 'Too many wrong codes have been tried here in the last hour. Try again later.', code: 'too_many_wrong_codes' } };
+
+    it('Back on the number screen leaves the record and its key: the screen\'s stop clears nothing', () => {
+        const src = readFileSync(join(__dirname, '../../app/rekey-code.tsx'), 'utf8');
+        const stop = src.slice(src.indexOf('const stop = '), src.indexOf('};', src.indexOf('const stop = ')));
+        expect(stop.length).toBeGreaterThan(0);
+        expect(stop).not.toMatch(/abandonRekey|slot\.clear|setSlot\(null\)/);
+    });
+
+    it('the admin binds after Back: the next launch asks the status, is told bound, and the key is still here', async () => {
+        const w = world({ answers: [waiting, bound] });
+        const slot = await beginRekey(MULLUM, CODE, w.deps);
+        expect((await askRekey(slot, w.deps)).state).toBe('waiting');
+        // Back: nothing on the phone changes. The admin types the number; the next launch:
+        const r = await resumeRekey(w.deps);
+        expect(r?.answer.state).toBe('bound');
+        expect(w.sent.map((s) => s.init?.method)).toEqual(['POST', 'GET']);
+        const done = await finishRekey(r!.slot, { callsign: 'MiaMember' }, w.deps);
+        expect(done.identity.publicKey).toBe(slot.publicKey);
+        expect(w.phone?.publicKey).toBe(slot.publicKey);
+    });
+
+    it('Continue with the same community and code is the same key, so the same proposal and number', async () => {
+        const w = world({ answers: [waiting, waiting] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        const again = await beginRekey(MULLUM, CODE.toLowerCase(), w.deps);
+        expect(again.publicKey).toBe(first.publicKey);
+        expect(w.sent.length).toBe(1);
+    });
+
+    it('a second code while the first may still be bound is refused, and the first record is kept', async () => {
+        const w = world({ answers: [waiting, waiting] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        await expect(beginRekey(MULLUM, 'RK-EEEE-FFFF', w.deps)).rejects.toThrow(/still open/);
+        expect(w.slot?.code).toBe(CODE);
+        expect(w.slot?.publicKey).toBe(first.publicKey);
+        expect(w.sent[1].url).toContain(`code=${CODE}`);
+    });
+
+    it('offline, a second code is refused too (nothing known), and the record is kept', async () => {
+        const w = world({ answers: [waiting, 'offline'] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        await expect(beginRekey('https://bellingen.example.org', 'RK-EEEE-FFFF', w.deps)).rejects.toThrow(/Couldn’t check the re-key you started at mullum\.example\.org/);
+        expect(w.slot?.publicKey).toBe(first.publicKey);
+    });
+
+    it('once the first has ended, a second code starts with a new key', async () => {
+        const w = world({ answers: [waiting, gone] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        const second = await beginRekey(MULLUM, 'RK-EEEE-FFFF', w.deps);
+        expect(second.code).toBe('RK-EEEE-FFFF');
+        expect(second.publicKey).not.toBe(first.publicKey);
+        expect(w.slot?.publicKey).toBe(second.publicKey);
+    });
+
+    it('resume during a wrong-code lock-out: the status answers, the ask is never re-sent', async () => {
+        const w = world({ answers: [waiting, bound, tooMany] });
+        const slot = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(slot, w.deps);
+        const r = await resumeRekey(w.deps);
+        expect(r?.answer.state).toBe('bound');
+        expect(w.sent.filter((s) => s.init?.method === 'POST').length).toBe(1);
+    });
+
+    it('a 429 on the status keeps the record and sends no ask', async () => {
+        const w = world({ answers: [waiting, tooMany] });
+        const slot = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(slot, w.deps);
+        const r = await resumeRekey(w.deps);
+        expect(r?.answer.state).toBe('unreachable');
+        expect(w.slot).not.toBeNull();
+        expect(w.sent.map((s) => s.init?.method)).toEqual(['POST', 'GET']);
+    });
+
+    it('the node never heard the ask (gone): resume sends it once more', async () => {
+        const w = world({ answers: [gone, waiting] });
+        await beginRekey(MULLUM, CODE, w.deps);
+        const r = await resumeRekey(w.deps);
+        expect(r?.answer.state).toBe('waiting');
+        expect(w.sent.map((s) => s.init?.method)).toEqual(['GET', 'POST']);
     });
 });

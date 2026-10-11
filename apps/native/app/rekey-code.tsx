@@ -204,10 +204,9 @@ export default function RekeyCodeScreen() {
         setPhase((p) => (p === 'asking' ? 'form' : p));
     };
 
-    const stop = async () => {
-        await abandonRekey(deps);
-        setSlot(null);
-        setMatch(null);
+    // Back only leaves the number: the record and its key stay, since the admin may still type this number (#1783 review
+    // N2). Continue with the same code shows the same number, and the next launch asks after it.
+    const stop = () => {
         setPhase('form');
     };
 
@@ -259,7 +258,7 @@ export default function RekeyCodeScreen() {
                 {expiresAt ? <Text style={styles.note}>{timeLeft(expiresAt, now)}</Text> : null}
                 {error ? <Text style={styles.error}>{error}</Text> : null}
                 <Pressable style={styles.secondary} onPress={stop} accessibilityRole="button">
-                    <Text style={styles.secondaryText}>Stop</Text>
+                    <Text style={styles.secondaryText}>Back</Text>
                 </Pressable>
             </View>
         );

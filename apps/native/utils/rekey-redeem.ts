@@ -133,22 +133,35 @@ export const REKEY_TEXT = {
 
 /**
  * Starts (or resumes) an ask: the key this phone asks with, written down with the community and the code BEFORE the
- * caller sends anything. A record already here keeps its key: the same community and code is the same proposal, and a new
- * code reuses a key this flow made (no node accepted it).
+ * caller sends anything. A record already here for the same community and code keeps its key: the same proposal, the
+ * same number. A record for another community or code is never re-pointed while its node may still bind it (#1783
+ * review N2): it is asked first, let go only once its node says it has ended, and otherwise this ask is refused.
  */
 export async function beginRekey(community: string, rawCode: string, deps: RekeyDeps): Promise<RekeySlot> {
     const code = cleanRekeyCode(rawCode);
     if (!CODE.test(code)) throw new Error('That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.');
     const url = rekeyCommunityUrl(community);
     if (!url) throw new Error('That isn’t a community address the app can use.');
-    const held = await deps.slot.get();
+    let held = await deps.slot.get();
     const stored = await deps.loadIdentity();
+    if (held?.madeHere && held.draft && (held.community !== url || held.code !== code)) {
+        const answer = await pollRekey(held, deps);
+        if (!endsRekey(answer)) {
+            const open = held;
+            const where = (() => { try { return new URL(open.community).host; } catch { return open.community; } })();
+            throw new Error(answer.state === 'unreachable'
+                ? `Couldn’t check the re-key you started at ${where}. Try again when you’re connected.`
+                : `The re-key you started at ${where} with ${open.code} is still open. Type that code to continue it, or ask your admin to decline this phone, then try again.`);
+        }
+        await abandonRekey(deps);
+        held = null;
+    }
     let slot: RekeySlot;
     if (stored) {
         // One identity per device: the phone's own key, never a new one beside it.
         slot = { community: url, code, publicKey: stored.publicKey, madeHere: false, startedAt: Date.now() };
     } else if (held?.madeHere && held.draft) {
-        slot = { ...held, community: url, code };
+        slot = held;
     } else {
         const draft = await deps.draftIdentity();
         slot = { community: url, code, publicKey: draft.publicKey, madeHere: true, draft, startedAt: Date.now() };
@@ -244,11 +257,14 @@ export function endsRekey(answer: RekeyAnswer): boolean {
 /**
  * The next launch: a record left by an app stopped mid-ask is asked about once. `bound` is for the caller to finish
  * ({@link finishRekey}); an answer that ends it clears the record here; no answer keeps it. Null when there is none.
+ * The status (GET) first, which no wrong-code limit holds back (#1783 review N4); the ask is sent again only when the
+ * node never heard it (`gone`: the app stopped before the ask arrived, or the code is dead, which the ask then says).
  */
 export async function resumeRekey(deps: RekeyDeps): Promise<{ slot: RekeySlot; answer: RekeyAnswer } | null> {
     const slot = await deps.slot.get();
     if (!slot) return null;
-    const answer = await askRekey(slot, deps);
+    const status = await pollRekey(slot, deps);
+    const answer = status.state === 'gone' ? await askRekey(slot, deps) : status;
     if (endsRekey(answer)) await abandonRekey(deps);
     return { slot, answer };
 }

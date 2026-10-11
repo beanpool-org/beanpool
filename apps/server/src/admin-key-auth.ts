@@ -48,6 +48,7 @@ import { getLocalConfig, isBreakGlassMode, isPasswordRetired } from './config/lo
 import { issueCsrfToken, revokeCsrfTokensBoundTo, restamp2faSessions } from './admin-auth.js';
 import { adminBroadcastAnnouncement } from './state-engine.js';
 import { logger } from './logger.js';
+import { noteSecurityEvent } from './services/security-signal.js';
 import { isMemberKeySpelling } from './engine/member-key.js';
 import { adminSigninText, verifyStatementSignature } from './engine/member-signature.js';
 import { breakGlassCodeMatches, generateBreakGlassCode, hashBreakGlassCode, isBreakGlassCodeShape } from './break-glass-code.js';
@@ -802,6 +803,12 @@ export async function verifyBreakGlassCode(code: string, ownerPubkey?: string): 
     return null;
 }
 
+/** How a break-glass code was made, for the owners' alert: never whose. */
+const BREAK_GLASS_HOW: Record<BreakGlassMadeBy, string> = {
+    'key-session': 'from a key sign-in', app: 'from the app', password: 'with the admin password',
+    'break-glass': 'with a break-glass code', recover: 'with beanpool recover on the server',
+};
+
 /**
  * A new break-glass code for a key that holds the owner role now, shown once by the caller. The stored hash is replaced,
  * so any earlier code of that owner's stops working. Grants nothing: a key without the owner role gets an error, and
@@ -815,6 +822,12 @@ export function issueBreakGlassCode(ownerPubkey: string, by: string, madeBy: Bre
     const code = generateBreakGlassCode();
     setNodeRoleBreakGlassHash(ownerPubkey, hashBreakGlassCode(code), madeBy);
     logger.security('AUTH', `A new break-glass code was made for owner ${ownerPubkey.slice(0, 12)}… by ${by}; any earlier code of theirs no longer works`);
+    noteSecurityEvent({
+        key: 'sec.keys',
+        detail: `A new break-glass code was made for an owner, ${BREAK_GLASS_HOW[madeBy] ?? 'from a sign-in'}; any earlier code of theirs no longer works.`,
+        actor: madeBy === 'password' ? 'owner:password' : madeBy === 'recover' ? 'SYSTEM' : ownerPubkey,
+        actorRole: madeBy === 'password' ? 'admin password' : madeBy === 'recover' ? 'server' : 'owner', high: true,
+    });
     return code;
 }
 
@@ -827,6 +840,7 @@ export function retireBreakGlassCode(ownerPubkey: string): boolean {
     if (!getNodeRoleBreakGlassHash(ownerPubkey)) return false;
     setNodeRoleBreakGlassHash(ownerPubkey, null);
     logger.security('AUTH', `Owner ${ownerPubkey.slice(0, 12)}… signed out everywhere: their break-glass code no longer works`);
+    noteSecurityEvent({ key: 'sec.keys', detail: 'An owner signed out everywhere: their break-glass code no longer works.', actor: ownerPubkey, actorRole: 'owner' });
     return true;
 }
 
@@ -861,7 +875,8 @@ export function enrolAdminOwnerKey(params: {
     // Grant role in node_roles if not already held
     const currentRole = nodeRoleOf(targetPubkey);
     if (currentRole !== role) {
-        grantNodeRole(targetPubkey, role, actorPubkey || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'));
+        grantNodeRole(targetPubkey, role, actorPubkey || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'),
+            isBreakGlass ? 'with a break-glass code' : undefined);
     }
 
     // Generate per-owner break-glass code only for a new owner. An owner who already holds the role keeps theirs, or

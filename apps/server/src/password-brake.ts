@@ -78,6 +78,7 @@ import type Koa from 'koa';
 import { getLocalConfig, verifyPasswordAsync } from './config/local-config.js';
 import { clientLimiterKey, isSharedSourceKey } from './client-ip.js';
 import { logger } from './logger.js';
+import { noteSecurityEvent } from './services/security-signal.js';
 import { logAddressTag } from './log-address.js';
 
 export const SOURCE_FREE_FAILURES = 5;
@@ -281,6 +282,10 @@ export function tryAdmit(key: string, now = Date.now()): Admission | 'wait' {
                 try {
                     logger.security('AUTH', `[password-brake] wrong admin passwords are arriving from many addresses; this node now checks at most ${NODE_CHECKS_PER_MIN} a minute from addresses that failed in the last day. Addresses with no failure, and key sign-in, are unaffected.`);
                 } catch { /* logging never blocks auth */ }
+                noteSecurityEvent({
+                    key: 'sec.password-burst', state: 'seen', priority: 4,
+                    detail: `Wrong admin passwords are arriving from many addresses: this server now checks at most ${NODE_CHECKS_PER_MIN} a minute from addresses that failed. Key sign-in is unaffected.`,
+                });
             }
             return { admitted: false, retryAfter: Math.min(60, Math.max(1, Math.ceil((freesAt - now) / 1000))), reason: 'node' };
         }
@@ -332,6 +337,10 @@ export function notePasswordFailure(key: string, now = Date.now()): void {
                 // The address by its daily keyed hash, never itself (log-address.ts).
                 logger.security('AUTH', `[password-brake] ${s.failures} wrong admin passwords from ${logAddressTag(key)} (the address, hashed with a key that changes daily); that address now backs off (up to ${(shared ? SHARED_SOURCE_MAX_DELAY_MS : MAX_DELAY_MS) / 60_000} min between attempts). Other addresses and key sign-in are unaffected.`);
             } catch { /* logging never blocks auth */ }
+            noteSecurityEvent({
+                key: 'sec.password-burst', state: 'seen', priority: 3,
+                detail: `${s.failures} wrong admin passwords came from one address, which now waits between tries. Other addresses and key sign-in are unaffected.`,
+            });
         }
         if (shared && now - lastSharedLog > 10 * 60_000) {
             lastSharedLog = now;

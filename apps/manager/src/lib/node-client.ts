@@ -2415,6 +2415,9 @@ export interface AlertsStatus {
     hourlyCap: number;
     active: Array<{ key: string; title: string; priority: number; since: number; detail: string }>;
     history: Array<{ key: string; title: string; kind: 'raised' | 'still' | 'cleared'; at: number; since: number; priority: number; detail: string }>;
+    /** Security events of the last day not yet acknowledged; absent on a server older than security alerts. */
+    recent?: Array<{ key: string; title: string; at: number; priority: number; detail: string }>;
+    acknowledge?: boolean;
 }
 
 export function getAlertsStatus(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AlertsStatus> {
@@ -2425,6 +2428,11 @@ export function saveAlertsChannel(
     nodeUrl: string, update: { url?: string; format?: 'ntfy' | 'json'; token?: string; remove?: boolean }, adminPassword?: string, tfaToken?: string,
 ): Promise<{ success: boolean; status: AlertsStatus }> {
     return offboxPost(nodeUrl, '/api/local/admin/alerts/settings', update, adminPassword, tfaToken);
+}
+
+/** "Seen": the security events so far leave the banner, and a replaced server's urgent alert ends. */
+export function acknowledgeAlerts(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<{ success: boolean; status: AlertsStatus }> {
+    return offboxPost(nodeUrl, '/api/local/admin/alerts/acknowledge', {}, adminPassword, tfaToken);
 }
 
 export function sendTestAlert(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<{ ok: boolean; status: AlertsStatus; error?: string }> {

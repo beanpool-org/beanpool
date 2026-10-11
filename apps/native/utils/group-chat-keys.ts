@@ -151,6 +151,10 @@ export class GroupKeyring {
     readonly successions = new Map<string, boolean>();
     /** Epochs whose record didn't verify: nothing under them opens, and no wrap of theirs is refused for it. */
     private badRecords = new Set<number>();
+    /** The active members the screen shows (GET …/members), as last read here or handed in by the screen. */
+    private shown: Set<string> | null = null;
+    /** Each epoch's recipients by its signed record (…/keys/:epoch/wraps, digests re-derived): who may be topped up. */
+    private recordRecipients = new Map<number, Set<string>>();
     state: GroupKeysState | null = null;
 
     constructor(public readonly groupId: string, private readonly nodeUrl: string, private readonly identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, private readonly store: GroupKeyStore) {}
@@ -262,6 +266,48 @@ export class GroupKeyring {
         }
         this.state = { current: a.current ?? null, stale: !!a.stale, fromEpoch: a.fromEpoch ?? null, roster: Array.isArray(a.roster) ? a.roster : [] };
         return this.state;
+    }
+
+    /** The roster the screen shows (its active members' keys): what a recipient of a key this phone hands out must be in. */
+    noteShownRoster(keys: readonly string[]): void {
+        this.shown = new Set(keys);
+    }
+
+    /** Read the members list the screen shows (GET …/members, active rows): null when the node won't say. */
+    private async readShownRoster(): Promise<Set<string> | null> {
+        try {
+            const rows = await answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/members`, this.identity as BeanPoolIdentity));
+            if (!Array.isArray(rows)) return null;
+            this.shown = new Set(rows.filter((m: any) => m?.status === 'active' && typeof m.memberPubkey === 'string').map((m: any) => m.memberPubkey as string));
+            return this.shown;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Who an epoch's maker wrapped it to, by the record's signature: the recipients of its own wraps (unsigned, by its
+     * maker; GET …/keys/:epoch/wraps) must be exactly the ones its signed membersDigest names. Not its wrapsDigest: a wrap
+     * the node spoiled still names its recipient, and repairing that slot is what a top-up is for. Null when they don't
+     * match or can't be read. Top-ups are outside the record: a member they reached is not in it.
+     */
+    private async recipientsOf(epoch: number): Promise<Set<string> | null> {
+        const known = this.recordRecipients.get(epoch);
+        if (known) return known;
+        const stored = this.epochs.get(epoch);
+        if (!stored) return null;
+        try {
+            const a = await answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/${epoch}/wraps`, this.identity as BeanPoolIdentity));
+            const set = new Set<string>((Array.isArray(a?.wraps) ? a.wraps : [])
+                .filter((w: any) => w && (w.sig === null || w.sig === undefined) && w.wrapper === stored.record.createdBy && typeof w.recipient === 'string')
+                .map((w: any) => w.recipient as string));
+            verifyGroupEpochRecord(stored.record, { groupId: this.groupId, epoch });
+            if (!groupEpochCoversExactly(stored.record, [...set])) return null;
+            this.recordRecipients.set(epoch, set);
+            return set;
+        } catch {
+            return null;
+        }
     }
 
     /** The key for an epoch if it is already open (no work): what the line display reads synchronously. */
@@ -406,6 +452,11 @@ export class GroupKeyring {
      * Hand keys I hold to members who lack them (GET …/keys/missing, POST …/keys/wrap; §2.5): newest epochs first, at
      * most `max` per call (they share the chat's rate limit with sends). A slot already filled, or one my wrap was once
      * refused on, is left. Returns how many went.
+     *
+     * `missing` is the node's word, so a key goes only to someone the screen shows as a member AND whom that epoch's maker
+     * wrapped it to, by the record's signature (review of #1788, finding 1; director's decision a): a junk wrap's repair.
+     * A newcomer is never handed an epoch from before them, and a re-keyed member's new key is in no old record: they
+     * read from their next epoch until the succession chain (epochs-over-time §5) is served.
      */
     async serveMissing(max = 10): Promise<number> {
         await this.ensureLoaded();
@@ -418,13 +469,17 @@ export class GroupKeyring {
         // A slot for an epoch this phone hasn't fetched yet (it never opened the chat since): fetch first, once.
         const wanted = (answer.missing ?? []).flatMap((m) => m.epochs ?? []);
         if (wanted.some((e) => !this.epochs.has(e))) await this.sync().catch(() => null);
+        if (!(answer.missing ?? []).some((m) => m?.pubkey !== this.identity.publicKey)) return 0;
+        const shown = await this.readShownRoster();
+        if (!shown) return 0;
         let sent = 0;
         for (const m of answer.missing ?? []) {
-            if (m.pubkey === this.identity.publicKey) continue;
+            if (m.pubkey === this.identity.publicKey || !shown.has(m.pubkey)) continue;
             for (const epoch of [...(m.epochs ?? [])].sort((x, y) => y - x)) {
                 if (sent >= max) return sent;
                 const key = await this.keyFor(epoch);
                 if (!key) continue;
+                if (!(await this.recipientsOf(epoch))?.has(m.pubkey)) continue;
                 const t = makeTopUp(key, { myEdPrivHex: this.identity.privateKey, groupId: this.groupId, epoch, recipientPubHex: m.pubkey });
                 const res = await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/wrap`,
                     { epoch, recipient: t.recipient, ephPub: t.ephPub, nonce: t.nonce, wrapped: t.wrapped, sig: t.sig }, this.identity as BeanPoolIdentity).catch(() => null);

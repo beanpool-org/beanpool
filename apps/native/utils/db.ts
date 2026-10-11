@@ -542,6 +542,10 @@ async function _doInitDB() {
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_callsign TEXT;`); } catch (e) {}
         // The ids a by-area community's last set read named `tied` (keepPostsNearby), for a phone whose schema ran before it.
         try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);`); } catch (e) {}
+        // The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat
+        // names it: by index, not a scan of each table per listing (the review of #1778, finding 4: 79 ms at 3,000 deals).
+        try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_id ON marketplace_transactions(post_id);`); } catch (e) {}
+        try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_conversations_post_id ON conversations(post_id);`); } catch (e) {}
         // Profile sync: track when a profile was last updated for cache-busting
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0;`); } catch (e) {}

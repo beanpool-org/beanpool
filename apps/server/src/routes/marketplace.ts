@@ -306,9 +306,18 @@ function photoKeysSince(): string {
 /**
  * A member's set's hash, in each answer beside its ids (DESIGN-global-sync-by-area §2.3), `tied` included: a deal opened on
  * a listing already in the set moves no id, and the phone must still learn the tie. A phone sends back the one it holds
- * (`setHash`), and is not sent the set again while it still holds.
+ * (`setHash`), and is not sent the set again while it still holds. Of the ids as a set, not in their order: a listing in
+ * it moving a little nearer changes no member of it.
  */
-const nearbySetHash = (ids: string[], tied: string[]) => crypto.createHash('sha256').update(`${ids.join(',')}\n${tied.join(',')}`).digest('hex').slice(0, 24);
+const nearbySetHash = (ids: string[], tied: string[]) =>
+    crypto.createHash('sha256').update(`${[...ids].sort().join(',')}\n${[...tied].sort().join(',')}`).digest('hex').slice(0, 24);
+
+/** A by-area read's query as its ETag describes it: without where the read starts, its page, or the hash the phone holds. */
+function nearbyTagQuery(querystring: string): string {
+    const q = new URLSearchParams(querystring);
+    for (const k of ['updatedAfter', 'paged', 'pageAfter', 'setHash']) q.delete(k);
+    return q.toString();
+}
 
 router.get('/api/marketplace/posts', async (ctx) => {
     // Distance search (G4, design §3.2), on every profile: `lat`, `lng`, `radiusKm`, `sort=distance|recent`. Checked
@@ -464,8 +473,15 @@ router.get('/api/marketplace/posts', async (ctx) => {
         });
         nearbyWhole = !!updatedAfter && photoUrlsChangedAfter(updatedAfter);
         // `tied` too: a deal opened on a listing already near the member moves no row of S, but the phone must now keep it.
-        const described = [ctx.querystring || '', viewerPubkey, area ? `${area.lat},${area.lng}` : '-', nearbySet.ids.join(','),
-            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(',')].join('\n');
+        // The query without where the read starts (`updatedAfter`), its page (`paged`, `pageAfter`) and the hash the phone
+        // holds (`setHash`): the tag describes the set, so every page of one read carries it, and a phone that holds it
+        // sends it with its next delta from whatever cursor (REPORT-geosync-load-B, item 3). The cursor moves after every
+        // read, and the 5-minute drift buffer re-sends what changed minutes ago, so a tag that hashed the URL was never
+        // repeated (12 of 8,556 cycles with nothing changed got a 304; kept URLs 39%). A 304 is only right where the
+        // phone holds the set as the tag describes it, which it does once a read has landed; the phone sends its tag on a
+        // delta only. The identity epoch too: a take-over's server never confirms the old one's copy.
+        const described = [nearbyTagQuery(ctx.querystring || ''), viewerPubkey, area ? `${area.lat},${area.lng}` : '-', nearbySet.ids.join(','),
+            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(','), syncEpochHeaderValue()].join('\n');
         nearbyEtag = `W/"near-${crypto.createHash('sha256').update(described).digest('hex').slice(0, 24)}"`;
     }
 

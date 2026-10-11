@@ -367,7 +367,8 @@ async function _doInitDB() {
         -- own and tied listings as the node knows them, which the phone keeps past its cap (keepPostsNearby).
         CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);
         -- And the set it last reconciled with, beside the node's hash of it (k = 'set', JSON ids; k = 'hash'), written
-        -- together: the phone sends the hash back and is not sent the set again while it holds (readNearbyHeld).
+        -- together: the phone sends the hash back and is not sent the set again while it holds (readNearbyHeld). k = 'tag':
+        -- the ETag of its last read that landed whole, sent with the next delta for a 304 (readNearbyTag).
         CREATE TABLE IF NOT EXISTS nearby_held (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
@@ -3038,15 +3039,21 @@ async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: an
  * member's own or tied, kept from now on (nearby_tied) until the next set read says otherwise, so a tie this phone holds
  * no row for (a deal made elsewhere, or older than the deals it reads) keeps its listing too. `setHash`, when this write
  * carries the node's set: the node's hash of it, stored with the set (nearby_held) in this same transaction, so the hash
- * the phone sends back always names the set it holds; null forgets both (the next read is named the set in full).
+ * the phone sends back always names the set it holds; null forgets both (the next read is named the set in full). `tag`:
+ * the ETag of a read that has landed whole (every row of its set held), which the phone sends with its next delta and is
+ * answered 304 while nothing in the set changed; null forgets it, as the first write of every read does.
  */
 async function keepPostsNearby(
     txn: SQLite.SQLiteDatabase,
-    nearby: { set?: unknown; tied?: unknown; setHash?: unknown; area?: { lat: number; lng: number } | null; max?: unknown },
+    nearby: { set?: unknown; tied?: unknown; setHash?: unknown; tag?: unknown; area?: { lat: number; lng: number } | null; max?: unknown },
     selfPubkey: string | null,
     fresh: ReadonlySet<string>,
 ): Promise<void> {
     if (!selfPubkey) return;
+    if (nearby.tag !== undefined) {
+        await txn.runAsync("DELETE FROM nearby_held WHERE k = 'tag'");
+        if (typeof nearby.tag === 'string' && nearby.tag !== '') await txn.runAsync("INSERT INTO nearby_held (k, v) VALUES ('tag', ?)", [nearby.tag]);
+    }
     const max = typeof nearby.max === 'number' && Number.isFinite(nearby.max) && nearby.max >= 0 ? nearby.max : null;
     const set = Array.isArray(nearby.set) ? nearby.set.filter((id): id is string => typeof id === 'string') : null;
     if (max === null && set === null) return;
@@ -3100,6 +3107,15 @@ export async function readNearbyHeld(): Promise<{ set: string[]; hash: string } 
         const set = JSON.parse(rows.find(r => r.k === 'set')?.v ?? 'null');
         if (!hash || !Array.isArray(set) || !set.every(id => typeof id === 'string')) return null;
         return { set, hash };
+    } catch {
+        return null;
+    }
+}
+
+/** The ETag of this phone's last read by area that landed whole (keepPostsNearby `tag`), or null. */
+export async function readNearbyTag(): Promise<string | null> {
+    try {
+        return (await (await getDb()).getFirstAsync<{ v: string }>("SELECT v FROM nearby_held WHERE k = 'tag'"))?.v || null;
     } catch {
         return null;
     }

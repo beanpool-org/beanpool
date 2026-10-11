@@ -14,7 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanpool/core';
-import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readNearbyHeld } from '../utils/db';
+import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readNearbyHeld, readNearbyTag } from '../utils/db';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
@@ -554,9 +554,13 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // The set this phone holds and the node's hash of it: the read sends the hash back (`setHash`), and while that is
         // still the set the node names none, only echoes the hash (utils/posts-nearby.ts nearbyLastSet).
         let nearbyHeld: { set: string[]; hash: string } | null = null;
+        // The tag of the last read that landed whole: sent with a delta, it is answered 304 while nothing in the set changed,
+        // whatever the cursor (the node's tag leaves it out: REPORT-geosync-load-B, item 3).
+        let nearbyTag: string | null = null;
         if (nearbyLimits) {
             nearbyArea = await nearbyAreaForSync(anchorUrl, pubKey, signer);
             nearbyHeld = await readNearbyHeld();
+            nearbyTag = await readNearbyTag();
             // No held read: the set is a few pages, and each of them names all of it.
             postsHeld = null;
             // A first read by area, or an area that moved: the new neighbourhood, whole.
@@ -662,9 +666,11 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // `setOnce=1`: the node names the member's set on the read's last page only (utils/posts-nearby.ts nearbyPageOf),
             // and with `setHash` not at all while the set this phone holds is still the set.
             const nearbyQuery = () => `limit=200&sync=true&nearby=1&setOnce=1${nearbyHeld ? `&setHash=${encodeURIComponent(nearbyHeld.hash)}` : ''}`;
-            const pullPosts = (cursor: string, after: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? nearbyQuery() : 'limit=1000&sync=true'}&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
+            // `tag`: this phone's own If-None-Match (a by-area delta's first page), where the platform cache knows no URL it
+            // never asked; the platform passes its 304 through as one.
+            const pullPosts = (cursor: string, after: string | null = null, tag: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? nearbyQuery() : 'limit=1000&sync=true'}&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
                 method: 'GET',
-                headers: { 'Accept': 'application/json' },
+                headers: { 'Accept': 'application/json', ...(tag ? { 'If-None-Match': tag } : {}) },
                 signal: timeouts.signal(30000)
             });
             // A page's rows, or null for a body that isn't a list: never a throw, which would end the cycle after the first
@@ -698,7 +704,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 }
                 return { rows, stoppedAt: null as string | null, pages };
             };
-            let postsRes = await pullPosts(postsSyncParam, postsHeld?.after ?? null);
+            // A by-area delta carries the tag of the last read that landed whole; a whole read never does (it holds nothing to
+            // confirm: a first read, a moved area, an emptied copy).
+            let postsRes = await pullPosts(postsSyncParam, postsHeld?.after ?? null, nearbyLimits && postsIsIncremental ? nearbyTag : null);
             // The node answered the held page (whatever it said): one more cycle that asked for it. Stored now, so a cycle
             // the answer ends counts too.
             if (postsHeld) {
@@ -830,7 +838,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 let named = nearbyLastSet(nearbyFirst, null);
                 let last = nearbyFirst;
                 let rows = nearbyFirst.posts.length;
-                let complete = await writeNear({ posts: nearbyFirst.posts });
+                // The tag a read leaves goes with its first write, and is stored again once every row of its set is held.
+                let lastTag = postsRes.headers.get('etag');
+                let complete = await writeNear({ posts: nearbyFirst.posts, ...(nearbyTag ? { postsNearby: { tag: null } } : {}) });
                 if (complete) changed();
                 let next = complete ? nextPageKeyOf(postsRes) : null;
                 let pages = 1;
@@ -844,6 +854,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     }
                     named = nearbyLastSet(page, null) ?? named;
                     last = page;
+                    lastTag = res.headers.get('etag');
                     rows += page.posts.length;
                     pages++;
                     next = nextPageKeyOf(res);
@@ -876,6 +887,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                         if (theirs.length > 0 && !(await writeNear({ posts: theirs, postsNearby: keep }))) break;
                         fetched += theirs.length;
                     }
+                    // Every row of the set held: the read's tag describes what this phone holds, so the next delta sends it.
+                    if (complete && fetched === missing.length && lastTag) await writeNear({ postsNearby: { tag: lastTag } });
                     if (takenOver) postsReplaced = complete;
                     // The whole read the area's move asked for has landed: the next ones are deltas again.
                     if (complete && !postsIsIncremental && nearbyArea?.whole) {

@@ -33,7 +33,10 @@
  *  12. a phone that says `setOnce=1` is named the set on the last page of a read only (REPORT-geosync-load-B, item 1):
  *      each page before it answers `{ posts }`; a read without it is answered as before, the set on each page;
  *  13. a phone that sends the hash of the set it holds (`setHash`) is answered `{ posts, setHash }` on that page when the
- *      set and its `tied` are unchanged (item 2), the hash echoed; another hash, or none, gets the set in full.
+ *      set and its `tied` are unchanged (item 2), the hash echoed; another hash, or none, gets the set in full;
+ *  14. the tag of a by-area read leaves out where the read starts (`updatedAfter`), its page and the held hash (item 3):
+ *      each page of one read carries the same tag, and that tag sent with a delta from any later cursor is answered 304
+ *      while nothing in the set changed (a change 300 km away included), 200 once a listing in it does.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-sync-nearby)
  */
@@ -622,6 +625,36 @@ async function main() {
         assert(afterDeal.keys.join() === 'posts,set,setHash,tied' && afterDeal.set.join() === held.set.join() && afterDeal.setHash !== held.setHash
             && !!afterDeal.tied?.includes(dealt.id),
             'a deal opened on a listing already in her set: the same ids, a new hash, and the set named with the listing tied');
+    }
+
+    // ── 14. the 304 at any cursor ──
+    console.log('\n── 14. a phone that holds a read\'s tag gets the 304 from any later cursor while nothing in its set changed ──');
+    {
+        const busy = members[1].id;
+        const read = await readNearby(busy, undefined, '&setOnce=1');
+        const tags = new Set(read.answers.map(a => a.etag));
+        assert(read.answers.length >= 3 && tags.size === 1, `each page of one read carries the one tag of the set (${read.answers.length} pages, ${tags.size} tag(s))`);
+        const tag = read.answers[0].etag || '';
+        const hash = read.answers[read.answers.length - 1].setHash;
+        const deltaFrom = (ms: number, held = hash, inm = tag) =>
+            get(`${SYNC}&nearby=1&setOnce=1&setHash=${held}&updatedAfter=${encodeURIComponent(iso(ms))}&paged=1`, busy, { 'If-None-Match': inm });
+        const fromLater = await deltaFrom(Date.now() - 300_000);
+        assert(fromLater.status === 304 && !!fromLater.epoch, `a delta from a later cursor, with that tag: 304, with the epoch (${fromLater.status})`);
+        assert((await deltaFrom(Date.now() - 1000, 'another-held-hash')).status === 304, 'from another cursor and another held hash: 304');
+        const busyArea = db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?').get(busy.pubKeyHex) as { area_lat: number; area_lng: number };
+        const farOne = (db.prepare('SELECT id, lat, lng FROM posts WHERE lat IS NOT NULL AND active = 1').all() as Array<{ id: string; lat: number; lng: number }>)
+            .find(p => haversineKm(busyArea.area_lat, busyArea.area_lng, p.lat, p.lng) > 300)!;
+        db.prepare(`UPDATE posts SET title = 'Far change 14', updated_at = ? WHERE id = ?`).run(iso(Date.now()), farOne.id);
+        const afterFar = await deltaFrom(Date.now() - 1000);
+        assert(afterFar.status === 304, `a listing 300 km+ away edited: still 304 (${afterFar.status})`);
+        const nearOne = read.set.find(id => (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(id) as any)?.author_pubkey !== busy.pubKeyHex)!;
+        db.prepare(`UPDATE posts SET title = 'Near change 14', updated_at = ? WHERE id = ?`).run(iso(Date.now()), nearOne);
+        const afterNear = await deltaFrom(Date.now() - 1000);
+        assert(afterNear.status === 200 && afterNear.etag !== tag && afterNear.posts.some(r => r.id === nearOne && r.title === 'Near change 14'),
+            `a listing in her set edited: 200 with a new tag, the change in it (${afterNear.status})`);
+        assert((await deltaFrom(Date.now() - 1000, hash, afterNear.etag || '')).status === 304, 'and with that new tag, from any cursor: 304 again');
+        const otherTypes = await get(`/api/marketplace/posts?limit=200&sync=true&types=offer&nearby=1&setOnce=1&paged=1`, busy, { 'If-None-Match': afterNear.etag || '' });
+        assert(otherTypes.status === 200, `a read of other types is another body: never confirmed with this tag (${otherTypes.status})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

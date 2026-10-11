@@ -44,7 +44,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import {
     dmPublicKeyOf, groupEpochCanonical, groupKeyCommit, groupMembersDigest, groupWrapsDigest, makeGroupEpochRecord, makeGroupTopUp,
-    openGroupLine, openMyGroupKey, sealGroupLine, verifyGroupEpochRecord, wrapGroupKey, GROUP_NONCE_PREFIX,
+    openGroupLine, openMyGroupKey, sealGroupLine, verifyGroupEpochRecord, verifyGroupTopUp, wrapGroupKey, GROUP_NONCE_PREFIX,
     type GroupEpochReason, type GroupEpochRecord, type GroupServedWrap,
 } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -129,14 +129,14 @@ function resign(r: Omit<GroupEpochRecord, 'sig'>, signer: Id): GroupEpochRecord 
     return { ...r, sig: b64(ed25519.sign(sha256Utf8(groupEpochCanonical(r)), Buffer.from(signer.seedHex, 'hex'))) };
 }
 
-/** A member's side: fetch …/keys, verify the record and open my wrap for `epoch` against the roster the node serves. */
+/** A member's side: fetch …/keys, verify the record and open my wrap for `epoch`. Reading checks no roster (step 2b, §2). */
 async function myKey(who: Id, groupId: string, epoch: number, served?: Res): Promise<Uint8Array> {
     const keys = served ?? await call('GET', who, `/api/groups/${groupId}/keys`);
     const rec = (keys.body.epochs as any[]).find((e) => e.epoch === epoch);
     const wrap = (keys.body.myWraps as any[]).find((w) => w.epoch === epoch) as GroupServedWrap | undefined;
     if (!rec || !wrap) throw new Error(`no record or wrap for epoch ${epoch}`);
     const record: GroupEpochRecord = { groupId, ...rec };
-    return openMyGroupKey(record, wrap, who.seedHex, { groupId, activeMembers: keys.body.roster });
+    return openMyGroupKey(record, wrap, who.seedHex, { groupId });
 }
 
 async function main(): Promise<void> {
@@ -164,8 +164,9 @@ async function main(): Promise<void> {
     // ── 1. the first epoch ─────────────────────────────────────────────────────────────────────────
     console.log('── 1. the first epoch, and what POST …/keys/epoch refuses ──');
     const k0 = await call('GET', ana, keysPath);
-    assert(k0.status === 200 && k0.body.current === null && k0.body.fromEpoch === null && JSON.stringify(k0.body.roster) === JSON.stringify([ana.pk]),
-        `a group with no epoch: current null, Ana's roster of one (got ${k0.status} ${JSON.stringify(k0.body)})`);
+    // fromEpoch is a number the creation wrote (step 2b, §4): the creator holds keys from epoch 1, which does not exist yet.
+    assert(k0.status === 200 && k0.body.current === null && k0.body.fromEpoch === 1 && k0.body.epochs.length === 0 && JSON.stringify(k0.body.roster) === JSON.stringify([ana.pk]),
+        `a group with no epoch: current null, Ana's fromEpoch 1, nothing served, her roster of one (got ${k0.status} ${JSON.stringify(k0.body)})`);
     const noKeyYet = await sendLine(ana, { ciphertext: b64(crypto.randomBytes(120)), nonce: GROUP_NONCE_PREFIX + b64(crypto.randomBytes(24)) }, { epoch: 1 });
     assert(noKeyYet.status === 409 && noKeyYet.body.code === 'epoch_needed', `a line before any epoch is refused: epoch_needed (got ${noKeyYet.status} ${noKeyYet.body?.code})`);
 
@@ -334,16 +335,19 @@ async function main(): Promise<void> {
     const rogueTopUp = makeGroupTopUp(new Uint8Array(rogueKey), { myEdPrivHex: outsider.seedHex, groupId: G, epoch: 4, recipientPubHex: ben.pk });
     db.prepare('UPDATE group_key_wraps SET wrapper_pubkey = ?, eph_pub = ?, nonce = ?, wrapped = ?, sig = ? WHERE group_id = ? AND epoch = 4 AND recipient_pubkey = ?')
         .run(outsider.pk, rogueTopUp.ephPub, rogueTopUp.nonce, rogueTopUp.wrapped, rogueTopUp.sig, G, ben.pk);
+    // Reading checks no roster (step 2b, §2): a key of the operator's own is refused by the commitment, whoever signed it.
     refuses(() => openMyGroupKey({ groupId: G, ...(swapped.body.epochs.find((e: any) => e.epoch === 4)) },
         { epoch: 4, wrapper: outsider.pk, ephPub: rogueTopUp.ephPub, nonce: rogueTopUp.nonce, wrapped: rogueTopUp.wrapped, sig: rogueTopUp.sig }, ben.seedHex,
-        { groupId: G, activeMembers: roster }), /wrapper is not an active member/, 'a top-up row signed by a key in no roster is refused by the roster check');
+        { groupId: G }), /commits to/, 'a top-up row signed by a key in no roster, holding the operator\'s key, is refused by the commitment');
     const k4served = (await call('GET', ben, keysPath)).body;
-    refuses(() => myKeySync(ben, G, 4, k4served, roster), /wrapper is not an active member/, '… and so it is when served through GET …/keys');
+    refuses(() => myKeySync(ben, G, 4, k4served), /commits to/, '… and so it is when served through GET …/keys');
+    refuses(() => verifyGroupTopUp(G, { ...rogueTopUp, recipient: ben.pk }, { activeMembers: roster }), /wrapper is not an active member/,
+        'and the node\'s own check refuses to store it: its wrapper is in no roster');
     const wrongByAna = makeGroupTopUp(new Uint8Array(rogueKey), { myEdPrivHex: ana.seedHex, groupId: G, epoch: 4, recipientPubHex: ben.pk });
     db.prepare('UPDATE group_key_wraps SET wrapper_pubkey = ?, eph_pub = ?, nonce = ?, wrapped = ?, sig = ? WHERE group_id = ? AND epoch = 4 AND recipient_pubkey = ?')
         .run(ana.pk, wrongByAna.ephPub, wrongByAna.nonce, wrongByAna.wrapped, wrongByAna.sig, G, ben.pk);
     const k4c = (await call('GET', ben, keysPath)).body;
-    refuses(() => myKeySync(ben, G, 4, k4c, roster), /commits to/, "a member's genuine top-up holding another key is refused by the commitment");
+    refuses(() => myKeySync(ben, G, 4, k4c), /commits to/, "a member's genuine top-up holding another key is refused by the commitment");
     db.prepare('UPDATE group_key_wraps SET wrapper_pubkey = ?, eph_pub = ?, nonce = ?, wrapped = ?, sig = ? WHERE group_id = ? AND epoch = 4 AND recipient_pubkey = ?')
         .run(realBenWrap.wrapper_pubkey, realBenWrap.eph_pub, realBenWrap.nonce, realBenWrap.wrapped, realBenWrap.sig, G, ben.pk);
     assert(Buffer.from(await myKey(ben, G, 4)).equals(Buffer.from(rem4.groupKey)), 'with the real row back, Ben opens epoch 4 again');
@@ -360,7 +364,7 @@ async function main(): Promise<void> {
         .run(G, ben.pk, ana.pk, opWrap.ephPub, opWrap.nonce, opWrap.wrapped, now, now);
     const k5 = (await call('GET', ben, keysPath)).body;
     assert(k5.current === 5, 'the node now serves its forged epoch 5 as current');
-    refuses(() => myKeySync(ben, G, 5, k5, roster), /signature/, 'a forged epoch record is refused: its signature is not Ana\'s');
+    refuses(() => myKeySync(ben, G, 5, k5), /signature/, 'a forged epoch record is refused: its signature is not Ana\'s');
     db.prepare('DELETE FROM group_key_wraps WHERE group_id = ? AND epoch = 5').run(G);
     db.prepare('DELETE FROM group_key_epochs WHERE group_id = ? AND epoch = 5').run(G);
 
@@ -471,22 +475,29 @@ async function main(): Promise<void> {
     const pointless = await call('POST', ben, `/api/groups/${clock.id}/join`, { epoch: epochBy(ben, clock.id, 4, 'join', [ana, ben], ben).record });
     assert(pointless.status === 400 && pointless.body.code === 'epoch_not_applicable' && count('SELECT MAX(epoch) AS n FROM group_key_epochs WHERE group_id = ?', clock.id) === 3,
         `joining again while active, with an epoch: 400 epoch_not_applicable, and no epoch 4 is stored (got ${pointless.status} ${pointless.body?.code})`);
-    // An edit re-seals under the current epoch and moves the row's epoch with it (§7.4), or nobody could open it.
+    // An edit re-seals under the line's OWN epoch and the row's epoch never moves (§7.4 as step 2b decided it, Marty's
+    // pick 1): a member who joined since never holds that key. Flipped from step 2, where the edit moved to the current one.
     const clockLine = crypto.randomUUID();
     const sentE3 = await call('POST', ana, `/api/groups/${clock.id}/chat/message`, {
         ...sealGroupLine('the gate code is 4417', { myEdPrivHex: ana.seedHex, groupKey: rejoin3.groupKey, groupId: clock.id, epoch: 3, messageId: clockLine }), metadata: { epoch: 3 }, clientId: clockLine });
     assert(sentE3.status === 201, 'Ana writes a line under epoch 3');
     const rot4 = epochBy(ben, clock.id, 4, 'rotate', [ana, ben]);
     assert((await call('POST', ben, `${clockKeys}/epoch`, { epoch: rot4.record })).status === 201, 'Ben rotates to epoch 4');
-    const edited = sealGroupLine('the gate code is 5528', { myEdPrivHex: ana.seedHex, groupKey: rot4.groupKey, groupId: clock.id, epoch: 4, messageId: clockLine, part: 'edit' });
-    const editRes = await call('POST', ana, '/api/messages/edit', { messageId: clockLine, ...edited, metadata: { epoch: 4 } });
+    const underCurrent = sealGroupLine('the gate code is 5528', { myEdPrivHex: ana.seedHex, groupKey: rot4.groupKey, groupId: clock.id, epoch: 4, messageId: clockLine, part: 'edit' });
+    const refusedEdit = await call('POST', ana, '/api/messages/edit', { messageId: clockLine, ...underCurrent, metadata: { epoch: 4 } });
+    const unchanged = db.prepare('SELECT ciphertext, metadata FROM messages WHERE id = ?').get(clockLine) as any;
+    assert(refusedEdit.status === 409 && refusedEdit.body?.code === 'epoch_not_lines' && refusedEdit.body?.epoch === 3 && JSON.parse(unchanged.metadata).epoch === 3
+        && unchanged.ciphertext === sentE3.body.message.ciphertext,
+        `an edit sealed under the current epoch 4 is refused 409 epoch_not_lines, naming the line's epoch 3, nothing written (got ${refusedEdit.status} ${refusedEdit.body?.code})`);
+    const edited = sealGroupLine('the gate code is 5528', { myEdPrivHex: ana.seedHex, groupKey: rejoin3.groupKey, groupId: clock.id, epoch: 3, messageId: clockLine, part: 'edit' });
+    const editRes = await call('POST', ana, '/api/messages/edit', { messageId: clockLine, ...edited, metadata: { epoch: 3 } });
     const editedRow = db.prepare('SELECT ciphertext, nonce, metadata FROM messages WHERE id = ?').get(clockLine) as any;
     const editedEpoch = JSON.parse(editedRow.metadata).epoch;
-    assert(editRes.status === 200 && editedEpoch === 4, `Ana edits it under epoch 4, and the row's epoch moves to 4 (got ${editRes.status}, epoch ${editedEpoch})`);
+    assert(editRes.status === 200 && editedEpoch === 3, `Ana edits it under its own epoch 3, and the row's epoch stays 3 (got ${editRes.status}, epoch ${editedEpoch})`);
     let editedText = '';
     try {
         editedText = openGroupLine({ ciphertext: editedRow.ciphertext, nonce: editedRow.nonce },
-            { groupId: clock.id, epoch: editedEpoch, senderPubHex: ana.pk, messageId: clockLine, part: 'edit' }, editedEpoch === 4 ? rot4.groupKey : rejoin3.groupKey).text;
+            { groupId: clock.id, epoch: editedEpoch, senderPubHex: ana.pk, messageId: clockLine, part: 'edit' }, editedEpoch === 3 ? rejoin3.groupKey : rot4.groupKey).text;
     } catch { /* the epoch the row names does not open it */ }
     assert(editedText === 'the gate code is 5528', `so Ben opens the edit under the epoch the row names (got "${editedText}")`);
 
@@ -506,10 +517,10 @@ async function main(): Promise<void> {
 }
 
 /** myKey with an answer already fetched. */
-function myKeySync(who: Id, groupId: string, epoch: number, served: any, activeMembers: string[]): Uint8Array {
+function myKeySync(who: Id, groupId: string, epoch: number, served: any): Uint8Array {
     const rec = (served.epochs as any[]).find((e) => e.epoch === epoch);
     const wrap = (served.myWraps as any[]).find((w) => w.epoch === epoch) as GroupServedWrap;
-    return openMyGroupKey({ groupId, ...rec }, wrap, who.seedHex, { groupId, activeMembers });
+    return openMyGroupKey({ groupId, ...rec }, wrap, who.seedHex, { groupId });
 }
 
 main().catch((e) => {

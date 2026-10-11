@@ -29,7 +29,7 @@ import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
 import { tombstoneFields, writeMessageTombstone } from './message-tombstone.js';
 import type { MessagingCallbacks } from './messaging.js';
 import {
-    assertLineEpochIsCurrent, filterDeclaredMentions, fromEpochOf, groupChatEncryption, GroupKeyError, GROUP_CHAT_UPDATE_APP,
+    assertLineEpochIsCurrent, filterDeclaredMentions, fromEpochOf, fromEpochsOf, groupChatEncryption, GroupKeyError, GROUP_CHAT_UPDATE_APP,
 } from './group-keys.js';
 
 // Moved to core (group-crypto.ts): the sending app detects mentions and declares them (§9). Still exported from here.
@@ -78,6 +78,8 @@ export const GroupSystemType = {
     POLL_POSTED: 'GROUP_POLL_POSTED',
     /** Once per group, when the node switched to locked lines and removed the readable ones (§14.1). */
     CHAT_LOCKED: 'GROUP_CHAT_LOCKED',
+    /** Its members closed the group by a vote (close_group): the chat stays to read and takes no new line. */
+    CLOSED: 'GROUP_CLOSED',
 } as const;
 export type GroupSystemTypeVal = typeof GroupSystemType[keyof typeof GroupSystemType];
 
@@ -87,6 +89,9 @@ export interface GroupThreadView {
     group: { id: string; name: string; slug: string; category: string; joinPolicy: string; avatarUrl: string | null };
     role: GroupRole;
     canPost: boolean;
+    /** When its members closed the group by a vote (group_closures), or null; a closed group's chat takes no new line. */
+    closedAt: string | null;
+    readOnly: boolean;
     isConvenor: boolean;
     notice: string;
     mute: ChatMute | null;
@@ -248,9 +253,12 @@ function participantKeys(groupId: string): string[] {
         .map(r => r.public_key);
 }
 
-/** Live update to the people in the chat only — never to every socket, as the enterprise thread does. */
+/**
+ * Live update to the people in the chat only — never to every socket, as the enterprise thread does — and of them only
+ * those the line may be served to (groupLineHearers): a new line, an edit, a removal.
+ */
 function broadcastToChat(cb: MessagingCallbacks, groupId: string, message: EventThreadMessage, action?: GroupChatAction, extra: string[] = []): void {
-    const recipients = Array.from(new Set([...participantKeys(groupId), ...extra]));
+    const recipients = groupLineHearers(groupId, message.metadata, Array.from(new Set([...participantKeys(groupId), ...extra])));
     cb.broadcast({
         type: 'new_message',
         conversationId: groupId,
@@ -316,6 +324,17 @@ export function groupLineForReader(metadata: unknown, fromEpoch: number | null):
     return fromEpoch !== null && typeof epoch === 'number' && epoch >= fromEpoch;
 }
 
+/**
+ * Of `keys`, the ones a line with this metadata may reach (groupLineForReader, as the reads serve it): a line sealed under
+ * an epoch from before someone's membership reaches them by no path, live or read (review of #1772, finding 2). A line
+ * with no epoch reaches them all.
+ */
+export function groupLineHearers(groupId: string, metadata: unknown, keys: string[]): string[] {
+    if (groupLineForReader(metadata, null)) return keys;
+    const from = fromEpochsOf(groupId);
+    return keys.filter((pk) => groupLineForReader(metadata, from.get(pk) ?? null));
+}
+
 export function getGroupThreadMessages(groupId: string, viewer: string, limit = 50, offset = 0): EventThreadMessage[] {
     const fromEpoch = fromEpochOf(groupId, viewer);
     const rows = db.prepare(`
@@ -335,6 +354,7 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
     const role = groupChatRole(groupId, viewerPubkey);
     if (!role) throw new Error(GROUP_CHAT_FORBIDDEN);
     const conversation = ensureGroupThread(groupId);
+    const closedAt = (db.prepare('SELECT closed_at FROM group_closures WHERE group_id = ?').get(groupId) as { closed_at: string } | undefined)?.closed_at ?? null;
     return {
         conversation,
         messages: getGroupThreadMessages(groupId, viewerPubkey!, limit, offset),
@@ -343,7 +363,9 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
             joinPolicy: group.join_policy, avatarUrl: groupPictureUrlOf(group.id, group.avatar_ref),
         },
         role,
-        canPost: role !== 'observer',
+        canPost: role !== 'observer' && !closedAt,
+        closedAt,
+        readOnly: !!closedAt,
         isConvenor: role === 'convenor',
         notice: GROUP_THREAD_NOTICE,
         mute: getChatMute(groupId, viewerPubkey!),
@@ -376,24 +398,32 @@ function metadataObject(metadata: unknown): Record<string, unknown> {
 }
 
 /**
- * The node's keyless check of a sealed line (Appendix B), for a send and an edit alike: the group prefix with a 24-byte
- * nonce and a ciphertext at least a sealed line long and no longer than GROUP_LINE_MAX_BYTES, under the current epoch,
- * not stale. A readable line, or any other form, is refused with the words an old app shows. Returns the epoch.
+ * The node's keyless check of a sealed line's form (Appendix B), for a send and an edit alike: the group prefix with a
+ * 24-byte nonce and a ciphertext at least a sealed line long and no longer than GROUP_LINE_MAX_BYTES. A readable line, or
+ * any other form, is refused with the words an old app shows.
  */
-export function assertSealedGroupLine(groupId: string, ciphertext: unknown, nonce: unknown, meta: Record<string, unknown>): number {
+function assertSealedGroupLineForm(ciphertext: unknown, nonce: unknown): void {
     if (!isGroupEncryptedPayload({ ciphertext, nonce })) throw new GroupKeyError(400, 'not_encrypted', GROUP_CHAT_UPDATE_APP);
     if (Buffer.byteLength(String(ciphertext), 'base64') > GROUP_LINE_MAX_BYTES) {
         throw new Error(`Message is too long (maximum ${GROUP_THREAD_MESSAGE_MAX} characters)`);
     }
+}
+
+/** A new line's keyless check: sealed (assertSealedGroupLineForm), under the current epoch, not stale. Returns the epoch. */
+export function assertSealedGroupLine(groupId: string, ciphertext: unknown, nonce: unknown, meta: Record<string, unknown>): number {
+    assertSealedGroupLineForm(ciphertext, nonce);
     return assertLineEpochIsCurrent(groupId, meta.epoch);
 }
 
 /**
  * Post a sealed line in a group's chat. Convenors and members only; observers read. The same author block and client-id
  * idempotency as the other threads; the line must be sealed under the current, non-stale epoch (assertSealedGroupLine).
- * The node stores { epoch, replyToId?, mentions? } beside it, the mentions being the ones the app declared, cut to active
- * members other than the author (§9). Every other member in the chat gets a push unless they muted it; a mention gets
- * through a mute.
+ * The node stores { epoch, sender, replyToId?, mentions? } beside it, the mentions being the ones the app declared, cut to
+ * active members other than the author (§9). `sender` is the signed caller, the key the line's associated data and inner
+ * signature are bound to: a re-key moves author_pubkey to the new key and leaves metadata alone, so apps open a line with
+ * `metadata.sender ?? author_pubkey` (DESIGN-group-chat-epochs-over-time-fable.md §2); a wrong sender fails to open. Which
+ * key an app shows as the line's author is not settled here (display rule: see the line-display design; slice 3). Every
+ * other member in the chat gets a push unless they muted it; a mention gets through a mute.
  */
 export function postGroupThreadMessage(
     cb: MessagingCallbacks,
@@ -436,7 +466,7 @@ export function postGroupThreadMessage(
     const nonce = line.nonce;
     const timestamp = new Date().toISOString();
     // `replyToId` is stored exactly as a DM stores it, so one component draws a quoted reply in either chat.
-    const meta: Record<string, unknown> = { epoch };
+    const meta: Record<string, unknown> = { epoch, sender: authorPubkey };
     if (mentions.length > 0) meta.mentions = mentions;
     if (replyToId) meta.replyToId = replyToId;
     const metadata = JSON.stringify(meta);
@@ -497,7 +527,8 @@ export function removeGroupThreadMessage(
     // A convenor whose account is suspended removes nothing until it ends (the route answers 403 for "suspended").
     assertConvenorPowersActive(db, actorPubkey);
     const msgRow = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?').get(messageId, groupId) as any;
-    if (!msgRow) throw new Error('Message not found');
+    // A line from before the convenor's membership is one they were never served: an id nobody has (groupLineHearers).
+    if (!msgRow || !groupLineForReader(msgRow.metadata, fromEpochOf(groupId, actorPubkey))) throw new Error('Message not found');
     if (msgRow.type === 'system') throw new Error('A system line cannot be removed');
     // Already down — a second removal is a no-op success, and must not rewrite who took it down first (an
     // author who deleted their own line stays the author on the record, not this convenor).
@@ -524,16 +555,25 @@ export function assertCanWriteInGroupChat(groupId: string, actorPubkey: string):
 }
 
 /**
- * An edited group chat line (§7.4), checked exactly as a new one is: sealed, bounded, under the current non-stale epoch,
- * which the edit re-seals under. Returns what to store: the line as sent, and the row's metadata with its epoch moved
- * to the current one (the reply and the mentions stay the original's).
+ * An edited group chat line (§7.4 as step 2b decided it: DESIGN-group-chat-epochs-over-time-fable.md §3, Marty's pick 1).
+ * An edit is part of its line and has its line's audience: it is re-sealed under the line's OWN epoch, never the current
+ * one, so a member who joined since never holds its key, whatever the read filter does. Sealed and bounded as a new line
+ * is, and naming the row's epoch, else 409 epoch_not_lines with that epoch; no current or stale check (the line's epoch
+ * is older by nature). Returns what to store: the line as sent, and the row's metadata with its epoch unchanged (the
+ * reply and the mentions stay the original's) and `sender` the editor, who sealed the bytes stored now: the author,
+ * under the key they hold today (postGroupThreadMessage).
  */
-export function groupChatEdit(groupId: string, row: { metadata?: string | null }, ciphertext: string, nonce: string, metadata: unknown): { ciphertext: string; nonce: string; metadata: string } {
-    const epoch = assertSealedGroupLine(groupId, ciphertext, nonce, metadataObject(metadata));
+export function groupChatEdit(row: { metadata?: string | null }, ciphertext: string, nonce: string, metadata: unknown, editor: string): { ciphertext: string; nonce: string; metadata: string } {
+    assertSealedGroupLineForm(ciphertext, nonce);
     let kept: Record<string, unknown> = {};
     try { kept = row.metadata ? JSON.parse(row.metadata) : {}; } catch { kept = {}; }
     if (!kept || typeof kept !== 'object' || Array.isArray(kept)) kept = {};
-    return { ciphertext, nonce, metadata: JSON.stringify({ ...kept, epoch }) };
+    const own = typeof kept.epoch === 'number' && Number.isSafeInteger(kept.epoch) ? kept.epoch : null;
+    if (own === null || metadataObject(metadata).epoch !== own) {
+        throw new GroupKeyError(409, 'epoch_not_lines', own === null ? 'This line was sealed under no epoch, so it cannot be edited.'
+            : `An edit is sealed under its line's own epoch, ${own}.`, { epoch: own });
+    }
+    return { ciphertext, nonce, metadata: JSON.stringify({ ...kept, epoch: own, sender: editor }) };
 }
 
 /** A message this group chat may be replied to: in this chat, and not a system line. */

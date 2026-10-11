@@ -328,6 +328,8 @@ export interface SyncGroupMember {
     updatedAt: string;
     /** When the row took its role (group_members.role_since). Absent from a node older than the column. */
     roleSince?: string | null;
+    /** The first epoch of the group's chat this membership holds keys from (group_members.from_epoch). Absent from a node older than the column. */
+    fromEpoch?: number | null;
 }
 
 /**
@@ -1276,6 +1278,7 @@ function groupMemberOfRow(r: any): SyncGroupMember {
         invitedBy: r.invited_by ?? null,
         updatedAt: r.updated_at || r.joined_at,
         roleSince: r.role_since ?? null,
+        fromEpoch: r.from_epoch ?? null,
     };
 }
 

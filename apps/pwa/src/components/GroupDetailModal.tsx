@@ -13,10 +13,11 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
-import { MAKE_OBSERVER_MEMBER_FIRST } from '@beanpool/core';
+import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, type GroupPerson } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { buildRosterView } from '../lib/group-roster';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
+import { GroupDecisions } from './EnterpriseDecisions';
 
 interface Props {
     group: Group | null;
@@ -96,6 +97,14 @@ export function GroupDetailModal({
     // with the native roster and with the engine that enforces it: a convenor never sees the Role select or ✕ on
     // the lead, or on another convenor.
     const roster = buildRosterView(groupData, members, myPubkey);
+    // Closed by its members' vote (DESIGN-group-decisions §2.3): it stays to read and takes nothing new.
+    const closed = !!groupData.closedAt;
+    // Everyone in the group now, for the Decisions block's names and pickers (the lead as 'lead').
+    const people: GroupPerson[] = members.filter(m => m.status === 'active').map(m => ({
+        pubkey: m.memberPubkey,
+        name: m.callsign || m.memberPubkey.slice(0, 10),
+        role: m.memberPubkey === groupData.leadPubkey ? 'lead' : m.role,
+    }));
 
     const handleJoin = async () => {
         setActionLoading(true);
@@ -251,6 +260,11 @@ export function GroupDetailModal({
                         <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
                             <span aria-hidden="true">🚪 </span>{groupData.joinPolicy.replace(/_/g, ' ')}
                         </span>
+                        {closed && (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-nature-100" data-testid="group-closed-pill">
+                                <span aria-hidden="true">🔒 </span>Closed
+                            </span>
+                        )}
                         {isConvenor && (
                             <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
                                 <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? 'Lead convenor' : 'Convenor'}
@@ -283,8 +297,31 @@ export function GroupDetailModal({
                         </p>
                     )}
 
+                    {closed && (
+                        <p className="m-0 p-3 rounded-xl border border-nature-300 dark:border-nature-700 text-sm text-nature-800 dark:text-nature-200 break-words" data-testid="group-closed-note">
+                            <span aria-hidden="true">🔒 </span>{GROUP_CLOSED_NOTE}
+                        </p>
+                    )}
+
+                    {/* The group's votes, high on the sheet: Home's vote line lands here. Drawn for anyone the node answers,
+                        members or not: someone removed or made an observer mid-vote still votes on it (#1784 review B1). It
+                        draws nothing for someone the node doesn't answer, or when there is no vote and none can open. */}
+                    {(
+                        <GroupDecisions
+                            groupId={groupData.id}
+                            myPubkey={myPubkey ?? null}
+                            people={people}
+                            joinPolicy={groupData.joinPolicy}
+                            onChanged={() => {
+                                // A vote carried out may move the lead, a role or the join rule, or close the group.
+                                void loadDetails();
+                                onMembershipChanged?.();
+                            }}
+                        />
+                    )}
+
                     {/* Convenor Tools Section */}
-                    {isConvenor && (
+                    {isConvenor && !closed && (
                         <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl space-y-3">
                             <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400">
                                 <span aria-hidden="true">🛡️ </span>Convenor Tools
@@ -359,7 +396,7 @@ export function GroupDetailModal({
 
                     {/* The quiet-lead vote, beside the roster it is about. It draws nothing unless the lead is
                         eligible for replacement or a vote has been held, so a healthy group sees no change. */}
-                    {isMember && (
+                    {isMember && !closed && (
                         <GroupSuccessionPanel
                             groupId={groupData.id}
                             members={members}
@@ -472,7 +509,7 @@ export function GroupDetailModal({
 
                     {/* Action Area */}
                     <div className="pt-2 space-y-2">
-                        {isMember && onPostToGroup && (
+                        {isMember && onPostToGroup && !closed && (
                             <button
                                 type="button"
                                 onClick={() => {
@@ -494,6 +531,10 @@ export function GroupDetailModal({
                             >
                                 Leave Group
                             </button>
+                        ) : closed ? (
+                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-sm text-center">
+                                Closed
+                            </div>
                         ) : isPending ? (
                             <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-400 font-bold text-sm text-center">
                                 Request Pending Approval

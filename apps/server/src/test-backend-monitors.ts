@@ -6,7 +6,7 @@
 
 import {
     initStateEngine, adminSetTier,
-    runWashSybilMetricsAudit, getCommunityHealth,
+    runWashSybilMetricsAudit, runWashSybilMetricsAuditSliced, getCommunityHealth,
     reconcileLedgerFromDb
 } from './state-engine.js';
 import { db } from './db/db.js';
@@ -106,6 +106,26 @@ async function main() {
         const spikeFlag = health2.flags.find(f => f.type === 'aggregate_spike' && f.description.includes('Aggregate credit spike'));
         assert(!!spikeFlag, 'Aggregate credit spike alert was raised in community health report');
         assert(!!spikeFlag?.description.includes('increased by 900.0%'), `Description is correct (got: "${spikeFlag?.description}")`);
+
+        // --- Test 5: the audit as the node's timers run it, a slice at a time ---
+        // In one go it held a 20,000-member node for 20 s (the global load test, 2026-10-11). Sliced, it gives the event
+        // loop a turn between slices; with sliceMs 0 a turn after every step, and every active member is at least one
+        // step. The turns are counted, not timed, so a slow CI machine cannot fail it.
+        for (let i = 0; i < 20; i++) seedMember(`slice${i}-${Date.now()}`, i % 3 === 0 ? -5 : 10, 30 + i);
+        reconcileLedgerFromDb();
+        const activeCount = (db.prepare("SELECT COUNT(*) AS n FROM members WHERE status = 'active'").get() as { n: number }).n;
+        const oneGo = runWashSybilMetricsAudit()!;
+        let turns = 0, otherWork = 0, ticking = true;
+        const tick = () => { if (ticking) { otherWork++; setImmediate(tick); } };
+        setImmediate(tick);
+        const sliced = await runWashSybilMetricsAuditSliced({ sliceMs: 0, onYield: () => turns++ });
+        ticking = false;
+        assert(activeCount >= 20 && turns >= activeCount, `Sliced audit gave the loop a turn per step: ${turns} turns for ${activeCount} active members`);
+        assert(otherWork >= turns / 2, `Other work ran while the sliced audit ran (${otherWork} turns of a ticker for ${turns} yields)`);
+        assert(JSON.stringify(sliced) === JSON.stringify(oneGo), `Sliced audit gives the one-go numbers (${JSON.stringify(sliced)} vs ${JSON.stringify(oneGo)})`);
+        const [a, b] = [runWashSybilMetricsAuditSliced({ sliceMs: 0 }), runWashSybilMetricsAuditSliced({ sliceMs: 0 })];
+        assert(a === b, 'A second start while the sliced audit runs joins the run in progress');
+        assert(JSON.stringify(await a) === JSON.stringify(oneGo), 'The joined run gives the one-go numbers');
 
         console.log(`\n${passed}/${run} checks passed.`);
         if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

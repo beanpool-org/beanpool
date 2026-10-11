@@ -329,6 +329,9 @@ function placelessListingArea(authorPublicKey: string): { lat: number; lng: numb
     return area ? { lat: area.lat, lng: area.lng } : null;
 }
 
+/** What a closed group answers a new post (state-engine GROUP_CLOSED is its chat's and its door's words). */
+export const GROUP_CLOSED_TO_POSTS = 'This group was closed by a vote of its members. It takes no new posts.';
+
 export function createPost(
     broadcast: BroadcastFn,
     type: 'offer' | 'need' | 'poll' | 'event',
@@ -422,6 +425,10 @@ export function createPost(
         ).get(options.targetGroupId, authorPublicKey);
         if (!isMem) {
             throw new Error('UNAUTHORIZED: Must be an active convenor or member to post to a group');
+        }
+        // A group its members closed by a vote takes no new post: offers, needs, polls and events (close_group, §2.3).
+        if (db.prepare('SELECT 1 FROM group_closures WHERE group_id = ?').get(options.targetGroupId)) {
+            throw new Error(GROUP_CLOSED_TO_POSTS);
         }
     } else if (audienceScope === 'direct') {
         if (!options?.targetPubkey && !options?.assignedTo) {
@@ -699,14 +706,27 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
         `).run(id, callerPublicKey, callerPublicKey, callerPublicKey);
         if (result.changes === 0) return;
         removed = true;
-        // Removing an event is cancelling it: the card shows CANCELLED to anyone who can still open it.
-        db.prepare(`UPDATE posts SET event_state = 'cancelled' WHERE id = ? AND type = 'event'`).run(id);
-        db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);
-        db.prepare(`UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'`).run(id);
+        cancelPostFollowOns(id);
     })();
     if (!removed) return false;
     bumpPostsVersion();
+    announcePostCancelled(broadcast, postRow, dealSides, push, callerPublicKey);
+    return true;
+}
 
+/** What a cancelled post takes with it, in the caller's transaction (removePost; a group's close, cancelClosedGroupPosts). */
+function cancelPostFollowOns(id: string): void {
+    // Removing an event is cancelling it: the card shows CANCELLED to anyone who can still open it.
+    db.prepare(`UPDATE posts SET event_state = 'cancelled' WHERE id = ? AND type = 'event'`).run(id);
+    db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);
+    db.prepare(`UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'`).run(id);
+}
+
+type CancelledPostRow = { id: string; type: string; title: string; author_pubkey: string; target_group_id: string | null; audience_scope: string | null; target_pubkey: string | null; assigned_to: string | null };
+
+/** After the commit: the post's audience hears it went, and an event's goers are told it is cancelled. */
+function announcePostCancelled(broadcast: BroadcastFn, postRow: CancelledPostRow, dealSides: string[], push: PushFn | undefined, actorPubkey: string): void {
+    const id = postRow.id;
     let recipients: string[] | undefined;
     if (postRow.audience_scope === 'group' && postRow.target_group_id) {
         const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(postRow.target_group_id) as any[];
@@ -722,9 +742,36 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     // Cancelling an event tells everyone who said they were going (§2.2). The chat turns read-only on its
     // own: event-thread.ts reads `event_state`, which the transaction above has already set to 'cancelled'.
     if (postRow.type === 'event') {
-        notifyEventChange(push, 'cancelled', id, postRow.title, callerPublicKey);
+        notifyEventChange(push, 'cancelled', id, postRow.title, actorPubkey);
     }
-    return true;
+}
+
+/**
+ * close_group (DESIGN-group-decisions §2.3): every live post of the group (paused ones too) is cancelled as removePost
+ * cancels one, in the vote's transaction. A deal already in escrow is left to finish (it holds the Beans); a deal only
+ * asked for is declined. The posts keep their group, so nobody outside it ever sees them. Hand the result to
+ * announceClosedGroupPosts after the commit.
+ */
+export function cancelClosedGroupPosts(groupId: string): Array<{ row: CancelledPostRow; dealSides: string[] }> {
+    const rows = db.prepare(
+        "SELECT id, type, title, author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE target_group_id = ? AND active = 1"
+    ).all(groupId) as CancelledPostRow[];
+    const cancelled: Array<{ row: CancelledPostRow; dealSides: string[] }> = [];
+    for (const row of rows) {
+        const dealSides = openDealSides(row.id);
+        const res = db.prepare("UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND active = 1").run(row.id);
+        if (res.changes === 0) continue;
+        cancelPostFollowOns(row.id);
+        cancelled.push({ row, dealSides });
+    }
+    return cancelled;
+}
+
+/** After a close's commit: the posts version moves (a cached feed revalidates to the change), and each post's removal is heard. */
+export function announceClosedGroupPosts(broadcast: BroadcastFn, cancelled: Array<{ row: CancelledPostRow; dealSides: string[] }>, push?: PushFn): void {
+    if (cancelled.length === 0) return;
+    bumpPostsVersion();
+    for (const { row, dealSides } of cancelled) announcePostCancelled(broadcast, row, dealSides, push, 'SYSTEM');
 }
 
 export const PRICE_FROZEN_ERROR = 'This post has a deal in progress, so its price can’t change until that deal is finished. To change the price, cancel or decline the deal first.';

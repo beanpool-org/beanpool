@@ -27,7 +27,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Pkcs8 } from './ed25519-key.js';
 import { mintGroupVectorRng } from './group-vector-rng.js';
 import type {
-    GroupCryptoRandom, GroupEpochCheck, GroupEpochRecord, GroupLineBinding, GroupLinePart, GroupLinePayload, GroupServedWrap, GroupTopUp,
+    GroupCryptoRandom, GroupEpochCheck, GroupEpochRecord, GroupKeyOpenCheck, GroupLineBinding, GroupLinePart, GroupLinePayload, GroupServedWrap, GroupTopUp,
     GroupTopUpCheck, MakeGroupEpochInput, OpenedGroupLine, SealGroupLineInput,
 } from './group-crypto.js';
 
@@ -151,10 +151,12 @@ export const GROUP_LINE_VECTORS: GroupLineVector[] = [
 /** The parts of an app's e2e-crypto module the vectors exercise. */
 export interface GroupCryptoApi {
     makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCryptoRandom): { record: GroupEpochRecord; groupKey: Uint8Array };
-    openGroupEpochRecord(record: GroupEpochRecord, myEdPrivHex: string, check: GroupEpochCheck): Uint8Array;
-    openMyGroupKey(record: GroupEpochRecord, myWrap: GroupServedWrap, myEdPrivHex: string, check: GroupEpochCheck): Uint8Array;
+    verifyGroupEpochRecord(record: GroupEpochRecord, check: GroupEpochCheck): void;
+    openGroupEpochRecord(record: GroupEpochRecord, myEdPrivHex: string, check: GroupKeyOpenCheck): Uint8Array;
+    openMyGroupKey(record: GroupEpochRecord, myWrap: GroupServedWrap, myEdPrivHex: string, check: GroupKeyOpenCheck): Uint8Array;
     makeGroupTopUp(groupKey: Uint8Array, input: { myEdPrivHex: string; groupId: string; epoch: number; recipientPubHex: string }, opts?: GroupCryptoRandom): GroupTopUp;
-    openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string, keyCommit: string, check?: GroupTopUpCheck): Uint8Array;
+    verifyGroupTopUp(groupId: string, t: GroupTopUp, check?: GroupTopUpCheck): void;
+    openGroupTopUp(groupId: string, t: GroupTopUp, myEdPrivHex: string, keyCommit: string): Uint8Array;
     groupMessageKey(groupKey: Uint8Array, messageId: string): Uint8Array;
     sealGroupLine(text: string, input: SealGroupLineInput, opts?: GroupCryptoRandom): GroupLinePayload;
     openGroupLine(payload: GroupLinePayload, ref: GroupLineBinding, groupKey: Uint8Array): OpenedGroupLine;
@@ -204,18 +206,20 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
         }
         const commit = GROUP_VECTOR_RECORD.keyCommit;
         if (bytesToHex(api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, keyOf('dov', pkcs8), commit)) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from the top-up');
+        // The roster is checked when a top-up is stored and before sealing, never when reading (epochs-over-time design §2).
         const roster = [people.ana.publicKey, people.ben.publicKey, people.cat.publicKey, people.dov.publicKey];
-        if (bytesToHex(api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, keyOf('dov', pkcs8), commit, { activeMembers: roster })) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from the top-up, roster given');
+        api.verifyGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, { activeMembers: roster });
+        api.verifyGroupEpochRecord(GROUP_VECTOR_RECORD, { groupId: GROUP_VECTOR_GROUP, epoch: 3, activeMembers: roster });
         // The served shape (GET …/keys): the record without its wraps, and my own wrap beside it.
         const { wraps, ...served } = GROUP_VECTOR_RECORD;
         for (const who of MEMBERS) {
             const w = wraps!.find((x) => x.recipient === people[who].publicKey)!;
             const mine: GroupServedWrap = { epoch: 3, wrapper: GROUP_VECTOR_RECORD.createdBy, ephPub: w.ephPub, nonce: w.nonce, wrapped: w.wrapped, sig: null };
-            if (bytesToHex(api.openMyGroupKey(served, mine, keyOf(who, pkcs8), { groupId: GROUP_VECTOR_GROUP, epoch: 3, activeMembers: roster })) !== GROUP_VECTOR_KEY_HEX) fail(`${who} opened another key from the served record`);
+            if (bytesToHex(api.openMyGroupKey(served, mine, keyOf(who, pkcs8), { groupId: GROUP_VECTOR_GROUP, epoch: 3 })) !== GROUP_VECTOR_KEY_HEX) fail(`${who} opened another key from the served record`);
         }
         const t = GROUP_VECTOR_TOP_UP;
         const dovServed: GroupServedWrap = { epoch: t.epoch, wrapper: t.wrapper, ephPub: t.ephPub, nonce: t.nonce, wrapped: t.wrapped, sig: t.sig };
-        if (bytesToHex(api.openMyGroupKey(served, dovServed, keyOf('dov', pkcs8), { groupId: GROUP_VECTOR_GROUP, activeMembers: roster })) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from his served top-up');
+        if (bytesToHex(api.openMyGroupKey(served, dovServed, keyOf('dov', pkcs8), { groupId: GROUP_VECTOR_GROUP })) !== GROUP_VECTOR_KEY_HEX) fail('Dov opened another key from his served top-up');
     }
     let otherCommit = false;
     try { api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, people.dov.seedHex, GROUP_VECTOR_RECORD.membersDigest); otherCommit = true; } catch { /* as it should */ }
@@ -227,8 +231,8 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
     try { api.openGroupEpochRecord(GROUP_VECTOR_RECORD, people.ana.seedHex, { groupId: '00000000-0000-4000-8000-000000000000' }); otherGroup = true; } catch { /* as it should */ }
     if (otherGroup) fail('the record opened as another group\'s');
     let outsideRoster = false;
-    try { api.openGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, people.dov.seedHex, GROUP_VECTOR_RECORD.keyCommit, { activeMembers: [people.ben.publicKey, people.cat.publicKey, people.dov.publicKey] }); outsideRoster = true; } catch { /* as it should */ }
-    if (outsideRoster) fail('the top-up opened though its wrapper is in no roster given');
+    try { api.verifyGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, { activeMembers: [people.ben.publicKey, people.cat.publicKey, people.dov.publicKey] }); outsideRoster = true; } catch { /* as it should */ }
+    if (outsideRoster) fail('the top-up verified for storing though its wrapper is in no roster given');
 
     for (const v of GROUP_LINE_VECTORS) {
         if (bytesToHex(api.groupMessageKey(key, v.messageId)) !== v.messageKeyHex) fail(`${v.label}: the message key differs`);

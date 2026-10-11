@@ -47,7 +47,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, copyDir, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
-import { makeGroupEpochRecord, sealGroupLine } from '@beanpool/core';
+import { makeGroupEpochRecord, makeGroupTopUp, sealGroupLine } from '@beanpool/core';
 import {
     diffDatabases, diffSettings, normaliseAnswer, idsIn, firstDifferences, checkKnownGaps,
     type DbDump, type SettingsDump, type Differences, type KnownGap,
@@ -473,6 +473,15 @@ async function main(): Promise<void> {
             `M: Cy approves it for Probe Co, which holds nothing: refused, and Kip's wage is owed (${brief(wage)})`);
         built('Cy pauses Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/pause`));
         const seed = built('Eve starts a project with a goal', await S_(eve, '/api/treasury', { name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount: 100 }));
+        // Group chats 2b: where a membership's keys begin (group_members.from_epoch) and a refused wrap beside the one that
+        // replaced it (group_key_wraps.rejected_at), each travelling in a delta.
+        built('Cy joins the Gardeners with no epoch (an old app): his keys begin at epoch 2', await S_(cy, `/api/groups/${groupId}/join`));
+        const gardenEpoch2 = makeGroupEpochRecord({ myEdPrivHex: pkcs8(ann), groupId, epoch: 2, reason: 'rotate', createdAt: new Date().toISOString(), recipients: [ann.pk, bo.pk, cy.pk] });
+        built('Ann rotates the Gardeners chat to epoch 2', await S_(ann, `/api/groups/${groupId}/keys/epoch`, { epoch: gardenEpoch2.record }));
+        const cyWrap2 = gardenEpoch2.record.wraps!.find((w) => w.recipient === cy.pk)!;
+        built("Cy says Ann's wrap of epoch 2 does not open", await S_(cy, `/api/groups/${groupId}/keys/2/reject`, { wrapper: ann.pk, ephPub: cyWrap2.ephPub }));
+        built('and Bo hands him epoch 2', await S_(bo, `/api/groups/${groupId}/keys/wrap`,
+            makeGroupTopUp(gardenEpoch2.groupKey, { myEdPrivHex: pkcs8(bo), groupId, epoch: 2, recipientPubHex: cy.pk })));
         await pull('the escrow, the dispute, standing');
 
         // ── 4. More, then a whole copy ──
@@ -575,6 +584,19 @@ async function main(): Promise<void> {
         };
         const [epochT, epochS] = [await gardenEpochOn(t), await gardenEpochOn(s)];
         assert(epochT === 1 && epochS === 1, `the sealed group line's epoch (its metadata) is the same on the promoted standby (${epochT} on the twin, ${epochS} on the standby)`);
+        // And its sender, which an app opens a re-keyed author's line by (group chats 2b).
+        const gardenSenderOn = async (base: string): Promise<unknown> => {
+            const line = ((await api(base, 'GET', `/api/groups/${groupId}/chat`, { as: bo })).body?.messages ?? []).find((x: any) => x.id === gardenLineId);
+            return (typeof line?.metadata === 'string' ? JSON.parse(line.metadata) : line?.metadata)?.sender;
+        };
+        const [senderT, senderS] = [await gardenSenderOn(t), await gardenSenderOn(s)];
+        assert(senderT === bo.pk && senderS === bo.pk, `and its metadata.sender, Bo's key, on both (${senderT === bo.pk}, ${senderS === bo.pk})`);
+        // A promoted standby answers the same fromEpoch, by number, and serves Cy the live wrap, not the one he refused.
+        const cyKeysOn = async (base: string) => (await api(base, 'GET', `/api/groups/${groupId}/keys`, { as: cy })).body;
+        const [cyT, cyS] = [await cyKeysOn(t), await cyKeysOn(s)];
+        assert(cyT?.fromEpoch === 2 && cyS?.fromEpoch === 2 && JSON.stringify(cyT.myWraps) === JSON.stringify(cyS.myWraps)
+            && cyS.myWraps.length === 1 && cyS.myWraps[0].wrapper === bo.pk,
+            `Cy's fromEpoch (2) and his one live wrap, Bo's, are the same on the promoted standby (${cyT?.fromEpoch}/${cyS?.fromEpoch}, ${cyS?.myWraps?.length} wraps)`);
         const manifest = await import('./engine/replication-manifest.js');
         diffSettings(await twin.send('settings'), await standby.send('settings'), {
             localConfig: (f) => manifest.LOCAL_CONFIG_FIELDS[f],

@@ -402,6 +402,20 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         expect(nav).toHaveBeenCalledWith('enterprise', 'ent-key');
     });
 
+    it("a group's vote line lands on the group (DESIGN-group-decisions S3), not Messages and not Commons → Decide", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            needs: { items: [
+                { kind: 'vote', count: 1, accent: false, label: 'Vote closes in 6 days: Ada leads the guild', target: { to: 'group', id: 'group-id' } },
+            ] },
+        })));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const needs = await screen.findByTestId('home-card-needs');
+        fireEvent.click(within(needs).getByRole('button', { name: /Ada leads the guild/ }));
+        expect(nav).toHaveBeenCalledWith('group', 'group-id');
+        expect(nav).not.toHaveBeenCalledWith('messages');
+    });
+
     it('a new member\'s Beans: nothing to repay, how credit opens; the steps link to where each is done', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
             beans: { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false },

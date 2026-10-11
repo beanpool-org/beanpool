@@ -19,13 +19,13 @@ describe('GET /api/home names the landings this app opens', () => {
     });
     afterEach(() => { globalThis.fetch = realFetch; });
 
-    it('lands=enterprise, with or without the cards and a point', async () => {
+    it('lands=enterprise,group, with or without the cards and a point', async () => {
         const { getHome } = await import('./api');
         await getHome({ cards: ['needs', 'decide'] }).catch(() => undefined);
         await getHome({}).catch(() => undefined);
         expect(calls.length).toBe(2);
-        expect(new URL(calls[0], 'https://node.example').searchParams.get('lands')).toBe('enterprise');
+        expect(new URL(calls[0], 'https://node.example').searchParams.get('lands')).toBe('enterprise,group');
         expect(new URL(calls[0], 'https://node.example').searchParams.get('cards')).toBe('needs,decide');
-        expect(new URL(calls[1], 'https://node.example').searchParams.get('lands')).toBe('enterprise');
+        expect(new URL(calls[1], 'https://node.example').searchParams.get('lands')).toBe('enterprise,group');
     });
 });

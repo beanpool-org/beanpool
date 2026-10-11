@@ -14,6 +14,8 @@ import crypto from 'node:crypto';
 import {
     createGroup,
     getGroup,
+    groupClosedAt,
+    groupClosedAtMany,
     listGroups,
     getGroupMembers,
     getGroupMember,
@@ -39,8 +41,8 @@ import {
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
 import {
-    GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rotateGroupEpoch,
-    storeGroupTopUp,
+    GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
+    rotateGroupEpoch, storeGroupTopUp,
 } from '../engine/group-keys.js';
 import { CONVENOR_POWERS_PAUSED } from '@beanpool/engine';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -164,9 +166,12 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         const answer = () => {
             const groups = listGroups({ category, query: q, memberPubkey: member, limit, offset }, viewerPubkey);
+            // A group its members closed by a vote is listed as closed (#1784 review N4), so its row says so before the
+            // sheet's own read lands. Closing bumps the groups version (afterGroupVote), so a list cached before is fresh.
+            const closed = groupClosedAtMany(groups.map(g => g.id));
             ctx.status = 200;
             ctx.type = 'application/json';
-            ctx.body = groups;
+            ctx.body = groups.map(g => ({ ...g, closedAt: closed.get(g.id) ?? null }));
         };
         // Above the apps' 50 a page, the list waits for room under the heavy-read cap (heavy-reads.ts) or is "busy",
         // weighed by the last list with the same filters and page: a search that matches nothing is light, the whole
@@ -222,8 +227,10 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Group not found' };
             return;
         }
+        // Closed by its members' vote: the group stays to read, as "Your groups" shows it (closedAt, readOnly).
+        const closedAt = groupClosedAt(group.id);
         ctx.status = 200;
-        ctx.body = group;
+        ctx.body = { ...group, closedAt, readOnly: !!closedAt };
     });
 
     // 3. Create a group
@@ -575,7 +582,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
         ctx.set('Cache-Control', 'private, no-store');
-        ctx.body = getMissingGroupWraps(ctx.params.id);
+        ctx.body = getMissingGroupWraps(ctx.params.id, actor);
     });
 
     router.get('/api/groups/:id/keys/:epoch/wraps', async (ctx) => {
@@ -618,6 +625,26 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             ctx.status = 201;
             ctx.body = { success: true, ...storeGroupTopUp(ctx.params.id, actor, body) };
+        } catch (e) {
+            if (!respondGroupKeyError(ctx, e)) throw e;
+        }
+    });
+
+    // A member refuses their own wrap that does not open (DESIGN-group-chat-epochs-over-time-fable.md §1): body
+    // `{ wrapper, ephPub }`. The slot shows in …/keys/missing again; the refused wrapper may not fill it.
+    router.post('/api/groups/:id/keys/:epoch/reject', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!chatRateLimit(ctx, actor)) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        if (!/^\d{1,9}$/.test(ctx.params.epoch)) {
+            ctx.status = 400;
+            ctx.body = { error: 'An epoch is a whole number' };
+            return;
+        }
+        const body = (ctx as any).requestBody || {};
+        try {
+            ctx.body = { success: true, ...rejectGroupWrap(ctx.params.id, actor, Number(ctx.params.epoch), body) };
         } catch (e) {
             if (!respondGroupKeyError(ctx, e)) throw e;
         }

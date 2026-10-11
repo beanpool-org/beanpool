@@ -2652,10 +2652,13 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             // column sends none. Its row is still the appointment this node knows when role, status and joined_at
             // are unchanged, so the known time stays; when any of them changed there, the known time belongs to an
             // earlier appointment and would backdate this one, so it is dropped and the reader takes joined_at.
+            // from_epoch (the first epoch a membership holds keys from, engine/group-keys.ts) is the main server's number. A
+            // main older than the column sends none: the same membership (status and joined_at unchanged) keeps the one
+            // this node has; another membership gets none, and the reader falls back to the stored_at rule.
             if (remote.groupMembers) {
                 const importGroupMember = db.prepare(`INSERT INTO group_members
-                    (group_id, member_pubkey, role, status, joined_at, invited_by, updated_at, role_since)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (group_id, member_pubkey, role, status, joined_at, invited_by, updated_at, role_since, from_epoch)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(group_id, member_pubkey) DO UPDATE SET
                         role = excluded.role,
                         status = excluded.status,
@@ -2666,6 +2669,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                             WHEN excluded.role_since IS NOT NULL THEN excluded.role_since
                             WHEN excluded.role = group_members.role AND excluded.status = group_members.status
                                  AND excluded.joined_at IS group_members.joined_at THEN group_members.role_since
+                            ELSE NULL END,
+                        from_epoch = CASE
+                            WHEN excluded.from_epoch IS NOT NULL THEN excluded.from_epoch
+                            WHEN excluded.status = group_members.status AND excluded.joined_at IS group_members.joined_at THEN group_members.from_epoch
                             ELSE NULL END
                     WHERE excluded.updated_at IS NOT NULL
                       AND (group_members.updated_at IS NULL OR excluded.updated_at > group_members.updated_at)`);
@@ -2682,6 +2689,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     const res = importGroupMember.run(
                         gm.groupId, gm.memberPubkey, gm.role, gm.status, gm.joinedAt ?? null, gm.invitedBy ?? null, updatedAt,
                         gm.roleSince ?? null,
+                        typeof gm.fromEpoch === 'number' && Number.isSafeInteger(gm.fromEpoch) && gm.fromEpoch >= 1 ? gm.fromEpoch : null,
                     );
                     if (res.changes > 0) groupChanges++;
                 }

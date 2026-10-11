@@ -22,9 +22,9 @@ import {
 import {
     GROUP_THREAD_TYPE, GROUP_CHAT_FORBIDDEN, GROUP_CHAT_OBSERVER, GROUP_CHAT_SYSTEM_REACT_ERROR,
     GROUP_NOT_FOUND, GROUP_THREAD_DELETED_TEXT, postGroupThreadMessageFromSendRoute,
-    assertCanWriteInGroupChat, groupChatEdit, groupChatRefusal, broadcastGroupChatUpdate,
+    assertCanWriteInGroupChat, groupChatEdit, groupChatRefusal, broadcastGroupChatUpdate, groupLineForReader, groupLineHearers,
 } from './group-thread.js';
-import { GroupKeyError } from './group-keys.js';
+import { GroupKeyError, fromEpochOf } from './group-keys.js';
 import { writeMessageTombstone, tombstoneFields } from './message-tombstone.js';
 import { eventChatUnknownTo } from './event-thread.js';
 import { unmutedRecipients } from './chat-mutes.js';
@@ -653,6 +653,9 @@ export function toggleMessageReaction(
         const refusal = groupChatRefusal(row.conversation_id, authorPubkey);
         if (refusal?.status === 404) return null;
         if (refusal) throw new MessagingError(refusal.error, refusal.status);
+        // A line sealed under an epoch from before the caller's membership is one the chat never served them: an id
+        // nobody has, before any answer about the line itself (review of #1772, finding 2).
+        if (!groupLineForReader(row.metadata, fromEpochOf(row.conversation_id, authorPubkey))) return null;
         if (row.type === 'system') throw new MessagingError(GROUP_CHAT_SYSTEM_REACT_ERROR, 400);
         try { assertCanWriteInGroupChat(row.conversation_id, authorPubkey); }
         catch (e: any) { throw toGroupChatMessagingError(e); }
@@ -701,13 +704,14 @@ export function toggleMessageReaction(
     }
     db.prepare("UPDATE messages SET metadata=? WHERE id=?").run(metadataStr, messageId);
 
+    // A group chat's line reaches only those it is served to, as its edits and removals do (groupLineHearers).
     cb.broadcast({
         type: 'message_reaction',
         conversationId: row.conversation_id,
         messageId,
         metadata: metadataStr,
         participants: keys
-    }, keys);
+    }, convType?.type === GROUP_THREAD_TYPE ? groupLineHearers(row.conversation_id, metadataStr, keys) : keys);
 
     return { success: true, metadata: metadataStr };
 }
@@ -883,8 +887,8 @@ export function editMessage(
     if (isGroupChat) {
         try {
             assertCanWriteInGroupChat(row.conversation_id, authorPubkey);
-            // Sealed again under the current epoch (group chat encryption design §7.4): the row's epoch moves with it.
-            const edited = groupChatEdit(row.conversation_id, row, ciphertext, nonce, metadata);
+            // Sealed again under the line's own epoch (§7.4 as step 2b decided it): the row's epoch never moves.
+            const edited = groupChatEdit(row, ciphertext, nonce, metadata, authorPubkey);
             storedCiphertext = edited.ciphertext;
             storedNonce = edited.nonce;
             storedMetadata = edited.metadata;

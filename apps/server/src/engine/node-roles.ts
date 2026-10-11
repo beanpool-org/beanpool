@@ -1,6 +1,7 @@
 import { db } from '../db/db.js';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
+import { noteSecurityEvent } from '../services/security-signal.js';
 import { bumpMembersVersion } from './versions.js';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
@@ -191,6 +192,35 @@ export function nodeHasOwner(): boolean {
     return !!row;
 }
 
+const withArticle = (role: string) => `${/^[aeiou]/.test(role) ? 'an' : 'a'} ${role}`;
+
+/** The actor's role, for the owners' alert (services/alerts.ts sec.role): never who. Read before the change. */
+function actorRoleOf(actorPubkey?: string): string {
+    if (actorPubkey === 'owner:password') return 'admin password';
+    if (actorPubkey === 'break-glass:enrolment') return 'break-glass code';
+    if (!actorPubkey || actorPubkey === 'SYSTEM') return 'server';
+    if (actorPubkey.startsWith('claim:')) return 'claim code';
+    if (isNodeOwner(actorPubkey)) return 'owner';
+    return isNodeAdmin(actorPubkey, false) ? 'admin' : 'key with no role';
+}
+
+const HOW: Record<string, string> = {
+    'admin password': 'by the admin password', 'break-glass code': 'with a break-glass code', server: 'by the server itself',
+    'claim code': "with the community's claim code", owner: 'by an owner', admin: 'by an admin', 'key with no role': 'by a key with no role',
+};
+
+/**
+ * Tells the owners a role changed: which role and how, never whose (services/security-signal.ts). Bounded per actor
+ * and hour there; an owner made or removed, or break-glass, is high (never folded out of the channel or the card).
+ */
+function noteRoleAlert(detail: string, stillTrue: () => boolean, a: { actor?: string; actorRole: string; high: boolean; lostBy?: string }): void {
+    noteSecurityEvent({
+        key: 'sec.role', detail: `${detail} Open Settings to see who.`, stillTrue, actor: a.actor || 'SYSTEM', actorRole: a.actorRole, high: a.high,
+        // An owner or admin who lost that role is pushed too: with one owner's key stolen, the other owner hears of it.
+        alsoPush: a.lostBy ? [a.lostBy] : undefined,
+    });
+}
+
 /**
  * Grants a node role ('owner', 'admin' or 'moderator') to a member.
  * Each member holds at most ONE node role.
@@ -214,7 +244,7 @@ export function nodeHasOwner(): boolean {
  * therefore reads the target's CURRENT role from the same transaction and refuses unless it is
  * null or 'moderator'.
  */
-export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string): void {
+export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string, how?: string): void {
     if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
         throw new Error("Role must be 'owner', 'admin', or 'moderator'");
     }
@@ -244,6 +274,9 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
         throw new Error('Only active accounts can hold a node role');
     }
 
+    const actorRole = actorRoleOf(actorPubkey);
+    const howChanged = how ?? HOW[actorRole];
+    let before: string | null = null;
     db.transaction(() => {
         const ownerCount = (db.prepare(
             `SELECT COUNT(*) as c FROM node_roles nr
@@ -261,6 +294,7 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
         const existing = db.prepare("SELECT role, session_epoch, break_glass_hash, break_glass_made_at, break_glass_made_by FROM node_roles WHERE member_pubkey = ?").get(targetPubkey) as
             { role: string; session_epoch: number; break_glass_hash: string | null; break_glass_made_at: string | null; break_glass_made_by: string | null } | undefined;
         const currentRole = existing?.role ?? null;
+        before = currentRole;
 
         if (role === 'owner') {
             if (!isOwner) {
@@ -315,6 +349,13 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
     })();
     bumpMembersVersion();
     noteTakeoverInputsChanged(`${role} role granted`);
+    // A claim's grant is told as the community claimed (claim-code.ts), not twice.
+    if (before !== role && !actorPubkey?.startsWith('claim:')) {
+        const was = before ? `${withArticle(before).replace(/^a/, 'A')} was made` : 'Someone was made';
+        noteRoleAlert(`${was} ${withArticle(role)}, ${howChanged}.`, () => heldNodeRoleOf(targetPubkey) === role,
+            { actor: actorPubkey, actorRole, high: role === 'owner' || before === 'owner' || /break-glass/.test(howChanged),
+                lostBy: before === 'owner' || before === 'admin' ? targetPubkey : undefined });
+    }
 }
 
 /**
@@ -334,6 +375,8 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
         throw new Error("Role must be 'owner', 'admin', or 'moderator'");
     }
 
+    const actorRole = actorRoleOf(actorPubkey);
+    let removed = false;
     db.transaction(() => {
         const isOwner = actorPubkey === 'owner:password' || (!!actorPubkey && isNodeOwner(actorPubkey));
 
@@ -367,10 +410,15 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
 
         if (db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = ?").run(targetPubkey, role).changes > 0) {
             noteRoleChanged(targetPubkey);
+            removed = true;
         }
     })();
     bumpMembersVersion();
     noteTakeoverInputsChanged(`${role} role revoked`);
+    if (removed) {
+        noteRoleAlert(`${withArticle(role).replace(/^a/, 'A')} lost that role, ${HOW[actorRole]}.`, () => heldNodeRoleOf(targetPubkey) !== role,
+            { actor: actorPubkey, actorRole, high: role === 'owner', lostBy: role === 'owner' || role === 'admin' ? targetPubkey : undefined });
+    }
 }
 
 /**

@@ -61,6 +61,8 @@ export interface YourChat {
     eventStartAt?: string | null;
     eventEndAt?: string | null;
     readOnly: boolean;
+    /** A group its members closed by a vote (DESIGN-group-decisions §2.3): shown closed, its chat read-only. */
+    closedAt?: string | null;
     lastMessage: YourChatLastMessage | null;
     unreadCount: number;
     mute: ChatMute | null;
@@ -180,8 +182,9 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
 
     // Commons groups: active membership only.
     const groups = db.prepare(`
-        SELECT g.id, g.name, g.category, g.join_policy, g.avatar_ref, gm.role
+        SELECT g.id, g.name, g.category, g.join_policy, g.avatar_ref, gm.role, gc.closed_at
         FROM group_members gm JOIN groups g ON g.id = gm.group_id
+        LEFT JOIN group_closures gc ON gc.group_id = g.id
         WHERE gm.member_pubkey = ? AND gm.status = 'active'
     `).all(pubkey) as any[];
     for (const g of groups) {
@@ -190,7 +193,8 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
         finish({
             kind: 'group', badge: YOUR_CHAT_BADGES.group, id: g.id, conversationId: g.id, name: g.name,
             // The group's picture as its URL (#1486), never the picture: as every group read gives it.
-            avatarUrl: groupPictureUrlOf(g.id, g.avatar_ref), role: g.role, category: g.category, joinPolicy: g.join_policy, readOnly: false,
+            avatarUrl: groupPictureUrlOf(g.id, g.avatar_ref), role: g.role, category: g.category, joinPolicy: g.join_policy,
+            readOnly: !!g.closed_at, closedAt: g.closed_at ?? null,
         }, GROUP_THREAD_REMOVED_TEXT);
     }
 

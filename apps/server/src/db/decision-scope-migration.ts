@@ -8,7 +8,10 @@ import { createTableText } from './table-rules.js';
  * community Decision. Then the one-open-per-author index becomes one open per author per scope: a keeper of three
  * enterprises may have one open in each, and the community rule is unchanged. Day zero: no live node holds a scoped row.
  *
- * Idempotent: once the table names `scope_kind` and the index names it too, nothing is done.
+ * Slice S3 (2026-10-11) adds the 'group' scope to the CHECK: a table whose scope_kind can't hold it is rebuilt the same
+ * way, its rows kept as they are.
+ *
+ * Idempotent: once the table's scope_kind holds 'group' and the index names scope_kind, nothing is done.
  * Relies on `foreign_keys = OFF` (db.ts), so dropping the old `decisions` table does not cascade to its votes.
  */
 export const DECISIONS_AUTHOR_SCOPE_OPEN_INDEX = `CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_member_author_open
@@ -21,7 +24,8 @@ export function addDecisionScope(targetDb: Database.Database, schemaSql: string)
     const indexSql = (targetDb.prepare(
         "SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_decisions_member_author_open'"
     ).get() as { sql: string } | undefined)?.sql || '';
-    const tableHasScope = /\bscope_kind\b/.test(tableSql);
+    // A table from before the scope, or from slice S1 (scope_kind without 'group'), is rebuilt into schema.sql's own.
+    const tableHasScope = /\bscope_kind\b[^\n]*'group'/.test(tableSql);
     if (tableHasScope && /\bscope_kind\b/.test(indexSql)) return 'already';
 
     let rebuilt = false;

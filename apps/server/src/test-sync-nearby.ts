@@ -690,6 +690,10 @@ async function main() {
             const row = resent.posts.find(r => r.id === tiedOff) as (Row & { resentAt?: string }) | undefined;
             assert(resent.status === 200 && resent.etag === tag && row?.status === 'paused' && !!row?.resentAt,
                 `her cancelled deal on it (the phone's deal heal writes it back active): a 200 under the same tag, the listing paused and sent again (${resent.status}, ${row?.status})`);
+            // A phone that takes a diff (item 16) is held to the same: the row still comes, and the unchanged set is its hash.
+            const asDiff = await get(`${SYNC}&nearby=1&setOnce=1&setHash=${hash}&setDiff=1&updatedAfter=${encodeURIComponent(iso(sinceMs))}&paged=1`, reader, { 'If-None-Match': tag });
+            assert(asDiff.status === 200 && asDiff.posts.some(r => r.id === tiedOff && r.status === 'paused') && asDiff.keys.join() === 'posts,setUnchanged',
+                `and with setDiff=1: a 200, the listing sent again, the set { setUnchanged } (${asDiff.status}, ${asDiff.keys.join('+')})`);
         }
         db.prepare('DELETE FROM marketplace_transactions WHERE id = ?').run(dealId);
         assert((await deltaFrom(Date.now() - 1000)).status === 304, 'nothing sent again any more: 304 again');

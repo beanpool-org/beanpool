@@ -14,14 +14,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanpool/core';
-import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration } from '../utils/db';
+import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readNearbyHeld, readNearbyTag } from '../utils/db';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
 import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
 import { getCachedNodeProfile } from '../utils/node-profile';
-import { nearbyIdReads, nearbySetOf } from '../utils/posts-nearby';
+import { nearbyIdReads, nearbyLastSet, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
 import {
     nextNearbyAreaCopy, readNearbyAreaCopy, sameArea, storeNearbyAreaCopy, NEARBY_AREA_RECHECK_MS, type NearbyArea, type NearbyAreaCopy,
 } from '../utils/nearby-area';
@@ -551,8 +551,16 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // as it always was.
         const nearbyLimits = pubKey ? (await getCachedNodeProfile(anchorUrl))?.features.nearbyListings ?? null : null;
         let nearbyArea: NearbyAreaCopy | null = null;
+        // The set this phone holds and the node's hash of it: the read sends the hash back (`setHash`), and while that is
+        // still the set the node names none, only echoes the hash (utils/posts-nearby.ts nearbyLastSet).
+        let nearbyHeld: { set: string[]; hash: string } | null = null;
+        // The tag of the last read that landed whole: sent with a delta, it is answered 304 while nothing in the set changed,
+        // whatever the cursor (the node's tag leaves it out: REPORT-geosync-load-B, item 3).
+        let nearbyTag: string | null = null;
         if (nearbyLimits) {
             nearbyArea = await nearbyAreaForSync(anchorUrl, pubKey, signer);
+            nearbyHeld = await readNearbyHeld();
+            nearbyTag = await readNearbyTag();
             // No held read: the set is a few pages, and each of them names all of it.
             postsHeld = null;
             // A first read by area, or an area that moved: the new neighbourhood, whole.
@@ -654,10 +662,15 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         try {
             // `types=` opts in to events (docs/events-on-the-map.md §2.6). Without it the node leaves them out, which
             // is what keeps builds that predate events from ever caching one.
-            // `paged=1` asks for the read paged by key (POSTS_NEXT_HEADER), `pageAfter` for the page below a key.
-            const pullPosts = (cursor: string, after: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? 'limit=200&sync=true&nearby=1' : 'limit=1000&sync=true'}&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
+            // `paged=1` asks for the read paged by key (POSTS_NEXT_HEADER), `pageAfter` for the page below a key. By area,
+            // `setOnce=1`: the node names the member's set on the read's last page only (utils/posts-nearby.ts nearbyPageOf),
+            // and with `setHash` not at all while the set this phone holds is still the set.
+            const nearbyQuery = () => `limit=200&sync=true&nearby=1&setOnce=1${nearbyHeld ? `&setHash=${encodeURIComponent(nearbyHeld.hash)}` : ''}`;
+            // `tag`: this phone's own If-None-Match (a by-area delta's first page), where the platform cache knows no URL it
+            // never asked; the platform passes its 304 through as one.
+            const pullPosts = (cursor: string, after: string | null = null, tag: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? nearbyQuery() : 'limit=1000&sync=true'}&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
                 method: 'GET',
-                headers: { 'Accept': 'application/json' },
+                headers: { 'Accept': 'application/json', ...(tag ? { 'If-None-Match': tag } : {}) },
                 signal: timeouts.signal(30000)
             });
             // A page's rows, or null for a body that isn't a list: never a throw, which would end the cycle after the first
@@ -691,7 +704,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 }
                 return { rows, stoppedAt: null as string | null, pages };
             };
-            let postsRes = await pullPosts(postsSyncParam, postsHeld?.after ?? null);
+            // A by-area delta carries the tag of the last read that landed whole; a whole read never does (it holds nothing to
+            // confirm: a first read, a moved area, an emptied copy).
+            let postsRes = await pullPosts(postsSyncParam, postsHeld?.after ?? null, nearbyLimits && postsIsIncremental ? nearbyTag : null);
             // The node answered the held page (whatever it said): one more cycle that asked for it. Stored now, so a cycle
             // the answer ends counts too.
             if (postsHeld) {
@@ -721,6 +736,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     postsSyncParam = '';
                     postsSinceIso = '';
                     postsReadStartedAt = Date.now();
+                    // A take-over's whole read is named its set in full: the replace never rests on a hash from before.
+                    nearbyHeld = null;
                     postsRes = await pullPosts('');
                     // The epoch stored is that of the server whose whole pull replaces the cache. If the old one
                     // answered it (the address flipping back), that is its own epoch, and the next cycle does this again.
@@ -775,12 +792,14 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // A by-area community's answer carries its member's set (utils/posts-nearby.ts), read below on its own. A bare
             // list (the node's switch went off since this phone heard its profile) is read as any other. Anything else is
             // an answer this phone can't read: a failed read, so the cursor stays and the next cycle asks again, never a
-            // plain read that writes nothing and moves the cursor past what changed (the review of #1778, finding 6).
-            let nearbyFirst: { posts: any[]; set: string[]; tied: string[] | null } | null = null;
+            // plain read that writes nothing and moves the cursor past what changed (the review of #1778, finding 6). So is
+            // a read's last page that names no set: the first page here when the node hands out no next key.
+            let nearbyFirst: NearbyPage | null = null;
             let nearbyPlain: any;
             if (nearbyLimits && postsRes.status !== 304) {
                 const body = JSON.parse(await postsRes.text());
-                nearbyFirst = nearbySetOf(body);
+                nearbyFirst = nearbyPageOf(body);
+                if (nearbyFirst && !nextPageKeyOf(postsRes) && !nearbyLastSet(nearbyFirst, nearbyHeld)) nearbyFirst = null;
                 if (!nearbyFirst && !Array.isArray(body)) {
                     timeouts.clear();
                     result.durationMs = Date.now() - startTime;
@@ -795,9 +814,11 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 postsNotModified = true;
             } else if (nearbyLimits && nearbyFirst) {
                 // The member's set, paged by key until the node hands out no next key. Each page is written as it comes, and
-                // each names the whole set: the last one read is the set this phone keeps. Then what it holds outside the
-                // set goes (never the member's own or tied), what it lacks comes by `ids=`, and it keeps at most `max`
-                // others. After a take-over this is the replace: exact, where utils/posts-replace.ts's recency rule guesses.
+                // the last one names the whole set (a node before `setOnce` names it on each): that is the set this phone
+                // keeps. Then what it holds outside the set goes (never the member's own or tied), what it lacks comes by
+                // `ids=`, and it keeps at most `max` others. After a take-over this is the replace: exact, where
+                // utils/posts-replace.ts's recency rule guesses. A last page that names no set but echoes the hash this phone
+                // sent ends the read with the set it holds; one that does neither cuts the read short (nearbyLastSet).
                 const keep = { area: nearbyArea?.area ?? null, max: nearbyLimits.max };
                 const writeNear = async (delta: any): Promise<boolean> => {
                     const wrote = await applyDelta({ ...delta, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName, copyGen);
@@ -813,34 +834,49 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                         DeviceEventEmitter.emit('sync_data_updated');
                     } catch (e) {}
                 };
-                let set = nearbyFirst.set;
-                let tied = nearbyFirst.tied;
+                // The latest set a page named (a node before `setOnce` names it on each), for a read cut short.
+                let named = nearbyLastSet(nearbyFirst, null);
+                let last = nearbyFirst;
                 let rows = nearbyFirst.posts.length;
-                let complete = await writeNear({ posts: nearbyFirst.posts });
+                // The tag a read leaves goes with its first write, and is stored again once every row of its set is held. Only
+                // a tag every page of the read carried: each page's tag describes the set as it stood then, and a listing
+                // changed after page 1 moves above every key this read hands out, so a later page's tag names a version this
+                // phone doesn't hold, and the next delta would be answered 304 over it (review of #1805, finding 1).
+                let lastTag = postsRes.headers.get('etag');
+                let complete = await writeNear({ posts: nearbyFirst.posts, ...(nearbyTag ? { postsNearby: { tag: null } } : {}) });
                 if (complete) changed();
                 let next = complete ? nextPageKeyOf(postsRes) : null;
                 let pages = 1;
                 while (complete && next) {
                     const res = pages < POSTS_PAGE_CAP ? await pullPosts(postsSyncParam, next).catch(() => null) : null;
                     const page = res && res.ok && epochOf(res) === epochNow && !(await postsViewRefusal(res, anchorUrl, pubKey))
-                        ? nearbySetOf(await res.json().catch(() => null)) : null;
+                        ? nearbyPageOf(await res.json().catch(() => null)) : null;
                     if (!res || !page || !(await writeNear({ posts: page.posts }))) {
                         complete = false;
                         break;
                     }
-                    set = page.set;
-                    tied = page.tied;
+                    named = nearbyLastSet(page, null) ?? named;
+                    last = page;
+                    if (res.headers.get('etag') !== lastTag) lastTag = null;
                     rows += page.posts.length;
                     pages++;
                     next = nextPageKeyOf(res);
                 }
+                const ended = complete ? nearbyLastSet(last, nearbyHeld) : null;
+                if (!ended) complete = false;
+                const read = ended ?? named;
                 let fetched = 0;
-                if (!postsUnwritten && await writeNear({ postsNearby: { set, ...(tied ? { tied } : {}), ...keep } })) {
+                // A read cut short before any page named the set: only the cap's prune, nothing dropped by a set.
+                if (!postsUnwritten && !read) await writeNear({ postsNearby: keep });
+                // The node's set is stored with its hash; one whose `tied` this phone can't read is stored without (the next
+                // read is named it in full). The set held, echoed, is reconciled with as it stands.
+                const storeHeld = read?.named ? { setHash: read.tied ? read.setHash : null } : {};
+                if (!postsUnwritten && read && await writeNear({ postsNearby: { set: read.set, ...(read.tied ? { tied: read.tied } : {}), ...storeHeld, ...keep } })) {
                     // The set's listings this phone lacks: one that came into it without changing (a nearer one went), or one
                     // on a page this read didn't reach. NEARBY_IDS_PER_READ a read, NEARBY_ID_READS_PER_CYCLE reads a cycle;
                     // the rest come next cycle. One the node won't hand out is left out, and nothing else changes for it.
                     const held = new Set((await (await getDb()).getAllAsync<{ id: string }>('SELECT id FROM posts')).map(r => r.id));
-                    const missing = [...new Set(set)].filter(id => !held.has(id));
+                    const missing = [...new Set(read.set)].filter(id => !held.has(id));
                     for (const ids of nearbyIdReads(missing)) {
                         const res = await fetch(`${anchorUrl}/api/marketplace/posts?ids=${ids.map(encodeURIComponent).join(',')}&sync=true&${EVENT_TYPES_QUERY}`, {
                             method: 'GET',
@@ -854,6 +890,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                         if (theirs.length > 0 && !(await writeNear({ posts: theirs, postsNearby: keep }))) break;
                         fetched += theirs.length;
                     }
+                    // Every row of the set held: the read's tag describes what this phone holds, so the next delta sends it.
+                    if (complete && fetched === missing.length && lastTag) await writeNear({ postsNearby: { tag: lastTag } });
                     if (takenOver) postsReplaced = complete;
                     // The whole read the area's move asked for has landed: the next ones are deltas again.
                     if (complete && !postsIsIncremental && nearbyArea?.whole) {
@@ -864,7 +902,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 }
                 if (!complete) postsCursorStays = true;
                 postsWrittenEarly = true;
-                console.log(`[Pillar Sync] Received ${rows} listing(s) of this member's set of ${set.length} in ${pages} page(s), ${fetched} more by id${complete ? '' : '; the read stopped, the cursor stays'}`);
+                console.log(`[Pillar Sync] Received ${rows} listing(s) of this member's set of ${read ? read.set.length : '?'}${ended && !ended.named ? ' (unchanged)' : ''} in ${pages} page(s), ${fetched} more by id${complete ? '' : '; the read stopped, the cursor stays'}`);
             } else {
                 postsData = nearbyLimits ? nearbyPlain : await parseIfChanged(postsRes, anchorUrl, 'posts', rawGated);
                 // A whole read that isn't a take-over's is written as it comes (review of PR #1719, NB3): its first page

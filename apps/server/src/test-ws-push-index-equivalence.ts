@@ -10,7 +10,12 @@
  *      removal), each sent once through the full loop and once through the index, the frames each socket got compared;
  *      between pushes, at random: a socket connects, disconnects, dies on a send; a member sets, moves or clears their
  *      area; an area changes under the map's refresh as an import's does; a member re-keys and connects with the new
- *      key; a member is removed; someone mid-join joins; rows change behind the map and it loads again whole
+ *      key; a member is removed; someone mid-join joins; rows change behind the map and it loads again whole.
+ *      After every change and every push, the index's rules (WsClients.inspect): every open socket with a key is filed
+ *      under exactly that key and nothing else is; with the cells built, they hold exactly the keys with an open socket
+ *      and an area, each in its own cell. Then every socket closes, and the index is empty
+ *   2b. no code writes a socket's key but the connect (before the socket is in the set) and wsClients.setKey: a key
+ *      written any other way would leave the socket filed under the old one (#1809 review, NB-1)
  *   3. the cost at 3,500 and 10,000 sockets: a push near a dense spot and one in an empty ocean, the full loop against
  *      the index, interleaved, with the host's load (`uptime`) printed with each
  *
@@ -26,7 +31,9 @@ process.env.NODE_PROFILE = 'global';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 // PUSH_INDEX_REPORT: a file each line below is also appended to (the runner keeps no log of a passing run).
 const REPORT = process.env.PUSH_INDEX_REPORT;
@@ -127,6 +134,19 @@ async function main(): Promise<void> {
         return ws;
     };
     const live = () => sockets.filter(s => !s.closed);
+    // The members with an open socket, for the picks below: a Set, so a pick is not members × sockets (NB-4).
+    const liveMembers = () => { const keys = new Set(live().map(s => s._memberPubkey)); return members.filter(pk => keys.has(pk)); };
+    // The index's rules, after every change and every push: what broke, and after what.
+    let inspections = 0;
+    const broken: Record<string, number> = {};
+    const brokenExamples: string[] = [];
+    const inspect = (after: string) => {
+        inspections++;
+        for (const problem of se.inspectWsClients().problems) {
+            broken[after] = (broken[after] ?? 0) + 1;
+            if (brokenExamples.length < 5) brokenExamples.push(`after "${after}": ${problem}`);
+        }
+    };
     for (const pk of members) connect(pk);
     for (let i = 0; i < 400; i++) connect(pick(members));          // a member's second (or third) device
     for (let i = 0; i < 80; i++) connect(null);                     // no member's key
@@ -137,7 +157,8 @@ async function main(): Promise<void> {
 
     // ── 2. pushes, the two side by side, while the world changes ───────────────────────────────
     const changes: Record<string, number> = {};
-    const did = (what: string) => { changes[what] = (changes[what] ?? 0) + 1; };
+    let lastChange = 'nothing';
+    const did = (what: string) => { changes[what] = (changes[what] ?? 0) + 1; lastChange = what; };
     const close = (ws: any) => { ws.closed = true; se.removeWsClient(ws); };
     const change = () => {
         const r = rand();
@@ -160,7 +181,7 @@ async function main(): Promise<void> {
             did('area imported');
         }
         else if (r < 0.7) {
-            const old = pick(members.filter(pk => live().some(s => s._memberPubkey === pk)));
+            const old = pick(liveMembers());
             if (!old) return;
             const fresh = crypto.randomBytes(32).toString('hex');
             try {
@@ -171,7 +192,7 @@ async function main(): Promise<void> {
             did('re-key, the new phone connects');
         }
         else if (r < 0.76) {
-            const pk = pick(members.filter(k => live().some(s => s._memberPubkey === k)));
+            const pk = pick(liveMembers());
             if (!pk) return;
             se.adminPruneUser(pk, 'owner:password');
             members.splice(members.indexOf(pk), 1);
@@ -218,10 +239,12 @@ async function main(): Promise<void> {
     const PUSHES = Number(process.env.PUSH_INDEX_PUSHES) || 1200;
     let differ = 0, reached = 0, emptyPushes = 0;
     const firstDiffs: string[] = [];
+    inspect('setup');
     for (let i = 0; i < PUSHES; i++) {
-        if (rand() < 0.5) change();
+        if (rand() < 0.5) { lastChange = 'nothing'; change(); inspect(lastChange); }
         const p = push();
         const full = through(false, p), indexed = through(true, p);
+        inspect(`a ${p.event.type} push`);
         reached += full.frames.length;
         if (full.frames.length === 0) emptyPushes++;
         if (full.sent !== indexed.sent || full.frames.join('\n') !== indexed.frames.join('\n')) {
@@ -242,6 +265,39 @@ async function main(): Promise<void> {
     }
     assert(reached > PUSHES, `the pushes reached sockets: ${reached} frames over ${PUSHES} pushes (${emptyPushes} reached none)`);
     assert(differ === 0, `${PUSHES} pushes: the index and the full loop send the same frames to the same sockets (${differ} differ; seed ${SEED})`);
+    for (const e of brokenExamples) say(`   ${e}`, true);
+    assert(Object.keys(broken).length === 0,
+        `the index kept its rules after each of ${inspections} changes and pushes (broken after: ${JSON.stringify(broken)}; seed ${SEED})`);
+
+    // Every socket closes: nothing stays filed. A push by area first, so the cells are built and hold keys.
+    se.broadcast({ type: 'post_updated', id: posts.find(id => (db.prepare('SELECT lat FROM posts WHERE id = ?').get(id) as any).lat != null)! });
+    const before = se.inspectWsClients();
+    assert(before.filed > 0 && before.keys > 0, `before the close: ${before.sockets} sockets, ${before.keys} keys, ${before.filed} filed in ${before.bands} bands`);
+    for (const ws of live()) close(ws);
+    const after = se.inspectWsClients();
+    assert(after.sockets === 0 && after.keys === 0 && after.filed === 0 && after.bands === 0 && after.problems.length === 0,
+        `every socket closed: the index is empty (${after.sockets} sockets, ${after.keys} keys, ${after.filed} filed, ${after.bands} bands; ${after.problems.length} problems)`);
+
+    // ── 2b. who writes a socket's key ───────────────────────────────────────────────────────────
+    // Outside the tests, only the connect (https-server.ts, before addWsClient) and setKey (ws-area-index.ts) may.
+    const srcDir = path.dirname(fileURLToPath(import.meta.url));
+    const writes: string[] = [];
+    const walk = (dir: string) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) { if (entry.name !== '__tests__' && entry.name !== 'node_modules') walk(full); continue; }
+            if (!entry.name.endsWith('.ts') || entry.name.endsWith('.d.ts') || entry.name.startsWith('test-')) continue;
+            fs.readFileSync(full, 'utf8').split('\n').forEach((line, n) => {
+                if (/_memberPubkey['"\]]?\s*(=(?!=)|\?\?=|\|\|=|&&=)|defineProperty\([^)]*_memberPubkey|Object\.assign\(\s*ws\b/.test(line)) {
+                    writes.push(`${path.relative(srcDir, full)}:${n + 1}`);
+                }
+            });
+        }
+    };
+    walk(srcDir);
+    const allowed = writes.filter(w => /^(https-server|ws-area-index)\.ts:/.test(w));
+    assert(writes.length === 2 && allowed.length === 2,
+        `a socket's key is written only at the connect and by wsClients.setKey: ${writes.join(', ')}`);
 
     // ── 3. the cost ─────────────────────────────────────────────────────────────────────────────
     if (process.env.PUSH_INDEX_COST !== '0') {

@@ -71,6 +71,14 @@ Restoring a different account replaces the one on this phone, whether you restor
 
 Make sure you have the 12 words for the account you are replacing. If this phone has them, that screen shows them when you tap **Show** (the account's name) **12 words** and pass your phone's lock screen check. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back.
 
-## Lost everything?
+## Lost your phone and your 12 words
 
-Without your 12 words and without a linked sign-in account, only the admins of your community can help, by setting you up again.
+Without your 12 words and without a linked sign-in account, an admin of your community can move your account to a new phone, with your Beans, your name and your history. Go and see them in person: they check it's you first.
+
+- The admin makes a re-key code on their screen. If your old phone still has the app, it gets a notice that an admin started moving your account.
+- On your new phone, open BeanPool, tap **Already a Member? Restore Account**, then **An admin gave me a re-key code**. Scan the QR on the admin's screen, or type the code (it starts RK-) and your community's name. In a browser, the QR's link opens the same screen; or open your community's web app, tap **I'm Already a Member →**, then **An admin gave me a re-key code**, and type the code.
+- Your phone shows a two-digit number, and under it the address of the community it asked. Show both to the admin: they type the number on their screen. The number makes sure it's your phone they bind, and not someone who saw the code. **Not now** leaves the number: your phone keeps its place, and the same code shows the same number again.
+- If the new phone had no BeanPool account, it then shows the 12 words of your **new** key. Write them down: your old words no longer work, and your old phone stops working for good. A phone that already had an account (for another community) keeps that account's 12 words, and they now bring this account back too.
+- If you had linked a sign-in account, your phone asks you to link it again in Account Protection: the one you had protected your old key, so it was removed.
+
+The code lasts 24 hours. If your admin says your phone isn't the one they saw, or the code runs out, ask them for a new one.

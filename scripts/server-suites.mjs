@@ -61,6 +61,7 @@ export const SUITES = [
     'test-member-purge',
     'test-purge-during-rekey',
     'test-rekey-cancel',
+    'test-rekey-redeem',
     'test-removed-member-delete',
     'test-keeper-deposit',
     'test-keeper-routes',
@@ -372,6 +373,7 @@ export const SUITES = [
     'test-ws-auth-default',
     'test-visitor-doorbells',
     'test-ws-nearby-push',
+    'test-ws-push-index-equivalence',
     'test-visitor-allowlist',
     'test-ws-feed-parties',
     'test-live-post-payloads',
@@ -481,6 +483,10 @@ export const SUITES = [
  * A variant with no tag is a suite that ONLY runs here, because it refuses to run without its flag.
  */
 export const VARIANTS = [
+    // The sockets' index for listing pushes against the full loop at the widest radius an operator may set and at a
+    // small one: the cells a push looks at change with it (#1791 item 5).
+    { name: 'test-ws-push-index-equivalence', tag: 'radius-2000', label: 'NEARBY_LISTINGS_RADIUS_KM=2000', env: { NEARBY_LISTINGS_RADIUS_KM: '2000', PUSH_INDEX_COST: '0' } },
+    { name: 'test-ws-push-index-equivalence', tag: 'radius-20', label: 'NEARBY_LISTINGS_RADIUS_KM=20', env: { NEARBY_LISTINGS_RADIUS_KM: '20', PUSH_INDEX_COST: '0' } },
     // test-heavy-read-cap's section 1c (stalled readers with the version moved before each, the directory and a roster)
     // on its own: with it the file ran past the 300 s per run on CI (#1526).
     { name: 'test-heavy-read-cap', tag: '1c-directory', label: 'version moves (1c), the directory', env: { HEAVY_READ_CAP_ONLY: '1c', HEAVY_READ_CAP_1C: 'directory' } },

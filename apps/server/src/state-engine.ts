@@ -20,6 +20,7 @@ import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-ke
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
+import { WsClients } from './ws-area-index.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
@@ -183,6 +184,7 @@ import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     CommonsPotUnknownError,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
+    runWashSybilMetricsAuditInSlices,
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
     exportLedgerFor as exportLedgerForEngine,
@@ -632,7 +634,9 @@ export interface NodeConfig {
     registrarNames?: RegistrarName[];
 }
 
-const wsClients: Set<any> = new Set();
+// Indexed by member and area for the listing pushes by area (ws-area-index.ts); otherwise a plain Set. An open socket's
+// key changes only through wsClients.setKey.
+const wsClients = new WsClients();
 
 // ===================== INIT =====================
 
@@ -834,13 +838,14 @@ export function initStateEngine(): void {
     }, 24 * 60 * 60 * 1000);
 
     // Daily Wash & Sybil metrics audit (once shortly after boot, then daily). Where Beans are off it returns at once, read
-    // at each run (engine/audit.ts): its numbers are about Beans, and its member walk freezes a large node.
-    setTimeout(() => {
-        try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
-    }, 2.5 * 60 * 1000);
-    setInterval(() => {
-        try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
-    }, 24 * 60 * 60 * 1000);
+    // at each run (engine/audit.ts): its numbers are about Beans. It walks every member a slice at a time, so the node
+    // keeps answering meanwhile.
+    const metricsAudit = () => {
+        try { runWashSybilMetricsAuditInSlices().catch((e) => console.warn('[MetricsAudit] failed:', e)); }
+        catch (e) { console.warn('[MetricsAudit] failed:', e); }
+    };
+    setTimeout(metricsAudit, 2.5 * 60 * 1000);
+    setInterval(metricsAudit, 24 * 60 * 60 * 1000);
 
     if (getNodeRole() === 'primary') runMainServerMigrations();
 
@@ -1544,7 +1549,14 @@ function keepersOf(treasuries: string[]): Set<string> {
  * Null for an event that names no listing, or one not on this node: it goes as before. That is a bare doorbell for many
  * listings at once (a burst's hide, engine/burst-cleanup.ts), rare and about no one place.
  */
-function listingReach(event: any, extraParties: string[] = []): ((pubkey: string | null | undefined) => boolean) | null {
+interface ListingReach {
+    reaches: (pubkey: string | null | undefined) => boolean;
+    /** The keys it reaches wherever they are, the listing's place (null with none) and the radius: what it visits. */
+    parties: string[];
+    place: { lat: number; lng: number } | null;
+    radiusKm: number;
+}
+function listingReach(event: any, extraParties: string[] = []): ListingReach | null {
     const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
     if (!id) return null;
     const row = db.prepare('SELECT author_pubkey, accepted_by, lat, lng FROM posts WHERE id = ?').get(id) as
@@ -1557,13 +1569,26 @@ function listingReach(event: any, extraParties: string[] = []): ((pubkey: string
     const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
         .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
-    return (pubkey) => {
+    const reaches = (pubkey: string | null | undefined) => {
         if (!pubkey) return false;
         if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
         if (!placed) return false;
         const area = memberAreaFor(pubkey);
         return !!area && engine.haversineKm(area.lat, area.lng, row.lat!, row.lng!) <= radiusKm;
     };
+    return { reaches, parties: [...sides, ...keepers], place: placed ? { lat: row.lat!, lng: row.lng! } : null, radiusKm };
+}
+
+// Whether a listing's push by area visits only the sockets the index finds (wsClients.reachable), not every socket. On,
+// always; off only for the test that holds the two to the same recipients, and for measuring them
+// (test-ws-push-index-equivalence.ts).
+let listingPushIndex = true;
+export function setListingPushIndex(on: boolean): void {
+    listingPushIndex = on;
+}
+/** For the same test: what breaks the sockets' index's rules, and its sizes (WsClients.inspect). */
+export function inspectWsClients(): ReturnType<WsClients['inspect']> {
+    return wsClients.inspect();
 }
 
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
@@ -1662,7 +1687,9 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // Whether a socket with no member's key may use this public doorbell (keylessSocketMayUse), asked once.
     let forKeyless: boolean | undefined;
     let sent = 0;
-    for (const ws of wsClients) {
+    // A listing's push by area visits only the sockets it may reach (ws-area-index.ts), each still measured below.
+    const sockets: Iterable<any> = reach && listingPushIndex ? wsClients.reachable(reach.parties, reach.place, reach.radiusKm) : wsClients;
+    for (const ws of sockets) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
         // member_joined alone never makes one (a replaced key, whatever announced it, stays a stranger's socket).
@@ -1670,7 +1697,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         if (joinersOwn) {
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
-                ws._memberPubkey = event.member.publicKey;
+                wsClients.setKey(ws, event.member.publicKey);
                 ws._visitor = joined.visitor;
                 ws._memberFeed = joined.feed;
                 ws._pendingMemberPubkey = null;
@@ -1678,7 +1705,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         }
         if (joinToJoinerOnly && !joinersOwn) continue;
         if (toCircle && !(ws._memberPubkey && toCircle.has(ws._memberPubkey))) continue;
-        if (reach && !reach(ws._memberPubkey)) continue;
+        if (reach && !reach.reaches(ws._memberPubkey)) continue;
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
@@ -1719,7 +1746,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         for (const ws of wsClients) {
             if (ws._memberPubkey !== changedKey) continue;
             standing ??= event.type === 'user_pruned' ? { act: false, visitor: false, feed: false } : socketStanding(ws._memberPubkey);
-            if (!standing.act) ws._memberPubkey = null;
+            if (!standing.act) wsClients.setKey(ws, null);
             ws._visitor = standing.visitor;
             ws._memberFeed = standing.feed;
         }
@@ -8792,6 +8819,11 @@ export function runLedgerAudit(): { sumBalances: number; baseline: number; drift
 /** Null where Beans are off: the audit does not run there (engine/audit.ts). */
 export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null {
     return runWashSybilMetricsEngine();
+}
+
+/** runWashSybilMetricsAudit a slice at a time, as the node's timers run it (engine/audit.ts). */
+export function runWashSybilMetricsAuditSliced(opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<{ totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null> {
+    return runWashSybilMetricsAuditInSlices(opts);
 }
 
 export type { ReplicaConsistency };

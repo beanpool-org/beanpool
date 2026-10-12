@@ -64,9 +64,11 @@ export {
     groupEpochCanonical, makeGroupEpochRecord, verifyGroupEpochRecord, openGroupEpochRecord, openMyGroupKey,
     groupTopUpCanonical, makeGroupTopUp, verifyGroupTopUp, openGroupTopUp,
     groupMessageKey, groupLineAad, isGroupEncryptedNonce, isGroupEncryptedPayload, sealGroupLine, openGroupLineWithMessageKey, openGroupLine,
-    detectMentions,
+    detectMentions, makeGroupEpochRecordAsync, groupLineVerdictKey,
+    KEY_SUCCESSION_TAG, KEY_SUCCESSION_MAX, keySuccessionCanonical, makeKeySuccession, verifyKeySuccession, walkKeySuccession,
 } from './group-crypto.js';
 export type {
     GroupEpochReason, GroupLinePart, GroupCryptoRandom, GroupKeyWrap, GroupEpochRecord, GroupTopUp, GroupLinePayload, GroupLineBinding,
     OpenedGroupLine, GroupWrapBinding, GroupWrapOpenBinding, GroupServedWrap, MakeGroupEpochInput, GroupEpochCheck, GroupKeyOpenCheck, GroupTopUpCheck, SealGroupLineInput,
+    GroupEpochProgress, GroupLineVerifyMemo, FormerKey,
 } from './group-crypto.js';

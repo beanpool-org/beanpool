@@ -13,6 +13,7 @@ import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
 import { registerForPushNotifications, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
+import { parseRekeyLink } from '../utils/rekey-redeem';
 import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
 import { retryPendingReports } from '../utils/blocklist';
 import { presentLeaveStatements } from '../utils/push-leave';
@@ -288,6 +289,13 @@ function RootLayoutNav() {
         // "Take over with this phone" (app/unlock-keys.tsx) is routed by expo-router. Not an invite: its server address
         // would otherwise make extractInviteToken read the path's last part ("unlock-keys") as an invite code.
         if (isUnlockLink(currentUrl)) return;
+
+        // A re-key code's link (the dashboard's QR, `https://<node>/?rekey=RK-…`): its own screen, never an invite
+        // (app/rekey-code.tsx; utils/rekey-redeem.ts parseRekeyLink refuses an address that isn't plain host[:port]).
+        if (parseRekeyLink(currentUrl)?.community) {
+            if (isComponentMounted.current) router.push({ pathname: '/rekey-code', params: { link: currentUrl } });
+            return;
+        }
 
         const inviteToken = extractInviteToken(currentUrl);
         // Valid invite tokens must be present, and not be full HTTP URLs or paths
@@ -773,6 +781,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="find-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="claim-community" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="rekey-code" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="join-global" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="start-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/[slug]" options={{ animation: 'slide_from_right' }} />

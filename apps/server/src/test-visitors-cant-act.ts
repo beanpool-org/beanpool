@@ -1051,6 +1051,8 @@ async function main(): Promise<void> {
             'POST /api/member/purge',
             // The join doors, signed by the joiner (its invite or ticket redeem is one the middleware never sees).
             'POST /api/join', 'POST /api/join/work', 'POST /api/join/sso-nonce', 'POST /api/join/knock',
+            // A re-key ask (#1768), which the route itself refuses for any key with a row here, with its own plain sentence.
+            'POST /api/member/re-enroll',
             // What anyone may do, signed or not.
             'POST /api/pricing-guide/report',
         ].sort();

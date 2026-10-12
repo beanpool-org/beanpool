@@ -709,6 +709,15 @@ function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, cursor
     }).map(r => r.id);
 }
 
+/**
+ * The listings a delta read from `cursor` sends this member again whatever changed (offBoardPostsToResend). A by-area
+ * read's tag describes the node's rows, not what the phone wrote over them, so the route answers no 304 while one of
+ * these is in the member's set: the 200 carries it (review of #1805, finding 2).
+ */
+export function postsResentTo(db: Db, viewer: string, cursor: string): string[] {
+    return offBoardPostsToResend(db, viewer, enterprisesKeptBy(db, viewer), cursor, new Date().toISOString());
+}
+
 export function hasListedOffer(db: Db, publicKey: string): boolean {
     const row = db.prepare("SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' LIMIT 1").get(publicKey);
     return !!row;

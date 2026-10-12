@@ -756,6 +756,9 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Category:** DELIBERATE DECISION
 - **Why not to re-file:** returning `[]` for a corrupt `commons_projects` value lets the next write persist the empty list and wipe every
   stored project. Failing loudly is the safer behaviour. Do not file a silent fallback for stored money/commons data.
+- **Re-filed 2026-10-12 as #1802** (a `parseCommonsProjectsRow` helper in state-engine.ts used by createProject, plus an unrelated
+  versions.test.mjs cleanup change). Closed again for the same reason. Any helper that turns a corrupt `commons_projects` into `[]` on a
+  path that then writes is this same defect.
 
 ### 2026-10-10 — Watchman: raise the test-door-work timing bound (#1730) — CLOSED, CLAIM FALSE
 - **Category:** CLAIM FALSE (no reproduction on main)

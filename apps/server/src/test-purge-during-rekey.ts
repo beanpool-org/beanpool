@@ -11,7 +11,7 @@
  * session as the app does (challenge, signature, handshake, session), members sign each request with their key.
  *
  *  A. Pat (40 Beans) has a re-key pending; the owner removes Pat (POST /api/local/admin/users/:pubkey/prune). Pat's new
- *     phone then redeems the code (POST /api/member/re-enroll), and the owner tries to complete it by hand: both refused.
+ *     phone then asks with the code (POST /api/member/re-enroll), and the owner tries to complete it by hand: both refused.
  *  B. Sam (25 Beans) has a re-key pending; the owner removes Sam, and Sam then tries to delete the account with the old
  *     key (refused: a replaced key has no exception, not even a closed account's Delete account). The re-key is refused.
  *  C. Tia (15 Beans) has a re-key pending and signs POST /api/member/purge with the old key: refused (the key is
@@ -34,6 +34,7 @@ import { db } from './db/db.js';
 import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, getBalance, getMember, payFromCommons } from './state-engine.js';
 import { runLedgerAudit } from './engine/audit.js';
 import { REKEY_ACCOUNT_GONE } from './engine/member-wizards.js';
+import { REKEY_CODE_NOT_VALID } from './engine/rekey-redeem.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
@@ -122,10 +123,16 @@ async function runTests() {
         });
         return { status: res.status, json: await res.json().catch(() => ({})) as any };
     }
-    /** The new phone redeems the code: the request signed by the new key, with its proof of possession of the code. */
+    /**
+     * The new phone asks with the code (signed by the new key, with its proof of possession of the code), and, once it is
+     * waiting, the owner binds its number (since #1768 an ask binds nothing). The ask's refusal, or the move's answer.
+     */
     async function reEnroll(code: string, kp: Keypair) {
-        const signature = crypto.sign(null, Buffer.from(code, 'utf8'), kp.privateKey).toString('base64');
-        return signed(kp, '/api/member/re-enroll', { code, newPublicKey: kp.pubKeyHex, signature });
+        const signature = crypto.sign(null, Buffer.concat([Buffer.from([0xff]), Buffer.from(`beanpool-re-enroll/2\nlocalhost\n${code}`, 'utf8')]), kp.privateKey).toString('base64');
+        const asked = await signed(kp, '/api/member/re-enroll', { code, newPublicKey: kp.pubKeyHex, signature, signedFor: 'localhost' });
+        if (asked.status !== 200 || asked.json.state !== 'waiting') return asked;
+        const oldPk = (db.prepare('SELECT old_pubkey FROM rekey_requests WHERE code = ?').get(code) as { old_pubkey: string }).old_pubkey;
+        return admin('POST', `/api/local/admin/members/${oldPk}/rekey/complete`, { code, newPubkey: kp.pubKeyHex });
     }
 
     async function issue(name: string, pk: string): Promise<string> {
@@ -174,7 +181,7 @@ async function runTests() {
         assert(getMember(pat.pubKeyHex)?.status === 'pruned' && getBalance(pat.pubKeyHex).balance === 0, 'A: Pat is pruned, the 40 Beans gone to the Commons');
 
         const phone = await reEnroll(code, patNew);
-        assert(phone.status === 400 && phone.json.error === REKEY_ACCOUNT_GONE, `A: the new phone's re-enrolment is refused (${phone.status} ${phone.json.error})`);
+        assert(phone.status === 404 && phone.json.error === REKEY_CODE_NOT_VALID, `A: the new phone's ask is refused, as on any dead code (${phone.status} ${phone.json.error})`);
         const byHand = await admin('POST', `/api/local/admin/members/${pat.pubKeyHex}/rekey/complete`, { code, newPubkey: patNew.pubKeyHex });
         assert(byHand.status === 400 && byHand.json.error === REKEY_ACCOUNT_GONE, `A: the owner completing it by hand is refused (${byHand.status} ${byHand.json.error})`);
         await nothingCameBack('A', pat, patNew, sumBefore);
@@ -195,7 +202,9 @@ async function runTests() {
         assert(getMember(sam.pubKeyHex)?.status === 'pruned', 'B: Sam stays pruned after the delete');
 
         const phone = await reEnroll(code, samNew);
-        assert(phone.status === 400 && phone.json.error === REKEY_ACCOUNT_GONE, `B: the re-enrolment is refused (${phone.status} ${phone.json.error})`);
+        assert(phone.status === 404 && phone.json.error === REKEY_CODE_NOT_VALID, `B: the new phone's ask is refused (${phone.status} ${phone.json.error})`);
+        const byHand = await admin('POST', `/api/local/admin/members/${sam.pubKeyHex}/rekey/complete`, { code, newPubkey: samNew.pubKeyHex });
+        assert(byHand.status === 400 && byHand.json.error === REKEY_ACCOUNT_GONE, `B: the owner completing it by hand is refused (${byHand.status} ${byHand.json.error})`);
         await nothingCameBack('B', sam, samNew, sumBefore);
     }
 

@@ -44,7 +44,7 @@ import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { withheldAttachmentFor } from '../engine/withheld-lines.js';
-import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, postsResentTo, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 
@@ -508,11 +508,19 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // never answered 304: the phone's platform HTTP cache sends the last ETag of that URL by itself, and a 304 would skip
     // the note while the app writes the stored body. It is one row. Every other read keeps its 304.
     const notesTheRead = !!viewerPubkey && !guestView && (!!id || !!ids) && !sync && !updatedAfter;
+    // A member's set from a cursor is never answered 304 while the delta would send one of its listings again whatever
+    // changed (engine postsResentTo): the phone wrote it back as it isn't (the deal heal, the event page), and the tag,
+    // which describes the node's rows, can't tell (review of #1805, finding 2). Asked only where the tag matches.
+    const resendsOfSet = () => {
+        if (!nearbySet || !updatedAfter || !reader) return false;
+        const inSet = new Set(nearbySet.ids);
+        return postsResentTo(db, reader, updatedAfter).some(postId => inSet.has(postId));
+    };
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch && !notesTheRead) {
         const cleanInm = ifNoneMatch.replace(/^W\//, '');
         const cleanEtag = etag.replace(/^W\//, '');
-        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+        if ((cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) && !resendsOfSet()) {
             // A heal answer confirmed is a page that went to the key: its row's time moves (engine/photo-keys.ts
             // restartPhotoHealFor), and nothing else, since the row already records this answer.
             if (heal) notePhotoHealAnsweredAgain(ctx.state.actor as string | undefined);

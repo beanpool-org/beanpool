@@ -207,6 +207,18 @@ export async function initDB() {
     await dbInitPromise;
 }
 
+/**
+ * Any write to the cached listings forgets the stored tag of the last read by area (nearby_held k = 'tag'), in its own
+ * transaction: the tag says "this phone holds the set as the node has it", and a write from anywhere else (a push, the
+ * deal heal, the event page, the member's own edit or deal) makes what it holds something the tag doesn't describe. A
+ * delta answered 304 over it would keep that until the set next changed (review of #1805, finding 2). The read by area
+ * writes its rows first and stores its tag after (services/pillar-sync.ts), so its own rows never forget it.
+ */
+const NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE = `
+        CREATE TRIGGER IF NOT EXISTS posts_ai_nearby_tag AFTER INSERT ON posts BEGIN DELETE FROM nearby_held WHERE k = 'tag'; END;
+        CREATE TRIGGER IF NOT EXISTS posts_au_nearby_tag AFTER UPDATE ON posts BEGIN DELETE FROM nearby_held WHERE k = 'tag'; END;
+        CREATE TRIGGER IF NOT EXISTS posts_ad_nearby_tag AFTER DELETE ON posts BEGIN DELETE FROM nearby_held WHERE k = 'tag'; END;`;
+
 async function _doInitDB() {
     const database = await getDb();
     
@@ -370,6 +382,7 @@ async function _doInitDB() {
         -- together: the phone sends the hash back and is not sent the set again while it holds (readNearbyHeld). k = 'tag':
         -- the ETag of its last read that landed whole, sent with the next delta for a 304 (readNearbyTag).
         CREATE TABLE IF NOT EXISTS nearby_held (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
 
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
         CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
@@ -549,6 +562,7 @@ async function _doInitDB() {
         try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);`); } catch (e) {}
         // The set a by-area community's last set read named, and its hash (keepPostsNearby, readNearbyHeld).
         try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_held (k TEXT PRIMARY KEY, v TEXT NOT NULL);`); } catch (e) {}
+        try { await database.execAsync(NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE); } catch (e) {}
         // The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat
         // names it: by index, not a scan of each table per listing (the review of #1778, finding 4: 79 ms at 3,000 deals).
         try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_id ON marketplace_transactions(post_id);`); } catch (e) {}
@@ -3317,7 +3331,11 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const fresh = new Set<string>(Array.isArray(delta.liveChanges)
                 ? (delta.liveChanges as LivePostChange[]).flatMap(c => (c.kind === 'upsert' && c.post?.id ? [String(c.post.id)] : []))
                 : []);
-            await keepPostsNearby(txn, delta.postsNearby, selfPubkey, fresh);
+            // A push replayed in this write landed outside the read the tag describes (one outside the set is kept as fresh):
+            // the tag isn't stored, and the next delta is answered whole (review of #1805, finding 2).
+            const pushed = Array.isArray(delta.liveChanges) && delta.liveChanges.length > 0;
+            const nearby = pushed && typeof delta.postsNearby.tag === 'string' ? { ...delta.postsNearby, tag: null } : delta.postsNearby;
+            await keepPostsNearby(txn, nearby, selfPubkey, fresh);
         }
 
         if (delta.marketplaceTransactions !== undefined) {

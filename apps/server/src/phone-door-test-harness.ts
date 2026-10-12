@@ -30,6 +30,8 @@
  *   listings {rows}             listings, each {id, author, lat, lng, type?, at?}: active, public, changed at `at` (else now)
  *   edit {post, lat?, lng?, status?}  a listing moved or taken off (`cancelled`), changed now
  *   deal {post, buyer, seller, status, at?}  a deal on a listing (a fixture row: requested or pending is a tie of both)
+ *   holiday {key}               the member goes on holiday (setHolidayMode): their listings are off the board
+ *   sql {q, p?}                 one statement on the node's database, as a fixture (a conversation, a block)
  *   epoch                       a take-over: the node's identity epoch one higher, as the take-over's role step leaves it
  *   profileSwitch {name, value} a profile switch's override in node_config (`true`/`false`), as an operator sets one
  *   quit                        exit
@@ -70,7 +72,7 @@ async function main(): Promise<void> {
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { probationState } = await import('./engine/probation.js');
-    const { transfer, getBalance } = await import('./state-engine.js');
+    const { transfer, getBalance, setHolidayMode } = await import('./state-engine.js');
     const { setMemberArea } = await import('./engine/member-area.js');
     const { bumpPostsVersion } = await import('./engine/versions.js');
     const { getLocalConfig, updateLocalConfig } = await import('./config/local-config.js');
@@ -182,6 +184,15 @@ async function main(): Promise<void> {
                         VALUES (?, ?, ?, ?, 5, ?, ?)`).run(`deal-${String(post)}`, String(post), String(buyer), String(seller), String(status), at ?? new Date().toISOString());
             bumpPostsVersion();
             return true;
+        },
+        holiday: ({ key }: { key?: string }) => {
+            setHolidayMode(String(key), true);
+            return true;
+        },
+        sql: ({ q, p }: { q?: string; p?: unknown[] }) => {
+            const r = db.prepare(String(q)).run(...(Array.isArray(p) ? p : []));
+            bumpPostsVersion();
+            return Number(r.changes);
         },
         epoch: () => {
             const next = (Number(getLocalConfig().identityEpoch) || 0) + 1;

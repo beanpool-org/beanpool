@@ -7,6 +7,8 @@ import { getConversationMessages, getEventChat, createConversationApi, sendMessa
 import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
 import { sealDmLine, encodePlaintext } from '../lib/e2e-crypto';
 import { dmNotLockedLine } from '../lib/dm-lock';
+import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 
 // Polyfill scrollIntoView for jsdom
 if (typeof window !== 'undefined' && window.HTMLElement) {
@@ -99,6 +101,10 @@ vi.mock('../lib/api', () => ({
     getMessageAttachmentApi: vi.fn(),
     completeMarketplaceTransaction: vi.fn(),
     cancelMarketplaceTransaction: vi.fn(),
+    // A group's chat on a node from before locked chats (no `encryption`), unless a test says otherwise.
+    getGroupChat: vi.fn(async (groupId: string) => ({ conversation: mockConversationDetails[groupId], messages: mockMessagesByConv[groupId] || [], canPost: true })),
+    getGroupMembers: vi.fn(async () => []),
+    groupKeysNet: { get: vi.fn(async () => new Response('{}', { status: 404 })), post: vi.fn(async () => new Response('{}', { status: 404 })) },
 }));
 
 const mockIdentity: BeanPoolIdentity = {
@@ -1062,7 +1068,7 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         expect(encodePlaintext).not.toHaveBeenCalled();
     });
 
-    it('a group chat still goes readable: the node reads it by design, and the chat says so', async () => {
+    it('a group chat on a node from before locked chats, never seen locked here, still goes readable (§14.3), and the chat says so', async () => {
         mockConversations = [{
             id: 'group-1', type: 'group_thread' as any, name: 'Garden crew', participants: ['my-pubkey', 'peer-pubkey'],
             createdBy: 'my-pubkey', unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
@@ -1070,6 +1076,9 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         mockConversationDetails = { 'group-1': mockConversations[0] };
         mockMessagesByConv = { 'group-1': [] };
         vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as any);
+        // A browser whose lock store reads (with none, nothing readable goes: group-chat-lock-store fails closed).
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        resetGroupChatLockStoreForTest();
         render(<MessagesPage identity={mockIdentity} openConversationId="group-1" />);
         const composer = await screen.findByPlaceholderText('Message...');
         await act(async () => {});
@@ -1079,6 +1088,9 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
         expect(encodePlaintext).toHaveBeenCalledWith('swap day on Saturday');
         expect(sealDmLine).not.toHaveBeenCalled();
+        // The app's own words for such a chat, never the node's notice.
+        expect(screen.getByTestId('group-chat-notice').textContent).toContain('This community\'s node is older and can read this group\'s chat.');
+        vi.unstubAllGlobals();
     });
 });
 

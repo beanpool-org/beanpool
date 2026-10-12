@@ -139,6 +139,9 @@ beforeEach(() => {
             return reply(200, { success: true, message: { id: body.id, timestamp: new Date().toISOString() } });
         }
         if (init.method === 'POST' && path === '/api/messages/edit') return reply(200, { success: true, message: { editedAt: new Date().toISOString() } });
+        // A node from before locked group chats: its group chat answer carries no `encryption` (§14.3), and it has no keys
+        // route. Only such a node, never seen locked by this phone, is sent a readable group line (review of #1788, finding 4).
+        if ((init.method ?? 'GET') === 'GET' && path.startsWith(`/api/groups/${CONV}/chat`)) return reply(200, { messages: [], canPost: true });
         return reply(404, { error: 'not in this test' });
     });
     (globalThis as any).fetch = fetchMock;

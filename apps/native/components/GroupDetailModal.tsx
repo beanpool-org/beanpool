@@ -386,7 +386,8 @@ export function GroupDetailModal({
     const handleJoin = async () => {
         setActionLoading(true);
         try {
-            await joinGroupApi(groupData.id);
+            // Joining lets this member into the chat: their phone makes its next key in the same request (§2.3).
+            await joinGroupApi(groupData.id, { joinPolicy: groupData.joinPolicy, viewerStatus: (groupData as any).viewerStatus });
             hapticSuccess();
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();

@@ -94,6 +94,7 @@ import {
     executeOffboard,
     type OffboardOptions,
 } from '../engine/member-wizards.js';
+import { bindRekeyByMatch, declineRekeyProposal, rekeyCodeUnderAttack, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
 import { getOffboxHealth } from '../services/offbox-backups.js';
@@ -2468,7 +2469,9 @@ router.get('/api/local/admin/members/:pubkey/rekey/status', async (ctx) => {
         const { pubkey } = ctx.params;
         // An automation token is never a fresh phone session, so it never reads an owner's or admin's code (#1546 review).
         const status = getRekeyStatus(pubkey, viewer, { viewerStepUpDue: !!(ctx.state as any)?.phoneStepUpDue || !!(ctx.state as any)?.viaToken });
-        ctx.body = status;
+        // Beside the code only: whether codes starting like it are being guessed at this hour (#1783 review N3).
+        const underAttack = status.pendingRequest?.code ? rekeyCodeUnderAttack(status.pendingRequest.code) : null;
+        ctx.body = underAttack ? { ...status, codeUnderAttack: underAttack } : status;
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e?.message || 'Failed to fetch re-key status' };
@@ -2512,18 +2515,46 @@ router.post('/api/local/admin/members/:pubkey/rekey/cancel', async (ctx) => {
     }
 });
 
+// "Not theirs" (engine/rekey-redeem.ts declineRekeyProposal): a phone that asked on the member's code is declined, and
+// its poll answers `declined`. Who may make the code may decline, as issue-code asks.
+router.post('/api/local/admin/members/:pubkey/rekey/proposals/:newPubkey/decline', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey, newPubkey } = ctx.params;
+    const effectiveActor = resolveAdminActor(ctx);
+    if (!effectiveActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
+
+    try {
+        ctx.body = { success: true, ...declineRekeyProposal(pubkey, newPubkey, effectiveActor) };
+    } catch (e: any) {
+        ctx.status = e?.status || 400;
+        ctx.body = { error: e?.message || 'Failed to decline the phone', ...(e instanceof RekeyRedeemRefusal ? { code: e.code } : {}) };
+    }
+});
+
+// Binding the member's new phone. Two explicit ways, never both in one request:
+// - `{ code, match }`: the number the admin typed from the member's phone; the node binds the live, undeclined phone that
+//   shows it (engine/rekey-redeem.ts bindRekeyByMatch), and three wrong numbers stop the code (#1783 review B2);
+// - `{ code, newPubkey }`: the wizard's folded "Paste a key instead", for a phone that can't ask (completeRekey, which
+//   refuses a phone the admins declined on this code).
 router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { pubkey } = ctx.params;
     const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
-    const { code, newPubkey } = body;
+    const { code, newPubkey, match } = body;
 
     if (!code || typeof code !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Re-enrolment code is required' };
         return;
     }
-    if (!newPubkey || typeof newPubkey !== 'string') {
+    const byMatch = match !== undefined && match !== null;
+    if (byMatch === (newPubkey !== undefined && newPubkey !== null)) {
+        ctx.status = 400;
+        ctx.body = { error: 'Type the number on their phone, or paste their key: one of the two' };
+        return;
+    }
+    if (!byMatch && typeof newPubkey !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'New public key is required' };
         return;
@@ -2534,9 +2565,17 @@ router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
     if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
 
     try {
-        const result = completeRekey(pubkey, newPubkey, code, effectiveActor);
+        const result = byMatch
+            ? bindRekeyByMatch(pubkey, code, match, effectiveActor)
+            : completeRekey(pubkey, newPubkey, code, effectiveActor);
         ctx.body = result;
     } catch (e: any) {
+        if (e instanceof RekeyRedeemRefusal) {
+            ctx.status = e.status;
+            const triesLeft = (e as RekeyRedeemRefusal & { triesLeft?: number }).triesLeft;
+            ctx.body = { error: e.message, code: e.code, ...(triesLeft !== undefined ? { triesLeft } : {}) };
+            return;
+        }
         ctx.status = e?.status || (e?.message?.includes('not found') || e?.message?.includes('unrecognised') ? 404 : 400);
         ctx.body = { error: e?.message || 'Failed to complete re-keying' };
     }

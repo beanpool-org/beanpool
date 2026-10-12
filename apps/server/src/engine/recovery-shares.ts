@@ -636,62 +636,17 @@ export function removeSignInCopiesAsStored(ownerPubkey: string, provider: string
 }
 
 /**
- * A member moved to a new key (the re-key wizard, engine/member-wizards.ts): the rows they own belong to the new key,
- * and the rows where they are the keeper name it. The owner is part of what a wrapped row is bound to, so each wrapped
- * row they own is opened under the old key and wrapped again under the new one; a keeper ref is not, so those rows are
- * only renamed.
+ * A member moved to a new key (the re-key, engine/member-wizards.ts completeRekey): the copies they keep for someone
+ * else name the new key as their keeper. A keeper ref is no part of what a wrapped copy is bound to (its owner and holder
+ * type, shareRowAad), so the rows are only renamed, never opened. Each is stamped, so a standby is sent the move.
  *
- * A wrapped row must never change owner without being wrapped again: bound to the old owner and filed under the new
- * one, it would not open with any key, even once the key that locked it is back. So:
- * - With no key file, it throws {@link RecoverySealKeyMissing} and the caller's transaction (the whole re-key) rolls
- *   back. The re-enrolment code stays pending, and the re-key can be run again once the key is back.
- * - A row this server's key does not open (another key locked it) stays where it is, under the old key it is bound
- *   to, and the log says how many. The re-key must not wait on it, and left there it still opens if the key that
- *   locked it comes back. The member's 12 words still work, and connecting the sign-in again makes a new copy.
- *
- * Every row it moves is stamped, so a standby is sent the move. Runs inside the caller's transaction.
+ * The copies the member OWNS are not moved: they rebuild the replaced seed, and completeRekey deletes them
+ * ({@link deleteAllShares}) so the member links their sign-in again (design DESIGN-rekey-redeem-fable.md §4).
+ * Runs inside the caller's transaction.
  */
-export function moveRecoverySharesToNewKey(oldPubkey: string, newPubkey: string): void {
-    const rows = db.prepare(`
-        SELECT * FROM recovery_shares
-        WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)
-    `).all(oldPubkey, oldPubkey) as Record<string, unknown>[];
-    const move = db.prepare(`
-        UPDATE recovery_shares
-        SET owner_pubkey = ?, holder_ref = ?, encrypted_share = ?, share_iv = ?, share_tag = ?, kdf_params = ?,
-            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-        WHERE id = ?
-    `);
-    let leftBehind = 0;
-    for (const r of rows) {
-        const holderType = r.holder_type as string;
-        const owner = r.owner_pubkey === oldPubkey ? newPubkey : r.owner_pubkey as string;
-        const ref = holderType === 'member' && r.holder_ref === oldPubkey ? newPubkey : r.holder_ref as string;
-        let fields = {
-            encryptedShare: r.encrypted_share as string,
-            shareIv: r.share_iv as string,
-            shareTag: r.share_tag as string,
-            kdfParams: (r.kdf_params as string | null) ?? null,
-        };
-        if (owner !== r.owner_pubkey && isNodeWrapped(fields.kdfParams)) {
-            try {
-                fields = sealRecoveryFields(
-                    openRecoveryFields(fields, shareRowAad(r.owner_pubkey as string, holderType)),
-                    shareRowAad(owner, holderType),
-                );
-            } catch (e) {
-                if (e instanceof RecoverySealKeyMissing) throw e;
-                if (!(e instanceof RecoverySealUnopenable)) throw e;
-                leftBehind++;
-                continue;
-            }
-        }
-        move.run(owner, ref, fields.encryptedShare, fields.shareIv, fields.shareTag, fields.kdfParams, r.id);
-    }
-    if (leftBehind) {
-        const one = leftBehind === 1;
-        console.warn(`[RecoverySeal] ${leftBehind} recovery cop${one ? 'y' : 'ies'} locked with another key `
-            + `${one ? 'stays' : 'stay'} under a re-keyed member's old key, where ${one ? 'it is' : 'they are'} bound: `
-            + `moved, ${one ? 'it' : 'they'} could never open again.`);
-    }
+export function moveKeeperCopiesToNewKey(oldPubkey: string, newPubkey: string): number {
+    return db.prepare(`
+        UPDATE recovery_shares SET holder_ref = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE holder_type = 'member' AND holder_ref = ?
+    `).run(newPubkey, oldPubkey).changes;
 }

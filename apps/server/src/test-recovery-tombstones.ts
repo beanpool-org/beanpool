@@ -22,7 +22,7 @@
  *  5. Between two pulls, Eli re-deposits (his older generation dropped on the main server) and then disconnects: the
  *     standby, which holds the older generation, has none of his copies after either pull.
  *  6. Between two pulls, Fay disconnects and is then re-keyed: the standby ends as the main server, no copy under either key.
- *  7. Between two pulls, Gus is re-keyed and then disconnects: the same.
+ *  7. Between two pulls, Gus is re-keyed, which deletes his copy with a tombstone (#1768): the same.
  * 7b. Ivy disconnects, and the standby records the tombstone without applying it, as a version from before this does. At
  *     its next start, before any pull, it applies it: a delta would not send it again, and a large database takes no
  *     routine whole copy.
@@ -332,12 +332,15 @@ async function main(): Promise<void> {
         await pull(true, 'then');
         await agree('after the whole copy', [fay, fay2]);
 
-        // ── 7. A re-key, then a delete, between two pulls ──
-        console.log('\n— 7. between two pulls, Gus is re-keyed and then disconnects his sign-in —');
+        // ── 7. A re-key between two pulls: the re-key itself deletes the copy (#1768) ──
+        // Since #1768 a re-key deletes the member's own copies (they rebuild the replaced seed) instead of moving them, so
+        // the new phone has nothing to disconnect: the re-key's own tombstone is what the standby must follow.
+        console.log('\n— 7. between two pulls, Gus is re-keyed: the main server deletes his copy rather than moving it —');
         require_(await main.send('rekey', { oldPk: gus.pk, newPk: gus2.pk, operator: owner }), 'Gus is re-keyed to his new phone\'s key');
-        const moved = (await main.send('copies')).filter((r: any) => r.owner === gus2.pk).length;
-        require_(moved === 1, `the main server moves his copy to the new key (${moved})`);
-        require_((await disconnect(gus2)).status === 200, 'Gus disconnects Google, from his new phone');
+        const left = (await main.send('copies')).filter((r: any) => r.owner === gus2.pk || r.owner === gus.pk).length;
+        require_(left === 0, `the main server holds no copy of his under either key (${left})`);
+        const gusTomb = (await main.send('recovery-tombstones')).find((t: any) => t.row_key.startsWith(`${gus.pk}|`));
+        assert(!!gusTomb, `with a tombstone under his old key (${gusTomb?.row_key?.split('|')[1]})`);
         await pull(false, 'after that');
         await agree('after the delta', [gus, gus2]);
         await pull(true, 'then');

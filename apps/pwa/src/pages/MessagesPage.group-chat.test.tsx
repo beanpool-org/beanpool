@@ -33,6 +33,8 @@ const ben = person();
 let node: FakeGroupNode;
 /** What the node's chat answer says about its lock: `locked` (encryption) or not (a node that now says unlocked). */
 let chatLocked = true;
+/** The type the node gives the conversation (a dishonest node retypes a group). */
+let nodeType = 'group_thread';
 /** Rows the node serves beside the sealed lines it stored. */
 let extraRows: any[] = [];
 
@@ -64,7 +66,7 @@ vi.mock('../lib/api', () => ({
 }));
 
 function conv() {
-    return { id: G, type: 'group_thread', name: 'Garden crew', participants: [ana.publicKey, ben.publicKey], createdBy: ana.publicKey, createdAt: '2026-10-01T00:00:00Z', unreadCount: 0 };
+    return { id: G, type: nodeType, name: 'Garden crew', participants: [ana.publicKey, ben.publicKey], createdBy: ana.publicKey, createdAt: '2026-10-01T00:00:00Z', unreadCount: 0 };
 }
 
 const me: BeanPoolIdentity = { publicKey: ana.publicKey, privateKey: ana.privateKey, callsign: 'Ana', createdAt: '2026-10-01T00:00:00Z' };
@@ -76,6 +78,7 @@ beforeEach(async () => {
     forgetGroupKeys();
     node = fakeGroupNode(G, [ana.publicKey, ben.publicKey]);
     chatLocked = true;
+    nodeType = 'group_thread';
     extraRows = [];
     // Ben opened the chat first: epoch 1 for both of them, and one line of his.
     const { epoch, key } = await groupKeyring(node.as(ben.publicKey), ben, G, memoryGroupLockStore()).prepareToSeal();
@@ -131,6 +134,18 @@ describe('a locked group chat on the web', () => {
         chatLocked = false;
         const composer = await openChat();
         expect(screen.getByTestId('group-chat-notice').textContent).toContain("This node now says this chat isn't locked.");
+        await send(composer, 'secret plan');
+        await waitFor(() => expect(node.lines).toHaveLength(2));
+        expect(node.lines[1].nonce.startsWith('group-xc20p-v1:')).toBe(true);
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it.each(['enterprise_thread', 'dm'])('once seen locked, a node that retypes the group as %s still gets a sealed group line, never a readable or DM one', async (type) => {
+        await openChat();
+        cleanup();
+        forgetGroupKeys();
+        nodeType = type;
+        const composer = await openChat();
         await send(composer, 'secret plan');
         await waitFor(() => expect(node.lines).toHaveLength(2));
         expect(node.lines[1].nonce.startsWith('group-xc20p-v1:')).toBe(true);

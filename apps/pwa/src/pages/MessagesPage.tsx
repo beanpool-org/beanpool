@@ -20,7 +20,9 @@ import {
 } from '../lib/e2e-crypto';
 import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
 import { heldConversation } from '../lib/dm-guard';
+import { holdConversation, lockedGroupsOrNull, sendRouteOf, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
+import { GROUP_CHAT_NO_PHOTOS_TEXT } from '../lib/group-chat-lines';
 import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import {
@@ -458,8 +460,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     async function loadConversations() {
         try {
             const result = await getConversations(identity.publicKey);
-            // A DM stays a DM, whatever type the node gives it now (lib/dm-guard.ts).
-            const held = (result.conversations || []).map((c: Conversation) => heldConversation(c));
+            // A DM stays a DM, and a group seen locked here stays a group, whatever type the node gives it now
+            // (lib/dm-guard.ts, lib/group-hold.ts).
+            const locked = await lockedGroupsOrNull(identity.publicKey);
+            const held = (result.conversations || []).map((c: Conversation) => holdConversation(c, locked));
             const blocked = new Set(getBlockedUsers());
             const filtered = held.filter((c: Conversation) => {
                 if (c.type === 'dm') {
@@ -490,7 +494,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         loadConversations().then(() => {
             // Find the conversation and open it
             getConversations(identity.publicKey).then(async result => {
-                const held = (result.conversations || []).map((c: Conversation) => heldConversation(c));
+                const locked = await lockedGroupsOrNull(identity.publicKey);
+                const held = (result.conversations || []).map((c: Conversation) => holdConversation(c, locked));
                 let conv = held.find((c: Conversation) => c.id === openConversationId);
                 if (!conv) {
                     conv = held.find((c: Conversation) => c.type === 'dm' && c.participants.includes(openConversationId));
@@ -616,7 +621,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
             }
             // A DM stays a DM: one seen as one here, or whose lines are encrypted (lib/dm-guard.ts).
-            const heldConv = result.conversation ? heldConversation(result.conversation, uniqueMessages) : null;
+            const locked = result.conversation ? await lockedGroupsOrNull(identity.publicKey) : null;
+            if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+            const heldConv = result.conversation ? holdConversation(result.conversation, locked, uniqueMessages) : null;
             if (heldConv) {
                 const isDm = heldConv.type === 'dm';
                 const peerCursor = isDm ? (heldConv as any).readCursors?.find(
@@ -744,7 +751,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         try {
             const result = await getConversationMessages(conv.id);
             if (!result.conversation) return conv;
-            const held = heldConversation(result.conversation, result.messages);
+            const held = holdConversation(result.conversation, await lockedGroupsOrNull(identity.publicKey), result.messages);
             setActiveConv(prev => (prev && prev.id === conv.id ? { ...prev, ...held } : prev));
             return { ...conv, ...held };
         } catch {
@@ -825,6 +832,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 await sendInGroup(activeConv, wasEditing);
                 return;
             }
+            // A group seen locked here, whatever the node now calls it, is sealed as a group's line or refused; with the
+            // lock store unreadable, only a DM this browser knows goes on (lib/group-hold.ts).
+            const route = await sendRouteOf(identity.publicKey, activeConv.id);
+            if (route === 'group') {
+                await sendInGroup({ ...activeConv, type: 'group_thread' }, wasEditing);
+                return;
+            }
+            if (route === 'refuse') {
+                setChatRefusal(GROUP_HOLD_UNREAD_TEXT);
+                return;
+            }
             // Nothing is sent, and the draft stays, when a DM can't be locked (caught below). A DM line is sealed to its
             // message id (a new one, sent with it; an edit's own) and to the line it was written after: the newest the
             // node has given us, or for an edit the one its line was written after.
@@ -883,6 +901,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     async function handleSendImage(file: File, caption = ''): Promise<boolean> {
         if (!activeConv) return false;
         if (activeConv.type !== 'dm') { alert('Photos can only be sent in direct messages.'); return false; }
+        // A group seen locked here takes no photo whatever the node calls it; an unreadable lock store sends none to a
+        // conversation this browser doesn't know as a DM (lib/group-hold.ts).
+        const route = await sendRouteOf(identity.publicKey, activeConv.id);
+        if (route !== 'as-typed') { setChatRefusal(route === 'group' ? GROUP_CHAT_NO_PHOTOS_TEXT : GROUP_HOLD_UNREAD_TEXT); return false; }
         setSending(true);
         try {
             const dataUri = await resizeImageToDataUri(file, 1000, 0.7);

@@ -44,7 +44,7 @@ import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { withheldAttachmentFor } from '../engine/withheld-lines.js';
-import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 
@@ -465,7 +465,11 @@ router.get('/api/marketplace/posts', async (ctx) => {
         nearbyEtag = `W/"near-${crypto.createHash('sha256').update(described).digest('hex').slice(0, 24)}"`;
     }
 
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}`;
+    // A search leaves out the listings of the authors the reader blocked (engine getPosts), so its tag describes that list
+    // too: a block or an unblock changes the answer and no listing, and a copy held from before must not be confirmed
+    // with a 304 (#1808 review, finding 3). The nearby set's tag holds its ids, so it needs nothing more.
+    const blocksPart = q && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 

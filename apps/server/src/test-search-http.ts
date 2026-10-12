@@ -10,6 +10,8 @@
  *    for nobody in particular, find them as before; a read that is not a search is unchanged (the phone hides them).
  * 3. A hyphenated word, asked with core's words as every app asks, finds the listing that holds it and not every listing
  *    with a word starting "co" or "op" (#1808 review, finding 1).
+ * 4. A search's ETag changes when the reader blocks or unblocks someone: the answer leaves out a different set of
+ *    authors, so a copy held from before must not be confirmed with a 304 (#1808 review, finding 3).
  *
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-search-http.ts
  */
@@ -22,7 +24,7 @@ import { initStateEngine, createPost } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { addBlocks } from './engine/member-blocks.js';
+import { addBlocks, removeBlock } from './engine/member-blocks.js';
 import { getPosts } from './state-engine.js';
 import { searchTermsFor } from '@beanpool/core';
 
@@ -45,7 +47,7 @@ function makeMember(callsign: string): Id {
     return { pubKeyHex, privateKey };
 }
 
-async function signedGet(path: string, id: Id): Promise<{ status: number; body: any }> {
+async function signedGet(path: string, id: Id, extra: Record<string, string> = {}): Promise<{ status: number; body: any; etag: string | null }> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const canonical = `GET\n${path.split('?')[0]}\n${ts}\n${nonce}\n`;
@@ -55,10 +57,11 @@ async function signedGet(path: string, id: Id): Promise<{ status: number; body: 
             'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
+            ...extra,
         },
     });
     let body: any; try { body = await res.json(); } catch { /* not JSON */ }
-    return { status: res.status, body };
+    return { status: res.status, body, etag: res.headers.get('etag') };
 }
 
 /** The titles a search answers this reader, sorted, and the status. */
@@ -138,6 +141,22 @@ async function main(): Promise<void> {
     const coop = await search(searchTermsFor('co-op').join(' '), other);
     assert(coop.status === 200 && JSON.stringify(coop.titles) === JSON.stringify(['Co-op shares']),
         `core's words for "co-op" find "Co-op shares" and not "Cooking lessons" or "Opera tickets" (${JSON.stringify(coop.titles)})`);
+
+    // ── 4. The search's ETag across a block and an unblock ─────────────────────
+    const tagged = makeMember('Tagged');
+    const path = '/api/marketplace/posts?q=fresh&limit=200';
+    const t1 = await signedGet(path, tagged);
+    const same = await signedGet(path, tagged, { 'If-None-Match': t1.etag! });
+    assert(t1.status === 200 && !!t1.etag && same.status === 304, `with nothing changed the search revalidates as 304 (${t1.status}, ${same.status})`);
+    addBlocks(tagged.pubKeyHex, [bo.pubKeyHex]);
+    const t2 = await signedGet(path, tagged, { 'If-None-Match': t1.etag! });
+    const t2Titles = Array.isArray(t2.body) ? t2.body.map((p: any) => p.title as string) : [];
+    assert(t2.status === 200 && t2.etag !== t1.etag && !t2Titles.includes('Fresh milk') && t2Titles.includes('Fresh eggs'),
+        `after a block the copy held from before is not confirmed: 200 without Bo's listing, a new tag (${t2.status}, ${JSON.stringify(t2Titles)})`);
+    removeBlock(tagged.pubKeyHex, bo.pubKeyHex);
+    const t3 = await signedGet(path, tagged, { 'If-None-Match': t2.etag! });
+    const t3Titles = Array.isArray(t3.body) ? t3.body.map((p: any) => p.title as string) : [];
+    assert(t3.status === 200 && t3Titles.includes('Fresh milk'), `after the unblock neither: 200 with Bo's listing back (${t3.status}, ${JSON.stringify(t3Titles)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

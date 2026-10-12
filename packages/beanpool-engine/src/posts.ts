@@ -1096,8 +1096,8 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
 }
 
 /** The authors this member blocked: their own list, read for them alone (schema.sql's member_blocks). The nearby set and
- *  the search leave out these authors' listings. */
-function authorsBlockedBy(db: Db, member: string): string[] {
+ *  the search leave out these authors' listings; the route's search ETag describes this list. */
+export function authorsBlockedBy(db: Db, member: string): string[] {
     try {
         return (prepared(db, 'SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = ?').all(member) as Array<{ blocked_pubkey: string }>).map(r => r.blocked_pubkey);
     } catch {

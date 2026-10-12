@@ -36,7 +36,11 @@
  *      page when the set and its `tied` are unchanged (item 2); another hash, or none, gets the set in full;
  *  14. the tag of a by-area read leaves out where the read starts (`updatedAfter`), its page and the held hash (item 3):
  *      each page of one read carries the same tag, and that tag sent with a delta from any later cursor is answered 304
- *      while nothing in the set changed (a change 300 km away included), 200 once a listing in it does.
+ *      while nothing in the set changed (a change 300 km away included), 200 once a listing in it does;
+ *  15. never 304 while the delta would send a listing of the set again whatever changed (engine postsResentTo): an
+ *      off-board author's listing she is tied to by a chat, with her cancelled deal on it, which the phone's deal heal
+ *      writes back as active, goes paused in a 200 under the very tag she holds; 304 again once nothing is sent again
+ *      (review of #1805, finding 2).
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-sync-nearby)
  */
@@ -655,6 +659,34 @@ async function main() {
         assert((await deltaFrom(Date.now() - 1000, hash, afterNear.etag || '')).status === 304, 'and with that new tag, from any cursor: 304 again');
         const otherTypes = await get(`/api/marketplace/posts?limit=200&sync=true&types=offer&nearby=1&setOnce=1&paged=1`, busy, { 'If-None-Match': afterNear.etag || '' });
         assert(otherTypes.status === 200, `a read of other types is another body: never confirmed with this tag (${otherTypes.status})`);
+    }
+
+    // ── 15. no 304 while the delta sends a listing of the set again ──
+    console.log('\n── 15. a phone that holds a read\'s tag is answered 200 while a listing of its set is sent again whatever changed ──');
+    {
+        const reader = memberAt('Resend', BUSY);
+        const tiedOff = post(around(BUSY, 3), holidayAuthor);
+        const conv = crypto.randomUUID();
+        db.prepare(`INSERT INTO conversations (id, type, post_id, created_by) VALUES (?, 'dm', ?, ?)`).run(conv, tiedOff, reader.pubKeyHex);
+        db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?), (?, ?)`).run(conv, reader.pubKeyHex, conv, holidayAuthor.pubKeyHex);
+        const read = await readNearby(reader, undefined, '&setOnce=1');
+        const tag = read.answers[0].etag || '';
+        const hash = read.answers[read.answers.length - 1].setHash;
+        const deltaFrom = (ms: number) =>
+            get(`${SYNC}&nearby=1&setOnce=1&setHash=${hash}&updatedAfter=${encodeURIComponent(iso(ms))}&paged=1`, reader, { 'If-None-Match': tag });
+        assert(read.set.includes(tiedOff) && (await deltaFrom(Date.now() - 60_000)).status === 304,
+            'an off-board listing she is tied to by a chat, in her set: with nothing sent again, her tag gets the 304');
+        const dealId = crypto.randomUUID();
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+                    VALUES (?, ?, ?, ?, 5, 'cancelled', ?)`).run(dealId, tiedOff, reader.pubKeyHex, holidayAuthor.pubKeyHex, iso(Date.now() - 86_400_000));
+        for (const sinceMs of [Date.now() - 60_000, Date.now() - 1000]) {
+            const resent = await deltaFrom(sinceMs);
+            const row = resent.posts.find(r => r.id === tiedOff) as (Row & { resentAt?: string }) | undefined;
+            assert(resent.status === 200 && resent.etag === tag && row?.status === 'paused' && !!row?.resentAt,
+                `her cancelled deal on it (the phone's deal heal writes it back active): a 200 under the same tag, the listing paused and sent again (${resent.status}, ${row?.status})`);
+        }
+        db.prepare('DELETE FROM marketplace_transactions WHERE id = ?').run(dealId);
+        assert((await deltaFrom(Date.now() - 1000)).status === 304, 'nothing sent again any more: 304 again');
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

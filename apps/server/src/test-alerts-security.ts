@@ -26,7 +26,8 @@
  *  5c. A role lost or given back outside grant and revoke, through the real routes: an admin suspends an admin, an owner
  *     lifts it, an owner removes an admin, an admin suspends a moderator on a report, an admin deletes their account, a
  *     suspension the community does not keep ends: each told once and pushed to the owners, under the actor's own bound.
- *  5d. Every security log line is in the history (one line per kind, counted, never its words). A standby takes a role
+ *  5d. Every security log line is in the history (one line per kind, counted, never its words); 1000 of them write the
+ *     alert book a handful of times at most, its next write carries their count. A standby takes a role
  *     grant and tells it on its own channel only; once it is the main server, its standby days leave the card and banner.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
@@ -600,6 +601,28 @@ async function main(): Promise<void> {
     const st5d = JSON.stringify(alerts.getAlertsStatus());
     assert(!st5d.includes(CALLSIGNS[3]) && !st5d.includes(CALLSIGNS[4]) && !st5d.includes(member.slice(0, 12)), '5d. never what the line says: no member or key');
     assert(ownerPushes().length === pL && topicHits().length === hL && banner('owner') === 0, '5d. the history only: no push, no channel line, no banner');
+    // A flood of them (a request with no credentials writes one) never rewrites the book per line: counted in memory, the
+    // book written by the next tick (the deciding review of #1807, finding 1: an fsync'd rewrite per line held the loop).
+    const bookFile = path.join(dataDir!, alerts.ALERTS_STATE_FILE);
+    const realRename = fs.renameSync;
+    let bookWrites = 0;
+    fs.renameSync = ((from: fs.PathLike, to: fs.PathLike) => {
+        if (path.basename(String(to)) === alerts.ALERTS_STATE_FILE) bookWrites++;
+        return realRename(from, to);
+    }) as typeof fs.renameSync;
+    const floodStarted = Date.now();
+    try {
+        for (let i = 0; i < 1000; i++) logger.security('AUTH', 'Unauthorized attempt to generate invite code.');
+    } finally {
+        fs.renameSync = realRename;
+    }
+    const floodMs = Date.now() - floodStarted;
+    assert(bookWrites <= 5, `5d. 1000 security log lines write the alert book a handful of times at most (${bookWrites} writes, ${floodMs} ms)`);
+    assert(historyOf('sec.log').find((e) => /sign-in/.test(e.detail))?.count === 1002, `5d. and every one is counted (${historyOf('sec.log').find((e) => /sign-in/.test(e.detail))?.count})`);
+    // The tick's write (checkServerAlerts ends in updateAlerts, which writes the book) or any event's: the same call.
+    await alerts.updateAlerts([]);
+    const onDisk = JSON.parse(fs.readFileSync(bookFile, 'utf8')).history.find((e: any) => e.key === 'sec.log' && /sign-in/.test(e.detail));
+    assert(onDisk?.count === 1002, `5d. the book's next write (the tick's, every minute) carries the count (${onDisk?.count})`);
     // (c) A standby takes a role grant through the route (its own operators' roles; a take-over replaces them): told on its
     // own channel and in its own card, and pushes nobody, as the first review measured it (M5-G1).
     const stan = pubkey();

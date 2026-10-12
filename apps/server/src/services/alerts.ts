@@ -833,6 +833,11 @@ const LOG_KINDS: Record<LogCategory, string> = {
  * Every logger.security() line is in the history (design §3.2), so an owner sees there that one was written, even one
  * never pushed: one line per category, counted, in the server's own words. Never the line itself, which may name a
  * member; Diagnostics & Logs shows it to whoever may read the logs. Not sent, not pushed, not in the banner.
+ *
+ * Counted in memory only: the book is not written here. A request with no credentials at all writes such a line, and a
+ * synchronous, fsync'd rewrite of the book for each one let a flood of them hold the event loop (the deciding review of
+ * #1807, finding 1: 10.6 ms a line). The tick writes the book every minute and every other event writes it too, so a
+ * crash loses at most a minute of these counts; the lines themselves are in the log.
  */
 onSecurityLogLine((category) => {
     const s = readState();
@@ -841,7 +846,6 @@ onSecurityLogLine((category) => {
         key: 'sec.log', kind: 'raised', at: t, since: t, priority: 1,
         detail: `A line was written to the server's security log (${LOG_KINDS[category] ?? 'the server itself'}). Open Appliance & Data → Diagnostics & Logs to read it.`,
     }, MAX_HISTORY, true);
-    writeState();
 });
 
 setSecurityAlertHandler((note) => {

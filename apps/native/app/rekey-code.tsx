@@ -367,7 +367,15 @@ export default function RekeyCodeScreen() {
                     accessibilityLabel="The re-key code"
                 />
                 {error ? <Text style={styles.error}>{error}</Text> : null}
-                <Pressable style={styles.primary} onPress={ask} disabled={phase === 'asking'} accessibilityRole="button">
+                <Pressable
+                    style={styles.primary}
+                    onPress={ask}
+                    disabled={phase === 'asking'}
+                    accessibilityRole="button"
+                    accessibilityLabel={phase === 'asking' ? 'Submitting re-key code...' : phase === 'ended' ? 'Try again' : 'Continue'}
+                    accessibilityHint="Submits code to community node to re-enroll this device"
+                    accessibilityState={{ disabled: phase === 'asking', busy: phase === 'asking' }}
+                >
                     {phase === 'asking' ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryText}>{phase === 'ended' ? 'Try again' : 'Continue'}</Text>}
                 </Pressable>
                 {heldHost ? (

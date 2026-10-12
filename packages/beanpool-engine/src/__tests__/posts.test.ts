@@ -3,10 +3,28 @@ import assert from 'node:assert';
 import Database from 'better-sqlite3';
 import {
     generateSearchKeywords, getPosts, guestPost, publicBroadcastPost, NEAREST_FIRST_CIRCLES_KM, NEAREST_FIRST_CIRCLES_MAX_DEPTH,
-    HIDDEN_AUTHOR, type MarketplacePost, type PostFilter,
+    HIDDEN_AUTHOR, SEARCH_TERMS_MAX, searchTermsOfQuery, type MarketplacePost, type PostFilter,
 } from '../posts.js';
 import { areaBox, boundingBox, haversineKm, registerGeoFunctions, roundToArea, MAX_RADIUS_KM } from '../geo.js';
-import { roundToArea as coreRoundToArea } from '@beanpool/core';
+import { roundToArea as coreRoundToArea, searchTermsFor } from '@beanpool/core';
+
+describe('the words a search asks posts_fts for (#1808 review, finding 5)', () => {
+    it('asks each word once: 4,000 × "a" is one prefix, not 4,000 that each read the whole index', () => {
+        assert.deepStrictEqual(searchTermsOfQuery(Array(4000).fill('a').join(' ')), ['a']);
+        assert.deepStrictEqual(searchTermsOfQuery('eggs honey eggs EGGS'), ['eggs', 'honey', 'EGGS']);
+    });
+    it('asks at most SEARCH_TERMS_MAX, the first ones: core puts the typed words before their synonyms', () => {
+        const many = Array.from({ length: 1000 }, (_, i) => `w${i}`);
+        const terms = searchTermsOfQuery(many.join(' '));
+        assert.strictEqual(terms.length, SEARCH_TERMS_MAX);
+        assert.deepStrictEqual(terms, many.slice(0, SEARCH_TERMS_MAX));
+    });
+    it('holds a wide synonym expansion whole: core\'s words for "food garden" are 175 here', () => {
+        const words = [...new Set(searchTermsFor('food garden').join(' ').split(/\s+/))];
+        assert.ok(words.length > 170);
+        assert.deepStrictEqual(searchTermsOfQuery(searchTermsFor('food garden').join(' ')), words);
+    });
+});
 
 describe('Posts Search Keyword Expansion', () => {
     const synonymMap: Record<string, string[]> = {

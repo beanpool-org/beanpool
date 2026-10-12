@@ -1076,10 +1076,24 @@ const UNSPACED_LIKE_MAX = 8;
 // eslint-disable-next-line no-control-regex -- matching control characters is the point
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
 
-function searchCondition(query: string | undefined): { sql: string; params: string[] } | null {
+/**
+ * At most this many distinct words go to posts_fts (#1808 review, finding 5). FTS5 reads each OR'd prefix on its own, so
+ * one unsigned GET repeating a short word (4,000 × "a") held the event loop 24 s; each word now goes once. The cap holds
+ * the wide synonym expansions apps ask with ("food" is 125 words here, "food garden" 175; core puts the typed words
+ * first, so a cap only ever trims synonyms at the end), and bounds what any number of distinct words can cost.
+ */
+export const SEARCH_TERMS_MAX = 256;
+
+/** The words a search asks posts_fts for, each once, at most SEARCH_TERMS_MAX. */
+export function searchTermsOfQuery(query: string | undefined): string[] {
     // Control characters part words, as core's searchTermsFor reads them, here too: a raw `q` (the route's, from any
     // client) carrying a NUL threw and answered 500 (#1781); it now finds what the words without it find.
-    const terms = (query ?? '').replace(CONTROL_CHARACTERS, ' ').trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
+    const words = (query ?? '').replace(CONTROL_CHARACTERS, ' ').trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
+    return [...new Set(words)].slice(0, SEARCH_TERMS_MAX);
+}
+
+function searchCondition(query: string | undefined): { sql: string; params: string[] } | null {
+    const terms = searchTermsOfQuery(query);
     if (terms.length === 0) return null;
     let sql = `p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
     const params = [terms.map(t => `"${t}"*`).join(' OR ')];

@@ -635,7 +635,8 @@ export interface NodeConfig {
     registrarNames?: RegistrarName[];
 }
 
-// Indexed by member and area for the listing pushes by area (ws-area-index.ts); otherwise a plain Set.
+// Indexed by member and area for the listing pushes by area (ws-area-index.ts); otherwise a plain Set. An open socket's
+// key changes only through wsClients.setKey.
 const wsClients = new WsClients();
 
 // ===================== INIT =====================
@@ -1586,6 +1587,10 @@ let listingPushIndex = true;
 export function setListingPushIndex(on: boolean): void {
     listingPushIndex = on;
 }
+/** For the same test: what breaks the sockets' index's rules, and its sizes (WsClients.inspect). */
+export function inspectWsClients(): ReturnType<WsClients['inspect']> {
+    return wsClients.inspect();
+}
 
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     if (event && typeof event.type === 'string') {
@@ -1693,7 +1698,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         if (joinersOwn) {
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
-                ws._memberPubkey = event.member.publicKey;
+                wsClients.setKey(ws, event.member.publicKey);
                 ws._visitor = joined.visitor;
                 ws._memberFeed = joined.feed;
                 ws._pendingMemberPubkey = null;
@@ -1742,7 +1747,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         for (const ws of wsClients) {
             if (ws._memberPubkey !== changedKey) continue;
             standing ??= event.type === 'user_pruned' ? { act: false, visitor: false, feed: false } : socketStanding(ws._memberPubkey);
-            if (!standing.act) ws._memberPubkey = null;
+            if (!standing.act) wsClients.setKey(ws, null);
             ws._visitor = standing.visitor;
             ws._memberFeed = standing.feed;
         }

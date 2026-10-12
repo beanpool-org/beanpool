@@ -137,7 +137,7 @@ async function main() {
     const rowAfter = db.prepare('SELECT memo FROM withheld_notes WHERE transaction_id = ?').get(txId2) as WithheldNoteRow | undefined;
     check(rowAfter !== undefined && rowAfter.memo === '', 'dropWithheldNotesOf blanks memo field for sender');
 
-    console.log(`\nPassed ${passedChecks}/${totalChecks} assertions.`);
+    console.log(`\n${passedChecks}/${totalChecks} checks passed.`);
     if (passedChecks !== totalChecks) {
         throw new Error(`Test failed: ${totalChecks - passedChecks} assertion(s) failed`);
     }

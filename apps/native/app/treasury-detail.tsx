@@ -921,7 +921,7 @@ export default function TreasuryDetailScreen() {
                             const isFunded = current >= goal || detail?.status === 'funded' || detail?.status === 'completed';
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
                             // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
-                            const pledgesClosed = pledgeClosedLine(detail?.status);
+                            const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle);
                             return (
                                 <View style={styles.progressCard}>
                                     <View style={styles.progressHeader}>

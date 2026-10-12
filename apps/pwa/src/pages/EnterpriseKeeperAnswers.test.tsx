@@ -119,4 +119,61 @@ describe('Enterprise keeper answers (A, G, M)', () => {
         expect(await screen.findByText('NEW LEAD CHOSEN AUTOMATICALLY')).toBeInTheDocument();
         expect(screen.getByText(/can choose someone else now/)).toBeInTheDocument();
     });
+
+    it("a project's wind-up, changes, requests, succession and thread say leader and collaborators, never keeper (pick 8)", async () => {
+        const PRJ = 'project-roof';
+        const inactivity = { leadPubkey: 'p-alice', leadCallsign: 'Alice', daysInactive: 40, isEligible: true, autoPromoted: false };
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, keeperOf: [PRJ] } as any);
+        vi.spyOn(api, 'getTreasury').mockResolvedValue(treasury({
+            publicKey: PRJ, name: 'New Roof', lifecycle: 'bounded', goalAmount: 500, status: 'winding_up',
+            windUpInitiatedAt: new Date().toISOString(),
+            isLeadOrSoleKeeperOrAdmin: true,
+            keepers: [
+                { publicKey: 'p-alice', callsign: 'Alice', role: 'lead', backing: 0 },
+                { publicKey: 'p-bob', callsign: 'Bob', role: 'keeper', backing: 0 },
+                { publicKey: 'p-cara', callsign: 'Cara', role: 'keeper', backing: 0 },
+            ],
+            keeperChanges: [{ ...REMOVE_CARA, enterprisePubkey: PRJ, memberPubkey: 'p-cara', proposedBy: 'p-alice' }],
+            keeperRequests: [{ id: 'req-dan', enterprisePubkey: PRJ, memberPubkey: 'p-dan', callsign: 'Dan', pledgedBacking: 0, status: 'pending', createdAt: new Date().toISOString() }],
+            leadInactivity: inactivity,
+            succession: {
+                inactivity,
+                proposals: [{
+                    id: 'prop-1', enterprisePubkey: PRJ, leadPubkey: 'p-alice', candidatePubkey: 'p-cara', candidateCallsign: 'Cara',
+                    status: 'active', votesCount: 1, noVotesCount: 0, requiredVotes: 2, totalEligible: 2,
+                    deadlineAt: new Date(Date.now() + 13 * DAY + 60_000).toISOString(),
+                    votes: [{ voterPubkey: 'p-cara', choice: 'yes' }],
+                }],
+            },
+        }));
+        vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({
+            conversation: { id: PRJ, type: 'enterprise_thread' },
+            messages: [{
+                id: 'msg-1', conversationId: PRJ, authorPubkey: 'p-dan', authorCallsign: 'Dan', ciphertext: btoa('gone'),
+                nonce: 'plaintext-v1', type: 'removed', metadata: JSON.stringify({ removed: true }), timestamp: '2026-09-17T10:00:00.000Z',
+            }],
+            readOnly: false,
+        } as any);
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        render(<TreasuryDetailPage identity={{ publicKey: 'p-bob', callsign: 'Bob', tier: 'Resident' } as any} pubkey={PRJ} onBack={vi.fn()} />);
+
+        expect(await screen.findByText('Collaborator changes waiting (1)')).toBeInTheDocument();
+        expect(await screen.findByText('removed by a collaborator')).toBeInTheDocument();
+        expect(screen.getByText(/Any collaborator can stop this during the 7-day grace period/)).toBeInTheDocument();
+        expect(screen.getByText(/started by a collaborator/)).toBeInTheDocument();
+        expect(screen.getByText(/Move the leader role to/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Yes, make Cara leader' })).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Message the project...')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Step down as a collaborator' }));
+        expect(confirmSpy.mock.calls[0][0]).toMatch(/^Step down as a collaborator\?/);
+
+        const said = [
+            document.body.textContent ?? '',
+            ...Array.from(document.querySelectorAll('[aria-label],[placeholder],[title]')).map((el) =>
+                [el.getAttribute('aria-label'), el.getAttribute('placeholder'), el.getAttribute('title')].join(' ')),
+            ...confirmSpy.mock.calls.map((c) => String(c[0])),
+        ].join('\n');
+        expect(said).not.toMatch(/keeper|enterprise|treasur|bounded/i);
+    });
 });

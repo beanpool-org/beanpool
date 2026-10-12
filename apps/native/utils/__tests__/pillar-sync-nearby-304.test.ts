@@ -334,8 +334,8 @@ describe('the nearby 304 only over what the phone holds (review of #1805, findin
         await control('join', { key: K, callsign: 'Away' });
         const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
         await control('listings', { rows: [{ id: 'held-off', author: K, at: dayAgo, ...at(BYRON, 2, 10) }] });
-        await control('sql', { q: "INSERT INTO conversations (id, type, post_id, created_by) VALUES ('conv-off', 'dm', 'held-off', ?)", p: [me.publicKey] });
-        await control('sql', { q: "INSERT INTO conversation_participants (conversation_id, public_key) VALUES ('conv-off', ?), ('conv-off', ?)", p: [me.publicKey, K] });
+        await control('postsSql', { q: "INSERT INTO conversations (id, type, post_id, created_by) VALUES ('conv-off', 'dm', 'held-off', ?)", p: [me.publicKey] });
+        await control('postsSql', { q: "INSERT INTO conversation_participants (conversation_id, public_key) VALUES ('conv-off', ?), ('conv-off', ?)", p: [me.publicKey, K] });
         await control('deal', { post: 'held-off', buyer: me.publicKey, seller: K, status: 'cancelled', at: dayAgo });
         await control('holiday', { key: K });
         const { getPosts } = await import('../db');
@@ -365,7 +365,7 @@ describe('the nearby 304 only over what the phone holds (review of #1805, findin
         expect(tagHeld()).toMatch(/^W\/"near-/);
         const B = randomBytes(32).toString('hex');
         await control('join', { key: B, callsign: 'Blocked' });
-        await control('sql', { q: 'INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)', p: [me.publicKey, B, Date.now(), Date.now()] });
+        await control('postsSql', { q: 'INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)', p: [me.publicKey, B, Date.now(), Date.now()] });
         const now = new Date().toISOString();
         await control('listings', { rows: [{ id: 'blocked-near', author: B, at: now, lat: BYRON.lat + 0.001, lng: BYRON.lng }] });
         const want = sorted([...expectedSet(BYRON, near, ['mine-ldn']), 'tied-perth']);
@@ -386,7 +386,7 @@ describe('the nearby 304 only over what the phone holds (review of #1805, findin
     it('a push that lands while a read pages: the read stores no tag, and the cycle after puts the phone back on the set', async () => {
         const B = randomBytes(32).toString('hex');
         await control('join', { key: B, callsign: 'Blocked too' });
-        await control('sql', { q: 'INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)', p: [me.publicKey, B, Date.now(), Date.now()] });
+        await control('postsSql', { q: 'INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)', p: [me.publicKey, B, Date.now(), Date.now()] });
         const now = new Date().toISOString();
         await control('listings', { rows: [{ id: 'blocked-mid', author: B, at: now, lat: BYRON.lat - 0.001, lng: BYRON.lng }] });
         const post = { id: 'blocked-mid', type: 'offer', category: 'food', title: 'Listing blocked-mid', description: '', credits: 5, authorPublicKey: B,

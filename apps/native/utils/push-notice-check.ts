@@ -456,7 +456,7 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
 /**
  * Where a valid notice's tap lands, from what its community answered for it (`data` of `GET /api/notices/push/<id>`,
  * or nothing when it couldn't be had): a post or a chat when the answer names one by an id in the node's own shape, an
- * enterprise's screen by its key (a keepers' vote opening), Settings when it says so, and otherwise the tab for the notice's kind; Home, where the app opens, for a kind this
+ * enterprise's screen by its key (a keepers' vote opening), a group by its id (its members' vote opening), Settings when it says so, and otherwise the tab for the notice's kind; Home, where the app opens, for a kind this
  * build doesn't know (`kind` null). Every route is one of a fixed few; the only text taken from the answer is an id that matched
  * {@link NODE_ID}.
  */
@@ -465,6 +465,8 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     if (d.screen === 'post' && typeof d.postId === 'string' && NODE_ID.test(d.postId)) return `/post/${d.postId}`;
     if (d.screen === 'chat' && typeof d.conversationId === 'string' && NODE_ID.test(d.conversationId)) return `/chat/${d.conversationId}`;
     if (d.screen === 'enterprise' && typeof d.publicKey === 'string' && ENTERPRISE_KEY.test(d.publicKey)) return `/treasury-detail?publicKey=${d.publicKey}`;
+    // A group's vote opening: the group itself, its info sheet open on its Decisions block; never Talk (slice S3).
+    if (d.screen === 'group' && typeof d.groupId === 'string' && NODE_ID.test(d.groupId)) return `/chat/${d.groupId}?group=1&info=1`;
     if (d.screen === 'settings') return '/(tabs)/settings';
     const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;

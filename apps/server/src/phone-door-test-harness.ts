@@ -24,6 +24,12 @@
  *                               their names-list entry (fixture rows, as test-names-debts-http's); answers the debt's id
  *   receive {key, beans}        a direct payment to the member (transfer()), whose after-commit hook runs the repayment sweep
  *   debt {key, debtId}          the member's balance and the debt record (repaid, status, how it was settled)
+ *   members {members}           member rows (each {key, callsign}, joined 30 days ago), as workingOff writes one: for the
+ *                               phone's group chat e2e (utils/__tests__/group-chat-e2e.test.ts)
+ *   groupRows {groupId, keys}   active group_members rows written straight in, with no epoch: members a node let in
+ *                               without a rotation (a big group for the rotation timing; an old app's join)
+ *   sql {sql, params, all}      one statement on the node's database, for that e2e's assertions and its dishonest-node
+ *                               cases (a moved author column, a rolled-back epoch, a junk wrap); `all` answers the rows
  * For apps/native/utils/__tests__/pillar-sync-nearby.test.ts (the phone's sync by area, DESIGN-global-sync-by-area §2.4):
  *   join {key, callsign, area?} a member (active), with an area ({lat, lng}, rounded as the node keeps it) or none
  *   area {key, area}            the member's area set ({lat, lng}) or cleared (null), as POST /api/community/me/area does
@@ -31,7 +37,7 @@
  *   edit {post, lat?, lng?, status?}  a listing moved or taken off (`cancelled`), changed now
  *   deal {post, buyer, seller, status, at?}  a deal on a listing (a fixture row: requested or pending is a tie of both)
  *   holiday {key}               the member goes on holiday (setHolidayMode): their listings are off the board
- *   sql {q, p?}                 one statement on the node's database, as a fixture (a conversation, a block)
+ *   postsSql {q, p?}            one statement on the node's database, as a fixture (a conversation, a block)
  *   epoch                       a take-over: the node's identity epoch one higher, as the take-over's role step leaves it
  *   profileSwitch {name, value} a profile switch's override in node_config (`true`/`false`), as an operator sets one
  *   quit                        exit
@@ -72,7 +78,7 @@ async function main(): Promise<void> {
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { probationState } = await import('./engine/probation.js');
-    const { transfer, getBalance, setHolidayMode } = await import('./state-engine.js');
+    const { transfer, getBalance, setHolidayMode, bumpGroupsVersion } = await import('./state-engine.js');
     const { setMemberArea } = await import('./engine/member-area.js');
     const { bumpPostsVersion } = await import('./engine/versions.js');
     const { getLocalConfig, updateLocalConfig } = await import('./config/local-config.js');
@@ -153,6 +159,28 @@ async function main(): Promise<void> {
             record: db.prepare('SELECT amount, repaid, status, settled_how FROM names_debts WHERE id = ?').get(String(debtId)) ?? null,
             links: (db.prepare('SELECT COUNT(*) n FROM names_debt_payments WHERE debt_id = ?').get(String(debtId)) as { n: number }).n,
         }),
+        members: ({ members }: { members?: { key: string; callsign: string }[] }) => {
+            const joined = new Date(Date.now() - 30 * 86_400_000).toISOString();
+            for (const m of members ?? []) {
+                db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
+                    .run(String(m.key), String(m.callsign), joined);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(String(m.key));
+            }
+            return (members ?? []).length;
+        },
+        groupRows: ({ groupId, keys }: { groupId?: string; keys?: string[] }) => {
+            const now = new Date().toISOString();
+            const add = db.prepare(`INSERT OR IGNORE INTO group_members (group_id, member_pubkey, role, status, joined_at, role_since, updated_at)
+                                    VALUES (?, ?, 'member', 'active', ?, ?, ?)`);
+            db.transaction(() => { for (const k of keys ?? []) add.run(String(groupId), String(k), now, now, now); })();
+            // As a join does: GET …/members serves a snapshot keyed by the groups version (roster-snapshots.ts).
+            bumpGroupsVersion();
+            return (keys ?? []).length;
+        },
+        sql: ({ sql, params, all }: { sql?: string; params?: unknown[]; all?: boolean }) => {
+            const st = db.prepare(String(sql));
+            return all ? st.all(...(params ?? [])) : st.run(...(params ?? [])).changes;
+        },
         join: ({ key, callsign, area }: { key?: string; callsign?: string; area?: { lat: number; lng: number } | null }) => {
             const pk = String(key);
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
@@ -189,7 +217,8 @@ async function main(): Promise<void> {
             setHolidayMode(String(key), true);
             return true;
         },
-        sql: ({ q, p }: { q?: string; p?: unknown[] }) => {
+        // A write behind the routes that also bumps the posts version (the 304 probes); `sql` above is the plain one.
+        postsSql: ({ q, p }: { q?: string; p?: unknown[] }) => {
             const r = db.prepare(String(q)).run(...(Array.isArray(p) ? p : []));
             bumpPostsVersion();
             return Number(r.changes);

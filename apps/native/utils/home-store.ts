@@ -85,9 +85,10 @@ export function coarseHomePoint(point: HomePoint | null | undefined): HomePoint 
  */
 export function homePath(asked: readonly HomeCardId[], point?: HomePoint | null): string {
     const p = coarseHomePoint(point);
-    // `lands=enterprise`: this app opens an enterprise's own screen (utils/needs-you.ts needsTargetHref), so the node may
-    // point a keepers' vote line there and count it (apps/server routes/home-answer.ts parseLands).
-    return `/api/home?cards=${asked.join(',')}&lands=enterprise${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}` : ''}`;
+    // `lands=enterprise,group`: this app opens an enterprise's own screen and a chat group's (utils/needs-you.ts
+    // needsTargetHref), so the node may point a keepers' or a group's vote line there and count it (apps/server
+    // routes/home-answer.ts parseLands).
+    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}` : ''}`;
 }
 
 export async function readStoredHome(publicKey: string, url: string): Promise<StoredHome | null> {

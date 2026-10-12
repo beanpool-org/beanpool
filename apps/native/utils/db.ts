@@ -20,7 +20,7 @@ import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange, type ScopedDecisionList, type ScopedEffect } from '@beanpool/core';
+import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -28,6 +28,11 @@ import type { OwnDecisionVote } from './decision-own-vote';
 import type { GroupSuccessionData } from './group-succession';
 import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, withoutSendState, type LocalMessageRow } from './chat-sync';
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
+import type { BeanPoolIdentity } from './identity';
+import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import { sqliteGroupKeyStore } from './group-chat-store';
+import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT } from './group-chat-lines';
+import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
@@ -436,6 +441,33 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
         );
         CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
 
+        -- Group chat keys (slice 3, utils/group-chat-store.ts): each epoch's record as the node served it and MY wrap,
+        -- exactly as sent (ciphertext, nothing secret); the highest epoch verified or made (never falls); verified line
+        -- signatures (hashes) and the first signer seen per line. Opened keys are never written anywhere.
+        CREATE TABLE IF NOT EXISTS group_chat_epochs (
+            group_id TEXT NOT NULL,
+            epoch INTEGER NOT NULL,
+            record TEXT NOT NULL,
+            wrap TEXT,
+            PRIMARY KEY (group_id, epoch)
+        );
+        CREATE TABLE IF NOT EXISTS group_chat_key_state (
+            group_id TEXT PRIMARY KEY,
+            highest INTEGER NOT NULL DEFAULT 0,
+            after INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS group_line_verdicts (
+            group_id TEXT NOT NULL,
+            k TEXT NOT NULL,
+            PRIMARY KEY (group_id, k)
+        );
+        CREATE TABLE IF NOT EXISTS group_line_signers (
+            group_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            signer TEXT NOT NULL,
+            PRIMARY KEY (group_id, message_id)
+        );
+
         -- 6. Relations (Friends, Ratings, Abuse)
         CREATE TABLE IF NOT EXISTS ratings (
             id TEXT PRIMARY KEY,
@@ -700,11 +732,19 @@ export function newCopyGeneration(): void {
 }
 
 /**
- * Simple Drop util if the User needs to wipe memory
+ * Simple Drop util if the User needs to wipe memory.
+ *
+ * `identityLeaves`: the identity is going off this phone (Sign Out, the self-delete purge), so what this phone knows of
+ * its groups' keys goes too (the four group key tables), as a new phone starts. Every other wipe (Force Resync, Wipe &
+ * Join Fresh, Wipe & Restart) keeps the identity and keeps that memory, kept per identity: the sticky lock and the
+ * highest verified epoch of each group, with the epochs and the cursor they go with. It is a security fact, not a copy
+ * of the node's (director's decision on the confirmation of #1788, NB3).
  */
-export async function clearDB() {
+export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
     // First, before anything awaits: from here no sync cycle that began before stores a cursor for this copy.
     newCopyGeneration();
+    // Every group key opened this session leaves memory with the copy; a kept store opens them again from its wraps.
+    forgetGroupKeys();
     try {
         const { resetSyncFingerprints } = require('../services/pillar-sync');
         resetSyncFingerprints();
@@ -719,7 +759,8 @@ export async function clearDB() {
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS nearby_held;');
+        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS nearby_held;'
+            + (opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers;' : ''));
     } finally {
         releaseSyncLock();
     }
@@ -2445,6 +2486,33 @@ export async function proposeEnterpriseDecision(treasury: string, body: {
 /** Yes or No on a keepers' vote. A vote can't be changed once cast. */
 export async function voteEnterpriseDecision(treasury: string, decisionId: string, support: boolean) {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
+}
+
+/**
+ * A chat group's votes (DESIGN-group-decisions S3; routes/group-decisions.ts). Its members (any role) are answered, and those
+ * on a vote's roll after they left; anyone else gets a 404, so null here means "nothing for you", never an error to show.
+ */
+export async function getGroupDecisions(groupId: string): Promise<ScopedDecisionList | null> {
+    try {
+        const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/decisions`);
+        if (!res.ok) return null;
+        const body = await res.json();
+        return body && Array.isArray(body.decisions) ? body as ScopedDecisionList : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A member or convenor proposes a group vote: the group's own things only, never a recipient or an amount. */
+export async function proposeGroupDecision(groupId: string, body: {
+    title: string; description: string; effect: GroupEffect; subject?: string; params?: { role?: 'convenor' | 'member'; policy?: string };
+}) {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/decisions`, body);
+}
+
+/** Yes or No on a group's vote. A vote can't be changed once cast. */
+export async function voteGroupDecision(groupId: string, decisionId: string, support: boolean) {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
 }
 
 export async function stepDownAsKeeper(treasury: string) {
@@ -4223,11 +4291,80 @@ async function isNodeReadableConversation(conversationId: string): Promise<boole
  * plaintext-v1, as designed. Every other conversation is a DM, locked or not sent: DmNotLockedError when the other
  * person's key can't be resolved even after asking the node, or the encryption throws. Never a readable fallback.
  */
-async function lockForConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string }> {
+async function lockForConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata?: Record<string, unknown> }> {
+    // A group's chat is locked since group chats step 2 (slice 3 here): sealed under the group's key, with its epoch in the
+    // metadata the node checks. Only a node from before locked chats, which this phone never saw locked, still reads it.
+    const groupLine = await sealForGroupConversation(conversationId, text, line);
+    if (groupLine) return groupLine;
     if (await isNodeReadableConversation(conversationId)) {
         return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
     }
     return lockWith(await requireDmKeyContext(conversationId), text, line);
+}
+
+/**
+ * True once this phone has held a key of the group with this id (its own key memory: an epoch verified, opened or made,
+ * kept per identity), whatever the node or the local row now calls the conversation. Such a group is locked here for good:
+ * every path that can post into it seals or refuses (director's decision b). With no node or no identity nothing can be
+ * sent at all, so that answers false.
+ */
+export async function isHeldGroupChat(conversationId: string): Promise<boolean> {
+    let ring: GroupKeyring;
+    try { ring = await groupKeyringFor(conversationId); } catch { return false; }
+    return ring.seenLocked();
+}
+
+/**
+ * Why a phone that has held this group's keys sends nothing when the node refuses it the keys (404): the node now says
+ * the chat isn't locked (the phone's own lock notice), or it refuses this phone the chat too (a removed member).
+ */
+async function heldGroupRefusal(groupId: string): Promise<GroupChatKeyError> {
+    if (await nodeChatIsUnlocked(groupId)) return new GroupChatKeyError(GROUP_CHAT_LOCK_LOST_TEXT, 'refused');
+    return new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
+}
+
+/** True only when the node answers this group's chat with no `encryption`: a node from before locked chats (§14.3). */
+async function nodeChatIsUnlocked(groupId: string): Promise<boolean> {
+    try {
+        const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=1`);
+        if (!res.ok) return false;
+        const answer = await res.json().catch(() => null);
+        return !!answer && typeof answer === 'object' && !chatIsLocked(answer);
+    } catch {
+        return false;
+    }
+}
+
+/** A group chat line sealed by the keyring's pre-seal rules, or null when this conversation isn't a locked group's. */
+async function sealForGroupConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata: Record<string, unknown> } | null> {
+    const database = await getDb();
+    const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
+    if (await isKnownDmConversation(conversationId)) return null;
+    // A group this phone has held keys of is its group whatever the row says, or with no row (a sync pruned it, a push
+    // landed before it): the phone's own key memory decides, never the node's or the row's type (confirmation of #1788, 1).
+    if (row?.type !== 'group_thread' && !(await isHeldGroupChat(conversationId))) return null;
+    const ring = await groupKeyringFor(conversationId);
+    let sealedUnder: { epoch: number; key: Uint8Array };
+    try {
+        sealedUnder = await ring.prepareToSeal();
+    } catch (e) {
+        // A 404 is an old node (no keys route) or a new one refusing this phone its keys (not a member). Readable words go
+        // only to an old node, by its own chat answer (no `encryption`), and only while this phone never held a key of
+        // this group (review of #1788, finding 4; director's decision b).
+        if (e instanceof GroupKeysRequestError && e.status === 404) {
+            if (await ring.seenLocked()) throw await heldGroupRefusal(conversationId);
+            if (await nodeChatIsUnlocked(conversationId)) return null;
+            throw new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
+        }
+        throw e;
+    }
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found.');
+    const sealed = sealLine(text, {
+        myEdPrivHex: identity.privateKey, groupKey: sealedUnder.key, groupId: conversationId, epoch: sealedUnder.epoch,
+        messageId: line.messageId, after: line.after ?? null, replyToId: line.replyToId ?? null,
+    });
+    return { ...sealed, metadata: { epoch: sealedUnder.epoch } };
 }
 
 export async function getMessages(conversationId: string, opts?: { limit?: number }) {
@@ -4394,12 +4531,19 @@ export async function insertMessage(conversationId: string, authorPubkey: string
 
     // E2E-encrypt direct messages (NAT-1), or send nothing: DmNotLockedError before anything is written, so the chat
     // can put the words back in the box. A group chat stays plaintext-v1 (lockForConversation).
-    const { ciphertext, nonce } = await lockForConversation(conversationId, text, {
+    const locked = await lockForConversation(conversationId, text, {
         senderPubHex: authorPubkey,
         messageId: tempId,
         after: await lineToWriteAfter(conversationId, reuseId),
         replyToId: replyToIdOf(metadata),
     });
+    const { ciphertext, nonce } = locked;
+    // A group line names the epoch it was sealed under, beside whatever the caller's metadata says (a reply).
+    if (locked.metadata) {
+        let m: any = {};
+        try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
+        metadata = JSON.stringify({ ...m, ...locked.metadata });
+    }
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
@@ -4517,6 +4661,18 @@ export async function editMessage(conversationId: string, messageId: string, new
     const database = await getDb();
     const identity = await loadIdentity();
 
+    // A locked group chat's line: re-sealed under its own epoch, never the current one (utils/group-chat-lines.ts).
+    const convRow = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
+    if (convRow?.type === 'group_thread' || await isHeldGroupChat(conversationId)) {
+        const row = await database.getFirstAsync<any>('SELECT nonce, metadata FROM messages WHERE id = ?', [messageId]).catch(() => null);
+        if (row?.nonce && String(row.nonce).startsWith(GROUP_NONCE_PREFIX)) {
+            let meta: any = {};
+            try { meta = row.metadata ? JSON.parse(row.metadata) : {}; } catch { meta = {}; }
+            await editThreadMessage(messageId, newText, { groupId: conversationId, metadata: meta, locked: true });
+            return;
+        }
+    }
+
     // New words: locked like a new message, or not sent (DmNotLockedError). Sealed to the line's own id, keeping the
     // line it was written after: an edit stays where its line is.
     const { ciphertext, nonce } = await lockForConversation(conversationId, newText, {
@@ -4555,7 +4711,7 @@ export async function editMessage(conversationId: string, messageId: string, new
  */
 export async function sendImageMessage(conversationId: string, dataUri: string, caption: string = '', metadata?: string) {
     const database = await getDb();
-    if (await isNodeReadableConversation(conversationId)) throw new Error('Photos can only be sent in direct messages.');
+    if (await isNodeReadableConversation(conversationId) || await isHeldGroupChat(conversationId)) throw new Error('Photos can only be sent in direct messages.');
     // The picture and its caption are locked, or neither goes (DmNotLockedError). Both are sealed to the message's own
     // id, which goes to the node with them, each as its own part, so neither can stand in for the other.
     const dmCtx = await requireDmKeyContext(conversationId);
@@ -6021,6 +6177,9 @@ export interface GroupItem {
     /** The group's LEAD convenor (2026-09-23): the one nobody can remove or demote. */
     leadPubkey?: string | null;
     leadCallsign?: string;
+    /** When its members closed it by a vote (GET /api/groups/:id), or null: it stays to read and takes nothing new. */
+    closedAt?: string | null;
+    readOnly?: boolean;
 }
 
 export interface GroupMemberItem {
@@ -6196,15 +6355,22 @@ export async function createGroupApi(groupData: {
     return signedRequestWithMethod('POST', '/api/groups', groupData);
 }
 
-export async function joinGroupApi(groupId: string): Promise<any> {
-    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/join`);
+/**
+ * Join a group, or accept its invitation. Joining an open group or accepting an invitation lets the joiner into the chat,
+ * so they make its next key in the same request (group chat encryption §2.3, utils/group-chat-keys.ts); a request to
+ * join an approval group lets nobody in yet and carries none. `onProgress` drives "Securing the chat…" on a big group.
+ */
+export async function joinGroupApi(groupId: string, info?: { joinPolicy?: string | null; viewerStatus?: string | null; onProgress?: (done: number, total: number) => void }): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return joinGroupWithEpoch(nodeUrl, identity, groupKeyStore(), { id: groupId, joinPolicy: info?.joinPolicy, viewerStatus: info?.viewerStatus },
+        info?.onProgress ? { onProgress: info.onProgress } : undefined);
 }
 
-export async function approveGroupMemberApi(groupId: string, memberPubkey: string): Promise<any> {
-    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
-        memberPubkey,
-        action: 'approve'
-    });
+/** A convenor approves a request: the approved member's first key is made here, in the same request (§2.3). */
+export async function approveGroupMemberApi(groupId: string, memberPubkey: string, onProgress?: (done: number, total: number) => void): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return approveWithEpoch(nodeUrl, identity, groupKeyStore(), groupId, memberPubkey, { memberPubkey, action: 'approve' },
+        onProgress ? { onProgress } : undefined);
 }
 
 export async function inviteGroupMemberApi(groupId: string, memberPubkey: string, role: GroupRole = 'member'): Promise<any> {
@@ -6267,8 +6433,21 @@ export async function voteGroupSuccessionApi(groupId: string, proposalId: string
     );
 }
 
-export async function leaveGroupApi(groupId: string, memberPubkey: string): Promise<boolean> {
-    const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`);
+/**
+ * Leave a group (your own key), or remove a member (a convenor, someone else's). A removal IS the chat's rotation: the
+ * convenor's phone makes a key for everyone but the removed member, in the same request (§2.4). Leaving carries none:
+ * the node marks the key stale and the next member to write makes a new one.
+ */
+export async function leaveGroupApi(groupId: string, memberPubkey: string, onProgress?: (done: number, total: number) => void): Promise<boolean> {
+    const path = `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`;
+    const { nodeUrl, identity } = await groupKeyContext();
+    const res = memberPubkey === identity.publicKey
+        ? await signedRequestWithMethod('DELETE', path)
+        : await removeWithEpoch(nodeUrl, identity, groupKeyStore(), groupId, memberPubkey, async (body) => {
+            const bodyString = JSON.stringify(body);
+            const headers = await buildSignedHeaders('DELETE', `${nodeUrl}${path}`, bodyString, identity.privateKey, identity.publicKey);
+            return fetch(`${nodeUrl}${path}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers }, body: bodyString });
+        }, onProgress ? { onProgress } : undefined);
     if (res?.success) {
         try {
             const database = await getDb();
@@ -6325,8 +6504,51 @@ export async function getGroupChat(groupId: string, limit = 50, offset = 0): Pro
     return body;
 }
 
-export async function postGroupChatMessage(groupId: string, text: string, clientId?: string, replyToId?: string | null): Promise<any> {
+/**
+ * Send a line in a group's chat. With `lock` (the chat is locked), or once this phone has held a key of this group
+ * whatever the node's answer says (review of #1788, finding 4): sealed on this phone under the group's key
+ * (utils/group-chat-lines.ts sendSealedGroupLine), or refused with a sentence. Otherwise a node from before locked chats,
+ * which takes `{ text }` as it always did (§14.3).
+ */
+export async function postGroupChatMessage(
+    groupId: string, text: string, clientId?: string, replyToId?: string | null,
+    lock?: { after?: string | null; mentionCandidates?: { pubkey: string; callsign: string | null | undefined }[]; onProgress?: (done: number, total: number) => void },
+): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore());
+    if (lock || await ring.seenLocked()) {
+        try {
+            return await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(), {
+                groupId, text, clientId: clientId || Crypto.randomUUID(), replyToId, after: lock?.after, mentionCandidates: lock?.mentionCandidates,
+                progress: lock?.onProgress ? { onProgress: lock.onProgress } : undefined,
+            });
+        } catch (e) {
+            if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw await heldGroupRefusal(groupId);
+            throw e;
+        }
+    }
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
+}
+
+let _groupKeyStore: GroupKeyStore | null = null;
+/** This phone's group key store (SQLite, the node's own file: utils/group-chat-store.ts). */
+export function groupKeyStore(): GroupKeyStore {
+    if (!_groupKeyStore) _groupKeyStore = sqliteGroupKeyStore(getDb as any);
+    return _groupKeyStore;
+}
+
+async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolIdentity }> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found. You must be logged in.');
+    return { nodeUrl: anchorUrl.replace(/\/+$/, ''), identity };
+}
+
+/** One group's keyring on this node, for this identity (shared for the session: the opened keys with it). */
+export async function groupKeyringFor(groupId: string): Promise<GroupKeyring> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return groupKeyring(nodeUrl, identity, groupId, groupKeyStore());
 }
 
 /** An enterprise's discussion thread — public to every member of the community, not only its keepers. */
@@ -6431,10 +6653,21 @@ export async function removeGroupChatMessage(groupId: string, messageId: string)
 }
 
 /**
- * Edit a message in a node-readable chat (a group's). Same endpoint as a DM edit, with the text as base64
- * `plaintext-v1` because the node has to be able to read a group chat.
+ * Edit a line in a group's chat. A locked chat (`line.locked`, the screen's word), or one whose keys this phone has held
+ * whatever the node now says (director's decision b): sealed under the line's own epoch (utils/group-chat-lines.ts), or
+ * refused. Only a node from before locked chats, which this phone never saw locked, takes base64 `plaintext-v1`.
  */
-export async function editThreadMessage(messageId: string, newText: string): Promise<any> {
+export async function editThreadMessage(messageId: string, newText: string, line: { groupId: string; metadata: any; locked: boolean }): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, line.groupId, groupKeyStore());
+    if (line.locked || await ring.seenLocked()) {
+        try {
+            return await editSealedGroupLine(nodeUrl, identity, groupKeyStore(), { groupId: line.groupId, messageId, metadata: line.metadata, text: newText });
+        } catch (e) {
+            if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw await heldGroupRefusal(line.groupId);
+            throw e;
+        }
+    }
     return _signedRequest('/api/messages/edit', {
         messageId,
         ciphertext: encodeBase64(encodeUtf8(newText)),

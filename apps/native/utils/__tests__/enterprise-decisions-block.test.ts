@@ -35,6 +35,6 @@ describe("an enterprise's Decisions block", () => {
     });
 
     it('no propose button unless the node says this keeper can (a roll of one holds no vote)', () => {
-        expect(block).toMatch(/\{list\.canPropose && \(/);
+        expect(block).toMatch(/\{list\.canPropose && !!propose && \(/);
     });
 });

@@ -27,7 +27,7 @@ beforeEach(() => { vi.mocked(api.getEnterpriseDecisions).mockReset(); vi.mocked(
 describe("an enterprise's Decisions block (DESIGN-group-decisions S2)", () => {
     it('open: turnout only and Yes / No; closed: the split', async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({
-            decisions: [card(), card({ id: 'd2', title: 'Remove Ann', effect: 'remove_keeper', subject: 'a'.repeat(64), status: 'executed', params: null,
+            decisions: [card({ canVote: true }), card({ id: 'd2', title: 'Remove Ann', effect: 'remove_keeper', subject: 'a'.repeat(64), status: 'executed', params: null,
                 tally: { voted: 3, roll: 3, quorumRequired: 2, thresholdRequired: 0.6, yes: 2, no: 1 } })] as never,
             canPropose: true, rollSize: 3,
         });

@@ -27,7 +27,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Pkcs8 } from './ed25519-key.js';
 import { mintGroupVectorRng } from './group-vector-rng.js';
 import type {
-    GroupCryptoRandom, GroupEpochCheck, GroupEpochRecord, GroupKeyOpenCheck, GroupLineBinding, GroupLinePart, GroupLinePayload, GroupServedWrap, GroupTopUp,
+    FormerKey, GroupCryptoRandom, GroupEpochCheck, GroupEpochRecord, GroupKeyOpenCheck, GroupLineBinding, GroupLinePart, GroupLinePayload, GroupServedWrap, GroupTopUp,
     GroupTopUpCheck, MakeGroupEpochInput, OpenedGroupLine, SealGroupLineInput,
 } from './group-crypto.js';
 
@@ -89,6 +89,20 @@ export const GROUP_VECTOR_RECORD: GroupEpochRecord = {
 
 /** The epoch key Cat made for epoch 3 (the first 32 bytes of the record's fixed RNG). */
 export const GROUP_VECTOR_KEY_HEX = 'af908826c36a0f432a7ef84fa65a87ec5fbcca41274397bac52f58ff52c59d7c';
+
+/**
+ * Ana was re-keyed (line-display design §5): her new key, seed SHA-256("beanpool group-line vector: Ana re-keyed"), signs
+ * that her vector key was hers before it. Served on her roster row as formerKeys[0].
+ */
+export const GROUP_VECTOR_SUCCESSION = {
+    newPubkey: '457477c10e94973111b8adb36e427abcc8001e9b967c729f8a2ffd945ba94c63',
+    newSeedHex: 'e3a90d50bde145685eea0b07b19a9173ad5424afc94ff851f75cada9983e7235',
+    former: {
+        pubkey: '4d3d8823dbd855a591a6f44cd2d5b5b14b37c2ed66347bd6392ca6746fe41c8a',
+        at: '2026-10-03T04:00:00.000Z',
+        sig: 'CDayh0b7cFcbii/DJpDvLqn8x8KqwoSkJKZ5wKEpDpSqDQb4ZCvH2QRSItXjIbEdshhO6B1ficY1J4zuW1BNDw==',
+    } as FormerKey,
+};
 
 /** Ana hands Dov the epoch-3 key (Dov was re-keyed and lacks a wrap). */
 export const GROUP_VECTOR_TOP_UP: GroupTopUp = {
@@ -161,6 +175,9 @@ export interface GroupCryptoApi {
     sealGroupLine(text: string, input: SealGroupLineInput, opts?: GroupCryptoRandom): GroupLinePayload;
     openGroupLine(payload: GroupLinePayload, ref: GroupLineBinding, groupKey: Uint8Array): OpenedGroupLine;
     openGroupLineWithMessageKey(payload: GroupLinePayload, ref: GroupLineBinding, messageKey: Uint8Array): OpenedGroupLine;
+    makeKeySuccession(input: { newEdPrivHex: string; oldPubHex: string; at: string }): FormerKey & { newPubkey: string };
+    verifyKeySuccession(former: FormerKey, newPubHex: string): boolean;
+    walkKeySuccession(row: { memberPubkey: string; formerKeys?: readonly FormerKey[] | null }, signer: string): boolean;
 }
 
 function fail(msg: string): never {
@@ -233,6 +250,19 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
     let outsideRoster = false;
     try { api.verifyGroupTopUp(GROUP_VECTOR_GROUP, GROUP_VECTOR_TOP_UP, { activeMembers: [people.ben.publicKey, people.cat.publicKey, people.dov.publicKey] }); outsideRoster = true; } catch { /* as it should */ }
     if (outsideRoster) fail('the top-up verified for storing though its wrapper is in no roster given');
+
+    // Ana's succession statement: made by her new key in either spelling, byte-identical; verified; walked from her row.
+    const succ = GROUP_VECTOR_SUCCESSION;
+    for (const pkcs8 of [false, true]) {
+        const newKey = pkcs8 ? bytesToHex(toEd25519Pkcs8(hexToBytes(succ.newSeedHex))) : succ.newSeedHex;
+        const made = api.makeKeySuccession({ newEdPrivHex: newKey, oldPubHex: succ.former.pubkey, at: succ.former.at });
+        if (made.sig !== succ.former.sig || made.newPubkey !== succ.newPubkey) fail(`the succession statement made with ${pkcs8 ? 'a PKCS8' : 'a bare-seed'} key differs`);
+    }
+    if (!api.verifyKeySuccession(succ.former, succ.newPubkey)) fail('the succession statement does not verify');
+    if (api.verifyKeySuccession(succ.former, people.ben.publicKey)) fail('the succession statement verified as signed by another key');
+    if (api.verifyKeySuccession({ ...succ.former, at: '2026-10-04T04:00:00.000Z' }, succ.newPubkey)) fail('the statement verified with another date');
+    if (!api.walkKeySuccession({ memberPubkey: succ.newPubkey, formerKeys: [succ.former] }, people.ana.publicKey)) fail("Ana's old key did not walk to her new one");
+    if (api.walkKeySuccession({ memberPubkey: people.ben.publicKey, formerKeys: [succ.former] }, people.ana.publicKey)) fail("Ana's old key walked to Ben");
 
     for (const v of GROUP_LINE_VECTORS) {
         if (bytesToHex(api.groupMessageKey(key, v.messageId)) !== v.messageKeyHex) fail(`${v.label}: the message key differs`);

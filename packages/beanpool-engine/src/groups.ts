@@ -764,7 +764,7 @@ export function getMemberGroupIds(db: Db, memberPubkey: string): string[] {
  * otherwise leave a row and a tombstone stamped identically, and a replica importing both would drop the
  * re-join. The same rule the event chat uses (apps/server/src/engine/event-thread.ts membershipWriteAt).
  */
-function membershipWriteAt(db: Db, groupId: string, memberPubkey: string): string {
+export function membershipWriteAt(db: Db, groupId: string, memberPubkey: string): string {
     const nowIso = new Date().toISOString();
     let prev: string | null = null;
     try {

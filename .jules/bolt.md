@@ -252,3 +252,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-12 - O(1) Escrow Banner Pending Transaction Lookups in PWA MessagesPage
 **Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, checking for active trust hold / escrow banners executed `userTransactions.find(...)` inside the render block on every render cycle ($O(T)$ complexity).
 **Action:** Memoized `activePendingTransaction` via `useMemo` dependent on `activeConv` and `userTransactions`, eliminating $O(T)$ array scans during active chat renders.
+
+## 2026-10-13 - O(1) Signature Usage Lookups in Server App Addresses Report
+**Learning:** In `apps/server/src/routes/app-addresses.ts`, `appAddressesReport` called `count(kind, address)` which executed `usage.find(...)` array scans across configured addresses and lost addresses, causing repetitive linear array scans.
+**Action:** Pre-indexed `usage` array into a `usageMap` Map indexed by `${u.kind}:${u.address}` for constant-time $O(1)$ lookups.

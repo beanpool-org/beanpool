@@ -119,3 +119,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** `deleteNodePost` omitted `credentials: "same-origin"` from `fetch` options, causing cookie-authenticated moderator sessions to fail with 401 Unauthorized when attempting to delete posts.
 **Learning:** Key-session authenticated endpoints rely on ambient HTTP cookies; omitting `credentials: "same-origin"` prevents the browser from attaching session cookies on fetch requests.
 **Prevention:** Always include `credentials: "same-origin"` on fetch calls to admin or moderator endpoints that support cookie authentication.
+
+## 2026-10-25 - Missing Cookie Credentials Forwarding in Bulk Delete Helper
+**Vulnerability:** `sendBulkDeleteBatch` in `lib/bulk-delete-posts.ts` omitted `credentials: 'same-origin'` from `fetch` options, causing cookie-authenticated moderator/admin sessions to fail with 401 Unauthorized when pruning stale posts.
+**Learning:** Endpoints relying on key-session authentication require ambient HTTP cookies; omitting `credentials: 'same-origin'` prevents the browser from attaching session cookies on fetch requests.
+**Prevention:** Always include `credentials: 'same-origin'` on fetch calls to admin or moderator endpoints that support key-session cookie authentication.

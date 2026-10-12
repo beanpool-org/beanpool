@@ -60,6 +60,8 @@ async function forgetCachedChatImage(messageId: string): Promise<void> {
  * Using the synchronous API available in expo-sqlite version 14.x+ 
  */
 let db: SQLite.SQLiteDatabase | null = null;
+/** The community file each open handle is for: a group's key store reads only its own community's (groupKeyStore). */
+const dbFileOf = new WeakMap<object, string>();
 let dbInitialized = false;
 let dbInitPromise: Promise<void> | null = null;
 
@@ -146,6 +148,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
             if (url && isPlainNodeAddress(url)) await addSavedNode(url);
             
             db = await SQLite.openDatabaseAsync(expectedDbName, { useNewConnection: true });
+            dbFileOf.set(db, expectedDbName);
             
             // Hardcode native concurrent locking parameters per-connection
             await db.execAsync(`
@@ -4243,7 +4246,9 @@ async function lockForConversation(conversationId: string, text: string, line: D
  * True once this phone has held a key of the group with this id (its own key memory: an epoch verified, opened or made,
  * kept per identity), whatever the node or the local row now calls the conversation. Such a group is locked here for good:
  * every path that can post into it seals or refuses (director's decision b). With no node or no identity nothing can be
- * sent at all, so that answers false.
+ * sent at all, so that answers false. When the phone can't read its key memory (a SQLite error, a community switched
+ * under it) this throws GROUP_KEY_STORE_UNREAD_TEXT: every send and edit that asks refuses, never "not held" (confirmation
+ * 2 of #1788, finding 1).
  */
 export async function isHeldGroupChat(conversationId: string): Promise<boolean> {
     let ring: GroupKeyring;
@@ -6299,14 +6304,14 @@ export async function createGroupApi(groupData: {
  */
 export async function joinGroupApi(groupId: string, info?: { joinPolicy?: string | null; viewerStatus?: string | null; onProgress?: (done: number, total: number) => void }): Promise<any> {
     const { nodeUrl, identity } = await groupKeyContext();
-    return joinGroupWithEpoch(nodeUrl, identity, groupKeyStore(), { id: groupId, joinPolicy: info?.joinPolicy, viewerStatus: info?.viewerStatus },
+    return joinGroupWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), { id: groupId, joinPolicy: info?.joinPolicy, viewerStatus: info?.viewerStatus },
         info?.onProgress ? { onProgress: info.onProgress } : undefined);
 }
 
 /** A convenor approves a request: the approved member's first key is made here, in the same request (§2.3). */
 export async function approveGroupMemberApi(groupId: string, memberPubkey: string, onProgress?: (done: number, total: number) => void): Promise<any> {
     const { nodeUrl, identity } = await groupKeyContext();
-    return approveWithEpoch(nodeUrl, identity, groupKeyStore(), groupId, memberPubkey, { memberPubkey, action: 'approve' },
+    return approveWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), groupId, memberPubkey, { memberPubkey, action: 'approve' },
         onProgress ? { onProgress } : undefined);
 }
 
@@ -6380,7 +6385,7 @@ export async function leaveGroupApi(groupId: string, memberPubkey: string, onPro
     const { nodeUrl, identity } = await groupKeyContext();
     const res = memberPubkey === identity.publicKey
         ? await signedRequestWithMethod('DELETE', path)
-        : await removeWithEpoch(nodeUrl, identity, groupKeyStore(), groupId, memberPubkey, async (body) => {
+        : await removeWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), groupId, memberPubkey, async (body) => {
             const bodyString = JSON.stringify(body);
             const headers = await buildSignedHeaders('DELETE', `${nodeUrl}${path}`, bodyString, identity.privateKey, identity.publicKey);
             return fetch(`${nodeUrl}${path}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers }, body: bodyString });
@@ -6452,10 +6457,10 @@ export async function postGroupChatMessage(
     lock?: { after?: string | null; mentionCandidates?: { pubkey: string; callsign: string | null | undefined }[]; onProgress?: (done: number, total: number) => void },
 ): Promise<any> {
     const { nodeUrl, identity } = await groupKeyContext();
-    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore());
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
     if (lock || await ring.seenLocked()) {
         try {
-            return await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(), {
+            return await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), {
                 groupId, text, clientId: clientId || Crypto.randomUUID(), replyToId, after: lock?.after, mentionCandidates: lock?.mentionCandidates,
                 progress: lock?.onProgress ? { onProgress: lock.onProgress } : undefined,
             });
@@ -6467,11 +6472,25 @@ export async function postGroupChatMessage(
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
 }
 
-let _groupKeyStore: GroupKeyStore | null = null;
-/** This phone's group key store (SQLite, the node's own file: utils/group-chat-store.ts). */
-export function groupKeyStore(): GroupKeyStore {
-    if (!_groupKeyStore) _groupKeyStore = sqliteGroupKeyStore(getDb as any);
-    return _groupKeyStore;
+const _groupKeyStores = new Map<string, GroupKeyStore>();
+/**
+ * This phone's group key store for one community (SQLite, that community's own file: utils/group-chat-store.ts). It reads
+ * and writes only that file: once the phone has switched to another community, every call throws (the keyring refuses,
+ * GROUP_KEY_STORE_UNREAD_TEXT) rather than read the other file and take a held group for never held (confirmation 2 of
+ * #1788, finding 1).
+ */
+export function groupKeyStore(nodeUrl: string): GroupKeyStore {
+    const file = getDatabaseFilenameForNode(nodeUrl);
+    let s = _groupKeyStores.get(file);
+    if (!s) {
+        s = sqliteGroupKeyStore(async () => {
+            const database = await getDb();
+            if (dbFileOf.get(database) !== file) throw new Error('This phone has switched community since this chat was opened.');
+            return database as any;
+        });
+        _groupKeyStores.set(file, s);
+    }
+    return s;
 }
 
 async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolIdentity }> {
@@ -6485,7 +6504,7 @@ async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolI
 /** One group's keyring on this node, for this identity (shared for the session: the opened keys with it). */
 export async function groupKeyringFor(groupId: string): Promise<GroupKeyring> {
     const { nodeUrl, identity } = await groupKeyContext();
-    return groupKeyring(nodeUrl, identity, groupId, groupKeyStore());
+    return groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
 }
 
 /** An enterprise's discussion thread — public to every member of the community, not only its keepers. */
@@ -6596,10 +6615,10 @@ export async function removeGroupChatMessage(groupId: string, messageId: string)
  */
 export async function editThreadMessage(messageId: string, newText: string, line: { groupId: string; metadata: any; locked: boolean }): Promise<any> {
     const { nodeUrl, identity } = await groupKeyContext();
-    const ring = groupKeyring(nodeUrl, identity, line.groupId, groupKeyStore());
+    const ring = groupKeyring(nodeUrl, identity, line.groupId, groupKeyStore(nodeUrl));
     if (line.locked || await ring.seenLocked()) {
         try {
-            return await editSealedGroupLine(nodeUrl, identity, groupKeyStore(), { groupId: line.groupId, messageId, metadata: line.metadata, text: newText });
+            return await editSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId: line.groupId, messageId, metadata: line.metadata, text: newText });
         } catch (e) {
             if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw await heldGroupRefusal(line.groupId);
             throw e;

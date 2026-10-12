@@ -17,7 +17,18 @@ const store = vi.hoisted(() => ({
     messages: new Map<string, any>(),
     execs: [] as string[],
     keyState: new Map<string, { highest: number; after: number }>(),
+    /** When set, every read of the four group key tables throws, as a SQLite error would. */
+    failGroupReads: false,
+    /** The community file open: the group tables of any other community's file hold nothing for these groups. */
+    openFile: 'beanpool_test.db',
+    anchor: 'https://node.example',
 }));
+const groupTable = (sql: string) => /group_chat_epochs|group_chat_key_state|group_line_verdicts|group_line_signers/.test(sql);
+const groupRead = (sql: string) => {
+    if (!groupTable(sql)) return false;
+    if (store.failGroupReads) throw new Error('SQLITE_IOERR: disk I/O error (simulated)');
+    return store.openFile !== 'beanpool_test.db';
+};
 const partsOf = (id: string) => { if (!store.participants.has(id)) store.participants.set(id, new Set()); return store.participants.get(id)!; };
 const mockDb = {
     execAsync: vi.fn(async (s: string) => {
@@ -31,6 +42,7 @@ const mockDb = {
     closeAsync: vi.fn(async () => undefined),
     withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { await cb(); }),
     getFirstAsync: vi.fn(async (sql: string, params: any[] = []) => {
+        if (groupRead(sql)) return null;
         if (/FROM conversations WHERE id = \?/.test(sql)) return store.conversations.get(params[0]) ?? null;
         if (/SELECT metadata FROM messages WHERE id/.test(sql)) return store.messages.get(params[0]) ?? null;
         if (/SELECT nonce, metadata FROM messages WHERE id/.test(sql)) return store.messages.get(params[0]) ?? null;
@@ -38,6 +50,7 @@ const mockDb = {
         return null;
     }),
     getAllAsync: vi.fn(async (sql: string, params: any[] = []) => {
+        if (groupRead(sql)) return [];
         if (/SELECT public_key FROM conversation_participants WHERE conversation_id = \?/.test(sql)) return [...partsOf(params[0])].map((public_key) => ({ public_key }));
         return [];
     }),
@@ -48,10 +61,10 @@ const mockDb = {
         return { changes: 1 };
     }),
 };
-vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn().mockImplementation(() => Promise.resolve(mockDb)) }));
+vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn().mockImplementation((name: string) => { store.openFile = name; return Promise.resolve(mockDb); }) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        getItem: vi.fn(async (k: string) => (k === 'beanpool_anchor_url' ? 'https://node.example' : null)),
+        getItem: vi.fn(async (k: string) => (k === 'beanpool_anchor_url' ? store.anchor : null)),
         setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}), getAllKeys: vi.fn(async () => []), multiRemove: vi.fn(async () => {}),
     },
 }));
@@ -62,16 +75,16 @@ vi.mock('expo-file-system/legacy', () => ({
 }));
 const who = vi.hoisted(() => ({ me: { publicKey: '', privateKey: '' } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...who.me, callsign: 'Me' })) }));
-vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn().mockReturnValue('beanpool_test.db'), addSavedNode: vi.fn() }));
+vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn((u: string | null) => (String(u).includes('other.example') ? 'beanpool_other.db' : 'beanpool_test.db')), addSavedNode: vi.fn() }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor } from '../db';
+import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat } from '../db';
 import { GROUP_CHAT_LOCK_LOST_TEXT, groupChatNotice, GROUP_CHAT_OLD_NODE_NOTICE } from '../group-chat-lines';
-import { forgetGroupKeys } from '../group-chat-keys';
+import { forgetGroupKeys, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 
 const realLoad = (Module as any)._load;
 (Module as any)._load = function (request: string, ...rest: any[]) {
@@ -84,7 +97,7 @@ const seed = ed25519.utils.randomSecretKey();
 who.me = { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesToHex(seed) };
 const OTHER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
 /** Every group in this file is one this phone may have held keys of; the fake node answers each the same way. */
-const groups = Array.from({ length: 12 }, () => randomUUID());
+const groups = Array.from({ length: 24 }, () => randomUUID());
 let chatAnswer: 'unlocked' | 'refused' = 'unlocked';
 const received: { method: string; path: string; body: any }[] = [];
 function reply(status: number, body: any) { return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body), clone() { return this; } }; }
@@ -109,6 +122,8 @@ const waitFor = async (pred: () => boolean, ms = 3000) => { const t = Date.now()
 const readable = (from: number) => received.slice(from).filter((r) => (r.path.endsWith('/chat/message') && typeof r.body?.text === 'string')
     || ((r.path === '/api/messages/send' || r.path === '/api/messages/edit') && r.body?.nonce === 'plaintext-v1'))
     .map((r) => `${r.path} ${r.body?.text ?? Buffer.from(String(r.body?.ciphertext ?? ''), 'base64').toString('utf8')}`);
+/** Every write that left the phone since `from`, in any form. */
+const writes = (from: number) => received.slice(from).filter((r) => r.method === 'POST').map((r) => r.path);
 /** This phone held a key of `g`: the highest epoch it verified is 2 (group_chat_key_state, kept per identity). */
 const held = (g: string) => store.keyState.set(`${who.me.publicKey}/${g}`, { highest: 2, after: 2 });
 const seen = async (g: string) => (await groupKeyringFor(g)).seenLocked();
@@ -237,5 +252,52 @@ describe('group chats: a held group is locked whatever its row says', () => {
         const drops = store.execs.filter((s) => /DROP TABLE/.test(s)).join(' ');
         expect(drops).toContain('DROP TABLE IF EXISTS group_chat_key_state;');
         expect(await seen(g)).toBe(false);
+    });
+});
+
+describe('group chats: a key store that can\'t be read never counts as "never held" (confirmation 2 of #1788, finding 1)', () => {
+    it('one failed read of the key tables: every send and edit refuses with the store sentence, nothing goes; once it reads again, same session, the group is held', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[12];
+        held(g);
+        store.failGroupReads = true;
+        const from = received.length;
+        const r: Record<string, string> = {};
+        try {
+            r.held = await tryIt(() => isHeldGroupChat(g));
+            r.insert = await tryIt(() => insertMessage(g, who.me.publicKey, 'words while the read fails'));
+            r.edit = await tryIt(() => editMessage(g, randomUUID(), 'an edit while the read fails'));
+            r.screen = await tryIt(() => postGroupChatMessage(g, 'the screen while the read fails', randomUUID(), null, undefined));
+            r.threadEdit = await tryIt(() => editThreadMessage(randomUUID(), 'a thread edit while the read fails', { groupId: g, metadata: { epoch: 2 }, locked: false }));
+        } finally {
+            store.failGroupReads = false;
+        }
+        const heldAfter = await isHeldGroupChat(g);
+        const after = await tryIt(() => insertMessage(g, who.me.publicKey, 'words once it reads again'));
+        await waitFor(() => readable(from).length > 0, 300);
+        console.log(`store error: ${JSON.stringify(r)}; held once it reads again ${heldAfter}; then ${after}; writes ${JSON.stringify(writes(from))}`);
+        for (const k of Object.keys(r)) expect(r[k]).toBe(`refused: ${GROUP_KEY_STORE_UNREAD_TEXT}`);
+        expect(heldAfter).toBe(true);
+        expect(after).toBe(`refused: ${GROUP_CHAT_LOCK_LOST_TEXT}`);
+        expect(writes(from)).toEqual([]);
+        expect(readable(from)).toEqual([]);
+    });
+
+    it('a keyring whose first read runs after the phone switched community never reads the other community\'s file: it refuses, then reads its own once back', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[13];
+        held(g);
+        const ring = await groupKeyringFor(g);
+        store.anchor = 'https://other.example';
+        let during: string;
+        try {
+            during = await tryIt(async () => { if (!(await ring.seenLocked())) throw new Error('read as never held'); });
+        } finally {
+            store.anchor = 'https://node.example';
+        }
+        const after = await ring.seenLocked();
+        console.log(`community switched under the keyring: ${during}; back on its own ${after}`);
+        expect(during).toBe(`refused: ${GROUP_KEY_STORE_UNREAD_TEXT}`);
+        expect(after).toBe(true);
     });
 });

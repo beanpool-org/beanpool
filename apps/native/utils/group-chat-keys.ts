@@ -33,8 +33,13 @@ export const GROUP_KEYS_UNOPENABLE_TEXT = "This device can't open your keys.";
 /** The node's keys roster names someone its members list doesn't show (review of #1788, finding 2). */
 export const GROUP_KEY_ROSTER_TEXT = "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.";
 export const GROUP_KEY_ROSTER_UNREAD_TEXT = "This phone couldn't check who is in this group just now. Nothing was sent; try again in a moment.";
+/**
+ * What this phone keeps of a group's keys couldn't be read (a SQLite error, or the file of a community it has since
+ * switched from): nothing is sent, and it is never taken for "never held" (confirmation 2 of #1788, finding 1).
+ */
+export const GROUP_KEY_STORE_UNREAD_TEXT = "This phone couldn't check this chat's keys just now. Nothing was sent; try again in a moment.";
 
-export type GroupChatKeyErrorCode = 'rollback' | 'no_key' | 'unopenable' | 'not_member' | 'refused' | 'roster';
+export type GroupChatKeyErrorCode = 'rollback' | 'no_key' | 'unopenable' | 'not_member' | 'refused' | 'roster' | 'store';
 
 /** Why this phone will not seal a line now; `message` is the sentence the chat shows. */
 export class GroupChatKeyError extends Error {
@@ -177,16 +182,34 @@ export class GroupKeyring {
         this.storeKey = `${identity.publicKey}/${groupId}`;
     }
 
+    /**
+     * Read what this phone keeps of the group, once per session. A read that fails is never remembered: it throws
+     * GROUP_KEY_STORE_UNREAD_TEXT ('store') to the caller, so every send and edit refuses, and the next call reads again.
+     * Taken for "nothing stored", one SQLite error would make a held group look never held for the rest of the session,
+     * and its next line go out readable (confirmation 2 of #1788, finding 1).
+     */
     private ensureLoaded(): Promise<void> {
         if (!this.loading) {
-            this.loading = (async () => {
-                const saved = await this.store.load(this.storeKey).catch(() => ({ epochs: [] as StoredGroupEpoch[], highest: 0, after: 0 }));
+            const loading = (async () => {
+                let saved: { epochs: StoredGroupEpoch[]; highest: number; after: number };
+                let verdicts: string[];
+                let signers: [string, string][];
+                try {
+                    saved = await this.store.load(this.storeKey);
+                    verdicts = await this.store.loadVerdicts(this.storeKey);
+                    signers = await this.store.loadSigners(this.storeKey);
+                } catch (e: any) {
+                    console.warn('[GroupKeys] could not read this group\'s keys on the phone:', e?.message || e);
+                    throw new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store');
+                }
                 for (const e of saved.epochs) this.epochs.set(e.epoch, e);
                 this.highest = Math.max(this.highest, saved.highest);
                 this.after = Math.max(this.after, saved.after);
-                for (const k of await this.store.loadVerdicts(this.storeKey).catch(() => [] as string[])) this.verdicts.add(k);
-                for (const [id, s] of await this.store.loadSigners(this.storeKey).catch(() => [] as [string, string][])) this.signers.set(id, s);
+                for (const k of verdicts) this.verdicts.add(k);
+                for (const [id, s] of signers) this.signers.set(id, s);
             })();
+            this.loading = loading;
+            loading.catch(() => { if (this.loading === loading) this.loading = null; });
         }
         return this.loading;
     }

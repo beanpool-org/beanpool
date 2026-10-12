@@ -63,7 +63,7 @@ describe('the Commons screen shows the sections a node has', () => {
             expect(commonsSections(f)).toEqual(['decide', 'enterprises', 'groups']);
             expect(commonsHeading(commonsSections(f))).toEqual({
                 title: 'Commons',
-                description: 'Community decisions, pooled circulation, and shared enterprises. Propose binding actions and vote on what matters.',
+                description: 'Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.',
             });
             expect(commonsSectionFor(undefined, f)).toBe('decide');
             for (const s of ['decide', 'enterprises', 'groups']) expect(commonsSectionFor(s, f)).toBe(s);

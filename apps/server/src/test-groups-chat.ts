@@ -150,10 +150,10 @@ async function main(): Promise<void> {
 
     // ── 1. The chat is created with the group ───────────────────────────────────────────────
     console.log('\n--- 1. A group is created with its chat ---');
-    assert(GROUP_CATEGORIES.join(',') === 'social,general,working_group,project,guild',
-        'categories are ordered Social Circle, General, Working Group, Project Team, Guild');
-    assert(DEFAULT_GROUP_CATEGORY === 'social' && GROUP_CATEGORY_LABELS.project === 'Project Team' && GROUP_CATEGORY_LABELS.social === 'Social Circle',
-        'Social Circle is the default, and "project" reads as Project Team');
+    assert(GROUP_CATEGORIES.join(',') === 'social,general,working_group,guild',
+        'categories are ordered Social Circle, General, Working Group, Guild: no Project Team (pick 7)');
+    assert(DEFAULT_GROUP_CATEGORY === 'social' && GROUP_CATEGORY_LABELS.project === 'Team' && GROUP_CATEGORY_LABELS.social === 'Social Circle',
+        'Social Circle is the default, and a stored "project" row reads as Team');
     const garden = createGroup({ name: 'Garden Crew', joinPolicy: 'request_to_join', createdBy: alice });
     assert(garden.category === 'social', 'a group created without a category is a Social Circle');
     const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(garden.id) as any;

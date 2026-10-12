@@ -321,7 +321,7 @@ export function inviteLandingFacts(p: { category?: string | null; memberCount?: 
 }
 
 export const GROUP_CATEGORY_WORDS: Readonly<Record<GroupCategory, string>> = {
-    social: 'Social Circle', general: 'General', working_group: 'Working Group', project: 'Project Team', guild: 'Guild',
+    social: 'Social Circle', general: 'General', working_group: 'Working Group', project: 'Team', guild: 'Guild',
 };
 
 export const JOIN_POLICY_WORDS: Readonly<Record<string, string>> = {

@@ -50,16 +50,19 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [error, setError] = useState<string | null>(null);
 
     // UI States
-    const [pickedSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>(initialSection);
+    // One Groups list holds projects, enterprises and chat groups (pick 7): a page asked for Enterprises opens on it.
+    const [pickedSection, setActiveSection] = useState<'decide' | 'groups'>(initialSection === 'enterprises' ? 'groups' : initialSection);
     // Formal Decisions, where the node has them (lib/node-decisions.ts: off on the global node, which refuses every
     // proposal and vote). Until the node has said, on, as on every node before the switch. Where they are off there is
     // no Decide tab, and a page asked to open on Decide opens on Groups.
     const [votes, setVotes] = useState(true);
+    // Projects and enterprises hold Beans: where the node has Beans off, the Create form offers neither.
+    const [beansOn, setBeansOn] = useState(true);
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
             .then(() => communityInfoOnce())
-            .then((info) => { if (!cancelled) setVotes(decisionsOn(info)); })
+            .then((info) => { if (!cancelled) { setVotes(decisionsOn(info)); setBeansOn(info?.features?.beans !== false); } })
             .catch(() => { /* Not answered: keep what the page shows; the node refuses a vote itself. */ });
         return () => { cancelled = true; };
     }, []);
@@ -80,8 +83,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
     const [selectedGroupForDetail, setSelectedGroupForDetail] = useState<Group | null>(null);
 
-    // Filter: all | ongoing | bounded
-    const [filter, setFilter] = useState<'all' | 'ongoing' | 'bounded'>('all');
+    // The kind chips: projects and enterprises hold Beans; chat groups (and My groups) are the rest.
+    const filter: 'all' | 'ongoing' | 'bounded' = groupCategoryFilter === 'projects' ? 'bounded' : groupCategoryFilter === 'enterprises' ? 'ongoing' : 'all';
+    const showEnterprises = groupCategoryFilter === 'all' || groupCategoryFilter === 'projects' || groupCategoryFilter === 'enterprises';
+    const showChatGroups = groupCategoryFilter === 'all' || groupCategoryFilter === 'chat' || groupCategoryFilter === 'my_groups';
 
     // Propose / New Enterprise modal
     const [showNewModal, setShowNewModal] = useState(false);
@@ -259,11 +264,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     }, [activeSection, fetchGroups]);
 
     const filteredGroups = useMemo(() => {
-        if (groupCategoryFilter === 'all') return groups;
         if (groupCategoryFilter === 'my_groups') {
             return groups.filter(g => g.viewerStatus === 'active' || g.viewerRole || g.viewerStatus === 'pending_approval');
         }
-        return groups.filter(g => g.category === groupCategoryFilter);
+        return groups;
     }, [groups, groupCategoryFilter]);
 
     const energySentence = (energyBalance: number): string => {
@@ -303,7 +307,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                             <span>🌱</span> The Commons
                         </h1>
-                        <p className="text-nature-400 text-sm mt-0.5">Community decisions, pooled circulation, and shared enterprises</p>
+                        <p className="text-nature-400 text-sm mt-0.5">Community decisions, the Commons, and your groups: projects, enterprises and more</p>
                     </div>
                     {identity && (
                         <button
@@ -358,14 +362,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 </div>
             </header>
 
-            {/* Section Switcher: Decide vs Enterprises vs Groups — the one sticky row */}
+            {/* Section Switcher: Decide vs Groups — the one sticky row */}
             <div className="sticky top-0 z-40 bg-nature-900 px-4 py-2" data-testid="commons-section-tabs">
                 {/* Emoji over label below `sm`: side by side, the three tabs need ~400px and pushed
                     Groups off a 320px screen at 1.3x text. */}
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
                     {([
                         { key: 'decide', emoji: '🗳️', label: 'Decide' },
-                        { key: 'enterprises', emoji: '🏛️', label: 'Enterprises' },
                         { key: 'groups', emoji: '👥', label: 'Groups' },
                     ] as const).filter(tab => votes || tab.key !== 'decide').map(tab => (
                         <button
@@ -393,36 +396,16 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
             {/* Filters scroll away with the content */}
             <div className="bg-nature-900 border-b border-nature-800 px-4 pb-3 shadow-sm empty:hidden" data-testid="commons-filters">
-                {/* Filter Controls: All / Ongoing / Bounded */}
-                {activeSection === 'enterprises' && (
-                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex gap-2 pt-1 overflow-x-auto scrollbar-none" data-testid="enterprise-filter-chips">
-                        {(['all', 'ongoing', 'bounded'] as const).map(option => (
-                            <button
-                                key={option}
-                                onClick={() => setFilter(option)}
-                                className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
-                                    filter === option
-                                        ? 'bg-emerald-600 text-white shadow-sm'
-                                        : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
-                                }`}
-                            >
-                                {option === 'all' ? 'All' : option === 'ongoing' ? 'Enterprises' : 'Projects'}
-                            </button>
-                        ))}
-                    </div>
-                )}
-
                 {/* Filter Controls: Groups Category */}
                 {activeSection === 'groups' && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
                         <div className="min-w-0 flex gap-2 overflow-x-auto py-1 scrollbar-none" data-testid="group-filter-chips">
                             {[
-                                { key: 'all', label: 'All Groups' },
-                                { key: 'my_groups', label: 'My Groups' },
-                                { key: 'working_group', label: '🤝 Working Groups' },
-                                { key: 'project', label: '🛠️ Projects' },
-                                { key: 'guild', label: '🛡️ Guilds' },
-                                { key: 'social', label: '☕ Social' },
+                                { key: 'all', label: 'All' },
+                                { key: 'my_groups', label: 'My groups' },
+                                { key: 'projects', label: '🌱 Projects' },
+                                { key: 'enterprises', label: '🏛️ Enterprises' },
+                                { key: 'chat', label: '👥 Chat groups' },
                             ].map(option => (
                                 <button
                                     key={option.key}
@@ -466,11 +449,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         onChangeView={setActiveDecideView}
                     />
                 </div>
-            ) : activeSection === 'groups' ? (
-                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full space-y-4">
+            ) : (
+                <>
+                <div className="px-4 pt-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
                     <div className="p-3 bg-nature-950/60 border border-nature-800 rounded-xl text-xs text-nature-300 leading-relaxed">
-                        👥 <strong>Groups & Teams:</strong> A group is a place to talk to some people rather than everyone. Groups do not hold beans and do not confer trust or voting standing.
+                        👥 <strong>Groups:</strong> A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.
                     </div>
+                </div>
+                {showChatGroups && (
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full space-y-4" data-testid="commons-chat-groups">
 
                     {loadingGroups ? (
                         <div className="py-12 text-center text-sm text-nature-400">Loading groups...</div>
@@ -550,7 +537,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         </div>
                     )}
                 </div>
-            ) : loading ? (
+                )}
+                {!showEnterprises ? null : loading ? (
                 <div className="p-8 text-center text-nature-500">Loading enterprises…</div>
                 ) : error ? (
                     <div className="p-8 text-center text-red-500">{error}</div>
@@ -737,6 +725,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         );
                     })}
                 </div>
+                )}
+                </>
             )}
 
             {/* Propose Enterprise / Project Modal */}
@@ -932,6 +922,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 isOpen={showCreateGroupModal}
                 onClose={() => setShowCreateGroupModal(false)}
                 onCreated={() => fetchGroups()}
+                onStartWithBeans={!beansOn ? undefined : (lifecycle) => {
+                    setShowCreateGroupModal(false);
+                    setNewLifecycle(lifecycle);
+                    setShowNewModal(true);
+                    setCreateError(null);
+                }}
             />
 
             <GroupDetailModal

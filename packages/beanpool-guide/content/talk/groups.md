@@ -25,11 +25,11 @@ The same list is in **Commons**, under **Groups**, as **Your groups**, without t
 
 - In **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form.
 - Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
-- Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group**, **Project Team** and **Guild**.
+- Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group** and **Guild**.
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.
 - Tap **Create Group**. You become its **lead convenor**, and the app takes you straight into the new group's chat.
 
-Running something together, with beans involved? Tap **Start an enterprise** at the bottom of the categories instead. See "Enterprises".
+With Beans involved? Start a project or an enterprise instead, from the bottom of the categories: on the phone **Start a project or an enterprise**, on the web **Start a project** or **Start an enterprise**. See "Projects and enterprises".
 
 ## Inviting people
 

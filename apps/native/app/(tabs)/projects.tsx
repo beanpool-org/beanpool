@@ -724,7 +724,6 @@ export default function ProjectsScreen() {
                                         { key: 'social', label: '🌻 Social' },
                                         { key: 'general', label: '💬 General' },
                                         { key: 'working_group', label: '🤝 Working Groups' },
-                                        { key: 'project', label: '🛠️ Project Teams' },
                                         { key: 'guild', label: '🛡️ Guilds' },
                                     ].map(option => (
                                         <Pressable

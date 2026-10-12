@@ -39,10 +39,10 @@ export function commonsHeading(sections: readonly CommonsSection[]): { title: st
     const decide = sections.includes('decide');
     const enterprises = sections.includes('enterprises');
     if (decide && enterprises) {
-        return { title: 'Commons', description: 'Community decisions, pooled circulation, and shared enterprises. Propose binding actions and vote on what matters.' };
+        return { title: 'Commons', description: 'Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.' };
     }
     if (decide) return { title: 'Commons', description: 'Community decisions and groups. Propose binding actions and vote on what matters.' };
-    if (enterprises) return { title: 'Commons', description: 'Shared enterprises, and groups to join or start.' };
+    if (enterprises) return { title: 'Commons', description: 'Projects, enterprises, and groups to join or start.' };
     return { title: 'Groups', description: 'Find a group to join, or start your own with +.' };
 }
 

@@ -160,10 +160,17 @@ describe('nodes with no door to choose', () => {
         expect(saveCalls(fetchMock)).toHaveLength(0);
     });
 
-    it('a node older than the door: nothing shown, nothing sent', async () => {
+    it('shows loading indicator while door settings request is pending', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => {})));
+        render(<DoorSettingPanel activeNode={NODE} viewer={PASSWORD} />);
+        expect(screen.getByTestId('door-setting-loading')).toHaveTextContent('Loading door settings…');
+    });
+
+    it('a node older than the door: nothing shown after loading finishes, nothing sent', async () => {
         const fetchMock = mockNode({});
         await renderPanel(PASSWORD);
         await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+        expect(screen.queryByTestId('door-setting-loading')).toBeNull();
         expect(screen.queryByText(/Who may invite/)).toBeNull();
         expect(saveCalls(fetchMock)).toHaveLength(0);
     });

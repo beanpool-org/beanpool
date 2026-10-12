@@ -57,6 +57,7 @@ type Status = { kind: 'saved' | 'error'; text: string };
 
 export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfile; viewer: RolesViewer }) {
     const [saved, setSaved] = useState<Door | null>(null);
+    const [loading, setLoading] = useState(true);
     const [choice, setChoice] = useState<CommunityDoor | null>(null);
     const [saving, setSaving] = useState(false);
     // null = not known (not loaded, or the node would not say): never warn on a guess.
@@ -82,16 +83,32 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
             } catch { /* the warning is a courtesy; no answer, no warning */ }
         })();
         (async () => {
-            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/node/config')).catch(() => null);
-            if (!res || !res.ok) return;
-            const cfg = await res.json().catch(() => ({}));
-            const door = readDoor((cfg as { door?: unknown }).door);
-            if (!mounted || !door) return;
-            setSaved(door);
-            setChoice(door === 'open' ? null : door);
+            setLoading(true);
+            try {
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/node/config')).catch(() => null);
+                if (!res || !res.ok) return;
+                const cfg = await res.json().catch(() => ({}));
+                const door = readDoor((cfg as { door?: unknown }).door);
+                if (!mounted || !door) return;
+                setSaved(door);
+                setChoice(door === 'open' ? null : door);
+            } finally {
+                if (mounted) setLoading(false);
+            }
         })();
         return () => { mounted = false; };
     }, [activeNode.url, activeNode.id]);
+
+    if (loading && saved === null) {
+        return (
+            <div className="bg-nature-900/90 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl" data-testid="door-setting-loading">
+                <div className="flex items-center gap-2 text-xs text-nature-400">
+                    <span className="inline-block w-3.5 h-3.5 border-2 border-nature-400/30 border-t-nature-400 rounded-full animate-spin" aria-hidden="true" />
+                    <span>Loading door settings…</span>
+                </div>
+            </div>
+        );
+    }
 
     if (!saved) return null;
 

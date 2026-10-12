@@ -40,6 +40,7 @@ export function readKnownFloorSettings(v: unknown): Settings | null {
 
 export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfile; viewer: RolesViewer }) {
     const [saved, setSaved] = useState<Settings | null>(null);
+    const [loading, setLoading] = useState(true);
     const [dial, setDial] = useState(false);
     const [floor, setFloor] = useState('');
     const [cap, setCap] = useState('');
@@ -55,19 +56,35 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
         setSaved(null);
         setStatus(null);
         (async () => {
-            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/known-floor'), {
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-            }).catch(() => null);
-            if (!res || !res.ok) return;
-            const s = readKnownFloorSettings(await res.json().catch(() => null));
-            if (!mounted || !s) return;
-            setSaved(s);
-            setDial(s.confirmation);
-            setFloor(String(s.knownFloor));
-            setCap(String(s.creditCap));
+            setLoading(true);
+            try {
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/known-floor'), {
+                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                }).catch(() => null);
+                if (!res || !res.ok) return;
+                const s = readKnownFloorSettings(await res.json().catch(() => null));
+                if (!mounted || !s) return;
+                setSaved(s);
+                setDial(s.confirmation);
+                setFloor(String(s.knownFloor));
+                setCap(String(s.creditCap));
+            } finally {
+                if (mounted) setLoading(false);
+            }
         })();
         return () => { mounted = false; };
     }, [activeNode.url, activeNode.id]);
+
+    if (loading && saved === null) {
+        return (
+            <div className="bg-nature-900/90 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl" data-testid="known-floor-loading">
+                <div className="flex items-center gap-2 text-xs text-nature-400">
+                    <span className="inline-block w-3.5 h-3.5 border-2 border-nature-400/30 border-t-nature-400 rounded-full animate-spin" aria-hidden="true" />
+                    <span>Loading known floor settings…</span>
+                </div>
+            </div>
+        );
+    }
 
     if (!saved) return null;
 

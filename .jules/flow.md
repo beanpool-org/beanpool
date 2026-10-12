@@ -131,3 +131,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-08 - Add loading indicator for AlertsPanel
 **Learning:** `AlertsPanel.tsx` rendered an empty card body below the description header while fetching server alerts status (`!status && !loadError`), leaving operators without visual feedback during network requests.
 **Action:** Render an explicit loading indicator with an animated spinner when `!status && !loadError`.
+
+## 2026-12-09 - Add loading indicators for DoorSettingPanel and KnownFloorPanel
+**Learning:** `DoorSettingPanel.tsx` and `KnownFloorPanel.tsx` rendered nothing while fetching initial settings asynchronously (`saved === null`), leaving node operators without visual feedback.
+**Action:** Render an explicit loading indicator with an animated spinner while initial settings are loading (`loading && saved === null`).

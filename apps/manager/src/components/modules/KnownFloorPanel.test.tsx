@@ -37,10 +37,17 @@ describe('KnownFloorPanel', () => {
         expect(readKnownFloorSettings({ error: 'Not found' })).toBeNull();
     });
 
-    it('shows nothing on a node older than the known floor', async () => {
+    it('shows a loading state indicator while initial fetch is in flight', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => {})));
+        render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
+        expect(screen.getByTestId('known-floor-loading')).toHaveTextContent('Loading known floor settings…');
+    });
+
+    it('shows nothing on a node older than the known floor after loading finishes', async () => {
         const f = mockNode({ ok: false, status: 404, body: { error: 'Not found' } });
         const { container } = render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
         await waitFor(() => expect(f).toHaveBeenCalled());
+        expect(screen.queryByTestId('known-floor-loading')).toBeNull();
         expect(container.querySelector('[data-testid="known-floor-panel"]')).toBeNull();
     });
 

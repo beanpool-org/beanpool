@@ -129,7 +129,8 @@ export default function ChatRoute() {
     useEffect(() => {
         if (isEventChat || threadKind || !id) return;
         let alive = true;
-        getConversationKind(String(id)).then(kind => {
+        // No row yet (a push tap before the sync): the node is asked, so a group's chat opens in its own screen.
+        getConversationKind(String(id), { askNode: true }).then(kind => {
             if (!alive) return;
             if (kind === 'event_thread') setIsEventChat(true);
             else if (kind === 'group_thread') setThreadKind('group');

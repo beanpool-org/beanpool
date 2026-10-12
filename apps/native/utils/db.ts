@@ -2641,10 +2641,19 @@ async function holdDmTypes(): Promise<void> {
     } catch {}
 }
 
-export async function getConversationKind(conversationId: string): Promise<string | null> {
+/**
+ * The kind of conversation this phone keeps for an id. `askNode`: with no row yet (a push tap, a link before the sync),
+ * ask the node once and keep its answer (the DM guard and the held guard applied), so a group's chat opens in its own
+ * screen rather than the DM one (confirmation 2 of #1788, finding 3).
+ */
+export async function getConversationKind(conversationId: string, opts: { askNode?: boolean } = {}): Promise<string | null> {
     try {
         const database = await getDb();
-        const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        let row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        if (!row && opts.askNode) {
+            await refreshConversationFromNode(conversationId);
+            row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        }
         const type = row?.type ?? null;
         // A known DM is a DM, whatever type its row says, or with no row (the node dropped it): the DM guard above.
         if (type !== 'dm' && await isKnownDmConversation(conversationId)) return 'dm';
@@ -4260,9 +4269,14 @@ async function lockForConversation(conversationId: string, text: string, line: D
     // A group's chat is locked since group chats step 2 (slice 3 here): sealed under the group's key, with its epoch in the
     // metadata the node checks. Only a node from before locked chats, which this phone never saw locked, still reads it.
     const groupLine = await sealForGroupConversation(conversationId, text, line);
+    if (groupLine === 'readable') return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
     if (groupLine) return groupLine;
     if (await isNodeReadableConversation(conversationId)) {
-        return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
+        // An event's or an enterprise's thread by its type (their own screens post to their own routes; this is the DM
+        // screen's path): readable only to a node whose own chat answer for this id says it isn't locked, never on a type
+        // alone (confirmation 2 of #1788, finding 3).
+        if (await nodeChatIsUnlocked(conversationId)) return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
+        throw new DmNotLockedError();
     }
     return lockWith(await requireDmKeyContext(conversationId), text, line);
 }
@@ -4302,10 +4316,14 @@ async function nodeChatIsUnlocked(groupId: string): Promise<boolean> {
     }
 }
 
-/** A group chat line sealed by the keyring's pre-seal rules, or null when this conversation isn't a locked group's. */
-async function sealForGroupConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata: Record<string, unknown> } | null> {
+/**
+ * A group chat line sealed by the keyring's pre-seal rules; 'readable' only when this phone never held the group's keys
+ * and the node's own chat answer for it has no `encryption` (a node from before locked chats, §14.3); null when the
+ * conversation isn't a group's (a DM, an event's or an enterprise's thread).
+ */
+async function sealForGroupConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata: Record<string, unknown> } | 'readable' | null> {
     const database = await getDb();
-    const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
+    let row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
     // A group this phone has held keys of is its group whatever the row says, with no row (a sync pruned it, a push landed
     // before it), or once something called it a DM: the phone's own key memory decides, never the node's or the row's
     // type (confirmation of #1788, 1), and it is asked FIRST (confirmation 2, finding 2). Only a group never held can be
@@ -4314,6 +4332,13 @@ async function sealForGroupConversation(conversationId: string, text: string, li
     const held = await isHeldGroupChat(conversationId);
     if (!held) {
         if (await isKnownDmConversation(conversationId)) return null;
+        if (!row) {
+            // Not on this phone yet (a push tap or a link before the sync wrote it): ask the node what it is first, so a
+            // group's first line goes through the keys and the node's own chat answer, never out readable on a missing row
+            // (confirmation 2 of #1788, finding 3).
+            await refreshConversationFromNode(conversationId);
+            row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
+        }
         if (row?.type !== 'group_thread') return null;
     }
     const ring = await groupKeyringFor(conversationId);
@@ -4326,7 +4351,7 @@ async function sealForGroupConversation(conversationId: string, text: string, li
         // this group (review of #1788, finding 4; director's decision b).
         if (e instanceof GroupKeysRequestError && e.status === 404) {
             if (held || await ring.seenLocked()) throw await heldGroupRefusal(conversationId);
-            if (await nodeChatIsUnlocked(conversationId)) return null;
+            if (await nodeChatIsUnlocked(conversationId)) return 'readable';
             throw new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
         }
         throw e;

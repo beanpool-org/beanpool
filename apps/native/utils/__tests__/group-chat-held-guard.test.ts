@@ -102,7 +102,7 @@ who.me = { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesT
 const OTHER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
 /** Every group in this file is one this phone may have held keys of; the fake node answers each the same way. */
 const groups = Array.from({ length: 24 }, () => randomUUID());
-let chatAnswer: 'unlocked' | 'refused' = 'unlocked';
+let chatAnswer: 'unlocked' | 'refused' | 'locked' = 'unlocked';
 const received: { method: string; path: string; body: any }[] = [];
 function reply(status: number, body: any) { return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body), clone() { return this; } }; }
 (globalThis as any).fetch = vi.fn(async (url: string, init: any = {}) => {
@@ -113,7 +113,10 @@ function reply(status: number, body: any) { return { ok: status >= 200 && status
     const g = groups.find((x) => path.includes(x));
     // The node: no keys for this phone (an old node, or one refusing it: 404), its chat answer with no `encryption`.
     if (g && method === 'GET' && path.startsWith(`/api/groups/${g}/keys`)) return reply(404, { error: 'Not found' });
-    if (g && method === 'GET' && path.startsWith(`/api/groups/${g}/chat`)) return chatAnswer === 'unlocked' ? reply(200, { messages: [], canPost: true }) : reply(404, { error: 'Not found' });
+    if (g && method === 'GET' && path.startsWith(`/api/groups/${g}/chat`)) {
+        if (chatAnswer === 'locked') return reply(200, { messages: [], canPost: true, encryption: { current: 1, stale: false, fromEpoch: 1 } });
+        return chatAnswer === 'unlocked' ? reply(200, { messages: [], canPost: true }) : reply(404, { error: 'Not found' });
+    }
     if (g && method === 'GET' && path.startsWith(`/api/messages/${g}`)) return reply(200, { conversation: { id: g, type: store.nodeType.get(g) ?? 'group_thread', name: 'The group', participants: [who.me.publicKey, OTHER] }, messages: [] });
     if (method === 'POST' && path.endsWith('/chat/message')) return reply(201, { success: true, message: { id: body?.clientId } });
     if (method === 'POST' && path === '/api/messages/send') return reply(201, { success: true, message: { id: body?.id, timestamp: new Date().toISOString() } });
@@ -362,5 +365,51 @@ describe('group chats: a held group is never a DM, and a known DM never becomes 
         expect(groupRoutes).toEqual([]);
         expect(sent).toEqual(['/api/messages/send x25519-xc20p-v2']);
         expect(await isHeldGroupChat(d)).toBe(false);
+    });
+});
+
+describe('group chats: a phone that never held the keys sends readable words only on the node\'s own chat answer (confirmation 2 of #1788, finding 3)', () => {
+    it('no row (a push tap before the sync), the node says group_thread and its chat is locked: nothing readable; the node is asked what it is, then its keys', async () => {
+        forgetGroupKeys(); chatAnswer = 'locked';
+        const g = groups[16];
+        const from = received.length;
+        const a = await tryIt(() => insertMessage(g, who.me.publicKey, 'a new member\'s first line'));
+        await waitFor(() => readable(from).length > 0, 300);
+        const asked = received.slice(from).map((r) => `${r.method} ${r.path.replace(g, 'G')}`);
+        chatAnswer = 'unlocked';
+        console.log(`never held, no row, chat locked: ${a}; asked ${JSON.stringify(asked)}; readable ${JSON.stringify(readable(from))}`);
+        expect(a.startsWith('refused: ')).toBe(true);
+        expect(readable(from)).toEqual([]);
+        expect(asked.slice(0, 2)).toEqual(['GET /api/messages/G?limit=1', 'GET /api/groups/G/keys?after=0']);
+    });
+
+    it('the row or the node says event_thread or enterprise_thread, and the node\'s chat answer is locked or refused: "couldn\'t be locked", nothing readable', async () => {
+        const r: Record<string, string> = {};
+        const from = received.length;
+        for (const [i, t] of [[17, 'event_thread'], [18, 'enterprise_thread']] as const) {
+            forgetGroupKeys(); chatAnswer = 'locked';
+            const g = groups[i];
+            store.conversations.set(g, { id: g, type: t, created_by: null });
+            r[`${t} row, chat locked`] = await tryIt(() => insertMessage(g, who.me.publicKey, `a line under ${t}`));
+        }
+        forgetGroupKeys(); chatAnswer = 'refused';
+        const g = groups[19];
+        store.nodeType.set(g, 'event_thread');
+        r['event_thread from the node, chat 404'] = await tryIt(() => insertMessage(g, who.me.publicKey, 'a line the node typed event_thread'));
+        chatAnswer = 'unlocked';
+        await waitFor(() => readable(from).length > 0, 300);
+        console.log(`never held, node-readable type: ${JSON.stringify(r)}; readable ${JSON.stringify(readable(from))}`);
+        for (const k of Object.keys(r)) expect(r[k]).toBe("refused: This message couldn't be locked yet.");
+        expect(readable(from)).toEqual([]);
+    });
+
+    it('as designed (§14.3): no row, an old node (keys 404, its chat answer has no encryption): the first line goes readable', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[20];
+        const from = received.length;
+        const a = await tryIt(() => insertMessage(g, who.me.publicKey, 'an old node\'s line'));
+        await waitFor(() => readable(from).length > 0);
+        console.log(`never held, no row, old node: ${a}; readable ${JSON.stringify(readable(from))}`);
+        expect(readable(from).length).toBe(1);
     });
 });

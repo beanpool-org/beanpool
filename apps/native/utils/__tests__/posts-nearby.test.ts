@@ -355,7 +355,7 @@ describe('posts-nearby, a set as what changed: 2,000 seeded worlds', { timeout: 
             const drop = body.setDrop.length > 0 ? body.setDrop.slice(1) : kept.length > 0 ? [kept[0]] : null;
             if (drop) expect(refused({ ...body, setDrop: drop }), `seed ${seed}: setDrop`).toBe(true);
             // tied: one more than the node's (or the held one's, where the answer names none).
-            expect(refused({ ...body, tied: [...('tied' in body ? body.tied : held.tied), set[0] === 'zz' ? 'zy' : 'zz'] }), `seed ${seed}: tied`).toBe(true);
+            expect(refused({ ...body, tied: [...(body.tied ?? held.tied),set[0] === 'zz' ? 'zy' : 'zz'] }), `seed ${seed}: tied`).toBe(true);
             // setHash: one hex digit off.
             const h = body.setHash;
             expect(refused({ ...body, setHash: `${h.slice(0, 5)}${h[5] === '0' ? '1' : '0'}${h.slice(6)}` }), `seed ${seed}: setHash`).toBe(true);

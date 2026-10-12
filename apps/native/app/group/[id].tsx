@@ -95,7 +95,7 @@ export default function GroupInviteLanding() {
         }
         setBusy(true);
         try {
-            await joinGroupApi(g.id);
+            await joinGroupApi(g.id, { joinPolicy: g.joinPolicy, viewerStatus });
             hapticSuccess();
             yourGroupsStore.refresh();
             if (g.joinPolicy === 'request_to_join' && viewerStatus !== 'invited') {

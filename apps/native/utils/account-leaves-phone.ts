@@ -266,7 +266,8 @@ export async function signOutOfThisPhone(account: LeavingAccount | null, opts: {
     // before this and passes `namesCopiesSaved`, so the copies aren't saved twice).
     if (!opts.namesCopiesSaved) await namesCopiesBeforeSignOut(account);
     const { clearDB } = await import('./db');
-    await clearDB();
+    // The identity leaves this phone: what it knew of its groups' keys goes with it (utils/db.ts clearDB).
+    await clearDB({ identityLeaves: true });
     await releaseAccountFromPhone(account);
     await wipeIdentity();
     // No community and no account on the phone now: the update screen's block, if one was up, comes down

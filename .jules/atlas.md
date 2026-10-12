@@ -205,3 +205,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `tokenCannotReach`, `guardTokenFetch`, and `installTokenFetchGuard` in `apps/manager/src/lib/token-guard.ts` lacked a standalone test file in `.test.ts` (existing tests were in `.test.tsx`).
 **Learning:** Adding `token-guard.test.ts` verified path blocking, event dispatch (`OWNER_PHONE_EVENT`), Request input extraction, 401 refusal formatting (`TOKEN_REPLACE_ADVICE`), and fetch guard wrapping without requiring React component rendering.
 **Action:** Continue expanding test coverage for untested utilities or components in `apps/manager/`.
+
+## 2026-10-12 - [manager tests] reportSubject, formatResolverName, and isManagerApi unit tests
+**Gap:** `formatResolverName`, `reportSubject`, and `isManagerApi` utility functions in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage.
+**Learning:** Testing `formatResolverName` confirmed that empty string or null returns `COMMUNITY_ADMIN` ('a community admin'), while whitespace-only string returns `''` after `trim()`. `reportSubject` verifies post author extraction, pulse item target fallback, and snake_case pubkey aliasing.
+**Action:** Continue identifying utility functions with missing direct assertions across `apps/manager/src/lib/`.

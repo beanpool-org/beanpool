@@ -208,6 +208,9 @@ describe('Sign Out (Device Only)', () => {
         expect([...vi.mocked(removeCommunityCaches).mock.calls[0][0]].sort()).toEqual([MULLUM, BELLINGEN, BYRON].sort());
         // The open community's tables are dropped first, as before; the cached copies go after the unregister.
         expect(callOrder(clearDB)).toBeLessThan(callOrder(fetch));
+        // The identity leaves this phone, so what it knew of its groups' keys goes too (utils/db.ts clearDB; confirmation 2
+        // of #1788, finding 4: nothing checked the flag).
+        expect(clearDB).toHaveBeenCalledWith({ identityLeaves: true });
         expect(callOrder(removeCommunityCaches)).toBeGreaterThan(Math.max(...vi.mocked(fetch).mock.invocationCallOrder));
     });
 

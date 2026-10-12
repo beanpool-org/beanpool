@@ -17,8 +17,12 @@ const store = vi.hoisted(() => ({
     messages: new Map<string, any>(),
     execs: [] as string[],
     keyState: new Map<string, { highest: number; after: number }>(),
-    /** When set, every read of the four group key tables throws, as a SQLite error would. */
-    failGroupReads: false,
+    /** group_chat_epochs rows by "<identity>/<group>": { epoch, record, wrap } as JSON strings, as the store keeps them. */
+    epochs: new Map<string, { epoch: number; record: string; wrap: string | null }[]>(),
+    /** Message ids the fake node no longer has: an edit of one is answered 404, as the edit route does. */
+    gone: new Set<string>(),
+    /** When set, every read of the four group key tables throws, as a SQLite error would; 'state', only the two that say held. */
+    failGroupReads: false as boolean | 'state',
     /** The community file open: the group tables of any other community's file hold nothing for these groups. */
     openFile: 'beanpool_test.db',
     anchor: 'https://node.example',
@@ -29,7 +33,7 @@ const store = vi.hoisted(() => ({
 const groupTable = (sql: string) => /group_chat_epochs|group_chat_key_state|group_line_verdicts|group_line_signers/.test(sql);
 const groupRead = (sql: string) => {
     if (!groupTable(sql)) return false;
-    if (store.failGroupReads) throw new Error('SQLITE_IOERR: disk I/O error (simulated)');
+    if (store.failGroupReads === true || (store.failGroupReads === 'state' && /group_chat_epochs|group_chat_key_state/.test(sql))) throw new Error('SQLITE_IOERR: disk I/O error (simulated)');
     return store.openFile !== 'beanpool_test.db';
 };
 const partsOf = (id: string) => { if (!store.participants.has(id)) store.participants.set(id, new Set()); return store.participants.get(id)!; };
@@ -55,6 +59,7 @@ const mockDb = {
     getAllAsync: vi.fn(async (sql: string, params: any[] = []) => {
         if (groupRead(sql)) return [];
         if (/SELECT public_key FROM conversation_participants WHERE conversation_id = \?/.test(sql)) return [...partsOf(params[0])].map((public_key) => ({ public_key }));
+        if (/FROM group_chat_epochs WHERE group_id = \?/.test(sql)) return store.epochs.get(params[0]) ?? [];
         return [];
     }),
     runAsync: vi.fn(async (sql: string, params: any[] = []) => {
@@ -87,7 +92,8 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi } from '../db';
-import { GROUP_CHAT_LOCK_LOST_TEXT, groupChatNotice, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
+import { GROUP_CHAT_LOCK_LOST_TEXT, groupChatNotice, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT } from '../group-chat-lines';
+import { makeGroupEpochRecord } from '@beanpool/core';
 import { forgetGroupKeys, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 
 const realLoad = (Module as any)._load;
@@ -120,6 +126,7 @@ function reply(status: number, body: any) { return { ok: status >= 200 && status
     if (g && method === 'GET' && path.startsWith(`/api/messages/${g}`)) return reply(200, { conversation: { id: g, type: store.nodeType.get(g) ?? 'group_thread', name: 'The group', participants: [who.me.publicKey, OTHER] }, messages: [] });
     if (method === 'POST' && path.endsWith('/chat/message')) return reply(201, { success: true, message: { id: body?.clientId } });
     if (method === 'POST' && path === '/api/messages/send') return reply(201, { success: true, message: { id: body?.id, timestamp: new Date().toISOString() } });
+    if (method === 'POST' && path === '/api/messages/edit' && store.gone.has(body?.messageId)) return reply(404, { error: 'Message not found' });
     if (method === 'POST' && path === '/api/messages/edit') return reply(200, { success: true, message: { editedAt: new Date().toISOString() } });
     return reply(404, { error: 'not here' });
 });
@@ -290,6 +297,24 @@ describe('group chats: a key store that can\'t be read never counts as "never he
         expect(readable(from)).toEqual([]);
     });
 
+    it('only the read that says held fails (the verdicts and signers read fine): still refused, never "never held"', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[12];
+        held(g);
+        store.failGroupReads = 'state';
+        const from = received.length;
+        let a: string;
+        try {
+            a = await tryIt(() => insertMessage(g, who.me.publicKey, 'words while the key state can\'t be read'));
+        } finally {
+            store.failGroupReads = false;
+        }
+        await waitFor(() => readable(from).length > 0, 300);
+        console.log(`key state unreadable: ${a}; writes ${JSON.stringify(writes(from))}`);
+        expect(a).toBe(`refused: ${GROUP_KEY_STORE_UNREAD_TEXT}`);
+        expect(writes(from)).toEqual([]);
+    });
+
     it('a keyring whose first read runs after the phone switched community never reads the other community\'s file: it refuses, then reads its own once back', async () => {
         forgetGroupKeys(); chatAnswer = 'unlocked';
         const g = groups[13];
@@ -411,5 +436,61 @@ describe('group chats: a phone that never held the keys sends readable words onl
         await waitFor(() => readable(from).length > 0);
         console.log(`never held, no row, old node: ${a}; readable ${JSON.stringify(readable(from))}`);
         expect(readable(from).length).toBe(1);
+    });
+});
+
+/** This phone holds a real epoch-1 key of `g`: a record I made (to me and OTHER) and my wrap, as the store keeps them. */
+function heldWithKey(g: string) {
+    const { record } = makeGroupEpochRecord({ myEdPrivHex: who.me.privateKey, groupId: g, epoch: 1, reason: 'start', subject: null, createdAt: new Date().toISOString(), recipients: [who.me.publicKey, OTHER] });
+    const mine = record.wraps!.find((w) => w.recipient === who.me.publicKey)!;
+    const { wraps: _all, ...served } = record;
+    const wrap = { epoch: 1, wrapper: who.me.publicKey, ephPub: mine.ephPub, nonce: mine.nonce, wrapped: mine.wrapped, sig: null };
+    store.epochs.set(`${who.me.publicKey}/${g}`, [{ epoch: 1, record: JSON.stringify(served), wrap: JSON.stringify(wrap) }]);
+    store.keyState.set(`${who.me.publicKey}/${g}`, { highest: 1, after: 1 });
+}
+
+describe('group chats: the photo guard and an edit with the key on the phone (confirmation 2 of #1788, finding 4)', () => {
+    it('held, its row kept as dm, the node lists one other person: a photo is refused and nothing goes (never DM-sealed to the node\'s pick)', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[21];
+        held(g);
+        store.nodeType.set(g, 'dm');
+        store.conversations.set(g, { id: g, type: 'dm', created_by: null });
+        partsOf(g).add(who.me.publicKey); partsOf(g).add(OTHER);
+        const from = received.length;
+        const a = await tryIt(() => sendImageMessage(g, 'data:image/jpeg;base64,/9j/AAAA', 'a caption'));
+        console.log(`photo, held, row dm: ${a}; writes ${JSON.stringify(writes(from))}`);
+        expect(a).toBe('refused: Photos can only be sent in direct messages.');
+        expect(writes(from)).toEqual([]);
+    });
+
+    it('held with a real key, the node says unlocked and serves no keys: the screen\'s edit (locked:false) goes SEALED under the line\'s epoch; a new line is refused', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[22];
+        heldWithKey(g);
+        const from = received.length;
+        const e = await tryIt(() => editThreadMessage(randomUUID(), 'edited words', { groupId: g, metadata: { epoch: 1 }, locked: false }));
+        const n = await tryIt(() => postGroupChatMessage(g, 'a new line', randomUUID(), null, undefined));
+        const edit = received.slice(from).find((r) => r.path === '/api/messages/edit');
+        console.log(`edit with the key: ${e} (nonce ${String(edit?.body?.nonce).split(':')[0]}, metadata ${JSON.stringify(edit?.body?.metadata)}); new line ${n}; readable ${JSON.stringify(readable(from))}`);
+        expect(e).toBe('went');
+        expect(String(edit?.body?.nonce).startsWith('group-xc20p-v1:')).toBe(true);
+        expect(edit?.body?.metadata).toEqual({ epoch: 1 });
+        expect(n).toBe(`refused: ${GROUP_CHAT_LOCK_LOST_TEXT}`);
+        expect(readable(from)).toEqual([]);
+    });
+
+    it('the edit route answers 404 (the node no longer has the line): the phone\'s own sentence, never the node\'s error', async () => {
+        forgetGroupKeys(); chatAnswer = 'locked';
+        const g = groups[23];
+        heldWithKey(g);
+        const id = randomUUID();
+        store.gone.add(id);
+        const from = received.length;
+        const e = await tryIt(() => editThreadMessage(id, 'an edit of a line the node no longer has', { groupId: g, metadata: { epoch: 1 }, locked: true }));
+        chatAnswer = 'unlocked';
+        console.log(`edit 404: ${e}; readable ${JSON.stringify(readable(from))}`);
+        expect(e).toBe(`refused: ${GROUP_CHAT_NOT_MEMBER_TEXT}`);
+        expect(readable(from)).toEqual([]);
     });
 });

@@ -82,7 +82,7 @@ describe('Enterprise keeper answers (A, G, M)', () => {
         const refusal = 'This enterprise is 30 beans in debt and your pledge is part of what covers it. You can step down once the debt is down to 10 beans, or once the other keepers pledge 20 beans more.';
         const stepSpy = vi.spyOn(api, 'stepDownAsKeeper').mockRejectedValue(new Error(refusal));
         render(<TreasuryDetailPage identity={BOB} pubkey={ENT} onBack={vi.fn()} />);
-        const btn = await screen.findByRole('button', { name: 'Step down as keeper' });
+        const btn = await screen.findByRole('button', { name: 'Step down as a keeper' });
         expect(btn.className).toContain('min-h-[48px]');
         fireEvent.click(btn);
         await waitFor(() => expect(stepSpy).toHaveBeenCalledWith(ENT));

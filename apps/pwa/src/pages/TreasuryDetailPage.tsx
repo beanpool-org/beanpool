@@ -1838,7 +1838,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             disabled={submittingJoinRequest}
                                             className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
                                         >
-                                            {submittingJoinRequest ? 'Submitting request…' : `Ask to join as a ${kw.keeper}`}
+                                            {submittingJoinRequest ? 'Submitting request…' : `Request to join as a ${kw.keeper}`}
                                         </button>
                                     </form>
                                 </div>
@@ -1880,7 +1880,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     </span>
                                                 ) : (
                                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-nature-200/70 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
-                                                        Keeper
+                                                        {kw.Keeper}
                                                     </span>
                                                 )}
                                                 {Number(k.backing) > 0 && (

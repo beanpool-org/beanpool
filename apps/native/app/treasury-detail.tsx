@@ -1186,12 +1186,12 @@ export default function TreasuryDetailScreen() {
                                         disabled={submittingJoin || Number(joinBackingPledge) > availableToBack}
                                         onPress={handleJoinRequest}
                                         accessibilityRole="button"
-                                        accessibilityLabel={`Ask to join as a ${kw.keeper}`}
+                                        accessibilityLabel={`Request to join as a ${kw.keeper}`}
                                     >
                                         {submittingJoin ? (
                                             <ActivityIndicator size="small" color={colors.text.inverse} />
                                         ) : (
-                                            <Text style={styles.joinButtonText}>Ask to join as a {kw.keeper}</Text>
+                                            <Text style={styles.joinButtonText}>Request to join as a {kw.keeper}</Text>
                                         )}
                                     </Pressable>
                                 </View>

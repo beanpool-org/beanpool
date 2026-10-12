@@ -25,7 +25,9 @@
  *     later each actor's rest is one pushed line ("257 more changes by the same admin").
  *  5c. A role lost or given back outside grant and revoke, through the real routes: an admin suspends an admin, an owner
  *     lifts it, an owner removes an admin, an admin suspends a moderator on a report, an admin deletes their account, a
- *     suspension the community does not keep ends: each told once and pushed to the owners, under the actor's own bound.
+ *     suspension the community does not keep ends, a suspension by a community vote, an owner halting a suspension's
+ *     vote: each told once and pushed to the owners, under the actor's own bound, in words naming who acted (a vote, an
+ *     owner); node-roles' community-vote actor is state-engine's.
  *  5d. Every security log line is in the history (one line per kind, counted, never its words); 1000 of them write the
  *     alert book a handful of times at most, its next write carries their count. A standby takes a role
  *     grant and tells it on its own channel only; once it is the main server, its standby days leave the card and banner.
@@ -520,22 +522,22 @@ async function main(): Promise<void> {
     await settle(300);
 
     // ── 5c. A role lost or given back outside grant and revoke (the first review's N1), through the real routes ──────
-    const C5 = ['SueSuspendS', 'PruPrunedS', 'RepReportedS', 'DelDeletesS', 'MiaModS', 'MoeModS'];
-    const [sue, pru, rpt, del, mia, moe] = C5.map(() => pubkey());
-    for (const [i, pk] of [sue, pru, rpt, del, mia, moe].entries()) {
+    const C5 = ['SueSuspendS', 'PruPrunedS', 'RepReportedS', 'DelDeletesS', 'MiaModS', 'MoeModS', 'DeeVotedS', 'EveHaltedS'];
+    const [sue, pru, rpt, del, mia, moe, dee, eve] = C5.map(() => pubkey());
+    for (const [i, pk] of [sue, pru, rpt, del, mia, moe, dee, eve].entries()) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, C5[i], new Date().toISOString(), owner, 'TEST');
         db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
-    for (const pk of [sue, pru, del]) grantNodeRole(pk, 'admin', owner);
-    for (const pk of [rpt, mia, moe]) grantNodeRole(pk, 'moderator', owner);
+    for (const pk of [sue, pru, del, eve]) grantNodeRole(pk, 'admin', owner);
+    for (const pk of [rpt, mia, moe, dee]) grantNodeRole(pk, 'moderator', owner);
     putPushTokenRow(sue, 'ExponentPushToken[sue-admin]', 'android');
     await settle(300);
     alerts.resetAlertsForTests();
     advance(2 * HOUR);
     const hR = topicHits().length;
     const { heldNodeRoleOf } = await import('./engine/node-roles.js');
-    const { tickDecisions } = await import('./decisions-engine.js');
+    const { tickDecisions, executeDecision, adminHaltDecision } = await import('./decisions-engine.js');
     const { purgeMemberSelf } = await import('./state-engine.js');
     const told = async (what: string, act: () => Promise<{ status: number; json?: any } | void>, words: RegExp, extraTo?: string) => {
         const p = ownerPushes().length;
@@ -578,9 +580,30 @@ async function main(): Promise<void> {
     await tick();
     await settle(500);
     assert(/1 more change by the same admin in the hour/.test(topicHits().slice(hR).map((h) => h.body).join('\n')), '5c. an hour later it is the admin\'s one more change');
+    // Who acted, in the words (the deciding review of #1807, finding 4: these two were told "by the server itself" with
+    // every step still green). The owner's bound is a new hour's: the tick above closed the last one.
+    const { COMMUNITY_VOTE_ACTOR } = await import('./engine/node-roles.js');
+    const { COMMUNITY_DECISION_ACTOR } = await import('./state-engine.js');
+    assert(COMMUNITY_VOTE_ACTOR === COMMUNITY_DECISION_ACTOR, `5c. node-roles' community-vote actor is state-engine's (${COMMUNITY_VOTE_ACTOR}, ${COMMUNITY_DECISION_ACTOR})`);
+    const vote = `vote-5c-${crypto.randomBytes(4).toString('hex')}`;
+    const at = new Date().toISOString();
+    db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status, opens_at, closes_at, created_at, updated_at)
+        VALUES (?, ?, 'Suspend a moderator', 'a passed suspension vote', 'member', 'suspend_member', ?, NULL, '1m1v', 'passed', ?, ?, ?, ?)`).run(vote, owner, dee, at, at, at, at);
+    await told('a suspension by a community vote', async () => { assert(executeDecision(vote).success, '5c. the suspension vote is carried out'); },
+        /^A moderator lost that role, suspended by a community vote\./);
+    assert(heldNodeRoleOf(dee) === null, '5c. the vote took the role');
+    // Told as the earlier "an owner suspends an admin" was, so counted on that same line (×2), not a new one.
+    const sEve = await call('POST', `/api/local/admin/users/${eve}/suspend`, { reason: 'An owner will halt this vote.' }, asOwner);
+    await settle(300);
+    assert(sEve.status === 200 && heldNodeRoleOf(eve) === null && (historyOf('sec.role').find((e) => /^An admin lost that role, suspended by an owner\./.test(e.detail))?.count ?? 1) >= 2,
+        `5c. an owner suspends an admin for its vote: told (${sEve.status})`);
+    const keep = (db.prepare("SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'").get(eve) as { id: string } | undefined)?.id;
+    await told('an owner halts its keep vote', async () => { assert(!!keep && adminHaltDecision(keep, owner, 'Halted: lift it.').success, '5c. the owner halts the keep vote'); },
+        /^Someone was made an admin again, the suspension's vote halted by an owner\./);
+    assert(heldNodeRoleOf(eve) === 'admin', '5c. the halt gave the role back');
     const c5 = [...topicHits().slice(hR).map((h) => JSON.stringify(h.headers) + h.body), JSON.stringify(alerts.getAlertsStatus()),
         ...ownerPushes().map((p) => p.title + p.body)];
-    assert(!c5.some((p) => C5.some((c) => p.includes(c)) || [sue, pru, rpt, del, mia, moe].some((k) => p.includes(k.slice(0, 12)))),
+    assert(!c5.some((p) => C5.some((c) => p.includes(c)) || [sue, pru, rpt, del, mia, moe, dee, eve].some((k) => p.includes(k.slice(0, 12)))),
         '5c. no member or key in any of these lines, pushes or the status');
 
     // ── 5d. The security log, and a standby's own events (the first review's N7 b–d) ─────────────────────────────────

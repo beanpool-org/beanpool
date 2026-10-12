@@ -194,8 +194,11 @@ export function nodeHasOwner(): boolean {
 
 const withArticle = (role: string) => `${/^[aeiou]/.test(role) ? 'an' : 'a'} ${role}`;
 
-/** The actor a community vote acts as (state-engine.ts COMMUNITY_DECISION_ACTOR, not imported: it imports this file). */
-const COMMUNITY_VOTE_ACTOR = 'system:community-decision';
+/**
+ * The actor a community vote acts as (state-engine.ts COMMUNITY_DECISION_ACTOR, not imported: it imports this file).
+ * Exported only for test-alerts-security, which checks the two strings are the same.
+ */
+export const COMMUNITY_VOTE_ACTOR = 'system:community-decision';
 
 /** The actor's role, for the owners' alert (services/alerts.ts sec.role): never who. Read before the change. */
 function actorRoleOf(actorPubkey?: string): string {

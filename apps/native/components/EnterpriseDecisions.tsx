@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, TextInput, Modal, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    GROUP_DECISIONS_NOTE, groupChoiceLabel, groupChoicePeople, groupChoicesFor, groupChoiceWhoWords, groupProposal, joinPolicyChoices,
+    GROUP_DECISIONS_NOTE, GROUP_SOMEONE, groupChoiceLabel, groupChoicePeople, groupChoicesFor, groupChoiceWhoWords, groupProposal, joinPolicyChoices,
     joinPolicyLabel, type GroupChoice, type GroupJoinPolicy, type GroupPerson,
     beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
     scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE, wageNoteWords,
@@ -72,7 +72,8 @@ export interface GroupDecisionsProps {
 
 /** A chat group's votes (slice S3), on its info: the same block, its own form (no recipient, no amount). */
 export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, refreshKey, onChanged }: GroupDecisionsProps) {
-    const nameOf = useCallback((pk: string) => people.find(p => p.pubkey === pk)?.name || 'a former member', [people]);
+    // Someone removed lands here with no roster (people is []): the card's own names, then plain words (#1794 N7).
+    const nameOf = useCallback((pk: string, names?: Record<string, string>) => people.find(p => p.pubkey === pk)?.name || names?.[pk] || GROUP_SOMEONE, [people]);
     const read = useCallback(() => getGroupDecisions(groupId), [groupId]);
     const cast = useCallback((id: string, support: boolean) => voteGroupDecision(groupId, id, support), [groupId]);
     return (
@@ -92,7 +93,7 @@ export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, refreshK
 function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, propose, onChanged }: {
     read: () => Promise<ScopedDecisionList | null>;
     cast: (id: string, support: boolean) => Promise<unknown>;
-    nameOf: (pubkey: string) => string;
+    nameOf: (pubkey: string, names?: Record<string, string>) => string;
     note: string;
     lifecycle?: string | null;
     refreshKey?: number;
@@ -142,9 +143,9 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
                 return (
                     <View key={d.id} style={s.decision}>
                         <Text style={s.title}>{d.title}</Text>
-                        <Text style={s.effect}>{scopedEffectWords(d, nameOf, lifecycle)}</Text>
+                        <Text style={s.effect}>{scopedEffectWords(d, pk => nameOf(pk, d.names), lifecycle)}</Text>
                         {!!d.description && <Text style={s.why}>{d.description}</Text>}
-                        <Text style={s.meta}>Proposed by {nameOf(d.authorPubkey)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}</Text>
+                        <Text style={s.meta}>Proposed by {nameOf(d.authorPubkey, d.names)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}</Text>
                         <Text style={s.tally}>{scopedTallyWords(d)}</Text>
                         {mine && <Text style={s.meta}>You voted {mine}.</Text>}
                         {/* The vote's own roll, frozen when it opened, says who votes: never who is in the group now. */}

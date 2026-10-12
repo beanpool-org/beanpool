@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-    GROUP_DECISIONS_NOTE, groupChoiceLabel, groupChoicePeople, groupChoicesFor, groupChoiceWhoWords, groupProposal, joinPolicyChoices,
+    GROUP_DECISIONS_NOTE, GROUP_SOMEONE, groupChoiceLabel, groupChoicePeople, groupChoicesFor, groupChoiceWhoWords, groupProposal, joinPolicyChoices,
     joinPolicyLabel, type GroupChoice, type GroupJoinPolicy, type GroupPerson,
     beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
     scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE, wageNoteWords,
@@ -67,7 +67,8 @@ export interface GroupDecisionsProps {
 
 /** A chat group's votes (slice S3), on its info: the same block, its own form (no recipient, no amount). */
 export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, onChanged }: GroupDecisionsProps) {
-    const nameOf = useCallback((pk: string) => people.find(p => p.pubkey === pk)?.name || 'a former member', [people]);
+    // Someone removed lands here with no roster (people is []): the card's own names, then plain words (#1794 N7).
+    const nameOf = useCallback((pk: string, names?: Record<string, string>) => people.find(p => p.pubkey === pk)?.name || names?.[pk] || GROUP_SOMEONE, [people]);
     const read = useCallback(() => getGroupDecisions(groupId), [groupId]);
     const cast = useCallback((id: string, support: boolean) => voteGroupDecision(groupId, id, support), [groupId]);
     return (
@@ -88,7 +89,7 @@ function ScopedDecisions({ id, read, cast, nameOf, note, lifecycle, propose, onC
     id: string;
     read: () => Promise<ScopedDecisionList | null>;
     cast: (decisionId: string, support: boolean) => Promise<unknown>;
-    nameOf: (pubkey: string) => string;
+    nameOf: (pubkey: string, names?: Record<string, string>) => string;
     note: ReactNode;
     lifecycle?: string | null;
     propose: ((close: () => void, done: () => void, list: ScopedDecisionList) => ReactNode) | null;
@@ -139,12 +140,12 @@ function ScopedDecisions({ id, read, cast, nameOf, note, lifecycle, propose, onC
                 return (
                     <article key={d.id} data-testid="scoped-decision" className="border-t border-nature-200 dark:border-nature-700 pt-3 min-w-0">
                         <h4 className="m-0 text-base font-bold text-nature-900 dark:text-nature-100 break-words">{d.title}</h4>
-                        <p className="m-0 mt-1 text-sm text-nature-800 dark:text-nature-200 break-words">{scopedEffectWords(d, nameOf, lifecycle)}</p>
+                        <p className="m-0 mt-1 text-sm text-nature-800 dark:text-nature-200 break-words">{scopedEffectWords(d, pk => nameOf(pk, d.names), lifecycle)}</p>
                         {d.description && (
                             <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300 break-words whitespace-pre-wrap" data-testid="scoped-why">{d.description}</p>
                         )}
                         <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 break-words">
-                            Proposed by {nameOf(d.authorPubkey)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}
+                            Proposed by {nameOf(d.authorPubkey, d.names)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}
                         </p>
                         <p className="m-0 mt-1 text-sm font-semibold text-nature-900 dark:text-nature-100 break-words" data-testid="scoped-tally">{scopedTallyWords(d)}</p>
                         {mine && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">You voted {mine}.</p>}

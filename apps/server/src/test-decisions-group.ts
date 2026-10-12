@@ -454,6 +454,10 @@ async function main(): Promise<void> {
         const theirs = seen.body?.decisions?.find((x: any) => x.id === lead7);
         assert(moved.every(s => s === 200) && seen.status === 200 && theirs?.canVote === true && seen.body?.onRoll === true && seen.body?.watching === false,
             `${how} mid-vote: their list still offers this vote (canVote ${theirs?.canVote}, onRoll ${seen.body?.onRoll}, watching ${seen.body?.watching})`);
+        // #1794 N7: their screen has no roster, so the card itself names the author and the subject by callsign.
+        assert(theirs?.names?.[a7.pubKeyHex] === `A7${how.slice(0, 2)}` && theirs?.names?.[b7.pubKeyHex] === `B7${how.slice(0, 2)}`
+            && Object.keys(theirs?.names ?? {}).length === 2,
+            `${how} mid-vote: the card names its author and subject, and nobody else (got ${JSON.stringify(theirs?.names)})`);
         const one = await detail(g7, lead7, d7);
         assert(one.body?.decision?.canVote === true, `${how} mid-vote: the vote's own read says they may vote (${one.body?.decision?.canVote})`);
         // The apps cast only where canVote is true: as they allow it now, the vote is decided as the node's roll says.

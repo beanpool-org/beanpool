@@ -28,7 +28,12 @@ describe('landOnGroup', () => {
 
     it('removed from an invite-only group mid-vote: the group is 404, the votes still read, so it lands on the votes', async () => {
         answers.decisions = { decisions: [{ ...card, canVote: true }], canPropose: false, onRoll: true, watching: false, rollSize: 4, closedAt: null };
-        expect(await landOnGroup(G)).toEqual({ kind: 'votes', groupId: G });
+        expect(await landOnGroup(G)).toEqual({ kind: 'votes', groupId: G, canVote: true });
+    });
+
+    it('left mid-vote, or every vote closed: it still lands on the votes, and says none takes theirs (#1794 N8)', async () => {
+        answers.decisions = { decisions: [{ ...card, canVote: false }], canPropose: false, onRoll: false, watching: false, rollSize: 4, closedAt: null };
+        expect(await landOnGroup(G)).toEqual({ kind: 'votes', groupId: G, canVote: false });
     });
 
     it('neither reads (never in the group, or no vote left): Commons', async () => {
@@ -41,10 +46,39 @@ describe('landOnGroup', () => {
 describe('GroupVotesSheet', () => {
     it('draws the votes from the id alone, with Yes / No on a vote whose roll holds the reader', async () => {
         answers.decisions = { decisions: [{ ...card, canVote: true }], canPropose: false, onRoll: true, watching: false, rollSize: 4, closedAt: null };
-        render(<GroupVotesSheet groupId={G} myPubkey={'cc'.repeat(32)} onClose={() => {}} />);
+        render(<GroupVotesSheet groupId={G} canVote={true} myPubkey={'cc'.repeat(32)} onClose={() => {}} />);
         expect(await screen.findByText('Close it')).toBeTruthy();
+        expect(screen.getByText(/so you can still vote on them/)).toBeTruthy();
         expect(screen.getByRole('button', { name: "Vote Yes on Close it" })).toBeTruthy();
         expect(screen.getByRole('button', { name: "Vote No on Close it" })).toBeTruthy();
         expect(screen.queryByText(/You watch this group/)).toBeNull();
+    });
+
+    it('no vote takes theirs: the line says only what is true, and no Yes / No (#1794 N8)', async () => {
+        answers.decisions = { decisions: [{ ...card, canVote: false }], canPropose: false, onRoll: false, watching: false, rollSize: 4, closedAt: null };
+        render(<GroupVotesSheet groupId={G} canVote={false} myPubkey={'cc'.repeat(32)} onClose={() => {}} />);
+        expect(await screen.findByText('Close it')).toBeTruthy();
+        expect(screen.getByText('You\'re not in this group now. These are the votes you were part of.')).toBeTruthy();
+        expect(screen.queryByText(/can still vote/)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Vote Yes on Close it' })).toBeNull();
+    });
+
+    it('names the subject and the author from the card, with no roster to name them from (#1794 N7)', async () => {
+        const named = { ...card, title: 'New lead', effect: 'replace_lead_convenor', subject: 'bb'.repeat(32), canVote: true,
+            names: { ['aa'.repeat(32)]: 'Ada', ['bb'.repeat(32)]: 'Bo' } };
+        answers.decisions = { decisions: [named], canPropose: false, onRoll: true, watching: false, rollSize: 4, closedAt: null };
+        render(<GroupVotesSheet groupId={G} canVote={true} myPubkey={'cc'.repeat(32)} onClose={() => {}} />);
+        expect(await screen.findByText(/Make Bo the lead convenor/)).toBeTruthy();
+        expect(screen.getByText(/Proposed by Ada/)).toBeTruthy();
+        expect(screen.queryByText(/a former member/)).toBeNull();
+    });
+
+    it('someone the card cannot name (an account deleted) is "someone in the group", never "a former member" (#1794 N7)', async () => {
+        const unnamed = { ...card, title: 'New lead', effect: 'replace_lead_convenor', subject: 'bb'.repeat(32), canVote: true, names: {} };
+        answers.decisions = { decisions: [unnamed], canPropose: false, onRoll: true, watching: false, rollSize: 4, closedAt: null };
+        render(<GroupVotesSheet groupId={G} canVote={true} myPubkey={'cc'.repeat(32)} onClose={() => {}} />);
+        expect(await screen.findByText(/Make someone in the group the lead convenor/)).toBeTruthy();
+        expect(screen.getByText(/Proposed by someone in the group/)).toBeTruthy();
+        expect(screen.queryByText(/a former member/)).toBeNull();
     });
 });

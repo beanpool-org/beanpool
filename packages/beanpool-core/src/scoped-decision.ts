@@ -35,6 +35,8 @@ export interface ScopedDecisionCard {
     /** Yes and No only once it has closed. */
     tally: { voted: number; roll: number; quorumRequired: number; thresholdRequired: number; yes?: number; no?: number };
     myVote: { support: number | boolean; updatedAt: string } | null;
+    /** A group vote's author and subject by callsign, for a screen with no roster to name them from (#1794 N7). */
+    names?: Record<string, string>;
     /** Whether the reader may vote on it: open, and on its own roll as frozen when it opened (an observer or someone removed
      *  since still is; someone who joined since is not). Yes / No are drawn from this, never from who is in the group now. */
     canVote?: boolean;
@@ -147,6 +149,19 @@ export function rollChoices(effect: ScopedEffect, roll: readonly RollPerson[], m
 }
 
 /** What the vote does, in one line, naming the person from the roll (the card is the keepers' own). */
+/**
+ * The line over a votes-only screen (someone no longer in the group, #1794 N8): "you can still vote" only when a vote
+ * still takes theirs. Someone who left mid-vote, or whose votes have all closed, is told only what is true.
+ */
+export function votesOnlyWords(canVote: boolean): string {
+    return canVote
+        ? "You're not in this group now, but you were when these votes opened, so you can still vote on them."
+        : "You're not in this group now. These are the votes you were part of.";
+}
+
+/** Who a group vote names when neither the roster nor the card knows them (an account deleted): never "a former member". */
+export const GROUP_SOMEONE = 'someone in the group';
+
 export function scopedEffectWords(d: Pick<ScopedDecisionCard, 'effect' | 'subject' | 'params'>, nameOf: (pubkey: string) => string, lifecycle?: string | null): string {
     const who = d.subject ? nameOf(d.subject) : 'someone';
     switch (d.effect) {

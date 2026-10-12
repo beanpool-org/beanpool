@@ -182,7 +182,7 @@ export function App() {
     // A chat group's info, opened over whatever is on screen: Home's vote line lands here (DESIGN-group-decisions S3).
     const [openGroup, setOpenGroup] = useState<Group | null>(null);
     // A group whose own read is refused, but whose votes still hold the reader (removed mid-vote from an invite-only group).
-    const [openGroupVotes, setOpenGroupVotes] = useState<string | null>(null);
+    const [openGroupVotes, setOpenGroupVotes] = useState<{ groupId: string; canVote: boolean } | null>(null);
     const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
 
     useEffect(() => {
@@ -308,7 +308,7 @@ export function App() {
             if (contextId) {
                 landOnGroup(contextId).then(l => {
                     if (l.kind === 'group') setOpenGroup(l.group);
-                    else if (l.kind === 'votes') setOpenGroupVotes(l.groupId);
+                    else if (l.kind === 'votes') setOpenGroupVotes({ groupId: l.groupId, canVote: l.canVote });
                     else setActiveTab('projects');
                 });
             }
@@ -1008,7 +1008,7 @@ export function App() {
                         />
                     )}
                     {openGroupVotes && (
-                        <GroupVotesSheet groupId={openGroupVotes} myPubkey={identity?.publicKey ?? null} onClose={() => setOpenGroupVotes(null)} />
+                        <GroupVotesSheet groupId={openGroupVotes.groupId} canVote={openGroupVotes.canVote} myPubkey={identity?.publicKey ?? null} onClose={() => setOpenGroupVotes(null)} />
                     )}
 
                     {/* Treasury Detail Overlay */}

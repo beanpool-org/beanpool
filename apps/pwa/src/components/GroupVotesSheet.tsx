@@ -6,8 +6,9 @@
  */
 import { getGroup, getGroupDecisions, type Group } from '../lib/api';
 import { GroupDecisions } from './EnterpriseDecisions';
+import { votesOnlyWords } from '@beanpool/core';
 
-export type GroupLanding = { kind: 'group'; group: Group } | { kind: 'votes'; groupId: string } | { kind: 'commons' };
+export type GroupLanding = { kind: 'group'; group: Group } | { kind: 'votes'; groupId: string; canVote: boolean } | { kind: 'commons' };
 
 /** The group's info when it reads; its votes when only they do; Commons, where groups are listed, when neither does. */
 export async function landOnGroup(groupId: string): Promise<GroupLanding> {
@@ -16,17 +17,21 @@ export async function landOnGroup(groupId: string): Promise<GroupLanding> {
     } catch {
         // The decisions route answers anyone on one of the group's votes' rolls, and 404s (null) everyone else.
         const list = await getGroupDecisions(groupId);
-        return list && list.decisions.length > 0 ? { kind: 'votes', groupId } : { kind: 'commons' };
+        return list && list.decisions.length > 0
+            ? { kind: 'votes', groupId, canVote: list.decisions.some(d => d.canVote === true) }
+            : { kind: 'commons' };
     }
 }
 
 interface Props {
     groupId: string;
+    /** Whether any of these votes still takes theirs: the line above says "you can still vote" only then (#1794 N8). */
+    canVote: boolean;
     myPubkey: string | null;
     onClose: () => void;
 }
 
-export function GroupVotesSheet({ groupId, myPubkey, onClose }: Props) {
+export function GroupVotesSheet({ groupId, canVote, myPubkey, onClose }: Props) {
     return (
         <div
             className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center"
@@ -53,7 +58,7 @@ export function GroupVotesSheet({ groupId, myPubkey, onClose }: Props) {
                 </div>
                 <div className="p-4 space-y-3">
                     <p className="text-sm text-nature-700 dark:text-nature-300">
-                        You're no longer in this group, but you were when these votes opened, so you can still vote on them.
+                        {votesOnlyWords(canVote)}
                     </p>
                     <GroupDecisions groupId={groupId} myPubkey={myPubkey} people={[]} />
                 </div>

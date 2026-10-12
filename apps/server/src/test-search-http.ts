@@ -12,6 +12,8 @@
  *    with a word starting "co" or "op" (#1808 review, finding 1).
  * 4. A search's ETag changes when the reader blocks or unblocks someone: the answer leaves out a different set of
  *    authors, so a copy held from before must not be confirmed with a 304 (#1808 review, finding 3).
+ * 5. A parameter the route reads as one value, given twice (`q=a&q=b`), arrives as an array: q made getPosts throw,
+ *    the others reached SQL as an array, and each answered 500. Each is now a 400 (#1808 review, finding 4).
  *
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-search-http.ts
  */
@@ -157,6 +159,16 @@ async function main(): Promise<void> {
     const t3 = await signedGet(path, tagged, { 'If-None-Match': t2.etag! });
     const t3Titles = Array.isArray(t3.body) ? t3.body.map((p: any) => p.title as string) : [];
     assert(t3.status === 200 && t3Titles.includes('Fresh milk'), `after the unblock neither: 200 with Bo's listing back (${t3.status}, ${JSON.stringify(t3Titles)})`);
+
+    // ── 5. A parameter given twice ──────────────────────────────────────────────
+    for (const p of ['q', 'type', 'category', 'id', 'updatedAfter', 'author', 'audienceScope', 'targetGroupId', 'assignedTo']) {
+        const twice = await signedGet(`/api/marketplace/posts?${p}=a&${p}=b`, other);
+        assert(twice.status === 400 && typeof twice.body?.error === 'string', `${p} given twice answers 400, not 500 (${twice.status})`);
+    }
+    const twiceCjk = await signedGet(`/api/marketplace/posts?q=${encodeURIComponent('鸡蛋')}&q=${encodeURIComponent('牛奶')}&lat=1&lng=1`, other);
+    assert(twiceCjk.status === 400, `q given twice with a point answers 400 (${twiceCjk.status})`);
+    const once = await signedGet('/api/marketplace/posts?q=fresh&type=offer&category=food', other);
+    assert(once.status === 200 && Array.isArray(once.body) && once.body.length > 0, `each given once answers as before (${once.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

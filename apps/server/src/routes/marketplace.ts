@@ -303,10 +303,20 @@ function photoKeysSince(): string {
     }
 }
 
+/** The posts route's parameters read as one value each. Given twice (`q=a&q=b`), one arrives as an array, which made
+ *  getPosts throw or reached SQL as one, and answered 500 to anyone (#1808 review, finding 4): it is a 400. */
+const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo'] as const;
+
 /** A member's set's hash, in each answer beside its ids (DESIGN-global-sync-by-area §2.3). */
 const nearbySetHash = (ids: string[]) => crypto.createHash('sha256').update(ids.join(',')).digest('hex').slice(0, 24);
 
 router.get('/api/marketplace/posts', async (ctx) => {
+    const repeated = ONE_VALUE_POSTS_PARAMS.find(p => ctx.query[p] !== undefined && typeof ctx.query[p] !== 'string');
+    if (repeated) {
+        ctx.status = 400;
+        ctx.body = { error: `${repeated} is one value: give it once` };
+        return;
+    }
     // Distance search (G4, design §3.2), on every profile: `lat`, `lng`, `radiusKm`, `sort=distance|recent`. Checked
     // first, so garbage is a 400 and never a 304. Without these parameters nothing below changes.
     const distance = parseDistanceQuery(ctx.query);

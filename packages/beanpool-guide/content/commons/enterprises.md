@@ -16,7 +16,7 @@ An enterprise has its own daily limits, ten times a member's: 1,000 payments, 30
 
 ## Finding them
 
-Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises** (in the phone app, tap **Enterprises**). The **Commons' enterprises** come first, then every project and enterprise with its status, purpose and balance. Tap one to open it.
+Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. The **Commons' enterprises** come first, then every project and enterprise with its status, purpose and balance. Tap one to open it.
 
 ## What an enterprise page shows
 
@@ -38,7 +38,7 @@ At the bottom, **Report Enterprise** if something is wrong.
 
 ## Starting one
 
-- On the web, tap **Commons**, then **+ Create Group**, then **Start a project** or **Start an enterprise**. In the phone app, tap **Commons**, then **Enterprises**, then the round **+** button.
+- On the web, tap **Commons**, then **+ Create Group**, then **Start a project** or **Start an enterprise**. In the phone app, tap **Commons**, then **Groups**, pick **Projects** or **Enterprises**, then the round **+** button.
 - Choose **Project** or **Enterprise**.
 - Give it a **Name** and a **Purpose statement**.
 - For a project, set a **Funding goal** and, if you like, a deadline.

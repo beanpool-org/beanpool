@@ -2,18 +2,18 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type MyPoolVoting, type TreasurySummary, type GroupItem, type GroupCategory } from '../../utils/db';
+import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type MyPoolVoting, type TreasurySummary, type GroupItem } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { beansOn } from '../../utils/node-profile';
-import { commonsSections, commonsSectionFor, commonsHeading, type CommonsSection } from '../../utils/commons-sections';
+import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, isProject, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
 import { YourGroupsRows, YourGroupsLoading, YourGroupsError, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { useYourGroups, yourGroupsStore } from '../../components/useYourGroups';
-import { groupsYouCouldJoin, chatEmoji, inviteLandingHref, yourGroupsPaneState } from '../../utils/your-groups';
+import { chatEmoji, inviteLandingHref, yourGroupsPaneState } from '../../utils/your-groups';
 import { GroupDetailModal } from '../../components/GroupDetailModal';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -40,15 +40,19 @@ export default function ProjectsScreen() {
     // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
-    // Decide only where formal Decisions are on, Enterprises only where enterprises are (utils/commons-sections.ts).
-    // With Groups all that is left (the worldwide community, reached from Talk's "Find groups"), this is its groups list.
+    // Decide only where formal Decisions are on; Groups is one list of projects, enterprises and chat groups, with
+    // projects and enterprises only where the node has them (utils/commons-sections.ts). With Groups all that is left
+    // (the worldwide community, reached from Talk's "Find groups"), this is its groups list.
     const sections = commonsSections(nodeProfile?.features);
     const showsDecide = sections.includes('decide');
-    const heading = commonsHeading(sections);
+    const heading = commonsHeading(nodeProfile?.features);
+    const kindChips = groupKindChips(nodeProfile?.features);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [treasuries, setTreasuries] = useState<any[]>([]);
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
     const [pickedSection, setActiveSection] = useState<CommonsSection>('decide');
+    // The kind chip over the one Groups list: projects, enterprises, chat groups, or all of them.
+    const [groupKind, setGroupKind] = useState<GroupKind>('all');
     // The one drawn: the section picked (or linked to), where this node shows it, else its first. So a section the
     // node's profile takes away is never drawn, not even before the profile has arrived and been acted on.
     const activeSection = commonsSectionFor(pickedSection, nodeProfile?.features);
@@ -57,7 +61,14 @@ export default function ProjectsScreen() {
     // clear the param so a later visit keeps its place.
     const sectionParam = useLocalSearchParams<{ section?: string }>().section;
     useEffect(() => {
-        // Talk's "Find a group to join" lands on Groups (decision 7).
+        // Talk's "Find a group to join" lands on Groups (decision 7). Enterprises are in Groups now: a link that
+        // asks for them opens Groups on its Enterprises chip.
+        if (sectionParam === 'enterprises') {
+            setActiveSection('groups');
+            setGroupKind('enterprises');
+            router.setParams({ section: '' });
+            return;
+        }
         if (sectionParam === 'groups') {
             setActiveSection('groups');
             router.setParams({ section: '' });
@@ -79,12 +90,7 @@ export default function ProjectsScreen() {
     // Groups states
     const [groups, setGroups] = useState<GroupItem[]>([]);
     const [loadingGroups, setLoadingGroups] = useState(false);
-    const [groupCategoryFilter, setGroupCategoryFilter] = useState<'all' | GroupCategory>('all');
     const [selectedGroupForDetail, setSelectedGroupForDetail] = useState<GroupItem | null>(null);
-
-    // Filter & sort states
-    const [filter, setFilter] = useState<'all' | 'ongoing' | 'bounded'>('all');
-    const [sortBy, setSortBy] = useState<'trending' | 'balance' | 'newest'>('trending');
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.page },
@@ -111,8 +117,8 @@ export default function ProjectsScreen() {
         statCardAmount: { fontSize: 20, color: colors.text.heading, fontWeight: '800' },
         statCardHint: { fontSize: 11, color: colors.text.muted, marginTop: 4, lineHeight: 15 },
 
-        // Three equal pills share ~288dp at 320dp wide, ~88dp each. "Enterprises" beside its icon
-        // needs ~110dp at 1.2x font, so the icon sits ABOVE the label and the label caps its scale.
+        // Two equal pills share ~288dp at 320dp wide. The icon sits ABOVE the label and the label caps its scale,
+        // as when there were three (Decide · Enterprises · Groups, before Groups held enterprises too).
         sectionTabsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
         sectionTabBtn: { flex: 1, minWidth: 0, minHeight: 56, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 14, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
         sectionTabBtnActive: { backgroundColor: colors.brand.tint, borderColor: colors.brand.primary },
@@ -301,45 +307,33 @@ export default function ProjectsScreen() {
         return `${days} days left`;
     };
 
-    const filteredGroups = useMemo(() => {
-        const mine = new Set(yourGroups.filter(y => y.kind === 'group').map(y => y.id));
-        let list = groupsYouCouldJoin(groups, mine);
-        if (groupCategoryFilter !== 'all') {
-            list = list.filter(g => g.category === groupCategoryFilter);
-        }
-        return list;
-    }, [groups, yourGroups, groupCategoryFilter]);
     const createGroup = useCreateGroupFlow(() => loadData());
 
-    const filteredEnterprises = useMemo(() => {
-        let list = [...enterprises];
-
-        // Filter
-        if (filter === 'ongoing') {
-            list = list.filter(e => e.lifecycle !== 'bounded' && (!e.goalAmount || e.goalAmount <= 0));
-        } else if (filter === 'bounded') {
-            list = list.filter(e => e.lifecycle === 'bounded' || (e.goalAmount != null && e.goalAmount > 0));
+    // Projects first (a goal to reach), then by live offers; then the one list for the chip (commonsGroupRows).
+    const groupRows = useMemo(() => {
+        const sorted = [...enterprises].sort((a, b) => {
+            if (isProject(a) && !isProject(b)) return -1;
+            if (!isProject(a) && isProject(b)) return 1;
+            return (b.liveOffers || 0) - (a.liveOffers || 0);
+        });
+        return commonsGroupRows(groupKind, groups, sorted, yourGroups, nodeProfile?.features);
+    }, [groups, enterprises, yourGroups, groupKind, nodeProfile?.features]);
+    const groupsEmpty = commonsGroupsEmpty(groupKind, nodeProfile?.features);
+    // The + on Groups: a project or enterprise on those chips, otherwise the create form (which offers both, with Beans).
+    const startsProject = activeSection === 'groups' && (groupKind === 'projects' || groupKind === 'enterprises');
+    const openProposeProject = async () => {
+        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        if (!anchorUrl) {
+            Alert.alert('Not Connected', 'Connect to a community first.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
+            ]);
+            return;
         }
+        router.push('/propose-project');
+    };
 
-        // Sort
-        switch (sortBy) {
-            case 'balance':
-                return list.sort((a, b) => (b.balance || 0) - (a.balance || 0));
-            case 'trending':
-                return list.sort((a, b) => {
-                    const aBounded = a.goalAmount != null && a.goalAmount > 0;
-                    const bBounded = b.goalAmount != null && b.goalAmount > 0;
-                    if (aBounded && !bBounded) return -1;
-                    if (!aBounded && bBounded) return 1;
-                    return (b.liveOffers || 0) - (a.liveOffers || 0);
-                });
-            case 'newest':
-            default:
-                return list;
-        }
-    }, [enterprises, filter, sortBy]);
-
-    const renderItem = ({ item }: { item: TreasurySummary }) => {
+    const renderEnterpriseItem = ({ item }: { item: TreasurySummary }) => {
         const { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, takesPledges, currentRaised, meta } = enterpriseCardStatus(item);
         const goalAmount = item.goalAmount || 1;
         const progress = Math.min(100, (currentRaised / goalAmount) * 100);
@@ -538,9 +532,11 @@ export default function ProjectsScreen() {
         <View style={styles.safeArea}>
             <FlatList
                 ref={listRef}
-                data={activeSection === 'decide' ? [] : activeSection === 'groups' ? (filteredGroups as any[]) : filteredEnterprises}
-                keyExtractor={item => activeSection === 'groups' ? (item as any).id : (item as any).publicKey}
-                renderItem={activeSection === 'groups' ? (renderGroupItem as any) : renderItem}
+                data={activeSection === 'decide' ? [] : groupRows}
+                keyExtractor={(row: CommonsGroupRow<TreasurySummary>) => row.key}
+                renderItem={({ item: row }: { item: CommonsGroupRow<TreasurySummary> }) => (
+                    row.kind === 'group' ? renderGroupItem({ item: row.item }) : renderEnterpriseItem({ item: row.item })
+                )}
                 contentContainerStyle={styles.listContainer}
                 refreshControl={
                     <RefreshControl
@@ -592,7 +588,7 @@ export default function ProjectsScreen() {
                         </View>
                         )}
 
-                        {/* Section Switcher: Decide vs Enterprises vs Groups, those this node shows; none for Groups alone */}
+                        {/* Section Switcher: Decide vs Groups, where this node shows both; none for Groups alone */}
                         {sections.length > 1 && (
                         <View style={styles.sectionTabsRow}>
                             {showsDecide && (
@@ -621,30 +617,6 @@ export default function ProjectsScreen() {
                                         <Text style={styles.sectionBadgeText} maxFontSizeMultiplier={1}>{openDecisionsCount}</Text>
                                     </View>
                                 )}
-                            </Pressable>
-                            )}
-
-                            {sections.includes('enterprises') && (
-                            <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel="Enterprises Section"
-                                style={[styles.sectionTabBtn, activeSection === 'enterprises' && styles.sectionTabBtnActive]}
-                                onPress={() => setActiveSection('enterprises')}
-                            >
-                                <MaterialCommunityIcons
-                                    name="office-building"
-                                    size={18}
-                                    color={activeSection === 'enterprises' ? colors.brand.primary : colors.text.secondary}
-                                />
-                                <Text
-                                    style={[styles.sectionTabText, activeSection === 'enterprises' && styles.sectionTabTextActive]}
-                                    numberOfLines={1}
-                                    adjustsFontSizeToFit
-                                    minimumFontScale={0.8}
-                                    maxFontSizeMultiplier={1.1}
-                                >
-                                    Enterprises
-                                </Text>
                             </Pressable>
                             )}
 
@@ -695,11 +667,13 @@ export default function ProjectsScreen() {
                                 activeView={activeDecideView}
                                 onChangeView={setActiveDecideView}
                             />
-                        ) : activeSection === 'groups' ? (
+                        ) : (
                             <View style={{ gap: 12 }}>
                                 <View style={{ backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default }}>
                                     <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 18 }}>
-                                        👥 <Text style={{ fontWeight: '700', color: colors.text.heading }}>Groups & Teams:</Text> A group is a place to talk to some people rather than everyone. Groups do not hold beans and do not confer trust or voting standing.
+                                        👥 <Text style={{ fontWeight: '700', color: colors.text.heading }}>Groups:</Text> {kindChips.length > 0
+                                            ? 'A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.'
+                                            : 'A group is a place for some people rather than everyone. Being in a group does not change your trust or your vote.'}
                                     </Text>
                                 </View>
 
@@ -718,189 +692,126 @@ export default function ProjectsScreen() {
                                 )}
 
                                 <Text style={styles.groupsHeading}>Groups you could join</Text>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
-                                    {[
-                                        { key: 'all', label: 'All' },
-                                        { key: 'social', label: '🌻 Social' },
-                                        { key: 'general', label: '💬 General' },
-                                        { key: 'working_group', label: '🤝 Working Groups' },
-                                        { key: 'guild', label: '🛡️ Guilds' },
-                                    ].map(option => (
+                                {/* The kind chips (pick 7): one list of projects, enterprises and chat groups. None where the
+                                    node has no projects or enterprises: there every group is a chat group. */}
+                                {kindChips.length > 0 && (
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }} testID="group-kind-chips">
+                                    {kindChips.map(option => (
                                         <Pressable
                                             key={option.key}
-                                            style={[styles.filterBtn, groupCategoryFilter === option.key && styles.filterBtnActive]}
-                                            onPress={() => setGroupCategoryFilter(option.key as any)}
+                                            accessibilityRole="button"
+                                            accessibilityState={{ selected: groupKind === option.key }}
+                                            style={[styles.filterBtn, groupKind === option.key && styles.filterBtnActive]}
+                                            onPress={() => setGroupKind(option.key)}
                                         >
-                                            <Text style={[styles.filterBtnText, groupCategoryFilter === option.key && styles.filterBtnTextActive]}>
+                                            <Text style={[styles.filterBtnText, groupKind === option.key && styles.filterBtnTextActive]}>
                                                 {option.label}
                                             </Text>
                                         </Pressable>
                                     ))}
                                 </ScrollView>
-                            </View>
-                        ) : (
-                            <>
+                                )}
+
                                 {/* Community Treasuries — the Commons' trading accounts (eggs, etc.) */}
-                        {treasuries.length > 0 && (
-                            <View style={{ marginBottom: 12 }}>
-                                <Text style={styles.treasuryPanelLabel}>🏛️ The Commons' enterprises</Text>
-                                {treasuries.map((t: any, index: number) => (
-                                    <Pressable
-                                        key={t.publicKey || `treasury-${index}`}
-                                        style={styles.treasuryCard}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={`Open ${t.name}`}
-                                        onPress={() => {
-                                            if (!t.publicKey) return;
-                                            router.push({ pathname: '/treasury-detail', params: { publicKey: t.publicKey, name: t.name, avatar: t.avatar } });
-                                        }}
-                                    >
-                                        {t.avatar ? (
-                                            <Image source={{ uri: t.avatar }} style={styles.treasuryAvatar} />
-                                        ) : (
-                                            <View style={[styles.treasuryAvatar, styles.treasuryAvatarPlaceholder]}><Text style={{ fontSize: 18 }}>🏛️</Text></View>
+                                {treasuries.length > 0 && kindChips.length > 0 && (groupKind === 'all' || groupKind === 'enterprises') && (
+                                    <View style={{ marginBottom: 12 }}>
+                                        <Text style={styles.treasuryPanelLabel}>🏛️ The Commons' enterprises</Text>
+                                        {treasuries.map((t: any, index: number) => (
+                                            <Pressable
+                                                key={t.publicKey || `treasury-${index}`}
+                                                style={styles.treasuryCard}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={`Open ${t.name}`}
+                                                onPress={() => {
+                                                    if (!t.publicKey) return;
+                                                    router.push({ pathname: '/treasury-detail', params: { publicKey: t.publicKey, name: t.name, avatar: t.avatar } });
+                                                }}
+                                            >
+                                                {t.avatar ? (
+                                                    <Image source={{ uri: t.avatar }} style={styles.treasuryAvatar} />
+                                                ) : (
+                                                    <View style={[styles.treasuryAvatar, styles.treasuryAvatarPlaceholder]}><Text style={{ fontSize: 18 }}>🏛️</Text></View>
+                                                )}
+                                                <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
+                                                    <Text style={styles.treasuryName} numberOfLines={1}>{t.name}</Text>
+                                                    <Text style={styles.treasuryMeta}>{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</Text>
+                                                </View>
+                                                <Text style={[styles.treasuryBalance, t.balance < 0 ? styles.treasuryBalanceNeg : styles.treasuryBalancePos]}>{t.balance} 🫘</Text>
+                                                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} style={{ marginLeft: 4 }} />
+                                            </Pressable>
+                                        ))}
+                                        {balanceState.canOperate && (
+                                            <View style={styles.operatorBadge}>
+                                                <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
+                                                <Text style={styles.operatorBadgeText}>You can act for these enterprises — post their offers & pay tenders</Text>
+                                            </View>
                                         )}
-                                        <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
-                                            <Text style={styles.treasuryName} numberOfLines={1}>{t.name}</Text>
-                                            <Text style={styles.treasuryMeta}>{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</Text>
-                                        </View>
-                                        <Text style={[styles.treasuryBalance, t.balance < 0 ? styles.treasuryBalanceNeg : styles.treasuryBalancePos]}>{t.balance} 🫘</Text>
-                                        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} style={{ marginLeft: 4 }} />
-                                    </Pressable>
-                                ))}
-                                {balanceState.canOperate && (
-                                    <View style={styles.operatorBadge}>
-                                        <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
-                                        <Text style={styles.operatorBadgeText}>You can act for these enterprises — post their offers & pay tenders</Text>
                                     </View>
                                 )}
                             </View>
                         )}
-
-                        {/* Filter Controls: All / Ongoing / Bounded */}
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-                            {(['all', 'ongoing', 'bounded'] as const).map(option => (
-                                <Pressable
-                                    key={option}
-                                    accessibilityRole="button"
-                                    accessibilityState={{ selected: filter === option }}
-                                    style={[styles.filterBtn, filter === option && styles.filterBtnActive]}
-                                    onPress={() => setFilter(option)}
-                                >
-                                    <Text style={[styles.filterBtnText, filter === option && styles.filterBtnTextActive]}>
-                                        {option === 'all' ? 'All' : option === 'ongoing' ? 'Enterprises' : 'Projects'}
-                                    </Text>
-                                </Pressable>
-                            ))}
-                        </ScrollView>
-                            </>
-                        )}
                     </View>
                 }
                 ListEmptyComponent={
-                    activeSection === 'decide' ? null : activeSection === 'groups' ? (
-                        loadingGroups ? (
-                            <View style={{ gap: 16 }}>
-                                <View style={styles.skeletonCard}>
-                                    <View style={styles.skeletonLineTitle} />
-                                    <View style={styles.skeletonLineDesc} />
-                                </View>
-                                <View style={styles.skeletonCard}>
-                                    <View style={styles.skeletonLineTitle} />
-                                    <View style={styles.skeletonLineDesc} />
-                                </View>
+                    activeSection === 'decide' ? null : (loadingGroups || loading) ? (
+                        <View style={{ gap: 16 }}>
+                            <View style={styles.skeletonCard}>
+                                <View style={styles.skeletonLineTitle} />
+                                <View style={styles.skeletonLineDesc} />
                             </View>
-                        ) : (
-                            <View style={styles.emptyState}>
-                                <Text style={styles.emptyEmoji}>👥</Text>
-                                <Text style={styles.emptyTitle}>No other groups to join</Text>
-                                <Text style={styles.emptyDesc}>
-                                    {groupCategoryFilter === 'all'
-                                        ? 'Start one: a social circle, a working group, a guild.'
-                                        : 'None in this category yet.'}
-                                </Text>
-                                <Pressable
-                                    accessibilityRole="button"
-                                    style={styles.emptyBtn}
-                                    onPress={createGroup.open}
-                                >
-                                    <Text style={styles.emptyBtnText}>+ Create a Group</Text>
-                                </Pressable>
+                            <View style={styles.skeletonCard}>
+                                <View style={styles.skeletonLineTitle} />
+                                <View style={styles.skeletonLineDesc} />
                             </View>
-                        )
+                        </View>
                     ) : (
-                        loading ? (
-                            <View style={{ gap: 16 }}>
-                                <View style={styles.skeletonCard}>
-                                    <View style={styles.skeletonLineTitle} />
-                                    <View style={styles.skeletonLineDesc} />
-                                    <View style={styles.skeletonLineProgress} />
-                                </View>
-                                <View style={styles.skeletonCard}>
-                                    <View style={styles.skeletonLineTitle} />
-                                    <View style={styles.skeletonLineDesc} />
-                                    <View style={styles.skeletonLineProgress} />
-                                </View>
-                            </View>
-                        ) : (
-                            <View style={styles.emptyState}>
-                                <Text style={styles.emptyEmoji}>🌱</Text>
-                                <Text style={styles.emptyTitle}>No enterprises proposed yet</Text>
-                                <Text style={styles.emptyDesc}>
-                                    Got an idea that benefits the community? Start an enterprise or propose a project to get started.
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyEmoji}>{groupsEmpty.action === 'project' ? '🌱' : '👥'}</Text>
+                            <Text style={styles.emptyTitle}>{groupsEmpty.title}</Text>
+                            <Text style={styles.emptyDesc}>{groupsEmpty.desc}</Text>
+                            <Pressable
+                                accessibilityRole="button"
+                                style={styles.emptyBtn}
+                                onPress={groupsEmpty.action === 'project' ? openProposeProject : createGroup.open}
+                            >
+                                <Text style={styles.emptyBtnText}>
+                                    {groupsEmpty.action === 'project' ? (groupKind === 'enterprises' ? '+ Start an enterprise' : '+ Start a project') : '+ Create a Group'}
                                 </Text>
-                                <Pressable
-                                    accessibilityRole="button"
-                                    style={styles.emptyBtn}
-                                    onPress={async () => {
-                                        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-                                        if (!anchorUrl) {
-                                            Alert.alert('Not Connected', 'Connect to a community first.', [
-                                                { text: 'Cancel', style: 'cancel' },
-                                                { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
-                                            ]);
-                                            return;
-                                        }
-                                        router.push('/propose-project');
-                                    }}
-                                >
-                                    <Text style={styles.emptyBtnText}>+ Propose a Project</Text>
-                                </Pressable>
-                            </View>
-                        )
+                            </Pressable>
+                        </View>
                     )
                 }
             />
             <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={activeSection === 'decide' ? "Propose a decision" : activeSection === 'groups' ? "Create a group" : "Propose a project or start an enterprise"}
+                accessibilityLabel={activeSection === 'decide' ? 'Propose a decision' : startsProject ? 'Start a project or an enterprise' : 'Create a group'}
                 style={styles.fab}
                 onPress={async () => {
+                    if (startsProject) {
+                        await openProposeProject();
+                        return;
+                    }
                     if (activeSection === 'groups') {
                         createGroup.open();
                         return;
                     }
                     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                     if (!anchorUrl) {
-                        Alert.alert('Not Connected', 'Connect to a community before proposing projects.', [
+                        Alert.alert('Not Connected', 'Connect to a community before proposing a decision.', [
                             { text: 'Cancel', style: 'cancel' },
                             { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
                         ]);
                         return;
                     }
-                    if (activeSection === 'decide') {
-                        if (!canProposeDecision) {
-                            Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
-                            return;
-                        }
-                        if (hasOpenDecision) {
-                            Alert.alert('Limit Reached', 'You already have an open decision (limit 1 open decision per author).');
-                            return;
-                        }
-                        setShowProposeDecision(true);
-                    } else {
-                        router.push('/propose-project');
+                    if (!canProposeDecision) {
+                        Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
+                        return;
                     }
+                    if (hasOpenDecision) {
+                        Alert.alert('Limit Reached', 'You already have an open decision (limit 1 open decision per author).');
+                        return;
+                    }
+                    setShowProposeDecision(true);
                 }}
             >
                 <MaterialCommunityIcons name="plus" size={30} color={colors.text.inverse} />

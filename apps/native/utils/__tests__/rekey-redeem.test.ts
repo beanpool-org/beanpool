@@ -387,19 +387,159 @@ describe('an ask that never showed a number is never held (#1783 review C1)', ()
         const err = await beginRekey('https://bellingen.example.org', CODE, w.deps).catch((e) => e);
         expect(err).toBeInstanceOf(RekeyHeldError);
         expect(err.host).toBe('mullum.example.org');
+        expect(err.canForget).toBe(true); // its node isn't answering
         expect(w.slot).toMatchObject({ community: MULLUM, publicKey: first.publicKey, shown: true });
         await abandonRekey(w.deps); // the form's "Forget the re-key at mullum.example.org", after its warning
         const next = await beginRekey('https://bellingen.example.org', CODE, w.deps);
         expect(next.publicKey).not.toBe(first.publicKey);
     });
 
-    it('a number that showed more than a code\'s life ago can no longer be bound: the next ask goes through', async () => {
-        const w = world({ answers: [waiting] });
+    it('a number that showed more than a code\'s life ago: its node is asked once, and unreachable, the next ask goes through', async () => {
+        const w = world({ answers: [waiting, 'offline'] });
         const first = await beginRekey(MULLUM, CODE, w.deps);
         await askRekey(first, w.deps);
         w.slot!.startedAt -= REKEY_ASK_LIFE_MS + 1;
         const next = await beginRekey(MULLUM, 'RK-EEEE-FFFF', w.deps);
         expect(next).toMatchObject({ code: 'RK-EEEE-FFFF', publicKey: first.publicKey, shown: false });
-        expect(w.sent.length).toBe(1);
+        expect(w.sent.map((x) => x.init?.method)).toEqual(['POST', 'GET']);
+        expect(w.sent[1].url).toContain(`code=${CODE}`);
+    });
+});
+
+describe('an earlier ask that showed a number, by its node\'s answer (#1783 review D1, decided 2026-10-12)', () => {
+    const BELLINGEN = 'https://bellingen.example.org';
+    const gone = { status: 200, body: { state: 'gone' } };
+
+    it('bound (the admin typed the number after Not now): returned, so the next ask is told bound and finishes it', async () => {
+        const w = world({ answers: [waiting, bound, bound] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        const r = await beginRekey(BELLINGEN, 'RK-EEEE-FFFF', w.deps);
+        expect(r).toMatchObject({ community: MULLUM, code: CODE, publicKey: first.publicKey });
+        const a = await askRekey(r, w.deps);
+        expect(a.state).toBe('bound');
+        expect((await finishRekey(r, a as { callsign: string }, w.deps)).identity.publicKey).toBe(first.publicKey);
+        expect(w.phone?.publicKey).toBe(first.publicKey);
+        expect(w.sent.some((x) => x.url.includes('bellingen'))).toBe(false);
+    });
+
+    it('bound, but this phone holds another account since: refused, and only then may it be forgotten', async () => {
+        const w = world({ answers: [waiting, bound] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        w.phone = id('7'); // the member restored their words meanwhile
+        const err = await beginRekey(BELLINGEN, 'RK-EEEE-FFFF', w.deps).catch((e) => e);
+        expect(err).toBeInstanceOf(RekeyHeldError);
+        expect(err.canForget).toBe(true);
+        expect(err.message).toMatch(/went through, but this phone holds another account now/);
+        expect(w.slot?.publicKey).toBe(first.publicKey);
+    });
+
+    it('waiting: refused, never offered to forget; the message says what is open and the ways out', async () => {
+        const w = world({ answers: [waiting, waiting] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        const err = await beginRekey(BELLINGEN, 'RK-EEEE-FFFF', w.deps).catch((e) => e);
+        expect(err).toBeInstanceOf(RekeyHeldError);
+        expect(err.canForget).toBe(false);
+        expect(err.message).toContain(`The re-key you started at mullum.example.org with ${CODE} is still open`);
+        expect(err.message).toContain('type that code');
+        expect(err.message).toContain('press Not theirs');
+        expect(err.message).toMatch(/lets it go by itself in about 24 hours\.$/);
+        expect(w.slot).toMatchObject({ community: MULLUM, publicKey: first.publicKey, shown: true });
+    });
+
+    it('a refusal that says nothing of the ask (a 401 on the status) is no reason to forget it either', async () => {
+        const w = world({ answers: [waiting, { status: 401, body: { error: 'A signed request is required' } }] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        const err = await beginRekey(BELLINGEN, 'RK-EEEE-FFFF', w.deps).catch((e) => e);
+        expect(err).toBeInstanceOf(RekeyHeldError);
+        expect(err.canForget).toBe(false);
+    });
+
+    it('unreachable: refused, and the only waiting case the form may forget', async () => {
+        const w = world({ answers: [waiting, 'offline'] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        const err = await beginRekey(BELLINGEN, 'RK-EEEE-FFFF', w.deps).catch((e) => e);
+        expect(err).toBeInstanceOf(RekeyHeldError);
+        expect(err.canForget).toBe(true);
+    });
+
+    it('more than a day old, and its node bound it while the phone was away: asked once, and finished', async () => {
+        const w = world({ answers: [waiting, bound, bound] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        w.slot!.startedAt -= REKEY_ASK_LIFE_MS + 1;
+        const r = await beginRekey(BELLINGEN, 'RK-EEEE-FFFF', w.deps);
+        expect(r).toMatchObject({ community: MULLUM, code: CODE, publicKey: first.publicKey });
+        const a = await askRekey(r, w.deps);
+        expect((await finishRekey(r, a as { callsign: string }, w.deps)).identity.publicKey).toBe(first.publicKey);
+    });
+
+    it('more than a day old, and a host that answers waiting for ever: let go, with its key, the next ask goes through', async () => {
+        const w = world({ answers: [waiting, waiting] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        w.slot!.startedAt -= REKEY_ASK_LIFE_MS + 1;
+        const next = await beginRekey(BELLINGEN, 'RK-EEEE-FFFF', w.deps);
+        expect(next).toMatchObject({ community: BELLINGEN, code: 'RK-EEEE-FFFF', publicKey: first.publicKey, shown: false });
+        expect(w.sent.filter((x) => x.url.includes('mullum')).map((x) => x.init?.method)).toEqual(['POST', 'GET']);
+    });
+
+    it('more than a day old, and its node says it ended: let go, as at any age', async () => {
+        const w = world({ answers: [waiting, gone] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        w.slot!.startedAt -= REKEY_ASK_LIFE_MS + 1;
+        const next = await beginRekey(BELLINGEN, 'RK-EEEE-FFFF', w.deps);
+        expect(next).toMatchObject({ community: BELLINGEN, code: 'RK-EEEE-FFFF' });
+        expect(next.publicKey).not.toBe(first.publicKey);
+    });
+});
+
+describe('the C1 details a mutant got past (#1783 review D5)', () => {
+    it('a record re-pointed from a day-old one starts its day again, so its new number is held for a whole day', async () => {
+        const w = world({ answers: [waiting, 'offline', waiting, waiting] });
+        const first = await beginRekey(MULLUM, CODE, w.deps);
+        await askRekey(first, w.deps);
+        w.slot!.startedAt -= REKEY_ASK_LIFE_MS + 1;
+        const before = Date.now();
+        const next = await beginRekey('https://bellingen.example.org', 'RK-EEEE-FFFF', w.deps);
+        expect(next.startedAt).toBeGreaterThanOrEqual(before);
+        expect((await askRekey(next, w.deps)).state).toBe('waiting'); // bellingen's number shows
+        // Another code: bellingen's admin can still type that number, so it is held, not re-pointed.
+        const err = await beginRekey(MULLUM, 'RK-1111-2222', w.deps).catch((e) => e);
+        expect(err).toBeInstanceOf(RekeyHeldError);
+        expect(w.slot).toMatchObject({ community: 'https://bellingen.example.org', shown: true });
+    });
+
+    it('a late answer for an earlier ask never marks the record that replaced it as shown', async () => {
+        const w = world();
+        let answerTypo: (r: Response) => void = () => {};
+        const realFetch = w.deps.fetch;
+        w.deps.fetch = ((url: string, init?: RequestInit) => (url.includes('mulum.example')
+            ? new Promise<Response>((ok) => { answerTypo = ok; })
+            : realFetch(url, init))) as typeof fetch;
+        const typo = await beginRekey('https://mulum.example.org', CODE, w.deps);
+        const late = askRekey(typo, w.deps); // still out
+        await new Promise((r) => setTimeout(r, 0));
+        // Never shown, so another code re-points it, with the same key.
+        const right = await beginRekey(MULLUM, 'RK-EEEE-FFFF', w.deps);
+        expect(right).toMatchObject({ community: MULLUM, publicKey: typo.publicKey, shown: false });
+        answerTypo(new Response(JSON.stringify(waiting.body), { status: 200 }));
+        expect((await late).state).toBe('waiting');
+        expect(w.slot).toMatchObject({ community: MULLUM, code: 'RK-EEEE-FFFF' });
+        expect(w.slot?.shown).toBeFalsy();
+    });
+
+    it('the phone\'s day is the node\'s code life (engine/member-wizards.ts REKEY_CODE_TTL_MS)', () => {
+        const src = readFileSync(join(__dirname, '../../../server/src/engine/member-wizards.ts'), 'utf8');
+        const m = src.match(/export const REKEY_CODE_TTL_MS = ([\d\s*]+);/);
+        expect(m).not.toBeNull();
+        const serverTtl = m![1].split('*').reduce((n, f) => n * Number(f.trim()), 1);
+        expect(serverTtl).toBe(24 * 60 * 60 * 1000);
+        expect(REKEY_ASK_LIFE_MS).toBe(serverTtl);
     });
 });

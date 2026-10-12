@@ -26,7 +26,7 @@ import { buildSignedHeaders } from '../utils/crypto';
 import { signReEnrollStatement } from '../utils/member-statements';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import {
-    abandonRekey, askRekey, beginRekey, endsRekey, finishRekey, parseRekeyLink, pollRekey, rekeyCommunityUrl, resumeRekey,
+    abandonRekey, askRekey, beginRekey, cleanRekeyCode, endsRekey, finishRekey, parseRekeyLink, pollRekey, rekeyCommunityUrl, resumeRekey,
     REKEY_POLL_MS, REKEY_TEXT, RekeyHeldError, type RekeyAnswer, type RekeyDeps, type RekeySlot,
 } from '../utils/rekey-redeem';
 
@@ -109,7 +109,10 @@ export default function RekeyCodeScreen() {
     const [code, setCode] = useState(fromLink?.code ?? '');
     const [phase, setPhase] = useState<Phase>('form');
     const [error, setError] = useState<string | null>(null);
-    /** An earlier ask showed a number and can't be checked now: the form offers to forget it (#1783 review C1). */
+    /**
+     * An earlier ask showed a number and its node can't be reached (or it was bound, and this phone holds another account
+     * since): the form offers to forget it (#1783 review C1). Never while its node still waits for the number (D1).
+     */
     const [heldHost, setHeldHost] = useState<string | null>(null);
     const [slot, setSlot] = useState<RekeySlot | null>(null);
     const [match, setMatch] = useState<string | null>(null);
@@ -207,11 +210,13 @@ export default function RekeyCodeScreen() {
         setPhase('asking');
         try {
             const s = await beginRekey(url, code, deps);
+            // An earlier ask its node bound comes back instead, to be finished (#1783 review D1): the form says which.
+            if (s.community !== url || s.code !== cleanRekeyCode(code)) { setCommunity(s.community); setCode(s.code); }
             setSlot(s);
             await apply(s, await askRekey(s, deps));
         } catch (e) {
             setError(e instanceof Error ? e.message : REKEY_TEXT.unreachable);
-            if (e instanceof RekeyHeldError) setHeldHost(e.host);
+            if (e instanceof RekeyHeldError && e.canForget) setHeldHost(e.host);
             setPhase('form');
         }
         setPhase((p) => (p === 'asking' ? 'form' : p));
@@ -220,7 +225,7 @@ export default function RekeyCodeScreen() {
     // The way out when an earlier ask can't be checked: its record and key go, after one warning.
     const forgetHeld = () => {
         if (!heldHost) return;
-        Alert.alert(`Forget the re-key at ${heldHost}?`, 'If your admin there already typed its number, your account moved to that phone key and only a new code from them gets you back in.', [
+        Alert.alert(`Forget the re-key at ${heldHost}?`, `If an admin at ${heldHost} has typed the number this phone showed, or types it later, your account there moves to a key this phone will no longer have. Only a new code from them gets you back in.`, [
             { text: 'Keep it', style: 'cancel' },
             { text: 'Forget it', style: 'destructive', onPress: async () => { await abandonRekey(deps); setHeldHost(null); setError(null); } },
         ]);

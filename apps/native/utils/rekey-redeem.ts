@@ -139,21 +139,32 @@ export const REKEY_TEXT = {
     changedAccount: 'This phone’s account changed while you waited, so nothing was saved. Start again.',
 } as const;
 
-/** Refused because an earlier ask may still be bound: the screen offers to forget it ({@link abandonRekey}). */
+/**
+ * Refused because an earlier ask may still be bound. `canForget`: the screen offers to forget it ({@link abandonRekey})
+ * only when its node can't be reached, or it was bound and this phone holds another account since. A node that still
+ * waits for the number is left to the code, the admin's Not theirs, or the day (#1783 review D1).
+ */
 export class RekeyHeldError extends Error {
-    constructor(message: string, readonly host: string) {
+    constructor(message: string, readonly host: string, readonly canForget: boolean) {
         super(message);
         this.name = 'RekeyHeldError';
     }
+}
+
+/** When this phone lets a held ask go by itself: a code's life after it started, in words. */
+function letsGoIn(startedAt: number): string {
+    const hours = Math.ceil((startedAt + REKEY_ASK_LIFE_MS - Date.now()) / 3600000);
+    return hours <= 1 ? 'within the hour' : `in about ${hours} hours`;
 }
 
 /**
  * Starts (or resumes) an ask: the key this phone asks with, written down with the community and the code BEFORE the
  * caller sends anything. A record already here for the same community and code keeps its key: the same proposal, the
  * same number. A record for another community or code is never re-pointed while its node may still bind it (#1783
- * review N2): it is asked first, let go only once its node says it has ended, and otherwise this ask is refused.
- * Only an ask that showed a number within a code's life may still be bound: any other (a typo in the name, an address
- * that isn't a BeanPool node, a day old) is re-pointed here, keeping its key (#1783 review C1).
+ * review N2): it is asked first. Bound, it is returned, so the caller's ask is told `bound` and finishes it (#1783
+ * review D1). Ended, it is let go. Otherwise this ask is refused while its code may live, and let go after.
+ * Only an ask that showed a number is asked about: any other (a typo in the name, an address that isn't a BeanPool node)
+ * can't be bound, and is re-pointed here, keeping its key (#1783 review C1).
  */
 export async function beginRekey(community: string, rawCode: string, deps: RekeyDeps): Promise<RekeySlot> {
     const code = cleanRekeyCode(rawCode);
@@ -162,18 +173,26 @@ export async function beginRekey(community: string, rawCode: string, deps: Rekey
     if (!url) throw new Error('That isn’t a community address the app can use.');
     let held = await deps.slot.get();
     const stored = await deps.loadIdentity();
-    if (held?.madeHere && held.draft && (held.community !== url || held.code !== code)
-        && held.shown && Date.now() - held.startedAt < REKEY_ASK_LIFE_MS) {
-        const answer = await pollRekey(held, deps);
-        if (!endsRekey(answer)) {
-            const open = held;
-            const where = (() => { try { return new URL(open.community).host; } catch { return open.community; } })();
+    if (held?.madeHere && held.draft && (held.community !== url || held.code !== code) && held.shown) {
+        const open = held;
+        const where = (() => { try { return new URL(open.community).host; } catch { return open.community; } })();
+        const answer = await pollRekey(open, deps);
+        if (answer.state === 'bound') {
+            // The admin typed the number (after Not now, or while the phone was away): the account is on this key now.
+            if (!stored || stored.publicKey === open.publicKey) return open;
+            throw new RekeyHeldError(`Your re-key at ${where} went through, but this phone holds another account now, and a phone holds only one. Forget that re-key to go on: your account at ${where} then needs a new code from an admin there.`, where, true);
+        }
+        if (endsRekey(answer)) {
+            await abandonRekey(deps);
+            held = null;
+        } else if (Date.now() - open.startedAt < REKEY_ASK_LIFE_MS) {
             throw new RekeyHeldError(answer.state === 'unreachable'
                 ? `This phone showed a number for a re-key at ${where}, and ${where} isn’t answering. Try again later, or forget that re-key.`
-                : `The re-key you started at ${where} with ${open.code} is still open. Type that code to continue it, or ask your admin to decline this phone, then try again.`, where);
+                : `The re-key you started at ${where} with ${open.code} is still open: an admin there can still type the number this phone showed. To go on with it, type that code. To end it, ask the admin there to press Not theirs. Otherwise this phone lets it go by itself ${letsGoIn(open.startedAt)}.`,
+            where, answer.state === 'unreachable');
         }
-        await abandonRekey(deps);
-        held = null;
+        // A day old and not bound: its code has died (the node's REKEY_CODE_TTL_MS), whatever its node says now, so it
+        // is re-pointed below with its key (#1783 review C1, D1c).
     }
     let slot: RekeySlot;
     if (stored) {

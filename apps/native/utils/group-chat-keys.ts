@@ -21,8 +21,8 @@
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import {
-    makeEpochRecord, openMyKey, verifyGroupEpochRecord, groupEpochCoversExactly, makeTopUp, GroupKeyNotVerifiedError,
-    type GroupEpochProgress, type GroupEpochReason, type GroupEpochRecord, type GroupLineVerifyMemo, type GroupServedWrap,
+    makeEpochRecord, openMyKey, verifyGroupEpochRecord, groupEpochCoversExactly, makeTopUp, GroupKeyNotVerifiedError, walkKeySuccession,
+    type FormerKey, type GroupEpochProgress, type GroupEpochReason, type GroupEpochRecord, type GroupLineVerifyMemo, type GroupServedWrap,
 } from './group-chat-crypto';
 
 /** Exact words the chat shows (provenance §7 rule 2; epochs-over-time §1, §5). */
@@ -159,6 +159,11 @@ export class GroupKeyring {
     private badRecords = new Set<number>();
     /** The active members the screen shows (GET …/members), as last read here or handed in by the screen. */
     private shown: Set<string> | null = null;
+    /**
+     * Each shown member's former keys this phone has verified (core walkKeySuccession over the row's `formerKeys`): a
+     * chain their current key signed, never the node's `rekeyed_to` (line-display design §4 2b, §5). Read with the list.
+     */
+    private formerOf = new Map<string, string[]>();
     /** Each epoch's recipients by its signed record (…/keys/:epoch/wraps, digests re-derived): who may be topped up. */
     private recordRecipients = new Map<number, Set<string>>();
     /** Epochs this phone made and the node said it stored, not yet served back: a served record that verifies replaces one. */
@@ -346,7 +351,15 @@ export class GroupKeyring {
         try {
             const rows = await answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/members`, this.identity as BeanPoolIdentity));
             if (!Array.isArray(rows)) return null;
-            this.shown = new Set(rows.filter((m: any) => m?.status === 'active' && typeof m.memberPubkey === 'string').map((m: any) => m.memberPubkey as string));
+            const active = rows.filter((m: any) => m?.status === 'active' && typeof m.memberPubkey === 'string');
+            this.shown = new Set(active.map((m: any) => m.memberPubkey as string));
+            this.formerOf = new Map();
+            for (const m of active) {
+                const chain: FormerKey[] = Array.isArray(m.formerKeys) ? m.formerKeys : [];
+                const verified = chain.map((f) => f?.pubkey).filter((k): k is string => typeof k === 'string'
+                    && walkKeySuccession({ memberPubkey: m.memberPubkey, formerKeys: chain }, k));
+                if (verified.length > 0) this.formerOf.set(m.memberPubkey, verified);
+            }
             return this.shown;
         } catch {
             return null;
@@ -379,6 +392,10 @@ export class GroupKeyring {
      * maker; GET …/keys/:epoch/wraps) must be exactly the ones its signed membersDigest names. Not its wrapsDigest: a wrap
      * the node spoiled still names its recipient, and repairing that slot is what a top-up is for. Null when they don't
      * match or can't be read. Top-ups are outside the record: a member they reached is not in it.
+     *
+     * A re-key drops the old key's wraps on the node (dropGroupWrapsOf), so a re-keyed member's old key is missing from
+     * them (review of #1788, NB2). The set is completed from shown members' verified former keys, at most one per member
+     * (a member held one key at a time), and is taken only if the completed set is exactly the signed one.
      */
     private async recipientsOf(epoch: number): Promise<Set<string> | null> {
         const known = this.recordRecipients.get(epoch);
@@ -391,12 +408,40 @@ export class GroupKeyring {
                 .filter((w: any) => w && (w.sig === null || w.sig === undefined) && w.wrapper === stored.record.createdBy && typeof w.recipient === 'string')
                 .map((w: any) => w.recipient as string));
             verifyGroupEpochRecord(stored.record, { groupId: this.groupId, epoch });
-            if (!groupEpochCoversExactly(stored.record, [...set])) return null;
-            this.recordRecipients.set(epoch, set);
-            return set;
+            const exact = groupEpochCoversExactly(stored.record, [...set]) ? set : this.completedBySuccession(stored.record, set);
+            if (!exact) return null;
+            this.recordRecipients.set(epoch, exact);
+            return exact;
         } catch {
             return null;
         }
+    }
+
+    /**
+     * The record's own wraps' recipients plus, for each shown member whose key is not among them, none or one of their
+     * verified former keys: the first such set the signed membersDigest names, or null. Tries at most 256 sets.
+     */
+    private completedBySuccession(record: GroupEpochRecord, set: Set<string>): Set<string> | null {
+        const choices = [...this.formerOf.entries()]
+            .filter(([current, former]) => !set.has(current) && !former.some((k) => set.has(k)))
+            .map(([, former]) => [null, ...former]);
+        if (choices.length === 0) return null;
+        let tried = 0;
+        const pick = (i: number, chosen: string[]): Set<string> | null => {
+            if (tried >= 256) return null;
+            if (i === choices.length) {
+                tried++;
+                if (chosen.length === 0) return null;
+                const candidate = new Set([...set, ...chosen]);
+                return groupEpochCoversExactly(record, [...candidate]) ? candidate : null;
+            }
+            for (const k of choices[i]) {
+                const found = pick(i + 1, k ? [...chosen, k] : chosen);
+                if (found) return found;
+            }
+            return null;
+        };
+        return pick(0, []);
     }
 
     /** The key for an epoch if it is already open (no work): what the line display reads synchronously. */
@@ -592,8 +637,9 @@ export class GroupKeyring {
      *
      * `missing` is the node's word, so a key goes only to someone the screen shows as a member AND whom that epoch's maker
      * wrapped it to, by the record's signature (review of #1788, finding 1; director's decision a): a junk wrap's repair.
-     * A newcomer is never handed an epoch from before them, and a re-keyed member's new key is in no old record: they
-     * read from their next epoch until the succession chain (epochs-over-time §5) is served.
+     * A newcomer is never handed an epoch from before them. A re-keyed member's new key is in no old record: they are
+     * handed an old epoch only when a former key their current key signed for (a verified succession chain, served with
+     * the members list; line-display design §5) is one that epoch's record names (review of #1788, NB2).
      */
     async serveMissing(max = 10): Promise<number> {
         await this.ensureLoaded();
@@ -616,7 +662,8 @@ export class GroupKeyring {
                 if (sent >= max) return sent;
                 const key = await this.keyFor(epoch);
                 if (!key) continue;
-                if (!(await this.recipientsOf(epoch))?.has(m.pubkey)) continue;
+                const recipients = await this.recipientsOf(epoch);
+                if (!recipients || !(recipients.has(m.pubkey) || (this.formerOf.get(m.pubkey) ?? []).some((k) => recipients.has(k)))) continue;
                 const t = makeTopUp(key, { myEdPrivHex: this.identity.privateKey, groupId: this.groupId, epoch, recipientPubHex: m.pubkey });
                 const res = await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/wrap`,
                     { epoch, recipient: t.recipient, ephPub: t.ephPub, nonce: t.nonce, wrapped: t.wrapped, sig: t.sig }, this.identity as BeanPoolIdentity).catch(() => null);

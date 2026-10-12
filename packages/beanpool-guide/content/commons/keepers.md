@@ -9,6 +9,8 @@ related: enterprises, rules, credit-line, commons-fund
 
 Keepers run an enterprise: they post its Offers and Needs, pay out its beans and look after it. One of them is the **lead keeper**.
 
+A project's keepers are its **leader** and **collaborators**: the app uses those words on a project. A collaborator is a keeper: they can post the project's Offers and Needs and they stand behind it the same way. Everything on this page applies to them too.
+
 A keeper can back the enterprise with some of their own trust. That deepens the enterprise's credit line. It never takes beans from your own balance or your own credit line.
 
 The full rules, including what happens when a lead goes quiet, are in "Rules and how decisions work".

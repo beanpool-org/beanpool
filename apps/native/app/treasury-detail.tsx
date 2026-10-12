@@ -28,6 +28,7 @@ import {
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
+import { groupKindLine, keeperWords } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -513,6 +514,8 @@ export default function TreasuryDetailScreen() {
     const keeperChanges: KeeperChangeLite[] = detail?.keeperChanges || [];
     const myPubkey: string | null = identity?.publicKey ?? null;
     const iAmLead = keeperList.some(k => k.publicKey === myPubkey && k.role === 'lead');
+    /** A project has a leader and collaborators; an enterprise a lead keeper and keepers (pick 8). */
+    const kw = keeperWords(detail?.lifecycle);
     const removableKeepers = keeperList.filter(k => canRemoveKeeper(k, myPubkey, iAmLead, keeperChanges));
     const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
 
@@ -867,7 +870,7 @@ export default function TreasuryDetailScreen() {
                             )}
                             <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
                                 <Text style={styles.name} numberOfLines={1}>{name}</Text>
-                                <Text style={styles.subtitle}>{detail?.lifecycle === 'bounded' ? 'Bounded enterprise · Community project' : 'Community enterprise · Run by the Commons'}</Text>
+                                <Text style={styles.subtitle}>{groupKindLine(detail?.lifecycle)}</Text>
                             </View>
                         </View>
 
@@ -1183,12 +1186,12 @@ export default function TreasuryDetailScreen() {
                                         disabled={submittingJoin || Number(joinBackingPledge) > availableToBack}
                                         onPress={handleJoinRequest}
                                         accessibilityRole="button"
-                                        accessibilityLabel="Request to join as keeper"
+                                        accessibilityLabel={`Ask to join as a ${kw.keeper}`}
                                     >
                                         {submittingJoin ? (
                                             <ActivityIndicator size="small" color={colors.text.inverse} />
                                         ) : (
-                                            <Text style={styles.joinButtonText}>Request to join as keeper</Text>
+                                            <Text style={styles.joinButtonText}>Ask to join as a {kw.keeper}</Text>
                                         )}
                                     </Pressable>
                                 </View>
@@ -1198,7 +1201,7 @@ export default function TreasuryDetailScreen() {
                         {/* Accountable Keepers */}
                         {detail?.keepers && detail.keepers.length > 0 && (
                             <View style={styles.keepersCard}>
-                                <Text style={styles.keepersLabel}>ACCOUNTABLE KEEPERS ({detail.keepers.length})</Text>
+                                <Text style={styles.keepersLabel}>{kw.Keepers.toUpperCase()} ({detail.keepers.length})</Text>
                                 <View style={styles.keepersList}>
                                     {detail.keepers.map((k: any) => {
                                         const isLead = k.role === 'lead';
@@ -1210,13 +1213,13 @@ export default function TreasuryDetailScreen() {
                                             <View
                                                 key={pk}
                                                 style={[styles.keeperChip, isSuspended && styles.keeperChipSuspended]}
-                                                accessibilityLabel={isSuspended ? `${k.callsign}, ${isLead ? 'lead keeper' : 'keeper'}, suspended` : undefined}
+                                                accessibilityLabel={isSuspended ? `${k.callsign}, ${isLead ? kw.lead : kw.keeper}, suspended` : undefined}
                                             >
                                                 <MaterialCommunityIcons name="shield-account" size={14} color={isSuspended ? colors.text.secondary : colors.brand.primary} />
                                                 <Text style={styles.keeperCallsign}>{k.callsign}</Text>
                                                 {isSuspended && <Text style={styles.keeperBadge}>Suspended</Text>}
                                                 <Text style={isLead ? styles.leadKeeperBadge : styles.keeperBadge}>
-                                                    {isLead ? 'Lead keeper' : 'Keeper'}
+                                                    {isLead ? kw.Lead : kw.Keeper}
                                                 </Text>
                                                 {Number(k.backing) > 0 && (
                                                     <Text style={styles.backingText}>+{k.backing} 🫘</Text>
@@ -1243,12 +1246,12 @@ export default function TreasuryDetailScreen() {
                                         disabled={steppingDown}
                                         onPress={handleStepDown}
                                         accessibilityRole="button"
-                                        accessibilityLabel="Step down as a keeper"
+                                        accessibilityLabel={`Step down as a ${kw.keeper}`}
                                     >
                                         {steppingDown ? (
                                             <ActivityIndicator size="small" color={colors.text.secondary} />
                                         ) : (
-                                            <Text style={styles.keeperActionText}>Step down as keeper</Text>
+                                            <Text style={styles.keeperActionText}>Step down as a {kw.keeper}</Text>
                                         )}
                                     </Pressable>
                                 )}

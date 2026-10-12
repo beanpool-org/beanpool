@@ -204,7 +204,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             return;
         }
         if (newLifecycle === 'bounded' && (!newGoal || Number(newGoal) <= 0)) {
-            setCreateError('Goal amount must be a positive number for a bounded project');
+            setCreateError('A project needs a goal in Beans');
             return;
         }
 
@@ -406,7 +406,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
                                 }`}
                             >
-                                {option === 'all' ? 'All Enterprises' : option === 'ongoing' ? 'Ongoing' : 'Bounded Projects'}
+                                {option === 'all' ? 'All' : option === 'ongoing' ? 'Enterprises' : 'Projects'}
                             </button>
                         ))}
                     </div>
@@ -644,7 +644,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                     </span>
                                                 ) : (
                                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-950/50 text-blue-300 border-blue-800/60">
-                                                        🏛️ Ongoing
+                                                        🏛️ Enterprise
                                                     </span>
                                                 )}
                                             </div>
@@ -790,8 +790,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 : 'bg-nature-800/60 border-nature-700 text-nature-400 hover:text-white'
                                         }`}
                                     >
-                                        <span>⏱️ Bounded Project</span>
-                                        <span className="text-[10px] font-normal opacity-80">Has funding goal & deadline</span>
+                                        <span>🌱 Project</span>
+                                        <span className="text-[10px] font-normal opacity-80">A leader, a goal, an end date</span>
                                     </button>
                                     <button
                                         type="button"
@@ -802,8 +802,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 : 'bg-nature-800/60 border-nature-700 text-nature-400 hover:text-white'
                                         }`}
                                     >
-                                        <span>🏛️ Ongoing Enterprise</span>
-                                        <span className="text-[10px] font-normal opacity-80">Permanent co-op or facility</span>
+                                        <span>🏛️ Enterprise</span>
+                                        <span className="text-[10px] font-normal opacity-80">Keepers; it keeps going</span>
                                     </button>
                                 </div>
                             </div>

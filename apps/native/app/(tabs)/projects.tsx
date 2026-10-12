@@ -398,7 +398,7 @@ export default function ProjectsScreen() {
                                 </View>
                             ) : (
                                 <View style={[styles.badge, styles.badgeOngoing]}>
-                                    <Text style={styles.badgeOngoingText} numberOfLines={1}>🏛️ ONGOING</Text>
+                                    <Text style={styles.badgeOngoingText} numberOfLines={1}>🏛️ ENTERPRISE</Text>
                                 </View>
                             )}
                         </View>
@@ -744,13 +744,13 @@ export default function ProjectsScreen() {
                                 {/* Community Treasuries — the Commons' trading accounts (eggs, etc.) */}
                         {treasuries.length > 0 && (
                             <View style={{ marginBottom: 12 }}>
-                                <Text style={styles.treasuryPanelLabel}>🏛️ Community Treasuries</Text>
+                                <Text style={styles.treasuryPanelLabel}>🏛️ The Commons' enterprises</Text>
                                 {treasuries.map((t: any, index: number) => (
                                     <Pressable
                                         key={t.publicKey || `treasury-${index}`}
                                         style={styles.treasuryCard}
                                         accessibilityRole="button"
-                                        accessibilityLabel={`Open ${t.name} treasury`}
+                                        accessibilityLabel={`Open ${t.name}`}
                                         onPress={() => {
                                             if (!t.publicKey) return;
                                             router.push({ pathname: '/treasury-detail', params: { publicKey: t.publicKey, name: t.name, avatar: t.avatar } });
@@ -772,7 +772,7 @@ export default function ProjectsScreen() {
                                 {balanceState.canOperate && (
                                     <View style={styles.operatorBadge}>
                                         <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
-                                        <Text style={styles.operatorBadgeText}>You can operate treasuries — post their offers & pay tenders</Text>
+                                        <Text style={styles.operatorBadgeText}>You can act for these enterprises — post their offers & pay tenders</Text>
                                     </View>
                                 )}
                             </View>
@@ -789,7 +789,7 @@ export default function ProjectsScreen() {
                                     onPress={() => setFilter(option)}
                                 >
                                     <Text style={[styles.filterBtnText, filter === option && styles.filterBtnTextActive]}>
-                                        {option === 'all' ? 'All Enterprises' : option === 'ongoing' ? 'Ongoing' : 'Bounded Projects'}
+                                        {option === 'all' ? 'All' : option === 'ongoing' ? 'Enterprises' : 'Projects'}
                                     </Text>
                                 </Pressable>
                             ))}

@@ -25,6 +25,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
+import { groupKindLine, keeperWords } from '@beanpool/core';
 import { ReportModal } from '../components/ReportModal';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
@@ -782,6 +783,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const keeperChanges: KeeperChangeItem[] = detail?.keeperChanges || [];
     const myPubkey: string | null = identity?.publicKey ?? null;
     const iAmLead = keeperList.some((k) => k.publicKey === myPubkey && k.role === 'lead');
+    /** A project has a leader and collaborators; an enterprise a lead keeper and keepers (pick 8). */
+    const kw = keeperWords(detail?.lifecycle);
     const removableKeepers = keeperList.filter((k) => canRemoveKeeper(k, myPubkey, iAmLead, keeperChanges));
     const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
 
@@ -859,7 +862,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     {name}
                                 </h1>
                                 <p className="text-xs sm:text-sm text-nature-500 dark:text-nature-400 mt-0.5">
-                                    {detail?.lifecycle === 'bounded' ? 'Bounded enterprise · Community project' : 'Community enterprise · Run by the Commons'}
+                                    {groupKindLine(detail?.lifecycle)}
                                 </p>
                             </div>
                         </div>
@@ -1580,7 +1583,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             <div className="bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-400/40 rounded-2xl p-5 space-y-4 shadow-sm">
                                 <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
                                     <span aria-hidden="true">📬</span>
-                                    <span>Pending Keeper Requests ({keeperRequests.length})</span>
+                                    <span>Asking to join as {kw.keepers} ({keeperRequests.length})</span>
                                 </div>
                                 <div className="space-y-3">
                                     {keeperRequests.map((req) => (
@@ -1767,13 +1770,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-2xl p-5 space-y-2">
                                     <div className="text-xs font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300 flex items-center gap-2">
                                         <span aria-hidden="true">⏳</span>
-                                        <span>Keeper Request Pending</span>
+                                        <span>Your request to join is waiting</span>
                                     </div>
                                     <p className="text-xs text-sky-900 dark:text-sky-200 leading-relaxed">
                                         {myPendingRequest.pendingChange ? approvedApplicantText(myPendingRequest.pendingChange.appliesAt) : (
                                             <>
                                                 You asked to join this enterprise with <strong className="font-bold text-emerald-700 dark:text-emerald-300">{myPendingRequest.pledgedBacking} 🫘</strong> of backing standing.
-                                                Awaiting review by the lead keeper.
+                                                Waiting for the {kw.lead}.
                                             </>
                                         )}
                                     </p>
@@ -1783,7 +1786,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <div>
                                         <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
                                             <span aria-hidden="true">🤝</span>
-                                            <span>Ask to Join as a Keeper</span>
+                                            <span>Ask to join as a {kw.keeper}</span>
                                         </div>
                                         <p className="text-xs text-nature-600 dark:text-nature-400 mt-1 leading-relaxed">
                                             Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.
@@ -1835,7 +1838,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             disabled={submittingJoinRequest}
                                             className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
                                         >
-                                            {submittingJoinRequest ? 'Submitting request…' : 'Request to join as keeper'}
+                                            {submittingJoinRequest ? 'Submitting request…' : `Ask to join as a ${kw.keeper}`}
                                         </button>
                                     </form>
                                 </div>
@@ -1846,7 +1849,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {keepers.length > 0 && (
                             <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-3">
                                 <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                                    Accountable Keepers ({keepers.length})
+                                    {kw.Keepers} ({keepers.length})
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                     {keepers.map((k: any) => {
@@ -1873,7 +1876,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 )}
                                                 {isLead ? (
                                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
-                                                        Lead keeper
+                                                        {kw.Lead}
                                                     </span>
                                                 ) : (
                                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-nature-200/70 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
@@ -1909,7 +1912,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 onClick={handleStepDown}
                                                 className="w-full px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[48px]"
                                             >
-                                                {steppingDown ? 'Stepping down…' : 'Step down as keeper'}
+                                                {steppingDown ? 'Stepping down…' : `Step down as a ${kw.keeper}`}
                                             </button>
                                         )}
                                     </div>

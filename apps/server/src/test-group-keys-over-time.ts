@@ -27,7 +27,11 @@
  *   K11.  a pruned account's group row stays active, and `missing` lists it for nobody (review of #1772, finding 3)
  *   E.    a newcomer hears nothing of a line from before her (review of #1772, finding 2): her socket hears no edit, reaction
  *         or removal of it; her reaction to it by id, and her removal of it once a convenor, are answered as an id nobody
- *         has, with nothing written; a member who holds its epoch hears each, and her own reaction to a line under 2 is heard
+ *         has, with nothing written; a member who holds its epoch hears each, and her own reaction to a line under 2 is heard.
+ *         A chat-mirror row with no active group row behind it (a kill between a leave's commit and the mirror delete)
+ *         hears no sealed line: groupLineHearers fails closed (review of #1782, finding 2)
+ *   K16.  setMembershipFromEpoch on a row whose updated_at is ahead of the clock moves updated_at strictly past it, so a
+ *         replica takes the new from_epoch (review of #1782, finding 1)
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-group-keys-over-time node scripts/run-server-suites.mjs
  */
@@ -45,6 +49,8 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
+import { setMembershipFromEpoch } from './engine/group-keys.js';
+import { groupLineHearers } from './engine/group-thread.js';
 import {
     dmPublicKeyOf, groupEpochCanonical, groupWrapsDigest, makeGroupEpochRecord, makeGroupTopUp, openGroupLine, openMyGroupKey, sealGroupLine,
     verifyGroupEpochRecord, wrapGroupKey,
@@ -570,6 +576,37 @@ async function main(): Promise<void> {
         assert(heard(cySock).some((e) => e.action === 'removed'), 'Coby hears the removal');
         fenSock.ws.close();
         cySock.ws.close();
+
+        // A mirror row with no group row: Hal is a node member in the chat's participants (a kill between a leave's
+        // commit and afterGroupMembershipChange's mirror delete), with no active group_members row. He hears no sealed
+        // line, live or by groupLineHearers, while a member who holds its epoch does (review of #1782, finding 2).
+        const hal = member('Hal');
+        db.prepare("INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key, updated_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))").run(g, hal.pk);
+        const [halSock, cy2] = [await socket(hal), await socket(c)];
+        await settle();
+        halSock.events.length = 0;
+        cy2.events.length = 0;
+        const anyKey = openFrom(await keysOf(c, g), c, g, 2);
+        const later = await send(c, g, anyKey, 2, 'AFTER-HAL-LEFT only members hear this');
+        await settle();
+        const heardIt = (s: Sock) => s.events.some((e) => e?.message?.id === later.id);
+        assert(later.status === 201 && !heardIt(halSock) && heardIt(cy2), `a sealed line reaches Coby and not Hal's mirror row (status ${later.status}, Hal heard ${heardIt(halSock)}, Coby ${heardIt(cy2)})`);
+        assert(groupLineHearers(g, { epoch: 2 }, [hal.pk, c.pk]).join() === c.pk, 'groupLineHearers leaves out a participant with no active group row (fails closed)');
+        halSock.ws.close();
+        cy2.ws.close();
+    }
+
+    // ── K16. from_epoch written past an updated_at that is ahead of the clock ──────────────────────
+    console.log('\n── K16. setMembershipFromEpoch moves updated_at strictly past a stamp ahead of the clock ──');
+    {
+        const k = member('Kip');
+        const g = createGroup({ name: 'K16', joinPolicy: 'open', createdBy: k.pk }).id;
+        const aheadIso = new Date(Date.now() + 60_000).toISOString();
+        db.prepare('UPDATE group_members SET updated_at = ? WHERE group_id = ? AND member_pubkey = ?').run(aheadIso, g, k.pk);
+        db.transaction(() => setMembershipFromEpoch(g, k.pk, 7))();
+        const row = db.prepare('SELECT from_epoch, updated_at FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, k.pk) as { from_epoch: number; updated_at: string };
+        assert(row.from_epoch === 7 && row.updated_at > aheadIso,
+            `from_epoch 7, and updated_at moved past the stamp 60 s ahead (${row.updated_at} > ${aheadIso}), so a replica takes it`);
     }
 
     console.log(`\n${passed}/${run} passed`);

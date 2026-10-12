@@ -11,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, isKnownDmConversation } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, isKnownDmConversation, isHeldGroupChat } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -110,6 +110,17 @@ export default function ChatRoute() {
         return () => { alive = false; };
     }, [id]);
 
+    // A group whose keys this phone has held opens only in its group chat (sealed or refused), whatever type the local
+    // row says, with no row (a sync pruned it, a push tap landed first), or whatever a link says: never the DM screen or
+    // the event chat, which would send it readable words (confirmation of #1788, finding 1). Null while asking.
+    const [heldGroup, setHeldGroup] = useState<boolean | null>(null);
+    useEffect(() => {
+        if (!id) return;
+        let alive = true;
+        isHeldGroupChat(String(id)).then(h => { if (alive) setHeldGroup(h); }, () => { if (alive) setHeldGroup(false); });
+        return () => { alive = false; };
+    }, [id]);
+
     useEffect(() => {
         if (isEventChat || threadKind || !id) return;
         let alive = true;
@@ -123,7 +134,8 @@ export default function ChatRoute() {
     }, [id, isEventChat, threadKind]);
 
     if (knownDm) return <ChatScreen />;
-    if ((isEventChat || threadKind) && knownDm === null) return null;
+    if (knownDm === null || heldGroup === null) return null;
+    if (heldGroup && id) return <GroupChatView kind="group" id={String(id)} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     if (isEventChat && id) return <EventChatView eventId={String(id)} />;
     if (threadKind && id) return <GroupChatView kind={threadKind} id={String(id)} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     return <ChatScreen />;

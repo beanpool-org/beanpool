@@ -110,8 +110,6 @@ const realFetch = globalThis.fetch;
 /** Every request the phone made: method, path + query, status as the app saw it, and whether a 304 stood behind it. */
 let sent: { method: string; url: string; status: number; revalidated: boolean; keys?: string[]; ifNoneMatch?: string }[] = [];
 const elsewhere: string[] = [];
-/** A fault: the body a by-area read answers, rewritten (null leaves it). The node never sends such a body itself. */
-let tamper: ((path: string, body: string) => string | null) | null = null;
 /** Runs before each of the phone's requests to the node: a change made while a read pages, a push that lands then. */
 let beforeFetch: ((path: string) => Promise<void>) | null = null;
 /** Every posts read's answer as the node sent it: path, status, ETag, body (a 200's). */
@@ -241,8 +239,6 @@ beforeAll(async () => {
         const keys = res.status === 200 && path.startsWith('/api/marketplace/posts?')
             ? (() => { const b = JSON.parse(String(Buffer.from(bodyCopy ?? ''))); return b && !Array.isArray(b) ? Object.keys(b).sort() : []; })() : undefined;
         sent.push({ method, url: path, status: res.status, revalidated: false, keys, ...(appTag ? { ifNoneMatch: appTag } : {}) });
-        const tampered = tamper && res.status === 200 ? tamper(path, await res.clone().text()) : null;
-        if (tampered !== null) return new Response(tampered, { status: 200, headers: res.headers });
         const etag = res.headers.get('etag');
         if (method === 'GET' && res.status === 200 && etag) {
             const body = await res.clone().text();

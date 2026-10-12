@@ -68,7 +68,8 @@ import { standbyIncidentOpen } from './standby-health.js';
 import { snapshotFailuresInARow } from './snapshot-scheduler.js';
 import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
-import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, type SecurityNote } from './security-signal.js';
+import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, type SecurityNote } from './security-signal.js';
+import { registrarNames } from '../engine/registrar-names.js';
 
 function dataDir(): string {
     return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -852,23 +853,28 @@ setSecurityAlertHandler((note) => {
     raiseSecurity(note).catch((e) => logger.warn('SYS', `[Alerts] A security alert could not be told: ${errorMessage(e)}`));
 });
 
-/** Ends a source told (the address its own again), carried through the hold by the tick: words as the end is told. */
-const SECURITY_ENDS: Partial<Record<AlertKey, string>> = { 'sec.name': "This community's address is its own again." };
-
-/**
- * Wrong passwords or claim proofs: over once an hour went by without another (then held 15 minutes, as every end is).
- * And an end a source told (sec.name), held and then told here: the source tells it once, the tick sees it through.
- */
+/** Wrong passwords or claim proofs: over once an hour went by without another (then held 15 minutes, as every end is). */
 function securityQuietConditions(s: BookState, t: number): Condition[] {
     const out: Condition[] = [];
-    for (const [key, detail] of Object.entries(SECURITY_ENDS) as Array<[AlertKey, string]>) {
-        if (s.raised[key]?.endedAt !== undefined) out.push({ key, active: false, detail });
-    }
     for (const key of SECURITY_SEEN) {
         if (!s.raised[key] || t - (s.seenAt[key] ?? 0) < SECURITY_QUIET_MS) continue;
         out.push({ key, active: false, detail: key === 'sec.claim-guess' ? 'No wrong claim proof for an hour.' : 'No wrong admin password for an hour.' });
     }
     return out;
+}
+
+/**
+ * This community's address not its own (sec.name): on while any recorded name is marked lost, read from the record at
+ * every tick, so the book never disagrees with it. A database restored from a backup made before a loss ends it, and one
+ * made during a loss raises it, though no round tells a change (the deciding review of #1807, finding 2). The name watch
+ * still tells a change at once; this sees it through. The main server only: a standby runs no rounds.
+ */
+function nameConditions(): Condition[] {
+    if (getNodeRole() === 'backup') return [];
+    let lost: Array<{ why: string }>;
+    try { lost = registrarNames().flatMap((e) => (e.lost ? [e.lost] : [])); } catch { return []; }
+    if (!lost.length) return [{ key: 'sec.name', active: false, detail: NAME_ALERT_WORDS.back }];
+    return [{ key: 'sec.name', active: true, detail: NAME_ALERT_WORDS[lost.some((l) => l.why === 'another-key') ? 'another-key' : 'released'] }];
 }
 
 /** This server replaced by another with the same keys: urgent, told daily, until an owner acknowledges it. */
@@ -1067,6 +1073,7 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             tlsCondition(),
             ...replacedCondition(s),
             ...securityQuietConditions(s, t),
+            ...nameConditions(),
             ...foldedConditions(s, t),
         ];
         return await updateAlerts(conditions);

@@ -56,6 +56,9 @@
  * P again:
  * 16. names still lost and the owners' alert on; P restarts; one name comes back: the alert lasts while another is
  *     still lost (22851459: ended at the first one back).
+ * 17. state.db restored from a backup made before any loss, the alert book kept beside it (as routes/backup.ts's restore
+ *     leaves it): the alert ends at the tick after the hold (234056b8: still on at +16 min, and for days). Then one
+ *     made while names were lost, beside a book that cleared it: the next tick raises it (234056b8: never raised).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-registrar-name-watch.ts
  */
@@ -224,6 +227,19 @@ async function child(): Promise<void> {
             await new Promise((r) => setTimeout(r, 300));
             const s = alerts.getAlertsStatus();
             return { active: s.active.map((x) => x.key), name: s.history.filter((e) => e.key === 'sec.name').map((e) => e.kind) };
+        },
+        // The alert book's minute tick, at a time on its clock (ms from now), as index.ts's timer runs it.
+        tick: async (a: { offsetMs: number }) => {
+            const alerts = await import('./services/alerts.js');
+            alerts.setAlertsClockForTests(a.offsetMs);
+            await alerts.checkServerAlerts();
+            return true;
+        },
+        // A copy of state.db, as Settings → Backups makes one (SQLite's online backup).
+        backup: async (a: { to: string }) => {
+            const { db } = await import('./db/db.js');
+            await db.backup(a.to);
+            return true;
         },
         bound: async (a: { seedHex: string; hosts: string[] }) => {
             const core = await import('@beanpool/core');
@@ -449,6 +465,10 @@ async function main(): Promise<void> {
         nodes.push(P);
         const pSetup = await P.send('setup', { ownerSeedHex });
         const pBase: string = pSetup.https;
+        // Step 17 restores this: P's database before any name was lost.
+        const pBeforeLoss = path.join(root, 'p-before-any-loss.db');
+        await P.send('backup', { to: pBeforeLoss });
+        let pNow: NodeProc = P;
         // Step 7c: the password alone opens no admin route with 2FA off: Settings' calls on each node go under an owner's key
         // session the node makes (takeover-test-harness.ts owner-session).
         const pAdmin: Record<string, string> = await P.send('owner-session');
@@ -955,6 +975,7 @@ async function main(): Promise<void> {
             await P.kill('SIGKILL');
             const P2 = await spawnNode(SCRIPT, dirs.p, { ...noAgent, ADMIN_PASSWORD: PW_P, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'p2.test,envname.beanpool.org' });
             nodes.push(P2);
+            pNow = P2;
             const p2 = await P2.send('start');
             const restarted = await P2.send('alerts');
             assert(restarted.active.includes('sec.name'), `after a restart it is still on (${JSON.stringify(restarted.active)})`);
@@ -965,8 +986,43 @@ async function main(): Promise<void> {
             assert(back[0]?.changed === 'restored', `envname.beanpool.org is this community's again (${JSON.stringify(back[0])})`);
             const stillLost = lostOn((await P2.send('inspect')).registrarNames ?? []);
             const after = await P2.send('alerts');
-            assert(stillLost.length >= 1 && after.active.includes('sec.name') && after.name.at(-1) !== 'cleared',
+            // The history is newest first: [0] is the latest the address alert told.
+            assert(stillLost.length >= 1 && after.active.includes('sec.name') && after.name[0] !== 'cleared',
                 `${stillLost.length} still lost: the alert stays on (${JSON.stringify(after)}; 22851459: ended)`);
+        });
+
+        // ── 17 ──
+        console.log("\n— 17. state.db restored from a backup, the alert book kept: the owners' address alert follows the record —");
+        await section('17', async () => {
+            const lostOn = (names: any[]) => names.filter((e: any) => e.lost).map((e: any) => e.address);
+            const pDuringLoss = path.join(root, 'p-during-loss.db');
+            await pNow.send('backup', { to: pDuringLoss });
+            // routes/backup.ts's restore: state.db replaced, the server restarted; alerts-state.json is a file beside it and stays.
+            const restore = async (from: string): Promise<NodeProc> => {
+                await pNow.kill('SIGKILL');
+                for (const ext of ['', '-wal', '-shm']) fs.rmSync(path.join(dirs.p, `state.db${ext}`), { force: true });
+                fs.copyFileSync(from, path.join(dirs.p, 'state.db'));
+                const next = await spawnNode(SCRIPT, dirs.p, { ...noAgent, ADMIN_PASSWORD: PW_P, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'p2.test,envname.beanpool.org' });
+                nodes.push(next);
+                pNow = next;
+                await next.send('start');
+                return next;
+            };
+
+            const P3 = await restore(pBeforeLoss);
+            const lost3 = lostOn((await P3.send('inspect')).registrarNames ?? []);
+            await P3.send('tick', { offsetMs: 0 });
+            await P3.send('tick', { offsetMs: 16 * MIN });
+            const ended = await P3.send('alerts');
+            assert(lost3.length === 0 && !ended.active.includes('sec.name') && ended.name[0] === 'cleared',
+                `restored from before any loss: nothing lost on the record, and the alert ends after the hold (${JSON.stringify({ lost3, ...ended })}; 234056b8: still on)`);
+
+            const P4 = await restore(pDuringLoss);
+            const lost4 = lostOn((await P4.send('inspect')).registrarNames ?? []);
+            await P4.send('tick', { offsetMs: 7 * HOUR });
+            const raised = await P4.send('alerts');
+            assert(lost4.length >= 1 && raised.active.includes('sec.name') && raised.name[0] === 'raised',
+                `restored from while names were lost, beside a book that cleared it: the next tick raises it (${JSON.stringify({ lost4, ...raised })}; 234056b8: never)`);
         });
 
         assert(!reg.calls.some((c) => !/^(GET|POST) \/api\/registrar\/(status|claim|offline|holder)$/.test(c)),

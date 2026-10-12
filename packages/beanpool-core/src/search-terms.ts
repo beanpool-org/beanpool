@@ -27,9 +27,10 @@ function own(map: Record<string, string[]>, w: string): string[] | undefined {
 // Chinese list is written) are two words, each found mid-run (#1781). The zero-width joiners (U+200C, U+200D) stay inside
 // the words that use them (Persian, emoji). Control characters go too: a NUL reaching FTS5 breaks the read (#1716
 // confirmation, finding 2). U+3000–303F loses its punctuation only: 々 〆 〇 〡–〩 〱–〵 〸–〼 are letters, the combining
-// tone marks 〪–〯 belong to their letter.
+// tone marks 〪–〯 belong to their letter. The list marks of the other scripts written without spaces go too, as the engine
+// scans those words as typed: Japanese ・ ゠, Myanmar ၊ ။, Khmer ។ ៕ ៖, Thai ๏ ๚ ๛ (#1808 review, finding 2; ฯ is a letter).
 // eslint-disable-next-line no-control-regex -- removing control characters is the point
-const PUNCTUATION = /[\u0000-\u001f\u007f-\u009f!-/:-@[-`{-~\u00a0-\u00bf\u2000-\u200b\u200e-\u206f\u3000-\u3004\u3008-\u3020\u3030\u3036\u3037\u303d-\u303f\uff00-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]/g;
+const PUNCTUATION = /[\u0000-\u001f\u007f-\u009f!-/:-@[-`{-~\u00a0-\u00bf\u0e4f\u0e5a\u0e5b\u104a\u104b\u17d4-\u17d6\u2000-\u200b\u200e-\u206f\u3000-\u3004\u3008-\u3020\u3030\u3036\u3037\u303d-\u303f\u30a0\u30fb\uff00-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]/g;
 
 // A Latin word joined by hyphens (wi-fi, co-op, t-shirt), or digits joined by . , / (1,000, 3.5, 24/7), is one word: parted,
 // "wi-fi" asked for every word starting "wi" or "fi", most of the board (#1808 review, finding 1). Kept whole it finds what

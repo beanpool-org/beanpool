@@ -5,9 +5,13 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
+import Database from 'better-sqlite3';
+import fs from 'node:fs';
+import path from 'node:path';
 import { initStateEngine, seedGenesisMember, addRating, addFriend, removeFriend } from './state-engine.js';
 import { db } from './db/db.js';
 import { createCommunityRoutes } from './routes/community.js';
+import { bootInto, indexes, tmp } from './schema-upgrade-test-harness.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -127,6 +131,40 @@ async function main() {
     };
     await dispatch('POST', '/api/ratings', validCtx);
     assert(validCtx.body?.success === true, 'POST /api/ratings with valid actor succeeds');
+
+    // 4. Every trust floor reads a member's ratings by target_pubkey (trust.ts), and so do getRatings and
+    // getAverageRating (social.ts). Without an index each read scanned the whole table: 0.60 ms of a 0.71 ms floor at
+    // 17,585 ratings (#1793's review, finding 1).
+    const floorRead = 'SELECT AVG(stars) as avg, COUNT(*) as cnt FROM ratings WHERE target_pubkey = ?';
+    const plan = (conn: Database.Database) =>
+        (conn.prepare(`EXPLAIN QUERY PLAN ${floorRead}`).all('x') as { detail: string }[]).map(r => r.detail).join(' | ');
+    assert(indexes(db, 'ratings').includes('idx_ratings_target_pubkey'), 'a fresh database has idx_ratings_target_pubkey');
+    assert(/SEARCH ratings USING (COVERING )?INDEX idx_ratings_target_pubkey/.test(plan(db)) && !/SCAN ratings/.test(plan(db)),
+        `a floor's ratings read searches by index, not a scan (${plan(db)})`);
+
+    // An old node: its database as the last boot left it, without the index, with ratings in it. The next boot builds it.
+    const dir = tmp('ratings-index');
+    try {
+        const first = bootInto(dir);
+        assert(first.ok, `a fresh data dir boots${first.ok ? '' : `: ${first.output.slice(-400)}`}`);
+        const old = new Database(path.join(dir, 'state.db'));
+        old.pragma('foreign_keys = OFF'); // two rating rows; their members needn't exist for a query plan and an average
+        old.exec('DROP INDEX IF EXISTS idx_ratings_target_pubkey');
+        old.prepare(`INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars) VALUES ('r1', 'm1', 'm2', 'provider', 4), ('r2', 'm1', 'm3', 'provider', 5)`).run();
+        const before = plan(old);
+        old.close();
+        assert(/SCAN ratings/.test(before), `the old database scans ratings (${before})`);
+        const again = bootInto(dir);
+        assert(again.ok, `the old database boots${again.ok ? '' : `: ${again.output.slice(-400)}`}`);
+        const upgraded = new Database(path.join(dir, 'state.db'), { readonly: true });
+        assert(indexes(upgraded, 'ratings').includes('idx_ratings_target_pubkey'), 'the boot built idx_ratings_target_pubkey on the old database');
+        assert(/SEARCH ratings USING (COVERING )?INDEX idx_ratings_target_pubkey/.test(plan(upgraded)), `the old database now searches by index (${plan(upgraded)})`);
+        const row = upgraded.prepare(floorRead).get('m1') as { avg: number; cnt: number };
+        assert(row.cnt === 2 && row.avg === 4.5, `its ratings are intact (${row.cnt} at ${row.avg})`);
+        upgraded.close();
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

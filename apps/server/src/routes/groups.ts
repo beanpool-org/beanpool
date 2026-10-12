@@ -15,6 +15,7 @@ import {
     createGroup,
     getGroup,
     groupClosedAt,
+    groupClosedAtMany,
     listGroups,
     getGroupMembers,
     getGroupMember,
@@ -165,9 +166,12 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         const answer = () => {
             const groups = listGroups({ category, query: q, memberPubkey: member, limit, offset }, viewerPubkey);
+            // A group its members closed by a vote is listed as closed (#1784 review N4), so its row says so before the
+            // sheet's own read lands. Closing bumps the groups version (afterGroupVote), so a list cached before is fresh.
+            const closed = groupClosedAtMany(groups.map(g => g.id));
             ctx.status = 200;
             ctx.type = 'application/json';
-            ctx.body = groups;
+            ctx.body = groups.map(g => ({ ...g, closedAt: closed.get(g.id) ?? null }));
         };
         // Above the apps' 50 a page, the list waits for room under the heavy-read cap (heavy-reads.ts) or is "busy",
         // weighed by the last list with the same filters and page: a search that matches nothing is light, the whole

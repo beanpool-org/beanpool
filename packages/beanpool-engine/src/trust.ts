@@ -48,6 +48,23 @@ export interface WashAnalysis {
 const washCache = new WeakMap<Db, { analysis: WashAnalysis; time: number }>();
 
 export function runWashTradingAnalysis(db: Db): WashAnalysis {
+    return drainSteps(washTradingAnalysisSteps(db));
+}
+
+/** Runs a step generator to its end in one go and returns its result. */
+export function drainSteps<T>(steps: Generator<void, T>): T {
+    for (;;) {
+        const r = steps.next();
+        if (r.done) return r.value;
+    }
+}
+
+/**
+ * runWashTradingAnalysis, one step at a time: it yields after each cluster's query, so a caller can give the event loop
+ * a turn between steps (engine audit.ts computeWashSybilMetricsInSlices) and the analysis never holds it for long.
+ * runWashTradingAnalysis drains it in one go, so both give the same analysis.
+ */
+export function* washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis> {
     const flaggedPairs = new Set<string>();
     const flaggedClusters = new Map<string, number>();
     const clusterDetails: any[] = [];
@@ -92,6 +109,7 @@ export function runWashTradingAnalysis(db: Db): WashAnalysis {
     } catch (e) {
         console.error('Wash analysis (pair net flow) failed:', e);
     }
+    yield;
 
     // --- 2. Cluster insularity (connected components over rolling 30 days) ---
     try {
@@ -101,6 +119,7 @@ export function runWashTradingAnalysis(db: Db): WashAnalysis {
             WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
               AND completed_at > datetime('now', '-30 days')
         `).all() as { buyer_pubkey: string; seller_pubkey: string; credits: number }[];
+        yield;
 
         const adj = new Map<string, Set<string>>();
         const edgeVol30 = new Map<string, number>();
@@ -142,14 +161,17 @@ export function runWashTradingAnalysis(db: Db): WashAnalysis {
                 }
             }
             components.push(comp);
+            yield;
         }
 
         if (components.length > 0) {
             const uniqueNodes = Array.from(nodes30);
             const memberAges = new Map<string, number>();
 
-            for (let i = 0; i < uniqueNodes.length; i += 999) {
-                const chunk = uniqueNodes.slice(i, i + 999);
+            // 100 keys a query, not SQLite's 999: on a cold 100,000-member database a 999-key lookup held the loop for up
+            // to 264 ms, and a slice can't end inside one query (the global load test, 2026-10-11).
+            for (let i = 0; i < uniqueNodes.length; i += 100) {
+                const chunk = uniqueNodes.slice(i, i + 100);
                 const placeholders = chunk.map(() => '?').join(',');
                 const membersRows = db.prepare(`
                     SELECT public_key, joined_at FROM members WHERE public_key IN (${placeholders})
@@ -160,6 +182,7 @@ export function runWashTradingAnalysis(db: Db): WashAnalysis {
                     const ageDays = (Date.now() - joined.getTime()) / (1000 * 60 * 60 * 24);
                     memberAges.set(m.public_key, ageDays);
                 }
+                yield;
             }
 
             let compIdx = 0;
@@ -215,6 +238,7 @@ export function runWashTradingAnalysis(db: Db): WashAnalysis {
                         }
                     }
                     compIdx++;
+                    yield;
                 }
             }
         }
@@ -251,8 +275,8 @@ export function clearWashTradingCache(db: Db): void {
  * Enforcement (soft haircut — Change 3): Excludes flagged wash-trading pairs and intra-cluster trades
  * for flagged insular clusters from the trust sum.
  */
-export function qualifiedTradeValue(db: Db, publicKey: string): number {
-    const { flaggedPairs, flaggedClusters } = getWashTradingEnforcement(db);
+export function qualifiedTradeValue(db: Db, publicKey: string, wash: WashAnalysis = getWashTradingEnforcement(db)): number {
+    const { flaggedPairs, flaggedClusters } = wash;
 
     const rows = prepared(db, `
         SELECT counterparty, COALESCE(SUM(credits), 0) as v FROM (
@@ -443,8 +467,11 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
  * Incorporates any pre-seeded earned_credit from admin genesis invites.
  * `extraKnownPledged`: a known pledge of this member's not yet written, counted as if it were (a keeper request's check
  * reads the floor binding them would leave, without writing the pledge). 0 everywhere else; an enterprise ignores it.
+ * `wash`: the wash-trading analysis to read, in place of the one kept for 10 s (getWashTradingEnforcement). The metrics
+ * audit passes the one it took at its start, so a walk over every member reads one analysis rather than making a new one
+ * every 10 s of the walk (engine audit.ts computeWashSybilMetrics).
  */
-export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledged = 0): {
+export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledged = 0, wash?: WashAnalysis): {
     stats: TrustStats;
     floor: number;
     tier: TierInfo;
@@ -516,7 +543,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     // per-counterparty (A2-26 diversity), crediting both buyer and seller. Direct "send credits"
     // are gifts, not trades, and build no trust. Earning a deep floor requires real, diverse,
     // completed trade — not gifts or 1-bean pings across sock accounts.
-    const value = qualifiedTradeValue(db, publicKey);
+    const value = qualifiedTradeValue(db, publicKey, wash);
     const rawEarned = earnedCreditFromValue(value);
 
     // Star rating scales EARNED value only (0.5–1.0×); granted credit passes through intact.

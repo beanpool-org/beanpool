@@ -74,6 +74,9 @@ export const PUSH_NOTICE_KINDS = {
     'community.near': { body: 'A community has started near you.', tab: 'home' },
     'account.recovery-started': { body: "Someone is trying to recover your account. If this isn't you, open BeanPool and stop it.", tab: 'settings' },
     'account.restored': { body: "Your account was just restored on another device. If that wasn't you, open BeanPool now.", tab: 'settings' },
+    // To the old phone when an admin makes a re-key code (server engine/member-wizards.ts issueRekeyCode): the one sign a
+    // member gets of an admin moving their account without them.
+    'account.rekey-started': { body: "An admin started moving your account to a new phone. If you still have this phone and didn't ask for this, tell an owner now.", tab: 'settings' },
     'owner.standby': { body: "Your community's standby server needs you.", tab: 'settings' },
     'owner.alert': { body: "Your community's server needs you.", tab: 'settings' },
 } as const satisfies Record<string, { body: string; tab: PushNoticeTab }>;

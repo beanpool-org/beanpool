@@ -26,7 +26,9 @@
  * XChaCha20-Poly1305 under mk, bound to [tag, group, epoch, sender, message id, part, reply-to?], and sealed inside it is
  * the sender's Ed25519 signature over the associated data, the nonce and the rest of the frame (Marty's pick 7: a member
  * cannot be framed). Every member holds the epoch key, so any of them could seal a line naming someone else as its
- * sender: the AEAD opens, the signature doesn't verify, and openGroupLine refuses it.
+ * sender: the AEAD opens, the signature doesn't verify, and openGroupLine refuses it. So the key that opens a line is its
+ * author; the node's author column is a hint, kept for the node's own jobs (DESIGN-group-chat-line-display-fable.md §4).
+ * A re-keyed member's old lines name them through succession statements their new key signed (keySuccession*, below).
  *
  * The signatures sign a SHA-256 digest whose input starts with this format's own tag. Nothing else the identity key signs
  * in core is a bare 32-byte value someone else chose (request signing prefixes 0xff to the request text; names lists,
@@ -402,13 +404,57 @@ export interface MakeGroupEpochInput {
  * order its ephemeral secret (32) and nonce (24).
  */
 export function makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCryptoRandom): { record: GroupEpochRecord; groupKey: Uint8Array } {
+    const steps = epochRecordSteps(input, opts);
+    let step = steps.next();
+    while (!step.done) step = steps.next();
+    return step.value;
+}
+
+/** How makeGroupEpochRecordAsync reports and paces a big rotation. */
+export interface GroupEpochProgress {
+    /** Called after every `yieldEvery` wraps and once at the end: wraps made so far, and how many there will be. */
+    onProgress?: (done: number, total: number) => void;
+    /** Wraps between two yields to the UI. Default 10 (design §15: "a loop that yields to the UI every 10"). */
+    yieldEvery?: number;
+    /** How to yield. Default a zero-delay timer, so a phone's JS thread draws the progress line between batches. */
+    yieldTo?: () => Promise<void>;
+}
+
+/**
+ * makeGroupEpochRecord for a big group on a slow phone (design §15): the same work in the same order, so the same
+ * randomness gives the same bytes, but it gives the UI a turn every `yieldEvery` wraps and says how far it got.
+ */
+export async function makeGroupEpochRecordAsync(
+    input: MakeGroupEpochInput, opts?: GroupCryptoRandom & GroupEpochProgress,
+): Promise<{ record: GroupEpochRecord; groupKey: Uint8Array }> {
+    const every = Math.max(1, Math.floor(opts?.yieldEvery ?? 10));
+    const yieldTo = opts?.yieldTo ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+    const total = new Set(input.recipients).size;
+    const steps = epochRecordSteps(input, opts);
+    let step = steps.next();
+    while (!step.done) {
+        if (step.value % every === 0) {
+            opts?.onProgress?.(step.value, total);
+            await yieldTo();
+        }
+        step = steps.next();
+    }
+    opts?.onProgress?.(total, total);
+    return step.value;
+}
+
+/** makeGroupEpochRecord's work, one wrap per step (it yields how many wraps are made), then the digests and signature. */
+function* epochRecordSteps(input: MakeGroupEpochInput, opts?: GroupCryptoRandom): Generator<number, { record: GroupEpochRecord; groupKey: Uint8Array }, void> {
     const { seed, pubHex } = me(input.myEdPrivHex);
     const recipients = [...input.recipients].sort();
     const rng = rngOf(opts);
     const groupKey = rng(KEY_LEN);
     if (groupKey.length !== KEY_LEN) throw new Error('A group key is 32 bytes.');
-    const wraps = recipients.map((recipientPubHex) =>
-        wrapWith(groupKey, { groupId: input.groupId, epoch: input.epoch, recipientPubHex, wrapperPubHex: pubHex }, rng));
+    const wraps: GroupKeyWrap[] = [];
+    for (const recipientPubHex of recipients) {
+        wraps.push(wrapWith(groupKey, { groupId: input.groupId, epoch: input.epoch, recipientPubHex, wrapperPubHex: pubHex }, rng));
+        yield wraps.length;
+    }
     const unsigned: Omit<GroupEpochRecord, 'sig'> = {
         groupId: input.groupId,
         epoch: input.epoch,
@@ -736,7 +782,7 @@ export function sealGroupLine(text: string, input: SealGroupLineInput, opts?: Gr
  * Open a line with its message key (a moderator holding one disclosed line's key, §13) and verify its sender's
  * signature. Throws GroupLineNotVerifiedError when it doesn't open, or opens but wasn't signed by the sender it names.
  */
-export function openGroupLineWithMessageKey(payload: GroupLinePayload, ref: GroupLineBinding, messageKey: Uint8Array): OpenedGroupLine {
+export function openGroupLineWithMessageKey(payload: GroupLinePayload, ref: GroupLineBinding, messageKey: Uint8Array, memo?: GroupLineVerifyMemo): OpenedGroupLine {
     try { checkLineBinding(ref); } catch { throw new GroupLineNotVerifiedError(); }
     if (!payload || !isGroupEncryptedNonce(payload.nonce) || typeof payload.ciphertext !== 'string') {
         throw new GroupLineNotVerifiedError('Not an encrypted group line.');
@@ -755,7 +801,12 @@ export function openGroupLineWithMessageKey(payload: GroupLinePayload, ref: Grou
     const unsigned = concatBytes(frame.subarray(0, 1), frame.subarray(1 + SIG_LEN));
     const afterLen = unsigned[1];
     if (unsigned.length < 2 + afterLen) throw new GroupLineNotVerifiedError();
-    if (!verifySig(sig, lineDigest(aad, nonce, unsigned), ref.senderPubHex)) throw new GroupLineNotVerifiedError();
+    const digest = lineDigest(aad, nonce, unsigned);
+    const memoKey = memo ? groupLineVerdictKey(sig, digest, ref.senderPubHex) : null;
+    if (!(memoKey !== null && memo!.has(memoKey))) {
+        if (!verifySig(sig, digest, ref.senderPubHex)) throw new GroupLineNotVerifiedError();
+        if (memoKey !== null) memo!.add(memoKey);
+    }
     return {
         after: afterLen ? utf8(unsigned.subarray(2, 2 + afterLen)) : null,
         text: utf8(unsigned.subarray(2 + afterLen)),
@@ -763,10 +814,89 @@ export function openGroupLineWithMessageKey(payload: GroupLinePayload, ref: Grou
 }
 
 /** Open a line with its epoch's key and verify its sender's signature. Throws GroupLineNotVerifiedError. */
-export function openGroupLine(payload: GroupLinePayload, ref: GroupLineBinding, groupKey: Uint8Array): OpenedGroupLine {
+export function openGroupLine(payload: GroupLinePayload, ref: GroupLineBinding, groupKey: Uint8Array, memo?: GroupLineVerifyMemo): OpenedGroupLine {
     let mk: Uint8Array;
     try { mk = groupMessageKey(groupKey, ref.messageId); } catch { throw new GroupLineNotVerifiedError(); }
-    return openGroupLineWithMessageKey(payload, ref, mk);
+    return openGroupLineWithMessageKey(payload, ref, mk, memo);
+}
+
+/**
+ * A once-only verify cache for lines (design §7.2: "verify once, store the verdict"; ~50 ms per Ed25519 verify on an
+ * API-26 phone). It remembers signatures that verified, keyed by groupLineVerdictKey: a hash of the signature, the exact
+ * digest it signs (associated data, nonce, frame) and the key it verified under. A strict verify is a pure function of
+ * those three, so a hit is the same answer, not a shortcut: a changed byte anywhere, another sender or another binding is
+ * another key and is verified afresh. The line is still opened by its AEAD every time. Nothing in it is secret.
+ */
+export interface GroupLineVerifyMemo {
+    has(key: string): boolean;
+    add(key: string): void;
+}
+
+/** The memo key for one verified signature: hex(sha256(tag ‖ sig ‖ digest ‖ signer)). */
+export function groupLineVerdictKey(sig: Uint8Array, digest: Uint8Array, signerPubHex: string): string {
+    return Buffer.from(sha256(concatBytes(utf8ToBytes('beanpool-group-line-verdict/1'), sig, digest, hexToBytes(signerPubHex)))).toString('hex');
+}
+
+// ─── Key succession (DESIGN-group-chat-line-display-fable.md §5) ───────────────────────────
+
+/** A succession statement: the first word of its canonical form. */
+export const KEY_SUCCESSION_TAG = 'beanpool-key-succession/1';
+/** The longest chain of former keys walkKeySuccession follows (line-display design §5). */
+export const KEY_SUCCESSION_MAX = 8;
+
+/** One former key as a roster row serves it (`formerKeys`, newest first): signed by the key that replaced it. */
+export interface FormerKey {
+    /** The former key, lower-case hex. */
+    pubkey: string;
+    /** When the statement says it was replaced, ISO 8601, as signed. */
+    at: string;
+    /** The successor's Ed25519 signature over sha256(keySuccessionCanonical(pubkey, successor, at)), base64. */
+    sig: string;
+}
+
+/** The canonical form a succession statement's signature covers: JSON.stringify([tag, old, new, at]). */
+export function keySuccessionCanonical(oldPubHex: string, newPubHex: string, at: string): string {
+    return JSON.stringify([KEY_SUCCESSION_TAG, oldPubHex, newPubHex, at]);
+}
+
+/**
+ * The member's NEW key says which old key was theirs (line-display design §3 B): made once, on the new phone, right after
+ * a re-key. The old key is gone by then, so it cannot sign; the new one can, and nobody else can make or change it.
+ */
+export function makeKeySuccession(input: { newEdPrivHex: string; oldPubHex: string; at: string }): FormerKey & { newPubkey: string } {
+    const { seed, pubHex } = me(input.newEdPrivHex);
+    if (!isPubHex(input.oldPubHex) || input.oldPubHex === pubHex) throw new Error('A succession statement names one other, older key.');
+    if (typeof input.at !== 'string' || !Number.isFinite(Date.parse(input.at))) throw new Error('A succession statement says when.');
+    const sig = ed25519.sign(sha256(utf8ToBytes(keySuccessionCanonical(input.oldPubHex, pubHex, input.at))), seed);
+    return { pubkey: input.oldPubHex, newPubkey: pubHex, at: input.at, sig: b64(sig) };
+}
+
+/** True if `newPubHex` signed that `former.pubkey` was its key before it, at `former.at` (strict RFC 8032). */
+export function verifyKeySuccession(former: FormerKey, newPubHex: string): boolean {
+    if (!former || !isPubHex(former.pubkey) || !isPubHex(newPubHex) || former.pubkey === newPubHex) return false;
+    if (typeof former.at !== 'string' || !Number.isFinite(Date.parse(former.at))) return false;
+    const sig = strictB64(former.sig, SIG_LEN);
+    return !!sig && verifySig(sig, sha256(utf8ToBytes(keySuccessionCanonical(former.pubkey, newPubHex, former.at))), newPubHex);
+}
+
+/**
+ * True if `signer` is one of this roster row's former keys by an unbroken chain of statements: formerKeys[0] signed by
+ * the member's current key, each later one by the key before it, every signature verified, up to `signer`. A broken
+ * link, a key seen twice (a cycle) or a chain longer than KEY_SUCCESSION_MAX is refused (line-display design §4 2b).
+ */
+export function walkKeySuccession(row: { memberPubkey: string; formerKeys?: readonly FormerKey[] | null }, signer: string): boolean {
+    const chain = Array.isArray(row?.formerKeys) ? row.formerKeys : [];
+    if (!isPubHex(row?.memberPubkey) || !isPubHex(signer) || chain.length > KEY_SUCCESSION_MAX) return false;
+    const seen = new Set<string>([row.memberPubkey]);
+    let successor = row.memberPubkey;
+    for (const former of chain) {
+        if (!former || seen.has(former.pubkey)) return false;
+        if (!verifyKeySuccession(former, successor)) return false;
+        if (former.pubkey === signer) return true;
+        seen.add(former.pubkey);
+        successor = former.pubkey;
+    }
+    return false;
 }
 
 // ─── Mentions (§9) ──────────────────────────────────────────────────────────────────────────

@@ -36,13 +36,17 @@
  *      page when the set and its `tied` are unchanged (item 2); another hash, or none, gets the set in full;
  *  14. the tag of a by-area read leaves out where the read starts (`updatedAfter`), its page and the held hash (item 3):
  *      each page of one read carries the same tag, and that tag sent with a delta from any later cursor is answered 304
- *      while nothing in the set changed (a change 300 km away included), 200 once a listing in it does.
- *  15. a phone that also says `setDiff=1` is answered a changed set as `{ setAdd, setDrop, setHash }` against the hash it
+ *      while nothing in the set changed (a change 300 km away included), 200 once a listing in it does;
+ *  15. never 304 while the delta would send a listing of the set again whatever changed (engine postsResentTo): an
+ *      off-board author's listing she is tied to by a chat, with her cancelled deal on it, which the phone's deal heal
+ *      writes back as active, goes paused in a 200 under the very tag she holds; 304 again once nothing is sent again
+ *      (review of #1805, finding 2);
+ *  16. a phone that also says `setDiff=1` is answered a changed set as `{ setAdd, setDrop, setHash }` against the hash it
  *      holds (DESIGN-nearby-set-diff-fable §2): a listing enters, leaves and moves at the busy town, and the diff applied
  *      to the held set is the brute force's; the answer's raw bytes drop by the set's ids; #1805's phone still gets it whole;
- *  16. `tied` rides a diff only where it moved: a deal opened on a listing already in the set;
- *  17. a hash this node never sent, another member's hash, her own without setDiff, and a moved area: named whole;
- *  18. a 304 after a restart remembers the set, so the next changed set is a diff; NEARBY_SET_MEMORY_MB=0 answers whole.
+ *  17. `tied` rides a diff only where it moved: a deal opened on a listing already in the set;
+ *  18. a hash this node never sent, another member's hash, her own without setDiff, and a moved area: named whole;
+ *  19. a 304 after a restart remembers the set, so the next changed set is a diff; NEARBY_SET_MEMORY_MB=0 answers whole.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-sync-nearby)
  */
@@ -663,7 +667,35 @@ async function main() {
         assert(otherTypes.status === 200, `a read of other types is another body: never confirmed with this tag (${otherTypes.status})`);
     }
 
-    // ── 15-18. a changed set as what changed (setDiff=1) ──
+    // ── 15. no 304 while the delta sends a listing of the set again ──
+    console.log('\n── 15. a phone that holds a read\'s tag is answered 200 while a listing of its set is sent again whatever changed ──');
+    {
+        const reader = memberAt('Resend', BUSY);
+        const tiedOff = post(around(BUSY, 3), holidayAuthor);
+        const conv = crypto.randomUUID();
+        db.prepare(`INSERT INTO conversations (id, type, post_id, created_by) VALUES (?, 'dm', ?, ?)`).run(conv, tiedOff, reader.pubKeyHex);
+        db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?), (?, ?)`).run(conv, reader.pubKeyHex, conv, holidayAuthor.pubKeyHex);
+        const read = await readNearby(reader, undefined, '&setOnce=1');
+        const tag = read.answers[0].etag || '';
+        const hash = read.answers[read.answers.length - 1].setHash;
+        const deltaFrom = (ms: number) =>
+            get(`${SYNC}&nearby=1&setOnce=1&setHash=${hash}&updatedAfter=${encodeURIComponent(iso(ms))}&paged=1`, reader, { 'If-None-Match': tag });
+        assert(read.set.includes(tiedOff) && (await deltaFrom(Date.now() - 60_000)).status === 304,
+            'an off-board listing she is tied to by a chat, in her set: with nothing sent again, her tag gets the 304');
+        const dealId = crypto.randomUUID();
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+                    VALUES (?, ?, ?, ?, 5, 'cancelled', ?)`).run(dealId, tiedOff, reader.pubKeyHex, holidayAuthor.pubKeyHex, iso(Date.now() - 86_400_000));
+        for (const sinceMs of [Date.now() - 60_000, Date.now() - 1000]) {
+            const resent = await deltaFrom(sinceMs);
+            const row = resent.posts.find(r => r.id === tiedOff) as (Row & { resentAt?: string }) | undefined;
+            assert(resent.status === 200 && resent.etag === tag && row?.status === 'paused' && !!row?.resentAt,
+                `her cancelled deal on it (the phone's deal heal writes it back active): a 200 under the same tag, the listing paused and sent again (${resent.status}, ${row?.status})`);
+        }
+        db.prepare('DELETE FROM marketplace_transactions WHERE id = ?').run(dealId);
+        assert((await deltaFrom(Date.now() - 1000)).status === 304, 'nothing sent again any more: 304 again');
+    }
+
+    // ── 16-19. a changed set as what changed (setDiff=1) ──
     // The phone's rule (apps/native utils/posts-nearby.ts nearbyApplyDiff), line for line: what it holds less what went,
     // then what came, each once; its stored `tied` where the answer names none.
     const applyDiff = (held: { set: string[]; tied: string[] }, d: { setAdd: string[]; setDrop: string[]; tied?: string[] }) => {
@@ -683,7 +715,7 @@ async function main() {
     const areaOf = (m: Id) => db.prepare('SELECT area_lat, area_lng FROM members WHERE public_key = ?').get(m.pubKeyHex) as { area_lat: number; area_lng: number };
     const othersIn = (set: string[], m: Id) => set.filter(id => (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(id) as { author_pubkey: string } | undefined)?.author_pubkey !== m.pubKeyHex);
 
-    console.log('\n── 15. a listing enters, leaves and moves at the busy town: the delta names what changed ──');
+    console.log('\n── 16. a listing enters, leaves and moves at the busy town: the delta names what changed ──');
     const dm = members[2].id;
     let dmHeld = await heldOf(dm);
     {
@@ -722,7 +754,7 @@ async function main() {
         dmHeld = d.setAdd && d.setHash ? { ...dmHeld, ...applied, hash: d.setHash } : await heldOf(dm);
     }
 
-    console.log('\n── 16. `tied` rides a diff only where it moved ──');
+    console.log('\n── 17. `tied` rides a diff only where it moved ──');
     {
         const dealt = othersIn(dmHeld.set, dm).find(id => !dmHeld.tied.includes(id))!;
         const author = (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(dealt) as { author_pubkey: string }).author_pubkey;
@@ -737,7 +769,7 @@ async function main() {
         dmHeld = d.setAdd && d.setHash ? { ...dmHeld, ...applied, hash: d.setHash } : await heldOf(dm);
     }
 
-    console.log('\n── 17. a hash this member wasn\'t sent, no setDiff, or a moved area: the set named whole ──');
+    console.log('\n── 18. a hash this member wasn\'t sent, no setDiff, or a moved area: the set named whole ──');
     {
         const a = areaOf(dm);
         const touch = othersIn(dmHeld.set, dm)[11];
@@ -762,7 +794,7 @@ async function main() {
         db.prepare('UPDATE members SET area_lat = ?, area_lng = ? WHERE public_key = ?').run(a.area_lat, a.area_lng, dm.pubKeyHex);
     }
 
-    console.log('\n── 18. a 304 remembers the set; NEARBY_SET_MEMORY_MB=0 answers whole ──');
+    console.log('\n── 19. a 304 remembers the set; NEARBY_SET_MEMORY_MB=0 answers whole ──');
     {
         const mem = await import('./engine/nearby-set-memory.js').catch(() => null);
         const m5 = members[5].id;

@@ -4,7 +4,7 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
-import type { ScopedDecisionList, ScopedEffect } from '@beanpool/core';
+import type { ScopedDecisionList, ScopedEffect, GroupEffect } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -12,6 +12,8 @@ import {
     buildInviteTicket,
     ed25519Signer,
     type Signer,
+    signReEnroll,
+    audienceOf,
     onboardingEventKey,
     oncePerPersonVariant,
     type PublicCreatorChannel,
@@ -122,6 +124,17 @@ export async function buildOfflineInviteCode(
 ): Promise<string> {
     const ticket = await buildInviteTicket(nodeAddress(), inviterPublicKey, memberSigner(privateKeyHex), { intendedFor });
     return `BP-${ticket.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
+}
+
+/**
+ * A re-key ask's proof of possession (lib/web-rekey.ts, #1768): core's signReEnroll, `0xFF ‖ beanpool-re-enroll/2\nHOST\nCODE`,
+ * for the node this web app talks to, signed by the key the ask wants bound.
+ */
+export async function signReEnrollAsk(code: string, privateKeyHex: string): Promise<{ signature: string; signedFor: string }> {
+    const base = nodeAddress();
+    const host = audienceOf(base);
+    if (!host) throw new Error('Cannot sign a re-key ask: this page names no community');
+    return { signature: await signReEnroll(base, code, memberSigner(privateKeyHex)), signedFor: host };
 }
 
 // Base request helper with auth
@@ -1158,6 +1171,9 @@ export interface Group {
     /** The group's LEAD convenor (2026-09-23): the one nobody can remove or demote. */
     leadPubkey?: string | null;
     leadCallsign?: string;
+    /** When its members closed it by a vote (GET /api/groups/:id), or null: it stays to read and takes nothing new. */
+    closedAt?: string | null;
+    readOnly?: boolean;
 }
 
 export interface GroupMember {
@@ -2223,6 +2239,31 @@ export async function voteEnterpriseDecision(treasury: string, decisionId: strin
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
 }
 
+/**
+ * A chat group's votes (DESIGN-group-decisions S3; routes/group-decisions.ts). Its members (any role) are answered, and those
+ * on a vote's roll after they left; anyone else gets a 404, so null means "nothing for you", never an error to show.
+ */
+export async function getGroupDecisions(groupId: string): Promise<ScopedDecisionList | null> {
+    try {
+        const body = await request<ScopedDecisionList>('GET', `/api/groups/${encodeURIComponent(groupId)}/decisions`);
+        return body && Array.isArray(body.decisions) ? body : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A member or convenor proposes a group vote: the group's own things only, never a recipient or an amount. */
+export async function proposeGroupDecision(groupId: string, body: {
+    title: string; description: string; effect: GroupEffect; subject?: string; params?: { role?: 'convenor' | 'member'; policy?: string };
+}): Promise<{ success: boolean }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/decisions`, body);
+}
+
+/** Yes or No on a group's vote. A vote can't be changed once cast. */
+export async function voteGroupDecision(groupId: string, decisionId: string, support: boolean): Promise<{ success: boolean }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
+}
+
 export async function removeEnterpriseKeeper(treasury: string, memberPubkey: string): Promise<{ success: boolean; applied: boolean; change: KeeperChangeItem | null }> {
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/${encodeURIComponent(memberPubkey)}/remove`);
 }
@@ -2436,9 +2477,10 @@ export type HomeRead = { notModified: false; answer: HomeAnswer; etag: string | 
 export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}, etag?: string | null): Promise<HomeRead> {
     const q = new URLSearchParams();
     if (params.cards) q.set('cards', params.cards.join(','));
-    // This app opens an enterprise's own screen (HomePage needsLine, { to: 'enterprise', id }), so the node may point a
-    // keepers' vote line there and count it (routes/home-answer.ts parseLands). The two ship together.
-    q.set('lands', 'enterprise');
+    // This app opens an enterprise's own screen and a chat group's (HomePage needsLine, { to: 'enterprise' | 'group', id }), so
+    // the node may point a keepers' or a group's vote line there and count it (routes/home-answer.ts parseLands). The two
+    // ship together.
+    q.set('lands', 'enterprise,group');
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
         q.set('lat', String(params.lat));
         q.set('lng', String(params.lng));

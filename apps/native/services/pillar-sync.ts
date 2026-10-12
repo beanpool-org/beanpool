@@ -847,7 +847,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 let named = nearbyLastSet(nearbyFirst, null);
                 let last = nearbyFirst;
                 let rows = nearbyFirst.posts.length;
-                // The tag a read leaves goes with its first write, and is stored again once every row of its set is held.
+                // The tag a read leaves goes with its first write, and is stored again once every row of its set is held. Only
+                // a tag every page of the read carried: each page's tag describes the set as it stood then, and a listing
+                // changed after page 1 moves above every key this read hands out, so a later page's tag names a version this
+                // phone doesn't hold, and the next delta would be answered 304 over it (review of #1805, finding 1).
                 let lastTag = postsRes.headers.get('etag');
                 let complete = await writeNear({ posts: nearbyFirst.posts, ...(nearbyTag ? { postsNearby: { tag: null } } : {}) });
                 if (complete) changed();
@@ -863,7 +866,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     }
                     named = nearbyLastSet(page, null) ?? named;
                     last = page;
-                    lastTag = res.headers.get('etag');
+                    if (res.headers.get('etag') !== lastTag) lastTag = null;
                     rows += page.posts.length;
                     pages++;
                     next = nextPageKeyOf(res);

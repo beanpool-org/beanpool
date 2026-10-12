@@ -1244,6 +1244,8 @@ export function WebJoin({
 
     const offered = nonce ? offeredProviders(nonce) : [];
     const callsign = pending?.identity.callsign ?? '';
+    // A key with no name yet (a re-key ask left in the slot, WebRekey) is checked without one (#1783 review N8).
+    const joinedAs = callsign ? ` as ${callsign}` : '';
 
     let body: React.ReactNode;
     switch (screen.name) {
@@ -1527,11 +1529,11 @@ export function WebJoin({
 
         case 'checking':
             body = screen.checking ? (
-                <p role="status" data-testid="join-checking" style={lede}>Checking whether you've joined as {callsign}…</p>
+                <p role="status" data-testid="join-checking" style={lede}>Checking whether you've joined{joinedAs}…</p>
             ) : (
                 <>
                     <p role="alert" data-testid="join-checking" style={{ ...lede, color: 'var(--text-primary)' }}>
-                        We can't tell yet whether you joined as {callsign}. Your account is kept on this device. Check your
+                        We can't tell yet whether you joined{joinedAs}. Your account is kept on this device. Check your
                         connection, then try again.
                     </p>
                     <button type="button" style={primaryButton} onClick={() => afterJoin(checkAgain)}>Try again</button>

@@ -6,7 +6,7 @@
 
 import {
     initStateEngine, adminSetTier,
-    runWashSybilMetricsAudit, getCommunityHealth,
+    runWashSybilMetricsAudit, runWashSybilMetricsAuditSliced, getCommunityHealth,
     reconcileLedgerFromDb
 } from './state-engine.js';
 import { db } from './db/db.js';
@@ -33,7 +33,14 @@ function tx(from: string, to: string, amount: number, daysAgo = 0) {
 
 async function main() {
     console.log('Running Backend Visibility Monitors tests...\n');
-    initStateEngine();
+    // The node's own metrics-audit timer (initStateEngine: once 2.5 min after boot, then daily), kept for Test 7 to fire.
+    const realSetTimeout = globalThis.setTimeout;
+    const auditTimers: (() => void)[] = [];
+    (globalThis as any).setTimeout = (fn: () => void, ms?: number, ...rest: unknown[]) => {
+        if (ms === 2.5 * 60 * 1000) { auditTimers.push(fn); return realSetTimeout(() => {}, 0); }
+        return (realSetTimeout as any)(fn, ms, ...rest);
+    };
+    try { initStateEngine(); } finally { globalThis.setTimeout = realSetTimeout; }
 
     try {
         // --- Test 1: Aggregate Invariant Monitor ---
@@ -106,6 +113,82 @@ async function main() {
         const spikeFlag = health2.flags.find(f => f.type === 'aggregate_spike' && f.description.includes('Aggregate credit spike'));
         assert(!!spikeFlag, 'Aggregate credit spike alert was raised in community health report');
         assert(!!spikeFlag?.description.includes('increased by 900.0%'), `Description is correct (got: "${spikeFlag?.description}")`);
+
+        // --- Test 5: the audit as the node's timers run it, a slice at a time ---
+        // In one go it held a 20,000-member node for 20 s (the global load test, 2026-10-11). Sliced, it gives the event
+        // loop a turn between slices; with sliceMs 0 a turn after every step, and every active member is at least one
+        // step. The turns are counted, not timed, so a slow CI machine cannot fail it.
+        for (let i = 0; i < 20; i++) seedMember(`slice${i}-${Date.now()}`, i % 3 === 0 ? -5 : 10, 30 + i);
+        reconcileLedgerFromDb();
+        const activeCount = (db.prepare("SELECT COUNT(*) AS n FROM members WHERE status = 'active'").get() as { n: number }).n;
+        const oneGo = runWashSybilMetricsAudit()!;
+        let turns = 0, otherWork = 0, ticking = true;
+        const tick = () => { if (ticking) { otherWork++; setImmediate(tick); } };
+        setImmediate(tick);
+        const sliced = await runWashSybilMetricsAuditSliced({ sliceMs: 0, onYield: () => turns++ });
+        ticking = false;
+        assert(activeCount >= 20 && turns >= activeCount, `Sliced audit gave the loop a turn per step: ${turns} turns for ${activeCount} active members`);
+        assert(otherWork >= turns / 2, `Other work ran while the sliced audit ran (${otherWork} turns of a ticker for ${turns} yields)`);
+        assert(JSON.stringify(sliced) === JSON.stringify(oneGo), `Sliced audit gives the one-go numbers (${JSON.stringify(sliced)} vs ${JSON.stringify(oneGo)})`);
+        const [a, b] = [runWashSybilMetricsAuditSliced({ sliceMs: 0 }), runWashSybilMetricsAuditSliced({ sliceMs: 0 })];
+        assert(a === b, 'A second start while the sliced audit runs joins the run in progress');
+        assert(JSON.stringify(await a) === JSON.stringify(oneGo), 'The joined run gives the one-go numbers');
+
+        // --- Test 6: one wash-trading analysis per audit run ---
+        // Every floor reads the analysis, and a live floor reads the one kept for 10 s (engine trust.ts
+        // getWashTradingEnforcement). A walk over 100,000 members lasts minutes, so floors read that way made a new analysis
+        // every 10 s of the walk, each a pass over every trade: the audit grew with the square of the members. The run takes
+        // one analysis and reads every floor with it. Here each turn the run gives moves the clock on 11 s, as a long walk
+        // would, and the analyses are counted by their first query (washTradingAnalysisSteps' pair totals).
+        const pairTotals = /SUM\(credits\) as vol[\s\S]*GROUP BY buyer_pubkey, seller_pubkey/;
+        const realPrepare = (db as any).prepare;
+        const realNow = Date.now;
+        let analyses = 0, clockAhead = 0;
+        (db as any).prepare = function (this: any, sql: string) { if (pairTotals.test(sql)) analyses++; return realPrepare.call(this, sql); };
+        Date.now = () => realNow() + clockAhead;
+        let longWalk;
+        try {
+            longWalk = await runWashSybilMetricsAuditSliced({ sliceMs: 0, onYield: () => { clockAhead += 11_000; } });
+        } finally {
+            (db as any).prepare = realPrepare;
+            Date.now = realNow;
+        }
+        assert(clockAhead >= activeCount * 11_000, `The run walked past the live analysis's 10 s keep (${clockAhead / 1000} s on the clock)`);
+        assert(analyses === 1, `One wash-trading analysis for the whole run (${analyses})`);
+        assert(JSON.stringify(longWalk) === JSON.stringify(oneGo), 'It gives the one-go numbers');
+
+        // --- Test 7: the node's own timer runs the audit in slices ---
+        // Calling the one-go audit from initStateEngine's timer would hold the loop for the whole run again (20 s at 20,000
+        // members). Fired here with the slices' clock (performance.now) moving 5 ms each time it is read, so a 20 ms slice
+        // ends every few steps on any machine: the callback returns before the rows land, and the loop gets turns meanwhile.
+        // Counted, not timed. The one-go audit would write its rows before the callback returned, with no turn given.
+        const metricRows = () => (db.prepare("SELECT COUNT(*) AS n FROM system_metrics WHERE metric_key IN ('total_negative_balance', 'accounts_near_floor', 'delinquent_accounts', 'cohort_anomalies')").get() as { n: number }).n;
+        assert(auditTimers.length === 1, `initStateEngine set one 2.5-minute metrics-audit timer (${auditTimers.length})`);
+        const rowsBefore = metricRows();
+        let loopTurns = 0, looping = true, rowsAtReturn = -1;
+        const turn = () => { if (looping) { loopTurns++; setImmediate(turn); } };
+        const realPerfNow = performance.now;
+        let sliceClock = realPerfNow.call(performance);
+        performance.now = () => (sliceClock += 5);
+        try {
+            setImmediate(turn);
+            auditTimers[0]();
+            rowsAtReturn = metricRows();
+            while (metricRows() === rowsBefore) await new Promise((r) => setImmediate(r));
+        } finally {
+            looping = false;
+            performance.now = realPerfNow;
+        }
+        const turnsBeforeRows = loopTurns;
+        assert(rowsAtReturn === rowsBefore, `The timer's callback returned before the audit wrote its rows (${rowsAtReturn - rowsBefore} rows at return)`);
+        // One turn comes from this test's own wait even when nothing yields (the rows are saved in a microtask), so >= 2.
+        assert(turnsBeforeRows >= 2, `The loop ran other work while the timer's audit ran (${turnsBeforeRows} turns before its rows landed)`);
+        assert(metricRows() === rowsBefore + 4, `The timer's audit wrote its four rows (${metricRows() - rowsBefore})`);
+        const timerRun = Object.fromEntries((db.prepare('SELECT metric_key, metric_value FROM system_metrics ORDER BY id DESC LIMIT 4').all() as { metric_key: string; metric_value: number }[]).map(r => [r.metric_key, r.metric_value]));
+        const after = runWashSybilMetricsAudit()!;
+        assert(timerRun.total_negative_balance === after.totalNegative && timerRun.accounts_near_floor === after.accountsNearFloor
+            && timerRun.delinquent_accounts === after.delinquentCount && timerRun.cohort_anomalies === after.cohortAnomalies,
+            `The timer's rows are the one-go numbers (${JSON.stringify(timerRun)} vs ${JSON.stringify(after)})`);
 
         console.log(`\n${passed}/${run} checks passed.`);
         if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -25,7 +25,7 @@ function sourceFiles(dir: string): string[] {
 const FILES = sourceFiles(SRC);
 const read = (rel: string) => readFileSync(join(SRC, rel), 'utf8');
 
-const CORE_BUILDERS = ['buildBoundRequestHeaders', 'buildBoundWsParams', 'buildInviteTicket'];
+const CORE_BUILDERS = ['buildBoundRequestHeaders', 'buildBoundWsParams', 'buildInviteTicket', 'signReEnroll'];
 
 describe('the web app signs only through core\'s builders', () => {
     it('finds the app\'s source', () => {
@@ -50,7 +50,8 @@ describe('the web app signs only through core\'s builders', () => {
         const uses = [...api.matchAll(/\bmemberSigner\s*\(/g)]
             .map(m => m.index!)
             .filter(at => !api.slice(0, at).endsWith('function '));
-        expect(uses).toHaveLength(3);
+        // The request headers, the socket, an offline ticket, and a re-key ask's statement (lib/web-rekey.ts).
+        expect(uses).toHaveLength(4);
         for (const at of uses) {
             // Made inside the arguments of a call to one of core's builders: the nearest such call before it, with no
             // `;` between (so not a signer kept in a variable, and not one handed to anything else).

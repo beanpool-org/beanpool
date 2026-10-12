@@ -152,12 +152,12 @@ async function main(): Promise<void> {
     assert(t1.status === 200 && !!t1.etag && same.status === 304, `with nothing changed the search revalidates as 304 (${t1.status}, ${same.status})`);
     addBlocks(tagged.pubKeyHex, [bo.pubKeyHex]);
     const t2 = await signedGet(path, tagged, { 'If-None-Match': t1.etag! });
-    const t2Titles = Array.isArray(t2.body) ? t2.body.map((p: any) => p.title as string) : [];
+    const t2Titles = Array.isArray(t2.body) ? t2.body.map((p: { title: string }) => p.title) : [];
     assert(t2.status === 200 && t2.etag !== t1.etag && !t2Titles.includes('Fresh milk') && t2Titles.includes('Fresh eggs'),
         `after a block the copy held from before is not confirmed: 200 without Bo's listing, a new tag (${t2.status}, ${JSON.stringify(t2Titles)})`);
     removeBlock(tagged.pubKeyHex, bo.pubKeyHex);
     const t3 = await signedGet(path, tagged, { 'If-None-Match': t2.etag! });
-    const t3Titles = Array.isArray(t3.body) ? t3.body.map((p: any) => p.title as string) : [];
+    const t3Titles = Array.isArray(t3.body) ? t3.body.map((p: { title: string }) => p.title) : [];
     assert(t3.status === 200 && t3Titles.includes('Fresh milk'), `after the unblock neither: 200 with Bo's listing back (${t3.status}, ${JSON.stringify(t3Titles)})`);
 
     // ── 5. A parameter given twice ──────────────────────────────────────────────

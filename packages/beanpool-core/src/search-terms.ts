@@ -31,10 +31,36 @@ function own(map: Record<string, string[]>, w: string): string[] | undefined {
 // eslint-disable-next-line no-control-regex -- removing control characters is the point
 const PUNCTUATION = /[\u0000-\u001f\u007f-\u009f!-/:-@[-`{-~\u00a0-\u00bf\u2000-\u200b\u200e-\u206f\u3000-\u3004\u3008-\u3020\u3030\u3036\u3037\u303d-\u303f\uff00-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]/g;
 
+// A Latin word joined by hyphens (wi-fi, co-op, t-shirt), or digits joined by . , / (1,000, 3.5, 24/7), is one word: parted,
+// "wi-fi" asked for every word starting "wi" or "fi", most of the board (#1808 review, finding 1). Kept whole it finds what
+// holds it: FTS5 reads the engine's "wi-fi"* as the phrase wi fi*, and the web's substring finds it as typed. ASCII marks
+// around it come off first ("(t-shirt),"), so they never keep it from being whole.
+const COMPOUND = /^(?:[a-z0-9\u00c0-\u024f]+(?:[-\u2010\u2011][a-z0-9\u00c0-\u024f]+)+|[0-9]+(?:[.,/][0-9]+)+)$/;
+const COMPOUND_JOINS = /[-\u2010\u2011.,/]/g;
+const ASCII_MARKS_AROUND = /^[!-/:-@[-`{-~]+|[!-/:-@[-`{-~]+$/g;
+// Control characters and the spaces \s leaves out part chunks before a chunk is read as a compound.
+// eslint-disable-next-line no-control-regex -- removing control characters is the point
+const NOT_WORD_SPACE = /[\u0000-\u001f\u007f-\u009f\u00a0\u3000]/g;
+
+/** The words of a query: a compound whole and joined (wi-fi, wifi: the joined form is what the synonyms are looked up on),
+ *  every other chunk parted at its punctuation. */
+function queryWords(query: string): string[] {
+    const words: string[] = [];
+    for (const chunk of query.toLowerCase().replace(NOT_WORD_SPACE, ' ').split(/\s+/)) {
+        const bare = chunk.replace(ASCII_MARKS_AROUND, '');
+        if (COMPOUND.test(bare)) {
+            words.push(bare.replace(/[\u2010\u2011]/g, '-'), bare.replace(COMPOUND_JOINS, ''));
+            continue;
+        }
+        // A one-character word outside ASCII (鱼, 알) is a word; a lone a-z letter or digit is not.
+        for (const w of chunk.replace(PUNCTUATION, ' ').split(/\s+/)) if (w.length > 1 || w > '\u007f') words.push(w);
+    }
+    return words;
+}
+
 /** Expand a search query using synonyms: "fruit" → ["fruit", "lemon", "lime", ...] */
 export function expandSearchTerms(query: string): string[] {
-    // A one-character word outside ASCII (鱼, 알) is a word; a lone a-z letter or digit is not.
-    const words = query.toLowerCase().replace(PUNCTUATION, ' ').split(/\s+/).filter(w => w.length > 1 || w > '\u007f');
+    const words = queryWords(query);
     const expanded = new Set<string>(words);
     for (const w of words) {
         // Forward: word → its synonyms (e.g. "lemon" → ["fruit", "citrus"])

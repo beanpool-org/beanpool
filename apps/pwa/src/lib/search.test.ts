@@ -9,6 +9,13 @@ describe('matchesExpandedSearch', () => {
         expect(matchesExpandedSearch('（牛奶）', '', '每天新鲜牛奶')).toBe(true);
         expect(matchesExpandedSearch('鸡蛋，牛奶', '自行车', '')).toBe(false);
     });
+    it('finds a hyphenated word as typed, never by its two-letter halves (#1808 review, finding 1)', () => {
+        expect(matchesExpandedSearch('wi-fi', 'Wi-Fi router', '')).toBe(true);
+        expect(matchesExpandedSearch('wi-fi', 'Wifi extender', '')).toBe(true);
+        expect(matchesExpandedSearch('wi-fi', 'Window cleaning', '')).toBe(false);
+        expect(matchesExpandedSearch('co-op', 'Co-op shares', '')).toBe(true);
+        expect(matchesExpandedSearch('co-op', 'Cooking lessons', 'in the office')).toBe(false);
+    });
     it("asks with core's words, as the phone and Home do: synonyms, stems, one-letter words dropped", () => {
         expect(matchesExpandedSearch('fruit', 'Fresh lemons', '')).toBe(true);
         expect(matchesExpandedSearch('eggs', 'One dozen egg', '')).toBe(true);

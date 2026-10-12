@@ -8,6 +8,8 @@
  * 2. A search leaves out the listings of the authors the reader blocked (member_blocks, their own rows: the direction the
  *    nearby set reads, through the same helper), in the Chinese words' scan too. A reader who blocked nobody, and a read
  *    for nobody in particular, find them as before; a read that is not a search is unchanged (the phone hides them).
+ * 3. A hyphenated word, asked with core's words as every app asks, finds the listing that holds it and not every listing
+ *    with a word starting "co" or "op" (#1808 review, finding 1).
  *
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-search-http.ts
  */
@@ -84,6 +86,9 @@ async function main(): Promise<void> {
     const other = makeMember('Other');
     post('Fresh milk', bo);
     post('新鲜牛奶出售', bo);
+    post('Co-op shares', mei);
+    post('Cooking lessons', mei);
+    post('Opera tickets', mei);
 
     // ── 1. Control characters in a raw q ────────────────────────────────────────
     const asked: Array<[string, string]> = [
@@ -128,6 +133,11 @@ async function main(): Promise<void> {
     assert(getPosts({ query: 'fresh', limit: 50 }).some(p => p.title === 'Fresh milk'), 'a search for nobody in particular still finds Bo\'s listing');
     assert(!getPosts({ query: 'fresh', viewerPubkey: reader.pubKeyHex, limit: 50 }).some(p => p.title === 'Fresh milk'),
         "the engine's read (Home's saved-search card asks with it) leaves it out for the reader");
+
+    // ── 3. A hyphenated word, as the apps ask ──────────────────────────────────
+    const coop = await search(searchTermsFor('co-op').join(' '), other);
+    assert(coop.status === 200 && JSON.stringify(coop.titles) === JSON.stringify(['Co-op shares']),
+        `core's words for "co-op" find "Co-op shares" and not "Cooking lessons" or "Opera tickets" (${JSON.stringify(coop.titles)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

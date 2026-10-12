@@ -41,6 +41,25 @@ describe('expandSearchTerms', () => {
         // The letters inside U+3000–303F stay: 々 repeats the character before it (人々, people).
         expect(searchTermsFor('人々、時々')).toEqual(['人々', '時々']);
     });
+    it('keeps a Latin word joined by a hyphen whole, with its joined form, never two short prefixes (#1808 review, finding 1)', () => {
+        const wifi = searchTermsFor('wi-fi');
+        expect(wifi).toEqual(expect.arrayContaining(['wi-fi', 'wifi']));
+        expect(wifi).not.toContain('wi');
+        expect(wifi).not.toContain('fi');
+        // The joined form is what the synonyms are looked up on, as before the split.
+        expect(wifi).toEqual(expect.arrayContaining(['internet']));
+        expect(searchTermsFor('Co-op')).toEqual(expect.arrayContaining(['co-op', 'coop']));
+        expect(searchTermsFor('co-op')).not.toContain('co');
+        expect(searchTermsFor('(t-shirt),')).toEqual(expect.arrayContaining(['t-shirt', 'tshirt']));
+        // Digits joined by . , / stay one number.
+        expect(searchTermsFor('1,000')).toEqual(['1,000', '1000']);
+        expect(searchTermsFor('3.5')).toEqual(['3.5', '35']);
+        expect(searchTermsFor('24/7')).toEqual(['24/7', '247']);
+        // Every other punctuation still parts words.
+        expect(searchTermsFor('eggs,honey')).toEqual(expect.arrayContaining(['eggs', 'honey']));
+        expect(searchTermsFor('eggs/honey')).not.toContain('eggs/honey');
+        expect(searchTermsFor('鸡蛋，牛奶')).toEqual(['鸡蛋', '牛奶']);
+    });
 });
 
 describe('searchTermsFor', () => {

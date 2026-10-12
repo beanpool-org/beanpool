@@ -642,3 +642,87 @@ describe('RekeyMemberWizard: one try per number, and a code ended elsewhere (#17
         expect(screen.getByRole('button', { name: 'Make a new code' })).toBeTruthy();
     });
 });
+
+describe('RekeyMemberWizard: this dashboard\'s own cancel, a code replaced elsewhere, a code run out (#1783 review D2, D3, D4)', () => {
+    const member = { publicKey: 'a'.repeat(64), callsign: 'alice', status: 'suspended' };
+    const phone = 'c'.repeat(64);
+    const pending = (code = 'RK-AB12-CD34', expiresInMs = 3600000) => ({
+        id: 9, code, old_pubkey: member.publicKey, new_pubkey: null, operator_pubkey: 'b'.repeat(64),
+        expires_at: new Date(Date.now() + expiresInMs).toISOString(), status: 'pending', created_at: new Date().toISOString(),
+    });
+    const live = (code = 'RK-AB12-CD34', key = phone, expiresInMs = 3600000) => ({
+        isInvalidated: true, invalidatedInfo: null, pendingRequest: pending(code, expiresInMs),
+        proposals: [{ newPubkey: key, proposedAt: new Date().toISOString() }], wrongNumbers: 0, history: [],
+    });
+    const none = { isInvalidated: true, invalidatedInfo: null, pendingRequest: null, proposals: [], wrongNumbers: 0, history: [] };
+    beforeEach(() => { vi.restoreAllMocks(); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('Cancel here, with a read answered before the cancel: the next code made here is live, not "no longer active"', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const read = vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({ ...live(), wrongNumbers: 1 } as any);
+        let finishCancel: (v: any) => void = () => {};
+        vi.spyOn(nodeClient, 'cancelRekeyCodeApi').mockImplementation(() => new Promise((ok) => { finishCancel = ok; }));
+        vi.spyOn(nodeClient, 'issueRekeyCodeApi').mockResolvedValue({ success: true, code: 'RK-0E01-0001', oldPubkey: member.publicKey, callsign: 'alice', expiresAt: new Date(Date.now() + 86400000).toISOString(), operator: 'b'.repeat(64) } as any);
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        await screen.findByText('RK-AB12-CD34');
+        // The node has cancelled; the cancel's answer is still on its way when the page's read comes back.
+        read.mockResolvedValue(none as any);
+        fireEvent.click(screen.getByRole('button', { name: /Cancel this code/ }));
+        await act(async () => { await vi.advanceTimersByTimeAsync(REKEY_PROPOSALS_POLL_MS + 50); });
+        expect(screen.queryByTestId('rekey-code-expired')).toBeNull(); // that read was this cancel, not another screen
+        await act(async () => { finishCancel({ success: true, cancelled: true, oldPubkey: member.publicKey, callsign: 'alice', status: 'active' }); });
+        await screen.findByTestId('rekey-notice');
+        read.mockResolvedValue(live('RK-0E01-0001') as any);
+        screen.getAllByRole('checkbox').forEach((cb) => fireEvent.click(cb));
+        fireEvent.click(screen.getByRole('button', { name: /Make a re-key code/ }));
+        await screen.findByText('RK-0E01-0001');
+        expect(screen.queryByTestId('rekey-code-expired')).toBeNull();
+        expect(screen.getByTestId('rekey-code-qr').getAttribute('data-qr-value')).toBe('https://mullum.example.org/?rekey=RK-0E01-0001');
+        await act(async () => { await vi.advanceTimersByTimeAsync(REKEY_PROPOSALS_POLL_MS + 50); });
+        expect(screen.getByLabelText('The number on their phone')).toBeTruthy();
+        expect(screen.getByTestId('rekey-type-number').textContent).not.toContain('Wrong so far');
+    });
+
+    it('a code replaced on another dashboard: no longer active, its QR gone, and the new code\'s phones never show under it', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const read = vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue(live() as any);
+        const bind = vi.spyOn(nodeClient, 'bindRekeyByMatchApi');
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        await screen.findByText('RK-AB12-CD34');
+        // Another admin made a new code for alice: this one is cancelled; the node's pending code is RK-9999-0000.
+        read.mockResolvedValue({ ...live('RK-9999-0000', 'd'.repeat(64)), wrongNumbers: 2, codeUnderAttack: { wrongTries: 9, refusing: false } } as any);
+        await act(async () => { await vi.advanceTimersByTimeAsync(REKEY_PROPOSALS_POLL_MS * 2 + 50); });
+        expect(screen.queryByTestId('rekey-code-qr')).toBeNull();
+        expect(screen.queryAllByTestId('rekey-proposal')).toHaveLength(0);
+        expect(screen.queryByLabelText('The number on their phone')).toBeNull();
+        expect(screen.queryByTestId('rekey-under-attack')).toBeNull();
+        expect(screen.getByTestId('rekey-code-expired').textContent).toContain('a new code for @alice was made on another screen');
+        expect(screen.getByText('RK-AB12-CD34')).toBeTruthy(); // this page never takes up the other screen's code
+        expect(bind).not.toHaveBeenCalled();
+    });
+
+    it('a code that ran out while the page was open: says it expired, not that it was stopped or cancelled', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const read = vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue(live('RK-AB12-CD34', phone, 2000) as any);
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        await screen.findByText('RK-AB12-CD34');
+        await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+        // The node marks it expired and answers no pending code, before this page's 30-second clock moves.
+        read.mockResolvedValue(none as any);
+        await act(async () => { await vi.advanceTimersByTimeAsync(REKEY_PROPOSALS_POLL_MS + 50); });
+        const notice = screen.getByTestId('rekey-code-expired').textContent ?? '';
+        expect(notice).toContain('This code has expired');
+        expect(notice).not.toContain('stopped or cancelled');
+    });
+
+    it('a code gone well before its time is still called stopped or cancelled elsewhere', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const read = vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue(live() as any);
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        await screen.findByText('RK-AB12-CD34');
+        read.mockResolvedValue(none as any);
+        await act(async () => { await vi.advanceTimersByTimeAsync(REKEY_PROPOSALS_POLL_MS + 50); });
+        expect(screen.getByTestId('rekey-code-expired').textContent).toContain('stopped or cancelled on another screen');
+    });
+});

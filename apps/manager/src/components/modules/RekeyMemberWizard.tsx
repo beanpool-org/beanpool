@@ -102,8 +102,14 @@ export function RekeyMemberWizard({
     // Someone is guessing at codes starting like this one (the node's per-prefix count, #1783 review N3).
     const [underAttack, setUnderAttack] = useState<RekeyStatusResponse['codeUnderAttack'] | null>(null);
     // Three wrong numbers stopped the code on the node: like an expired one, only a new code helps.
-    /** 'wrong': three wrong numbers here. 'elsewhere': the node no longer has the code (stopped or cancelled on another screen). */
-    const [codeStopped, setCodeStopped] = useState<false | 'wrong' | 'elsewhere'>(false);
+    /**
+     * 'wrong': three wrong numbers here. 'elsewhere': the node no longer has the code (stopped or cancelled on another
+     * screen). 'replaced': another screen made a new code, which cancels this one. 'expired': it ran out on the node.
+     */
+    const [codeStopped, setCodeStopped] = useState<false | 'wrong' | 'elsewhere' | 'replaced' | 'expired'>(false);
+    // This dashboard's own Cancel is out: a read that finds no code meanwhile is that cancel, not another screen's (#1783
+    // review D2).
+    const cancellingHere = useRef(false);
     // Sign-in copies of the old key the move removed (the node's count): step 3 asks for a new link only when > 0.
     const [signInCopiesRemoved, setSignInCopiesRemoved] = useState(0);
 
@@ -186,18 +192,24 @@ export function RekeyMemberWizard({
         const id = setInterval(async () => {
             try {
                 const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
-                if (!live) return;
-                setProposals(status.proposals ?? []);
-                setWrongNumbers(status.wrongNumbers ?? 0);
-                setUnderAttack(status.codeUnderAttack ?? null);
+                if (!live || cancellingHere.current) return;
+                const pending = status.pendingRequest;
                 const moved = status.history?.[0];
-                if (!status.pendingRequest && moved && (status.history?.length ?? 0) > historyLength) {
+                if (!pending && moved && (status.history?.length ?? 0) > historyLength) {
                     setNewPubkey(moved.new_pubkey);
                     setStep(3);
-                } else if (!status.pendingRequest) {
-                    // No code and no move: it was stopped or cancelled on another screen (#1783 review C3).
-                    setCodeStopped((was) => was || 'elsewhere');
+                } else if (!pending || (pending.code && pending.code !== issuedCode)) {
+                    // This code is gone from the node: replaced by a new code on another screen (#1783 review D3), run out
+                    // (D4: the node marks it before this page's clock does), or stopped or cancelled there (C3). The
+                    // phones and counts the node reads now are another code's, so none of them show under this one.
+                    const ranOut = !pending && !!expiresAt && new Date(expiresAt).getTime() - Date.now() < 60000;
+                    setCodeStopped((was) => was || (pending ? 'replaced' : ranOut ? 'expired' : 'elsewhere'));
                     setProposals([]);
+                    setUnderAttack(null);
+                } else {
+                    setProposals(status.proposals ?? []);
+                    setWrongNumbers(status.wrongNumbers ?? 0);
+                    setUnderAttack(status.codeUnderAttack ?? null);
                 }
             } catch {
                 // The next read tries again; the cards stay as they were.
@@ -207,7 +219,16 @@ export function RekeyMemberWizard({
             live = false;
             clearInterval(id);
         };
-    }, [step, issuedCode, nodeUrl, member.publicKey, adminPassword, tfaToken, historyLength]);
+    }, [step, issuedCode, expiresAt, nodeUrl, member.publicKey, adminPassword, tfaToken, historyLength]);
+
+    /** A code made or cancelled here starts clean: nothing of the code before it shows (#1783 review D2). */
+    const forgetCodeState = () => {
+        setCodeStopped(false);
+        setWrongNumbers(0);
+        setTypedMatch('');
+        setProposals([]);
+        setUnderAttack(null);
+    };
 
     /** After Manage again: read the status once more, which now carries the code. */
     const handleReread = async () => {
@@ -233,6 +254,7 @@ export function RekeyMemberWizard({
         setNotice(null);
         try {
             const res = await issueRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            forgetCodeState();
             setIssuedCode(res.code);
             setCodeNeedsStepUp(false);
             setExpiresAt(res.expiresAt);
@@ -246,10 +268,12 @@ export function RekeyMemberWizard({
 
     /** Undoes the pending code on the node: the member's key works again and their status is put back. */
     const handleCancelCode = async () => {
+        cancellingHere.current = true;
         setCancelling(true);
         setError(null);
         try {
             const res = await cancelRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            forgetCodeState();
             setIssuedCode(null);
             setCodeNeedsStepUp(false);
             setExpiresAt(null);
@@ -261,6 +285,7 @@ export function RekeyMemberWizard({
         } catch (err: any) {
             setError(err?.message || 'Failed to cancel the re-key code');
         } finally {
+            cancellingHere.current = false;
             setCancelling(false);
         }
     };
@@ -570,7 +595,9 @@ export function RekeyMemberWizard({
                                                 ? 'Three wrong numbers were typed, so this code has stopped and no phone can use it.'
                                                 : codeStopped === 'elsewhere'
                                                     ? 'This code is no longer active: it was stopped or cancelled on another screen, so no phone can use it.'
-                                                    : 'This code has expired, so no phone can use it.'}
+                                                    : codeStopped === 'replaced'
+                                                        ? `This code is no longer active: a new code for @${member.callsign} was made on another screen, so no phone can use this one.`
+                                                        : 'This code has expired, so no phone can use it.'}
                                         </p>
                                         <button
                                             type="button"

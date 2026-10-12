@@ -222,3 +222,26 @@ describe('P&L helpers', () => {
         expect(heldCredit({})).toBe(0);
     });
 });
+
+describe('a project says leader and collaborators, never keeper (group decisions pick 8)', () => {
+    const project = (over: any = {}) => enterprise({ lifecycle: 'bounded', ...over });
+    it('every confirmation and banner for a project', () => {
+        const texts = [
+            pauseConfirmText(project()),
+            windUpConfirmText(project(), 'Hall Roof'),
+            windUpDeficitText(project({ balance: -5 })) ?? '',
+            cancelWindUpConfirmText('Hall Roof', 'bounded'),
+            finaliseWindUpConfirmText(project(), 'Hall Roof'),
+            postingBlockedText(project({ status: 'completed' })) ?? '',
+            seasonBanner(project({ status: 'completed' }))?.body ?? '',
+            seasonBanner(project({ status: 'winding_up', windUpEndsAt: new Date(NOW + 3 * DAY).toISOString() }), NOW)?.body ?? '',
+        ];
+        for (const t of texts) expect(t).not.toMatch(/keeper|enterprise/i);
+        expect(windUpConfirmText(project(), 'Hall Roof')).toContain('releases 3 collaborators');
+        expect(cancelWindUpConfirmText('Hall Roof', 'bounded')).toContain('Collaborators remain appointed');
+    });
+    it('an enterprise keeps its keepers', () => {
+        expect(windUpConfirmText(enterprise(), 'Bread Co-op')).toContain('Any keeper can stop this');
+        expect(cancelWindUpConfirmText('Bread Co-op')).toContain('Keepers remain appointed');
+    });
+});

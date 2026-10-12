@@ -20,13 +20,25 @@ import { resetSyncFingerprints } from '../services/pillar-sync';
 const DATABASE_FILE_SUFFIXES = ['-wal', '-shm', '-journal', ''] as const;
 
 /**
+ * A community copy's file, under any name nodes.ts has given one (getDatabaseFilenameForNode, legacyDatabaseFilenameForNode,
+ * the no-community file), or one of its side files. Group 1 is the database's own name.
+ */
+const COMMUNITY_COPY_FILE = /^(community_[a-z0-9._-]{0,40}_[0-9a-f]{32}\.db|beanpool_[A-Za-z0-9_]+\.db|beanpool\.db)(?:-wal|-shm|-journal)?$/;
+
+/**
  * Take each community's cached copy off this phone. The copy that is open is closed first: left open, it would go on
  * serving and writing a file that is gone. Best effort per file: a file that can't be removed is logged, and the rest go.
  *
  * The directory is the one expo-sqlite opens them in (`defaultDatabaseDirectory`). Sign Out used to guess it, and on
  * Android guessed `databases/`, where nothing is.
+ *
+ * `everyCopy`: the account is leaving this phone (Sign Out, the self-delete purge at its last community, Replace), so
+ * every community copy in that directory goes, listed or not. A community a Wipe left is no longer listed, and its file
+ * keeps what that identity knew of its groups' keys: a Wipe keeps the identity, so it keeps them (director, NB3 of the
+ * #1788 confirmation). Removing every copy as the identity leaves, rather than a record each Wipe would have to keep,
+ * also takes a copy left by any other path or an older build (confirmation 2 of #1788, finding 5).
  */
-export async function removeCommunityCaches(communities: readonly string[]): Promise<void> {
+export async function removeCommunityCaches(communities: readonly string[], opts: { everyCopy?: boolean } = {}): Promise<void> {
     // What the sync last applied belonged to the copies going now: the next account's sync must not skip a payload
     // because it matches one of them (pillar-sync.ts).
     resetSyncFingerprints();
@@ -42,6 +54,16 @@ export async function removeCommunityCaches(communities: readonly string[]): Pro
     // And each one's name from before every community had a file of its own (nodes.ts), in case it never moved
     // (cache-file-migration.ts): the account's copy goes with it either way.
     const names = new Set(communities.flatMap((url) => [getDatabaseFilenameForNode(url), legacyDatabaseFilenameForNode(url)]));
+    if (opts.everyCopy) {
+        try {
+            for (const f of await FileSystem.readDirectoryAsync(encodeURI(`file://${directory}`))) {
+                const copy = COMMUNITY_COPY_FILE.exec(f);
+                if (copy) names.add(copy[1]);
+            }
+        } catch (e) {
+            console.warn('[Account] Could not list the cached community copies: only the listed ones go', e);
+        }
+    }
     for (const name of names) {
         for (const suffix of DATABASE_FILE_SUFFIXES) {
             try {

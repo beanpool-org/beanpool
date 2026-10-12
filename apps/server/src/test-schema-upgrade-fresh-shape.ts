@@ -427,6 +427,35 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 8d. invalidated_keys gains the succession statement (group chats, line-display design §5) ───────
+    // Three NULL columns on every row from before: a re-key nobody has attested. The columns a fresh install has, and
+    // every row kept as it was.
+    console.log('\n--- 8d. invalidated_keys gains succession_sig, succession_at, succession_stored_at ---');
+    {
+        const dir = tmp('invalidated-keys-succession');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const oldDdl = legacyDdl('invalidated_keys', ['succession_sig', 'succession_at', 'succession_stored_at']);
+        assert(!oldDdl.includes('succession'), 'the fixture DDL is from before: no succession columns');
+        d.exec(`DROP TABLE invalidated_keys; ${oldDdl}`);
+        const at = new Date(Date.now() - 3 * 86_400_000).toISOString();
+        d.prepare(`INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to) VALUES (?, 'rekeyed', ?, ?)`).run('a'.repeat(64), at, 'b'.repeat(64));
+        d.close();
+        const result = bootInto(dir);
+        assert(result.ok, 'the node from before the columns boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'), { readonly: true });
+        assert(JSON.stringify(columns(after, 'invalidated_keys')) === JSON.stringify(columns(freshDb, 'invalidated_keys')),
+            `ending with exactly a fresh install's columns (got ${columns(after, 'invalidated_keys').join(',')})`);
+        assert(JSON.stringify(indexes(after, 'invalidated_keys')) === JSON.stringify(indexes(freshDb, 'invalidated_keys')), 'and its indexes');
+        const row = after.prepare('SELECT * FROM invalidated_keys').get() as any;
+        assert(row.invalidated_at === at && row.rekeyed_to === 'b'.repeat(64) && row.succession_sig === null && row.succession_at === null && row.succession_stored_at === null,
+            'the row kept as it was, unattested');
+        after.close();
+        assert(bootInto(dir).ok, 'a second boot is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     // ── accounts.balance NOT NULL (review FABLE-sec-input F1, 2026-10-01) ─────────────────────────
     // better-sqlite3 binds NaN as NULL, and the column was nullable, so a NaN balance was written as NULL without a word.
     // A fresh install declares it NOT NULL; a node whose table predates that is rebuilt at boot, unless a balance there

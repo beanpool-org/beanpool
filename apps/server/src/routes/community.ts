@@ -40,6 +40,7 @@ import { pushKeyHex } from '../engine/push-notices.js';
 import { boundInviteCodesOf } from '../engine/names-list.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
 import { cleanRekeyCode, proposeRekey, rekeyRedeemStatus, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
+import { recordKeySuccession, rekeyedFromOf } from '../engine/key-succession.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import {
@@ -846,7 +847,30 @@ router.get('/api/community/me', async (ctx) => {
         return;
     }
     ctx.set('Cache-Control', 'private, no-store');
-    ctx.body = { publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor), area: readMemberArea(actor) };
+    ctx.body = {
+        publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor), area: readMemberArea(actor),
+        // The keys a re-key replaced with this one, newest first, and whether this key has confirmed each (engine/key-succession.ts):
+        // the phone asks its member to confirm an unattested one (line-display design §5, §6).
+        rekeyedFrom: rekeyedFromOf(actor),
+    };
+});
+
+/**
+ * The signed member's new key confirms that a re-key's old key was theirs (group chats, line-display design §5): the
+ * succession statement core makeKeySuccession makes, `{ oldPubkey, at, sig }`. 201 once; 404 unless `oldPubkey` was
+ * re-keyed to the signer; 400 if the statement does not verify; 409 once set, which never changes.
+ */
+router.post('/api/community/me/key-succession', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const answer = recordKeySuccession(actor, (ctx as any).requestBody);
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.status = answer.status;
+    ctx.body = answer.body;
 });
 
 /**

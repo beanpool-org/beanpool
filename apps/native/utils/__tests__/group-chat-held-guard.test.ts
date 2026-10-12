@@ -22,6 +22,9 @@ const store = vi.hoisted(() => ({
     /** The community file open: the group tables of any other community's file hold nothing for these groups. */
     openFile: 'beanpool_test.db',
     anchor: 'https://node.example',
+    asyncStore: new Map<string, string>(),
+    /** The type the fake node gives a group's conversation, when not group_thread. */
+    nodeType: new Map<string, string>(),
 }));
 const groupTable = (sql: string) => /group_chat_epochs|group_chat_key_state|group_line_verdicts|group_line_signers/.test(sql);
 const groupRead = (sql: string) => {
@@ -64,8 +67,9 @@ const mockDb = {
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn().mockImplementation((name: string) => { store.openFile = name; return Promise.resolve(mockDb); }) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        getItem: vi.fn(async (k: string) => (k === 'beanpool_anchor_url' ? store.anchor : null)),
-        setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}), getAllKeys: vi.fn(async () => []), multiRemove: vi.fn(async () => {}),
+        getItem: vi.fn(async (k: string) => (k === 'beanpool_anchor_url' ? store.anchor : store.asyncStore.get(k) ?? null)),
+        setItem: vi.fn(async (k: string, v: string) => { store.asyncStore.set(k, v); }),
+        removeItem: vi.fn(async (k: string) => { store.asyncStore.delete(k); }), getAllKeys: vi.fn(async () => []), multiRemove: vi.fn(async () => {}),
     },
 }));
 vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID, getRandomBytes: () => new Uint8Array(16) }));
@@ -82,8 +86,8 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat } from '../db';
-import { GROUP_CHAT_LOCK_LOST_TEXT, groupChatNotice, GROUP_CHAT_OLD_NODE_NOTICE } from '../group-chat-lines';
+import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi } from '../db';
+import { GROUP_CHAT_LOCK_LOST_TEXT, groupChatNotice, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
 import { forgetGroupKeys, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 
 const realLoad = (Module as any)._load;
@@ -110,7 +114,7 @@ function reply(status: number, body: any) { return { ok: status >= 200 && status
     // The node: no keys for this phone (an old node, or one refusing it: 404), its chat answer with no `encryption`.
     if (g && method === 'GET' && path.startsWith(`/api/groups/${g}/keys`)) return reply(404, { error: 'Not found' });
     if (g && method === 'GET' && path.startsWith(`/api/groups/${g}/chat`)) return chatAnswer === 'unlocked' ? reply(200, { messages: [], canPost: true }) : reply(404, { error: 'Not found' });
-    if (g && method === 'GET' && path.startsWith(`/api/messages/${g}`)) return reply(200, { conversation: { id: g, type: 'group_thread', name: 'The group', participants: [who.me.publicKey, OTHER] }, messages: [] });
+    if (g && method === 'GET' && path.startsWith(`/api/messages/${g}`)) return reply(200, { conversation: { id: g, type: store.nodeType.get(g) ?? 'group_thread', name: 'The group', participants: [who.me.publicKey, OTHER] }, messages: [] });
     if (method === 'POST' && path.endsWith('/chat/message')) return reply(201, { success: true, message: { id: body?.clientId } });
     if (method === 'POST' && path === '/api/messages/send') return reply(201, { success: true, message: { id: body?.id, timestamp: new Date().toISOString() } });
     if (method === 'POST' && path === '/api/messages/edit') return reply(200, { success: true, message: { editedAt: new Date().toISOString() } });
@@ -299,5 +303,64 @@ describe('group chats: a key store that can\'t be read never counts as "never he
         console.log(`community switched under the keyring: ${during}; back on its own ${after}`);
         expect(during).toBe(`refused: ${GROUP_KEY_STORE_UNREAD_TEXT}`);
         expect(after).toBe(true);
+    });
+});
+
+describe('group chats: a held group is never a DM, and a known DM never becomes held (confirmation 2 of #1788, finding 2)', () => {
+    it('held AND a known DM (the node typed it dm once): the held guard is asked first; nothing goes DM-sealed to whoever the node lists', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[14];
+        held(g);
+        store.asyncStore.set('beanpool_dm_conversations_seen', JSON.stringify([g]));
+        store.conversations.set(g, { id: g, type: 'dm', created_by: null });
+        partsOf(g).add(who.me.publicKey); partsOf(g).add(OTHER);
+        const from = received.length;
+        let a: string;
+        try {
+            a = await tryIt(() => insertMessage(g, who.me.publicKey, 'words typed where the group was'));
+            await waitFor(() => writes(from).length > 0, 300);
+        } finally {
+            store.asyncStore.delete('beanpool_dm_conversations_seen');
+        }
+        console.log(`held + known DM: ${a}; writes ${JSON.stringify(writes(from))}`);
+        expect(a).toBe(`refused: ${GROUP_CHAT_LOCK_LOST_TEXT}`);
+        expect(writes(from)).toEqual([]);
+    });
+
+    it('the node types a held group dm when the phone asks for it: its row stays group_thread and it is never remembered as a DM', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[15];
+        held(g);
+        store.nodeType.set(g, 'dm');
+        const from = received.length;
+        const a = await tryIt(() => sendImageMessage(g, 'data:image/jpeg;base64,/9j/AAAA', 'a caption'));
+        const remembered = (JSON.parse(store.asyncStore.get('beanpool_dm_conversations_seen') ?? '[]') as string[]).includes(g);
+        console.log(`node says dm: photo ${a}; row ${store.conversations.get(g)?.type}; remembered as a DM ${remembered}`);
+        expect(store.conversations.get(g)?.type).toBe('group_thread');
+        expect(remembered).toBe(false);
+        expect(writes(from)).toEqual([]);
+    });
+
+    it('a known DM never becomes held: a group post, edit, join or approval under its id is refused before any key is asked; its own line goes DM-sealed', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const d = randomUUID();
+        store.conversations.set(d, { id: d, type: 'dm', created_by: null });
+        partsOf(d).add(who.me.publicKey); partsOf(d).add(OTHER);
+        const from = received.length;
+        const r: Record<string, string> = {};
+        r.screenLocked = await tryIt(() => postGroupChatMessage(d, 'as a locked group line', randomUUID(), null, { after: null }));
+        r.screenOldNode = await tryIt(() => postGroupChatMessage(d, 'as an old node\'s group line', randomUUID(), null, undefined));
+        r.threadEdit = await tryIt(() => editThreadMessage(randomUUID(), 'as a group edit', { groupId: d, metadata: { epoch: 1 }, locked: true }));
+        r.join = await tryIt(() => joinGroupApi(d, { joinPolicy: 'open' }));
+        r.approve = await tryIt(() => approveGroupMemberApi(d, OTHER));
+        const dm = await tryIt(() => insertMessage(d, who.me.publicKey, 'a DM line'));
+        await waitFor(() => writes(from).length > 0, 1000);
+        const groupRoutes = received.slice(from).filter((x) => x.path.includes(`/api/groups/${d}`)).map((x) => `${x.method} ${x.path}`);
+        const sent = received.slice(from).filter((x) => x.method === 'POST').map((x) => `${x.path} ${String(x.body?.nonce ?? '').split(':')[0]}`);
+        console.log(`known DM as a group: ${JSON.stringify(r)}; DM line ${dm}; group routes asked ${JSON.stringify(groupRoutes)}; sent ${JSON.stringify(sent)}`);
+        for (const k of Object.keys(r)) expect(r[k]).toBe(`refused: ${GROUP_KEYS_FOR_DM_TEXT}`);
+        expect(groupRoutes).toEqual([]);
+        expect(sent).toEqual(['/api/messages/send x25519-xc20p-v2']);
+        expect(await isHeldGroupChat(d)).toBe(false);
     });
 });

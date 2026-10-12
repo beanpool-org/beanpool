@@ -54,6 +54,12 @@ export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's
 export const GROUP_CHAT_LOCK_LOST_TEXT = "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.";
 /** A node that refuses this phone the group's keys and its chat (a removed member): it said nothing about locking. */
 export const GROUP_CHAT_NOT_MEMBER_TEXT = 'Only members of this group can open its chat';
+/**
+ * A conversation this phone knows as a direct message, asked to act as a group's chat (to post, edit, join or rotate its
+ * keys): refused, so a known DM never gets a group's keys here and never becomes a held group (confirmation 2 of #1788,
+ * finding 2).
+ */
+export const GROUP_KEYS_FOR_DM_TEXT = "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.";
 
 /** The group chat's notice: the phone's own words for what it decided, never the node's text. */
 export function groupChatNotice(state: { nodeSaysLocked: boolean; seenLocked: boolean }): string {

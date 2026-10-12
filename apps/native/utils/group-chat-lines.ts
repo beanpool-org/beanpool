@@ -107,6 +107,8 @@ export async function sendSealedGroupLine(nodeUrl: string, identity: BeanPoolIde
 
 /** Refused before anything is sent: this phone doesn't hold the key the line was sealed under. */
 export const GROUP_EDIT_NO_KEY_TEXT = "This message's key isn't on this phone, so it can't be edited here.";
+/** The node answers the chat, but its edit route says it no longer has this line (confirmation 2 of #1788, J2). */
+export const GROUP_EDIT_LINE_GONE_TEXT = 'This message is no longer in this chat.';
 
 /** Edit one of my lines: re-sealed under ITS epoch (part 'edit', after its own id, still answering what it answered). */
 export async function editSealedGroupLine(

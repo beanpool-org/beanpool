@@ -31,7 +31,7 @@ import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
 import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import { sqliteGroupKeyStore } from './group-chat-store';
-import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT } from './group-chat-lines';
+import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
@@ -4287,12 +4287,16 @@ async function lockForConversation(conversationId: string, text: string, line: D
  * every path that can post into it seals or refuses (director's decision b). With no node or no identity nothing can be
  * sent at all, so that answers false. When the phone can't read its key memory (a SQLite error, a community switched
  * under it) this throws GROUP_KEY_STORE_UNREAD_TEXT: every send and edit that asks refuses, never "not held" (confirmation
- * 2 of #1788, finding 1).
+ * 2 of #1788, finding 1). Asked of the id as given and lower-cased: a link or a push can carry a group's id in capitals
+ * (push routes match ids case-insensitively), and the group is held whichever way its id is spelled.
  */
 export async function isHeldGroupChat(conversationId: string): Promise<boolean> {
-    let ring: GroupKeyring;
-    try { ring = await groupKeyringFor(conversationId); } catch { return false; }
-    return ring.seenLocked();
+    for (const id of new Set([conversationId, conversationId.toLowerCase()])) {
+        let ring: GroupKeyring;
+        try { ring = await groupKeyringFor(id); } catch { return false; }
+        if (await ring.seenLocked()) return true;
+    }
+    return false;
 }
 
 /**
@@ -4304,16 +4308,32 @@ async function heldGroupRefusal(groupId: string): Promise<GroupChatKeyError> {
     return new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
 }
 
-/** True only when the node answers this group's chat with no `encryption`: a node from before locked chats (§14.3). */
-async function nodeChatIsUnlocked(groupId: string): Promise<boolean> {
+/** How the node answers this group's chat: 'unlocked' (no `encryption`), 'locked', or null (refused, unreachable). */
+async function nodeChatAnswer(groupId: string): Promise<'unlocked' | 'locked' | null> {
     try {
         const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=1`);
-        if (!res.ok) return false;
+        if (!res.ok) return null;
         const answer = await res.json().catch(() => null);
-        return !!answer && typeof answer === 'object' && !chatIsLocked(answer);
+        if (!answer || typeof answer !== 'object') return null;
+        return chatIsLocked(answer) ? 'locked' : 'unlocked';
     } catch {
-        return false;
+        return null;
     }
+}
+
+/** True only when the node answers this group's chat with no `encryption`: a node from before locked chats (§14.3). */
+async function nodeChatIsUnlocked(groupId: string): Promise<boolean> {
+    return (await nodeChatAnswer(groupId)) === 'unlocked';
+}
+
+/**
+ * Why an edit of a group line the node answered 404 sent nothing: the node answers the chat, so it no longer has the
+ * line; or it refuses this phone the chat too (a removed member). The phone's own words, never the node's (confirmation
+ * 2 of #1788, J2).
+ */
+async function editRefusal(groupId: string): Promise<GroupChatKeyError> {
+    if (await nodeChatAnswer(groupId)) return new GroupChatKeyError(GROUP_EDIT_LINE_GONE_TEXT, 'refused');
+    return new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
 }
 
 /**
@@ -6518,14 +6538,14 @@ export async function postGroupChatMessage(
     const { nodeUrl, identity } = await groupKeyContext();
     const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
     await refuseGroupKeysForDm(ring);
-    if (lock || await ring.seenLocked()) {
+    if (lock || await isHeldGroupChat(groupId)) {
         try {
             return await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), {
                 groupId, text, clientId: clientId || Crypto.randomUUID(), replyToId, after: lock?.after, mentionCandidates: lock?.mentionCandidates,
                 progress: lock?.onProgress ? { onProgress: lock.onProgress } : undefined,
             });
         } catch (e) {
-            if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw await heldGroupRefusal(groupId);
+            if (e instanceof GroupKeysRequestError && e.status === 404 && await isHeldGroupChat(groupId)) throw await heldGroupRefusal(groupId);
             throw e;
         }
     }
@@ -6687,11 +6707,12 @@ export async function editThreadMessage(messageId: string, newText: string, line
     const { nodeUrl, identity } = await groupKeyContext();
     const ring = groupKeyring(nodeUrl, identity, line.groupId, groupKeyStore(nodeUrl));
     await refuseGroupKeysForDm(ring);
-    if (line.locked || await ring.seenLocked()) {
+    if (line.locked || await isHeldGroupChat(line.groupId)) {
         try {
             return await editSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId: line.groupId, messageId, metadata: line.metadata, text: newText });
         } catch (e) {
-            if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw await heldGroupRefusal(line.groupId);
+            // Only the edit route answers 404 here (a keys sync that fails is retried as "no key"): the line, not the keys.
+            if (e instanceof GroupKeysRequestError && e.status === 404) throw await editRefusal(line.groupId);
             throw e;
         }
     }

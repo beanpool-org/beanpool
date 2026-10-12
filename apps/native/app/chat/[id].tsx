@@ -141,9 +141,13 @@ export default function ChatRoute() {
 
     const view = chatRouteView({ held: heldGroup, knownDm, isEventChat, threadKind });
     if (view === 'wait' || !id) return null;
-    if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={String(id)} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
-    if (view === 'event') return <EventChatView eventId={String(id)} />;
-    if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={String(id)} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
+    // Ids are UUIDs, lower-case as the node makes them; a link or a push may carry one in capitals (push routes match
+    // them case-insensitively). The node-readable screens get the node's spelling, which is the one this phone's group
+    // key memory is kept under (isHeldGroupChat asks both).
+    const nodeId = String(id).toLowerCase();
+    if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={nodeId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
+    if (view === 'event') return <EventChatView eventId={nodeId} />;
+    if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={nodeId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     return <ChatScreen />;
 }
 

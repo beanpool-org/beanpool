@@ -92,7 +92,7 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi } from '../db';
-import { GROUP_CHAT_LOCK_LOST_TEXT, groupChatNotice, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT } from '../group-chat-lines';
+import { GROUP_CHAT_LOCK_LOST_TEXT, groupChatNotice, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from '../group-chat-lines';
 import { makeGroupEpochRecord } from '@beanpool/core';
 import { forgetGroupKeys, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 
@@ -107,7 +107,7 @@ const seed = ed25519.utils.randomSecretKey();
 who.me = { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesToHex(seed) };
 const OTHER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
 /** Every group in this file is one this phone may have held keys of; the fake node answers each the same way. */
-const groups = Array.from({ length: 24 }, () => randomUUID());
+const groups = Array.from({ length: 28 }, () => randomUUID());
 let chatAnswer: 'unlocked' | 'refused' | 'locked' = 'unlocked';
 const received: { method: string; path: string; body: any }[] = [];
 function reply(status: number, body: any) { return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body), clone() { return this; } }; }
@@ -116,14 +116,16 @@ function reply(status: number, body: any) { return { ok: status >= 200 && status
     const method = init.method ?? 'GET';
     let body: any; try { body = init.body ? JSON.parse(init.body) : undefined; } catch { body = init.body; }
     received.push({ method, path, body });
-    const g = groups.find((x) => path.includes(x));
+    // Ids matched however they are spelled, as the node's push routes match them.
+    const g = groups.find((x) => path.toLowerCase().includes(x));
+    const lp = path.toLowerCase();
     // The node: no keys for this phone (an old node, or one refusing it: 404), its chat answer with no `encryption`.
-    if (g && method === 'GET' && path.startsWith(`/api/groups/${g}/keys`)) return reply(404, { error: 'Not found' });
-    if (g && method === 'GET' && path.startsWith(`/api/groups/${g}/chat`)) {
+    if (g && method === 'GET' && lp.startsWith(`/api/groups/${g}/keys`)) return reply(404, { error: 'Not found' });
+    if (g && method === 'GET' && lp.startsWith(`/api/groups/${g}/chat`)) {
         if (chatAnswer === 'locked') return reply(200, { messages: [], canPost: true, encryption: { current: 1, stale: false, fromEpoch: 1 } });
         return chatAnswer === 'unlocked' ? reply(200, { messages: [], canPost: true }) : reply(404, { error: 'Not found' });
     }
-    if (g && method === 'GET' && path.startsWith(`/api/messages/${g}`)) return reply(200, { conversation: { id: g, type: store.nodeType.get(g) ?? 'group_thread', name: 'The group', participants: [who.me.publicKey, OTHER] }, messages: [] });
+    if (g && method === 'GET' && lp.startsWith(`/api/messages/${g}`)) return reply(200, { conversation: { id: g, type: store.nodeType.get(g) ?? 'group_thread', name: 'The group', participants: [who.me.publicKey, OTHER] }, messages: [] });
     if (method === 'POST' && path.endsWith('/chat/message')) return reply(201, { success: true, message: { id: body?.clientId } });
     if (method === 'POST' && path === '/api/messages/send') return reply(201, { success: true, message: { id: body?.id, timestamp: new Date().toISOString() } });
     if (method === 'POST' && path === '/api/messages/edit' && store.gone.has(body?.messageId)) return reply(404, { error: 'Message not found' });
@@ -480,17 +482,36 @@ describe('group chats: the photo guard and an edit with the key on the phone (co
         expect(readable(from)).toEqual([]);
     });
 
-    it('the edit route answers 404 (the node no longer has the line): the phone\'s own sentence, never the node\'s error', async () => {
-        forgetGroupKeys(); chatAnswer = 'locked';
-        const g = groups[23];
-        heldWithKey(g);
-        const id = randomUUID();
-        store.gone.add(id);
+    it('the edit route answers 404 (the node no longer has the line): the phone\'s own sentence, never the node\'s error; "no longer in this chat" while the node answers the chat', async () => {
+        const r: Record<string, string> = {};
         const from = received.length;
-        const e = await tryIt(() => editThreadMessage(id, 'an edit of a line the node no longer has', { groupId: g, metadata: { epoch: 1 }, locked: true }));
+        for (const [i, chat] of [[23, 'locked'], [24, 'unlocked'], [25, 'refused']] as const) {
+            forgetGroupKeys(); chatAnswer = chat;
+            const g = groups[i];
+            heldWithKey(g);
+            const id = randomUUID();
+            store.gone.add(id);
+            r[chat] = await tryIt(() => editThreadMessage(id, `an edit of a line the node no longer has (chat ${chat})`, { groupId: g, metadata: { epoch: 1 }, locked: true }));
+        }
         chatAnswer = 'unlocked';
-        console.log(`edit 404: ${e}; readable ${JSON.stringify(readable(from))}`);
-        expect(e).toBe(`refused: ${GROUP_CHAT_NOT_MEMBER_TEXT}`);
+        console.log(`edit 404: ${JSON.stringify(r)}; readable ${JSON.stringify(readable(from))}`);
+        expect(r).toEqual({ locked: `refused: ${GROUP_EDIT_LINE_GONE_TEXT}`, unlocked: `refused: ${GROUP_EDIT_LINE_GONE_TEXT}`, refused: `refused: ${GROUP_CHAT_NOT_MEMBER_TEXT}` });
+        expect(readable(from)).toEqual([]);
+    });
+
+    it('a held group\'s id in capitals (a link or a push) is the same held group: held, and nothing readable by either path', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[26];
+        held(g);
+        const G = g.toUpperCase();
+        const from = received.length;
+        const heldUpper = await isHeldGroupChat(G);
+        const a = await tryIt(() => insertMessage(G, who.me.publicKey, 'words under the id in capitals'));
+        const b = await tryIt(() => postGroupChatMessage(G, 'the screen under the id in capitals', randomUUID(), null, undefined));
+        await waitFor(() => readable(from).length > 0, 300);
+        console.log(`id in capitals: held ${heldUpper}; conversation path ${a}; screen ${b}; readable ${JSON.stringify(readable(from))}`);
+        expect(heldUpper).toBe(true);
+        expect([a, b]).toEqual([`refused: ${GROUP_CHAT_LOCK_LOST_TEXT}`, `refused: ${GROUP_CHAT_LOCK_LOST_TEXT}`]);
         expect(readable(from)).toEqual([]);
     });
 });

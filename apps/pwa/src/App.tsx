@@ -15,7 +15,7 @@ import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
 import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, type CommunityInfo, type MarketplaceTransaction, type Group } from './lib/api';
 import { GroupDetailModal } from './components/GroupDetailModal';
-import { GroupVotesSheet, landOnGroup } from './components/GroupVotesSheet';
+import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { SyncStatus } from './components/SyncStatus';
@@ -306,11 +306,9 @@ export function App() {
         // that can't be read now opens just its votes when they still hold the reader (#1784 review B1), else Commons.
         if (tab === 'group') {
             if (contextId) {
-                landOnGroup(contextId).then(l => {
-                    if (l.kind === 'group') setOpenGroup(l.group);
-                    else if (l.kind === 'votes') setOpenGroupVotes({ groupId: l.groupId, canVote: l.canVote });
-                    else setActiveTab('projects');
-                });
+                landOnGroup(contextId).then(l => routeLanding(l, {
+                    group: setOpenGroup, votes: setOpenGroupVotes, commons: () => setActiveTab('projects'),
+                }));
             }
             return;
         }

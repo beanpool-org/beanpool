@@ -16,7 +16,7 @@ vi.mock('../lib/api', () => ({
     getGroupDecisions: vi.fn(async () => answers.decisions ?? null),
     proposeGroupDecision: vi.fn(), voteGroupDecision: vi.fn(async () => ({ success: true })),
 }));
-import { landOnGroup, GroupVotesSheet } from './GroupVotesSheet';
+import { landOnGroup, GroupVotesSheet, routeLanding } from './GroupVotesSheet';
 
 beforeEach(() => { for (const k of Object.keys(answers)) delete answers[k]; });
 
@@ -40,6 +40,19 @@ describe('landOnGroup', () => {
         expect(await landOnGroup(G)).toEqual({ kind: 'commons' });
         answers.decisions = { decisions: [], canPropose: false, onRoll: false, watching: false, rollSize: 4, closedAt: null };
         expect(await landOnGroup(G)).toEqual({ kind: 'commons' });
+    });
+});
+
+describe('routeLanding (what App does with a landing, #1794 N9 MP7)', () => {
+    it('votes open the votes sheet, never Commons; a group opens the group; neither, Commons', () => {
+        const to = { group: vi.fn(), votes: vi.fn(), commons: vi.fn() };
+        routeLanding({ kind: 'votes', groupId: G, canVote: false }, to);
+        expect(to.votes).toHaveBeenCalledWith({ groupId: G, canVote: false });
+        expect(to.commons).not.toHaveBeenCalled();
+        routeLanding({ kind: 'group', group: { id: G } as any }, to);
+        expect(to.group).toHaveBeenCalledWith({ id: G });
+        routeLanding({ kind: 'commons' }, to);
+        expect(to.commons).toHaveBeenCalledTimes(1);
     });
 });
 

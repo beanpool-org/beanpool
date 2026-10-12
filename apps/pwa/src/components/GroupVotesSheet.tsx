@@ -23,6 +23,13 @@ export async function landOnGroup(groupId: string): Promise<GroupLanding> {
     }
 }
 
+/** What App does with a landing (kept here so the votes branch has a test, #1794 N9 MP7). */
+export function routeLanding(l: GroupLanding, to: { group: (g: Group) => void; votes: (v: { groupId: string; canVote: boolean }) => void; commons: () => void }): void {
+    if (l.kind === 'group') to.group(l.group);
+    else if (l.kind === 'votes') to.votes({ groupId: l.groupId, canVote: l.canVote });
+    else to.commons();
+}
+
 interface Props {
     groupId: string;
     /** Whether any of these votes still takes theirs: the line above says "you can still vote" only then (#1794 N8). */

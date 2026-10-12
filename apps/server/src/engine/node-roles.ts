@@ -230,6 +230,21 @@ function noteRoleAlert(detail: string, stillTrue: () => boolean, a: { actor?: st
 }
 
 /**
+ * A re-key that moves an owner's or admin's role to a new key (engine/member-wizards.ts completeRekey), for the owners'
+ * alert: sec.keys, "An admin's key was replaced, by an owner", under the actor's own bound, never whose (the deciding
+ * review of #1807, finding 5). Who acted is read now, before the move (a member re-keying themselves holds no role
+ * after it); the returned call tells it, once the re-key has committed. An owner's is high, as an owner made or removed
+ * is. The owners are pushed, not the key replaced: the re-key drops its devices' push tokens (engine/key-move.ts (n)).
+ */
+export function roleKeyReplacedAlert(role: 'owner' | 'admin', oldKey: string, operator: string): () => void {
+    const actorRole = operator === oldKey ? role : actorRoleOf(operator);
+    const how = operator === oldKey ? `by that ${role} themselves` : HOW[actorRole] ?? 'by the server itself';
+    const who = withArticle(role);
+    const detail = `${who[0].toUpperCase()}${who.slice(1)}'s key was replaced by a re-key, ${how}. Open Settings to see who.`;
+    return () => noteSecurityEvent({ key: 'sec.keys', detail, actor: operator || 'SYSTEM', actorRole, high: role === 'owner' });
+}
+
+/**
  * Who took a role away or gave it back outside grantNodeRole/revokeNodeRole, for the owners' alert. `actor` bounds the
  * pushes as a grant's does: the person who acted (a member's key, 'owner:password'), or a stable id when nobody did:
  * 'SYSTEM' for the server itself, 'system:community-decision' for a community vote. `how` comes before "by an owner".

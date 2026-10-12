@@ -31,6 +31,8 @@
  *  5d. Every security log line is in the history (one line per kind, counted, never its words); 1000 of them write the
  *     alert book a handful of times at most, its next write carries their count. A standby takes a role
  *     grant and tells it on its own channel only; once it is the main server, its standby days leave the card and banner.
+ *  5e. An owner re-keys an admin through the real routes: told to the owners as a key replaced (sec.keys) and pushed to
+ *     them, naming nobody; a moderator's re-key tells nothing.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts-security.ts
@@ -672,6 +674,52 @@ async function main(): Promise<void> {
     revokeNodeRole(stan, 'moderator', owner);
     await settle(300);
     assert(banner('owner') === 1 && alerts.getAlertsStatus().recent.length === 1, `5d. one told on the main server is in both (${banner('owner')})`);
+
+    // ── 5e. A re-key moves an owner's or admin's role to a new key (the deciding review of #1807, finding 5) ─────────
+    // Through the real routes: an owner issues the code and binds the new key. Told to the owners as sec.keys, under the
+    // owner's own bound (the re-key drops the old key's push tokens: the owners are pushed); a moderator's re-key tells
+    // nothing; nobody named.
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    const C5E = ['ReyRekeyedS', 'MacModRekeyS'];
+    const [rey, mac] = C5E.map(() => pubkey());
+    for (const [i, pk] of [rey, mac].entries()) {
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
+            .run(pk, C5E[i], new Date().toISOString(), owner, 'TEST');
+        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    }
+    grantNodeRole(rey, 'admin', owner);
+    grantNodeRole(mac, 'moderator', owner);
+    putPushTokenRow(rey, 'ExponentPushToken[rey-admin]', 'android');
+    await settle(300);
+    const rekey = async (pk: string) => {
+        const issued = await call('POST', `/api/local/admin/members/${pk}/rekey/issue-code`, {}, asOwner);
+        const fresh = pubkey();
+        const done = await call('POST', `/api/local/admin/members/${pk}/rekey/complete`, { code: issued.json?.code, newPubkey: fresh }, asOwner);
+        await settle(300);
+        return { issued: issued.status, done: done.status, error: done.json?.error ?? issued.json?.error, fresh };
+    };
+    const hK = topicHits().length;
+    const pK = ownerPushes().length;
+    const keysBefore = historyOf('sec.keys').length;
+    const r1 = await rekey(rey);
+    assert(r1.issued === 200 && r1.done === 200 && heldNodeRoleOf(r1.fresh) === 'admin' && heldNodeRoleOf(rey) === null,
+        `5e. an owner re-keys an admin through the routes: the role is on the new key (${r1.issued} ${r1.done} ${r1.error ?? ''})`);
+    const keyLines = historyOf('sec.keys');
+    assert(keyLines.length === keysBefore + 1 && /^An admin's key was replaced by a re-key, by an owner\. Open Settings to see who\.$/.test(keyLines[0]?.detail ?? ''),
+        `5e. told once as a key replaced, the role and how (${keyLines[0]?.detail})`);
+    const toK = ownerPushes().slice(pK).flatMap((x) => x.to);
+    assert(ownerPushes().length === pK + 1 && toK.includes('ExponentPushToken[olive-owner]') && toK.includes('ExponentPushToken[xav-new-owner]'),
+        `5e. the owners pushed at once (${JSON.stringify(toK)})`);
+    assert(topicHits().length === hK + 1 && /An admin's key was replaced by a re-key, by an owner\./.test(topicHits().at(-1)?.body ?? ''),
+        `5e. one line on the channel (${topicHits().length - hK})`);
+    const r2 = await rekey(mac);
+    assert(r2.done === 200 && heldNodeRoleOf(r2.fresh) === 'moderator' && historyOf('sec.keys').length === keysBefore + 1,
+        `5e. a moderator's re-key tells nothing as a key replaced (${r2.done} ${r2.error ?? ''})`);
+    const c5e = [...topicHits().slice(hK).map((h) => JSON.stringify(h.headers) + h.body), JSON.stringify(alerts.getAlertsStatus()),
+        ...ownerPushes().slice(pK).map((p) => p.title + p.body)];
+    assert(!c5e.some((p) => C5E.some((c) => p.includes(c)) || [rey, mac, r1.fresh, r2.fresh].some((k) => p.includes(k.slice(0, 12)))),
+        '5e. no member or key in any of these lines, pushes or the status');
 
     // ── 6. The server's shell: beanpool recover run as a real process, its notice delivered as index.ts's watch does ──
     alerts.resetAlertsForTests();

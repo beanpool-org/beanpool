@@ -593,6 +593,50 @@ async function main(): Promise<void> {
         const gone = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(t2.body.token) } });
         assert(gone.status === 401, `its maker no longer an owner or admin: 401 (${show(gone)})`);
 
+        // The demoted maker's token sent 100 times: the one refusal no per-grant limit bounds. Every line it leaves is a
+        // refusal's, within the minute's budget, and the "…and M more" line names its grant and why, so no flood can make
+        // its attempts anonymous (#1855 confirmation 2, findings 1 and 2, mutant R5).
+        const t2Id: string = t2.body.record.id;
+        endRefusalMinute();
+        pruneSystemLogs();
+        const demotedFrom = maxId();
+        const honestBefore = honest();
+        for (let i = 0; i < 100; i += 25) {
+            await Promise.all(Array.from({ length: 25 }, () => call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(t2.body.token) } })));
+        }
+        endRefusalMinute();
+        pruneSystemLogs();
+        const lineMeta = (l: { metadata: string | null }) => { try { return JSON.parse(l.metadata ?? '{}'); } catch { return {}; } };
+        const demotedLines = db.prepare("SELECT message, metadata FROM system_logs WHERE category = 'AGENT' AND id > ?").all(demotedFrom) as Array<{ message: string; metadata: string | null }>;
+        const demotedNamed = demotedLines.filter(l => l.message === 'Assistant refused: its member is no longer an owner or admin' && lineMeta(l).grant === t2Id).length;
+        const demotedSummaries = demotedLines.filter(l => /^Assistant refused \d+ more requests in that minute/.test(l.message));
+        const demotedCounted = demotedSummaries.reduce((s, l) => s + Number(lineMeta(l).grants?.[t2Id] ?? 0), 0);
+        const demotedKind = demotedSummaries.reduce((s, l) => s + Number(lineMeta(l).byStatus?.demoted ?? 0), 0);
+        assert(demotedLines.length > 0 && demotedLines.every(l => l.message.startsWith('Assistant refused')) && demotedLines.length <= 2 * (BUDGET + 1)
+            && demotedNamed + demotedCounted === 100 && demotedKind === demotedCounted && demotedCounted > 0 && honest() === honestBefore,
+        `100 calls with a demoted maker's token leave only refusal lines, budgeted (${demotedLines.length} ≤ ${2 * (BUDGET + 1)}), its grant named ${demotedNamed} times and counted ${demotedCounted} in the summary (as "demoted": ${demotedKind}); the assistant's reads untouched (${honest()}/${honestBefore})`);
+
+        // The minute rolls over by itself, with no hand ending it (mutant R4): 25 tokenless refusals, then 61 s later 25
+        // more. The second minute writes its own 20 lines one by one, and the first minute's "…and 5 more", counted by status.
+        endRefusalMinute();
+        const rollFrom = maxId();
+        for (let i = 0; i < 25; i++) await call('POST', '/mcp', { body: init, headers: MCP_HEADERS });
+        const rollMid = maxId();
+        const realNow = Date.now;
+        Date.now = () => realNow() + 61_000;
+        try {
+            for (let i = 0; i < 25; i++) await call('POST', '/mcp', { body: init, headers: MCP_HEADERS });
+        } finally {
+            Date.now = realNow;
+        }
+        const rolled = db.prepare("SELECT message, metadata FROM system_logs WHERE category = 'AGENT' AND id > ?").all(rollMid) as Array<{ message: string; metadata: string | null }>;
+        endRefusalMinute();
+        const firstNamed = countWhere("category = 'AGENT' AND message = 'Assistant refused a request' AND id > ? AND id <= ?", rollFrom, rollMid);
+        const firstMore = rolled.filter(l => /^Assistant refused 5 more requests in that minute/.test(l.message));
+        const secondNamed = rolled.filter(l => l.message === 'Assistant refused a request').length;
+        assert(firstNamed === BUDGET && secondNamed === BUDGET && firstMore.length === 1 && lineMeta(firstMore[0]).byStatus?.['401'] === 5,
+            `the refusal minute rolls over on its own: ${firstNamed} lines, then 61 s later ${secondNamed} fresh ones and the first minute's "…and 5 more" (${firstMore.length}, by status ${JSON.stringify(lineMeta(firstMore[0] ?? { metadata: null }).byStatus ?? null)})`);
+
         // ── 8. Revoke, method, Origin, the switch ─────────────────────────────────────────────────
         console.log('── 8. Revoked 401, GET 405, a foreign Origin 403, the switch off 404 ──');
         await client.close();

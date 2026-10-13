@@ -72,23 +72,37 @@ function nodeUrlFor(ctx: any): string {
 // rest counted into one "…and M more" line when the minute is over (claim-code.ts claimLogAdmit's pattern). logger.ts
 // pruneSystemLogs keeps those lines apart (AGENT_REFUSED_LOG_KEEP_ROWS), so no number of refusals, from anyone, takes
 // the line of a call that was let in (review of #1855: 5,000 tokenless POSTs emptied the assistant's own record).
+// The "…and M more" line counts them by status and by grant, so 20 tokenless requests opening a minute cannot hide which
+// grant was refused after them, a demoted maker's included (#1855 confirmation 2, finding 1). A grant id there is one a
+// token check found (at most TOKEN_LIMIT of them), never what a request sent.
 
 export const AGENT_REFUSAL_LOG_BUDGET = 20;
 const REFUSAL_LOG_WINDOW_MS = 60_000;
 let refusalWindowStart = 0, refusalWritten = 0, refusalUnwritten = 0;
 let refusalSummaryTimer: ReturnType<typeof setTimeout> | null = null;
+/** Why a request was refused, as the summary line counts it: the HTTP status, or what the status alone does not say. */
+export type RefusalKind = '401' | '403' | '415' | '429' | 'batch' | 'demoted';
+const refusalByKind = new Map<RefusalKind, number>();
+const refusalByGrant = new Map<string, number>();
 
 function writeRefusalSummary(): void {
     if (refusalSummaryTimer) clearTimeout(refusalSummaryTimer);
     refusalSummaryTimer = null;
     if (refusalUnwritten > 0) {
-        logger.warn('AGENT', `Assistant refused ${refusalUnwritten} more requests in that minute, past the ${AGENT_REFUSAL_LOG_BUDGET} logged one by one`);
+        logger.warn('AGENT', `Assistant refused ${refusalUnwritten} more requests in that minute, past the ${AGENT_REFUSAL_LOG_BUDGET} logged one by one`, {
+            byStatus: Object.fromEntries(refusalByKind), grants: Object.fromEntries(refusalByGrant),
+        });
     }
     refusalUnwritten = 0;
+    refusalByKind.clear();
+    refusalByGrant.clear();
 }
 
-/** Write a refused request's line (`message` starts "Assistant refused") within the minute's budget, else count it. */
-function logRefusal(message: string, metadata: Record<string, unknown>, now = Date.now()): void {
+/**
+ * Write a refused request's line (`message` starts "Assistant refused") within the minute's budget, else count it, by
+ * `kind` and by the grant a token check found (`metadata.grant`).
+ */
+function logRefusal(message: string, metadata: Record<string, unknown>, kind: RefusalKind, now = Date.now()): void {
     if (now - refusalWindowStart >= REFUSAL_LOG_WINDOW_MS) {
         writeRefusalSummary();
         refusalWindowStart = now;
@@ -100,6 +114,8 @@ function logRefusal(message: string, metadata: Record<string, unknown>, now = Da
         return;
     }
     refusalUnwritten++;
+    refusalByKind.set(kind, (refusalByKind.get(kind) ?? 0) + 1);
+    if (typeof metadata.grant === 'string') refusalByGrant.set(metadata.grant, (refusalByGrant.get(metadata.grant) ?? 0) + 1);
     if (!refusalSummaryTimer) {
         refusalSummaryTimer = setTimeout(writeRefusalSummary, Math.max(0, refusalWindowStart + REFUSAL_LOG_WINDOW_MS - now));
         refusalSummaryTimer.unref?.();
@@ -123,7 +139,7 @@ export function agentGrantFrom(ctx: any): GrantCheck {
     const record = verifyAutomationToken(m[1]);
     if (!record) return { ok: false, status: 401, error: 'Invalid, revoked or expired token' };
     if (record.scope !== 'agent') {
-        return { ok: false, status: 403, error: "Only an AI assistant's token (the agent scope) reaches /mcp: this token's scope is another" };
+        return { ok: false, status: 403, error: "Only an AI assistant's token (the agent scope) reaches /mcp: this token's scope is another", grantId: record.id };
     }
     const role = typeof record.createdBy === 'string' ? nodeRoleOf(record.createdBy) : null;
     if (role !== 'owner' && role !== 'admin') {
@@ -243,8 +259,8 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         if (!check.ok) {
             if (check.status === 401) ctx.set('WWW-Authenticate', 'Bearer realm="beanpool", error="invalid_token"');
             const from = logAddressTag(clientLimiterKey(ctx));
-            if (check.grantId) logRefusal('Assistant refused: its member is no longer an owner or admin', { grant: check.grantId, from });
-            else logRefusal('Assistant refused a request', { status: check.status, from });
+            if (check.status === 401 && check.grantId) logRefusal('Assistant refused: its member is no longer an owner or admin', { grant: check.grantId, from }, 'demoted');
+            else logRefusal('Assistant refused a request', { status: check.status, from, ...(check.grantId ? { grant: check.grantId } : {}) }, check.status === 403 ? '403' : '401');
             jsonRpcError(ctx, check.status, check.error);
             return;
         }
@@ -253,7 +269,7 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         const admitted = admitAgentCall(grant.id);
         if (!admitted.ok) {
             ctx.set('Retry-After', String(admitted.retryAfterSeconds));
-            logRefusal('Assistant refused: over its limit', { grant: grant.id });
+            logRefusal('Assistant refused: over its limit', { grant: grant.id }, '429');
             jsonRpcError(ctx, 429, admitted.error);
             return;
         }
@@ -264,7 +280,7 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         // capitals, or none) would be read by the SDK itself, past the 64 KiB cap and the one-message rule below.
         const rawBody: unknown = (ctx as any).rawBody;
         if (typeof rawBody !== 'string') {
-            logRefusal('Assistant refused: a body the server did not read', { grant: grant.id });
+            logRefusal('Assistant refused: a body the server did not read', { grant: grant.id }, '415');
             jsonRpcError(ctx, 415, 'Send the MCP message with Content-Type: application/json', -32600);
             return;
         }
@@ -276,7 +292,7 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         // One message per request: a JSON-RPC batch would carry hundreds of calls past the per-call limits (MCP dropped
         // batching in 2025-06-18; the SDK's client never sends one).
         if (Array.isArray(parsed)) {
-            logRefusal('Assistant refused: a batch', { grant: grant.id, messages: parsed.length });
+            logRefusal('Assistant refused: a batch', { grant: grant.id, messages: parsed.length }, 'batch');
             jsonRpcError(ctx, 400, 'Send one MCP message per request: batches are not accepted', -32600);
             return;
         }

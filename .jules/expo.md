@@ -161,3 +161,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `edit-project.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `edit-project.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-12 - [Export ErrorBoundary in rekey-code.tsx]
+**Issue:** `rekey-code.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `rekey-code.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.

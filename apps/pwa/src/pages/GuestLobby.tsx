@@ -31,6 +31,7 @@ const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage }
 
 import { helpSheetFor, webHelpKey } from '@beanpool/core';
 import { HelpDialog } from '../components/HelpDialog';
+import { LobbyHeader, LobbyHelpButton, LobbyJoin } from '../components/LobbyHeader';
 import { MemberGuide } from '../components/MemberGuide';
 import { getBundledGuide } from '../lib/guide';
 
@@ -58,14 +59,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
     const [helpOpen, setHelpOpen] = useState(false);
     const [guideAt, setGuideAt] = useState<string | null | undefined>(undefined);
     const helpWords = helpSheetFor(getBundledGuide(), webHelpKey({ tab, lobby: true }));
-    const helpButton = (className: string) => (
-        <button type="button" onClick={() => setHelpOpen(true)} aria-label="Help for this screen" title="Help for this screen" data-testid="lobby-help"
-            className={`${className} flex items-center justify-center bg-transparent border-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400`}>
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
-            </svg>
-        </button>
-    );
+    const helpButton = (className: string) => <LobbyHelpButton onClick={() => setHelpOpen(true)} className={className} />;
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [openPostId, setOpenPostId] = useState<string | null>(null);
     // The browser join over the lobby: where it opens ('guard' from Join, 'restore' from "Already have BeanPool?";
@@ -150,12 +144,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
         </section>
     );
 
-    const headerJoin = (className: string) => (
-        <button type="button" data-testid="header-join" onClick={() => openJoin('guard')} disabled={canHoldKey === null}
-            className={`border-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold cursor-pointer ${className}`}>
-            Join
-        </button>
-    );
+    const headerJoin = (className: string) => <LobbyJoin onClick={() => openJoin('guard')} disabled={canHoldKey === null} className={className} />;
 
     // The tab's own name: at 320 px with 1.3x text "Marketplace" runs under the Join button.
     const title = tab === 'home' ? 'Home' : tab === 'marketplace' ? 'Market' : 'Map';
@@ -191,33 +180,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                 {/* Opened at a name this community had before: where it lives now (lost-name L4). */}
                 <FormerAddressBanner />
                 {/* The mobile header, as a member's: the page's name in the middle, Join where Settings sits. */}
-                <header className="relative shadow-md md:hidden" style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '0.3rem 0.75rem',
-                    minHeight: '46px',
-                    borderBottom: tab === 'map' ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                    position: tab === 'map' ? 'absolute' : 'sticky',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    zIndex: 100,
-                    backgroundImage: "url('/assets/neon-vines-banner.png')",
-                    backgroundSize: '150% auto',
-                    backgroundPosition: 'center',
-                }}>
-                    <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
-                    <img src="/bean.png" alt="" aria-hidden="true" className="relative z-10 w-8 h-8 object-contain drop-shadow-sm" />
-                    <h1 className="absolute left-1/2 -translate-x-1/2 z-10 m-0 font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] whitespace-nowrap overflow-hidden text-ellipsis"
-                        style={{ maxWidth: 'calc(100% - 190px)' }}>
-                        {title}
-                    </h1>
-                    <div className="relative z-10 flex items-center gap-1">
-                        {helpButton('min-w-[44px] min-h-[44px] rounded-full text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]')}
-                        {headerJoin('min-h-[36px] px-4 rounded-full text-sm shadow-md')}
-                    </div>
-                </header>
+                <LobbyHeader tab={tab} title={title} onHelp={() => setHelpOpen(true)} onJoin={() => openJoin('guard')} joinDisabled={canHoldKey === null} />
                 {helpOpen && (
                     <HelpDialog
                         sheet={helpWords}

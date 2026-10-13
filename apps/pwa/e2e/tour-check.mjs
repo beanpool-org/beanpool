@@ -31,7 +31,7 @@ execFileSync(path.join(BIN, 'esbuild'), [path.join(PWA, 'e2e', 'tour-harness.tsx
     '--define:process.env.NODE_ENV="production"', '--define:import.meta.env={"DEV":false,"PROD":true,"MODE":"production","BASE_URL":"/"}', '--define:__APP_VERSION__="harness"',
     '--banner:js=globalThis.process = globalThis.process || { env: {} };', '--loader:.png=dataurl', '--log-level=error'], { cwd: PWA, env: { ...process.env, NODE_PATH: path.join(PWA, 'node_modules') } });
 execFileSync(path.join(BIN, 'tailwindcss'), ['-c', 'tailwind.config.js', '-i', 'src/index.css', '-o', path.join(DIR, 'app.css'),
-    '--content', 'src/components/TourBar.tsx,src/components/HelpDialog.tsx,src/components/HeaderControls.tsx,e2e/tour-harness.tsx,' + path.join(DIR, 'fabs.json')], { cwd: PWA, stdio: 'ignore' });
+    '--content', 'src/components/TourBar.tsx,src/components/HelpDialog.tsx,src/components/HeaderControls.tsx,src/components/LobbyHeader.tsx,e2e/tour-harness.tsx,' + path.join(DIR, 'fabs.json')], { cwd: PWA, stdio: 'ignore' });
 const AXE = fs.readFileSync(path.join(PWA, '..', '..', 'node_modules', 'axe-core', 'axe.min.js'), 'utf8');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
@@ -67,6 +67,16 @@ const measure = () => {
     const dlg = document.querySelector('[data-testid="help-dialog"]');
     if (dlg) {
         out.dialog = { height: Math.round(dlg.getBoundingClientRect().height), text: dlg.querySelector('[data-testid="help-text"]') ? ratio(dlg.querySelector('[data-testid="help-text"]')) : null, rows: [...dlg.querySelectorAll('[data-testid^="help-"]')].filter(e => e.tagName === 'BUTTON' && e.dataset.testid !== 'help-close').map(e => ratio(e)) };
+    }
+    const lobby = document.querySelector('[data-testid="lobby-header"]');
+    if (lobby) {
+        const t = lobby.querySelector('[data-testid="lobby-title"]'), tr = t.getBoundingClientRect();
+        const bean = lobby.querySelector('[data-testid="lobby-bean"]').getBoundingClientRect(), right = lobby.querySelector('[data-testid="lobby-header-right"]').getBoundingClientRect();
+        const help = lobby.querySelector('[data-testid="lobby-help"]').getBoundingClientRect();
+        // The words' own width (the h1 fills the room; its text is centred in it).
+        const range = document.createRange(); range.selectNodeContents(t); const w = range.getBoundingClientRect();
+        out.lobby = { bean: Math.round(bean.right), words: [Math.round(w.left), Math.round(w.right)], right: Math.round(right.left), whole: t.scrollWidth <= t.clientWidth,
+            helpTappable: document.elementFromPoint(help.left + help.width / 2, help.top + help.height / 2)?.closest('[data-testid="lobby-help"]') != null, fits: right.right <= innerWidth, title: [Math.round(tr.left), Math.round(tr.right)] };
     }
     const pill = document.getElementById('pill');
     if (pill) {
@@ -116,6 +126,12 @@ for (const dark of [false, true]) {
         rows.push([scheme, 'header ' + title, JSON.stringify(m.header)]);
         if (title !== 'Marketplace' && (!m.header.fits || m.header.gapToPill < 0 || m.header.gapToSync < 0)) problems.push(scheme + ' header ' + title + ' overlaps ' + JSON.stringify(m.header));
         if (m.scrollW > 320) problems.push(scheme + ' header ' + title + ': sideways ' + m.scrollW);
+    }
+    for (const title of ['Home', 'Market', 'Map']) {
+        const m = await open('view=lobby&title=' + encodeURIComponent(title));
+        rows.push([scheme, 'lobby header ' + title, JSON.stringify(m.lobby)]);
+        if (!m.lobby.whole || !m.lobby.fits || !m.lobby.helpTappable || m.lobby.words[0] < m.lobby.bean || m.lobby.words[1] > m.lobby.right) problems.push(scheme + ' lobby header ' + title + ' overlaps ' + JSON.stringify(m.lobby));
+        if (m.scrollW > 320) problems.push(scheme + ' lobby header ' + title + ': sideways ' + m.scrollW);
     }
     await ctx.close();
 }

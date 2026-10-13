@@ -1,7 +1,8 @@
 /**
  * The tour's bar, the "?" dialog and the mobile header's pill on their own (scratch/global-node/DESIGN-getting-started-
  * fable.md §2, §4, §5), for e2e/tour-check.mjs: the real components, the real stylesheet, nothing from a node.
- * ?view=step&i=N[&global=1] · ?view=help&key=<help-map key> · ?view=header&title=<words>; &dark=1 for the dark scheme.
+ * ?view=step&i=N[&global=1] · ?view=help&key=<help-map key> · ?view=header&title=<words> · ?view=lobby&title=<words>
+ * (the lobby's own mobile header, components/LobbyHeader.tsx); &dark=1 for the dark scheme.
  * A step also draws its tab's own bottom button (the Market's + ADD POST, the Map's +), with the classes and offset
  * tour-check.mjs read out of MarketplacePage.tsx and MapPage.tsx (fabs.json), under the real stylesheet's offset.
  * The header row is App.tsx's own inline styles around the real pill (the sync dot as its 26 px box).
@@ -10,6 +11,7 @@ import { createRoot } from 'react-dom/client';
 import { TourBar } from '../src/components/TourBar';
 import { HelpDialog } from '../src/components/HelpDialog';
 import { HEADER_TITLE_SHIFT_PX, HeaderControls } from '../src/components/HeaderControls';
+import { LobbyHeader } from '../src/components/LobbyHeader';
 import { helpSheetFor, tourSteps } from '@beanpool/core';
 import { getBundledGuide } from '../src/lib/guide';
 
@@ -34,6 +36,10 @@ function App() {
                 </header>
             </div>
         );
+    }
+    if (view === 'lobby') {
+        const title = q.get('title') ?? 'Market';
+        return <div style={{ minHeight: '100vh' }} className="bg-nature-50 dark:bg-nature-950"><LobbyHeader tab={title === 'Map' ? 'map' : 'home'} title={title} onHelp={() => {}} onJoin={() => {}} joinDisabled={false} /></div>;
     }
     if (view === 'help') {
         const sheet = helpSheetFor(getBundledGuide() as never, q.get('key') ?? 'market');

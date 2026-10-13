@@ -115,9 +115,10 @@ function bodyFieldReads(ts: typeof import('typescript'), files: string[], read: 
                     const idx = name ? bodyParams.get(name) : undefined;
                     if (idx) n.parameters.forEach((p, i) => { if (idx.has(i) && ts.isIdentifier(p.name)) grew = addAlias(n, p.name.text) || grew; });
                 }
-                if (ts.isCallExpression(n)) {
-                    const callee = ts.isIdentifier(n.expression) ? n.expression.text : ts.isPropertyAccessExpression(n.expression) ? n.expression.name.text : null;
-                    if (callee && !getters.has(callee)) n.arguments.forEach((a, i) => {
+                // A body handed to a function by name (a helper in src/); a method of some object (`re.test(v)`) is not followed.
+                if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
+                    const callee = n.expression.text;
+                    if (!getters.has(callee)) n.arguments.forEach((a, i) => {
                         if (!isBody(a)) return;
                         const set = bodyParams.get(callee) ?? new Set<number>();
                         if (!set.has(i)) { set.add(i); bodyParams.set(callee, set); grew = true; }
@@ -167,7 +168,12 @@ function bodyFieldReads(ts: typeof import('typescript'), files: string[], read: 
             }
         };
         (function v(n: import('typescript').Node) {
-            if (ts.isPropertyAccessExpression(n) || ts.isElementAccessExpression(n)) { const p = readPath(n); if (p) add(n, p); }
+            // A field, not a method called on one (`body.url.trim()`) nor its length.
+            const called = !!n.parent && ts.isCallExpression(n.parent) && n.parent.expression === n;
+            if ((ts.isPropertyAccessExpression(n) || ts.isElementAccessExpression(n)) && !called && !(ts.isPropertyAccessExpression(n) && n.name.text === 'length')) {
+                const p = readPath(n);
+                if (p) add(n, p);
+            }
             if (ts.isVariableDeclaration(n) && n.initializer && ts.isObjectBindingPattern(n.name)) { const p = readPath(n.initializer); if (p) pattern(n.name, p); }
             if (ts.isFunctionLike(n)) {
                 const name = fnName(n);
@@ -416,6 +422,8 @@ async function main() {
             else if (e.name.endsWith('.ts') && !e.name.endsWith('.d.ts') && !/^test-|harness|\.test\.ts$/.test(e.name)) files.push(p);
         }
     })(srcDir);
+    // The guard reads a body as data, not as fields: it is what is being checked, not a reader of it.
+    files.splice(files.indexOf(nodePath.join(srcDir, 'sample-id-guard.ts')), 1);
     const fieldReads = bodyFieldReads(ts, files, f => fs.readFileSync(f, 'utf8'), f => nodePath.relative(srcDir, f));
     const conversation = fieldReads.filter(f => f.route === 'POST /api/messages/conversation').map(f => f.path.join('.'));
     assert(fieldReads.length > 300 && ['participants', 'createdBy'].every(k => conversation.includes(k)),

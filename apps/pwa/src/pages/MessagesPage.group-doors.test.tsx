@@ -362,6 +362,13 @@ describe('a held group\'s id by every door (review of #1816)', () => {
         expect(order).toBe('second drawn first');
     });
 
+    it('a line sealed by Ben with the author column naming Ana: drawn as Ben\'s, never mine (no Edit, no Delete on it)', async () => {
+        node.lines[0] = { ...node.lines[0], author: ana.publicKey };
+        await openChat();
+        expect(screen.queryAllByLabelText('Edit message')).toHaveLength(0);
+        expect(screen.getAllByText('Ben').length).toBeGreaterThan(0);
+    });
+
     it('P9: reply, reaction and edit through the page, on a chat the node now says is unlocked (sticky): sealed, no words in the clear', async () => {
         let composer = await openChat();
         await send(composer, 'gloves from me');

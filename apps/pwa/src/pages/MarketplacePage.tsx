@@ -1194,7 +1194,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         {/* Avatar */}
                         {loadingProfile ? (
-                            <div className="w-14 h-14 rounded-full bg-nature-100 animate-pulse shrink-0" />
+                            <div className="w-14 h-14 rounded-full bg-nature-100 dark:bg-nature-800 animate-pulse shrink-0" />
                         ) : resolveAvatarUrl(authorProfile?.avatar) ? (
                             <img
                                 src={resolveAvatarUrl(authorProfile?.avatar)!}
@@ -1218,7 +1218,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <>
                                             {`${authorAvgRating.average.toFixed(1)} (${authorAvgRating.count})`}
                                             {authorAvgRating.asProvider && authorAvgRating.asProvider.count > 0 && (
-                                                <span className="ml-2 text-[0.65rem] bg-amber-50 px-1.5 py-0.5 rounded text-amber-700">
+                                                <span className="ml-2 text-[0.65rem] bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded text-amber-700 dark:text-amber-300">
                                                     📤 {authorAvgRating.asProvider.average.toFixed(1)}
                                                 </span>
                                             )}
@@ -1237,7 +1237,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 </p>
                             )}
                             {authorProfile?.contact && authorProfile.contact.visibility !== 'hidden' && (
-                                <p className="text-xs text-nature-500 mt-2 font-medium bg-oat-50 px-2 py-1 rounded-lg inline-block border border-nature-100">
+                                <p className="text-xs text-nature-500 dark:text-nature-300 mt-2 font-medium bg-oat-50 dark:bg-nature-900 px-2 py-1 rounded-lg inline-block border border-nature-100 dark:border-nature-800">
                                     📧 {authorProfile.contact.value}
                                 </p>
                             )}
@@ -1885,7 +1885,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     {showRatingForm && (
                                         <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mt-2 shadow-inner">
                                             <p className="text-sm text-nature-600 mb-3 text-center">
-                                                How was <strong className="text-nature-900">{targetName}</strong> as a <strong className="text-nature-900">{targetRole}</strong>?
+                                                How was <strong className="text-nature-900 dark:text-text-primary">{targetName}</strong> as a <strong className="text-nature-900 dark:text-text-primary">{targetRole}</strong>?
                                             </p>
                                             <div className="flex justify-center gap-2 mb-3">
                                                 {[1, 2, 3, 4, 5].map(star => (
@@ -1905,7 +1905,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 onChange={(e) => setRatingComment(e.target.value)}
                                                 placeholder="Leave a comment (optional)..."
                                                 maxLength={200}
-                                                className="w-full p-2.5 rounded-lg border border-nature-200 bg-white text-nature-900 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none mb-2"
+                                                className="w-full p-2.5 rounded-lg border border-nature-200 bg-white text-nature-900 text-sm dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none mb-2"
                                                 rows={2}
                                             />
                                             <button
@@ -1950,11 +1950,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </button>
 
                         {showReportForm && (
-                            <div className="bg-red-50 border border-red-100 rounded-xl p-4 mt-2 shadow-inner">
+                            <div className="bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900 rounded-xl p-4 mt-2 shadow-inner">
                                 <select
                                     value={reportReason}
                                     onChange={(e) => setReportReason(e.target.value)}
-                                    className="w-full p-2.5 rounded-lg bg-white border border-red-200 text-nature-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer mb-2"
+                                    className="w-full p-2.5 rounded-lg bg-white border border-red-200 text-nature-900 text-sm dark:bg-bg-input dark:text-text-primary dark:border-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer mb-2"
                                 >
                                     <option value="">Select a reason...</option>
                                     <option value="Spam or scam">Spam or scam</option>
@@ -2090,7 +2090,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <select
                                     value={editCategory}
                                     onChange={(e) => setEditCategory(e.target.value)}
-                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
+                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
                                     style={inputStyle}
                                 >
                                     {MARKETPLACE_CATEGORIES.map(cat => (
@@ -2103,7 +2103,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     value={editTitle}
                                     onChange={(e) => setEditTitle(e.target.value)}
                                     placeholder="Title"
-                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm"
+                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm"
                                     style={inputStyle}
                                 />
 
@@ -2112,7 +2112,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     value={editDescription}
                                     onChange={(e) => setEditDescription(e.target.value)}
                                     placeholder="Description"
-                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[100px] resize-y"
+                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[100px] resize-y"
                                     style={{ ...inputStyle, minHeight: '100px' }}
                                 />
 
@@ -2123,13 +2123,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         value={editCredits}
                                         onChange={(e) => setEditCredits(Number(e.target.value) || 0)}
                                         placeholder="Credits (B)"
-                                        className="flex-1 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-w-0"
+                                        className="flex-1 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-w-0"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     />
                                     <select
                                         value={editPriceType}
                                         onChange={(e) => setEditPriceType(e.target.value as any)}
-                                        className="w-28 shrink-0 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
+                                        className="w-28 shrink-0 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     >
                                         <option value="fixed">Total</option>
@@ -2217,7 +2217,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => setEditMode(false)}
-                                        className="flex-1 py-3 is-bold rounded-xl border border-nature-300 text-nature-600 bg-white hover:bg-nature-50 transition-colors text-[15px] font-bold shadow-sm"
+                                        className="flex-1 py-3 is-bold rounded-xl border border-nature-300 text-nature-600 bg-white hover:bg-nature-50 dark:bg-nature-900 dark:text-nature-200 dark:border-nature-600 dark:hover:bg-nature-800 transition-colors text-[15px] font-bold shadow-sm"
                                     >
                                         Cancel
                                     </button>
@@ -2290,7 +2290,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 )}
 
                 {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-4 text-red-600 text-sm text-center shadow-sm">
+                    <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mt-4 text-red-600 dark:text-red-300 text-sm text-center shadow-sm">
                         {error}
                     </div>
                 )}
@@ -2563,7 +2563,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {/* Connected Communities — multi-toggle (only if peer nodes exist) */}
                 {peerNodes.length > 0 && (
                     <div className="flex gap-2 mt-2 overflow-x-auto pb-1 scrollbar-hide">
-                        <span className="px-3 py-1.5 rounded-lg border-2 border-emerald-300 bg-emerald-50 text-emerald-700 text-xs font-black uppercase tracking-widest whitespace-nowrap inline-flex items-center shadow-sm">
+                        <span className="px-3 py-1.5 rounded-lg border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-black uppercase tracking-widest whitespace-nowrap inline-flex items-center shadow-sm">
                             🏠 Internal
                         </span>
                         {peerNodes.map(peer => {
@@ -2588,7 +2588,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
             {/* Error */}
             {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-red-600 text-sm text-center shadow-sm">
+                <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mb-4 text-red-600 dark:text-red-300 text-sm text-center shadow-sm">
                     {error}
                 </div>
             )}

@@ -1573,7 +1573,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </div>
                     ))}
                     {newPostPhotos.length < 5 && (
-                        <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer bg-nature-50 text-2xl text-nature-400 hover:text-nature-500 hover:border-nature-400 hover:bg-oat-50 transition-all shadow-sm">
+                        <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 dark:border-nature-600 flex items-center justify-center cursor-pointer bg-nature-50 dark:bg-nature-900 text-2xl text-nature-400 dark:text-nature-300 hover:text-nature-500 hover:border-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 transition-all shadow-sm">
                             📷
                             <input
                                 type="file"
@@ -2617,7 +2617,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     disabled={submitDisabled}
                     className={`w-full p-3 min-h-[48px] rounded-xl font-semibold transition-all ${
                         submitDisabled
-                            ? 'bg-oat-200 text-oat-500 cursor-not-allowed'
+                            ? 'bg-oat-200 text-oat-500 dark:bg-nature-800 dark:text-nature-400 cursor-not-allowed'
                             : (newPostType === 'poll' ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-md' : newPostType === 'event' ? 'bg-violet-700 hover:bg-violet-800 text-white shadow-md' : 'bg-nature-600 text-white hover:bg-nature-700 shadow-md')
                     }`}
                 >

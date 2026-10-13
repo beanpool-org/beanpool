@@ -1642,7 +1642,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 autoCapitalize="none"
                             />
                             {nodeTestResult && (
-                                <div className={`p-3 rounded-xl mb-3 text-xs font-mono border ${nodeTestResult.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                <div className={`p-3 rounded-xl mb-3 text-xs font-mono border ${nodeTestResult.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900'}`}>
                                     {nodeTestResult.ok ? `✅ Connected to "${nodeTestResult.callsign}" (${nodeTestResult.latencyMs}ms)` : `❌ ${nodeTestResult.error}`}
                                 </div>
                             )}

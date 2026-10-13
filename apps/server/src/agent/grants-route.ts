@@ -25,6 +25,7 @@ import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import { cleanMemberText, newBoundary } from './fence.js';
 import { agentCallsToday, forgetAgentGrant } from './limits.js';
+import { dropSuggestionsOf } from './suggestions.js';
 import { aiAssistantsAllowed, MCP_PATH, nodeUrlFor } from './mcp-route.js';
 import { offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
 import { agentConnectedWords, agentDisconnectedWords } from './welcome.js';
@@ -178,6 +179,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             return;
         }
         forgetAgentGrant(id);
+        dropSuggestionsOf(id);
         const by = actorOf(ctx) ?? 'owner:password';
         const role = roleOf(ctx);
         logger.info('AUTH', 'AI assistant disconnected', { tokenId: id, role, by: by.slice(0, 16) });

@@ -384,6 +384,7 @@ function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>, d
             : `${plural(n, 'emergency suspension', 'emergency suspensions')} the community is voting on`;
         case 'removals': return n === 1 ? '1 removal in its 7-day grace period' : `${n} removals in their 7-day grace period`;
         case 'unclean_shutdown': return 'the node restarted after an unclean shutdown';
+        case 'agent_suggestions': return `${plural(n, 'suggestion', 'suggestions')} from your AI assistant to approve`;
         default: return `${i.label.charAt(0).toLowerCase()}${i.label.slice(1)}: ${n}`;
     }
 }
@@ -428,7 +429,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     const role = nodeRoleOf(me);
     const row = getMember(me);
     if (role && row?.status === 'active' && !isVisitorKey(me)) {
-        const queue = getAdminQueue({ forModerator: role === 'moderator', forOwner: role === 'owner' });
+        const queue = getAdminQueue({ forModerator: role === 'moderator', forOwner: role === 'owner', forMember: me });
         const work = queue.items.filter(i => i.count > 0);
         if (queue.total > 0 && work.length) {
             const parts = work.map(i => adminItemInWords(i, c.switches.decisions));

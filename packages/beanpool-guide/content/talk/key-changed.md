@@ -38,7 +38,7 @@ The code isn't secret. It's safe to read out.
 
 Tap **Not now**. Nothing is sent and nothing changes. You can come back to the chat later.
 
-A paused chat stays paused until you continue. To keep talking without the new key, start a new chat.
+A paused chat may stay paused until you continue. To keep talking without the new key, start a new chat.
 
 If the code doesn't match, don't continue. Tell the person and your community's admins: someone may be trying to read your messages.
 

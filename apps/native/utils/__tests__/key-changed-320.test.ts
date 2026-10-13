@@ -11,6 +11,9 @@
  * does); the roster row is read from GroupDetailModal's source. The widths are a model of the components' own numbers
  * (each button its 48dp and 6dp margin), with a generous glyph width (0.62em, a bold Latin face), as
  * sso-button-layout.test.ts does.
+ *
+ * Rule 5's line under a DM's box (utils/dm-lock DM_UNPLACED_LINE, design §3.4 amendment 4 §3) is held to the same floor:
+ * the real ChatComposer drawn in light and in dark, the line whole, with no line limit and no fixed height around it.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -28,16 +31,25 @@ vi.mock('react-native', () => {
         if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
         const flat = Object.assign({}, ...[style].flat(3).filter((x) => x && typeof x === 'object'));
         if (typeof flat.fontSize === 'number') attrs['data-font'] = String(flat.fontSize);
+        if (['height', 'maxHeight'].some((k) => typeof flat[k] === 'number')) attrs['data-fixed'] = 'height';
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
-    return { Platform: { OS: 'android' }, StyleSheet: { create: <T,>(s: T) => s, hairlineWidth: 1 }, View: el('div'), Text: el('span'), Pressable: el('div') };
+    return {
+        Platform: { OS: 'android' }, StyleSheet: { create: <T,>(s: T) => s, hairlineWidth: 1 },
+        View: el('div'), Text: el('span'), Pressable: el('div'), TextInput: el('textarea'), ActivityIndicator: el('span'),
+    };
 });
+const theme = vi.hoisted(() => ({ colors: null as any }));
+vi.mock('../../app/ThemeContext', () => ({ useTheme: () => ({ colors: theme.colors }) }));
+vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}) } }));
 
 import { ChatBubble } from '../../components/chat/ChatBubble';
 import { makeChatStyles } from '../../components/chat/styles';
-import { lightColors } from '../../constants/colors';
+import { ChatComposer } from '../../components/chat/ChatComposer';
+import { lightColors, darkColors } from '../../constants/colors';
 import { KEY_CHANGED_HINT, markKeyChanged } from '../name-key-memory';
+import { DM_UNPLACED_LINE } from '../dm-lock';
 
 const SCREEN = 320;
 const FONT_SCALE = 1.3;
@@ -120,5 +132,45 @@ describe('"(key changed)" at 320dp with 1.3× text', () => {
         const column = (n: number) => SCREEN - 2 * 20 - 36 - num(style('memberInfo'), 'marginLeft') - num(style('memberInfo'), 'marginRight') - n * btn;
         expect([column(2), column(3)]).toEqual([120, 66]);
         expect(widthOf(longestWord(KEY_CHANGED_HINT), font)).toBeGreaterThan(column(3));
+    });
+});
+
+describe('rule 5\'s line under the DM box at 320dp with 1.3× text, light and dark (amendment 4 §3)', () => {
+    it('is the approved line, word for word', () => {
+        expect(DM_UNPLACED_LINE).toBe("This phone can't match this chat to one key, so sending is off. What you can read here may not be from them. Check with them in person or on a call, then start a new chat.");
+    });
+
+    it.each([['light', lightColors], ['dark', darkColors]] as const)('%s: drawn whole above the box, no line limit and no fixed height on it or around it, wrapping only between words', (name, colors) => {
+        theme.colors = colors;
+        const chat = makeChatStyles({ theme: name, colors } as any) as any;
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        act(() => root!.render(createElement(ChatComposer, {
+            styles: chat, onSend: () => {}, placeholder: 'Message...', accessibilityLabel: 'Message', disabled: true, notice: DM_UNPLACED_LINE, bottomPadding: 12,
+        }) as any));
+        const line = Array.from(host.querySelectorAll('span')).find((el) => el.textContent === DM_UNPLACED_LINE);
+        expect(line, 'the whole line is one Text').toBeTruthy();
+        expect(line!.getAttribute('data-lines')).toBeNull();
+        for (let el: Element | null = line!; el && el !== host; el = el.parentElement) expect(el.getAttribute('data-fixed')).toBeNull();
+        expect(line!.nextElementSibling?.querySelector('textarea'), 'the line sits above the box').toBeTruthy();
+        const font = chat.composerNotice.fontSize;
+        expect(line!.getAttribute('data-font')).toBe(String(font));
+        // The screen's whole width less the line's own padding; [id].tsx wraps the box in a View with no style.
+        const width = SCREEN - 2 * chat.composerNotice.paddingHorizontal;
+        expect(width).toBe(296);
+        expect(widthOf(longestWord(DM_UNPLACED_LINE), font)).toBeLessThanOrEqual(width / 3);
+        const src = fs.readFileSync(path.resolve(__dirname, '../../app/chat/[id].tsx'), 'utf-8');
+        expect(src).toMatch(/<View onLayout=\{measured\('composer'\)\}>\s*\{isPeerBlocked \? \(/);
+        // Word by word at the generous glyph width: every word on a line, no line wider than the screen gives it.
+        const lines: string[] = [];
+        for (const word of DM_UNPLACED_LINE.split(' ')) {
+            const last = lines[lines.length - 1];
+            if (last !== undefined && widthOf(`${last} ${word}`, font) <= width) lines[lines.length - 1] = `${last} ${word}`;
+            else lines.push(word);
+        }
+        expect(lines.join(' ')).toBe(DM_UNPLACED_LINE);
+        expect(lines.every((l) => widthOf(l, font) <= width)).toBe(true);
+        expect(lines.length).toBe(6);   // the RN-web replica draws it on 4 lines at 320 dp and 1.3× (Roboto is narrower than 0.62 em)
     });
 });

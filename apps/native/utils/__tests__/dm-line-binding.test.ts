@@ -1080,6 +1080,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         expect(participantsOf(dm.id)).toEqual([ana.publicKey, ben.publicKey].sort());
         const r = await trySend(dm.id, 'Ben, did you get my message?');
         expect(r.err?.name).toBe('DmKeyChangedError');
+        expect(refusedSendNotice(r.err, 'Ben')).toBe('The key behind Ben changed, so sending is paused.');   // the screen's one line
         expect({ sent: r.sent.length, requests: r.requests, rowsWritten: r.rowsWritten }).toEqual({ sent: 0, requests: [], rowsWritten: 0 });
         expect(await isDmKeyChangePending(dm.id)).toBe(true);
         expect(pinOf(ana, dm.id).peer).toBe(ben.publicKey);

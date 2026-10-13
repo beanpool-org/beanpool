@@ -52,10 +52,10 @@ export function isDmKeyChanged(e: unknown): e is DmKeyChangedError {
     return e instanceof DmKeyChangedError || (e as { name?: unknown } | null)?.name === 'DmKeyChangedError';
 }
 
-/** The one line the member sees while a key change waits: under the box, which stays disabled. */
+/** The one line the member sees while a key change waits (and for a send it refused): under the box, which stays disabled. */
 export function dmKeyChangedLine(peerName?: string | null): string {
     const name = peerName?.trim();
-    return `The key behind ${name && name !== 'Loading...' ? name : 'this chat'} changed, so sending is paused. Nothing was sent.`;
+    return `The key behind ${name && name !== 'Loading...' ? name : 'this chat'} changed, so sending is paused.`;
 }
 
 /**

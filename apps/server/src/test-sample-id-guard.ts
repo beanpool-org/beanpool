@@ -16,6 +16,10 @@
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-sample-id-guard.ts
  */
+// A module, not a global script: everything loads by `await import`, and without this its `main` collides with the one
+// in phone-door-test-harness.ts (TS2393 in the server build).
+export {};
+
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;

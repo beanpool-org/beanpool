@@ -89,11 +89,13 @@ export interface ChatRoute {
 }
 
 /**
- * Which screen `/chat/:id` draws and the id it gets, from one canonical id (screenIdOf): the held check and the DM guard
- * are asked of it, and a group's screen gets it, so no spelling of an id can be a DM to one check and a group to the next
- * (#1841 review, findings 1 and 4). A known DM is one conversation whatever the link's case: its kind is asked of the
- * spelling the phone keeps it under (so no second row is fetched from the node under another), and its DM screen gets that
- * spelling, so a push in capitals opens the conversation the phone already has (#1841 confirmation 1, C3 and C4).
+ * Which screen `/chat/:id` draws and the id it gets. The held check is asked of one canonical id (screenIdOf), and a
+ * group's screen gets it; the DM guard is asked of the link's own spelling, which it folds itself and answers whenever the
+ * phone knows a DM under it, so no spelling of an id can be a DM to one check and a group to the next (#1841 review,
+ * findings 1 and 4), and the spelling asked wins over a twin (#1863 review). A known DM is one conversation whatever the
+ * link's case: its kind is asked of the spelling the phone keeps it under (so no second row is fetched from the node under
+ * another), and its DM screen gets that spelling, so a push in capitals opens the conversation the phone already has
+ * (#1841 confirmation 1, C3 and C4).
  * Resolves once every fact is in; never rejects.
  */
 export async function routeChat(asks: ChatRouteAsks, id: string, link: ChatRouteLink): Promise<ChatRoute> {

@@ -77,9 +77,10 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId } from '../db';
+import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor } from '../db';
 import { routeChat } from '../chat-route';
 import { dmQuoteFor } from '../chat-actions';
+import { GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { encryptDmFormat2 } from '../e2e-crypto';
 import * as phoneCrypto from '../e2e-crypto';
@@ -929,5 +930,93 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
         h.store.set(DM_SEEN, '{unreadable');
         expect(await knownDmConversationId(dm.id)).toBe(dm.id);
         await expectBens(dm.id, 'Are you there?', await tapAndSend(dm.id, 'Are you there?'));
+    });
+
+    it('every local state of one id, asked in each spelling: a DM is known iff it is kept under one, the spelling asked wins wherever it is kept, and a known DM opens on the DM screen', async () => {
+        // For each of three spellings (lower case, capitals, mixed): no row, a dm row or a group's row; a sealed line or
+        // none; in the DM list or not. 1,728 states, each written in a fixed shuffled order (the DM list's order and
+        // SQLite's ties follow it), each asked in all three spellings (#1863 confirmation 1, E6).
+        const u = randomUUID();
+        const spellings = [u, u.toUpperCase(), [...u].map((c, i) => (i % 2 ? c.toLowerCase() : c.toUpperCase())).join('')];
+        const opts: Array<{ row: string | null; line: boolean; listed: boolean }> = [];
+        for (const row of [null, 'dm', 'group_thread']) for (const line of [false, true]) for (const listed of [false, true]) opts.push({ row, line, listed });
+        let seed = 1863;
+        const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+        h.me = { publicKey: ana.publicKey, privateKey: ana.privateKey };
+        const checked = { known: 0, askedKept: 0, dmScreen: 0 };
+        const wrong: any[] = [];
+        for (const a of opts) for (const b of opts) for (const c of opts) {
+            const st = [a, b, c];
+            for (const t of ['messages', 'conversation_participants', 'conversations']) sql.exec(`DELETE FROM ${t}`);
+            const order = [0, 1, 2].sort(() => rnd() - 0.5);
+            const seen: string[] = [];
+            for (const i of order) {
+                const s = st[i];
+                if (s.row) sql.prepare("INSERT INTO conversations (id, type, created_by, created_at) VALUES (?, ?, '', '2026-10-01T00:00:00.000Z')").run(spellings[i], s.row);
+                if (s.line) sql.prepare("INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp) VALUES (?, ?, ?, 'x', 'x25519-xc20p-v2:abc', 'text', '2026-10-01T00:00:01.000Z')").run(randomUUID(), spellings[i], ben.publicKey);
+                if (s.listed) seen.push(spellings[i]);
+            }
+            h.store.set(DM_SEEN, JSON.stringify(seen));
+            for (let i = 0; i < 3; i++) {
+                const asked = spellings[i];
+                const state = st.map((s) => `${s.row ?? '-'}${s.line ? '+line' : ''}${s.listed ? '+listed' : ''}`).join(' | ') + ` (order ${order.join('')}, asked #${i})`;
+                const known = await knownDmConversationId(asked);
+                const route = await routeChat(ROUTE_ASKS, asked, {});
+                // known iff the DM list holds any spelling, or a dm row or a sealed line is kept under the one asked, its lower case or its capitals
+                const folds = [asked, asked.toLowerCase(), asked.toUpperCase()];
+                const kept = st.some((s) => s.listed) || st.some((s, j) => folds.includes(spellings[j]) && (s.row === 'dm' || s.line));
+                checked.known++;
+                if ((known !== null) !== kept) wrong.push({ state, known, expected: kept ? 'a DM' : null });
+                if (st[i].listed || st[i].row === 'dm' || st[i].line) {
+                    checked.askedKept++;
+                    if (known !== asked) wrong.push({ state, known, expected: asked });
+                }
+                if (known !== null) {
+                    checked.dmScreen++;
+                    if (route.view !== 'dm' || route.screenId !== known) wrong.push({ state, route, expected: { view: 'dm', screenId: known } });
+                }
+            }
+        }
+        for (const t of ['messages', 'conversation_participants', 'conversations']) sql.exec(`DELETE FROM ${t}`);
+        expect({ wrong: wrong.length, first: wrong.slice(0, 3) }).toEqual({ wrong: 0, first: [] });
+        expect(checked).toEqual({ known: 5_184, askedKept: 4_320, dmScreen: 5_128 });
+    }, 120_000);
+});
+
+describe('a DM kept under a spelling the DM list never got: no group keys under any other spelling of its id (#1863 review, finding 2)', () => {
+    // A dm row or a sealed line written under a mixed-case spelling while the key memory couldn't be read, so the DM list
+    // never got it. The node then serves the id in another spelling as a group's chat, with Ana and a puppet: a group's
+    // screen asks for its keys (groupScreenKeyringFor), and is refused before any request, so no epoch is made to the puppet.
+    const reset = () => {
+        for (const t of ['messages', 'conversation_participants', 'conversations']) sql.exec(`DELETE FROM ${t}`);
+        h.store.delete('beanpool_dm_conversations_seen');
+    };
+    const row = (id: string, type: string) => sql.prepare("INSERT INTO conversations (id, type, created_by, created_at) VALUES (?, ?, '', '2026-10-01T00:00:00.000Z')").run(id, type);
+    const sealedLine = (id: string) => sql.prepare("INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp) VALUES (?, ?, ?, 'x', 'x25519-xc20p-v2:abc', 'text', '2026-10-01T00:00:01.000Z')").run(randomUUID(), id, ben.publicKey);
+    const keysFor = (id: string) => groupScreenKeyringFor(id).then(() => 'keys', (e: any) => (e?.message === GROUP_KEYS_FOR_DM_TEXT ? 'refused' : `error: ${e?.message}`));
+    let d: string;
+    let mixed: string;
+    beforeEach(() => {
+        h.me = { publicKey: ana.publicKey, privateKey: ana.privateKey };
+        d = randomUUID();
+        mixed = [...d].map((c, i) => (i % 2 ? c.toLowerCase() : c.toUpperCase())).join('');
+        reset();
+    });
+    afterAll(reset);
+
+    it('a dm row under the mixed spelling only: refused in lower case and in capitals', async () => {
+        row(mixed, 'dm');
+        expect({ lower: await keysFor(d), upper: await keysFor(d.toUpperCase()) }).toEqual({ lower: 'refused', upper: 'refused' });
+    });
+
+    it('a sealed line under the mixed spelling, whose row is a group\'s: refused', async () => {
+        row(mixed, 'group_thread');
+        sealedLine(mixed);
+        expect(await keysFor(d)).toBe('refused');
+    });
+
+    it('a group\'s row and nothing else: its screen gets its keys', async () => {
+        row(d, 'group_thread');
+        expect(await keysFor(d)).toBe('keys');
     });
 });

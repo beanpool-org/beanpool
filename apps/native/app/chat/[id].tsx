@@ -92,10 +92,12 @@ const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getC
  *
  * Nothing draws until the phone has asked its own key memory, its DM list and the conversation's kind (a SecureStore read
  * and a few small SQLite reads; the node only when there is no row yet): every screen here can post, and which one may is
- * what is being decided. Every fact is asked of one id, lower-cased, and a group's screen gets that id, so no spelling is
- * a DM to one check and a group to the next (routeChat; #1841 review, findings 1 and 4). The Inbox row, the event detail
- * and "Your groups" say the kind on the way in (`event=1`, `group=1`, `enterprise=1`); the conversation's type is the
- * fallback for an older link or a push.
+ * what is being decided. The held check is asked of the id lower-cased, and a group's screen gets that id; the DM guard is
+ * asked of the link's own spelling, which it folds itself and answers whenever the phone knows a DM under it. So no
+ * spelling is a DM to one check and a group to the next, and a link to a DM's own id opens that DM, never a twin in other
+ * capitals (routeChat; #1841 review, findings 1 and 4; #1863 review). The Inbox row, the event detail and "Your groups"
+ * say the kind on the way in (`event=1`, `group=1`, `enterprise=1`); the conversation's type is the fallback for an older
+ * link or a push.
  */
 export default function ChatRoute() {
     const { id, event, group, enterprise, created, name, info } = useLocalSearchParams<{

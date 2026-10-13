@@ -710,7 +710,7 @@ export function App() {
                             aria-label="Help for this screen"
                             title="Help for this screen"
                             data-testid="sidebar-help"
-                            className="ml-auto p-2 rounded-lg transition-colors cursor-pointer text-nature-600 dark:text-nature-400 hover:bg-nature-200/60 dark:hover:bg-nature-800/60"
+                            className="ml-auto p-2 rounded-lg transition-colors cursor-pointer text-nature-600 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60"
                         >
                             <HelpIcon className="w-5 h-5" />
                         </button>

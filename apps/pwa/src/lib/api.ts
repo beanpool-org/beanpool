@@ -281,6 +281,11 @@ export interface CommunityInfo {
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
         /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
+        /**
+         * Present, and true, only where no app reads the member directory whole (the worldwide community): people come
+         * by search, by nearness and by key (lib/members-on-demand.ts).
+         */
+        membersOnDemand?: true;
     };
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
     addresses?: string[];
@@ -1597,6 +1602,28 @@ export interface MemberSummary {
 
 export async function getAllMembers(): Promise<MemberSummary[]> {
     return request('GET', '/api/members');
+}
+
+/**
+ * A member's card as the directory's small forms answer it (`GET /api/members?keys=|q=|lat&lng&limit=`): what the
+ * whole directory gives each member, and `distanceKm` on the nearest-first form (whole km, null for no area).
+ */
+export interface MemberCard {
+    publicKey: string;
+    callsign: string;
+    joinedAt: string;
+    nodeRole?: string | null;
+    avatarUrl?: string | null;
+    profileUpdatedAt?: string | null;
+    earnedCredit?: number;
+    elderVouchedBy?: string | null;
+    archetype?: string | null;
+    distanceKm?: number | null;
+}
+
+/** One of the directory's small forms (lib/members-on-demand.ts builds the path), signed as every read is. */
+export async function getMemberCards(path: string, signal?: AbortSignal): Promise<MemberCard[]> {
+    return request('GET', path, undefined, signal);
 }
 
 // ===================== FEDERATION =====================

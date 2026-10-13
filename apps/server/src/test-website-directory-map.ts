@@ -12,7 +12,9 @@
  *  1. Rows whose name, email, phone and member count hold `<img src=x onerror=...>`, `"><script>`, and `javascript:`
  *     links: no element the popup doesn't build itself, no event handler, no link but mailto: and tel:, and each value
  *     shows as the text it is.
- *  2. A normal row still gets its mailto: and tel: links, its member count and its radius.
+ *     A node_url that isn't an https address with a real host name (javascript:, http:, an IP, localhost, a
+ *     user:password@ address) is no link.
+ *  2. A normal row still gets its mailto: and tel: links, its member count and its radius, and a link to its address.
  *  3. A row whose place isn't a number (Leaflet throws on it) is left off the map, and the rows after it still show.
  *  4. The totals count communities and whole-number member counts only.
  *
@@ -49,21 +51,23 @@ const JS_LINK = 'javascript:window.__pwned=1';
 const HOSTILE_ROWS = [
     {
         node_id: 'hostile-1', community_name: IMG, contact_email: SCRIPT, contact_phone: JS_LINK,
-        member_count: 3, service_radius: { lat: -28.5, lng: 153.4, radiusKm: 10 },
+        member_count: 3, service_radius: { lat: -28.5, lng: 153.4, radiusKm: 10 }, node_url: JS_LINK,
     },
     {
         node_id: 'hostile-2', community_name: SCRIPT, contact_email: `${JS_LINK}//@example.com`, contact_phone: IMG,
         member_count: '<b onmouseover="window.__pwned=1">9</b>', service_radius: { lat: -37.0, lng: 144.2, radiusKm: 0 },
+        node_url: 'http://plain.example.org',
     },
     {
         node_id: 'hostile-3', callsign: JS_LINK, contact_email: 'someone@example.com?body=' + IMG, contact_phone: `tel:+61;${JS_LINK}`,
         member_count: 4, service_radius: { lat: 51.5, lng: -0.1, radiusKm: `"><svg onload="window.__pwned=1">` },
+        node_url: 'https://user:pw@10.0.0.1:8443',
     },
 ];
-const NOT_A_PLACE = { node_id: 'nowhere', community_name: 'Nowhere', member_count: 1, service_radius: { lat: 'north', lng: 'east', radiusKm: 5 } };
+const NOT_A_PLACE = { node_id: 'nowhere', community_name: 'Nowhere', member_count: 1, service_radius: { lat: 'north', lng: 'east', radiusKm: 5 }, node_url: 'https://localhost' };
 const NORMAL = {
     node_id: 'mullum', community_name: 'Mullum Creek', contact_email: 'hello@mullum.example', contact_phone: '+61 (2) 6684-0000',
-    member_count: 42, service_radius: { lat: -28.55, lng: 153.5, radiusKm: 25 },
+    member_count: 42, service_radius: { lat: -28.55, lng: 153.5, radiusKm: 25 }, node_url: 'mullum.example.org/',
 };
 // The place that isn't one comes before the normal row, so the normal row shows only if the map goes on past it.
 const ROWS = [...HOSTILE_ROWS, NOT_A_PLACE, NORMAL];
@@ -165,8 +169,8 @@ async function main() {
         [...el.attributes].filter((a: any) => /^on/i.test(a.name)).map((a: any) => `${el.tagName}[${a.name}]`)));
     assert(handlers.length === 0, `no event handler on any element (found: ${handlers.join(', ') || 'none'})`);
     const links = opened.flatMap((box) => [...box.querySelectorAll('a')].map((a: any) => a.getAttribute('href') ?? ''));
-    const badLinks = links.filter((href: string) => !/^(mailto:[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+|tel:\+?\d+)$/.test(href));
-    assert(badLinks.length === 0, `no link but a plain mailto: or tel: (bad: ${badLinks.join(' | ') || 'none'})`);
+    const badLinks = links.filter((href: string) => !/^(mailto:[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+|tel:\+?\d+|https:\/\/[a-z0-9.-]+\.[a-z][a-z0-9-]*(:\d+)?)$/.test(href));
+    assert(badLinks.length === 0, `no link but a plain mailto:, tel: or https:// address (bad: ${badLinks.join(' | ') || 'none'})`);
     const hostileLinks = hostile.flatMap((box) => [...box.querySelectorAll('a')].map((a: any) => a.getAttribute('href')));
     assert(hostileLinks.length === 0, `none of the hostile values became a link (${hostileLinks.join(' | ') || 'none'})`);
     assert(w.__pwned === undefined, 'nothing a community published ran');
@@ -192,6 +196,10 @@ async function main() {
     assert(normalText.includes('Mullum Creek') && normalText.includes('42 members') && normalText.includes('25km radius'),
         `its name, member count and radius show (${JSON.stringify(normalText)})`);
     assert(normal?.querySelector('strong')?.textContent === 'Mullum Creek', 'its name is the popup\'s heading');
+    const visit = normal?.querySelector('a[href^="https:"]');
+    assert(visit?.getAttribute('href') === 'https://mullum.example.org' && visit?.textContent === 'Visit mullum.example.org →'
+        && visit?.getAttribute('target') === '_blank' && visit?.getAttribute('rel') === 'noopener',
+        `its bare node_url is a link to its https address, opening in a new tab (${visit?.outerHTML ?? 'no link'})`);
 
     console.log('\n── 3 and 4. a place that isn\'t one, and the totals ──');
     assert(!markers.some((m) => isNaN(m.lat)) && markers.some((m) => m.lat === -28.55),

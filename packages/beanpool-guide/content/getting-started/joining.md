@@ -9,7 +9,7 @@ related: home, finding-a-community, your-12-words, your-profile, communities, ho
 ## Two ways in
 
 - **With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.
-- **Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans and no community votes there. Beans, credit, the Commons and its Decisions live in local communities.
+- **Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans and no community votes there. Beans, credit, the Commons and its Decisions live in local communities. The global community shows you how they work, in an example community. See "Beans and the global community".
 
 No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can, or, in a community where only the admins invite, its admins. See "Finding a community near you".
 
@@ -100,7 +100,7 @@ A community's admins can turn invites off for the whole community.
 - Invite codes you made before the community chose this still work until their 30 days are up.
 - A ticket you made without a connection doesn't: whoever has it is asked to get a fresh invite from an admin.
 
-The global community has no invites: anyone joins it with a sign-in, one account each. There, the invite icon opens **Bring someone here**, with **Share the link** to send the global community's address. There is nothing to generate, and an invite code made for it does not work.
+The global community has no invites: anyone joins it in the BeanPool app, with 12 secret words or a sign-in. There, the invite icon opens **Bring someone here**, with **Share the link** to send the global community's address. There is nothing to generate, and an invite code made for it does not work.
 
 ## Requests to join
 

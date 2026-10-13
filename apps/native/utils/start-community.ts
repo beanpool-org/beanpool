@@ -9,9 +9,24 @@
  */
 
 import { BEANPOOL_WEBSITE_URL } from '@beanpool/core';
+import type { NodeProfile } from './node-profile';
 
-/** The website's own section on running a community's node. */
+/** The website's own section on running a community's node: only where the community's node names no page of its own. */
 export const RUN_A_NODE_URL = `${BEANPOOL_WEBSITE_URL}/#run-a-node`;
+
+/**
+ * Where "How to run a node" leads: the page the community's node names (`startCommunityUrl`, read by readNodeProfile),
+ * else beanpool.org's. No community needs our domain (memory no-domain-lock-in).
+ */
+export function runANodeUrl(profile: Pick<NodeProfile, 'startCommunityUrl'> | null | undefined): string {
+    return profile?.startCommunityUrl ?? RUN_A_NODE_URL;
+}
+
+/** The link's words, naming the site it opens. */
+export function runANodeLabel(url: string): string {
+    if (url === RUN_A_NODE_URL) return START_COMMUNITY_COPY.website;
+    try { return `How to run a node, on ${new URL(url).hostname}`; } catch { return 'How to run a node'; }
+}
 
 export const START_COMMUNITY_COPY = {
     title: 'Start a community',

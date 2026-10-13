@@ -2,7 +2,7 @@
 slug: faq
 title: Questions
 summary: Short answers to the questions members ask most.
-related: your-12-words, recovery, communities, holiday-mode, leaving-or-deleting, getting-help
+related: your-12-words, recovery, communities, beans-and-the-global-community, holiday-mode, leaving-or-deleting, getting-help
 ---
 
 ## Who runs my community?
@@ -50,6 +50,14 @@ Lost your 12 words too? An admin of your community can move your account to a ne
 ## Do I need a Google, Apple or Facebook account?
 
 No. A local community lets you in with an invite from one of its members. The global community lets anyone in with 12 secret words, or with a sign-in if you would rather. If you join with 12 words alone, they are your only way back into your account, and a new account made that way starts slower for its first week. You can add a sign-in later, from any phone or browser where you are in your account, and not while your account is suspended. See "Joining BeanPool" and "Your 12 words".
+
+## Why are there no Beans on the global community?
+
+Beans are a promise between people who can be found again. Anyone can join the global community with 12 words, so nobody there can yet vouch for who's who. Beans, deals, enterprises and Decisions live in local communities. The global community shows them from an example community, Example Valley, marked **🏘️ Local community**. See "Beans and the global community".
+
+## How do I start a community?
+
+Tap **Start a community** in the app. A community runs on its own small server: a spare computer at home, or a rented one for a few dollars a month. The software is free, and the community doesn't need beanpool.org. See "Beans and the global community".
 
 ## Can I belong to more than one community?
 

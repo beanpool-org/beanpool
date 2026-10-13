@@ -1208,6 +1208,7 @@ async function main(): Promise<void> {
             'POST /api/names/health/settings': { debtLinePct: 90, quietDays: 30 },
             'POST /api/names/consent': { version: '1:50:60' },
             'POST /api/local/admin/community-health': { debtLinePct: 90 },
+            'POST /api/local/admin/start-community-url': { url: 'https://start.example.org/how' },
             // An enterprise's keepers' vote: paying Alice out of the enterprise, and a yes on a vote.
             'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
                 params: { to: alice.pk, amount: 1 } },
@@ -1310,6 +1311,7 @@ async function main(): Promise<void> {
             'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
             'GET /api/local/admin/known-floor/member/:pubkey',
             'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health',
+            'POST /api/local/admin/start-community-url',
             'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
             'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',
             'POST /api/local/admin/members/:pubkey/burst/remove',

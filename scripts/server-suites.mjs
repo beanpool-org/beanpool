@@ -450,6 +450,7 @@ export const SUITES = [
     'test-dm-never-plaintext',
     'test-group-keys-http',
     'test-group-keys-over-time',
+    'test-key-succession',
     'test-dm-line-relay',
     'test-dm-standby-order',
     'test-keeper-read-cursor',

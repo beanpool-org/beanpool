@@ -28,6 +28,7 @@ import {
     makeKeySuccession,
     verifyKeySuccession,
     walkKeySuccession,
+    KEY_SUCCESSION_MAX,
     detectMentions,
     isGroupEncryptedNonce,
     GROUP_NONCE_PREFIX,
@@ -57,6 +58,46 @@ export type {
     FormerKey, GroupEpochProgress, GroupEpochReason, GroupEpochRecord, GroupKeyWrap, GroupLineBinding, GroupLinePart, GroupLinePayload,
     GroupLineVerifyMemo, GroupServedWrap, GroupTopUp, MakeGroupEpochInput, OpenedGroupLine,
 };
+
+/**
+ * Every former key a roster row's chain verifies to, newest first, in ONE walk: exactly the keys k for which
+ * walkKeySuccession(row, k) is true, with each statement's signature checked once instead of once per later key (review
+ * of #1826, NB8: a k-hop chain cost k(k+1)/2 verifies through the walker; the design's "verified once", §4 2b).
+ */
+export function verifiedFormerKeys(row: { memberPubkey: string; formerKeys?: readonly FormerKey[] | null }): string[] {
+    const chain = Array.isArray(row?.formerKeys) ? row.formerKeys : [];
+    if (typeof row?.memberPubkey !== 'string' || chain.length > KEY_SUCCESSION_MAX) return [];
+    const seen = new Set<string>([row.memberPubkey]);
+    const out: string[] = [];
+    let successor = row.memberPubkey;
+    for (const former of chain) {
+        if (!former || seen.has(former.pubkey) || !verifyKeySuccession(former, successor)) break;
+        out.push(former.pubkey);
+        seen.add(former.pubkey);
+        successor = former.pubkey;
+    }
+    return out;
+}
+
+/**
+ * The part of a served chain a phone walks, and the id it is remembered under (review of #1826, NB5): its entries up to
+ * the first that isn't the shape a node stores (a 64-character key, a date of at most 40 characters, an 88-character
+ * signature: POST …/me/key-succession refuses any other, and a walk stops there), none when the chain is longer than
+ * KEY_SUCCESSION_MAX. The id is those entries' own three fields, so whatever a node serves, a chain costs the phone's
+ * memory a few hundred characters an entry, and two different walkable chains never share an id.
+ */
+export function servedChain(formerKeys: unknown): { chain: FormerKey[]; id: string } {
+    const all: unknown[] = Array.isArray(formerKeys) ? formerKeys : [];
+    const chain: FormerKey[] = [];
+    if (all.length <= KEY_SUCCESSION_MAX) {
+        for (const f of all as Partial<FormerKey>[]) {
+            if (!f || typeof f.pubkey !== 'string' || f.pubkey.length !== 64 || typeof f.at !== 'string' || f.at.length > 40
+                || typeof f.sig !== 'string' || f.sig.length !== 88) break;
+            chain.push({ pubkey: f.pubkey, at: f.at, sig: f.sig });
+        }
+    }
+    return { chain, id: JSON.stringify(chain.map((f) => [f.pubkey, f.at, f.sig])) };
+}
 
 /** A new epoch: a fresh key wrapped to every recipient, signed. Yields to the UI every 10 wraps (the progress line). */
 export function makeEpochRecord(input: MakeGroupEpochInput, progress?: GroupEpochProgress): Promise<{ record: GroupEpochRecord; groupKey: Uint8Array }> {

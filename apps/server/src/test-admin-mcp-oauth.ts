@@ -19,6 +19,14 @@
  *   7. Registration bounds: the 101st pending → 429; an unused registration is gone after an hour; only https or localhost.
  *   8. A standby's copy holds no grants (per-server field, left out of every backup file).
  *   9. The owners' switch off → 404 on every OAuth endpoint and /mcp.
+ *  10. #1881 review: nothing sent on to an address nobody approved, nor after a No (finding 3); a client a grant holds
+ *      keeps the standard redirect. Registrations write nothing into the assistants' ring and their refusals are budgeted;
+ *      the connect and reuse lines are AUTH SECURITY lines (finding 4). At most 10 waiting per address, an IPv6 /64 one;
+ *      full, the oldest unopened makes room (5). X-Forwarded-Host only from our own proxy (6). Switch off → 404 for
+ *      every verb (7). Two refreshes at once: the strict rule holds (8).
+ *  11. Lifetimes and pins (finding 9): a code 60 s, access 1 h, 30 days idle, 5 a member, the role re-read at the token,
+ *      refresh with another client's id, framing headers, a forged revoke, no fragment or credentials in a redirect, an
+ *      OAuth assistant's suggestion approved by its member only, and no token, code or verifier in the log.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-admin-mcp-oauth" node ../../scripts/run-server-suites.mjs
  */
@@ -36,7 +44,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import { audienceOf, signSettingsSignin } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, submitReport } from './state-engine.js';
 import { updateLocalConfig, getLocalConfig, redactLocalConfig } from './config/local-config.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
@@ -45,7 +53,17 @@ import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
 import { db } from './db/db.js';
 import { getAlertsStatus } from './services/alerts.js';
 import { setSecurityAlertHandler } from './services/security-signal.js';
-import { OAUTH_PENDING_MAX, OAUTH_PENDING_TTL_MS, registerClient, resetOAuthForTests } from './agent/oauth.js';
+import {
+    isPendingRegistration, markRegistrationOpened, OAUTH_ACCESS_TTL_MS, OAUTH_CODE_TTL_MS, OAUTH_GRANTS_PER_MEMBER, OAUTH_PENDING_MAX,
+    OAUTH_PENDING_PER_ADDRESS, OAUTH_PENDING_TTL_MS, OAUTH_REFRESH_IDLE_MS, pendingRegistrations, registerClient, resetOAuthForTests,
+} from './agent/oauth.js';
+import { AGENT_REFUSAL_LOG_BUDGET, endAgentRefusalLogMinute } from './agent/mcp-route.js';
+import { limiterKeyForIp, setTrustConfigForTests } from './client-ip.js';
+
+// Time moves on for the lifetimes (section 11) only; 0 everywhere else.
+const realNow = Date.now.bind(Date);
+let skew = 0;
+Date.now = () => realNow() + skew;
 
 let BASE = '';
 let HOST = '';
@@ -411,9 +429,18 @@ async function main(): Promise<void> {
         const loopback = await call('POST', '/oauth/register', { body: { client_name: 'Desktop', redirect_uris: ['http://127.0.0.1:33418/callback'] } });
         assert(insecure.status === 400 && loopback.status === 201, `only https or localhost redirects (${insecure.status}, ${loopback.status})`);
         resetOAuthForTests();
-        for (let i = 0; i < OAUTH_PENDING_MAX; i++) registerClient({ client_name: `p${i}`, redirect_uris: [REDIRECT] }, `test-${i}`);
+        const held: string[] = [];
+        for (let i = 0; i < OAUTH_PENDING_MAX; i++) {
+            const r = registerClient({ client_name: `p${i}`, redirect_uris: [REDIRECT] }, `test-${i}`);
+            if (r.ok) held.push(r.client.clientId);
+        }
+        markRegistrationOpened(held[0]);
+        const room = await call('POST', '/oauth/register', { body: { client_name: 'Makes Room', redirect_uris: [REDIRECT] } });
+        assert(room.status === 201 && pendingRegistrations() === OAUTH_PENDING_MAX && isPendingRegistration(held[0]) && !isPendingRegistration(held[1]),
+            `the 101st pending registration: the oldest one nobody opened a page for makes room, an opened one stays (${show(room)})`);
+        for (const id of [...held, room.body?.client_id]) markRegistrationOpened(id);
         const over = await call('POST', '/oauth/register', { body: { client_name: 'One Too Many', redirect_uris: [REDIRECT] } });
-        assert(over.status === 429, `the 101st pending registration → 429 (${show(over)})`);
+        assert(over.status === 429 && pendingRegistrations() === OAUTH_PENDING_MAX, `100 waiting, every one opened: the next → 429 (${show(over)})`);
         resetOAuthForTests();
         const old = registerClient({ client_name: 'Stale', redirect_uris: [REDIRECT] }, 'test-old', Date.now() - OAUTH_PENDING_TTL_MS - 1);
         const stale = old.ok ? await call('GET', authorizeUrl(old.client.clientId)) : null;
@@ -445,6 +472,228 @@ async function main(): Promise<void> {
         assert(offs.every(r => r.status === 404), `the owners' switch off → 404 on every OAuth endpoint and /mcp (${offs.map(r => r.status).join(',')})`);
         updateLocalConfig({ aiAssistantsAllowed: true });
         assert((await mcpStatus(m6.access)) === 200, 'switched back on, the grant answers again');
+
+        // ── 10. #1881 review findings 3 to 8 ──
+        // Finding 3: a client nobody approved on a phone gets our page for any error, and a No sends the browser nowhere.
+        resetOAuthForTests();
+        resetLimits();
+        const EVIL = 'https://evil.example/landing';
+        const evilReg = await call('POST', '/oauth/register', { body: { client_name: 'Claude', redirect_uris: [EVIL] } });
+        const evilId = evilReg.body?.client_id ?? '';
+        const evilErrors = await Promise.all([
+            call('GET', `/oauth/authorize?client_id=${evilId}&response_type=token`),
+            call('GET', `/oauth/authorize?client_id=${evilId}&response_type=code`),
+            call('GET', `/oauth/authorize?client_id=${evilId}&response_type=code&code_challenge_method=S256&code_challenge=${'A'.repeat(43)}&scope=admin`),
+        ]);
+        assert(evilReg.status === 201 && evilErrors.every(r => r.status === 400 && !r.headers.get('location') && !/var id=/.test(r.text)),
+            `an unapproved client's bad request → our page, never a redirect to the address it registered (${evilErrors.map(r => `${r.status} ${r.headers.get('location') ?? ''}`).join(', ')})`);
+        const declined = await openConsent(authorizeUrl(evilId, { redirect_uri: EVIL }));
+        const no = await call('POST', `/api/local/admin/auth/pairing/${declined.id}/decline`, {
+            body: { memberPubkey: admin.pub, signature: await signSettingsSignin(BASE, 'decline', declined.id, declined.shortCode, signer(admin)), signedFor: HOST },
+        });
+        const afterNo = await call('POST', `/oauth/authorize/${declined.id}/wait`, { body: { wait: false }, headers: { Cookie: declined.cookie } });
+        assert(afterNo.status === 410 && afterNo.body?.status === 'declined' && !('redirect' in (afterNo.body ?? {})) && !afterNo.text.includes('evil.example'),
+            `a No on the phone: the page is told "declined" and sent nowhere (decline ${no.status}; ${show(afterNo)})`);
+        assert(declined.html.split('\n').filter(l => l.includes("r.status==='declined'")).every(l => !l.includes('go(r)')),
+            "the consent page's script never navigates after a No");
+        const claudeId = claude.clientInformation()?.client_id ?? '';
+        const trustedErr = await call('GET', authorizeUrl(claudeId, { response_type: 'token' }));
+        const tl = (() => { try { return new URL(trustedErr.headers.get('location') ?? ''); } catch { return null; } })();
+        assert(trustedErr.status === 302 && tl?.origin === 'https://assistant.example' && tl?.searchParams.get('error') === 'unsupported_response_type' && tl?.searchParams.get('iss') === BASE,
+            `a client a grant holds (approved on a phone) keeps the standard error redirect (${trustedErr.status} ${tl?.toString().slice(0, 100)})`);
+
+        // Finding 4: registrations write nothing into the ring kept for calls let in; their refusals are budgeted.
+        const admittedLines = () => (db.prepare("SELECT COUNT(*) AS n FROM system_logs WHERE category = 'AGENT' AND message NOT LIKE 'Assistant refused%'").get() as any).n as number;
+        const refusedRegistrations = () => db.prepare("SELECT message, metadata FROM system_logs WHERE category = 'AGENT' AND message LIKE 'Assistant refused a registration%' ORDER BY id").all() as any[];
+        resetOAuthForTests();
+        endAgentRefusalLogMinute();
+        const ringBefore = admittedLines(), refusedBefore = refusedRegistrations().length;
+        const flood: Record<number, number> = {};
+        for (let a = 1; a <= 3; a++) {
+            for (let i = 0; i < 20; i++) {
+                const x = await call('POST', '/oauth/register', { body: { redirect_uris: ['https://flood.example/cb'] }, headers: { 'X-Forwarded-For': `203.0.113.${a}` } });
+                flood[x.status] = (flood[x.status] ?? 0) + 1;
+            }
+        }
+        const refusedLines = refusedRegistrations().slice(refusedBefore);
+        assert(flood[201] === 30 && flood[429] === 30 && admittedLines() === ringBefore,
+            `60 registrations from 3 addresses (30 made, 30 refused) write nothing into the ring kept for calls let in (${JSON.stringify(flood)}; ${admittedLines() - ringBefore} lines)`);
+        assert(refusedLines.length === AGENT_REFUSAL_LOG_BUDGET && refusedLines.every(l => !String(l.metadata).includes('203.0.113.') && String(l.metadata).includes('ip#')),
+            `…their refusals go through the refusal budget (${refusedLines.length} written one by one), each naming the address's daily tag, never the address`);
+        endAgentRefusalLogMinute();
+        const summary = db.prepare("SELECT message FROM system_logs WHERE category = 'AGENT' AND message LIKE 'Assistant refused % more requests%' ORDER BY id DESC LIMIT 1").get() as any;
+        assert(/refused 10 more requests/.test(summary?.message ?? ''), `…and the rest are counted in one line at the minute's end (${summary?.message})`);
+        const secLines = db.prepare("SELECT category, level, message FROM system_logs WHERE message IN ('Assistant connected through OAuth', 'Assistant disconnected: a used code or refresh token was presented again')").all() as any[];
+        assert(secLines.filter(l => /connected through/.test(l.message)).length >= 3 && secLines.filter(l => /presented again/.test(l.message)).length >= 2
+            && secLines.every(l => l.category === 'AUTH' && l.level === 'SECURITY'),
+        `the connect and reuse lines are AUTH SECURITY lines, outside the assistants' rings (${[...new Set(secLines.map(l => `${l.category}/${l.level}`))].join(',')})`);
+
+        // Finding 5: at most 10 waiting from one address (an IPv6 /64 is one); its own oldest unopened one makes room.
+        resetOAuthForTests();
+        const v6Key = limiterKeyForIp('2001:db8:5:6::1');
+        const v6Ids: string[] = [];
+        for (let i = 0; i < OAUTH_PENDING_PER_ADDRESS; i++) {
+            const r = registerClient({ client_name: `v6-${i}`, redirect_uris: [REDIRECT] }, v6Key, Date.now() - 2 * 60_000);
+            if (r.ok) v6Ids.push(r.client.clientId);
+        }
+        const sameSlash64 = { 'X-Forwarded-For': '2001:db8:5:6:aaaa:bbbb:cccc:42' };
+        const eleventh = await call('POST', '/oauth/register', { body: { client_name: 'v6 again', redirect_uris: [REDIRECT] }, headers: sameSlash64 });
+        assert(v6Ids.length === OAUTH_PENDING_PER_ADDRESS && eleventh.status === 201 && pendingRegistrations() === OAUTH_PENDING_PER_ADDRESS
+            && !isPendingRegistration(v6Ids[0]) && isPendingRegistration(v6Ids[1]),
+        `an address (another address in the same IPv6 /64) with 10 waiting: its 11th drops its own oldest unopened one (${show(eleventh)}; ${pendingRegistrations()} waiting)`);
+        for (const id of [...v6Ids, eleventh.body?.client_id]) markRegistrationOpened(id);
+        const twelfth = await call('POST', '/oauth/register', { body: { client_name: 'v6 once more', redirect_uris: [REDIRECT] }, headers: sameSlash64 });
+        const otherAddress = await call('POST', '/oauth/register', { body: { client_name: 'Claude', redirect_uris: [REDIRECT] }, headers: { 'X-Forwarded-For': '198.51.100.7' } });
+        assert(twelfth.status === 429 && twelfth.body?.error === 'temporarily_unavailable' && otherAddress.status === 201,
+            `…its 10 all opened: its next → 429, and another address still registers (${show(twelfth)}; ${otherAddress.status})`);
+
+        // Finding 6: no public address: X-Forwarded-Host is believed only from our own proxy.
+        setTrustConfigForTests({ loopback: false, localSubnets: false });
+        const asForged = await call('GET', '/.well-known/oauth-authorization-server', { headers: { 'X-Forwarded-Host': 'evil.example' } });
+        const prmForged = await call('GET', '/.well-known/oauth-protected-resource/mcp', { headers: { 'X-Forwarded-Host': 'evil.example' } });
+        setTrustConfigForTests(undefined);
+        assert(asForged.body?.issuer === BASE && prmForged.body?.resource === `${BASE}/mcp` && JSON.stringify(prmForged.body?.authorization_servers) === JSON.stringify([BASE]),
+            `X-Forwarded-Host from a peer that isn't our proxy moves nothing: the issuer is the host reached (${asForged.body?.issuer}, ${prmForged.body?.resource})`);
+        const asProxied = await call('GET', '/.well-known/oauth-authorization-server', { headers: { 'X-Forwarded-Host': 'town.example' } });
+        assert(asProxied.body?.issuer === 'https://town.example', `…from our own proxy it names the host the member reached (${asProxied.body?.issuer})`);
+
+        // Finding 7: the switch off → 404 for every verb on every OAuth path, OPTIONS included.
+        updateLocalConfig({ aiAssistantsAllowed: false });
+        const doorPaths = ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp', '/.well-known/oauth-authorization-server',
+            '/oauth/register', '/oauth/authorize', `/oauth/authorize/${'a'.repeat(64)}/wait`, `/oauth/authorize/${'a'.repeat(64)}/confirm`, '/oauth/token', '/oauth/revoke'];
+        const notFound: string[] = [];
+        for (const p of doorPaths) {
+            for (const v of ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
+                const res = await fetch(`${BASE}${p}`, { method: v, redirect: 'manual', headers: { 'Content-Type': 'application/json', Origin: 'https://claude.ai' }, body: v === 'GET' || v === 'HEAD' ? undefined : '{}' });
+                await res.arrayBuffer();
+                if (res.status !== 404) notFound.push(`${v} ${p} ${res.status}`);
+            }
+        }
+        updateLocalConfig({ aiAssistantsAllowed: true });
+        assert(notFound.length === 0, `the switch off: all 7 verbs on all 9 OAuth paths → 404 (${notFound.slice(0, 6).join('; ')})`);
+        const preflight = await fetch(`${BASE}/oauth/token`, { method: 'OPTIONS', headers: { Origin: 'https://claude.ai' } });
+        await preflight.arrayBuffer();
+        assert(preflight.status !== 404, `switched on, the door answers its preflight again (${preflight.status})`);
+
+        // Finding 8 (kept): two refreshes at once with one refresh token: one is answered, the other revokes the grant.
+        resetLimits();
+        const race = await manualConnect(admin, 'Race Check');
+        const highBefore = notes.filter(n => n.high).length;
+        resetLimits();
+        const both = await Promise.all([1, 2].map(() => call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: race.refresh, client_id: race.clientId } })));
+        assert(both.map(r => r.status).sort().join(',') === '200,400' && !(getLocalConfig().agentOAuthGrants ?? []).some(g => g.clientName === 'Race Check')
+            && notes.filter(n => n.high).length === highBefore + 1,
+        `two refreshes at once: the strict rule holds, the grant revoked and the owners told, high (${both.map(r => r.status).join(',')})`);
+
+        // ── 11. Lifetimes and the pins finding 9 asked for ──
+        resetOAuthForTests();
+        resetLimits();
+        const life = await call('POST', '/oauth/register', { body: { client_name: 'Life', redirect_uris: [REDIRECT] } });
+        const lifeVerifier = crypto.randomBytes(32).toString('base64url');
+        const lifeCode = (await consent(authorizeUrl(life.body.client_id, { code_challenge: crypto.createHash('sha256').update(lifeVerifier).digest('base64url') }), owner)).redirect?.searchParams.get('code') ?? '';
+        skew = OAUTH_CODE_TTL_MS + 1000;
+        const lateCode = await call('POST', '/oauth/token', { form: { grant_type: 'authorization_code', code: lifeCode, client_id: life.body.client_id, redirect_uri: REDIRECT, code_verifier: lifeVerifier } });
+        skew = 0;
+        assert(lateCode.status === 400 && /expired/.test(lateCode.body?.error_description ?? ''), `a code past 60 s → refused (${show(lateCode)})`);
+        resetLimits();
+        const lg = await manualConnect(owner, 'Life Grant');
+        skew = OAUTH_ACCESS_TTL_MS + 1000;
+        const accessLate = await mcpStatus(lg.access);
+        resetLimits();
+        const refreshLate = await call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: lg.refresh, client_id: lg.clientId } });
+        const refreshedWorks = await mcpStatus(refreshLate.body?.access_token ?? '');
+        assert(accessLate === 401 && refreshLate.status === 200 && refreshedWorks === 200, `an access token dies at an hour; a refresh then works (${accessLate}, ${refreshLate.status}, ${refreshedWorks})`);
+        skew += OAUTH_REFRESH_IDLE_MS + 1000;
+        resetLimits();
+        const idle = await call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: refreshLate.body?.refresh_token ?? '', client_id: lg.clientId } });
+        skew = 0;
+        pruneAuthAttempts(Date.now() + 90 * 86_400_000); // the auth limiter's attempts made 30 days ahead
+        assert(idle.status === 400 && /30 days/.test(idle.body?.error_description ?? '') && !(getLocalConfig().agentOAuthGrants ?? []).some(g => g.clientName === 'Life Grant'),
+            `30 days without a refresh: refused, and the grant is gone (${show(idle)})`);
+
+        // Five OAuth assistants a member; the role is read again at the token step.
+        resetOAuthForTests();
+        const capper = keypair();
+        addMember(capper, 'Cap');
+        grantNodeRole(capper.pub, 'admin', 'SYSTEM');
+        const capStatuses: number[] = [];
+        let capLast: Reply | null = null;
+        for (let i = 0; i <= OAUTH_GRANTS_PER_MEMBER; i++) {
+            resetLimits();
+            capLast = (await manualConnect(capper, `Cap ${i}`)).token;
+            capStatuses.push(capLast.status);
+        }
+        assert(capStatuses.slice(0, OAUTH_GRANTS_PER_MEMBER).every(s => s === 200) && capStatuses[OAUTH_GRANTS_PER_MEMBER] === 400
+            && new RegExp(`You have ${OAUTH_GRANTS_PER_MEMBER} assistants`).test(capLast?.body?.error_description ?? ''),
+        `${OAUTH_GRANTS_PER_MEMBER} OAuth assistants a member; the next is refused in words (${capStatuses.join(',')})`);
+        resetOAuthForTests();
+        resetLimits();
+        const roleReg = await call('POST', '/oauth/register', { body: { client_name: 'Role Check', redirect_uris: [REDIRECT] } });
+        const roleVerifier = crypto.randomBytes(32).toString('base64url');
+        const roleCode = (await consent(authorizeUrl(roleReg.body.client_id, { code_challenge: crypto.createHash('sha256').update(roleVerifier).digest('base64url') }), admin)).redirect?.searchParams.get('code') ?? '';
+        revokeNodeRole(admin.pub, 'admin', owner.pub);
+        const demotedExchange = await call('POST', '/oauth/token', { form: { grant_type: 'authorization_code', code: roleCode, client_id: roleReg.body.client_id, redirect_uri: REDIRECT, code_verifier: roleVerifier } });
+        grantNodeRole(admin.pub, 'admin', 'SYSTEM');
+        assert(roleCode.length > 0 && demotedExchange.status === 400 && /no longer an owner or admin/.test(demotedExchange.body?.error_description ?? ''),
+            `approved as an admin, demoted before the exchange: the token step reads the role again (${show(demotedExchange)})`);
+
+        // Refresh with another client's id; a forged revoke; framing; a fragment or credentials in a redirect.
+        resetLimits();
+        const fg = await manualConnect(owner, 'Forge Check');
+        const fgId = (getLocalConfig().agentOAuthGrants ?? []).find(g => g.clientName === 'Forge Check')?.id ?? '';
+        resetLimits();
+        const forgedRefresh = await call('POST', '/oauth/revoke', { form: { token: `bpr_${fgId}_${crypto.randomBytes(32).toString('hex')}` } });
+        const forgedAccess = await call('POST', '/oauth/revoke', { form: { token: `bpo_${fgId}_${crypto.randomBytes(32).toString('hex')}` } });
+        assert(!!fgId && forgedRefresh.status === 200 && forgedAccess.status === 200 && (getLocalConfig().agentOAuthGrants ?? []).some(g => g.id === fgId) && (await mcpStatus(fg.access)) === 200,
+            'a refresh or access token forged for a real grant id at /oauth/revoke: 200 (RFC 7009), and the grant stays');
+        const otherClient = await call('POST', '/oauth/register', { body: { client_name: 'Other Client', redirect_uris: [REDIRECT] } });
+        resetLimits();
+        const wrongClient = await call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: fg.refresh, client_id: otherClient.body?.client_id ?? '' } });
+        const rightClient = await call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: fg.refresh, client_id: fg.clientId } });
+        assert(wrongClient.status === 400 && /another client/.test(wrongClient.body?.error_description ?? '') && rightClient.status === 200,
+            `a refresh token sent with another client's id → refused, nothing revoked: its own client's refresh still works (${show(wrongClient)}; ${rightClient.status})`);
+        resetLimits();
+        const framed = await fetch(authorizeUrl(otherClient.body?.client_id ?? ''), { redirect: 'manual' });
+        await framed.text();
+        assert(framed.status === 200 && /frame-ancestors 'none'/.test(framed.headers.get('content-security-policy') ?? '') && framed.headers.get('x-frame-options') === 'DENY',
+            'the consent page cannot be framed (CSP frame-ancestors none, X-Frame-Options DENY)');
+        const fragment = await call('POST', '/oauth/register', { body: { redirect_uris: ['https://assistant.example/cb#x'] } });
+        const credentials = await call('POST', '/oauth/register', { body: { redirect_uris: ['https://user:pw@assistant.example/cb'] } });
+        assert(fragment.status === 400 && credentials.status === 400, `a redirect address with a fragment or credentials in it is refused (${fragment.status}, ${credentials.status})`);
+
+        // An OAuth assistant's suggestion: filed, on its member's card, approved by that member only.
+        const poster = keypair(), reporter = keypair();
+        addMember(poster, 'Pat');
+        addMember(reporter, 'Rita');
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+                    VALUES ('post-oauth-1', 'offer', 'general', 'Bike repair', 'Bring it on Saturday.', 10, ?, 'active')`).run(poster.pub);
+        const report = submitReport(reporter.pub, poster.pub, 'Looks like spam', 'post-oauth-1');
+        resetLimits();
+        const sg = await manualConnect(admin, 'Suggesting Claude');
+        const filed = await call('POST', '/mcp', {
+            body: rpc('tools/call', 1, { name: 'suggest_action', arguments: { kind: 'dismiss_report', report_id: report?.id, reason: 'It is a real offer.' } }),
+            headers: { ...MCP_HEADERS, ...bearer(sg.access) },
+        });
+        resetLimits();
+        const sAdmin = await keySignIn(admin), sOwner = await keySignIn(owner);
+        const card = ((await call('GET', '/api/local/admin/agent/suggestions', { headers: { 'X-Admin-Session': sAdmin ?? '' } })).body?.suggestions ?? [])[0];
+        assert(filed.status === 200 && !filed.body?.result?.isError && card?.agent?.name === 'Suggesting Claude' && card?.agent?.member === 'Adam' && card?.approve?.path === `/api/local/admin/reports/${report?.id}/dismiss`,
+            `an OAuth assistant's suggestion is filed and waits on its member's card with Approve (${show(filed)})`);
+        const byOwner = await call('POST', `/api/local/admin/reports/${report?.id}/dismiss`, { body: { suggestion: card?.id }, headers: { 'X-Admin-Session': sOwner ?? '' } });
+        resetLimits();
+        const byMember = await call('POST', `/api/local/admin/reports/${report?.id}/dismiss`, { body: { suggestion: card?.id }, headers: { 'X-Admin-Session': sAdmin ?? '' } });
+        const reportNow = (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(report?.id) as any)?.status;
+        assert(byOwner.status === 403 && byMember.status === 200 && reportNow === 'reviewed',
+            `only its member approves it (owner ${byOwner.status}, member ${byMember.status}, report ${reportNow})`);
+
+        // No access token, refresh token, code or verifier in any log line or the local config.
+        const secrets = [tokens?.access_token, tokens?.refresh_token, m1.code, m1.verifier, m1.access, m1.refresh, m2.access, m2.refresh, r1.body?.refresh_token,
+            lifeCode, lifeVerifier, lg.access, lg.refresh, refreshLate.body?.access_token, fg.access, fg.refresh, sg.access, sg.refresh]
+            .filter((s): s is string => typeof s === 'string' && s.length >= 16);
+        const logText = (db.prepare('SELECT message, metadata FROM system_logs').all() as any[]).map(r => `${r.message} ${r.metadata ?? ''}`).join('\n');
+        const cfgText = JSON.stringify(getLocalConfig());
+        const leaked = secrets.filter(s => logText.includes(s) || cfgText.includes(s));
+        assert(secrets.length >= 16 && leaked.length === 0, `no access token, refresh token, code or verifier in any log line or the local config (${secrets.length} checked, ${leaked.length} found)`);
     } finally {
         console.log(`\n${passed}/${run} passed`);
         setTimeout(() => process.exit(process.exitCode ?? 0), 50);

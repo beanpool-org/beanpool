@@ -568,6 +568,80 @@ describe('wash analysis: what floors read (S2)', () => {
         }
     });
 
+    it('race: a refresh `again` starts past the served analysis\'s bound holds off no one-go read (a take-over at boot, Step 6.1, no read while R_t runs)', async () => {
+        // As the race above, but no floor read comes while R_t runs (a quiet node just after boot): R_t lands, its snapshot
+        // already past 10 s + c, and `again` starts R_2 at once. A read then is past today's bound, and R_2 started after it:
+        // waiting on R_2 would serve R_t's analysis for how late R_2 started plus its whole run.
+        const realNow = Date.now;
+        const realPerf = performance.now;
+        const t = { jump: 0, perf: 0 };
+        const base = realNow();
+        performance.now = () => (t.perf += 60);
+        Date.now = () => base + t.jump + Math.floor(t.perf);
+        try {
+            const db = fileDb();
+            const ring = seedRaceWorld(db);
+            clearWashTradingCache(db); // the take-over hook...
+            void refreshWashTradingInBackground(db); // ...and its refresh R_t
+            const rT = washRefreshRunning(db);
+            void refreshWashTradingInBackground(db); // Step 6.1 while R_t runs: again
+            await turn(); // R_t has taken its snapshot
+            completeRaceTrades(db, ring); // a ring trades after it, and no floor read comes
+            t.jump += 15_000; // R_t stalls past 10 s + c
+            for (let i = 0; washRefreshRunning(db) === rT && i < 1000; i++) await turn();
+            const r2 = washRefreshRunning(db);
+            expect(r2).not.toBeNull();
+            expect(r2).not.toBe(rT);
+            await turn(); // R_2 has taken its snapshot
+            const n = washAnalysisCount(db);
+            const q = ring.map((k) => qualifiedTradeValue(db, k));
+            expect(washAnalysisCount(db) - n).toBe(1); // one go at the read, as today
+            expect(q.every((v) => v === 0)).toBe(true);
+            await r2;
+            closeWashSnapshotHandle(db);
+            db.close();
+        } finally {
+            Date.now = realNow;
+            performance.now = realPerf;
+        }
+    });
+
+    it('race: Step 6.1\'s refresh, started after a slow boot past the served analysis\'s bound, holds off no one-go read (no refresh stalls)', async () => {
+        // The take-over hook's refresh R_t lands quickly; boot steps 2.7-6 (the image-store check, TLS, listen) then take
+        // 12 s, past 10 s + c, with no read possible before listen. Step 6.1 starts R_b; the first read comes while it runs.
+        const realNow = Date.now;
+        const realPerf = performance.now;
+        const t = { jump: 0, perf: 0 };
+        const base = realNow();
+        performance.now = () => (t.perf += 60);
+        Date.now = () => base + t.jump + Math.floor(t.perf);
+        try {
+            const db = fileDb();
+            const ring = seedRaceWorld(db);
+            clearWashTradingCache(db); // the take-over hook...
+            await refreshWashTradingInBackground(db); // ...and its refresh R_t, which lands
+            const landed = getWashTradingEnforcement(db);
+            expect(washRefreshRunning(db)).toBeNull();
+            completeRaceTrades(db, ring); // a ring trades after R_t's snapshot
+            t.jump += 12_000; // boot steps 2.7-6
+            void refreshWashTradingInBackground(db); // Step 6.1: R_b
+            const rB = washRefreshRunning(db);
+            expect(rB).not.toBeNull();
+            await turn(); // R_b has taken its snapshot
+            const n = washAnalysisCount(db);
+            const q = ring.map((k) => qualifiedTradeValue(db, k));
+            expect(washAnalysisCount(db) - n).toBe(1); // one go at the read, as today
+            expect(q.every((v) => v === 0)).toBe(true);
+            expect(getWashTradingEnforcement(db)).not.toBe(landed);
+            await rB;
+            closeWashSnapshotHandle(db);
+            db.close();
+        } finally {
+            Date.now = realNow;
+            performance.now = realPerf;
+        }
+    });
+
     it('mode: a quick analysis (under 50 ms of steps) stays one go, every 10 s of reads, and never starts a refresh', () => {
         const db = fileDb();
         seedRaceWorld(db);

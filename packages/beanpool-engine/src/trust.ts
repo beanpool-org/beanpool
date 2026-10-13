@@ -345,6 +345,9 @@ interface WashState {
     again: boolean;
     /** The refresh running can no longer land: an analysis worked out in one go since it started read later rows. */
     stale: boolean;
+    /** When the refresh running started (Date.now()): one that `again` or the server started past the bound of the
+     *  analysis serving floors holds off no one go (a refresh a read started always starts before that bound). */
+    refreshStartedAt: number;
     /** When the hard cap was last logged (once a minute). */
     capSaidAt: number;
 }
@@ -353,7 +356,7 @@ const washState = new WeakMap<Db, WashState>();
 
 function stateOf(db: Db): WashState {
     let s = washState.get(db);
-    if (!s) washState.set(db, s = { analyses: 0, current: null, generation: 0, refreshing: null, again: false, stale: false, capSaidAt: 0 });
+    if (!s) washState.set(db, s = { analyses: 0, current: null, generation: 0, refreshing: null, again: false, stale: false, refreshStartedAt: 0, capSaidAt: 0 });
     return s;
 }
 
@@ -471,10 +474,12 @@ export function getWashTradingEnforcement(db: Db): WashAnalysis {
         }
         return analyseNow(db, s);
     }
-    // Past today's bound with no refresh coming that can land (a quiet spell: refreshes start only at reads; or the one
-    // running read its rows before an analysis worked out in one go since, so `again`'s next waits behind it): one go at
-    // the read, as before, so no read gets rows older than today's rules ever served.
-    if ((!s.refreshing || s.stale) && now - current.snapshotAt >= WASH_KEEP_MS + current.stepMs) return analyseNow(db, s);
+    // Past today's bound with no refresh coming that can land in time (a quiet spell: refreshes start only at reads; or
+    // the one running read its rows before an analysis worked out in one go since, so `again`'s next waits behind it; or
+    // the one running started after this bound, by `again` or the server, so waiting on it would add how late it
+    // started to its run time): one go at the read, as before, so no read gets rows older than today's rules ever served.
+    const bound = current.snapshotAt + WASH_KEEP_MS + current.stepMs;
+    if ((!s.refreshing || s.stale || s.refreshStartedAt >= bound) && now >= bound) return analyseNow(db, s);
     if (!s.refreshing && now - current.snapshotAt >= washRefreshDueMs(current)) startRefresh(db, s);
     return current.analysis;
 }
@@ -491,7 +496,7 @@ function analyseNow(db: Db, s: WashState): WashAnalysis {
     const snapshotAt = Date.now();
     const analysis = drainSteps(timedSteps(analysisSteps(db, false, db), time));
     if (s.refreshing) s.stale = true;
-    land(s,{ analysis, snapshotAt, finishedAt: Date.now(), stepMs: time.ms, wallMs: performance.now() - wallStart });
+    land(s, { analysis, snapshotAt, finishedAt: Date.now(), stepMs: time.ms, wallMs: performance.now() - wallStart });
     return analysis;
 }
 
@@ -518,6 +523,7 @@ function startRefresh(db: Db, s: WashState): void {
         });
     s.refreshing = run;
     s.stale = false;
+    s.refreshStartedAt = Date.now();
 }
 
 /**

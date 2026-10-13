@@ -275,6 +275,7 @@ async function main(): Promise<void> {
         check(!('addressRequest' in redacted), 'a backup file\'s local config leaves the request out');
         const stager = fs.readFileSync(path.join(SRC, 'services/stager.ts'), 'utf8');
         check(/CREDENTIALS_LEFT_OUT = \[[^\]]*'addressRequest'/.test(stager), 'the stager\'s copy leaves it out');
+        check(/CREDENTIALS_LEFT_OUT = \[[^\]]*'agentOAuthGrants'/.test(stager), 'the stager\'s copy leaves out the assistants\' OAuth grants too (per-server, #1881)');
     } finally {
         for (const n of started) { try { if (n.proc.pid && n.proc.exitCode === null) process.kill(-n.proc.pid, 'SIGKILL'); } catch { /* gone */ } }
         registrar.close();

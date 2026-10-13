@@ -15,7 +15,7 @@ related: privacy, trust-badges, joining, people
 - Tap the photo to change it.
 - Tap **Save Profile**.
 
-You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, and the short tour of how BeanPool works.
+You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, roughly where you are (on the global community), and the short tour of how BeanPool works.
 
 ## A name and a photo come first
 

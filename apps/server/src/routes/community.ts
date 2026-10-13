@@ -2151,9 +2151,23 @@ router.post('/api/reports', async (ctx) => {
 
 // ======================== FRIENDS ========================
 
+// A member's friends list (each friend's name and face) is read by that member alone, whatever ENFORCE_READ_AUTH says:
+// every app asks only for its own. Anyone else, an admin and the owner included, is refused before any lookup with one
+// answer whatever key is named, so a refusal says nothing of whether that key is a member or has friends; walking
+// friends of friends would otherwise list a members-on-demand node's people past the search's floor and caps.
 router.get('/api/friends/:publicKey', async (ctx) => {
-    const pubkey = ctx.params.publicKey;
-    ctx.body = getFriends(pubkey);
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (ctx.params.publicKey !== actor) {
+        ctx.status = 403;
+        ctx.body = { error: 'You may only read your own friends' };
+        return;
+    }
+    ctx.body = getFriends(actor);
 });
 
 router.post('/api/friends/add', async (ctx) => {

@@ -70,12 +70,15 @@ describe('the Market\'s no-Beans words (design §1 row 2)', () => {
 });
 
 describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", () => {
-    it('global First steps gains "See how Beans work ›" only where Beans are previewed', async () => {
-        const { globalStepLines, homeBeansPreview } = await import('../home-cards');
-        const steps = { firstPost: false } as never;
-        expect(globalStepLines(steps, undefined, false, true).map(l => l.id)).toEqual(['post', 'beans']);
-        expect(globalStepLines(steps, undefined, false, true)[1]).toMatchObject({ text: 'See how Beans work ›', done: false, suggestion: true });
-        expect(globalStepLines(steps, undefined, false).map(l => l.id)).toEqual(['post']);
+    it('global First steps gains no "See how Beans work" line (the getting-started tour owns it); the Your Beans card shows where Beans are previewed', async () => {
+        const { firstSteps, homeBeansPreview } = await import('../home-cards');
+        const answer = {
+            profile: 'global', features: { beans: false, showcase: true }, me: null,
+            cards: { steps: { firstPost: false, joinedAt: new Date().toISOString() } },
+        } as never;
+        const steps = firstSteps(answer, { interests: [], role: 'member', knocked: false } as never);
+        expect(steps.lines.map(l => l.id)).toEqual(['post']);
+        expect(steps.lines.map(l => l.text).join(' ')).not.toMatch(/Beans/);
         expect(homeBeansPreview({ features: { beans: false, showcase: true } } as never)).toBe(true);
         expect(homeBeansPreview({ features: { beans: false } } as never)).toBe(false);
         expect(homeBeansPreview({ features: { beans: true, showcase: true } } as never)).toBe(false);

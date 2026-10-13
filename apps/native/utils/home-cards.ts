@@ -25,7 +25,7 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
-    type SkyToday, featureModeFor, LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+    type SkyToday, featureModeFor } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
@@ -711,7 +711,7 @@ export function marketForward(params: { tab?: string | string[]; dealsTab?: stri
  * A First steps line (§3.1), with what is done. `suggestion`: a line that never holds the card open (the phone can't
  * tick it: a knock is kept on the community knocked on, not here); it goes once the phone remembers a knock.
  */
-export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite' | 'post' | 'ask' | 'beans'; text: string; done: boolean; suggestion?: true }
+export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite' | 'post' | 'ask'; text: string; done: boolean; suggestion?: true }
 
 /**
  * `canInvite`: whether the reader can invite here ({@link invitesForReader}). The node sends `invited: false` wherever
@@ -750,17 +750,17 @@ function communityToAsk(find: HomeFind | undefined): boolean {
  * remembers no knock, a suggestion to ask one to let them in, which never holds the card open. The design's "Set your area" is left
  * out, as on the web: no screen on the phone sets the account's area yet, and every line opens a screen.
  */
-export function globalStepLines(
-    steps: NonNullable<HomeCards['steps']>, find: HomeFind | undefined, knocked: boolean, beansPreview: boolean = false,
-): StepLine[] {
+export function globalStepLines(steps: NonNullable<HomeCards['steps']>, find: HomeFind | undefined, knocked: boolean): StepLine[] {
     const lines: StepLine[] = [{ id: 'post', text: 'Post something free or for swap', done: steps.firstPost }];
-    // Where the node previews Beans (the showcase, DESIGN-global-showcase-fable §1 row 1): a step that opens the Ledger.
-    if (beansPreview) lines.push({ id: 'beans', text: LOCAL_COMMUNITY_LINES.firstStep, done: false, suggestion: true });
     if (!knocked && communityToAsk(find)) lines.push({ id: 'ask', text: 'Ask a community to let you in', done: false, suggestion: true });
     return lines;
 }
 
-/** Whether this answer previews Beans: /api/home's `features` are the reader's own (W1), with the node's `showcase`. */
+/**
+ * Whether this answer previews Beans: /api/home's `features` are the reader's own (W1), with the node's `showcase`.
+ * Then Home shows the Your Beans preview card; First steps gains no line for it, since the getting-started tour's Ledger
+ * step is the way in (scratch/global-node/DESIGN-getting-started-fable.md pick 10, Marty yes).
+ */
 export function homeBeansPreview(answer: Pick<HomeAnswer, 'features'>): boolean {
     return featureModeFor('beans', answer.features as Record<string, unknown>) === 'preview';
 }
@@ -796,7 +796,7 @@ export function firstSteps(
         const lines = stepLines(s, ctx.interests.length > 0, invitesForReader(answer.features, ctx.role));
         return { lines, note: null, show: lines.some(l => !l.done) };
     }
-    const lines = globalStepLines(s, answer.cards.find, !!ctx.knocked, homeBeansPreview(answer));
+    const lines = globalStepLines(s, answer.cards.find, !!ctx.knocked);
     const note = probationSentence(answer.me?.probation);
     const joined = Date.parse(answer.me?.joinedAt ?? s.joinedAt ?? '');
     const young = Number.isFinite(joined) && (ctx.now ?? Date.now()) - joined < STEPS_NEW_DAYS * DAY_MS;

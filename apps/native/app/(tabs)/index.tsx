@@ -638,7 +638,6 @@ export default function HomeScreen() {
         else if (step === 'photo') router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } });
         else if (step === 'interests') openTune();
         else if (step === 'ask') router.push('/find-community');
-        else if (step === 'beans') router.navigate('/(tabs)/ledger');
         else router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
     }, [openTune]);
 
@@ -729,7 +728,7 @@ export default function HomeScreen() {
                 const steps = firstSteps(answer, { interests, role, knocked });
                 const stepsCard = frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
                 // Where Beans are previewed, Your Beans rides under First steps (design §1 row 1): no API, the Ledger's
-                // example behind its link; it goes when First steps is taken off Home.
+                // example behind its link; its own "Hide this card" puts it away, and it goes when First steps does.
                 return homeBeansPreview(answer) ? <>{stepsCard}<YourBeansPreviewCard colors={colors} /></> : stepsCard;
             }
             case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} />);

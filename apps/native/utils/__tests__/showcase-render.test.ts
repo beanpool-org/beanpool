@@ -195,6 +195,26 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(routes.pushed).toContain('/(tabs)/ledger');
         });
 
+        it("Home's Your Beans card hides on its own, remembered for this community, and stays hidden when Home draws again", async () => {
+            await render(createElement('div', null,
+                createElement('div', { 'data-testid': 'steps-stand-in' }, 'First steps'), createElement(YourBeansPreviewCard, { colors })));
+            const hide = host.querySelector('[data-testid="home-beans-preview-hide"]')!;
+            expect(hide.getAttribute('aria-label')).toBe('Hide the Your Beans card');
+            await press(hide);
+            expect(host.querySelector('[data-testid="home-card-beans-preview"]')).toBeNull();
+            expect(text()).toContain('First steps');
+            expect(store.map.get('beanpool_showcase_card:https://global.example:beans')).toBe('1');
+            await render(createElement('div', null));
+            await render(createElement(YourBeansPreviewCard, { colors }));
+            expect(host.querySelector('[data-testid="home-card-beans-preview"]')).toBeNull();
+            // Another community on this phone still shows it.
+            store.map.set('beanpool_anchor_url', 'https://other.example');
+            await render(createElement('div', null));
+            await render(createElement(YourBeansPreviewCard, { colors }));
+            expect(host.querySelector('[data-testid="home-card-beans-preview"]')).not.toBeNull();
+            expect(net.calls).toEqual([]);
+        });
+
         it('the net spy: every press on every preview asks nothing of a node and writes nothing', async () => {
             await render(createElement('div', null,
                 createElement(LocalCommunityMark, { variant: 'strip', feature: 'beans' }),

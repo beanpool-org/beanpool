@@ -132,7 +132,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 // null, not [], when the directory couldn't be read (the node busy with heavy lists answers 503): the
                 // members list below keeps who it had, and the next fetch reads them again.
                 // Read only once the node has said it reads whole (the effect below reads them when it says so).
-                getAllMembers && membersOnDemandRef.current === false ? getAllMembers().catch(() => null) : null,
+                membersOnDemandRef.current !== false ? null : getAllMembers ? getAllMembers().catch(() => null) : null,
             ]);
             setTreasuries(tresData.treasuries || []);
             setDecisions(decData.decisions || []);

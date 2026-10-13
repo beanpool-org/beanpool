@@ -240,7 +240,7 @@ async function main(): Promise<void> {
         assert(byAdmin.status === 403, `an admin's session cannot make one (${show(byAdmin)})`);
         await new Promise(r => setTimeout(r, 50));
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent');
-        assert(told.some(e => /An AI assistant \(Claude Desktop\) was connected by an owner: it can read health, backups, totals, reports and join requests, and take a backup\./.test(e.detail)),
+        assert(told.some(e => /An AI assistant \(Claude Desktop\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, and suggest actions it cannot take\./.test(e.detail)),
             `owners are told an assistant connected, in the server's words (${told.map(e => e.detail).join(' | ')})`);
 
         const client = await connect(AGENT);
@@ -255,7 +255,7 @@ async function main(): Promise<void> {
             .replace('dismiss or act on a report, restore a post, lift a mute, answer a join request, send an announcement', SUGGESTABLE_WORDS),
             'with suggestions and backups (S4) the welcome is §6 word for word, its list of suggestions the kinds built');
         assert(/SUGGEST actions \(dismiss or act on a report, restore a post hidden by reports\)/.test(instructions) && !/lift a mute|answer a join request|send an announcement/.test(instructions)
-            && /and take a backup; and SUGGEST/.test(instructions) && /approve a suggestion; reach another server\./.test(instructions),
+            && /; take a backup; and SUGGEST/.test(instructions) && /approve a suggestion; reach another server\./.test(instructions),
             'it promises only the suggestions it can file (no mute, join request or announcement yet) and says the assistant cannot approve one');
 
         // ── 2. tools/list, prompts/list ───────────────────────────────────────────────────────────
@@ -286,7 +286,9 @@ async function main(): Promise<void> {
         console.log('── 3. Every tool answers redacted at the source ──');
         const answers: Record<string, any> = {};
         for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup')) {
+            // suggest_action (S4) files one card on r1: swept like every answer; it changes no report.
             const args: Record<string, unknown> = t.name === 'report_get' ? { report_id: r1!.id }
+                : t.name === 'suggest_action' ? { kind: 'dismiss_report', report_id: r1!.id, reason: 'Swept: the reporter may be mistaken.' }
                 : ['reports_list', 'knocks_list'].includes(t.name) ? { include_text: true, ...(t.name === 'reports_list' ? { status: 'all' } : {}) } : {};
             const r = await client.callTool({ name: t.name, arguments: args });
             answers[t.name] = r;

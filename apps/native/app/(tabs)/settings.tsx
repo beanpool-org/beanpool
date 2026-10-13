@@ -2099,6 +2099,7 @@ export default function SettingsScreen() {
                                 <Text style={[styles.infoText, { marginBottom: 12 }]} accessibilityLiveRegion="polite">{protectionNote}</Text>
                             )}
                             <KeeperProtectionPanel
+                                colors={colors}
                                 protection={protectionFrom(protectionResult)}
                                 communityName={protectionNodeLabel || undefined}
                                 hasWords={hasMnemonic(identity)}

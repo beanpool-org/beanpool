@@ -6,12 +6,13 @@
  */
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
-import { colors } from '../constants/colors';
+import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { signedGet, signedRequestWithMethod } from '../utils/db';
 import { ConsentText } from './ConsentText';
 import { readKnownConsent, saveKnownConsent, shouldOfferConsent, showsConsentCard, canWithdrawConsent, consentHeading, type KnownConsent } from '../utils/known-consent';
 
 export function KnownConsentCard() {
+    const styles = useStyles(makeStyles);
     const [consent, setConsent] = useState<KnownConsent | null>(null);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
@@ -76,7 +77,8 @@ export function KnownConsentCard() {
     );
 }
 
-const styles = StyleSheet.create({
+// Themed: this card sits in Settings, and the light info-blue box glared on the dark page.
+const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     card: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 16, backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border },
     heading: { fontSize: 18, fontWeight: '700', color: colors.text.heading, marginBottom: 8 },
     body: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginBottom: 8 },

@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native';
-import { colors } from '../constants/colors';
+import { colors as lightColors, type AppColors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
 import { GoogleButton, AppleButton, FacebookButton } from './SsoButton';
 import { SSO_PROVIDER_NAMES as PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
@@ -76,8 +76,11 @@ export function KeeperProtectionPanel({
     onProtectSso,
     onDisconnectSso,
     hasWords,
+    colors = lightColors,
 }: {
     protection: Protection;
+    /** The drawn theme's colours. Settings passes them; welcome, which is light throughout, keeps the default. */
+    colors?: AppColors;
     /**
      * Whether this phone holds the 12 words (`hasMnemonic`). A phone restored with a sign-in holds
      * none, so the panel must not call them the way back or tell the member to keep them written down.
@@ -92,6 +95,7 @@ export function KeeperProtectionPanel({
     onProtectSso?: (provider: SsoProvider) => void;
     onDisconnectSso?: (provider: SsoProvider) => void;
 }): React.JSX.Element {
+    const styles = stylesFor(colors);
     const enrolledSso = protection.enrolledSso ?? [];
     const allProviders: SsoProvider[] = Platform.OS === 'ios'
         ? ['apple', 'google', 'facebook']
@@ -261,7 +265,17 @@ export function KeeperProtectionPanel({
     );
 }
 
-const styles = StyleSheet.create({
+const cache = new WeakMap<AppColors, ReturnType<typeof make>>();
+function stylesFor(colors: AppColors) {
+    let s = cache.get(colors);
+    if (!s) {
+        s = make(colors);
+        cache.set(colors, s);
+    }
+    return s;
+}
+
+const make = (colors: AppColors) => StyleSheet.create({
     panel: { borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1 },
     covered: { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border },
     wordsOnly: { backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border },

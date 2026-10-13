@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, type ShowcaseFeature,
+    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, type ShowcaseFeature,
 } from '@beanpool/core';
 import { startCommunityUrl, useCommunityInfo } from '../lib/features';
 
@@ -105,7 +105,8 @@ function WithSheet({ feature, ways, children }: { feature: ShowcaseFeature; ways
     return (
         <>
             {children(() => setOpen(true))}
-            {open && <LocalCommunitySheet feature={feature} onClose={() => setOpen(false)} {...ways} />}
+            {/* A marker inside a tappable card (a poll, a listing): its clicks and the sheet's stay here. */}
+            {open && <div onClick={(e) => e.stopPropagation()}><LocalCommunitySheet feature={feature} onClose={() => setOpen(false)} {...ways} /></div>}
         </>
     );
 }
@@ -162,12 +163,15 @@ export function LocalCommunityStrip({ feature, ...ways }: { feature: ShowcaseFea
     );
 }
 
+/** A listing's deal action, "Request · Beans held safely": the pill after it carries the 🏘️. */
+export const DEAL_ACTION_LABEL = LOCAL_COMMUNITY_LINES.dealAction.replace(LOCAL_COMMUNITY_EMOJI, '').trim();
+
 /** A button that would move Beans or cast a vote: its place and words kept, dashed, with the pill; opens the sheet. */
 export function LocalCommunityAction({ feature, label, className = '', ...ways }: { feature: ShowcaseFeature; label: string; className?: string } & LocalCommunityWays) {
     return (
         <WithSheet feature={feature} ways={ways}>
             {(open) => (
-                <button type="button" onClick={open} data-testid="local-community-action"
+                <button type="button" onClick={(e) => { e.stopPropagation(); open(); }} data-testid="local-community-action"
                     className={`${TONE} inline-flex flex-wrap items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-bold ${className}`}>
                     <span>{label}</span><LocalCommunityPill />
                 </button>
@@ -181,7 +185,7 @@ export function LocalCommunityLine({ feature, text, ...ways }: { feature: Showca
     return (
         <WithSheet feature={feature} ways={ways}>
             {(open) => (
-                <button type="button" onClick={open} data-testid="local-community-line"
+                <button type="button" onClick={(e) => { e.stopPropagation(); open(); }} data-testid="local-community-line"
                     className="block w-full text-left text-sm font-semibold text-blue-700 dark:text-blue-300 underline-offset-2 hover:underline">
                     {text}
                 </button>

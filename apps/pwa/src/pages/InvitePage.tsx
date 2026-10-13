@@ -15,6 +15,9 @@ import { useState, useEffect } from 'react';
 import { buildOfflineInviteCode, generateInvite, getMyInvites, getInviteTree, request, type CommunityInfo, type InviteCode } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { marked, modeFor, useReaderFeatures } from '../lib/features';
+import { LocalCommunityLine } from '../components/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, OFFLINE_ADMINS_ONLY_TEXT, type InviteRole,
@@ -25,6 +28,8 @@ const QRCodeSVGComponent = QRCodeSVG as any;
 
 interface Props {
     identity: BeanPoolIdentity;
+    /** Where the 🏘️ sheet's in-app ways forward lead (Home's Find card, a guide page). */
+    onNavigate?: (tab: string, contextId?: string) => void;
 }
 
 interface TreeNode {
@@ -35,7 +40,9 @@ interface TreeNode {
     children: TreeNode[];
 }
 
-export function InvitePage({ identity }: Props) {
+export function InvitePage({ identity, onNavigate }: Props) {
+    // Invites live in a local community here (preview or read-only, lib/features.ts): the line under the link (§1 row 8).
+    const reader = useReaderFeatures();
     const [invites, setInvites] = useState<InviteCode[]>([]);
     const [generating, setGenerating] = useState(false);
     const [newCode, setNewCode] = useState<string | null>(null);
@@ -307,9 +314,16 @@ export function InvitePage({ identity }: Props) {
                     📤 Bring someone here
                 </h2>
                 <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
-                    {refused ?? 'This community doesn’t use invites. Anyone can join it with a sign-in, so just share its link.'}
+                    {refused ?? 'This community doesn’t use invites. Anyone can join it with 12 words or a sign-in, so just share its link.'}
                 </p>
                 {linkActions()}
+                {marked(modeFor('invites', nodeInfo, reader)) && (
+                    <div className="mt-5" data-testid="invites-local-line">
+                        <LocalCommunityLine feature="invites" text={LOCAL_COMMUNITY_LINES.invites}
+                            onNearYou={onNavigate ? () => onNavigate('home') : undefined}
+                            onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                    </div>
+                )}
             </div>
         );
     }

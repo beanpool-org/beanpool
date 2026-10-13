@@ -31,15 +31,19 @@ export function startCommunityUrl(info: CommunityInfo | null | undefined): strin
     return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : START_COMMUNITY_URL_DEFAULT;
 }
 
-/** The node's info, read once and shared; null until it arrives, and null for good when the node can't be asked. */
-export function useCommunityInfo(): CommunityInfo | null {
+/**
+ * The node's info, read once and shared; null until it arrives, and null for good when the node can't be asked.
+ * `enabled` false: nothing is read (a screen that has no use for it this time, as a visitor's map).
+ */
+export function useCommunityInfo(enabled = true): CommunityInfo | null {
     const [info, setInfo] = useState<CommunityInfo | null>(null);
     useEffect(() => {
+        if (!enabled) return;
         let cancelled = false;
         // Inside a promise, so a read that throws at once is a read that failed (as ProjectsPage reads it): hidden.
         Promise.resolve().then(() => communityInfoOnce()).then((i) => { if (!cancelled) setInfo(i); }, () => {});
         return () => { cancelled = true; };
-    }, []);
+    }, [enabled]);
     return info;
 }
 
@@ -75,18 +79,27 @@ export function resetReaderFeaturesOnce(): void {
     readerOnce = null;
 }
 
-/** The reader's own set; null until it arrives, and for a visitor. */
-export function useReaderFeatures(): FeatureSet {
+/** The reader's own set; null until it arrives, for a visitor, and when `enabled` is false (nothing is read). */
+export function useReaderFeatures(enabled = true): FeatureSet {
     const [set, setSet] = useState<FeatureSet>(null);
     useEffect(() => {
+        if (!enabled) return;
         let cancelled = false;
         readerFeaturesOnce().then((s) => { if (!cancelled) setSet(s); }, () => {});
         return () => { cancelled = true; };
-    }, []);
+    }, [enabled]);
     return set;
 }
 
-/** One feature's mode for this reader: the node's info and the reader's own set (the node's until it arrives). */
-export function useFeatureMode(feature: ShowcaseFeature): FeatureMode {
-    return modeFor(feature, useCommunityInfo(), useReaderFeatures());
+/**
+ * One feature's mode for this reader: the node's info and the reader's own set (the node's until it arrives).
+ * `enabled` false: nothing is read and the mode is `hidden`, as before (a visitor's map, which composes nothing).
+ */
+export function useFeatureMode(feature: ShowcaseFeature, enabled = true): FeatureMode {
+    return modeFor(feature, useCommunityInfo(enabled), useReaderFeatures(enabled));
+}
+
+/** Preview or read-only: the feature lives in a local community for this reader, so its actions carry the marker. */
+export function marked(mode: FeatureMode): boolean {
+    return mode === 'preview' || mode === 'read-only';
 }

@@ -23,6 +23,9 @@ import { votePoll, closePoll, type MarketplacePost } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { INFORMAL_POLL_NOTE } from '../lib/informal-polls';
+import { marked, useFeatureMode } from '../lib/features';
+import { LocalCommunityLine } from './LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '@beanpool/core';
 
 interface PollCardProps {
@@ -42,6 +45,7 @@ interface PollCardProps {
 }
 
 export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, visitor = false, informal = false }: PollCardProps) {
+    const decisionsMarked = marked(useFeatureMode('decisions'));
     const [livePost, setLivePost] = useState<MarketplacePost>(post);
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
     const [isClosing, setIsClosing] = useState(false);
@@ -311,6 +315,12 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             <p className="mb-1 text-[11px] font-semibold text-purple-700 dark:text-purple-300" data-testid="poll-informal-note">
                 <span aria-hidden="true">💬 </span>{INFORMAL_POLL_NOTE}
             </p>
+            )}
+            {/* Decisions live in a local community here: where one would bind, said once under the note (design §1 row 7). */}
+            {decisionsMarked && (
+            <div className="mb-1" data-testid="poll-decision-line">
+                <LocalCommunityLine feature="decisions" text={LOCAL_COMMUNITY_LINES.poll} />
+            </div>
             )}
 
             {/* Where its votes came from, once it has closed, where the node says: all of them still count. In rem, so a

@@ -1056,6 +1056,8 @@ export function App() {
                             onNavigateTab={(tab, subView) => {
                                 setOpenProfilePubkey(null);
                                 setOpenTreasuryPubkey(null);
+                                // The 🏘️ sheet's How it works: a guide page, as every other screen opens one.
+                                if (tab === 'guide') { navigateToTab('guide', subView); return; }
                                 if (tab === 'people' && subView) {
                                     setPeopleSubView(subView as any);
                                 }

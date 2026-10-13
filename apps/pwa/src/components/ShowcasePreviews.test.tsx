@@ -136,3 +136,29 @@ describe('the sample is imported by one web file only', () => {
         expect(naming).toEqual(['components/ShowcasePreviews.test.tsx', 'components/ShowcasePreviews.tsx']);
     });
 });
+
+describe('the marker inside a tappable card', () => {
+    it('a line opens the sheet and neither it nor the sheet reaches the card; the deal action keeps its words, with the pill', async () => {
+        const { LocalCommunityLine, LocalCommunityAction, DEAL_ACTION_LABEL } = await import('./LocalCommunityMark');
+        const card = vi.fn();
+        render(
+            <div onClick={card}>
+                <LocalCommunityLine feature="decisions" text="🏘️ In a local community a Decision binds ›" />
+                <LocalCommunityAction feature="escrow" label={DEAL_ACTION_LABEL} />
+            </div>,
+        );
+        fireEvent.click(screen.getByTestId('local-community-line'));
+        const sheet = screen.getByTestId('local-community-sheet');
+        fireEvent.click(sheet);
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        expect(card).not.toHaveBeenCalled();
+        expect(DEAL_ACTION_LABEL).toBe('Request · Beans held safely');
+        const action = screen.getByTestId('local-community-action');
+        expect(action.textContent).toContain('Request · Beans held safely');
+        expect(action.querySelector('[data-testid="local-community-pill"]')).not.toBeNull();
+        fireEvent.click(action);
+        expect(card).not.toHaveBeenCalled();
+        expect(screen.getByTestId('local-community-sheet').textContent).toContain(LOCAL_COMMUNITY_SHEET.features.escrow);
+        onlyInfo();
+    });
+});

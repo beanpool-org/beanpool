@@ -6,7 +6,8 @@
  * The boundary is this server, never the assistant's process. In order, every request to /mcp:
  *   1. the owner switch "Allow AI assistants" (local config `aiAssistantsAllowed`, on unless an owner turned it off): off → 404;
  *   2. `Origin` absent or this node's own public address, else 403 (a web page cannot drive it from a browser);
- *   3. POST only: GET (no server push in v1), DELETE and the rest → 405;
+ *   3. POST only: GET (no server push in v1) and DELETE (no session to end) → 405; no other method is a route here, so the
+ *      router answers PUT and PATCH 405 itself and the CORS layer answers OPTIONS 204, switch on or off, before any of this;
  *   4. a bearer that is an automation token of the `agent` scope, and nothing else (no session, cookie, password or other
  *      scope), whose maker is an owner or an admin NOW (lose the role, lose the assistant) → else 401 (403 for another scope);
  *   5. 60 calls a minute and 2,000 a day per token → 429 in words;
@@ -235,7 +236,7 @@ export function buildAgentServer(grant: AgentGrant, facts: WelcomeFacts): Server
 export function createMcpRoutes(deps: RouteDeps): Router {
     const router = new Router();
 
-    router.all(MCP_PATH, async (ctx) => {
+    const serveMcp: Router.Middleware = async (ctx) => {
         // 1. The owner switch: off, the endpoint is not there at all.
         if (!aiAssistantsAllowed()) {
             ctx.status = 404;
@@ -317,7 +318,12 @@ export function createMcpRoutes(deps: RouteDeps): Router {
                 ctx.res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null }));
             }
         }
-    });
+    };
+    // The methods Streamable HTTP names, each by name (never router.all, which registers ACL, CONNECT and every other verb
+    // as a route of its own): POST carries every message; GET (server push) and DELETE (ending a session) answer 405 above.
+    router.post(MCP_PATH, serveMcp);
+    router.get(MCP_PATH, serveMcp);
+    router.delete(MCP_PATH, serveMcp);
 
     // The owner switch. Reading it: any admin. Turning it on or off: an owner (requireAdminRole: never a token, and a
     // phone session asks for its unlock again). Owners are told either way.

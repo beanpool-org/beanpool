@@ -653,6 +653,14 @@ async function main(): Promise<void> {
         const get = await call('GET', '/mcp', { headers: bearer(AGENT2) });
         const del = await call('DELETE', '/mcp', { headers: bearer(AGENT2) });
         assert(get.status === 405 && del.status === 405 && get.headers.get('allow') === 'POST', `GET and DELETE /mcp: 405, Allow: POST (${show(get)})`);
+        // Every other verb is no route here (POST, GET and DELETE are registered by name, never router.all), switch on or off:
+        // PUT and PATCH get the router's own 405, OPTIONS the 204 every path's preflight gets before any route. No MCP answer.
+        const otherVerbs = () => Promise.all(['PUT', 'PATCH', 'OPTIONS'].map(m => call(m, '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(AGENT2) } })));
+        const notMcp = (rs: Reply[]) => rs[0].status === 405 && rs[1].status === 405 && rs[2].status === 204
+            && rs.every(r => !r.text.includes('jsonrpc') && !/PUT|PATCH/.test(r.headers.get('allow') ?? ''));
+        const showVerbs = (rs: Reply[]) => rs.map(r => `${r.status} Allow: ${r.headers.get('allow')}`).join(', ');
+        const others = await otherVerbs();
+        assert(notMcp(others), `PUT, PATCH and OPTIONS /mcp reach nothing of MCP: 405, 405, 204 (${others.map(show).join(' | ')}; ${showVerbs(others)})`);
         const foreign = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(AGENT2), Origin: 'https://evil.example' } });
         assert(foreign.status === 403, `a foreign Origin: 403 (${show(foreign)})`);
         const sw = '/api/local/admin/agent/switch';
@@ -662,8 +670,11 @@ async function main(): Promise<void> {
         const off = await call('POST', sw, { headers: asSession(ownerS), body: { allowed: false } });
         const offPost = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(AGENT2) } });
         const offGet = await call('GET', '/mcp', {});
-        assert(off.status === 200 && off.body?.allowed === false && offPost.status === 404 && offGet.status === 404,
-            `an owner turns AI assistants off: /mcp is 404 to everyone (${off.status}, ${offPost.status}, ${offGet.status})`);
+        const offDel = await call('DELETE', '/mcp', { headers: bearer(AGENT2) });
+        const offOthers = await otherVerbs();
+        assert(off.status === 200 && off.body?.allowed === false && offPost.status === 404 && offGet.status === 404 && offDel.status === 404,
+            `an owner turns AI assistants off: /mcp is 404 to everyone (${off.status}, ${offPost.status}, ${offGet.status}, ${offDel.status})`);
+        assert(notMcp(offOthers), `and every other verb is answered as when on, by no route (${showVerbs(offOthers)})`);
         const on = await call('POST', sw, { headers: asSession(ownerS), body: { allowed: true } });
         const onPost = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(AGENT2) } });
         assert(on.status === 200 && onPost.status === 200 && onPost.body?.result?.instructions === s1Welcome, `turned on again, it answers (${onPost.status})`);

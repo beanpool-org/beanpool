@@ -287,6 +287,10 @@ run_check "migration_steps" bash scripts/check-migrations-unchanged.sh
 # the repository's workflows and each edit the check exists to catch. Instant.
 run_check "workflows" node --test scripts/check-workflows.test.mjs
 
+# No page in apps/ asks Google for a font: the web app, Settings, the website and its guide serve their own files
+# (with their licences), and the node's document policies allow fonts from the node only. Instant.
+run_check "no_google_fonts" node --test scripts/no-google-fonts.test.mjs
+
 # setup-backup.mjs against a stand-in primary on localhost: a password refused for needing two-factor sign-in (step 7c)
 # prints the primary's words and the way out. Instant.
 run_check "setup_backup" node --test scripts/setup-backup.test.mjs

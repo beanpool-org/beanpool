@@ -222,9 +222,9 @@ async function globalMember(browser, root) {
             `the Map's list read(s): ${mapReads.map((p) => `?${p.toString()}`).join(' ; ')}`);
         const swm = await sideways(m.page);
         check(swm <= 0, `no sideways scroll on the Map at 320 px / 1.3x (${swm})`);
-        // The map's tiles and the font the app already loads are its own (aborted here); nothing else may leave.
-        const others = [...m.otherHosts].filter((h) => !/(^|\.)tile\.openstreetmap\.org$/.test(h) && h !== 'fonts.googleapis.com');
-        check(others.length === 0, `no request to any other host but the map tiles and the font (${others.join(', ') || 'none'})`);
+        // The map's tiles are their own host (aborted here); nothing else may leave, the font included (it is the node's).
+        const others = [...m.otherHosts].filter((h) => !/(^|\.)tile\.openstreetmap\.org$/.test(h));
+        check(others.length === 0, `no request to any other host but the map tiles (${others.join(', ') || 'none'})`);
         await m.context.close();
 
         // #1770: after Show everywhere the newest from everywhere holds the Seed swap event, so the event chips show, in

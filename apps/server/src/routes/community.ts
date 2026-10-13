@@ -2176,6 +2176,8 @@ router.get('/api/friends/added-you', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    // It names other members: a member's read only (a visitor, a suspended account and a guest are refused).
+    if (!memberReadsOnlyHere(ctx)) return;
     ctx.set('Cache-Control', 'private, no-store');
     ctx.body = getAddedYou(actor);
 });

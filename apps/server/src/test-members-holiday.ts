@@ -202,7 +202,7 @@ async function main() {
     // Rows stored under other keys before this rule stay where they are, and no read serves them.
     db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'made_up_before', 'x')`).run(alice.pubKeyHex);
     const served = Object.keys(await readPrefs(alice)).sort();
-    assert(served.join() === 'eventReminderOffsets,holiday_mode,notify_chat,notify_escrow,notify_marketplace,notify_recovery',
+    assert(served.join() === 'eventReminderOffsets,holiday_mode,notify_chat,notify_escrow,notify_marketplace,notify_recovery,show_as_connection_in_common',
         `a key stored before the rule is not served back (${served.join()})`);
     assert(rowsOf(alice.pubKeyHex).includes('made_up_before'), '...and its row is left in place');
 

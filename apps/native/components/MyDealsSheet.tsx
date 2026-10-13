@@ -36,14 +36,16 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
     const { colors, theme } = useTheme();
     // The held and pending cards' tones: light keeps its tints; dark takes the scheme's success and warning tones, with
     // each status line in its tone's ink, so every text on them reads at 4.5:1 or more (my-deals-dark-render.test.ts).
-    const dark = theme === 'dark';
-    const heldTone = dark
-        ? { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border }
-        : { backgroundColor: palette.green50, borderColor: palette.green200 };
-    const actionTone = dark
-        ? { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border }
-        : { backgroundColor: palette.amber50, borderColor: palette.yellow300 };
-    const styles = useStyles(({ colors }) => StyleSheet.create({
+    const isDark = theme === 'dark';
+    const heldTone = {
+        backgroundColor: isDark ? colors.feedback.success.bg : palette.green50,
+        borderColor: isDark ? colors.feedback.success.border : palette.green200,
+    };
+    const actionTone = {
+        backgroundColor: isDark ? colors.feedback.warning.bg : palette.amber50,
+        borderColor: isDark ? colors.feedback.warning.border : palette.yellow300,
+    };
+    const styles = useStyles(({ colors, theme }) => StyleSheet.create({
         overlay: {
             flex: 1,
             backgroundColor: 'rgba(0,0,0,0.4)',
@@ -156,10 +158,10 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         historyChipText: {
             fontSize: 12,
             fontWeight: '700',
-            color: palette.gray600,
+            color: theme === 'dark' ? colors.text.secondary : palette.gray600,
         },
         historyChipTextActive: {
-            color: colors.text.inverse,
+            color: theme === 'dark' ? colors.surface.app : colors.text.inverse, // white on the dark scheme's pale chip was 1.1:1
         },
 
         // Deal cards
@@ -197,7 +199,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         dateText: {
             fontSize: 12,
             fontWeight: '600',
-            color: colors.text.muted,
+            color: theme === 'dark' ? colors.text.secondary : colors.text.muted, // dark muted is 3.60:1 on the card
         },
         creditAmount: {
             fontWeight: '900',
@@ -217,7 +219,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             borderRadius: 8,
         },
         statusCompleted: {
-            backgroundColor: palette.emerald100,
+            backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.emerald100,
         },
         statusText: {
             fontSize: 10,
@@ -226,7 +228,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             textTransform: 'uppercase',
         },
         statusTextCompleted: {
-            color: palette.emerald800,
+            color: theme === 'dark' ? colors.feedback.success.fg : palette.emerald800,
         },
         typeBadge: {
             paddingHorizontal: 6,
@@ -255,7 +257,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         pausedBadgeText: {
             fontSize: 10,
             fontWeight: '800',
-            color: '#b45309',
+            color: theme === 'dark' ? colors.feedback.warning.fg : '#b45309', // amber700 is 3.47:1 on the dark card
             letterSpacing: 0.3,
         },
         typeBadgeText: {
@@ -274,15 +276,15 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             fontWeight: '800',
         },
         reviewBtn: {
-            backgroundColor: palette.amber100,
+            backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber100,
             paddingHorizontal: 12,
             paddingVertical: 6,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: palette.yellow300,
+            borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.yellow300,
         },
         reviewBtnText: {
-            color: palette.amber700,
+            color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber700,
             fontSize: 12,
             fontWeight: '800',
         },
@@ -498,7 +500,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                         style={[styles.reviewBtn, { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }]}
                                         onPress={preview ? openMark : () => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
                                     >
-                                        <Text style={[styles.reviewBtnText, { color: palette.gray600, fontSize: 11 }]}>Edit</Text>
+                                        <Text style={[styles.reviewBtnText, { color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 11 }]}>Edit</Text>
                                     </Pressable>
                                 )
                             )}
@@ -535,16 +537,16 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         if (item.status === 'pending' || relatedTx?.status === 'pending') {
             displayStatusText = '🤝 Held in Trust';
             highlightStyle = heldTone;
-            if (dark) statusInk = colors.feedback.success.fg;
+            if (isDark) statusInk = colors.feedback.success.fg;
         } else if (relatedTx?.status === 'requested') {
             if (item.author_pubkey === identity?.publicKey) {
                 displayStatusText = '⚠️ Action Required';
                 highlightStyle = actionTone;
-                statusInk = dark ? colors.feedback.warning.fg : palette.amber600;
+                statusInk = isDark ? colors.feedback.warning.fg : palette.amber600;
             } else {
                 displayStatusText = '⏳ Awaiting Approval';
                 highlightStyle = { backgroundColor: colors.surface.subtle, borderColor: colors.border.default };
-                if (dark) statusInk = colors.text.secondary;
+                if (isDark) statusInk = colors.text.secondary;
             }
         }
 

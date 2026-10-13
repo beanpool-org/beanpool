@@ -30,6 +30,7 @@ import {
 } from 'react-native';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
+import { palette } from '../constants/colors';
 import { votePoll, closePoll } from '../utils/db';
 import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
 import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, LOCAL_COMMUNITY_LINES } from '@beanpool/core';
@@ -545,7 +546,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             color: colors.text.body,
         },
         optionPctVoted: {
-            color: '#7c3aed',
+            color: theme === 'dark' ? palette.violet300 : '#7c3aed', // violet600 is 2.9:1 on the dark card; violet300 9.43:1
         },
         optionVotes: {
             fontSize: 11,
@@ -603,7 +604,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         votersToggleText: {
             fontSize: 12,
             fontWeight: '700',
-            color: '#7c3aed',
+            color: theme === 'dark' ? palette.violet300 : '#7c3aed', // violet600 is 2.9:1 on the dark card; violet300 9.43:1
         },
         votersSection: {
             marginTop: 10,

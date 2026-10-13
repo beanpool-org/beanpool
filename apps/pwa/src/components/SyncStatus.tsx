@@ -11,6 +11,7 @@ import { onSyncChange, type SyncState } from '../lib/sync';
 import { checkMembership } from '../lib/api';
 import { loadIdentity } from '../lib/identity';
 import { withJitter } from '../lib/jitter';
+import { SyncChip } from './SyncChip';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -23,9 +24,13 @@ function formatTimeAgo(timestamp: number): string {
 
 interface SyncStatusProps {
     isMember?: boolean | null;
+    /** How long ago goes under the word (the mobile header, as on the phone), not beside it. */
+    stacked?: boolean;
+    /** The dot alone: the header is too narrow for the tab's title beside the words (HeaderControls' useDotOnlyChip). */
+    dotOnly?: boolean;
 }
 
-export function SyncStatus({ isMember: propIsMember }: SyncStatusProps = {}) {
+export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncStatusProps = {}) {
     const [sync, setSync] = useState<SyncState>({
         connected: false,
         lastSyncTime: null,
@@ -153,66 +158,6 @@ export function SyncStatus({ isMember: propIsMember }: SyncStatusProps = {}) {
         ? 'guest'
         : 'offline';
 
-    const STATUS_CONFIG = {
-        online: {
-            borderColor: 'rgba(16, 185, 129, 0.3)',
-            color: '#10b981',
-            label: 'Online',
-            bg: 'var(--bg-card)',
-        },
-        guest: {
-            borderColor: 'rgba(217, 119, 6, 0.4)',
-            color: 'var(--sync-guest, #d97706)',
-            label: 'Guest',
-            bg: 'var(--sync-guest-bg, #fffbeb)',
-        },
-        offline: {
-            borderColor: 'rgba(239, 68, 68, 0.3)',
-            color: 'var(--sync-offline, #ef4444)',
-            label: 'Offline',
-            bg: 'var(--bg-card)',
-        },
-    } as const;
-
-    const config = STATUS_CONFIG[statusMode];
-
-    return (
-        <div
-            role="status"
-            aria-live="polite"
-            aria-label={`Network status: ${config.label}${sync.lastSyncTime && statusMode !== 'guest' ? `, last synced ${formatTimeAgo(sync.lastSyncTime)}` : ''}`}
-            style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.3rem 0.75rem',
-                borderRadius: '9999px',
-                background: config.bg,
-                border: `1px solid ${config.borderColor}`,
-                fontSize: '0.75rem',
-                fontWeight: 500,
-                transition: 'all 0.3s ease',
-            }}
-        >
-            <span
-                aria-hidden="true"
-                style={{
-                    width: '7px',
-                    height: '7px',
-                    borderRadius: '50%',
-                    background: config.color,
-                    animation: sync.connected ? 'pulse 2s infinite' : 'none',
-                    flexShrink: 0,
-                }}
-            />
-            <span style={{ color: config.color, whiteSpace: 'nowrap' }}>
-                {config.label}
-            </span>
-            {sync.lastSyncTime && statusMode !== 'guest' && (
-                <span style={{ color: 'var(--text-faint)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
-                    {formatTimeAgo(sync.lastSyncTime)}
-                </span>
-            )}
-        </div>
-    );
+    const ago = sync.lastSyncTime && statusMode !== 'guest' ? formatTimeAgo(sync.lastSyncTime) : null;
+    return <SyncChip mode={statusMode} ago={ago} pulsing={sync.connected} stacked={stacked} dotOnly={dotOnly} />;
 }

@@ -8,8 +8,8 @@
  * another host is refused and logged (`BLOCKED-FETCH`). Pulse items have no thumbnail, so nothing is proxied.
  *
  * Env (set by the check): BEANPOOL_DATA_DIR (a fresh folder), FIXTURE_ROOT (a folder whose `public/` holds the web app
- * build), FIXTURE_PROFILE ('local' | 'global'), FIXTURE_MEMBERS (JSON `[{ "publicKey", "callsign", "joinedDaysAgo" }]`:
- * the browsers' own keys, made members here).
+ * build), FIXTURE_PROFILE ('local' | 'global'), FIXTURE_MEMBERS (JSON `[{ "publicKey", "callsign", "joinedDaysAgo",
+ * "avatar"? }]`: the browsers' own keys, made members here; `avatar` true gives one a photo, so it may post).
  *
  * Says `FIXTURE_READY {"port":N}` once listening. Takes one JSON request a line on stdin and answers one
  * `FIXTURE_ANSWER {"id":…,"ok":…,"result"|"error":…}` line:
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
     const root = process.env.FIXTURE_ROOT;
     if (!root) throw new Error('FIXTURE_ROOT is not set');
     const profile = process.env.FIXTURE_PROFILE === 'global' ? 'global' : 'local';
-    const browsers = JSON.parse(process.env.FIXTURE_MEMBERS || '[]') as { publicKey: string; callsign: string; joinedDaysAgo?: number }[];
+    const browsers = JSON.parse(process.env.FIXTURE_MEMBERS || '[]') as { publicKey: string; callsign: string; joinedDaysAgo?: number; avatar?: boolean }[];
     process.chdir(root);
 
     const { initTls } = await import('../../server/src/services/tls.js');
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
         db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
         return pk;
     };
-    for (const b of browsers) member(b.publicKey, b.callsign, b.joinedDaysAgo ?? 1);
+    for (const b of browsers) member(b.publicKey, b.callsign, b.joinedDaysAgo ?? 1, { avatar: b.avatar === true });
     const kofi = member(key(), 'Kofi', 3, { avatar: true, area: { lat: BYRON.lat + 0.02, lng: BYRON.lng } });
     const mere = member(key(), 'Mere', 2, { avatar: true, area: { lat: BYRON.lat - 0.05, lng: BYRON.lng + 0.03 } });
     const tama = member(key(), 'Tama', 60, { avatar: true, area: BYRON });

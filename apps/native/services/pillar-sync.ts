@@ -14,7 +14,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanpool/core';
-import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readNearbyHeld, readNearbyTag } from '../utils/db';
+import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
+import { absentAfter, cardsToDrop, membersKeysPath, planMembersCycle, readAbsent } from '../utils/members-on-demand';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
@@ -105,6 +106,9 @@ export function epochOf(res: { headers?: { get?(name: string): string | null } }
     return /^\d+$/.test(epoch) ? epoch : null;
 }
 
+/** The referenced keys a community that says `membersOnDemand` answered no card for lately (utils/members-on-demand.ts). */
+const MEMBERS_ABSENT = 'members_absent';
+
 export async function getSyncCursorKey(keyId: string): Promise<string> {
     // Never read before the phone's copies and their cursors have their new names (utils/cache-file-migration.ts): a
     // cursor read under the new name before its file moved would start a whole sync for nothing.
@@ -120,7 +124,7 @@ export async function getSyncCursorKey(keyId: string): Promise<string> {
  * (review of PR #1719, B1). The identity epoch is not: it says which server the phone last read, not what it holds.
  */
 export function syncCursorKeysOf(dbFilename: string): string[] {
-    return [StorageKeysConfig.LAST_SYNC, StorageKeysConfig.SYNC_CHECKPOINT, 'members_last_sync', 'members_held_since', POSTS_HELD_READ, StorageKeysConfig.LAST_CYCLE]
+    return [StorageKeysConfig.LAST_SYNC, StorageKeysConfig.SYNC_CHECKPOINT, 'members_last_sync', 'members_held_since', POSTS_HELD_READ, StorageKeysConfig.LAST_CYCLE, MEMBERS_ABSENT]
         .map(id => `pillar_sync_${dbFilename}_${id}`);
 }
 
@@ -507,6 +511,11 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         } catch (e) {
             console.error('[Pillar Sync] Failed to query local members count', e);
         }
+
+        // A community that says `membersOnDemand` (the worldwide one, DESIGN-global-members-by-area §2.2): this phone never
+        // reads its directory whole nor asks for everyone who changed. It holds the cards it has a reason to show and asks
+        // for those by key once the cycle has landed (syncMembersOnDemand). Anywhere else, every request is as it was.
+        const membersOnDemand = pubKey ? (await getCachedNodeProfile(anchorUrl))?.features.membersOnDemand === true : false;
 
         let shouldFetchMembers = !lastMembersSync ||
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
@@ -1017,7 +1026,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
 
         // Fetch directory (members)
-        if (shouldFetchMembers) {
+        if (membersOnDemand) {
+            // No directory read: the cards come by key after the cycle lands (syncMembersOnDemand), never `membersComplete`.
+        } else if (shouldFetchMembers) {
             try {
                 const directoryRes = await fetch(`${anchorUrl}/api/members`, {
                     method: 'GET',
@@ -1317,6 +1328,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             await storeForCopy(kEpoch, epochNow);
         }
 
+        // The cards this phone has a reason to show, by key, on a community that says `membersOnDemand`. After the cursors,
+        // so a members read that fails never holds the cycle back; its own failures leave every card where it was.
+        if (membersOnDemand && pubKey && sameCopy()) await syncMembersOnDemand(anchorUrl, pubKey, expectedDbName, copyGen);
+
         // A completed pillar cycle means the marketplace posts have actually been fetched
         // and written — the true "the market has loaded" signal, as opposed to a fast
         // messages/balance sync that also fires 'sync_data_updated'. Emitted unconditionally
@@ -1435,6 +1450,88 @@ async function parseIfChanged(res: { text(): Promise<string> }, anchorUrl: strin
     _lastAppliedFingerprints[key] = fp;
     rawGated?.add(table);
     return JSON.parse(raw);
+}
+
+/**
+ * One cycle's members reads on a community that says `membersOnDemand` (DESIGN-global-members-by-area §2.2; the plan is
+ * utils/members-on-demand.ts): the referenced cards this phone lacks, `keys=` at most 100 at a time and at most 3
+ * requests (the rest next cycle), then the 100 held cards fetched longest ago, re-checked with `updatedAfter` = the
+ * oldest of their stamps, then past 1,000 cards the oldest that nothing references dropped. A read the node refuses
+ * (503 `heavy_read_busy`, a timeout, anything but a list) ends the reads for this cycle and drops nothing for it: the
+ * cards held stay held and the ones missing are asked for again next cycle. Never throws.
+ */
+async function syncMembersOnDemand(anchorUrl: string, ownKey: string, expectedDbName: string, copyGen: number): Promise<void> {
+    const timeouts = requestTimeouts();
+    try {
+        const world = await readMembersOnDemandWorld(ownKey);
+        if (!world || copyGenerationNow() !== copyGen) return;
+        const now = Date.now();
+        const kAbsent = await getSyncCursorKey(MEMBERS_ABSENT);
+        const absentRaw = await AsyncStorage.getItem(kAbsent);
+        const absent = readAbsent(absentRaw, now);
+        const plan = planMembersCycle(ownKey, world.referenced.filter(k => !absent.has(k)), world.held);
+        const rows: any[] = [];
+        const asked: string[] = [];
+        const read = async (path: string): Promise<any[] | null> => {
+            try {
+                const res = await fetch(`${anchorUrl}${path}`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    signal: timeouts.signal(30000),
+                });
+                if (!res || !res.ok) return null;
+                const body = await res.json();
+                return Array.isArray(body) ? body : null;
+            } catch (e) {
+                console.warn('[Pillar Sync] Members by key failed:', e);
+                return null;
+            }
+        };
+        let refused = false;
+        for (const batch of plan.missing) {
+            const got = await read(membersKeysPath(batch));
+            if (!got) { refused = true; break; }
+            rows.push(...got);
+            asked.push(...batch);
+        }
+        const rechecked: string[] = [];
+        if (!refused && plan.revalidate) {
+            const got = await read(membersKeysPath(plan.revalidate.keys, plan.revalidate.since));
+            if (got) {
+                rows.push(...got);
+                rechecked.push(...plan.revalidate.keys);
+            }
+        }
+        const answered = new Set<string>(rows.map(r => r?.publicKey ?? r?.public_key).filter((k: unknown): k is string => typeof k === 'string'));
+        const fetchedAt = new Date(now).toISOString();
+        const fetched = [...asked.filter(k => answered.has(k)), ...rechecked];
+        const fetchedSet = new Set(fetched);
+        const heldKeys = new Set(world.held.map(c => c.key));
+        const heldAfter = [
+            ...world.held.map(c => (fetchedSet.has(c.key) ? { key: c.key, fetchedAt } : c)),
+            ...[...answered].filter(k => !heldKeys.has(k)).map(key => ({ key, fetchedAt })),
+        ];
+        const drop = cardsToDrop(ownKey, world.referenced, heldAfter);
+        if (copyGenerationNow() !== copyGen) return;
+        if (rows.length > 0 || fetched.length > 0 || drop.length > 0) {
+            const wrote = await applyDelta({ members: rows, membersFetched: { keys: fetched, at: fetchedAt }, membersDrop: drop }, expectedDbName, copyGen);
+            if (wrote === false) return;
+        }
+        if (asked.length > 0 || absent.size > 0 || absentRaw) {
+            const next = absentAfter(absent, asked, answered, now);
+            if (next !== absentRaw && copyGenerationNow() === copyGen) await AsyncStorage.setItem(kAbsent, next);
+        }
+        if (rows.length > 0 || drop.length > 0) {
+            try {
+                const { DeviceEventEmitter } = require('react-native');
+                DeviceEventEmitter.emit('sync_data_updated');
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn('[Pillar Sync] Members on demand failed:', e);
+    } finally {
+        timeouts.clear();
+    }
 }
 
 /**

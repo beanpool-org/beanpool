@@ -98,3 +98,30 @@ export function membersKeysPath(keys: readonly string[], since?: string | null):
     const cursor = since ? `&updatedAfter=${encodeURIComponent(since)}` : '';
     return `/api/members?keys=${keys.join(',')}${cursor}`;
 }
+
+/** A referenced key the node answered no card for (a member pruned since, an account that is not a person) is not
+ *  asked again for this long, so one such key never costs a request every cycle. Its screens show the key's first
+ *  8 characters meanwhile, as they do for any card not held. */
+export const ABSENT_RETRY_MS = 24 * 60 * 60 * 1000;
+
+/** The keys asked for recently and not answered, from what was stored (`{ key: when asked, ms }`); stale ones dropped. */
+export function readAbsent(raw: string | null, nowMs: number): Map<string, number> {
+    const absent = new Map<string, number>();
+    try {
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            for (const [k, at] of Object.entries(parsed)) {
+                if (isMemberKey(k) && typeof at === 'number' && nowMs - at < ABSENT_RETRY_MS && at <= nowMs) absent.set(k, at);
+            }
+        }
+    } catch {}
+    return absent;
+}
+
+/** What to store after a cycle: the keys still absent, those asked and not answered now added, the answered ones gone. */
+export function absentAfter(before: Map<string, number>, asked: readonly string[], answered: ReadonlySet<string>, nowMs: number): string {
+    const next: Record<string, number> = {};
+    for (const [k, at] of before) if (!answered.has(k)) next[k] = at;
+    for (const k of asked) if (!answered.has(k)) next[k] = nowMs;
+    return JSON.stringify(next);
+}

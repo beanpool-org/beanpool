@@ -154,3 +154,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `pruneTombstones` in `apps/server/src/connector-manager.ts` executed database tombstone pruning without a `try/catch` block. When run via periodic `setInterval`, database errors (such as SQLite lock/busy states) threw uncaught exceptions in timer callbacks.
 **Learning:** Functions executed in periodic `setInterval` callbacks must handle internal exceptions with a top-level `try/catch` block to prevent uncaught exceptions from destabilizing or crashing the Node process.
 **Pattern:** Ensure all functions passed directly or indirectly to `setInterval` enclose database or external I/O operations inside `try/catch` blocks.
+
+## 2026-10-13 - [Missing try/catch in POST /api/commons/projects/delete]
+**Issue:** `POST /api/commons/projects/delete` in `apps/server/src/routes/commons.ts` called `deleteProject` without a `try/catch` block.
+**Learning:** `deleteProject` checks non-zero ledger balances and throws errors (e.g. "Cannot delete project with non-zero balance: would violate ledger conservation"), which caused uncaught 500 exceptions instead of formatted 400 error responses.
+**Pattern:** Ensure deletion routes calling domain functions that enforce balance/ledger constraints wrap the deletion call in a `try/catch` block that catches errors and sets `ctx.status = 400`.

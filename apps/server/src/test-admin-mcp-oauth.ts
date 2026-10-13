@@ -429,18 +429,25 @@ async function main(): Promise<void> {
         const loopback = await call('POST', '/oauth/register', { body: { client_name: 'Desktop', redirect_uris: ['http://127.0.0.1:33418/callback'] } });
         assert(insecure.status === 400 && loopback.status === 201, `only https or localhost redirects (${insecure.status}, ${loopback.status})`);
         resetOAuthForTests();
+        // 100 addresses with 10 waiting each all fit: at 100 node-wide, 10 addresses opening their own pages shut the door
+        // for an hour (#1881 confirmation, finding 1).
         const held: string[] = [];
-        for (let i = 0; i < OAUTH_PENDING_MAX; i++) {
-            const r = registerClient({ client_name: `p${i}`, redirect_uris: [REDIRECT] }, `test-${i}`);
-            if (r.ok) held.push(r.client.clientId);
+        for (let a = 0; a < 100; a++) {
+            for (let i = 0; i < OAUTH_PENDING_PER_ADDRESS; i++) {
+                const r = registerClient({ client_name: `p${a}-${i}`, redirect_uris: [REDIRECT] }, `test-${a}`);
+                if (r.ok) held.push(r.client.clientId);
+            }
         }
+        const stillWaiting = held.filter(id => isPendingRegistration(id)).length;
+        assert(held.length === 1000 && stillWaiting === 1000 && pendingRegistrations() === 1000,
+            `100 addresses × 10 waiting all fit: none made room for another (${held.length} made, ${stillWaiting} still waiting)`);
         const opened = await openConsent(authorizeUrl(held[0])); // its consent page shown: no longer the first to make room
         const room = await call('POST', '/oauth/register', { body: { client_name: 'Makes Room', redirect_uris: [REDIRECT] } });
         assert(opened.status === 200 && room.status === 201 && pendingRegistrations() === OAUTH_PENDING_MAX && isPendingRegistration(held[0]) && !isPendingRegistration(held[1]),
-            `the 101st pending registration: the oldest one nobody opened a page for makes room, one whose page was opened stays (${opened.status}; ${show(room)})`);
+            `the cap still bounds it: one more from a 101st address, and the oldest one nobody opened a page for makes room, one whose page was opened stays (${opened.status}; ${show(room)}; ${pendingRegistrations()} waiting)`);
         for (const id of [...held, room.body?.client_id]) markRegistrationOpened(id);
         const over = await call('POST', '/oauth/register', { body: { client_name: 'One Too Many', redirect_uris: [REDIRECT] } });
-        assert(over.status === 429 && pendingRegistrations() === OAUTH_PENDING_MAX, `100 waiting, every one opened: the next → 429 (${show(over)})`);
+        assert(over.status === 429 && pendingRegistrations() === OAUTH_PENDING_MAX, `${OAUTH_PENDING_MAX} waiting, every one opened: the next → 429 (${show(over)})`);
         resetOAuthForTests();
         const old = registerClient({ client_name: 'Stale', redirect_uris: [REDIRECT] }, 'test-old', Date.now() - OAUTH_PENDING_TTL_MS - 1);
         const stale = old.ok ? await call('GET', authorizeUrl(old.client.clientId)) : null;
@@ -530,6 +537,8 @@ async function main(): Promise<void> {
 
         // Finding 5: at most 10 waiting from one address (an IPv6 /64 is one); its own oldest unopened one makes room.
         resetOAuthForTests();
+        const otherWaiting = await call('POST', '/oauth/register', { body: { client_name: 'Elsewhere', redirect_uris: [REDIRECT] }, headers: { 'X-Forwarded-For': '198.51.100.8' } });
+        const otherWaitingId = otherWaiting.body?.client_id ?? '';
         const v6Key = limiterKeyForIp('2001:db8:5:6::1');
         const v6Ids: string[] = [];
         for (let i = 0; i < OAUTH_PENDING_PER_ADDRESS; i++) {
@@ -538,9 +547,12 @@ async function main(): Promise<void> {
         }
         const sameSlash64 = { 'X-Forwarded-For': '2001:db8:5:6:aaaa:bbbb:cccc:42' };
         const eleventh = await call('POST', '/oauth/register', { body: { client_name: 'v6 again', redirect_uris: [REDIRECT] }, headers: sameSlash64 });
-        assert(v6Ids.length === OAUTH_PENDING_PER_ADDRESS && eleventh.status === 201 && pendingRegistrations() === OAUTH_PENDING_PER_ADDRESS
+        const v6Waiting = [...v6Ids, eleventh.body?.client_id].filter(id => isPendingRegistration(id)).length;
+        assert(otherWaiting.status === 201 && v6Ids.length === OAUTH_PENDING_PER_ADDRESS && eleventh.status === 201 && pendingRegistrations() === OAUTH_PENDING_PER_ADDRESS + 1
             && !isPendingRegistration(v6Ids[0]) && isPendingRegistration(v6Ids[1]),
         `an address (another address in the same IPv6 /64) with 10 waiting: its 11th drops its own oldest unopened one (${show(eleventh)}; ${pendingRegistrations()} waiting)`);
+        assert(isPendingRegistration(otherWaitingId) && v6Waiting === OAUTH_PENDING_PER_ADDRESS,
+            `…never another address's, even one older and unopened: 198.51.100.8's still waits, and the /64 still holds 10 (${v6Waiting})`);
         for (const id of [...v6Ids, eleventh.body?.client_id]) markRegistrationOpened(id);
         const twelfth = await call('POST', '/oauth/register', { body: { client_name: 'v6 once more', redirect_uris: [REDIRECT] }, headers: sameSlash64 });
         const otherAddress = await call('POST', '/oauth/register', { body: { client_name: 'Claude', redirect_uris: [REDIRECT] }, headers: { 'X-Forwarded-For': '198.51.100.7' } });

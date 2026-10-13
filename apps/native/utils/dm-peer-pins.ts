@@ -16,7 +16,8 @@
  * leaves the phone, as its block list is (Marty, 13 Oct, pick 2), and never read for another account's key. Ids are
  * folded, as the held check and the DM guard fold them, so a twin the node writes in other capitals is the same DM here.
  *
- * Pure: the storage is passed in. db.ts reads it once per sync pass and once per send or thread read.
+ * The storage is passed in. db.ts keeps one copy per account in memory for the app's run ({@link createDmPinBook}): read
+ * from storage once, and every change goes through one queue that writes it through.
  */
 
 import { dmPeerPinsStoreKey } from './storage-keys';
@@ -110,7 +111,7 @@ export async function readDmPeerPins(storage: Pick<PinStorage, 'getItem'>, myPub
     } catch {
         throw new DmPinStoreError();
     }
-    if (raw == null) return {};
+    if (raw == null) return Object.create(null);
     let parsed: unknown;
     try {
         parsed = JSON.parse(raw);
@@ -133,6 +134,57 @@ export async function writeDmPeerPins(storage: Pick<PinStorage, 'setItem'>, myPu
     } catch {
         throw new DmPinStoreError();
     }
+}
+
+/**
+ * One account's pins held in memory for the app's run, one copy per account (#1872 review, findings 6 and 7). The copy
+ * is read from storage the first time it is asked for, and every change after that goes through one queue per account,
+ * which changes that copy and writes it through: a key resolve never re-reads or re-parses the store, and two writers
+ * (a sync pass, a first sight, the refresh) can't each write a copy of their own that drops the other's pin.
+ *
+ * Unreadable store: `read` throws DmPinStoreError and keeps nothing, so the next ask reads again. A write the storage
+ * refuses: `update` throws DmPinStoreError and drops the copy, so the next ask reads what storage holds. The copy is the
+ * book's own object: callers read it, and change it only inside `update`.
+ */
+export interface DmPinBook {
+    /** This account's pins (read from storage the first time). */
+    read(myPubkey: string): Promise<DmPeerPins>;
+    /** Run `change` on this account's pins after every change queued before it; written through when it returns true. */
+    update(myPubkey: string, change: (pins: DmPeerPins) => boolean): Promise<boolean>;
+    /** Drop every copy: the next ask reads storage again (a fresh app session). */
+    forget(): void;
+}
+
+export function createDmPinBook(storage: PinStorage): DmPinBook {
+    const copies = new Map<string, Promise<DmPeerPins>>();
+    const queues = new Map<string, Promise<unknown>>();
+    function read(myPubkey: string): Promise<DmPeerPins> {
+        const key = dmPeerPinsStoreKey(myPubkey);
+        const held = copies.get(key);
+        if (held) return held;
+        const loading = readDmPeerPins(storage, myPubkey);
+        copies.set(key, loading);
+        loading.catch(() => { if (copies.get(key) === loading) copies.delete(key); });
+        return loading;
+    }
+    function update(myPubkey: string, change: (pins: DmPeerPins) => boolean): Promise<boolean> {
+        const key = dmPeerPinsStoreKey(myPubkey);
+        const turn = (queues.get(key) ?? Promise.resolve()).catch(() => {}).then(async () => {
+            const copy = read(myPubkey);
+            const pins = await copy;
+            if (!change(pins)) return false;
+            try {
+                await writeDmPeerPins(storage, myPubkey, pins);
+            } catch (e) {
+                if (copies.get(key) === copy) copies.delete(key);
+                throw e;
+            }
+            return true;
+        });
+        queues.set(key, turn);
+        return turn;
+    }
+    return { read, update, forget: () => { copies.clear(); queues.clear(); } };
 }
 
 /** The pin kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */

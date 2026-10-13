@@ -1,14 +1,84 @@
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { openHelp } from '../lib/tour-store';
 
 /** The pill's width: profile, the "?" and Settings (72 px before the "?"). */
 export const HEADER_PILL_PX = 100;
-/** The sync dot's box on the header's left. */
-export const HEADER_SYNC_PX = 26;
+
 /**
- * The header's title sits in the middle of the room between the sync dot and the pill, not of the screen: at 320 px
- * with 130% text, centred on the screen it ran under the wider pill (measured: "Commons" by 24 px).
+ * The mobile header's title: the tab's name in the middle of the room the row leaves between the sync chip and the pill
+ * (the row's flexible middle, so the chip's real width counts: "● Online" is 82 px at 320 px with 130% text), never drawn
+ * over either. Where the name wouldn't fit beside the chip's words the chip goes to its dot (useDotOnlyChip); only where
+ * even that leaves too little room is the name cut, with an ellipsis. The padding is
+ * room for the words' glow (text-rainbow's shadow; the cut clips at the padding box), given back by the margins so the
+ * words sit where they always did. `children`: what opens under the title (the community's status).
  */
-export const HEADER_TITLE_SHIFT_PX = -(HEADER_PILL_PX - HEADER_SYNC_PX) / 2;
+export function HeaderTitle({ title, onClick, children }: { title: string; onClick?: () => void; children?: ReactNode }) {
+    return (
+        <div className="relative z-10 flex-1 min-w-0 flex justify-center items-center" style={{ padding: '0 6px' }}>
+            <span
+                data-testid="header-title"
+                className="font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center cursor-pointer truncate"
+                style={{ margin: '-2px -6px -10px', padding: '10px 6px' }}
+                onClick={onClick}
+            >
+                {title}
+            </span>
+            {children}
+        </div>
+    );
+}
+
+/**
+ * Whether the header row's sync chip shows its dot alone: where the tab's title, whole, wouldn't fit between the chip with
+ * its words and the pill (at 320 px with 130% text, "Commons" and "The Pulse" were cut to "Com…" and "The P…"). Measured
+ * in the row as laid out, again whenever the row, the chip or the title changes size: the chip at its dot alone keeps its
+ * words laid out but hidden (SyncChip), so the room the title would have beside them is known either way. The words come
+ * back only with a pixel to spare, so the chip can't flick between the two at the edge. `title`: null where the row has
+ * no HeaderTitle (the map's). Returns the ref for the header row (a callback, so a row that mounts after the first render,
+ * as App's does after loading, is measured) and whether the chip is at its dot alone.
+ */
+export function useDotOnlyChip(title: string | null): [(row: HTMLElement | null) => void, boolean] {
+    const [el, setRow] = useState<HTMLElement | null>(null);
+    const [dotOnly, setDotOnly] = useState(false);
+    useLayoutEffect(() => {
+        if (!el || title === null || typeof ResizeObserver === 'undefined') {
+            setDotOnly(false);
+            return;
+        }
+        const chip = el.querySelector<HTMLElement>('[data-testid="sync-chip"]');
+        const words = chip?.querySelector<HTMLElement>('[data-chip-words]');
+        const span = el.querySelector<HTMLElement>('[data-testid="header-title"]');
+        const box = span?.parentElement;
+        if (!chip || !words || !span || !box) return;
+        const measure = () => {
+            if (!el.getBoundingClientRect().width) return; // hidden (the md: layout)
+            const now = chip.dataset.dotOnly === 'true';
+            const cs = getComputedStyle(span);
+            const range = document.createRange();
+            range.selectNodeContents(span);
+            // The words' own width (the span itself is clamped to the room) and its padding (HeaderTitle's margins give it back).
+            const need = range.getBoundingClientRect().width + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+            const room = box.getBoundingClientRect().width - (now ? words.getBoundingClientRect().width + (parseFloat(getComputedStyle(chip).columnGap) || 0) : 0);
+            setDotOnly(now ? need > room - 1 : need > room + 0.01);
+        };
+        measure();
+        // A frame later, not inside the observer: the chip's own change of size would loop it.
+        let frame = 0;
+        const observer = new ResizeObserver(() => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(measure);
+        });
+        for (const e of [el, chip, words, span]) observer.observe(e);
+        let live = true;
+        document.fonts?.ready.then(() => live && measure());
+        return () => {
+            live = false;
+            observer.disconnect();
+            cancelAnimationFrame(frame);
+        };
+    }, [el, title]);
+    return [setRow, dotOnly];
+}
 
 /** The "?" (DESIGN-getting-started-fable.md §4–§5): help for the screen you're on, in the pill and the sidebar. */
 export function HelpIcon({ className }: { className: string }) {
@@ -22,7 +92,7 @@ export function HelpIcon({ className }: { className: string }) {
 /** The mobile header's pill: your profile, the "?" and Settings (its own file so its fit at 320 px can be measured alone). */
 export function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
     return (
-        <div style={{
+        <div data-testid="header-pill" style={{
             display: 'flex',
             alignItems: 'center',
             gap: '0.4rem',
@@ -32,6 +102,7 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
             border: '1px solid var(--border-secondary)',
             height: '26px', // Geometric balance with SyncStatus
             width: `${HEADER_PILL_PX}px`,
+            flexShrink: 0,
             justifyContent: 'center',
         }}>
             <button

@@ -89,7 +89,7 @@ export function ReportModal({
             <div
                 ref={modalCardRef}
                 tabIndex={-1}
-                className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl w-full max-w-md max-h-full overflow-y-auto p-5 sm:p-6 shadow-xl flex flex-col gap-4 outline-none"
+                className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl w-full max-w-md max-h-full overflow-y-auto scroll-pb-24 p-5 sm:p-6 shadow-xl flex flex-col gap-4 outline-none"
             >
                 <div className="flex items-center justify-between border-b border-nature-100 dark:border-nature-800 pb-3">
                     <h3 id="report-modal-title" className="text-base font-bold text-nature-950 dark:text-white flex items-center gap-2">
@@ -160,7 +160,7 @@ export function ReportModal({
                   * Cancel and Submit stay at the card's foot while it scrolls (the review of #1895, finding 6: at 320 px
                   * with 130% text the card ended at the hint, with no sign that Submit was below it).
                   */}
-                <div data-testid="report-actions" className="sticky bottom-0 -mx-5 sm:-mx-6 -mb-5 sm:-mb-6 px-5 sm:px-6 pb-5 sm:pb-6 pt-3 flex gap-2 bg-white dark:bg-nature-900 border-t border-nature-100 dark:border-nature-800 rounded-b-2xl">
+                <div data-testid="report-actions" className="sticky -bottom-5 sm:-bottom-6 -mx-5 sm:-mx-6 -mb-5 sm:-mb-6 px-5 sm:px-6 pb-5 sm:pb-6 pt-3 flex gap-2 bg-white dark:bg-nature-900 border-t border-nature-100 dark:border-nature-800 rounded-b-2xl">
                     <button
                         type="button"
                         onClick={onClose}

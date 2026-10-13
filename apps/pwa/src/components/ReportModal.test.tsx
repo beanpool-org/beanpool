@@ -85,12 +85,18 @@ describe('ReportModal Component', () => {
         expect(within(row).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
         // Sticky to the bottom of the scrolling card, with a solid background in each theme so the fields slide under it.
         expect(row.className).toMatch(/(^| )sticky( |$)/);
-        expect(row.className).toMatch(/(^| )bottom-0( |$)/);
+        // Its bottom edge is the card's outer edge, not the padding's: with bottom-0 it stopped one card padding short,
+        // and fields scrolled through the strip below the buttons (review of #1912, finding 1).
+        expect(row.className).toMatch(/(^| )-bottom-5( |$)/);
+        expect(row.className).toMatch(/(^| )sm:-bottom-6( |$)/);
+        expect(row.className).not.toMatch(/(^| )bottom-0( |$)/);
         expect(row.className).toMatch(/(^| )bg-white( |$)/);
         expect(row.className).toMatch(/(^| )dark:bg-nature-900( |$)/);
         // It is the last thing in the card that scrolls.
         const card = row.parentElement!;
         expect(card.className).toMatch(/overflow-y-auto/);
+        // A focused field scrolls clear of the row, not under it.
+        expect(card.className).toMatch(/(^| )scroll-pb-24( |$)/);
         expect(card.lastElementChild).toBe(row);
     });
 });

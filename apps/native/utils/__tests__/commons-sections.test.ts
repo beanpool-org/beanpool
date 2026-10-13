@@ -185,9 +185,9 @@ describe('the screens go through the helpers (source check)', () => {
 
     it('Commons: the section drawn is commonsSectionFor, and Decide, its pill and the propose form only where shown', () => {
         const src = read('app/(tabs)/projects.tsx');
-        expect(src).toContain('const sections = commonsSections(nodeProfile?.features);');
+        expect(src).toContain('const sections = commonsSections(reader.effective);');
         expect(src).toContain("const showsDecide = sections.includes('decide');");
-        expect(src).toContain('const activeSection = commonsSectionFor(pickedSection, nodeProfile?.features);');
+        expect(src).toContain('const activeSection = commonsSectionFor(pickedSection, reader.effective);');
         expect(src).not.toMatch(/const \[activeSection,/);
         expect(src.split('<DecideSection').length - 1).toBe(1);
         expect(src.slice(src.lastIndexOf('\n', src.indexOf('<DecideSection')) - 60, src.indexOf('<DecideSection'))).toContain("{activeSection === 'decide' ? (");
@@ -199,10 +199,10 @@ describe('the screens go through the helpers (source check)', () => {
         // commonsGroupRows.
         expect(src).not.toContain('Enterprises Section');
         expect(block(src, '{sections.length > 1 && (')).toContain('accessibilityLabel="Groups Section"');
-        expect(src).toContain('const kindChips = groupKindChips(nodeProfile?.features);');
-        expect(src).toContain('return commonsGroupRows(groupKind, groups, sorted, yourGroups, nodeProfile?.features);');
+        expect(src).toContain('const kindChips = groupKindChips(reader.effective);');
+        expect(src).toContain('return commonsGroupRows(groupKind, groups, sorted, yourGroups, reader.effective);');
         expect(src).toContain("data={activeSection === 'decide' ? [] : groupRows}");
-        expect(src).toContain('const heading = commonsHeading(nodeProfile?.features);');
+        expect(src).toContain('const heading = commonsHeading(reader.effective);');
         expect(src).toContain('<PageTitle title={heading.title}');
     });
 

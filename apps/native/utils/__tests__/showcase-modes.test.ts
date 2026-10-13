@@ -63,3 +63,33 @@ describe('the Market\'s no-Beans words (design §1 row 2)', () => {
         expect(NO_BEANS_TERMS.note).not.toMatch(/There are no Beans here|Ʀ|🔒|locked/i);
     });
 });
+
+describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", () => {
+    it('global First steps gains "See how Beans work ›" only where Beans are previewed', async () => {
+        const { globalStepLines, homeBeansPreview } = await import('../home-cards');
+        const steps = { firstPost: false } as never;
+        expect(globalStepLines(steps, undefined, false, true).map(l => l.id)).toEqual(['post', 'beans']);
+        expect(globalStepLines(steps, undefined, false, true)[1]).toMatchObject({ text: 'See how Beans work ›', done: false, suggestion: true });
+        expect(globalStepLines(steps, undefined, false).map(l => l.id)).toEqual(['post']);
+        expect(homeBeansPreview({ features: { beans: false, showcase: true } } as never)).toBe(true);
+        expect(homeBeansPreview({ features: { beans: false } } as never)).toBe(false);
+        expect(homeBeansPreview({ features: { beans: true, showcase: true } } as never)).toBe(false);
+    });
+
+    it("the member's own Ledger reads Example Valley in preview: 85 Beans, floor −200, level 2, six rows, no Ʀ", async () => {
+        const { sampleBalance, sampleTransactions } = await import('../../components/showcase/sample-screens');
+        const { memberLevel } = await import('@beanpool/core');
+        const b = sampleBalance();
+        expect(b).toMatchObject({ balance: 85, floor: -200, frozen: false, activated: true, commons: 640, liveOffers: 1 });
+        expect(memberLevel(b).index).toBe(1);
+        const rows = sampleTransactions();
+        expect(rows).toHaveLength(6);
+        for (const r of rows) {
+            expect(r.id).toMatch(/^sample-/);
+            expect(r.amount).toBeGreaterThan(0);
+            expect(r.peer).toMatch(/^(a neighbour|the Commons|the Example Valley Bakery)$/);
+        }
+        expect(rows.map(r => r.type)).toEqual(['credit', 'debit', 'credit', 'debit', 'credit', 'debit']);
+        expect(JSON.stringify([b, rows])).not.toMatch(/Ʀ/);
+    });
+});

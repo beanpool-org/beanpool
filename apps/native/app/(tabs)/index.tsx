@@ -19,6 +19,7 @@ import { NewEventModal } from '../../components/NewEventModal';
 import { goToNeedsTarget } from '../../components/NeedsYouIcons';
 import { useManageNode } from '../../components/useManageNode';
 import { FabBandContext, HomeCard, HomeButton, homeStyles, type FabBand } from '../../components/home/HomeParts';
+import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
 import { EditHomeSheet } from '../../components/home/EditHomeSheet';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
@@ -31,7 +32,7 @@ import {
 import {
     FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
-    effectiveInterests, fewerCardsNews, firstSteps, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
+    effectiveInterests, fewerCardsNews, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, skyOf, starredFirst,
     type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
@@ -637,6 +638,7 @@ export default function HomeScreen() {
         else if (step === 'photo') router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } });
         else if (step === 'interests') openTune();
         else if (step === 'ask') router.push('/find-community');
+        else if (step === 'beans') router.navigate('/(tabs)/ledger');
         else router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
     }, [openTune]);
 
@@ -725,7 +727,10 @@ export default function HomeScreen() {
             case 'steps': {
                 if (!c.steps) return null;
                 const steps = firstSteps(answer, { interests, role, knocked });
-                return frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
+                const stepsCard = frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
+                // Where Beans are previewed, Your Beans rides under First steps (design §1 row 1): no API, the Ledger's
+                // example behind its link; it goes when First steps is taken off Home.
+                return homeBeansPreview(answer) ? <>{stepsCard}<YourBeansPreviewCard colors={colors} /></> : stepsCard;
             }
             case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} />);
             case 'tips': return tipsView ? frame(

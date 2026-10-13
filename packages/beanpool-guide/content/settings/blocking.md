@@ -38,7 +38,7 @@ Your community does this for blocks it keeps for you. Today that is a block made
 ## What it does not do
 
 - They are not told. To them, their messages look sent, and so do the notes with their Beans.
-- Group chats, event chats and enterprise chats are shared: everyone in them sees the same messages. Their messages there still show, to you as to everyone else.
+- Group chats, event chats and project and enterprise chats are shared: everyone in them sees the same messages. Their messages there still show, to you as to everyone else.
 - A deal you already have with them goes on as before, with its notices and notifications.
 - If you have traded with them before, they can still send you Beans. Every Bean arrives, with no notification.
 - Notices from your community still come, even when they started them. For example, you are told when someone opens a vote to replace you as a group's lead convenor, and you get messages from the people who run your community.

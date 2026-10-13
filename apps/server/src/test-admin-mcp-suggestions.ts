@@ -292,7 +292,10 @@ async function main(): Promise<void> {
         assert(afterTtl.status === 409 && (reportStatus(reports[3]) === 'pending' || reportStatus(reports[3]) === null), `an expired one can't be approved (${show(afterTtl)})`);
         const b1 = await suggest(ada, { kind: 'dismiss_report', report_id: reports[3], reason: 'ok again' });
         assert(b1.ok, 'filed again');
-        revokeNodeRole(admin2.pub, 'admin', 'SYSTEM');
+        // The 48 hours took Olive's too: her assistant files again (the report is still open).
+        const o2 = await suggest(olive, { kind: 'dismiss_report', report_id: reports[10], reason: 'Still fine' });
+        assert(o2.ok, "Olive's assistant files again after the 48 hours");
+        revokeNodeRole(admin2.pub, 'admin', owner.pub);
         grantNodeRole(admin2.pub, 'moderator', 'SYSTEM');
         const asModNow = await call('POST', `/api/local/admin/reports/${reports[3]}/dismiss`, { headers: asSession(await keySignIn(admin2)), body: { suggestion: b1.sc.id } });
         const oSees = ((await call('GET', LIST, { headers: asSession(ownerS) })).body?.suggestions ?? []).some((x: any) => x.id === b1.sc.id);
@@ -324,7 +327,7 @@ async function main(): Promise<void> {
 
         // ── 6. The assistant can never approve ──────────────────────────────────────────────────
         console.log("── 6. The assistant can't approve or reach the routes ──");
-        const pending = oItems.find(x => x.mine);
+        const pending = { id: o2.sc.id as string };
         const routes: Array<[string, string, unknown]> = [
             ['GET', LIST, undefined], ['POST', decline(pending.id), {}],
             ['POST', `/api/local/admin/reports/${reports[10]}/dismiss`, { suggestion: pending.id }],

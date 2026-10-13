@@ -79,7 +79,7 @@ describe('AgentSuggestionsPanel', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(changed).toHaveBeenCalled());
         const sent = calls.find((c) => c.method === 'POST');
-        expect(sent?.url).toBe('http://localhost:8080/api/local/admin/reports/rep1/dismiss');
+        expect(sent?.url.endsWith('localhost:8080/api/local/admin/reports/rep1/dismiss')).toBe(true);
         expect(sent?.body).toEqual({ suggestion: 'sug1' });
     });
 

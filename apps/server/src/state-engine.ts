@@ -263,7 +263,6 @@ import {
     withoutPollVoters,
     withoutTradeParty,
     isTradeParty,
-    getPostCount as getPostCountEngine,
     getActivePostCount as getActivePostCountEngine,
     hasListedOffer as hasListedOfferEngine,
     hasLiveOffer as hasLiveOfferEngine,
@@ -7089,18 +7088,6 @@ export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfa
     }
     notifyPostsCleared(moderationNoticeCb, removed, reportersByPost);
     return removed.length;
-}
-
-export function getPostCount(filter?: {
-    type?: string;
-    category?: string;
-    status?: string;
-    query?: string;
-    audienceScope?: AudienceScope | string;
-    viewerPubkey?: string;
-    targetGroupId?: string;
-}): number {
-    return getPostCountEngine(db, filter);
 }
 
 // ===================== COMMUNITY HEALTH =====================

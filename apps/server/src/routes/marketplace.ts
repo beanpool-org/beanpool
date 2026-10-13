@@ -44,7 +44,7 @@ import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { withheldAttachmentFor } from '../engine/withheld-lines.js';
-import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, postsResentTo, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 
@@ -303,6 +303,10 @@ function photoKeysSince(): string {
     }
 }
 
+/** The posts route's parameters read as one value each. Given twice (`q=a&q=b`), one arrives as an array, which made
+ *  getPosts throw or reached SQL as one, and answered 500 to anyone (#1808 review, finding 4): it is a 400. */
+const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo'] as const;
+
 /**
  * A member's set's hash, in each answer beside its ids (DESIGN-global-sync-by-area §2.3), `tied` included: a deal opened on
  * a listing already in the set moves no id, and the phone must still learn the tie. A phone sends back the one it holds
@@ -320,6 +324,12 @@ function nearbyTagQuery(querystring: string): string {
 }
 
 router.get('/api/marketplace/posts', async (ctx) => {
+    const repeated = ONE_VALUE_POSTS_PARAMS.find(p => ctx.query[p] !== undefined && typeof ctx.query[p] !== 'string');
+    if (repeated) {
+        ctx.status = 400;
+        ctx.body = { error: `${repeated} is one value: give it once` };
+        return;
+    }
     // Distance search (G4, design §3.2), on every profile: `lat`, `lng`, `radiusKm`, `sort=distance|recent`. Checked
     // first, so garbage is a 400 and never a 304. Without these parameters nothing below changes.
     const distance = parseDistanceQuery(ctx.query);
@@ -485,7 +495,11 @@ router.get('/api/marketplace/posts', async (ctx) => {
         nearbyEtag = `W/"near-${crypto.createHash('sha256').update(described).digest('hex').slice(0, 24)}"`;
     }
 
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}`;
+    // A search leaves out the listings of the authors the reader blocked (engine getPosts), so its tag describes that list
+    // too: a block or an unblock changes the answer and no listing, and a copy held from before must not be confirmed
+    // with a 304 (#1808 review, finding 3). The nearby set's tag holds its ids, so it needs nothing more.
+    const blocksPart = q && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 

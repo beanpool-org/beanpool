@@ -1064,7 +1064,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
 const UNSPACED_SCRIPT = /[฀-໿က-႟ក-៿぀-ヿㇰ-ㇿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ]|[\ud840-\ud87f][\udc00-\udfff]/;
 
 /**
- * The search, as one condition on `p` and its parameters, for getPosts and getPostCount alike; null for no words. Any
+ * The search, as one condition on `p` and its parameters, for getPosts; null for no words. Any
  * word may match (OR), each as the start of a word in posts_fts, as it always has.
  *
  * posts_fts's unicode61 parts words at spaces and punctuation, so a run of Chinese, Japanese or Thai is one token and a
@@ -1081,8 +1081,28 @@ const UNSPACED_SCRIPT = /[฀-໿က-႟ក-៿぀-ヿㇰ-ㇿ㐀-䶿一-鿿豈-�
  */
 const UNSPACED_LIKE_MAX = 8;
 
+/** Control characters (C0, DEL, C1): a NUL in a quoted FTS5 string ends it ("unterminated string"), and none is in a word. */
+// eslint-disable-next-line no-control-regex -- matching control characters is the point
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+/**
+ * At most this many distinct words go to posts_fts (#1808 review, finding 5). FTS5 reads each OR'd prefix on its own, so
+ * one unsigned GET repeating a short word (4,000 × "a") held the event loop 24 s; each word now goes once. The cap holds
+ * the wide synonym expansions apps ask with ("food" is 125 words here, "food garden" 175; core puts the typed words
+ * first, so a cap only ever trims synonyms at the end), and bounds what any number of distinct words can cost.
+ */
+export const SEARCH_TERMS_MAX = 256;
+
+/** The words a search asks posts_fts for, each once, at most SEARCH_TERMS_MAX. */
+export function searchTermsOfQuery(query: string | undefined): string[] {
+    // Control characters part words, as core's searchTermsFor reads them, here too: a raw `q` (the route's, from any
+    // client) carrying a NUL threw and answered 500 (#1781); it now finds what the words without it find.
+    const words = (query ?? '').replace(CONTROL_CHARACTERS, ' ').trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
+    return [...new Set(words)].slice(0, SEARCH_TERMS_MAX);
+}
+
 function searchCondition(query: string | undefined): { sql: string; params: string[] } | null {
-    const terms = (query ?? '').trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
+    const terms = searchTermsOfQuery(query);
     if (terms.length === 0) return null;
     let sql = `p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
     const params = [terms.map(t => `"${t}"*`).join(' OR ')];
@@ -1096,6 +1116,17 @@ function searchCondition(query: string | undefined): { sql: string; params: stri
 
 export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     return getPostsRankedBy(db, filter, postRowsNear);
+}
+
+/** The authors this member blocked: their own list, read for them alone (schema.sql's member_blocks). The nearby set and
+ *  the search leave out these authors' listings; the route's search ETag describes this list. */
+export function authorsBlockedBy(db: Db, member: string): string[] {
+    try {
+        return (prepared(db, 'SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = ?').all(member) as Array<{ blocked_pubkey: string }>).map(r => r.blocked_pubkey);
+    } catch {
+        // No member_blocks table: an engine-only database.
+        return [];
+    }
 }
 
 /** What a member's set is worked out from (getNearbySet). */
@@ -1166,13 +1197,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
     } catch {
         // No conversations table: an engine-only database.
     }
-    // The authors this member blocked: their own list, read for them alone (schema.sql's member_blocks).
-    let blocked: string[] = [];
-    try {
-        blocked = (prepared(db, 'SELECT blocked_pubkey FROM member_blocks WHERE owner_pubkey = ?').all(member) as Array<{ blocked_pubkey: string }>).map(r => r.blocked_pubkey);
-    } catch {
-        // No member_blocks table: an engine-only database.
-    }
+    const blocked = authorsBlockedBy(db, member);
     const base: PostFilter = { viewerPubkey: member, types: q.types, excludeEvents: q.excludeEvents, includeHidden: q.includeHidden };
 
     // near(M): the rows are never read in full; the hook keeps what the lean pass ranked. `m` stays joined for any
@@ -1475,6 +1500,14 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // Goods search isolation: searching marketplace keywords must not return polls unless explicitly asked
         if (filter?.type !== 'poll') {
             where += " AND p.type != 'poll'";
+        }
+        // A search leaves out the listings of the authors the reader blocked, as their nearby set does (#1781): the phone
+        // hides those, so they would only take the places of listings it shows, and the web and Home show them otherwise.
+        // A read for nobody in particular has no list.
+        const blocked = viewer && !filter?.includeAllScopes ? authorsBlockedBy(db, viewer) : [];
+        if (blocked.length > 0) {
+            where += ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))';
+            params.push(JSON.stringify(blocked));
         }
     }
 
@@ -1861,72 +1894,3 @@ export function getActivePostCount(db: Db): number {
     return row?.c || 0;
 }
 
-export function getPostCount(db: Db, filter?: {
-    type?: string;
-    category?: string;
-    status?: string;
-    query?: string;
-    audienceScope?: AudienceScope | string;
-    viewerPubkey?: string;
-    targetGroupId?: string;
-    includeAllScopes?: boolean;
-}): number {
-    let query = "SELECT COUNT(*) as c FROM posts p WHERE p.active = 1";
-    const params: any[] = [];
-
-    const viewer = filter?.viewerPubkey;
-    if (filter?.includeAllScopes) {
-        // Internal lookup bypasses feed scoping
-    } else if (filter?.audienceScope === 'public') {
-        query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
-    } else if (filter?.audienceScope === 'group') {
-        query += " AND p.audience_scope = 'group'";
-        if (!viewer) {
-            query += " AND 1=0";
-        } else {
-            query += " AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))";
-            params.push(viewer, viewer);
-        }
-    } else if (filter?.audienceScope === 'direct') {
-        query += " AND p.audience_scope = 'direct'";
-        if (!viewer) {
-            query += " AND 1=0";
-        } else {
-            query += " AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?)";
-            params.push(viewer, viewer, viewer);
-        }
-    } else {
-        if (!viewer) {
-            query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
-        } else {
-            query += ` AND (
-                (p.audience_scope IS NULL OR p.audience_scope = 'public')
-                OR (p.audience_scope = 'group' AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active')))
-                OR (p.audience_scope = 'direct' AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?))
-            )`;
-            params.push(viewer, viewer, viewer, viewer, viewer);
-        }
-    }
-
-    // Hidden by reports (G3): counted for its author only, as getPosts lists it.
-    if (!filter?.includeAllScopes) {
-        if (viewer) { query += " AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)"; params.push(viewer); }
-        else query += " AND p.hidden_by_reports_at IS NULL";
-    }
-    if (filter?.targetGroupId) { query += " AND p.target_group_id = ?"; params.push(filter.targetGroupId); }
-    if (filter?.type && filter.type !== 'all') { query += " AND p.type = ?"; params.push(filter.type); }
-    if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }
-    if (filter?.status) { query += " AND p.status = ?"; params.push(filter.status); }
-
-    const search = searchCondition(filter?.query);
-    if (search) {
-        query += ` AND ${search.sql}`;
-        params.push(...search.params);
-        if (filter?.type !== 'poll') {
-            query += " AND p.type != 'poll'";
-        }
-    }
-
-    const row = db.prepare(query).get(...params) as any;
-    return row?.c || 0;
-}

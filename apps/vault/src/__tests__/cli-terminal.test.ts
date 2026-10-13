@@ -10,6 +10,7 @@ import { NO_HARDWARE_PROOF } from '../custodian/checker.js';
 import { SIGNATURES_ASSET } from '../shared/release-feed.js';
 import { doGenesis, get, startVault, type VaultUnderTest } from './harness.js';
 import { makeRelease, publish, randomImage, type MadeRelease } from './release-kit.js';
+import { StubS3 } from './stubs.js';
 // @ts-expect-error: a plain .mjs build script, no types
 import { bundleVault } from '../../scripts/bundle.mjs';
 
@@ -261,4 +262,111 @@ describe.skipIf(!hasExpect)('vault-custodian on a real terminal', () => {
         expect(second.terminalRestored, second.out).toBe(true);
         expect((JSON.parse(readFileSync(requestFile, 'utf8')) as { signatures: unknown[] }).signatures).toHaveLength(2);
     }, 120_000);
+
+    // The other commands that ask the passphrase and then the host warning's yes (BLOCKERS.md §0 named them all).
+    it('unlock under none: passphrase then "no" sends no part and exits non-zero; passphrase then yes sends the part', async () => {
+        v = await startVault({ custodians, clock: { now: () => Date.now(), advance: () => undefined } });
+        const g = await doGenesis(v);
+        await v.restartKeyholder();
+        const share = path.join(dir, 'unlock-share.json');
+        writeFileSync(share, JSON.stringify(g.shares[0]));
+        const unlock = ['unlock', '--url', v.baseUrl, '--key', keys[0], '--share', share, '--feed-dir', v.feedDir];
+
+        const no = await onTerminal('no', unlock);
+        expect(no.code, no.out).toBe(1);
+        expect(no.out).toContain(NO_HARDWARE_PROOF);
+        expect(no.out).toContain('Nothing was sent');
+        expect(no.out).not.toContain(PASS);
+        expect(v.keyholder().status().sharesPresent).toBe(0);
+
+        const yes = await onTerminal('yes', unlock);
+        expect(yes.code, yes.out).toBe(0);
+        expect(yes.out).toMatch(/200 .*"sharesPresent":1/);
+        expect(yes.out).not.toContain(PASS);
+        expect(yes.terminalRestored, yes.out).toBe(true);
+        expect(v.keyholder().status().sharesPresent).toBe(1);
+    });
+
+    it('reshare under none: one custodian\'s "no" sends no part (exits non-zero), so another\'s yes is the first share, not the second', async () => {
+        v = await startVault({ custodians, clock: { now: () => Date.now(), advance: () => undefined } });
+        const g = await doGenesis(v);
+        const out = path.join(dir, 'reshare-out');
+        const reshare = (i: number) => {
+            const share = path.join(dir, `reshare-share-${i}.json`);
+            writeFileSync(share, JSON.stringify(g.shares[i]));
+            return ['reshare', '--url', (v as VaultUnderTest).baseUrl, '--key', keys[i], '--share', share,
+                '--new-custodians', custodians.map(c => c.publicKey).join(','), '--out', out, '--feed-dir', (v as VaultUnderTest).feedDir];
+        };
+
+        const no = await onTerminal('no', reshare(0));
+        expect(no.code, no.out).toBe(1);
+        expect(no.out).toContain(NO_HARDWARE_PROOF);
+        expect(no.out).toContain('Nothing was sent');
+        expect(no.out).not.toContain(PASS);
+
+        const yes = await onTerminal('yes', reshare(1));
+        expect(yes.code, yes.out).toBe(0);
+        expect(yes.out).toMatch(/200 .*"state":"open".*"sharesPresent":1/);
+        expect(yes.out).not.toContain(PASS);
+        expect(yes.terminalRestored, yes.out).toBe(true);
+        expect(readdirSync(out)).toHaveLength(0);
+    });
+
+    it('restore under none: passphrase then "no" leaves the fresh vault as it was and exits non-zero; passphrase then yes restores it, locked', async () => {
+        const clock = { now: () => Date.now(), advance: () => undefined };
+        // The store outlives the first vault (close() removes its directory), as an off-box store outlives a lost vault.
+        const storeDir = path.join(dir, 'restore-store');
+        const a = await startVault({ custodians, clock, storeDir });
+        let backup: string;
+        try {
+            await doGenesis(a);
+            backup = await a.api.runBackup();
+            v = await startVault({ custodians, clock, storeDir });
+        } finally {
+            await a.close();
+        }
+        const restore = ['restore', '--url', v.baseUrl, '--key', keys[1], '--backup', backup, '--feed-dir', v.feedDir];
+        const before = (await get(v, '/v1/health')).body.state;
+
+        const no = await onTerminal('no', restore);
+        expect(no.code, no.out).toBe(1);
+        expect(no.out).toContain(NO_HARDWARE_PROOF);
+        expect(no.out).toContain('Nothing was sent');
+        expect(no.out).not.toContain(PASS);
+        expect((await get(v, '/v1/health')).body.state).toBe(before);
+
+        const yes = await onTerminal('yes', restore);
+        expect(yes.code, yes.out).toBe(0);
+        expect(yes.out).toMatch(/200 .*"state":"locked"/);
+        expect(yes.out).not.toContain(PASS);
+        expect(yes.terminalRestored, yes.out).toBe(true);
+    });
+
+    it('settings send under none: one custodian\'s "no" sends nothing (exits non-zero), so another\'s yes waits for a second, not in force', async () => {
+        v = await startVault({ custodians, clock: { now: () => Date.now(), advance: () => undefined } });
+        await doGenesis(v);
+        const s3 = await new StubS3().start();
+        try {
+            const file = path.join(dir, 'settings.json');
+            writeFileSync(file, JSON.stringify({ v: 1, offsite: s3.settings() }));
+            const send = (i: number) => ['settings', 'send', '--url', (v as VaultUnderTest).baseUrl, '--key', keys[i], '--file', file, '--feed-dir', (v as VaultUnderTest).feedDir];
+
+            const no = await onTerminal('no', send(0));
+            expect(no.code, no.out).toBe(1);
+            expect(no.out).toContain(NO_HARDWARE_PROOF);
+            expect(no.out).toContain('Nothing was sent');
+            expect(no.out).not.toContain(PASS);
+            expect(no.out).not.toContain(s3.secretAccessKey);
+
+            const yes = await onTerminal('yes', send(1));
+            expect(yes.code, yes.out).toBe(0);
+            expect(yes.out).toContain('The vault took your file as it is (the same hash).');
+            expect(yes.out).toContain('Waiting for a second custodian');
+            expect(yes.out).not.toContain(PASS);
+            expect(yes.out).not.toContain(s3.secretAccessKey);
+            expect(yes.terminalRestored, yes.out).toBe(true);
+        } finally {
+            await s3.stop();
+        }
+    });
 });

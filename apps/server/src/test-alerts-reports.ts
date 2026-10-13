@@ -13,11 +13,13 @@
  *     while the ordinary ones beside it still fold. The history counts them as one line (×3).
  *  4. The operator's fold window (ALERTS_REPORT_FOLD_MINUTES): 5 minutes folds into "the 5 minutes"; a bad value is
  *     the hour.
- *  5. One member's 10 child-safety reports (their hour's limit): the first pushed at once, the other 9 in one urgent
- *     line 10 minutes on, not 10 pushes (the deciding review of #1850, finding 2).
+ *  5. One member's 10 child-safety reports (their hour's limit), one every 6 minutes, a tick a minute: the first pushed
+ *     at once, the other 9 in one urgent line when their hour ends, so 2 pushes that hour, not 10 (the deciding review
+ *     of #1850, finding 2) and not 6 (its confirmation review, finding 2: they went on the 10-minute summary).
  *  6. A flood, 12 members × 8 child-safety reports: 10 pushed at once (each a member's first, the server's hourly cap),
- *     the other 86 in one urgent line 10 minutes on. The channel is not filled: an owner made by the admin password
- *     just after reaches it at once (it went at +61 minutes before). The history counts the lines told at once as one.
+ *     the 2 firsts past the cap in one urgent line 10 minutes on, and the other 84 in one urgent line when the 12 hours
+ *     end. The channel is not filled: an owner made by the admin password just after reaches it at once (it went at +61
+ *     minutes before). The history counts the lines told at once as one.
  *  7. 250 urgent report lines, each its own (as the unbounded flood told them), with the channel down: the owner made
  *     before them stays in the history (finding 1: it was pushed out), and so does someone made an admin, a security
  *     line that is not high (the confirmation review's finding 1: report lines pushed it out of the history and the
@@ -320,7 +322,7 @@ async function main(): Promise<void> {
         && alerts.reportKind('Spam or scam') === 'spam or scam' && alerts.reportKind('offensive content: rude') === 'offensive content'
         && alerts.reportKind('He was rude') === 'other' && alerts.reportKind(42) === 'other', '4. a report\'s kind is read from its reason');
 
-    // ── 5. One member's child-safety reports: the first at once, the rest one urgent line 10 minutes on ─────────────
+    // ── 5. One member's child-safety reports, one every 6 minutes: the first at once, the rest one line at their hour's end
     advance(HOUR + MIN);
     await tick();
     await settle();
@@ -329,22 +331,29 @@ async function main(): Promise<void> {
     for (let j = 0; j < 10; j++) {
         const r = await report(childReporters[3], targets[j], 'Child safety');
         if (r.status !== 200 || r.json?.duplicate) throw new Error(`setup: child-safety report ${j} not taken (${r.status} ${JSON.stringify(r.json)})`);
+        await settle(50);
+        if (j === 0) {
+            assert(ownerPushes().length === p5 + 1 && topicHits().length === h5 + 1,
+                `5. one member's first child-safety report: pushed and told at once (${ownerPushes().length - p5} pushes, ${topicHits().length - h5} lines)`);
+        }
+        for (let m = 0; m < (j < 9 ? 6 : 5); m++) { advance(MIN); await tick(); }
     }
     await settle();
     assert(ownerPushes().length === p5 + 1 && topicHits().length === h5 + 1,
-        `5. one member's 10 child-safety reports: their first pushed and told at once, not the other 9 (${ownerPushes().length - p5} pushes, ${topicHits().length - h5} lines)`);
-    advance(9 * MIN);
-    await tick();
-    await settle();
-    assert(ownerPushes().length === p5 + 1 && topicHits().length === h5 + 1, '5. nine minutes on, still counted');
+        `5. 59 minutes and 9 more reports on, nothing more told: not on the 10-minute summary (${ownerPushes().length - p5} pushes, ${topicHits().length - h5} lines)`);
     advance(MIN + 1000);
     await tick();
     await settle();
-    assert(ownerPushes().length === p5 + 2 && topicHits().length === h5 + 2, `5. ten minutes on, one push and one line (${ownerPushes().length - p5}, ${topicHits().length - h5})`);
+    assert(ownerPushes().length === p5 + 2 && topicHits().length === h5 + 2,
+        `5. their hour over: one push and one line, 2 in their hour, not 10 or 6 (${ownerPushes().length - p5}, ${topicHits().length - h5})`);
     const sum5 = topicHits().at(-1)!;
     assert(/more child-safety reports waiting/.test(String(sum5.headers.title)) && sum5.headers.priority === '5', `5. urgent (${sum5.headers.title} p${sum5.headers.priority})`);
-    assert(/9 more child-safety reports came in, from one member, past those pushed one by one/.test(sum5.body), `5. it counts them: ${JSON.stringify(sum5.body.split('\n')[2])}`);
+    assert(/9 more child-safety reports came in from the same member in the hour after their first was told: look at them first\./.test(sum5.body),
+        `5. it counts them: ${JSON.stringify(sum5.body.split('\n')[2])}`);
     assert(JSON.stringify((ownerPushes().at(-1)?.to ?? []).slice().sort()) === JSON.stringify(pushTo), '5. pushed to the owner and the admin');
+    await tick();
+    await settle();
+    assert(ownerPushes().length === p5 + 2 && topicHits().length === h5 + 2, '5. and told once');
 
     // ── 6. A flood from 12 members: 10 at once, the rest one line; the channel stays open ───────────────────────────
     advance(HOUR + MIN);
@@ -372,9 +381,18 @@ async function main(): Promise<void> {
     advance(10 * MIN + 1000);
     await tick();
     await settle();
-    const sum6 = topicHits().slice(h6).filter((h) => /more child-safety reports waiting/.test(String(h.headers.title)));
-    assert(sum6.length === 1 && /86 more child-safety reports came in, from 12 members/.test(sum6[0].body) && sum6[0].headers.priority === '5',
-        `6. ten minutes on, the other 86 in one urgent line: ${JSON.stringify(sum6.map((h) => h.body.split('\n')[2]))}`);
+    const more6 = () => topicHits().slice(h6).filter((h) => /more child-safety reports waiting/.test(String(h.headers.title)));
+    const sum6 = more6();
+    assert(sum6.length === 1 && /2 more child-safety reports came in, from 2 members, past the 10 lines an hour this server tells on their own/.test(sum6[0].body)
+        && sum6[0].headers.priority === '5', `6. ten minutes on, the 2 firsts past the cap in one urgent line: ${JSON.stringify(sum6.map((h) => h.body.split('\n')[2]))}`);
+    const p6b = ownerPushes().length;
+    advance(50 * MIN + 30_000);
+    await tick();
+    await settle();
+    const fold6 = more6().slice(1);
+    assert(fold6.length === 1 && /84 more child-safety reports came in from 12 members, each in the hour after their first was told/.test(fold6[0].body)
+        && fold6[0].headers.priority === '5' && ownerPushes().length === p6b + 1,
+        `6. the 12 hours over: the other 84 in one urgent line, one push: ${JSON.stringify(fold6.map((h) => h.body.split('\n')[2]))}`);
     assert(childLines().length === 1 && childLines()[0].count === 3 + 1 + 10,
         `6. the history counts every child-safety line told at once as one (${childLines().length} lines, ×${childLines()[0]?.count})`);
 

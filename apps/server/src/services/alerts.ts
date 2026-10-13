@@ -22,8 +22,9 @@
  * And reports coming in (the launch-readiness review's B9): the first report is told at once, and those that follow
  * inside the fold window (an hour, or ALERTS_REPORT_FOLD_MINUTES in .env) are counted and told as one line when it is
  * over: "N more reports came in", by kind (the reason the member picked: spam or scam, offensive, misleading, child
- * safety, other). A child-safety report is told at once, urgent: each member's first in their hour, up to 10 an hour on
- * the server. Past either, it is counted into one urgent line told within about 10 minutes, never dropped. Owners and
+ * safety, other). A child-safety report is told at once, urgent: each member's first in their hour; their others that
+ * hour as one urgent line when it ends (#1807's model); up to 10 lines an hour on the server told so. Past those 10, it
+ * is counted into one urgent line told within about 10 minutes. None is dropped. Owners and
  * admins are pushed (admins act on reports; they are pushed the report lines alone); the line says how many and what
  * kind, never who reported whom or what they wrote. Report lines are members' doing: urgent to deliver, but never kept
  * over another line, so no flood of them pushes a security line out of the history or the channel's queue, or past it in
@@ -282,11 +283,11 @@ interface BookState {
 }
 
 interface ChildReports {
-    /** When each was told at once, the last hour's: at most REPORT_CHILD_AT_ONCE_PER_HOUR. */
+    /** When each line was told on its own (a member's first, a member's hour folded), the last hour's: at most REPORT_CHILD_AT_ONCE_PER_HOUR. */
     told: number[];
-    /** When each reporter's hour began, by a hash of who reported (never the key itself). */
-    reporters: Record<string, number>;
-    /** Those past the bounds: counted from `from`, told as one line REPORT_CHILD_SUMMARY_MS later; who by hash, for a count. */
+    /** Each reporter's hour, by a hash of who reported (never the key itself): when it began, and their reports after the first. */
+    reporters: Record<string, { from: number; folded: number }>;
+    /** Those past the server's hourly bound: counted from `from`, told as one line REPORT_CHILD_SUMMARY_MS later; who by hash, for a count. */
     summary: { from: number; count: number; reporters: string[] } | null;
 }
 
@@ -1070,36 +1071,80 @@ function foldedReportConditions(s: BookState, t: number, foldMs: number = report
 }
 
 /**
- * Child-safety reports told at once on this server in any hour, whoever filed them (the director's call on the deciding
- * review of #1850: global's open door makes accounts cheap). Past it they go in the summary, never dropped.
+ * Child-safety lines told on their own on this server in any hour (a member's first, a member's hour folded), whoever
+ * filed them (the director's call on the deciding review of #1850: global's open door makes accounts cheap). Past it
+ * they go in the summary, never dropped.
  */
 export const REPORT_CHILD_AT_ONCE_PER_HOUR = 10;
-/** The summary of child-safety reports past those bounds: told, urgent and pushed, this long after the first it counts. */
+/** The summary of child-safety reports past the server's bound: told, urgent and pushed, this long after the first it counts. */
 export const REPORT_CHILD_SUMMARY_MS = 10 * 60_000;
 
 /** The same words every time, so the history and the channel's queue count them (×n) rather than keep each. */
 const CHILD_AT_ONCE_WORDS = "A report in the child-safety category came in: look at it first, in the Manager's Reports queue.";
 
+/** One of the server's hourly slots for a child-safety line told on its own, taken if there is one left. */
+function childSlot(c: ChildReports, t: number): boolean {
+    c.told = c.told.filter((x) => t - x < HOUR_MS);
+    if (c.told.length >= REPORT_CHILD_AT_ONCE_PER_HOUR) return false;
+    c.told.push(t);
+    return true;
+}
+
+/** Reports past the server's hourly bound, counted into the summary (opened now if none is). */
+function childToSummary(c: ChildReports, t: number, id: string, count: number): void {
+    const w = c.summary ??= { from: t, count: 0, reporters: [] };
+    w.count += count;
+    if (!w.reporters.includes(id)) w.reporters.push(id);
+}
+
 /**
- * Whether this child-safety report is told at once: its reporter's first in their hour, and the server's hour not yet at
- * REPORT_CHILD_AT_ONCE_PER_HOUR. If not, it is counted into the summary. One member filing their 10 an hour at once sends
- * each owner and admin 2 pushes, not 10; any number of new accounts, 10 an hour and a summary every 10 minutes.
+ * Whether this child-safety report is told at once, #1807's model (the director's call on the confirmation review of
+ * #1850, finding 2): a member's first in their hour is, while the server's hour has a slot (REPORT_CHILD_AT_ONCE_PER_HOUR,
+ * whoever filed them); their others that hour are counted and told as one line when it ends (childFoldConditions). A
+ * first with no slot left is counted into the summary, told within about 10 minutes. So one member filing their 10 an
+ * hour, together or one every 6 minutes, sends each owner and admin 2 pushes; any number of new accounts, at most 10 lines
+ * an hour told on their own and a summary every 10 minutes. Call childFoldConditions first: it closes the hours that are over.
  */
 function childAtOnce(s: BookState, t: number, reporter: string): boolean {
     const c = s.child;
-    c.told = c.told.filter((x) => t - x < HOUR_MS);
-    for (const [id, from] of Object.entries(c.reporters)) if (t - from >= HOUR_MS) delete c.reporters[id];
     const id = actorId(`report:${reporter}`);
-    const first = c.reporters[id] === undefined;
-    c.reporters[id] ??= t;
-    if (first && c.told.length < REPORT_CHILD_AT_ONCE_PER_HOUR) {
-        c.told.push(t);
-        return true;
+    const mine = c.reporters[id];
+    if (mine) {
+        mine.folded++;
+        return false;
     }
-    const w = c.summary ??= { from: t, count: 0, reporters: [] };
-    w.count++;
-    if (!w.reporters.includes(id)) w.reporters.push(id);
+    c.reporters[id] = { from: t, folded: 0 };
+    if (childSlot(c, t)) return true;
+    childToSummary(c, t, id, 1);
     return false;
+}
+
+/**
+ * Each member's hour that is over: their child-safety reports after their first, told as one urgent line (pushed), and
+ * the hour closed. Hours that end on the same tick are one line. It takes one of the server's hourly slots; with none
+ * left, the reports are counted into the summary instead.
+ */
+function childFoldConditions(s: BookState, t: number): Condition[] {
+    const c = s.child;
+    const due: Array<[string, number]> = [];
+    for (const [id, w] of Object.entries(c.reporters)) {
+        if (t - w.from < HOUR_MS) continue;
+        delete c.reporters[id];
+        if (w.folded > 0) due.push([id, w.folded]);
+    }
+    if (!due.length) return [];
+    if (!childSlot(c, t)) {
+        for (const [id, n] of due) childToSummary(c, t, id, n);
+        return [];
+    }
+    const count = due.reduce((sum, [, n]) => sum + n, 0);
+    let also: string[] = [];
+    try { also = admins(); } catch { /* the owners still are */ }
+    const by = due.length === 1 ? 'the same member in the hour after their first was told' : `${due.length} members, each in the hour after their first was told`;
+    return [{
+        key: 'reports.child-more', active: true, oneShot: true, priority: 5, alsoPush: also,
+        detail: `${count} more child-safety report${count === 1 ? '' : 's'} came in from ${by}: look at them first. ${waitingWords(pendingReports())}`,
+    }];
 }
 
 /** The child-safety summary that is due: what it counted, told as one urgent line (pushed), and closed. */
@@ -1112,8 +1157,8 @@ function childSummaryConditions(s: BookState, t: number): Condition[] {
     const by = w.reporters.length === 1 ? 'one member' : `${w.reporters.length} members`;
     return [{
         key: 'reports.child-more', active: true, oneShot: true, priority: 5, alsoPush: also,
-        detail: `${w.count} more child-safety report${w.count === 1 ? '' : 's'} came in, from ${by}, past those pushed one by one `
-            + `(a member's first in their hour, ${REPORT_CHILD_AT_ONCE_PER_HOUR} an hour in all): look at them first. ${waitingWords(pendingReports())}`,
+        detail: `${w.count} more child-safety report${w.count === 1 ? '' : 's'} came in, from ${by}, past the ${REPORT_CHILD_AT_ONCE_PER_HOUR} lines `
+            + `an hour this server tells on their own: look at them first. ${waitingWords(pendingReports())}`,
     }];
 }
 
@@ -1121,14 +1166,14 @@ function childSummaryConditions(s: BookState, t: number): Condition[] {
  * A new report in the queue (routes/community.ts POST /api/reports, once a new row is written, with who filed it): told to
  * the owners and admins, by kind and count only. The first of a fold window goes at once; the rest are counted in memory
  * (the tick writes the book every minute, so a crash loses at most a minute of counts, and the reports themselves are in
- * the queue) and told as one line when the window is over. A child-safety one is told at once, urgent and pushed, within
- * childAtOnce's bounds; past them it is counted (the book written) into one urgent line told within about 10 minutes.
+ * the queue) and told as one line when the window is over. A child-safety one is told at once, urgent and pushed, or
+ * counted (the book written) into its member's hour or the summary: childAtOnce.
  */
 export function noteNewReport(reason: unknown, reporter: string): Promise<AlertEvent[]> {
     const s = readState();
     const t = now();
     const kind = reportKind(reason);
-    const conditions = [...foldedReportConditions(s, t), ...childSummaryConditions(s, t)];
+    const conditions = [...foldedReportConditions(s, t), ...childFoldConditions(s, t), ...childSummaryConditions(s, t)];
     let also: string[] = [];
     try { also = admins(); } catch { /* the owners still are */ }
     if (kind === 'child safety') {
@@ -1311,6 +1356,7 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             ...nameConditions(),
             ...foldedConditions(s, t),
             ...foldedReportConditions(s, t),
+            ...childFoldConditions(s, t),
             ...childSummaryConditions(s, t),
         ];
         return await updateAlerts(conditions);

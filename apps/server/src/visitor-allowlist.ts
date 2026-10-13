@@ -79,6 +79,9 @@ export const VISITOR_WRITES: readonly VisitorWrite[] = [
     { method: 'POST', path: '/api/join/work', why: "the open door's work, which a 12-words join (and a busy sign-in) carries" },
     { method: 'POST', path: '/api/join/sso-nonce', why: "the open door's sign-in" },
     { method: 'POST', path: '/api/join/knock', why: 'a knock (its status is a public read)' },
+    // Asking to take over a member's account with an admin's re-key code (engine/rekey-redeem.ts): the route refuses every
+    // key that has a row here, a visitor's included, with the sentence that says to use a phone with no account here.
+    { method: 'POST', path: '/api/member/re-enroll', why: "a re-key ask, which the route itself refuses for any key with a row here, with its own plain sentence" },
     // What anyone may do, signed or not.
     { method: 'POST', path: '/api/pricing-guide/report', why: 'a price report, which may be anonymous; signed, it only names the reporter' },
 ];

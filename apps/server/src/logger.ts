@@ -288,10 +288,24 @@ export function scrubMemberFromLogs(callsign: string | null | undefined, keys: r
     return changed;
 }
 
+export type LogCategory = 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS';
+let securityLineListener: ((category: LogCategory) => void) | null = null;
+
+/**
+ * Told of each logger.security() line by its category only, never its words (they may name a member): the alert book
+ * keeps one line per category in Settings → Alerts' history (services/alerts.ts sec.log, design §3.2).
+ */
+export function onSecurityLogLine(fn: ((category: LogCategory) => void) | null): void {
+    securityLineListener = fn;
+}
+
 export const logger = {
     info: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('INFO', category, message, metadata),
     warn: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('WARN', category, message, metadata),
     error: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('ERROR', category, message, metadata),
-    security: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('SECURITY', category, message, metadata),
+    security: (category: LogCategory, message: string, metadata?: any) => {
+        writeLog('SECURITY', category, message, metadata);
+        try { securityLineListener?.(category); } catch { /* a log line never fails for the alert book */ }
+    },
     sync: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('SYNC', category, message, metadata),
 };

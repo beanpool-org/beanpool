@@ -314,6 +314,9 @@ describe('every other screen that draws an account\'s words', () => {
             // Confirm & Link Device sends the account (key and words) to a computer: read only after the phone's lock
             // (pair-device-behind-lock.test.ts).
             'pair-device.tsx:getMnemonic(identity)': 1,
+            // A re-key code bound this phone (app/rekey-code.tsx): only when the key is one the ask itself made (`newWords`),
+            // the member's own new words, as Safety Backup after a join. A key the phone already had shows none.
+            'rekey-code.tsx:getMnemonic(done.identity)': 1,
         };
         const found: Record<string, number> = {};
         const walk = (dir: string) => {

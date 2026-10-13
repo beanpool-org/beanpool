@@ -40,11 +40,12 @@ import { CONVENOR_PAUSED_CODE } from '../engine/posts.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches, nearbyListingsLimits } from '../config/node-profile.js';
+import { nearbySetHash, nearbySetMemory } from '../engine/nearby-set-memory.js';
 import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { withheldAttachmentFor } from '../engine/withheld-lines.js';
-import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 
@@ -303,10 +304,28 @@ function photoKeysSince(): string {
     }
 }
 
-/** A member's set's hash, in each answer beside its ids (DESIGN-global-sync-by-area §2.3). */
-const nearbySetHash = (ids: string[]) => crypto.createHash('sha256').update(ids.join(',')).digest('hex').slice(0, 24);
+/** The posts route's parameters read as one value each. Given twice (`q=a&q=b`), one arrives as an array, which made
+ *  getPosts throw or reached SQL as one, and answered 500 to anyone (#1808 review, finding 4): it is a 400. */
+const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo'] as const;
+
+/**
+ * A by-area read's query as its ETag describes it: without where the read starts, its page, the hash the phone holds, or
+ * whether it takes a diff (`setDiff`). The tag describes the set, so a 304 means the phone's set is current whatever it
+ * sent beside it.
+ */
+function nearbyTagQuery(querystring: string): string {
+    const q = new URLSearchParams(querystring);
+    for (const k of ['updatedAfter', 'paged', 'pageAfter', 'setHash', 'setDiff']) q.delete(k);
+    return q.toString();
+}
 
 router.get('/api/marketplace/posts', async (ctx) => {
+    const repeated = ONE_VALUE_POSTS_PARAMS.find(p => ctx.query[p] !== undefined && typeof ctx.query[p] !== 'string');
+    if (repeated) {
+        ctx.status = 400;
+        ctx.body = { error: `${repeated} is one value: give it once` };
+        return;
+    }
     // Distance search (G4, design §3.2), on every profile: `lat`, `lng`, `radiusKm`, `sort=distance|recent`. Checked
     // first, so garbage is a 400 and never a 304. Without these parameters nothing below changes.
     const distance = parseDistanceQuery(ctx.query);
@@ -460,12 +479,23 @@ router.get('/api/marketplace/posts', async (ctx) => {
         });
         nearbyWhole = !!updatedAfter && photoUrlsChangedAfter(updatedAfter);
         // `tied` too: a deal opened on a listing already near the member moves no row of S, but the phone must now keep it.
-        const described = [ctx.querystring || '', viewerPubkey, area ? `${area.lat},${area.lng}` : '-', nearbySet.ids.join(','),
-            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(',')].join('\n');
+        // The query without where the read starts (`updatedAfter`), its page (`paged`, `pageAfter`) and the hash the phone
+        // holds (`setHash`): the tag describes the set, so every page of one read carries it, and a phone that holds it
+        // sends it with its next delta from whatever cursor (REPORT-geosync-load-B, item 3). The cursor moves after every
+        // read, and the 5-minute drift buffer re-sends what changed minutes ago, so a tag that hashed the URL was never
+        // repeated (12 of 8,556 cycles with nothing changed got a 304; kept URLs 39%). A 304 is only right where the
+        // phone holds the set as the tag describes it, which it does once a read has landed; the phone sends its tag on a
+        // delta only. The identity epoch too: a take-over's server never confirms the old one's copy.
+        const described = [nearbyTagQuery(ctx.querystring || ''), viewerPubkey, area ? `${area.lat},${area.lng}` : '-', nearbySet.ids.join(','),
+            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(','), syncEpochHeaderValue()].join('\n');
         nearbyEtag = `W/"near-${crypto.createHash('sha256').update(described).digest('hex').slice(0, 24)}"`;
     }
 
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}`;
+    // A search leaves out the listings of the authors the reader blocked (engine getPosts), so its tag describes that list
+    // too: a block or an unblock changes the answer and no listing, and a copy held from before must not be confirmed
+    // with a 304 (#1808 review, finding 3). The nearby set's tag holds its ids, so it needs nothing more.
+    const blocksPart = q && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -488,14 +518,25 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // never answered 304: the phone's platform HTTP cache sends the last ETag of that URL by itself, and a 304 would skip
     // the note while the app writes the stored body. It is one row. Every other read keeps its 304.
     const notesTheRead = !!viewerPubkey && !guestView && (!!id || !!ids) && !sync && !updatedAfter;
+    // A member's set from a cursor is never answered 304 while the delta would send one of its listings again whatever
+    // changed (engine postsResentTo): the phone wrote it back as it isn't (the deal heal, the event page), and the tag,
+    // which describes the node's rows, can't tell (review of #1805, finding 2). Asked only where the tag matches.
+    const resendsOfSet = () => {
+        if (!nearbySet || !updatedAfter || !reader) return false;
+        const inSet = new Set(nearbySet.ids);
+        return postsResentTo(db, reader, updatedAfter).some(postId => inSet.has(postId));
+    };
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch && !notesTheRead) {
         const cleanInm = ifNoneMatch.replace(/^W\//, '');
         const cleanEtag = etag.replace(/^W\//, '');
-        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+        if ((cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) && !resendsOfSet()) {
             // A heal answer confirmed is a page that went to the key: its row's time moves (engine/photo-keys.ts
             // restartPhotoHealFor), and nothing else, since the row already records this answer.
             if (heal) notePhotoHealAnsweredAgain(ctx.state.actor as string | undefined);
+            // A by-area 304: the phone's set is the set. Remembered, so its next changed set is a diff against it
+            // (engine/nearby-set-memory.ts), and the memory warms on every phone's first quiet cycle.
+            if (nearbySet) nearbySetMemory().confirmed(viewerPubkey!, nearbySet);
             ctx.status = 304;
             return;
         }
@@ -506,7 +547,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // set is then empty, in its own shape.
         ctx.status = 200;
         ctx.type = 'application/json';
-        ctx.body = nearby ? JSON.stringify({ posts: [], set: [], setHash: nearbySetHash([]), tied: [] }) : '[]';
+        ctx.body = nearby ? JSON.stringify({ posts: [], set: [], setHash: nearbySetHash([], []), tied: [] }) : '[]';
         return;
     }
     // A visitor's posts each go through guestPost below, so the read leaves out what guestPost would replace (`guest`):
@@ -551,22 +592,40 @@ router.get('/api/marketplace/posts', async (ctx) => {
     }
     // Who took a listing, and the deal it is in, go to that trade's two people only (withoutTradeParty): its author, or
     // the member who took it, and for an enterprise's side its keepers. Everyone else sees it spoken for or done.
+    // ⚡ Bolt: Pre-compute treasury keys in O(1) set lookup to avoid repeated N+1 SQLite queries per post row during feed response mapping
+    const treasuryKeys = new Set(
+        (db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as { public_key: string }[]).map(r => r.public_key)
+    );
+    const isTreasuryFast = (pk: string): boolean => treasuryKeys.has(pk);
+
     const tradeSide = (p: MarketplacePost): boolean => isTradeParty(p, reader)
-        || (!!reader && isTreasury(p.authorPublicKey) && canOperateTreasury(reader, p.authorPublicKey))
-        || (!!reader && !!p.acceptedBy && isTreasury(p.acceptedBy) && canOperateTreasury(reader, p.acceptedBy));
+        || (!!reader && isTreasuryFast(p.authorPublicKey) && canOperateTreasury(reader, p.authorPublicKey))
+        || (!!reader && !!p.acceptedBy && isTreasuryFast(p.acceptedBy) && canOperateTreasury(reader, p.acceptedBy));
     const shown = guestView ? posts.map(guestPost)
         : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p);
-    // A member's set answers its rows and the set's ids, every time (DESIGN-global-sync-by-area §2.3): the phone drops
-    // what it holds outside them and fetches what it lacks by `ids=`. `tied`, the ids of the set that are theirs or tied
-    // to them, which the phone keeps past its cap whatever it holds of the deal or the chat. Every other read keeps the
-    // bare list. The contract: `tied` stays string[]; a new shape gets a new field name. A phone reads any other shape as
-    // no `tied` and keeps the ties it stored (apps/native utils/posts-nearby.ts nearbySetOf).
-    const bodyStr = JSON.stringify(nearbySet ? {
-        posts: shown,
-        set: nearbySet.ids,
-        setHash: nearbySetHash(nearbySet.ids),
-        tied: nearbySet.tied,
-    } : shown);
+    // A member's set answers its rows and the set's ids (DESIGN-global-sync-by-area §2.3): the phone drops what it holds
+    // outside them and fetches what it lacks by `ids=`. `tied`, the ids of the set that are theirs or tied to them, which
+    // the phone keeps past its cap whatever it holds of the deal or the chat. Every other read keeps the bare list. The
+    // contract: `tied` stays string[]; a new shape gets a new field name. A phone reads any other shape as no `tied` and
+    // keeps the ties it stored (apps/native utils/posts-nearby.ts nearbyPageOf).
+    // A phone that says `setOnce=1` reconciles after a read's last page only, so it is named the set there alone: each page
+    // with a next key is `{ posts }`. At a busy town the 500 ids are ~11 KB gzipped (UUIDs barely compress), which rode on
+    // each of a first sync's three pages (REPORT-geosync-load-B, item 1). A phone without it gets the set on each page.
+    // A phone that sends the hash of the set it holds (`setHash`) is answered `{ posts, setUnchanged: <that hash> }` where
+    // the set would go while that is still the set (item 2): a field no node before it sends, so a phone never reads an
+    // answer that merely lacks the set (a node's or a proxy's fault) as "unchanged". At a busy town an edit's delta was ~12 KB
+    // of ids; now it is the hash. A phone that sends none, or another, gets the set.
+    // A phone that also says `setDiff=1` is answered `{ posts, setAdd, setDrop, setHash, tied? }` where its set changed,
+    // against a hash this node named or confirmed to this member and still holds (engine/nearby-set-memory.ts): the ids
+    // that came in, nearest first, and the ones that went, `tied` only where it moved. At a busy town a delta whose set
+    // moved named ~500 ids, 11.8-15.5 KB gzipped (REPORT-geosync-load-B); now it names the few that changed. The phone
+    // writes the result only where it hashes to `setHash`. Anything else is the whole set, as before; a phone that never
+    // says `setDiff` is never answered a diff.
+    const setOnce = ctx.query.setOnce === '1';
+    const setPart = nearbySet && !(setOnce && syncPage?.next)
+        ? nearbySetMemory().answer(viewerPubkey!, nearbySet, { setHash: ctx.query.setHash, setDiff: ctx.query.setDiff === '1' })
+        : null;
+    const bodyStr = JSON.stringify(!nearbySet ? shown : { posts: shown, ...setPart });
 
     if (syncPage?.next) ctx.set(POSTS_NEXT_HEADER, syncPage.next);
     ctx.status = 200;

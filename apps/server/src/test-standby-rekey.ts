@@ -496,8 +496,11 @@ async function main(): Promise<void> {
         const rexAfter = await agree(main, standby, 'Rex', rex, rex2);
         assert(rexAfter.s.members[rex2.pk]?.updated_at === rexAfter.m.members[rex2.pk]?.updated_at,
             `his row keeps the main server's stamp (${rexAfter.s.members[rex2.pk]?.updated_at} / ${rexAfter.m.members[rex2.pk]?.updated_at})`);
-        assert(rexAfter.s.keyRows[rex2.pk]['recovery_shares.owner_pubkey'] === 1 && rexAfter.s.keyRows[rex2.pk]['recovery_shares.holder_ref'] === 1,
-            'his recovery copy and the keeper copy he holds for Bea are under the new key there, once each');
+        // Since #1768 the main server deletes a re-keyed member's own copies (they rebuild the replaced seed) with a tombstone,
+        // and renames the copies they keep for others.
+        assert(rexAfter.s.keyRows[rex2.pk]['recovery_shares.owner_pubkey'] === 0 && rexAfter.s.keyRows[rex.pk]['recovery_shares.owner_pubkey'] === 0
+            && rexAfter.s.keyRows[rex2.pk]['recovery_shares.holder_ref'] === 1,
+            'his own recovery copy is gone there under both keys, as on the main server, and the keeper copy he holds for Bea is under the new key, once');
         await main.send('set-bio', { pk: rex2.pk, bio: 'New phone, same Rex' });
         const later = await standby.send('pull', {});
         const bio = (await standby.send('state', { keys: [rex2.pk] })).members[rex2.pk]?.bio;
@@ -567,9 +570,9 @@ async function main(): Promise<void> {
             `every row names the key the main server has it under (${JSON.stringify(sh.keyRows[bea.pk])} / ${JSON.stringify(mh.keyRows[bea.pk])})`);
         assert([bea.pk, bea2.pk, cat.pk].every((k) => Object.values(sh.keyRows[k] as Record<string, number>).every((n) => n === 0)),
             `none names a replaced key: no recovery copy is left under one (${JSON.stringify(sh.keyRows[bea.pk])}, ${JSON.stringify(sh.keyRows[cat.pk])})`);
-        assert(sh.keyRows[bea3.pk]['recovery_shares.owner_pubkey'] === 2 && sh.keyRows[bea3.pk]['recovery_shares.holder_ref'] === 1
-            && sh.keyRows[cat2.pk]['recovery_shares.owner_pubkey'] === 2,
-            `Bea's two copies and the copy of Cat's she keeps are under her last key, and Cat's two under his new one, once each (${JSON.stringify(sh.keyRows[bea3.pk])})`);
+        assert(sh.keyRows[bea3.pk]['recovery_shares.owner_pubkey'] === 0 && sh.keyRows[bea3.pk]['recovery_shares.holder_ref'] === 0
+            && sh.keyRows[cat2.pk]['recovery_shares.owner_pubkey'] === 0,
+            `every copy of a replaced seed is gone, as on the main server: Bea's two, Cat's two and the copy of Cat's she kept (#1768) (${JSON.stringify(sh.keyRows[bea3.pk])})`);
         assert(same(heldBy(sh.accounts, mh.accounts), mh.accounts) && sh.sum === mh.sum, `every balance is the main server's (sum ${sh.sum} / ${mh.sum})`);
 
         // ── 6c. A re-key's two steps in one millisecond ──

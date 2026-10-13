@@ -20,6 +20,7 @@ import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-ke
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
+import { WsClients } from './ws-area-index.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
@@ -86,8 +87,10 @@ import {
     setNodeRoleBreakGlassHash,
     getNodeRoleBreakGlassHash,
     NODE_ROLE_ACTS,
+    dropNodeRoleRow,
     type MemberNodeRole,
     type NodeRoleRecord,
+    type RoleChangeBy,
 } from './engine/node-roles.js';
 export {
     nodeRoleOf,
@@ -262,7 +265,6 @@ import {
     withoutPollVoters,
     withoutTradeParty,
     isTradeParty,
-    getPostCount as getPostCountEngine,
     getActivePostCount as getActivePostCountEngine,
     hasListedOffer as hasListedOfferEngine,
     hasLiveOffer as hasLiveOfferEngine,
@@ -634,7 +636,9 @@ export interface NodeConfig {
     registrarNames?: RegistrarName[];
 }
 
-const wsClients: Set<any> = new Set();
+// Indexed by member and area for the listing pushes by area (ws-area-index.ts); otherwise a plain Set. An open socket's
+// key changes only through wsClients.setKey.
+const wsClients = new WsClients();
 
 // ===================== INIT =====================
 
@@ -1538,16 +1542,27 @@ function keepersOf(treasuries: string[]): Set<string> {
  * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it), and the
  * listing's parties always: its author, the member who took it, both sides of each open deal on it (asked for, or taken
  * and not yet done: a member's set ties them to it, getNearbySet) or of one a removal just closed (`extraParties`,
- * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. Every other socket gets nothing, not
+ * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. A member near it who blocked its author
+ * is not reached, as their set holds none of that author's listings (getNearbySet: the member's own list, never the
+ * author's); a party is, blocked or not, as their set keeps the listings they are tied to. The block list is read at
+ * each event, so a block or an unblock holds from the next one (#1812). Every other socket gets nothing, not
  * even a doorbell (a doorbell sends an app back for every listing): one with no area, or with no member's key, among
  * them. Their apps have the newest listings and the poll. A listing with no place reaches
  * its parties alone. The place and the parties are the stored row's, so an event carrying only an id is measured as one
- * carrying the post. Everything is read once for the event; each socket is then a lookup and a distance, no read.
+ * carrying the post. Everything is read once for the event (the author's blockers too, one read on
+ * idx_member_blocks_blocked, not one per socket); each socket is then a lookup and a distance, no read.
  *
  * Null for an event that names no listing, or one not on this node: it goes as before. That is a bare doorbell for many
  * listings at once (a burst's hide, engine/burst-cleanup.ts), rare and about no one place.
  */
-function listingReach(event: any, extraParties: string[] = []): ((pubkey: string | null | undefined) => boolean) | null {
+interface ListingReach {
+    reaches: (pubkey: string | null | undefined) => boolean;
+    /** The keys it reaches wherever they are, the listing's place (null with none) and the radius: what it visits. */
+    parties: string[];
+    place: { lat: number; lng: number } | null;
+    radiusKm: number;
+}
+function listingReach(event: any, extraParties: string[] = []): ListingReach | null {
     const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
     if (!id) return null;
     const row = db.prepare('SELECT author_pubkey, accepted_by, lat, lng FROM posts WHERE id = ?').get(id) as
@@ -1560,13 +1575,27 @@ function listingReach(event: any, extraParties: string[] = []): ((pubkey: string
     const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
         .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
-    return (pubkey) => {
+    const blockers = placed ? blockersOf(row.author_pubkey) : null;
+    const reaches = (pubkey: string | null | undefined) => {
         if (!pubkey) return false;
         if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
-        if (!placed) return false;
+        if (!placed || blockers!.has(pubkey)) return false;
         const area = memberAreaFor(pubkey);
         return !!area && engine.haversineKm(area.lat, area.lng, row.lat!, row.lng!) <= radiusKm;
     };
+    return { reaches, parties: [...sides, ...keepers], place: placed ? { lat: row.lat!, lng: row.lng! } : null, radiusKm };
+}
+
+// Whether a listing's push by area visits only the sockets the index finds (wsClients.reachable), not every socket. On,
+// always; off only for the test that holds the two to the same recipients, and for measuring them
+// (test-ws-push-index-equivalence.ts).
+let listingPushIndex = true;
+export function setListingPushIndex(on: boolean): void {
+    listingPushIndex = on;
+}
+/** For the same test: what breaks the sockets' index's rules, and its sizes (WsClients.inspect). */
+export function inspectWsClients(): ReturnType<WsClients['inspect']> {
+    return wsClients.inspect();
 }
 
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
@@ -1665,7 +1694,9 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // Whether a socket with no member's key may use this public doorbell (keylessSocketMayUse), asked once.
     let forKeyless: boolean | undefined;
     let sent = 0;
-    for (const ws of wsClients) {
+    // A listing's push by area visits only the sockets it may reach (ws-area-index.ts), each still measured below.
+    const sockets: Iterable<any> = reach && listingPushIndex ? wsClients.reachable(reach.parties, reach.place, reach.radiusKm) : wsClients;
+    for (const ws of sockets) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
         // member_joined alone never makes one (a replaced key, whatever announced it, stays a stranger's socket).
@@ -1673,7 +1704,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         if (joinersOwn) {
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
-                ws._memberPubkey = event.member.publicKey;
+                wsClients.setKey(ws, event.member.publicKey);
                 ws._visitor = joined.visitor;
                 ws._memberFeed = joined.feed;
                 ws._pendingMemberPubkey = null;
@@ -1681,7 +1712,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         }
         if (joinToJoinerOnly && !joinersOwn) continue;
         if (toCircle && !(ws._memberPubkey && toCircle.has(ws._memberPubkey))) continue;
-        if (reach && !reach(ws._memberPubkey)) continue;
+        if (reach && !reach.reaches(ws._memberPubkey)) continue;
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
@@ -1722,7 +1753,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         for (const ws of wsClients) {
             if (ws._memberPubkey !== changedKey) continue;
             standing ??= event.type === 'user_pruned' ? { act: false, visitor: false, feed: false } : socketStanding(ws._memberPubkey);
-            if (!standing.act) ws._memberPubkey = null;
+            if (!standing.act) wsClients.setKey(ws, null);
             ws._visitor = standing.visitor;
             ws._memberFeed = standing.feed;
         }
@@ -7005,7 +7036,7 @@ export function actionReport(
             // writes the same 'suspended', and a cancel puts back the status it recorded (member-wizards.ts
             // cancelRekeyCode). From now on that status is this report's 'suspended', which no cancel may undo.
             db.prepare("UPDATE rekey_requests SET prior_status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE old_pubkey = ? AND status IN ('pending', 'expired')").run(subject);
-            try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(subject); } catch { }
+            try { dropNodeRoleRow(subject, { actor: opts?.actor ?? undefined, how: 'suspended on a report' }); } catch { }
             noteTakeoverInputsChanged('member suspended by a report');
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
             db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(subject);
@@ -7064,18 +7095,6 @@ export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfa
     }
     notifyPostsCleared(moderationNoticeCb, removed, reportersByPost);
     return removed.length;
-}
-
-export function getPostCount(filter?: {
-    type?: string;
-    category?: string;
-    status?: string;
-    query?: string;
-    audienceScope?: AudienceScope | string;
-    viewerPubkey?: string;
-    targetGroupId?: string;
-}): number {
-    return getPostCountEngine(db, filter);
 }
 
 // ===================== COMMUNITY HEALTH =====================
@@ -7538,14 +7557,15 @@ export function isAdminPubkey(publicKey: string): boolean {
  *
  * The row write and the announcement are therefore separate, and the prune announces after it commits.
  */
-export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
+export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned', by?: RoleChangeBy) {
     // An account its owner deleted stays closed, whoever asks (isDeletedByOwner). Each path that could ask answers first in
     // its own words (a reinstate vote, an admin halting a removal); this is the last line, and throws inside the caller's
     // transaction so nothing it wrote alongside stays either.
     if (status !== 'pruned' && isDeletedByOwner(publicKey)) throw new Error(OWNER_DELETED_REFUSAL);
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    // A role it takes away is told to the owners (engine/node-roles.ts dropNodeRoleRow), as by whom the caller says.
     if (status !== 'active') {
-        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        try { dropNodeRoleRow(publicKey, by ?? { how: status === 'pruned' ? 'removed from the community' : 'suspended' }); } catch { }
     }
     // Either way the owner set may have changed: an owner disabled or pruned, or one made active again.
     noteTakeoverInputsChanged(`member ${status === 'active' ? 'reactivated' : status}`);
@@ -7930,7 +7950,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // `setUserStatusRow`, not `adminSetUserStatus` — the latter broadcasts, and a broadcast cannot be
         // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
         // client the member was pruned while the database reverted.
-        setUserStatusRow(publicKey, 'pruned');
+        setUserStatusRow(publicKey, 'pruned', { actor, how: 'removed from the community' });
         // Removed within a day of joining through the open door: their network asks the most door work for 7 days from
         // the join (engine/door-signal.ts). Local, and nothing happens for anyone else.
         noteRemovedNewcomer(publicKey);
@@ -7947,7 +7967,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
         const prunedAt = new Date().toISOString();
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
-        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        // The node role went with setUserStatusRow above, told once; the one a suspension held aside goes here.
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
         // Their groups' chats are locked to a roster they are no longer in: the next line waits for a rotation (§2.3).
         markGroupEpochsStaleFor(publicKey);
@@ -8204,7 +8224,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         try {
             if (db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(publicKey).changes > 0) engine.keepersChanged(db, publicKey);
         } catch { }
-        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        try { dropNodeRoleRow(publicKey, { actor: publicKey, how: 'by deleting their own account' }); } catch { }
         // The same line `adminPruneUser` carries, and for the same reason. A SUSPENDED member's node
         // role is not in node_roles at all — the suspension parked it in `suspended_node_roles`, to be
         // given back if the community does not keep the suspension — and the request-signing middleware

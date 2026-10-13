@@ -15,6 +15,11 @@ export interface AlertsPanelProps {
 
 const TOO_OLD = "This server's BeanPool is older than alerts: update it to use them.";
 
+/** " (×5)": the same line told that many times, kept as one, as the channel shows it; nothing when once. */
+function times(count: number | undefined): string {
+    return count && count > 1 ? ` (×${count})` : '';
+}
+
 function when(t: number | null | undefined): string {
     if (!t) return 'never';
     return new Date(t).toLocaleString();
@@ -124,7 +129,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                                 <span className={`px-2 py-0.5 rounded-lg text-xs font-bold shrink-0 ${PRIORITY_LABEL[r.priority]?.className ?? ''}`}>
                                     {PRIORITY_LABEL[r.priority]?.text ?? r.priority}
                                 </span>
-                                <span className="text-xs text-white min-w-0 flex-1 break-words">{r.detail} <span className="text-nature-500">{when(r.at)}.</span></span>
+                                <span className="text-xs text-white min-w-0 flex-1 break-words">{r.detail}{times(r.count)} <span className="text-nature-500">{when(r.at)}.</span></span>
                             </div>
                         ))}
                         {status.acknowledge && (
@@ -214,7 +219,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                             <ul className="m-0 mt-2 pl-4 space-y-1">
                                 {status.history.map((h, i) => (
                                     <li key={`${h.key}-${h.at}-${i}`} className="break-words">
-                                        {when(h.at)}: {h.kind === 'cleared' ? 'resolved' : h.kind === 'still' ? 'still' : 'raised'} — {h.detail}
+                                        {when(h.at)}: {h.kind === 'cleared' ? 'resolved' : h.kind === 'still' ? 'still' : 'raised'} — {h.detail}{times(h.count)}
                                     </li>
                                 ))}
                             </ul>

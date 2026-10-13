@@ -28,6 +28,8 @@ import { fetchConsentTerms, type ConsentTerms } from '../lib/known-consent';
 import { ConsentText } from '../components/ConsentText';
 import { LookAroundGlobal } from '../components/MembersOnlyListings';
 import { WebRestore } from '../components/WebRestore';
+import { WebRekey } from '../components/WebRekey';
+import { rekeyCodeFromSearch } from '../lib/web-rekey';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { AddSignIn } from '../components/OneWayBack';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, PRIVATE_PREVIEW_MESSAGE, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
@@ -609,6 +611,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [inviteRedeemed, setInviteRedeemed] = useState(false);
     const [showOnboardingGuide, setShowOnboardingGuide] = useState(false);
     // From the lobby's "Already have BeanPool?" on a node whose door is shut: the ways back, not the invite form.
+    /**
+     * "An admin gave me a re-key code" (components/WebRekey.tsx, #1768): open with the code a dashboard's QR put in the
+     * address (`/?rekey=RK-…`), or '' from the restore options. Null: closed.
+     */
+    const [rekeyCode, setRekeyCode] = useState<string | null>(() => (typeof window !== 'undefined' ? rekeyCodeFromSearch(window.location.search) : null));
     const [showNewUser, setShowNewUser] = useState(() => start !== 'restore');
     const [showMemberOptions, setShowMemberOptions] = useState(() => start === 'restore');
     const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -2443,6 +2450,19 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 ← Back to Options
                             </button>
                         </>
+                    ) : rekeyCode !== null ? (
+                        /* ===== A NEW DEVICE TAKES OVER THE ACCOUNT WITH AN ADMIN'S RE-KEY CODE (#1768) ===== */
+                        <WebRekey
+                            initialCode={rekeyCode}
+                            onBound={(member) => {
+                                // The code is spent: the address no longer carries it.
+                                if (typeof window !== 'undefined' && rekeyCodeFromSearch(window.location.search)) {
+                                    window.history.replaceState(null, '', window.location.pathname);
+                                }
+                                onComplete(member);
+                            }}
+                            onBack={() => { setRekeyCode(null); setShowMemberOptions(true); }}
+                        />
                     ) : signInRestore || restoreReturn === 'restore' ? (
                         /* ===== AN ACCOUNT BACK WITH ITS SIGN-IN (G11-d) ===== */
                         <WebRestore
@@ -2849,6 +2869,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         className="w-full rounded-2xl border border-amber-500/40 bg-amber-50/90 hover:bg-amber-100/90 active:scale-[0.98] dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                                     >
                                         <span aria-hidden="true">🔑</span> Recover with 12 Words
+                                    </button>
+
+                                    <button
+                                        onClick={() => { setRekeyCode(''); setError(null); }}
+                                        disabled={loading}
+                                        className="w-full rounded-2xl border border-sky-500/40 bg-sky-50/90 hover:bg-sky-100/90 active:scale-[0.98] dark:bg-sky-950/40 dark:hover:bg-sky-900/50 text-sky-900 dark:text-sky-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+                                    >
+                                        <span aria-hidden="true">🪪</span> An admin gave me a re-key code
                                     </button>
 
                                     <button

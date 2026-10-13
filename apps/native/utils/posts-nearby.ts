@@ -49,11 +49,97 @@ const isIds = (v: unknown[]): v is string[] => v.every(id => typeof id === 'stri
  * refusing would stop every listing update on this build (the confirmation review of #1778, finding 2).
  */
 export function nearbySetOf(body: unknown): { posts: any[]; set: string[]; tied: string[] | null } | null {
+    const page = nearbyPageOf(body);
+    return page && page.set ? { posts: page.posts, set: page.set, tied: page.tied } : null;
+}
+
+/** One page of a read by area, as nearbyPageOf reads it. */
+export interface NearbyPage {
+    posts: any[];
+    /** The member's set, where the page names it: the read's last page, or each page from a node before `setOnce`. */
+    set: string[] | null;
+    /** As nearbySetOf reads it, beside a set only. */
+    tied: string[] | null;
+    /** The node's hash of the set, where it says one. */
+    setHash: string | null;
+    /** Where the page names no set because the one this phone holds is still the set: the hash this phone sent. */
+    setUnchanged: string | null;
+    /**
+     * Where the page names the set as what changed against the one this phone holds (`setAdd`, `setDrop`: a phone that
+     * says `setDiff=1`), each as an id list or null for one this phone can't read; absent on a page that carries neither.
+     */
+    diff?: { setAdd: string[] | null; setDrop: string[] | null };
+}
+
+/**
+ * One page of a read by area, or null for an answer that isn't one (a bare list: the node's switch went off; a set this
+ * phone can't read). The phone says `setOnce=1`, and a node that knows it names the set on the read's last page only
+ * (the pages before it are `{ posts }`), since the phone reconciles after the last page anyway (REPORT-geosync-load-B,
+ * item 1: at a busy town the ids are ~11 KB gzipped, and rode on each page). A node before it names the set on each.
+ */
+export function nearbyPageOf(body: unknown): NearbyPage | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-    const b = body as { posts?: unknown; set?: unknown; tied?: unknown };
-    if (!Array.isArray(b.posts) || !Array.isArray(b.set)) return null;
-    if (!isIds(b.set)) return null;
-    return { posts: b.posts, set: b.set, tied: Array.isArray(b.tied) && isIds(b.tied) ? b.tied : null };
+    const b = body as { posts?: unknown; set?: unknown; tied?: unknown; setHash?: unknown; setUnchanged?: unknown; setAdd?: unknown; setDrop?: unknown };
+    if (!Array.isArray(b.posts)) return null;
+    if (b.set !== undefined && !(Array.isArray(b.set) && isIds(b.set))) return null;
+    const set = Array.isArray(b.set) ? b.set : null;
+    const idsOf = (v: unknown) => (Array.isArray(v) && isIds(v) ? v : null);
+    const diff = b.setAdd !== undefined || b.setDrop !== undefined ? { setAdd: idsOf(b.setAdd), setDrop: idsOf(b.setDrop) } : undefined;
+    return {
+        posts: b.posts,
+        set,
+        tied: (set || diff) && Array.isArray(b.tied) && isIds(b.tied) ? b.tied : null,
+        setHash: typeof b.setHash === 'string' && b.setHash !== '' ? b.setHash : null,
+        setUnchanged: typeof b.setUnchanged === 'string' && b.setUnchanged !== '' ? b.setUnchanged : null,
+        ...(diff ? { diff } : {}),
+    };
+}
+
+/**
+ * The set a diff names (scratch/global-node/DESIGN-nearby-set-diff-fable.md §2): the one held less `setDrop`, then
+ * `setAdd` (in the node's order, nearest first), each id once; `tied` the page's where it names one, else the held. The
+ * phone writes it only where it hashes to the page's `setHash` (nearbyLastSet).
+ */
+export function nearbyApplyDiff(
+    held: { set: readonly string[]; tied: readonly string[] },
+    page: { setAdd: readonly string[]; setDrop: readonly string[]; tied: readonly string[] | null },
+): { set: string[]; tied: string[] } {
+    const drop = new Set(page.setDrop);
+    const seen = new Set<string>();
+    const set: string[] = [];
+    for (const id of held.set) if (!drop.has(id) && !seen.has(id)) { seen.add(id); set.push(id); }
+    for (const id of page.setAdd) if (!seen.has(id)) { seen.add(id); set.push(id); }
+    return { set, tied: [...(page.tied ?? held.tied)] };
+}
+
+/**
+ * The set a read ends with, from its last page: the one the node names (`named`); or, when the page names none and says
+ * `setUnchanged` with the hash this phone sent (`held.hash`, the set it holds), that one (REPORT-geosync-load-B, item 2).
+ * A field no node before it sends: an answer that merely lacks the set (a node before it, cut or altered on the way, whose
+ * `setHash` may well equal the held one) is no end this phone can read (null), and the read is cut short there. So is
+ * another hash.
+ *
+ * Or, where the page names what changed (`setAdd`, `setDrop`), the held set with the diff applied (nearbyApplyDiff),
+ * only when that hashes (`hashOf`: utils/nearby-hash.ts, passed in so this file stays import-free) to the page's
+ * `setHash`. A diff that doesn't, one with no held set (or its `tied`) to apply to, or one this phone can't read is no
+ * end (null): never a silently wrong set. The caller then forgets what it holds (services/pillar-sync.ts), so the next
+ * read is named the set whole.
+ */
+export function nearbyLastSet(
+    last: NearbyPage,
+    held: { set: string[]; tied?: string[] | null; hash: string } | null,
+    hashOf?: (ids: readonly string[], tied: readonly string[]) => string,
+): { set: string[]; tied: string[] | null; setHash: string | null; named: boolean } | null {
+    if (last.set) return { set: last.set, tied: last.tied, setHash: last.setHash, named: true };
+    if (last.diff) {
+        const { setAdd, setDrop } = last.diff;
+        const heldTied = held?.tied ?? null;
+        if (!held || !hashOf || !setAdd || !setDrop || last.setHash === null || (last.tied === null && heldTied === null)) return null;
+        const applied = nearbyApplyDiff({ set: held.set, tied: heldTied ?? [] }, { setAdd, setDrop, tied: last.tied });
+        return hashOf(applied.set, applied.tied) === last.setHash ? { set: applied.set, tied: applied.tied, setHash: last.setHash, named: true } : null;
+    }
+    if (held && last.setUnchanged !== null && last.setUnchanged === held.hash) return { set: held.set, tied: null, setHash: held.hash, named: false };
+    return null;
 }
 
 /**

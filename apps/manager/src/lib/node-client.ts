@@ -2414,9 +2414,10 @@ export interface AlertsStatus {
     sentLastHour: number;
     hourlyCap: number;
     active: Array<{ key: string; title: string; priority: number; since: number; detail: string }>;
-    history: Array<{ key: string; title: string; kind: 'raised' | 'still' | 'cleared'; at: number; since: number; priority: number; detail: string }>;
+    /** `count`: the same line told this many times, kept as one (at: the latest); absent when once. */
+    history: Array<{ key: string; title: string; kind: 'raised' | 'still' | 'cleared'; at: number; since: number; priority: number; detail: string; count?: number }>;
     /** Security events of the last day not yet acknowledged; absent on a server older than security alerts. */
-    recent?: Array<{ key: string; title: string; at: number; priority: number; detail: string }>;
+    recent?: Array<{ key: string; title: string; at: number; priority: number; detail: string; count?: number }>;
     acknowledge?: boolean;
 }
 
@@ -2796,6 +2797,15 @@ export async function liftMemberSuspension(nodeUrl: string, pubkey: string, admi
 
 // ===================== MEMBER WIZARDS (docs/settings-ia.md §5 items 1 & 4, Item 9b) =====================
 
+/**
+ * A phone that asked on a re-key code: the key it wants bound and when it asked. Never its digits: the admin types the
+ * number on the member's phone and the node finds the phone (#1783 review B2).
+ */
+export interface RekeyProposal {
+    newPubkey: string;
+    proposedAt: string;
+}
+
 export interface RekeyStatusResponse {
     isInvalidated: boolean;
     invalidatedInfo: {
@@ -2819,6 +2829,12 @@ export interface RekeyStatusResponse {
         created_at: string;
         expires_at: string;
     } | null;
+    /** The phones that asked on the pending code (#1768), oldest first: only beside the code itself. */
+    proposals?: RekeyProposal[];
+    /** Wrong numbers typed on the pending code so far; the third stops it. */
+    wrongNumbers?: number;
+    /** Codes starting like the pending one are being guessed at this hour; `refusing`: phones asking with it are turned away. */
+    codeUnderAttack?: { wrongTries: number; refusing: boolean };
     history: Array<{
         id: number;
         old_pubkey: string;
@@ -2855,6 +2871,15 @@ export interface CompleteRekeyResponse {
     oldPubkey: string;
     newPubkey: string;
     callsign: string;
+    /** Sign-in copies (hub, sso) of the old key the move deleted: the member links a sign-in again only when this is > 0. */
+    signInCopiesRemoved?: number;
+}
+
+/** A refused bind by number: the node's short code (`wrong_number`, `code_stopped`, …) and the tries left. */
+export class RekeyBindError extends Error {
+    constructor(message: string, readonly code?: string, readonly triesLeft?: number) {
+        super(message);
+    }
 }
 
 export interface OffboardPreviewResponse {
@@ -2936,6 +2961,50 @@ export async function cancelRekeyCodeApi(
     return res.json();
 }
 
+/** "Not theirs": declines a phone that asked on the member's code (#1768). */
+export async function declineRekeyProposalApi(
+    nodeUrl: string,
+    pubkey: string,
+    newPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; declined: boolean; declines: number }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/proposals/${encodeURIComponent(newPubkey)}/decline`);
+    const res = await fetch(endpoint, { method: 'POST', headers: buildAdminHeaders(adminPassword, tfaToken), body: JSON.stringify({}) });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+/**
+ * Binds the member's new phone by the number on it (#1783 review B2): the node binds the live, undeclined phone that shows
+ * those two digits. A number no waiting phone shows is a wrong try, and the third stops the code (RekeyBindError's code
+ * `code_stopped`).
+ */
+export async function bindRekeyByMatchApi(
+    nodeUrl: string,
+    pubkey: string,
+    code: string,
+    match: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<CompleteRekeyResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/complete`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ code, match }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new RekeyBindError(body.error || `HTTP ${res.status}: ${res.statusText}`, body.code, typeof body.triesLeft === 'number' ? body.triesLeft : undefined);
+    }
+    return res.json();
+}
+
+/** "Paste a key instead": binds a pasted key, for a phone that can't ask on the code. */
 export async function completeRekeyApi(
     nodeUrl: string,
     pubkey: string,

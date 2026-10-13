@@ -44,7 +44,9 @@ Each card says which assistant suggested it and for whom, and shows **the report
 
 - **Approve** does exactly what Settings' own button does, as you: dismissing, removing or restoring through the same step, with the same rules (a moderator's limits, the confirmations that step asks for). The log line says it came from a suggestion by that assistant. Members are told as when you act yourself.
 - **Decline** deletes it; nothing changes. An owner can decline any assistant's suggestion; only its own member can approve one.
-- Each assistant can have at most 10 suggestions waiting and make 30 a day, one per report. A suggestion goes away after 48 hours, when its assistant is disconnected, and stops counting when its member is no longer an owner or admin.
+- Each assistant can have at most 10 suggestions waiting and make 30 a day, one per report. Once you decline one, that assistant can't suggest anything about the same report for 48 hours. A suggestion goes away after 48 hours, when its assistant is disconnected, and stops counting when its member is no longer an owner or admin.
+- If the report was dismissed or acted on since the assistant suggested dismissing it or removing what was reported, there is nothing left to approve: the card keeps only Decline.
+- While an owner has AI assistants turned off, their waiting suggestions are hidden and can't be approved. Turned back on within the 48 hours, they wait again.
 
 An assistant can't approve a suggestion, its own or anyone's, and can't reach the moderation steps itself. It can't suggest lifting a mute, answering a join request or sending an announcement yet: those stay with you.
 

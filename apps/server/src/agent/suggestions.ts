@@ -5,8 +5,11 @@
  *
  * - A suggestion is a row {grant, kind, target, reason (≤ 2 KB, member text: fenced wherever it is shown), at, expires 48 h},
  *   kept in node_config `agent_suggestions` (this server's own, never copied to a standby).
- * - Limits per grant: at most 10 open, 30 filed a day (UTC), one per target (a report). All of a grant's go when it is
- *   revoked, and none is shown or approvable once the grant has expired or its member is no longer an owner or admin.
+ * - Limits per grant: at most 10 open, 30 filed a day (UTC), one per target (a report), and none about a report whose
+ *   suggestion was declined in the last 48 h. All of a grant's go when it is revoked, and none is shown or approvable once
+ *   the grant has expired or its member is no longer an owner or admin, nor while the owners' switch is off (they wait,
+ *   hidden, and come back if it is turned on again before they expire).
+ * - A dismiss or remove suggestion can't be approved once its report is closed (dismissed or actioned since).
  * - Approve runs the EXISTING route (reports/:id/dismiss, reports/:id/action, posts/:id/restore) under the human's own
  *   session, so the moderator rules and any step-up there are unchanged: the card sends `suggestion: <id>` with that
  *   route's own call (`approveCall`), the route checks the suggestion matches (`admitSuggestion`) before it acts, and on
@@ -18,6 +21,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { listAutomationTokens } from '../automation-tokens.js';
+import { getLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { logger } from '../logger.js';
 import { cleanMemberText } from './fence.js';
@@ -59,12 +63,14 @@ interface Stored {
     approved: { day: string; n: number };
     /** Today's suggestions filed, node-wide. */
     filedToday: { day: string; n: number };
+    /** Declined (grant, report) pairs: that assistant files nothing more about that report until `until` (48 h). */
+    declined: Array<{ grantId: string; target: string; until: number }>;
 }
 
 const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
 
 function read(): Stored {
-    const empty: Stored = { open: [], filed: {}, approved: { day: '', n: 0 }, filedToday: { day: '', n: 0 } };
+    const empty: Stored = { open: [], filed: {}, approved: { day: '', n: 0 }, filedToday: { day: '', n: 0 }, declined: [] };
     const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(KEY) as { value: string } | undefined;
     if (!row) return empty;
     try {
@@ -76,6 +82,8 @@ function read(): Stored {
             filed: s?.filed && typeof s.filed === 'object' ? s.filed : {},
             approved: s?.approved && typeof s.approved.n === 'number' ? s.approved : empty.approved,
             filedToday: s?.filedToday && typeof s.filedToday.n === 'number' ? s.filedToday : empty.filedToday,
+            declined: Array.isArray(s?.declined) ? s.declined.filter((d: { grantId?: unknown; target?: unknown; until?: unknown } | null) =>
+                typeof d?.grantId === 'string' && typeof d.target === 'string' && typeof d.until === 'number') : [],
         };
     } catch {
         return empty;
@@ -85,6 +93,7 @@ function read(): Stored {
 function write(s: Stored, now: number): void {
     const day = utcDay(now);
     for (const [g, f] of Object.entries(s.filed)) if (f.day !== day) delete s.filed[g];
+    s.declined = s.declined.filter((d) => d.until > now);
     db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(KEY, JSON.stringify(s));
 }
 
@@ -99,11 +108,15 @@ export function grantStillLive(grantId: string, now = Date.now()): LiveGrant | n
     return { id: t.id, name: cleanMemberText(t.name, 60), member: t.createdBy, role };
 }
 
-/** The open suggestions whose grant is live, the expired ones dropped. */
+/** The owners' switch "Allow AI assistants" (agent/mcp-route.ts aiAssistantsAllowed, read here to keep the imports one way). */
+const assistantsAllowed = (): boolean => getLocalConfig().aiAssistantsAllowed !== false;
+
+/** The open suggestions whose grant is live, the expired ones dropped; none while the owners' switch is off. */
 export function openSuggestions(now = Date.now()): Array<Suggestion & { grant: LiveGrant }> {
     const s = read();
     const kept = s.open.filter((x) => x.expiresAt > now);
     if (kept.length !== s.open.length) { s.open = kept; write(s, now); }
+    if (!assistantsAllowed()) return [];
     const out: Array<Suggestion & { grant: LiveGrant }> = [];
     for (const x of kept) {
         const grant = grantStillLive(x.grantId, now);
@@ -134,6 +147,9 @@ export function fileSuggestion(grantId: string, kind: SuggestionKind, target: st
     if (mine.some((x) => x.target === target)) {
         return { ok: false, error: 'This assistant already has a suggestion waiting for that report: one per report.' };
     }
+    if (s.declined.some((d) => d.grantId === grantId && d.target === target && d.until > now)) {
+        return { ok: false, error: 'Your suggestion about that report was declined: suggest nothing more about it for 48 hours.' };
+    }
     if (mine.length >= SUGGESTIONS_OPEN_MAX) {
         return { ok: false, error: `This assistant has ${SUGGESTIONS_OPEN_MAX} suggestions waiting, the most it may: wait until they are approved or declined.` };
     }
@@ -162,17 +178,19 @@ function remove(id: string, now: number, approved: boolean): Suggestion | null {
     if (approved) {
         const day = utcDay(now);
         s.approved = s.approved.day === day ? { day, n: s.approved.n + 1 } : { day, n: 1 };
+    } else {
+        s.declined.push({ grantId: hit.grantId, target: hit.target, until: now + SUGGESTION_TTL_MS });
     }
     write(s, now);
     return hit;
 }
 
-/** Decline: the suggestion is deleted. */
+/** Decline: the suggestion is deleted, and its assistant files nothing more about that report for 48 hours. */
 export function declineSuggestion(id: string, now = Date.now()): Suggestion | null {
     return remove(id, now, false);
 }
 
-/** Every suggestion of a grant goes when it is revoked (agent/limits.ts forgetAgentGrant calls this). */
+/** Every suggestion of a grant goes when it is revoked (both revoke routes call this: grants-route.ts, routes/automation-tokens.ts). */
 export function dropSuggestionsOf(grantId: string, now = Date.now()): number {
     const s = read();
     const before = s.open.length;
@@ -188,18 +206,21 @@ export function suggestionCountsToday(now = Date.now()): { suggestions: number; 
     return { suggestions: s.filedToday.day === day ? s.filedToday.n : 0, approved: s.approved.day === day ? s.approved.n : 0 };
 }
 
-/** The report's subject, for a card's approve call and the restore check. */
-function reportTarget(reportId: string): { postId: string | null; pulse: boolean } | null {
-    const r = db.prepare('SELECT target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
-        { target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
+/** The report's subject and whether it is still open, for a card's approve call and the route's checks. */
+function reportTarget(reportId: string): { postId: string | null; pulse: boolean; open: boolean } | null {
+    const r = db.prepare('SELECT target_post_id, target_pulse_item_id, status FROM abuse_reports WHERE id = ?').get(reportId) as
+        { target_post_id: string | null; target_pulse_item_id: string | null; status: string | null } | undefined;
     if (!r) return null;
-    return { postId: r.target_pulse_item_id ? null : r.target_post_id, pulse: !!r.target_pulse_item_id };
+    return { postId: r.target_pulse_item_id ? null : r.target_post_id, pulse: !!r.target_pulse_item_id, open: r.status === 'pending' || r.status === null };
 }
+
+/** A dismiss or remove suggestion is about an open report: once it is closed there is nothing left to approve. */
+const closedSince = (x: Pick<Suggestion, 'kind'>, t: { open: boolean } | null): boolean => x.kind !== 'restore_post' && !!t && !t.open;
 
 /** The existing route's own call that approves it: the card sends exactly this, with `suggestion` in the body. */
 export function approveCall(x: Suggestion): { method: 'POST'; path: string; body: Record<string, unknown> } | null {
     const t = reportTarget(x.target);
-    if (!t) return null;
+    if (!t || closedSince(x, t)) return null;
     const rid = encodeURIComponent(x.target);
     if (x.kind === 'dismiss_report') return { method: 'POST', path: `/api/local/admin/reports/${rid}/dismiss`, body: { suggestion: x.id } };
     if (x.kind === 'remove_reported') {
@@ -220,6 +241,7 @@ export type SuggestionRoute =
     | { kind: 'restore_post'; postId: string };
 
 const SUGGESTION_GONE = 'That suggestion is no longer waiting (approved, declined, expired, or its assistant disconnected).';
+const SUGGESTIONS_OFF = "AI assistants are turned off on this node: their suggestions wait, hidden, until an owner turns them back on.";
 
 /**
  * Called by the existing route, after its own sign-in check and before it acts, when its body names a `suggestion`.
@@ -233,6 +255,7 @@ export function admitSuggestion(ctx: any, route: SuggestionRoute, now = Date.now
     if (id === undefined || id === null) return true;
     const refuse = (status: number, error: string) => { ctx.status = status; ctx.body = { success: false, error }; return false; };
     if (typeof id !== 'string' || !id) return refuse(400, 'suggestion must be the id of a waiting suggestion');
+    if (!assistantsAllowed()) return refuse(409, SUGGESTIONS_OFF);
     const hit = openSuggestions(now).find((x) => x.id === id);
     if (!hit) return refuse(409, SUGGESTION_GONE);
     const actor = ctx.state?.isKeySession === true && typeof ctx.state?.actor === 'string' ? ctx.state.actor : null;
@@ -248,6 +271,7 @@ export function admitSuggestion(ctx: any, route: SuggestionRoute, now = Date.now
     }
     if (matches && route.kind === 'restore_post') matches = reportTarget(hit.target)?.postId === route.postId;
     if (!matches) return refuse(409, 'That suggestion is for another action or another report.');
+    if (closedSince(hit, reportTarget(hit.target))) return refuse(409, 'That report was closed since the assistant suggested this: there is nothing left to approve.');
     ctx.state.agentSuggestion = { id: hit.id, agent: hit.grant.name, kind: hit.kind, target: hit.target };
     return true;
 }

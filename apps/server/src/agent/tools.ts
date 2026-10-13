@@ -566,7 +566,7 @@ AGENT_TOOLS.push({
     title: 'Suggest a moderation action',
     reads: 'nothing: it files a suggestion about one report (dismiss it and keep the post, remove what was reported, or restore '
         + 'a post hidden by reports) that the member this assistant acts for approves or declines on their phone, with the report '
-        + `beside it; at most ${SUGGESTIONS_OPEN_MAX} waiting, ${SUGGESTIONS_PER_DAY} a day and one per report, each gone after 48 hours`,
+        + `beside it; at most ${SUGGESTIONS_OPEN_MAX} waiting, ${SUGGESTIONS_PER_DAY} a day and one per report (none again for 48 hours about one declined), each gone after 48 hours`,
     never: 'a change of any kind: nothing happens until a person approves it, and the assistant cannot approve',
     write: true,
     inputSchema: {

@@ -543,23 +543,21 @@ describe('wash analysis: what floors read (S2)', () => {
             read('the one go');
             t.jump += 1_000;
             completeRaceTrades(db, ring); // a ring of new members completes its trades
-            const n = washAnalysisCount(db);
             for (let i = 0; i < 300; i++) { t.jump += 50; read(`R_t stalled, read ${i}`); }
             expect(washRefreshRunning(db)).toBe(rT);
-            expect(washAnalysisCount(db) - n).toBeGreaterThanOrEqual(1); // past 10 s + c: one go at the read
-            expect(getWashTradingEnforcement(db)).not.toBe(oneGo);
+            expect(getWashTradingEnforcement(db)).not.toBe(oneGo); // past 10 s + c: worked out again in one go at a read
             expect(read('R_t stalled, last').every((q) => q === 0)).toBe(true);
             // R_t ends, landing nothing; R_2 starts.
             for (let i = 0; washRefreshRunning(db) === rT && i < 1000; i++) { await turn(); read(`R_t running, turn ${i}`); }
             const r2 = washRefreshRunning(db);
             expect(r2).not.toBeNull();
             expect(r2).not.toBe(rT);
-            await turn(); // R_2 has taken its snapshot, after the last one go: it can land
+            await turn(); // R_2 has taken its snapshot, after the last one go: it can land, and reads wait for it (no one go)
+            const served = getWashTradingEnforcement(db);
             for (let i = 0; i < 300; i++) { t.jump += 50; read(`R_2 stalled, read ${i}`); }
-            const m = washAnalysisCount(db);
+            expect(getWashTradingEnforcement(db)).toBe(served);
             await r2;
-            expect(washAnalysisCount(db) - m).toBe(1); // R_2's own
-            read('R_2 landed');
+            read('R_2 ended');
             const now = runWashTradingAnalysis(db);
             for (const k of members) expect(qualifiedTradeValue(db, k)).toBe(qualifiedTradeValue(db, k, now));
             closeWashSnapshotHandle(db);

@@ -211,8 +211,8 @@ async function main(): Promise<void> {
         assert(noRole === null, 'a member with no node role gets no session to connect one with');
         const byAdmin = await make(adminS, { name: 'Adam\'s Claude' });
         const byAdmin2 = await make(admin2S, { name: 'Ada\'s Cursor', days: 7 });
-        assert([byAdmin, byAdmin2].every(r => r.status === 403 && r.body?.code === OWNER_ONLY_CODE && !r.body?.token && /phone's approval/.test(r.body?.error ?? '')),
-            `an admin's key session cannot connect one until S2: 403 ${OWNER_ONLY_CODE}, told it comes with the phone's approval (${show(byAdmin)} | ${byAdmin2.status})`);
+        assert([byAdmin, byAdmin2].every(r => r.status === 403 && r.body?.code === OWNER_ONLY_CODE && !r.body?.token && /connector in your assistant and approving on your phone/.test(r.body?.error ?? '')),
+            `an admin's key session makes no token: 403 ${OWNER_ONLY_CODE}, told to connect through their assistant with the phone's approval (S2) (${show(byAdmin)} | ${byAdmin2.status})`);
         const byMod = await make(modS, { name: 'mod made' });
         assert(byMod.status === 403 && byMod.body?.code !== OWNER_ONLY_CODE && !byMod.body?.token, `a moderator cannot connect one (${show(byMod)})`);
         const byPw = await make(pwS, { name: 'pw made' });

@@ -22,7 +22,8 @@
  *      visitor's read carries none. An author renames: the next by-area delta carries their listings, with the new
  *      name, and nobody else's.
  *  8b. A local community with membersOnDemand on and nearbyListings off: an author removes their photo, and the next
- *      plain delta (revalidated with the tag held before) carries their listings with no face, and nobody else's; with
+ *      plain delta (revalidated with the tag held before) carries their listings with no face, and nobody else's, and so
+ *      does a delta answered whole by a photo heal; a visitor's delta (the visitors' view on too) carries none; with
  *      the switch off, a rename leaves the plain delta byte for byte as it was.
  *   9. Faces heal: once the face URLs change shape (engine/avatar-keys.ts), a `keys=` delta from before is answered with
  *      every key asked, and a by-area delta from before is the whole set; one from after is as before.
@@ -114,6 +115,7 @@ async function main() {
     const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { bumpMembersVersion } = await import('./engine/versions.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
+    const { PHOTO_KEYS_SINCE_ROW, notePhotoUrlShapeNow } = await import('./engine/photo-keys.js');
 
     await initTls();
     se.initStateEngine();
@@ -418,14 +420,14 @@ async function main() {
     // phones hold no card for most listing authors and sync with the plain delta, so a card edit must re-send that
     // author's listings there (opus-1859-confirm1 NB-2). With the switch off, the delta is byte for byte as before.
     console.log('\n── 8b. membersOnDemand on, nearbyListings off: the plain delta ──');
-    const PLAIN = '/api/marketplace/posts?limit=200&sync=true&types=offer,need,poll,event';
-    const plainDelta = async (from: string, etag?: string) => {
-        const p = `${PLAIN}&updatedAfter=${encodeURIComponent(from)}`;
-        const res = await localFetch(`${BASE}${p}`, { headers: { ...signedHeaders('GET', p, '', reader), ...(etag ? { 'If-None-Match': etag } : {}) } });
+    // The reader's (signed) unless `unsigned`: then a visitor's, where the visitors' view lets one read the listings.
+    const plainDelta = async (from: string, etag?: string, o: { unsigned?: boolean; limit?: number } = {}) => {
+        const p = `/api/marketplace/posts?limit=${o.limit ?? 200}&sync=true&types=offer,need,poll,event&updatedAfter=${encodeURIComponent(from)}`;
+        const res = await localFetch(`${BASE}${p}`, { headers: { ...(o.unsigned ? {} : signedHeaders('GET', p, '', reader)), ...(etag ? { 'If-None-Match': etag } : {}) } });
         const text = await res.text();
         let rows: any[] = [];
         try { rows = JSON.parse(text); } catch { /* a 304 has no body */ }
-        return { status: res.status, text, rows: Array.isArray(rows) ? rows : [], etag: res.headers.get('etag') ?? '' };
+        return { status: res.status, text, rows: Array.isArray(rows) ? rows : [], etag: res.headers.get('etag') ?? '', view: res.headers.get('x-beanpool-view') ?? '' };
     };
     const overrideKey = `${NODE_PROFILE_KEY}.membersOnDemand`;
     process.env.NODE_PROFILE = 'local';
@@ -470,6 +472,40 @@ async function main() {
         assert(deltaPlan.some(d => /^SEARCH members USING (COVERING )?INDEX idx_members_profile_updated_at \(profile_updated_at>\?\)/.test(d))
             && !deltaPlan.some(d => /^SCAN (p|members)\b/.test(d)),
             `the delta finds the authors whose card changed by idx_members_profile_updated_at, and walks no table (${deltaPlan.join('; ')})`);
+
+        // With the visitors' view on too (an operator's choice), a visitor's delta never says whose card changed: it sends
+        // nothing again, while a member's at the same moment does (review of #1899, NB-B).
+        const guestKey = `${NODE_PROFILE_KEY}.guestListingsOnly`;
+        db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(guestKey, 'true');
+        try {
+            const memberNow = await plainDelta(since2);
+            const visitorNow = await plainDelta(since2, undefined, { unsigned: true });
+            assert(getProfileSwitches().guestListingsOnly && memberNow.rows.filter(p => p.authorPublicKey === author.pubKeyHex).length === 3
+                && visitorNow.status === 200 && visitorNow.view === 'guest' && visitorNow.rows.length === 0,
+                `the visitors' view on too: a visitor's delta sends nothing again (${visitorNow.status} ${visitorNow.view}: ${visitorNow.rows.map(p => p.id).join(', ') || 'none'}); a member's carries the 3`);
+        } finally {
+            db.prepare('DELETE FROM node_config WHERE key = ?').run(guestKey);
+        }
+
+        // A delta from before the listing photos' URLs last changed is answered whole (engine/photo-keys.ts photoHealFor):
+        // its delta part sends the author's listings again too, ahead of the heal's page (review of #1899, NB-B). A page
+        // of 3 keeps the heal's own rows to 3, so the author's come only from the delta: theirs, then the heal's page (the
+        // other's listings rank first there: no photo, on the board and stamped alike, then by id).
+        const sinceRow = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(PHOTO_KEYS_SINCE_ROW) as { value: string } | undefined)?.value;
+        db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(PHOTO_KEYS_SINCE_ROW, new Date().toISOString());
+        notePhotoUrlShapeNow();
+        try {
+            const healed = await plainDelta(since2, undefined, { limit: 3 });
+            const healRow = db.prepare('SELECT 1 FROM photo_url_heals WHERE viewer = ?').get(reader.pubKeyHex);
+            assert(healed.status === 200 && !!healRow && healed.rows.length === 6
+                && healed.rows.slice(0, 3).every(p => p.authorPublicKey === author.pubKeyHex && p.authorAvatarUrl == null)
+                && healed.rows.slice(3).every(p => p.authorPublicKey === other.pubKeyHex),
+                `a delta from before the listing photos' URLs changed (answered whole): the author's 3 listings, then the heal's page (${healed.rows.map(p => p.id).join(', ')})`);
+        } finally {
+            if (sinceRow === undefined) db.prepare('DELETE FROM node_config WHERE key = ?').run(PHOTO_KEYS_SINCE_ROW);
+            else db.prepare('UPDATE node_config SET value = ? WHERE key = ?').run(sinceRow, PHOTO_KEYS_SINCE_ROW);
+            notePhotoUrlShapeNow();
+        }
 
         // The switch off (the local default): the same edit leaves the delta byte for byte as it was before the edit.
         db.prepare('DELETE FROM node_config WHERE key = ?').run(overrideKey);

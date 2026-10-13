@@ -2,7 +2,9 @@
  * The old phone, once its community says its key was replaced (utils/key-replaced.ts): "This account moved to a new
  * phone", and the offer of its old 12 words, so the new phone can unlock the group messages from before the change
  * (scratch/global-node/DESIGN-group-history-after-rekey-fable.md §3). The words show only behind the phone's lock, out of
- * screenshots, and are never sent. Nothing shows on a phone whose key is current, or one with no words on it.
+ * screenshots, and are never sent. Nothing shows on a phone whose key is current, or one with no words on it: the card
+ * shows only while the node refuses this key (the note goes with its next successful answer), and says the words are this
+ * account's own (review of #1844, finding 5).
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
@@ -11,7 +13,7 @@ import { useIdentity } from '../app/IdentityContext';
 import { anchorUrl } from '../utils/node-post';
 import { getMnemonic } from '../utils/identity';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
-import { KEY_MOVED_BODY, KEY_MOVED_REASON, KEY_MOVED_SHOW, KEY_MOVED_TITLE, keyReplacedHere, onKeyReplaced } from '../utils/key-replaced';
+import { KEY_MOVED_BODY, KEY_MOVED_OWN_ONLY, KEY_MOVED_REASON, KEY_MOVED_SHOW, KEY_MOVED_TITLE, keyReplacedHere, onKeyReplaced } from '../utils/key-replaced';
 import { NoScreenCapture } from './WordsOnScreen';
 
 /** The primary button's green: white on it is 5.5:1, where on brand.primary (emerald-500) it is 2.5:1 (e2e/locked-history-320.mjs). */
@@ -30,7 +32,7 @@ export function KeyMovedCard({ colors }: { colors: AppColors }) {
             if (!url || !identity?.publicKey) return;
             const yes = await keyReplacedHere(url, identity.publicKey);
             const w = yes ? await getMnemonic(identity).catch(() => null) : null;
-            if (live) { setMoved(yes); setHasWords(!!w?.length); }
+            if (live) { setMoved(yes); setHasWords(!!w?.length); if (!yes) setWords(null); }
         };
         void check();
         const off = onKeyReplaced(() => { void check(); });
@@ -42,6 +44,7 @@ export function KeyMovedCard({ colors }: { colors: AppColors }) {
         <View style={[styles.card, { backgroundColor: colors.surface.card, borderColor: colors.border.default }]} testID="key-moved-card">
             <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">{KEY_MOVED_TITLE}</Text>
             <Text style={[styles.body, { color: colors.text.secondary }]}>{KEY_MOVED_BODY}</Text>
+            <Text style={[styles.body, { color: colors.text.body, fontWeight: '700' }]}>{KEY_MOVED_OWN_ONLY}</Text>
             {words ? (
                 <NoScreenCapture>
                     <View style={styles.grid}>

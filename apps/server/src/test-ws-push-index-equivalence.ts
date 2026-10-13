@@ -21,11 +21,15 @@
  *      every run, followed by pushes of its listing of every kind, so no radius leaves one to luck
  *   2b. no code writes a socket's key but the connect (before the socket is in the set) and wsClients.setKey: a key
  *      written any other way would leave the socket filed under the old one (#1809 review, NB-1)
+ *   2c. the suite draws nothing but from its seed: no key, id or place from crypto or Math.random in this file
  *   3. the cost at 3,500 and 10,000 sockets: a push near a dense spot (its author blocked by 300 members) and one
  *      in an empty ocean, the full loop against the index, interleaved, with the host's load (`uptime`) printed with each
  *
  * Run with a radius (NEARBY_LISTINGS_RADIUS_KM) other than the default by its variants in scripts/server-suites.mjs.
- * Seed: PUSH_INDEX_SEED (printed). Run: SERVER_SUITES_ONLY=test-ws-push-index-equivalence node scripts/run-server-suites.mjs
+ * Seed: PUSH_INDEX_SEED (printed). Every draw comes from it, member keys and ids too, so a seed makes the same world and
+ * the same run anywhere; a failure prints the command that replays it, and every run a fingerprint of its world and its
+ * pushes (PUSH_INDEX_TRACE: a file the member keys and each push's line are written to, to set two runs side by side).
+ * Run: SERVER_SUITES_ONLY=test-ws-push-index-equivalence node scripts/run-server-suites.mjs
  */
 delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_WS_AUTH;
@@ -38,7 +42,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { haversineKm } from '@beanpool/engine';
 
 // PUSH_INDEX_REPORT: a file each line below is also appended to (the runner keeps no log of a passing run).
@@ -56,16 +60,27 @@ function assert(cond: boolean, msg: string): void {
 }
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
-// A seeded generator, so a failure is repeated by its seed.
+// A seeded generator, so a failure is repeated by its seed: every draw below comes from it, the members' keys and the
+// listings' and deals' ids as well as the places and the picks (#1875's check: keys drawn from crypto made another
+// world for the same seed, so a CI seed did not repeat here). The check after the run holds the file to that.
 const SEED = Number(process.env.PUSH_INDEX_SEED) || crypto.randomInt(1, 2 ** 31);
 let state = SEED >>> 0;
-function rand(): number {
+function next32(): number {
     state = (state + 0x6D2B79F5) >>> 0;
     let t = state;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    return (t ^ (t >>> 14)) >>> 0;
 }
+const rand = (): number => next32() / 4294967296;
+const hex32 = (words: number) => Array.from({ length: words }, () => next32().toString(16).padStart(8, '0')).join('');
+/** A member's key: 32 bytes in hex, as the suite's keys always were. */
+const seededKey = (): string => hex32(8);
+/** An id in the shape crypto's random UUIDs have (version 4). */
+const seededUuid = (): string => {
+    const h = hex32(4);
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${'89ab'[parseInt(h[16], 16) & 3]}${h.slice(17, 20)}-${h.slice(20)}`;
+};
 const pick = <T>(xs: T[]): T => xs[Math.floor(rand() * xs.length)];
 const round = (x: number) => Math.round(x * 10) / 10;
 const HUBS = [{ lat: -28.5, lng: 153.5 }, { lat: 51.5, lng: -0.1 }, { lat: -17.8, lng: 178.4 }, { lat: 64.1, lng: -21.9 }];
@@ -105,7 +120,7 @@ async function main(): Promise<void> {
     const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, area_lat, area_lng)
                                      VALUES (?, ?, ?, 'seed', 'seed', 'active', ?, ?)`);
     const newMember = (): string => {
-        const pk = crypto.randomBytes(32).toString('hex');
+        const pk = seededKey();
         const p = rand() < 0.1 ? null : randomPoint();
         insertMember.run(pk, `Eq${members.length}`, '2020-01-01T00:00:00.000Z', p?.lat ?? null, p?.lng ?? null);
         members.push(pk);
@@ -117,7 +132,7 @@ async function main(): Promise<void> {
                                    VALUES (?, 'offer', 'other', ?, 'equivalence', ?, ?, ?, ?)`);
     db.transaction(() => {
         for (let i = 0; i < 400; i++) {
-            const id = crypto.randomUUID();
+            const id = seededUuid();
             const p = rand() < 0.1 ? null : randomPoint();
             insertPost.run(id, `Listing ${i}`, pick(members), rand() < 0.2 ? pick(members) : null, p?.lat ?? null, p?.lng ?? null);
             posts.push(id);
@@ -149,7 +164,7 @@ async function main(): Promise<void> {
             party = chosen ?? (rand() < 0.5 ? (pick(nearMembers(id)) ?? pick(members)) : pick(members));
             if (party === p.author_pubkey) return 0;
             db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 1, ?)')
-                .run(crypto.randomUUID(), id, party, p.author_pubkey, rand() < 0.5 ? 'requested' : 'pending');
+                .run(seededUuid(), id, party, p.author_pubkey, rand() < 0.5 ? 'requested' : 'pending');
         }
         return addBlocks(party, [p.author_pubkey]).length;
     };
@@ -206,9 +221,13 @@ async function main(): Promise<void> {
     for (let i = 0; i < 400; i++) connect(pick(members));          // a member's second (or third) device
     for (let i = 0; i < 80; i++) connect(null);                     // no member's key
     for (let i = 0; i < 40; i++) connect(null, newMemberLater());   // signed before their membership existed
-    function newMemberLater(): string { return crypto.randomBytes(32).toString('hex'); }
+    function newMemberLater(): string { return seededKey(); }
     const pendingKeys = sockets.filter(s => s._pendingMemberPubkey).map(s => s._pendingMemberPubkey as string);
     assert(sockets.length >= 3500, `setup: ${sockets.length} sockets, ${members.length} members`);
+    // The world the seed made, and (below) each push's frames: the same for two runs of one seed, wherever they run.
+    const trace = [...members.map(k => `member ${k}`), ...posts.map(id => `listing ${id}`), ...pendingKeys.map(k => `joins later ${k}`)];
+    const sha = (text: string) => crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
+    const world = sha(trace.join('\n')), firstPush = trace.length;
 
     // ── 2. pushes, the two side by side, while the world changes ───────────────────────────────
     const changes: Record<string, number> = {};
@@ -238,7 +257,7 @@ async function main(): Promise<void> {
         else if (r < 0.7) {
             const old = pick(liveMembers());
             if (!old) return;
-            const fresh = crypto.randomBytes(32).toString('hex');
+            const fresh = seededKey();
             try {
                 completeRekey(old, fresh, issueRekeyCode(old, 'owner:password').code, 'owner:password');
             } catch (e: any) { did(`re-key refused: ${e?.message}`); return; }
@@ -417,7 +436,9 @@ async function main(): Promise<void> {
         reached += full.frames.length;
         if (full.frames.length === 0) emptyPushes++;
         checkReach(p, new Set(indexed.frames.map(f => Number(f.slice(0, f.indexOf('|'))))));
-        if (full.sent !== indexed.sent || full.frames.join('\n') !== indexed.frames.join('\n')) {
+        const indexedFrames = indexed.frames.join('\n');
+        trace.push(`push ${i} ${p.event.type} ${p.event.id ?? p.event.post?.id}: ${indexed.sent} sent, frames ${sha(indexedFrames)}`);
+        if (full.sent !== indexed.sent || full.frames.join('\n') !== indexedFrames) {
             differ++;
             if (firstDiffs.length < 3) {
                 const a = new Set(full.frames), b = new Set(indexed.frames);
@@ -428,6 +449,8 @@ async function main(): Promise<void> {
     }
     se.setListingPushIndex(true);
     say(`   changes between pushes: ${JSON.stringify(changes)}`);
+    say(`   fingerprint of seed ${SEED}: world ${world} (${firstPush} member keys and listing ids), pushes ${sha(trace.slice(firstPush).join('\n'))}`);
+    if (process.env.PUSH_INDEX_TRACE) fs.writeFileSync(process.env.PUSH_INDEX_TRACE, `${trace.join('\n')}\n`);
     for (const d of firstDiffs) say(`   ${d}`, true);
     for (const what of ['connect', 'disconnect', 'dies on a send', 'area set or moved', 'area cleared', 'area imported',
         're-key, the new phone connects', 'member removed', 'mid-join socket joins', 'map loaded again whole',
@@ -507,9 +530,22 @@ async function main(): Promise<void> {
     assert(writes.length === 2 && allowed.length === 2,
         `a socket's key is written only at the connect and by wsClients.setKey: ${writes.join(', ')}`);
 
+    // ── 2c. the suite's own draws ───────────────────────────────────────────────────────────────
+    // Nothing in this file draws but from the seed (its own line, which picks one when none is given, aside): a key or an
+    // id from crypto, or Math.random, makes another world for the same seed, as the members' keys did (#1875's check).
+    const DRAW = /\b(?:random(?:Bytes|UUID|Int|Fill|FillSync)|getRandomValues|Math\s*\.\s*random)\s*\(/;
+    const drawShapes = ['crypto.randomBytes', 'crypto.randomUUID', 'crypto.randomInt', 'randomFillSync', 'crypto.getRandomValues', 'Math.random'].map(f => `${f}(32)`);
+    const seededShapes = ['seededKey()', 'seededUuid()', 'rand()', 'randomPoint()', "crypto.createHash('sha256')"];
+    const unseen = drawShapes.filter(l => !DRAW.test(l)), misdrawn = seededShapes.filter(l => DRAW.test(l));
+    assert(unseen.length === 0 && misdrawn.length === 0,
+        `the draw pattern catches all ${drawShapes.length} other sources and none of ${seededShapes.length} seeded calls (missed: ${unseen.join(' | ') || 'none'}; taken for a draw: ${misdrawn.join(' | ') || 'none'})`);
+    const draws = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n')
+        .flatMap((line, n) => DRAW.test(line) && !line.startsWith('const SEED = ') ? [`line ${n + 1}`] : []);
+    assert(draws.length === 0, `the suite draws only from its seed: ${draws.length} other draws in this file (${draws.join(', ') || 'none'})`);
+
     // ── 3. the cost ─────────────────────────────────────────────────────────────────────────────
     if (process.env.PUSH_INDEX_COST !== '0') {
-        const hubPost = crypto.randomUUID(), oceanPost = crypto.randomUUID();
+        const hubPost = seededUuid(), oceanPost = seededUuid();
         insertPost.run(hubPost, 'At a dense spot', pick(members), null, HUBS[0].lat, HUBS[0].lng);
         insertPost.run(oceanPost, 'In the South Pacific', pick(members), null, -48.9, -123.4);
         // The dense spot's author blocked by 300 members anywhere, some near it: the read of their blockers is in every
@@ -554,4 +590,25 @@ async function main(): Promise<void> {
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ listing pushes through the index equal the full loop: PASSED.');
 }
-main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });
+
+/**
+ * The one command that replays this run: the runner's run of this suite with its seed, the variant in
+ * scripts/server-suites.mjs whose environment this run has, or else the suite by name with the variables that shape it.
+ */
+async function replayCommand(): Promise<string> {
+    const name = path.basename(fileURLToPath(import.meta.url), '.ts');
+    const suites = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../scripts/server-suites.mjs');
+    let variants: { name: string; tag?: string; env?: Record<string, string | null> }[] = [];
+    try { variants = (await import(pathToFileURL(suites).href)).VARIANTS ?? []; } catch { /* the plain name below */ }
+    const mine = variants.filter(v => v.name === name && v.tag);
+    const variant = mine.find(v => Object.entries(v.env ?? {}).every(([k, val]) => (process.env[k] ?? null) === val));
+    const env = [`PUSH_INDEX_SEED=${SEED}`, ...['NEARBY_LISTINGS_RADIUS_KM', 'PUSH_INDEX_COST', 'PUSH_INDEX_PUSHES']
+        .filter(k => process.env[k] !== undefined && !(variant?.env && k in variant.env)).map(k => `${k}=${process.env[k]}`)];
+    return `${env.join(' ')} SERVER_SUITES_ONLY='${variant ? `${name}(${variant.tag})` : name}' node scripts/run-server-suites.mjs` +
+        (variant || mine.length === 0 ? '' : ` (the name runs its ${mine.length} variants too, with the same seed)`);
+}
+main().then(() => process.exit(0)).catch(async e => {
+    console.error('❌ Test failed:', e);
+    say(`   replay (from the repository's root): ${await replayCommand()}`, true);
+    process.exit(1);
+});

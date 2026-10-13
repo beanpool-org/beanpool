@@ -106,6 +106,7 @@ import { createBackupRoutes } from './routes/backup.js';
 import { createOffboxBackupRoutes } from './routes/offbox-backups.js';
 import { createAlertsRoutes } from './routes/alerts.js';
 import { createAutomationTokenRoutes } from './routes/automation-tokens.js';
+import { createMcpRoutes } from './agent/mcp-route.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
@@ -772,7 +773,7 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 /** /api and /ws, ignoring case: answers that are never documents, so they carry no document headers. */
 function isApiOrWsPath(requestPath: string): boolean {
     const lower = requestPath.toLowerCase();
-    return lower === '/api' || lower.startsWith('/api/') || lower === '/ws' || lower.startsWith('/ws/');
+    return lower === '/api' || lower.startsWith('/api/') || lower === '/ws' || lower.startsWith('/ws/') || lower === '/mcp';
 }
 
 /**
@@ -788,6 +789,7 @@ export function isAdminSurfacePath(requestPath: string): boolean {
         p === '/settings.js' ||
         p === '/api/local/admin' ||
         p.startsWith('/api/local/admin/') ||
+        p === '/mcp' ||
         p === '/api/admin' ||
         p.startsWith('/api/admin/') ||
         p === '/api/local/verify-password' ||
@@ -1802,6 +1804,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createOffboxBackupRoutes(deps),
         createAlertsRoutes(deps),
         createAutomationTokenRoutes(deps),
+        createMcpRoutes(deps),
         createTakeoverEnvelopeRoutes(deps),
         createOwnerWordsCheckRoutes(deps),
         createOwnerUnlockRoutes(deps),
@@ -2002,6 +2005,8 @@ const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
 /** Routes whose legitimate bodies are much smaller than the global cap, enforced before
  *  a byte is buffered. Pulse OAuth ingest is at most 50 items of link metadata. */
 const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
+    // An AI assistant's MCP request (agent/mcp-route.ts): a method, an id and a few arguments.
+    [/^\/mcp$/, 64 * 1024],
     [/^\/api\/member\/pulse\/oauth-ingest$/, 512 * 1024],
     // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
     [/^\/api\/join\/knock$/, 192 * 1024],

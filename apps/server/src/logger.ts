@@ -48,7 +48,7 @@ function formatConsoleLog(entry: { timestamp: string; level: string; category: s
  */
 export function writeLog(
     level: 'INFO' | 'WARN' | 'ERROR' | 'SECURITY' | 'SYNC',
-    category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS',
+    category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT',
     message: string,
     metadata?: any
 ) {
@@ -288,7 +288,7 @@ export function scrubMemberFromLogs(callsign: string | null | undefined, keys: r
     return changed;
 }
 
-export type LogCategory = 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS';
+export type LogCategory = 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT';
 let securityLineListener: ((category: LogCategory) => void) | null = null;
 
 /**
@@ -300,12 +300,12 @@ export function onSecurityLogLine(fn: ((category: LogCategory) => void) | null):
 }
 
 export const logger = {
-    info: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('INFO', category, message, metadata),
-    warn: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('WARN', category, message, metadata),
-    error: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('ERROR', category, message, metadata),
+    info: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT', message: string, metadata?: any) => writeLog('INFO', category, message, metadata),
+    warn: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT', message: string, metadata?: any) => writeLog('WARN', category, message, metadata),
+    error: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT', message: string, metadata?: any) => writeLog('ERROR', category, message, metadata),
     security: (category: LogCategory, message: string, metadata?: any) => {
         writeLog('SECURITY', category, message, metadata);
         try { securityLineListener?.(category); } catch { /* a log line never fails for the alert book */ }
     },
-    sync: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('SYNC', category, message, metadata),
+    sync: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT', message: string, metadata?: any) => writeLog('SYNC', category, message, metadata),
 };

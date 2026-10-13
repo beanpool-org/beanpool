@@ -1203,7 +1203,7 @@ CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     level TEXT NOT NULL CHECK (level IN ('INFO', 'WARN', 'ERROR', 'SECURITY', 'SYNC')),
-    category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS')),
+    category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS', 'AGENT')),
     message TEXT NOT NULL,
     metadata TEXT -- JSON string metadata
 );

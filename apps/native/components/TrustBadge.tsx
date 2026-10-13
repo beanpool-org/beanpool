@@ -6,7 +6,9 @@ import Svg, { Defs, RadialGradient, LinearGradient, Stop, Circle, Path, Polygon,
  *
  * Rank reads through the enamel shade (light → deep green), an engraved emblem that grows
  * with standing (sprout → home → pillars → summit), and ornament (laurel for Steward+, a
- * crown-star for Elder). `ring`/`ringPct` draws a progress arc around it for the hero.
+ * crown-star for Elder). `ring`/`ringPct` draws a progress arc around it for the hero. `ahead` marks a level the
+ * member hasn't reached yet for screen readers only: levels are merit badges that gate nothing (#1838), so the coin is
+ * drawn at full strength, never faded or labelled locked.
  * All SVG so it stays razor-sharp at any size. Colours are intentionally all-green.
  */
 export type TrustLevel = 'newcomer' | 'resident' | 'steward' | 'elder';
@@ -64,13 +66,13 @@ function Emblem({ level }: { level: TrustLevel }) {
 export function TrustBadge({
     level,
     size = 64,
-    locked = false,
+    ahead = false,
     ring = false,
     ringPct = 0,
 }: {
     level: TrustLevel;
     size?: number;
-    locked?: boolean;
+    ahead?: boolean;
     ring?: boolean;
     ringPct?: number;
 }) {
@@ -82,14 +84,13 @@ export function TrustBadge({
     const C = 2 * Math.PI * RING_R;
     const dash = Math.max(0, Math.min(1, ringPct)) * C;
 
-    const labelText = `${level.charAt(0).toUpperCase() + level.slice(1)} trust badge${locked ? ' (locked)' : ''}`;
+    const labelText = `${level.charAt(0).toUpperCase() + level.slice(1)} trust badge${ahead ? ', up ahead' : ''}`;
 
     return (
         <Svg
             width={size}
             height={size}
             viewBox="0 0 120 120"
-            opacity={locked ? 0.5 : 1}
             accessible={true}
             accessibilityRole="image"
             accessibilityLabel={labelText}

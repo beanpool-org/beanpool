@@ -21,8 +21,6 @@ export const KEY_MOVED_REASON = 'Show your old 12 words';
 /** The screens showing the offer (a plain set, not DeviceEventEmitter: db.ts imports this, and runs outside React Native in tests). */
 const listeners = new Set<() => void>();
 const storageKey = (nodeUrl: string, pubkey: string) => `beanpool_key_replaced:${nodeUrl.replace(/\/+$/, '')}:${pubkey}`;
-/** Whether a note is kept, per storage key, once read: a successful request then costs no storage read. */
-const kept = new Map<string, boolean>();
 
 /** True for the node's answer that the signing key was replaced (403 with code `key_invalidated`). */
 export function isKeyReplacedAnswer(status: number, body: unknown): boolean {
@@ -33,24 +31,23 @@ export function isKeyReplacedAnswer(status: number, body: unknown): boolean {
 export async function noteKeyReplaced(nodeUrl: string, pubkey: string): Promise<void> {
     try {
         const k = storageKey(nodeUrl, pubkey);
-        kept.set(k, true);
         if (await AsyncStorage.getItem(k)) return;
         await AsyncStorage.setItem(k, String(Date.now()));
     } catch { /* the next refusal notes it again */ }
     for (const l of [...listeners]) l();
 }
 
-/** The node answered a signed request from this key with success: the key is current here, so any note goes. */
+/**
+ * The node answered a signed request from this key with success: the key is current here, so any note goes. Every success
+ * reads storage (no cache of "none kept"): a lie whose note lands while a success is being noted is cleared by the next
+ * success, not kept for good (confirmation 1 of #1844, finding 3).
+ */
 export async function noteKeyAnswered(nodeUrl: string, pubkey: string): Promise<void> {
     const k = storageKey(nodeUrl, pubkey);
-    if (kept.get(k) === false) return;
     try {
-        const had = !!(await AsyncStorage.getItem(k));
-        kept.set(k, false);
-        if (!had) return;
+        if (!(await AsyncStorage.getItem(k))) return;
         await AsyncStorage.removeItem(k);
     } catch {
-        kept.delete(k);
         return;
     }
     for (const l of [...listeners]) l();

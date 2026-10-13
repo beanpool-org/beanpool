@@ -37,6 +37,7 @@ import { getNodeConfig, updateNodeConfig, type NodeConfig } from '../state-engin
 import { isAutoSnapshotInterval, restartScheduler, MAX_SNAPSHOTS_KEPT } from '../services/snapshot-scheduler.js';
 import type { SyncCommunitySettings } from '@beanpool/engine';
 import { cleanLabel } from './clean-label.js';
+import { cleanStartCommunityUrl } from './start-community.js';
 
 export type { SyncCommunitySettings };
 
@@ -50,7 +51,7 @@ export const COMMUNITY_LOCAL_CONFIG_FIELDS = [
 /** node_config rows that are the community's. */
 export const COMMUNITY_NODE_CONFIG_KEYS = [
     'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door',
-    'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days',
+    'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl',
 ] as const;
 
 /** Fields of the `node_config` row's object that are the community's. */
@@ -219,6 +220,8 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     // The Community health panel's two lines (engine/community-health.ts): whole numbers as text.
     health_debt_line_pct: orNull(wholeBeans),
     health_quiet_days: orNull(wholeBeans),
+    // Where Start a community leads (config/start-community.ts): a web address, or no row for beanpool.org's page.
+    startCommunityUrl: orNull((v) => cleanStartCommunityUrl(v) ?? BAD),
 };
 
 /**

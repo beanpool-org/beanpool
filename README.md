@@ -249,12 +249,24 @@ BeanPool is distributed as a **Universal Docker Container** via the GitHub Conta
 - **ARM64** (Raspberry Pi, Apple Silicon, ARM NAS drives)
 - **TrueNAS Scale / Kubernetes** (runs smoothly as a non-root user via `PUID`/`PGID` variables)
 
+The same one block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node): fetch, create the network the compose file
+expects (`beanpool-shared`, declared `external`), pull, start, wait for the one-time claim code, then claim the community with your
+phone. The folder is `beanpool`, so Compose's project name is `beanpool` without `-p`.
+
 ```bash
-git clone https://github.com/beanpool-org/beanpool.git
-cd beanpool
+git clone https://github.com/beanpool-org/beanpool.git && cd beanpool
+docker network create beanpool-shared
 docker compose pull
-docker compose -p beanpool up -d
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/dev/null && break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim
 ```
+
+`beanpool claim` asks for a `.beanpool.org` name (or `--address https://your.domain`, or `--no-name` with
+`--direct http://IP:PORT`), then shows the claim code and a QR code: open BeanPool on your phone → **Claim a community**. The
+operator manual's [First-time setup](https://beanpool.org/guide/operators/first-time-setup.html) has the rest.
 
 #### Updating an Existing Node
 

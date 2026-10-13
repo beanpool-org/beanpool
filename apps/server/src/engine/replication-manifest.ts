@@ -681,6 +681,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     credit_cap: { kind: 'community-settings', reason: "the community's credit cap in Beans (config/known-floor.ts)" },
     health_debt_line_pct: { kind: 'community-settings', reason: "the Community health panel's debt line, a % of the credit line (engine/community-health.ts)" },
     health_quiet_days: { kind: 'community-settings', reason: "the Community health panel's days in debit without a sale (engine/community-health.ts)" },
+    startCommunityUrl: { kind: 'community-settings', reason: "where the Local community sheet's Start a community leads (config/start-community.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

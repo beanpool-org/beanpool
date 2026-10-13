@@ -1,6 +1,7 @@
 /**
  * Divergence checks between the operator manual and Settings:
- *   - Settings bundles exactly the bytes the guide build writes, and there is no website copy (Marty, 2026-09-19);
+ *   - Settings bundles exactly the bytes the guide build writes, and the website has First-time setup only (Marty,
+ *     2026-09-19; pick 8, 2026-10-13);
  *   - every "?" points at a page that exists;
  *   - every screen and sub-tab in Settings has a "?" entry, so a new screen cannot ship without help.
  *
@@ -41,13 +42,16 @@ describe('operator manual in Settings', () => {
         }
     });
 
-    it('is not published on the website', () => {
-        // The guard for Marty's decision of 2026-09-19: the manual ships in node Settings only, and the website copy
-        // waits until the security weak spots it describes are fixed (PUBLISH_OPERATORS_WEBSITE in
-        // packages/beanpool-guide/scripts/build.mjs). Remove this only together with that switch.
-        expect(fs.existsSync(path.join(repo, 'apps/website/guide/operators')),
-            'apps/website/guide/operators/ must not exist: the operator manual is not published on beanpool.org until its security weak spots are fixed (Marty, 2026-09-19)')
-            .toBe(false);
+    it('is not published on the website, but for First-time setup', () => {
+        // The guard for Marty's decision of 2026-09-19: the manual ships in node Settings, and the website copy waits
+        // until the security weak spots it describes are fixed. Reversed for First-time setup alone (pick 8,
+        // 2026-10-13; OPERATOR_PAGES_ON_WEBSITE in packages/beanpool-guide/scripts/build.mjs). Widen this only
+        // together with that list.
+        const dir = path.join(repo, 'apps/website/guide/operators');
+        const files = fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter(d => d.isFile())
+            .map(d => path.relative(dir, path.join(d.parentPath ?? d.path, d.name)).split(path.sep).join('/')).sort();
+        expect(files, 'apps/website/guide/operators/ holds only First-time setup and its picture: the rest of the manual is not published on beanpool.org until its security weak spots are fixed (Marty, 2026-09-19)')
+            .toEqual(['first-time-setup.html', 'images/cold-start.webp']);
     });
 
     it('passes the same validation the apps apply to the members\' guide', () => {

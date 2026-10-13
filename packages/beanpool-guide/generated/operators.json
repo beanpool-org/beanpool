@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 115,
-  "hash": "b607b883b92719e109f524cbbc8857324c9ab803c50eec77d3f8caaa1b5da572",
+  "version": 116,
+  "hash": "37cbfbcb8f0263651901b6f21b112e40d4c2d14940b488cd49e710b58de8da5c",
   "sections": [
     {
       "id": "setup",
@@ -2296,7 +2296,7 @@
       "blocks": [
         {
           "type": "p",
-          "text": "An enterprise is a shared project with its own account: a community garden, a tool library, a bakery run by several people. The people who run it are its **keepers**."
+          "text": "A project or an enterprise is a group with its own account: a community garden, a tool library, a bakery run by several people. The people who run an enterprise are its **keepers**, one of them the lead keeper; on a project the app calls them its **leader** and **collaborators**."
         },
         {
           "type": "h2",

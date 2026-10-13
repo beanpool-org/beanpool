@@ -1433,7 +1433,7 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
         const getAll = vi.mocked(db.getAllAsync);
         const counts = () => ({
             pinReads: getItem.mock.calls.filter((c) => c[0] === PINS(ana)).length,
-            firstSightChecks: getAll.mock.calls.filter((c) => String(c[0]).startsWith('SELECT id, author_pubkey, ciphertext, nonce, type, metadata FROM messages WHERE conversation_id = ? AND nonce LIKE ?')).length,
+            firstSightChecks: getAll.mock.calls.filter((c) => String(c[0]).startsWith('SELECT id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata FROM messages WHERE (conversation_id = ? OR conversation_id IN')).length,
         });
         getItem.mockClear(); getAll.mockClear();
         expect((await getMessages(dm.id)).map((m: any) => m.text)).toEqual(['Shall I cancel the order?', 'No']);
@@ -1472,6 +1472,27 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
         await syncMessages(ana.publicKey);
         const preview = ((await getConversations(ana.publicKey)).find((c: any) => c.id === dm.id) as any)?.lastMessage;
         expect(preview).not.toContain('door code');
+    });
+
+    it('the Inbox with the pins unreadable opens no DM\'s newest line, not even under the key its rows name (fail closed; #1872/#1873 confirmation review, finding 5)', async () => {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        node.convs = [];
+        await syncMessages(ana.publicKey);
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        node.convs = [dm];
+        puppetSays(dm, 'It is Ben on a new phone. Text me the door code');
+        await syncMessages(ana.publicKey);
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const real = getItem.getMockImplementation()!;
+        getItem.mockImplementation(async (k: string) => { if (k === PINS(ana)) throw new Error('storage unavailable'); return real(k); });
+        restarted();   // the app's next run can't read them
+        try {
+            const row = (await getConversations(ana.publicKey)).find((c: any) => c.id === dm.id) as any;
+            expect(row?.lastMessage).toBe('🔒 Encrypted message');
+        } finally {
+            getItem.mockImplementation(real);
+        }
     });
 });
 
@@ -1741,4 +1762,53 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(await sendTo(dm.id, 'Sorry, I have to decline', [puppet])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
     });
+
+    // A capitals twin of Ben's DM on a restored phone (#1872/#1873 confirmation review, finding 2): the pin is kept under
+    // the folded id, so its first sight is judged on the lines of every spelling this phone holds, never one spelling's.
+    /** The node answers its conversation listing with a 500 from now on (it chooses which routes answer). */
+    function listingsFail(): () => void {
+        const realFetch = (globalThis as any).fetch;
+        (globalThis as any).fetch = async (url: string, init?: any) => {
+            if (new URL(url).pathname.startsWith('/api/messages/conversations/')) return { ok: false, status: 500, headers: { get: () => null }, text: async () => '{}', json: async () => ({}) };
+            return realFetch(url, init);
+        };
+        return () => { (globalThis as any).fetch = realFetch; };
+    }
+
+    it('T2: restored phone, a twin with a PUPPET line and Ben\'s row listed [Ana, PUPPET] with his history; Ana opens the twin first: both rows pause on Ben, nothing goes', async () => {
+        await aQuestionAndAnAnswer();
+        const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        node.convs = [twin, dm];
+        saysTo(puppet, twin, 'Hi Ana, it is Ben on my new number');
+        await restoredPhone();
+        expect(await isDmKeyChangePending(twin.id)).toBe(true);
+        await syncMessages(ana.publicKey);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey, firstSight: true } });
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(await sendTo(dm.id, 'Ben, the code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+        expect(await sendTo(twin.id, 'Is that you, Ben?', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+    });
+
+    for (const variant of ['the twin has a PUPPET line; Ana opens it', 'the twin is empty; Ana sends there first (#1863 E2)'] as const) {
+        it(`T: restored phone, then the node refuses its listings; ${variant}, then Ben's row: Ben's row never seals to PUPPET`, async () => {
+            await aQuestionAndAnAnswer();
+            const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
+            node.convs = [twin, dm];
+            if (variant.startsWith('the twin has')) saysTo(puppet, twin, 'Hi Ana, it is Ben on my new number');
+            await restoredPhone();
+            const restore = listingsFail();
+            try {
+                await getMessages(twin.id);
+                await isDmKeyChangePending(twin.id);
+                if (variant.includes('sends there')) {
+                    expect(await sendTo(twin.id, 'Hi, who is this?', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+                }
+                await syncMessages(ana.publicKey);
+                expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
+                expect((await getMessages(dm.id)).map((m: any) => m.text)).toEqual(['Shall I cancel the order?', 'No']);
+                expect(await sendTo(dm.id, 'Ben, the code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+            } finally { restore(); }
+        });
+    }
 });

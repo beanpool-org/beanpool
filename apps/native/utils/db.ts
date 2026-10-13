@@ -4361,7 +4361,8 @@ interface PinnedDmKeyContext extends DMKeyContext {
 }
 
 /**
- * The history rule for one DM (design §3.4 amendment): the newest 20 encrypted lines, oldest first, each with the key it
+ * The history rule for one DM (design §3.4 amendment): the newest 20 encrypted lines under any spelling of its id this
+ * phone holds (#1872/#1873 confirmation, finding 2), oldest first, each with the key it
  * opens under, judged by judgeFirstSight. A line is tried under the listed key, then the keys the listing names as its
  * former ones (`heard.tryKeys`, which only say what to try), then the keys the rows name as authors; as mine sealed to
  * that key, or as that key's own whoever the row names (the node writes the rows, and a re-key moves old lines' author to
@@ -4369,9 +4370,10 @@ interface PinnedDmKeyContext extends DMKeyContext {
  */
 async function judgeThread(conversationId: string, myPrivHex: string, me: string, listed: string | null, heard: DmHeard | undefined): Promise<SightVerdict> {
     const database = await getDb();
+    // The pin is kept under the folded id, so first sight reads the thread under every spelling of it this phone holds.
     const rows = (await database.getAllAsync<any>(
-        'SELECT id, author_pubkey, ciphertext, nonce, type, metadata FROM messages WHERE conversation_id = ? AND nonce LIKE ? ORDER BY timestamp DESC LIMIT 20',
-        [conversationId, `${V2_NONCE_PREFIX}%`]
+        'SELECT id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata FROM messages WHERE (conversation_id = ? OR conversation_id IN (SELECT id FROM conversations WHERE lower(id) = lower(?))) AND nonce LIKE ? ORDER BY timestamp DESC LIMIT 20',
+        [conversationId, conversationId, `${V2_NONCE_PREFIX}%`]
     )).reverse().filter(r => dmLineKind({ authorPubkey: r.author_pubkey, nonce: r.nonce, type: r.type }) === 'encrypted');
     if (!rows.length) return judgeFirstSight([], listed);
     const mine = me.toLowerCase();
@@ -4381,10 +4383,14 @@ async function judgeThread(conversationId: string, myPrivHex: string, me: string
     for (const key of candidates) {
         const left = rows.filter(r => !placed.has(r.id));
         if (!left.length) break;
-        const views = checkDmThread(left.map(r => ({
-            id: r.id, authorPubkey: pinKeyOf(r.author_pubkey) === mine ? r.author_pubkey : key, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata,
-        })), { myEdPrivHex: myPrivHex, peerEdPubHex: key }, conversationId);
-        for (const r of left) if (views.get(r.id)?.format != null) placed.set(r.id, key);
+        // Each spelling's lines under its own id: a line is sealed to the conversation it was written in.
+        for (const spelling of new Set(left.map(r => String(r.conversation_id)))) {
+            const mineHere = left.filter(r => String(r.conversation_id) === spelling);
+            const views = checkDmThread(mineHere.map(r => ({
+                id: r.id, authorPubkey: pinKeyOf(r.author_pubkey) === mine ? r.author_pubkey : key, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata,
+            })), { myEdPrivHex: myPrivHex, peerEdPubHex: key }, spelling);
+            for (const r of mineHere) if (views.get(r.id)?.format != null) placed.set(r.id, key);
+        }
     }
     return judgeFirstSight(rows.map(r => placed.get(r.id) ?? null), listed);
 }

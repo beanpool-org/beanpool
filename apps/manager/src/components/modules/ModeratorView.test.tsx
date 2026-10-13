@@ -84,6 +84,22 @@ async function renderAppAs(hash: string, role: 'moderator' | 'admin' = 'moderato
 }
 
 describe('moderator Settings (App)', () => {
+    it('marks a child-safety report and keeps the node\'s order, which lists those first (the follow-up to #1895)', async () => {
+        const first = { ...REPORTS[2], id: 'r-child', reason: 'Child safety: messages to my daughter', childSafety: true };
+        REPORTS.unshift(first as typeof REPORTS[number]);
+        try {
+            await renderAppAs(`#handoff=${TOKEN}`);
+            await waitFor(() => expect(screen.getAllByTestId('moderator-report')).toHaveLength(4));
+            const cards = screen.getAllByTestId('moderator-report');
+            expect(within(cards[0]).getByTestId('child-safety-badge')).toHaveTextContent('Child safety');
+            expect(within(cards[0]).getByText(/Reported by Rita/)).toBeInTheDocument();
+            for (const c of cards.slice(1)) expect(within(c).queryByTestId('child-safety-badge')).toBeNull();
+            expect(screen.getAllByTestId('child-safety-badge')).toHaveLength(1);
+        } finally {
+            REPORTS.shift();
+        }
+    });
+
     it('signed in as a moderator, Settings shows only Reports, and the top bar says Moderator', async () => {
         await renderAppAs(`#handoff=${TOKEN}`);
         expect(screen.getByText('Moderator')).toBeInTheDocument();

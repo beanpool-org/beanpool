@@ -24,6 +24,7 @@ import { WsClients } from './ws-area-index.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
+import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
 import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove } from './db/db.js';
@@ -552,6 +553,11 @@ export interface AbuseReport {
     reporterCallsign?: string;
     targetCallsign?: string;
     postTitle?: string | null;
+    /**
+     * A child-safety report, read from its reason as the alerts read it (services/report-kind.ts reportKind): the Reports
+     * queue marks it and lists it first. A flag only: the reason itself is shown as before.
+     */
+    childSafety?: boolean;
     /** The same status in the moderation list's words: 'open' (pending), 'dismissed' (reviewed), 'actioned'. */
     outcome?: 'open' | 'dismissed' | 'actioned';
     /** The reported post's id, its author's callsign, and whether it is gone (null when no post is reported). */
@@ -6818,7 +6824,16 @@ export function getReportablePulseItemOwner(itemId: string): string | null {
     return row?.owner_pubkey ?? null;
 }
 
+/** The databases that have report_is_child_safety() (a test may open more than one in a process). */
+const childSafetyFnOn = new WeakSet<object>();
+
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
+    // Child safety first, read as the alerts read it, in SQL so a page of the queue holds the right ones (the alert says
+    // "look at it first, in the Manager's Reports queue": the follow-up to #1895).
+    if (!childSafetyFnOn.has(db)) {
+        db.function('report_is_child_safety', { deterministic: true }, (reason: unknown) => (reportKind(reason) === 'child safety' ? 1 : 0));
+        childSafetyFnOn.add(db);
+    }
     let whereClause = '';
     const params: any[] = [];
 
@@ -6855,7 +6870,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         LEFT JOIN pulse_items pi ON ar.target_pulse_item_id = pi.id
         LEFT JOIN members mpi ON pi.owner_pubkey = mpi.public_key
         ${whereClause}
-        ORDER BY ar.created_at DESC
+        ORDER BY report_is_child_safety(ar.reason) DESC, ar.created_at DESC
     `;
 
     const queryParams = [...params];
@@ -6877,6 +6892,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         targetPubkey: r.target_pulse_item_id ? (r.pulse_owner_pubkey || r.target_pubkey)
             : r.post_row_id ? (r.post_author_pubkey || '') : r.target_pubkey,
         targetPostId: r.target_pulse_item_id ? undefined : r.target_post_id, reason: r.reason, createdAt: r.created_at,
+        childSafety: reportKind(r.reason) === 'child safety',
         status: r.status || 'pending',
         outcome: (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open') as AbuseReport['outcome'],
         reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),

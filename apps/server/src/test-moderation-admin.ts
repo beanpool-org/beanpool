@@ -124,6 +124,38 @@ const deleteFakePost = adminDeletePost('non-existent-post-id-999');
 assert.strictEqual(deleteFakePost, false, 'F. adminDeletePost must return false for non-existent post ID');
 console.log('  F. Non-existent report and post IDs handled cleanly without errors');
 
+// H. Child-safety reports are marked and listed first (the follow-up to #1895: the alert says "look at it first, in the
+// Manager's Reports queue"), read as the alerts read them: picked, or written in on an older app. Newer reports of any
+// other kind still come after them, and a page of the queue holds them first.
+{
+    const ids: Record<string, string> = {};
+    const file = (name: string, reason: string) => {
+        const who = generateTestKeyHex();
+        createTestMember(who, `g_${name}`);
+        const r = submitReport(who, offenderKey, reason);
+        assert.ok(r, `H. ${name} filed`);
+        ids[name] = r!.id;
+        // One millisecond apart at least, so "newest first" is a real order.
+        db.prepare('UPDATE abuse_reports SET created_at = ? WHERE id = ?').run(new Date(Date.now() + Object.keys(ids).length).toISOString(), r!.id);
+    };
+    file('picked', 'Child safety');
+    file('writtenIn', 'Other: he is grooming an underage kid');
+    file('spamAfter', 'Spam or scam: fake gates');
+    file('pickedWords', 'Child safety: messages to my daughter');
+    file('otherLast', 'Other');
+
+    const all = getReports('pending').reports;
+    const order = all.map((r) => r.id);
+    const childIds = [ids.pickedWords, ids.writtenIn, ids.picked];
+    assert.deepStrictEqual(order.slice(0, 3), childIds, `H. child-safety reports come first, newest first among them (got ${JSON.stringify(all.slice(0, 5).map((r) => r.reason))})`);
+    assert.ok(order.indexOf(ids.otherLast) < order.indexOf(ids.spamAfter), 'H. the rest stay newest first');
+    for (const r of all) assert.strictEqual(r.childSafety, childIds.includes(r.id), `H. "${r.reason}" is marked ${childIds.includes(r.id)}`);
+    assert.strictEqual(all.find((r) => r.id === ids.picked)!.reason, 'Child safety', 'H. the reason itself is shown as before');
+    assert.deepStrictEqual(getReports('pending', 2, 0).reports.map((r) => r.id), childIds.slice(0, 2), 'H. the first page of the queue holds them');
+    assert.deepStrictEqual(getReports('all', 1, 0).reports.map((r) => r.id), [ids.pickedWords], 'H. and so does "all"');
+    console.log('  H. Child-safety reports are marked and listed first, on every page');
+}
+
 console.log('✅ #172 moderation admin portal test PASSED!');
 
 // Exit explicitly. This suite leaves the engine's timers and handles open, so returning normally

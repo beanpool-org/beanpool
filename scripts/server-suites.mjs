@@ -333,6 +333,7 @@ export const SUITES = [
     'test-membership-probe',
     'test-friends-routes',
     'test-trust-mutuals',
+    'test-friends-added-you',
     'test-message-attachment',
     'test-social-ratings',
     'test-app-store-versions',

@@ -59,12 +59,13 @@ function bothWays(a: Id, b: Id): void { oneWay(a, b); oneWay(b, a); }
 let requests = 0;
 async function signed(signer: Id, method: string, path: string, body: unknown): Promise<{ status: number; body: any; text: string }> {
     requests++;
-    const bodyString = JSON.stringify(body);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    const bodyString = body === undefined ? '' : JSON.stringify(body);
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
     Object.assign(headers, await buildBoundRequestHeaders({
         method, url: `https://${OWN_NAME}${path}`, body: bodyString, publicKeyHex: signer.pk, sign: ed25519Signer(signer.seed),
     }));
-    const res = await localFetch(`${BASE}${path}`, { method, headers, body: bodyString });
+    const res = await localFetch(`${BASE}${path}`, { method, headers, body: body === undefined ? undefined : bodyString });
     const text = await res.text();
     let parsed: any = null;
     try { parsed = JSON.parse(text); } catch { /* not JSON */ }
@@ -181,13 +182,20 @@ async function main() {
         for (const f of friends) bothWays(viewer, f);
         const scammer = member('t4-scammer');
         const everyone = db.prepare('SELECT public_key FROM members WHERE public_key != ?').all(scammer.pk) as { public_key: string }[];
-        let adds = 0, sent = 0;
+        // Through the signed route the day's 100 adds go through and the rest are refused (test-friends-added-you holds the
+        // cap); the rest are seeded as the days after would add them, so the scammer has added every member.
+        let adds = 0, refused = 0, sent = 0;
         for (const { public_key } of everyone) {
             if (sent > 0 && sent % 100 === 0) resetGatewayRateLimit(); // the per-minute limiter is not what is tested here
             sent++;
-            if (await add(scammer, { pk: public_key, seed: new Uint8Array(), callsign: '' })) adds++;
+            const r = await signed(scammer, 'POST', '/api/friends/add', { friendPubkey: public_key });
+            if (r.status === 200 && r.body?.success === true) adds++;
+            else if (r.status === 429) { refused++; oneWay(scammer, { pk: public_key, seed: new Uint8Array(), callsign: '' }); }
         }
-        assert(adds === everyone.length && adds >= 90, `T4: the new member added all ${everyone.length} members through the signed route (${adds})`);
+        assert(everyone.length > 100 && adds === 100 && refused === everyone.length - 100,
+            `T4: the new member added 100 of ${everyone.length} members through the signed route, the rest refused (${adds}, ${refused})`);
+        const scammerRows = (db.prepare('SELECT COUNT(*) AS n FROM friends WHERE owner_pubkey = ?').get(scammer.pk) as { n: number }).n;
+        assert(scammerRows === everyone.length, `T4: and over the following days has added all of them (${scammerRows})`);
         const p = await profile(viewer, scammer);
         assert(p.status === 200 && keys(p.body).length === 0 && p.body?.mutualCount === 0,
             `T4: the viewer with 5 two-way friends sees no connection in common (${names(p.body).join(',') || 'none'}, ${p.body?.mutualCount})`);
@@ -263,6 +271,31 @@ async function main() {
             assert(keys(seen.get(v2.pk)).length === 0 && seen.get(v2.pk)?.mutualCount === 0 && seen.get(v2.pk)?.risk?.band === 'red',
                 `T9 ${label}: V2 sees nobody, red (${names(seen.get(v2.pk)).join(',') || 'none'}, ${seen.get(v2.pk)?.risk?.band})`);
         }
+    }
+
+    // T10 — "show me as a connection in common", on by default: F turns it off with their own signed request and is
+    // named to nobody, nor counted (V's band goes red); turned back on, F is named again. Only F reads the setting.
+    {
+        resetGatewayRateLimit();
+        const v = member('t10-viewer'), f = member('t10-friend'), t = member('t10-target');
+        bothWays(v, f); bothWays(f, t);
+        const pref = (who: Id, on: boolean) => signed(who, 'POST', '/api/members/preferences', { publicKey: who.pk, preferences: { show_as_connection_in_common: on } });
+        const readPrefs = (reader: Id, of: Id) => signed(reader, 'GET', `/api/members/preferences?publicKey=${of.pk}`, undefined);
+        const before = await readPrefs(f, f);
+        assert(before.status === 200 && before.body?.show_as_connection_in_common === 'true', `T10: on by default (${before.body?.show_as_connection_in_common})`);
+        assert(JSON.stringify(keys((await profile(v, t)).body)) === JSON.stringify([f.pk]), 'T10: F is named while it is on');
+        const off = await pref(f, false);
+        assert(off.status === 200 && off.body?.success === true, `T10: F turns it off (${off.status} ${off.text.slice(0, 80)})`);
+        const p = await profile(v, t);
+        assert(p.status === 200 && keys(p.body).length === 0 && p.body?.mutualCount === 0 && p.body?.risk?.band === 'red',
+            `T10: then F is named to nobody and not counted: red (${names(p.body).join(',') || 'none'}, ${p.body?.risk?.band})`);
+        const own = await readPrefs(f, f), other = await readPrefs(v, f);
+        assert(own.body?.show_as_connection_in_common === 'false', `T10: F reads it back off (${own.body?.show_as_connection_in_common})`);
+        assert(!other.text.includes('show_as_connection_in_common'), `T10: another member never reads it (${other.status})`);
+        const bad = await signed(f, 'POST', '/api/members/preferences', { publicKey: f.pk, preferences: { show_as_connection_in_common: 'no' } });
+        assert(bad.status === 400, `T10: only true or false is taken (${bad.status})`);
+        const on = await pref(f, true);
+        assert(on.status === 200 && JSON.stringify(keys((await profile(v, t)).body)) === JSON.stringify([f.pk]), 'T10: turned back on, F is named again');
     }
 
     // Every actor above was a plain member: only the founder holds a role.

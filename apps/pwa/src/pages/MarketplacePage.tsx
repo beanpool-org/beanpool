@@ -2859,7 +2859,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <span className="text-xs font-bold text-orange-950 dark:text-orange-400">
                                             {freshTodayCount} fresh listing{freshTodayCount > 1 ? 's' : ''} posted today!
                                         </span>
-                                        <span className="text-[10px] text-orange-600/80 dark:text-orange-450/60 font-medium">
+                                        <span className="text-[10px] text-orange-600/80 dark:text-orange-300 font-medium">
                                             Scroll down to explore what is new in the community.
                                         </span>
                                     </div>

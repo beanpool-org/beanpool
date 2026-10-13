@@ -2896,7 +2896,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     )}
                 </div>
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '1.25rem', lineHeight: 1.4, opacity: 0.8 }}>
-                    BeanPool is a decentralized, peer-to-peer network. You are responsible for your own local tax compliance. By continuing, you agree to our <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }}>Terms of Service</a> and <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }}>Privacy Policy</a>.
+                    BeanPool is a decentralized, peer-to-peer network. You are responsible for your own local tax compliance. By continuing, you agree to our <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>Terms of Service</a> and <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>Privacy Policy</a>.
                 </p>
             </div>
         </div>

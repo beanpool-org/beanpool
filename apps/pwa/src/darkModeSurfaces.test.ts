@@ -53,4 +53,18 @@ describe('dark mode surfaces', () => {
         }
         expect(found).toEqual([]);
     });
+
+    it('a dark fill under white words keeps its own hover fill (hover:bg-emerald-500 is 2.5:1 under white, and beat dark:bg- on hover)', () => {
+        const found: string[] = [];
+        for (const file of files(SRC)) {
+            const rel = path.relative(SRC, file).split(path.sep).join('/');
+            const lines = fs.readFileSync(file, 'utf8').split('\n');
+            lines.forEach((line, i) => {
+                if (/(?<![\w:-])hover:bg-emerald-500(?![\w/-])/.test(line) && /dark:bg-(?:emerald|nature)-700/.test(line) && !/dark:hover:bg-/.test(line)) {
+                    found.push(`${rel}:${i + 1}`);
+                }
+            });
+        }
+        expect(found).toEqual([]);
+    });
 });

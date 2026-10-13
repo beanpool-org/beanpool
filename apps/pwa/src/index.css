@@ -89,6 +89,7 @@
   --danger: #e5967f;
   --on-danger: #1d231d;
   --link: #93c5fd;
+  --legal-link: var(--link); /* Welcome's Terms and Privacy links: #3b82f6 was 3.5:1 on the dark backdrop */
   /* Trust levels: the 400 inks on a tint of the same hue over the dark card (light slabs before, 13 Oct). */
   --tier-newcomer: #4ade80; --tier-newcomer-bg: #1f3a27; --tier-newcomer-border: #2f6b44;
   --tier-resident: #93c5fd; --tier-resident-bg: #1e2f45; --tier-resident-border: #2f4f7a;
@@ -317,6 +318,11 @@ html, body, #root {
 /* Dark: the sage ring is under 3:1 on the cards; a pale ring, and placeholders at 4.5:1 on the dark fields. */
 :root.dark-theme :focus-visible {
   outline-color: #c0ccc0;
+}
+
+/* Leaflet's controls and attribution keep their light surface in dark: the light theme's sage ring reads there (3.6:1 on #ddd). */
+:root.dark-theme .leaflet-container :focus-visible {
+  outline-color: #647664;
 }
 
 /* Fields that turn the outline off inline (Welcome, chat box) had no focus mark at all in dark. */

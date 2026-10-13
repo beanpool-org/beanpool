@@ -5,7 +5,7 @@
  * a local member's tabs, sheets and dialogs, the global lobby and a global member) it measures, from computed styles:
  *
  *   - text contrast against the colours actually behind it (every layer up to the first opaque one, gradients at their
- *     worst stop, the element's and its ancestors' opacity): 4.5:1, or 3:1 for large text (24 px, or 18.66 px bold);
+ *     worst stop, a background picture by the colour it sits on, the element's and its ancestors' opacity): 4.5:1, or 3:1 for large text (24 px, or 18.66 px bold);
  *     disabled controls are listed apart (WCAG exempts them);
  *   - placeholders (4.5:1) and the edges of text fields (3:1 against the page, unless the field's own fill stands out);
  *   - icons drawn in currentColor (3:1);
@@ -259,7 +259,8 @@ function measure(themeIsDark) {
             const size = parseFloat(cs.fontSize);
             const large = size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700);
             const m = worst(rgba(cs.color), el);
-            if (!m.picture) text.push({ el: describe(el), text: t.slice(0, 60), size, large, need: large ? 3 : 4.5, disabled: disabled(el), ...m });
+            // Over a background picture (the doodle pattern) the text is measured against the colour the picture sits on.
+            text.push({ el: describe(el), text: t.slice(0, 60), size, large, need: large ? 3 : 4.5, disabled: disabled(el), ...m });
         }
         if (el.matches('input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=hidden]), textarea, select')) {
             if (el.placeholder && !el.value) {

@@ -329,7 +329,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     setCreateError(null);
                                 }
                             }}
-                            className="bg-accent dark:bg-nature-700 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
+                            className="bg-accent dark:bg-nature-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                         >
                             {activeSection === 'groups' ? '+ Create Group' : '+ Propose'}
                         </button>
@@ -555,7 +555,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     setShowNewModal(true);
                                     setCreateError(null);
                                 }}
-                                className="bg-accent dark:bg-nature-700 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
+                                className="bg-accent dark:bg-nature-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
                             >
                                 + Propose a Project
                             </button>
@@ -897,7 +897,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 <button
                                     type="submit"
                                     disabled={creating || preparingPhoto}
-                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white font-bold text-sm disabled:opacity-50"
+                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm disabled:opacity-50"
                                 >
                                     {creating ? 'Submitting…' : preparingPhoto ? 'Preparing photo…' : 'Propose Enterprise 🌱'}
                                 </button>

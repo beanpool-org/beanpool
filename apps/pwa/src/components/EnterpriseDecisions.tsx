@@ -33,7 +33,7 @@ export interface EnterpriseDecisionsProps {
 }
 
 const btn = 'min-h-[44px] px-4 rounded-xl font-bold text-sm';
-const btnYes = `${btn} bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white disabled:opacity-50`;
+const btnYes = `${btn} bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white disabled:opacity-50`;
 const btnNo = `${btn} border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-nature-100 disabled:opacity-50`;
 
 export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, earnedSurplus, lifecycle }: EnterpriseDecisionsProps) {

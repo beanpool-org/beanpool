@@ -42,7 +42,7 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { addChannel, clearUnprovenOauthBadges } from './engine/creator-channels.js';
+import { addChannel, clearUnprovenOauthBadges, deleteChannel } from './engine/creator-channels.js';
 import { setPlatformRequestForTests, channelIdentityFromRow, matchIdentity, type PlatformRequest } from './engine/platform-identity.js';
 import { resetPulseOAuthRelayLimits } from './routes/channels.js';
 
@@ -114,12 +114,16 @@ const issuedTokens = new Set<string>();
 const tokenOwner = new Map<string, Account>();
 const calls = { tiktokToken: 0, tiktokUserInfo: 0, igToken: 0, igMe: 0, igLong: 0, other: [] as string[] };
 const userInfoUrls: string[] = [];
+// Runs once inside the next identity call: the member deletes the channel while the platform is asked.
+let duringUserInfo: (() => void) | null = null;
 // Meta's user_id is a 17-digit JSON number: JSON.parse hands the node this rounded value, which is why the
 // stable id is /me's string id.
 const igUserId = (digits: string) => Number(digits);
 const IG_SCENARIOS: Record<string, { userId: number; me: { status: number; json: any } }> = {
     'ig-good': { userId: igUserId('17841400000000001'), me: { status: 200, json: { id: 'ig-app-scoped-1', username: 'IG_Jane' } } },
     'ig-nameonly': { userId: igUserId('17841400000000002'), me: { status: 200, json: { id: 'ig-app-scoped-2', name: 'Jane Display Name' } } },
+    // A display name spelled exactly like the channel's handle: the fallback would badge on it.
+    'ig-nameonly-handle': { userId: igUserId('17841400000000004'), me: { status: 200, json: { id: 'ig-app-scoped-4', name: 'ig_jane' } } },
     'ig-tester': {
         userId: igUserId('17841400000000003'),
         me: { status: 400, json: { error: { message: 'Unsupported request - method type: get', type: 'IGApiException', code: 100 } } },
@@ -138,6 +142,8 @@ const fakePlatform: PlatformRequest = async (method, url, opts) => {
         calls.tiktokToken++;
         const form = opts?.form || {};
         const key = form.grant_type === 'refresh_token' ? form.refresh_token : form.code;
+        // A platform error that still carries tokens (the last commit strips them): none may reach the phone.
+        if (key === 'code-quirk') return { status: 400, json: { error: 'invalid_request', access_token: mint('tt-quirk'), refresh_token: mint('tt-quirk-r'), data: { access_token: mint('tt-quirk-d'), refresh_token: mint('tt-quirk-dr') } } };
         const account = tiktokAccounts[key];
         if (!account) return { status: 400, json: { error: 'invalid_grant', error_description: 'Code is expired' } };
         const access = mint('tt-access');
@@ -149,6 +155,7 @@ const fakePlatform: PlatformRequest = async (method, url, opts) => {
     if (method === 'GET' && url.startsWith('https://open.tiktokapis.com/v2/user/info/')) {
         calls.tiktokUserInfo++;
         userInfoUrls.push(url);
+        if (duringUserInfo) { const f = duringUserInfo; duringUserInfo = null; f(); }
         const account = opts?.bearer ? tokenOwner.get(opts.bearer) : undefined;
         if (!account) return { status: 401, json: { error: { code: 'access_token_invalid' } } };
         return { status: 200, json: { data: { user: { open_id: account.openId, username: account.username } }, error: { code: 'ok' } } };
@@ -282,6 +289,9 @@ async function main(): Promise<void> {
     const tester = await igConnect('ig-tester');
     assert(tester.status === 502 && tester.body?.error === 'identity_unavailable' && /Tester/.test(tester.body?.message || '') && noTokenIn(tester),
         `Instagram's Tester-role refusal gives the role hint and no token (${show(tester)})`);
+    const nameAsHandle = await igConnect('ig-nameonly-handle');
+    assert(nameAsHandle.status === 502 && nameAsHandle.body?.error === 'identity_unavailable' && noTokenIn(nameAsHandle) && channelRow(ig.id).oauth_verified_at === null,
+        `a display name spelled like the channel's handle never stands in for a username (${show(nameAsHandle)})`);
     const longBefore = calls.igLong;
     assert(calls.igLong === longBefore && calls.igLong === 0, 'no long-lived token is fetched for a refused connect');
     const igGood = await igConnect('ig-good');
@@ -310,6 +320,8 @@ async function main(): Promise<void> {
     const ghost = await tiktokConnect(bob, 'no-such-channel', { openId: 'oid-bob', username: 'bob' });
     assert(ghost.status === 404, 'an unknown channel is 404');
     assert(calls.tiktokToken + calls.igToken === codesBefore, 'none of those refusals spent a code with the platform');
+    const quirk = await exchange(jane, { platform: 'tiktok', grantType: 'authorization_code', code: 'code-quirk', codeVerifier: 'v'.repeat(43), redirectUri: 'beanpool://auth/tiktok', channelId: art.id });
+    assert(quirk.status === 400 && noTokenIn(quirk), `a platform error that carries tokens passes through with every token stripped (${show(quirk)})`);
 
     // ── 5. Refresh: proven rows skip the identity call; unbadged rows re-verify silently ─────
     const janeRefresh = right.body.data.refresh_token as string;
@@ -347,6 +359,27 @@ async function main(): Promise<void> {
     const otherMember = await exchange(sam, { platform: 'tiktok', grantType: 'refresh_token', refreshToken: 'refresh-bob' }, false);
     assert(otherMember.status === 200, 'the cap is per member: another member still gets through');
 
+    // ── 6b. Delete and disconnect forget the account; a channel deleted mid-connect is never badged ──
+    const pub = await call('GET', bob, `/api/members/${jane.pk}/channels`);
+    assert(pub.status === 200 && pub.text.includes(art.id) && /"isVerified":true/.test(pub.text) && !pub.text.includes('oid-jane') && !pub.text.includes('jane_renamed'),
+        `another member sees isVerified only, never the account id or the platform's handle (${show(pub)})`);
+    const discCh = addChannel({ ownerPubkey: bob.pk, platform: 'tiktok', raw: '@bob_disc', category: 'art' });
+    const discOk = await tiktokConnect(bob, discCh.id, { openId: 'oid-bob-disc', username: 'bob_disc' });
+    const disc = await call('POST', bob, `/api/member/channels/${discCh.id}/disconnect-oauth`, {});
+    const discRow = channelRow(discCh.id);
+    assert(discOk.status === 200 && disc.status === 200 && discRow.oauth_verified_at === null && discRow.platform_account_id === null && discRow.verified_handle === null,
+        `disconnect drops the badge, the account id and the handle (${show(disc)})`);
+    const del = await call('POST', sam, `/api/member/channels/${caseFold.id}/delete`, {});
+    const tomb = channelRow(caseFold.id);
+    assert(del.status === 200 && !!tomb.deleted_at && tomb.oauth_verified_at === null && tomb.platform_account_id === null && tomb.verified_handle === null,
+        `a deleted verified channel's tombstone keeps no account id or handle (${show(del)})`);
+    const racy = addChannel({ ownerPubkey: sam.pk, platform: 'tiktok', raw: '@sam_racy', category: 'art' });
+    duringUserInfo = () => { deleteChannel(sam.pk, racy.id); };
+    const raced = await tiktokConnect(sam, racy.id, { openId: 'oid-sam-racy', username: 'sam_racy' });
+    const racyRow = channelRow(racy.id);
+    assert(raced.status === 404 && noTokenIn(raced) && !!racyRow.deleted_at && racyRow.oauth_verified_at === null && racyRow.platform_account_id === null,
+        `a channel deleted while the platform is asked is never badged (${show(raced)})`);
+
     // ── 7. Nothing stored, nothing logged ────────────────────────────────────────────────────
     try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* the bytes are read from every file anyway */ }
     const dataDir = process.env.BEANPOOL_DATA_DIR || '';
@@ -376,7 +409,9 @@ async function main(): Promise<void> {
     db.prepare(`INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, category, source)
                 VALUES ('item-legacy', ?, ?, 'tiktok', 'art', 'manual')`)
         .run(legacy.id, neighbour.pk);
-    const cleared = clearUnprovenOauthBadges();
+    // The switch is the BOOT: a node restarting on this data dir clears the legacy badges itself.
+    initStateEngine();
+    const cleared = [legacy.id, legacyYt.id].filter(id => channelRow(id).oauth_verified_at === null).length;
     const legacyRow = channelRow(legacy.id), legacyYtRow = channelRow(legacyYt.id);
     assert(cleared === 2 && legacyRow.oauth_verified_at === null && legacyYtRow.oauth_verified_at === null,
         `a badge with no platform account id is cleared at the switch (${cleared} cleared)`);

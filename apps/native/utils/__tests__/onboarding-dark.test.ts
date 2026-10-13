@@ -9,7 +9,7 @@ import { onboardingColors } from '../onboarding-colors';
 
 const ONBOARDING_SCREENS = ['app/welcome.tsx', 'app/recover-identity.tsx', 'app/profile-setup.tsx', 'app/node-mismatch.tsx'];
 // Everything onboarding draws: the screens, the area step (profile setup, and Settings → Your area) and the parts welcome shows.
-const ONBOARDING_FILES = [...ONBOARDING_SCREENS, 'app/your-area.tsx', 'components/AreaPicker.tsx'];
+const ONBOARDING_FILES = [...ONBOARDING_SCREENS, 'app/your-area.tsx', 'components/AreaPicker.tsx', 'components/SavedNodePicker.tsx', 'components/SsoEnrolSheet.tsx'];
 const read = (rel: string) => readFileSync(join(__dirname, '..', '..', rel), 'utf8');
 
 function luminance(hex: string): number {
@@ -30,7 +30,7 @@ describe('onboarding screens follow dark mode', () => {
         expect(src).toMatch(/useOnboardingColors\(\)/);
         expect(src).not.toMatch(/import\s*\{[^}]*\bcolors\b[^}]*\}\s*from\s*'\.\.\/constants\/colors'/);
         // Every style sheet is built inside makeStyles(colors, dark), none at module level from the light colours.
-        const factory = src.indexOf('function makeStyles(colors: AppColors, dark: boolean)');
+        const factory = src.search(/function makeStyles\(colors: AppColors(, dark: boolean)?\)/);
         expect(factory).toBeGreaterThan(-1);
         expect(src.indexOf('StyleSheet.create(')).toBeGreaterThan(factory);
     });

@@ -3,8 +3,9 @@
  * Getting started at the floor (scratch/global-node/DESIGN-getting-started-fable.md): the tour's bar on every step
  * (local 9, global 7), the "?" dialog for each tab, and the mobile header's pill with each tab's title, in headless
  * Chromium at 320 x 569 with 130% text, light and dark. Fails on sideways scroll, a control under 44 px, words over
- * four lines, contrast under 4.5:1, an axe (WCAG 2 A/AA) violation, a title under the pill or the sync dot, or the
- * bar covering a button above it. Nothing here talks to a node; every request off this machine is aborted.
+ * four lines, contrast under 4.5:1, an axe (WCAG 2 A/AA) violation, a title under the pill or the sync dot, the bar
+ * covering a button above it, or the bar covering the tab's own bottom button (the Market's + ADD POST, which step 2
+ * names, and the Map's +: their classes and offset are read from the pages themselves). Nothing here talks to a node; every request off this machine is aborted.
  *
  * Run from apps/pwa: node e2e/tour-check.mjs
  */
@@ -19,13 +20,20 @@ const PWA = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(PWA, '..', '..', 'node_modules', '.bin');
 const DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'tour-check-'));
 fs.writeFileSync(path.join(DIR, 'index.html'), '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="stylesheet" href="app.css" /><title>tour check</title></head><body><div id="root"></div><script type="module" src="app.js"></script></body></html>');
+// Each tab's bottom button as its page draws it: the first fixed button riding on --bottom-nav-offset.
+const fabOf = (rel) => {
+    const m = /className="(fixed bottom-\[calc\(var\(--bottom-nav-offset\)[^"]*)"\s*style=\{\{ bottom: '([^']+)' \}\}/.exec(fs.readFileSync(path.join(PWA, rel), 'utf8'));
+    if (!m) throw new Error('no bottom button found in ' + rel);
+    return { className: m[1], bottom: m[2] };
+};
+fs.writeFileSync(path.join(DIR, 'fabs.json'), JSON.stringify({ market: fabOf('src/pages/MarketplacePage.tsx'), map: fabOf('src/pages/MapPage.tsx') }));
 execFileSync(path.join(BIN, 'esbuild'), [path.join(PWA, 'e2e', 'tour-harness.tsx'), '--bundle', '--format=esm', '--jsx=automatic', '--outfile=' + path.join(DIR, 'app.js'),
     '--define:process.env.NODE_ENV="production"', '--define:import.meta.env={"DEV":false,"PROD":true,"MODE":"production","BASE_URL":"/"}', '--define:__APP_VERSION__="harness"',
     '--banner:js=globalThis.process = globalThis.process || { env: {} };', '--loader:.png=dataurl', '--log-level=error'], { cwd: PWA, env: { ...process.env, NODE_PATH: path.join(PWA, 'node_modules') } });
 execFileSync(path.join(BIN, 'tailwindcss'), ['-c', 'tailwind.config.js', '-i', 'src/index.css', '-o', path.join(DIR, 'app.css'),
-    '--content', 'src/components/TourBar.tsx,src/components/HelpDialog.tsx,src/components/HeaderControls.tsx,e2e/tour-harness.tsx'], { cwd: PWA, stdio: 'ignore' });
+    '--content', 'src/components/TourBar.tsx,src/components/HelpDialog.tsx,src/components/HeaderControls.tsx,e2e/tour-harness.tsx,' + path.join(DIR, 'fabs.json')], { cwd: PWA, stdio: 'ignore' });
 const AXE = fs.readFileSync(path.join(PWA, '..', '..', 'node_modules', 'axe-core', 'axe.min.js'), 'utf8');
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
     const f = path.join(DIR, new URL(req.url, 'http://x').pathname.replace(/^\/$/, '/index.html'));
     if (!f.startsWith(DIR) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
@@ -53,6 +61,8 @@ const measure = () => {
         out.contrast = { words: ratio(w), caption: ratio(bar.querySelector('[data-testid="tour-step-caption"]')), skip: ratio(bar.querySelector('[data-testid="tour-skip"]')), next: ratio(bar.querySelector('[data-testid="tour-next"],[data-testid="tour-done"]')) };
         const b = document.getElementById('behind').getBoundingClientRect();
         out.behindTappable = document.elementFromPoint(b.left + 5, b.top + 5)?.id === 'behind';
+        const f = document.getElementById('fab').getBoundingClientRect();
+        out.fab = { bottom: Math.round(f.bottom), barTop: Math.round(r.top), tappable: document.elementFromPoint(f.left + f.width / 2, f.top + f.height / 2)?.closest('#fab') != null };
     }
     const dlg = document.querySelector('[data-testid="help-dialog"]');
     if (dlg) {
@@ -82,10 +92,11 @@ for (const dark of [false, true]) {
         for (let i = 0; i < n; i++) {
             const m = await open('view=step&i=' + i + (global ? '&global=1' : ''));
             const v = i === 0 ? await axe('[data-testid="tour-bar"]') : [];
-            rows.push([scheme, (global ? 'global' : 'local') + ' step ' + (i + 1), JSON.stringify({ bar: m.bar, lines: m.lines, c: m.contrast, behind: m.behindTappable, axe: v })]);
+            rows.push([scheme, (global ? 'global' : 'local') + ' step ' + (i + 1), JSON.stringify({ bar: m.bar, lines: m.lines, c: m.contrast, behind: m.behindTappable, fab: m.fab, axe: v })]);
             if (m.scrollW > 320) problems.push(scheme + ' step ' + i + ': sideways scroll ' + m.scrollW);
             if (m.small.length) problems.push(scheme + ' step ' + i + ': under 44 px: ' + m.small.join(', '));
             if (!m.behindTappable) problems.push(scheme + ' step ' + i + ': the button behind is covered');
+            if (!m.fab.tappable || m.fab.bottom > m.fab.barTop) problems.push(scheme + ' step ' + i + ': the tab\'s bottom button is under the bar ' + JSON.stringify(m.fab));
             if (m.lines > 4) problems.push(scheme + ' step ' + i + ': ' + m.lines + ' lines');
             for (const [k, r] of Object.entries(m.contrast)) if (r < 4.5) problems.push(scheme + ' step ' + i + ' ' + k + ' contrast ' + r);
             if (v.length) problems.push(scheme + ' step ' + i + ' axe ' + v.join(' '));

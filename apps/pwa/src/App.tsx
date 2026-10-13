@@ -189,7 +189,7 @@ export function App() {
                 document.documentElement.setAttribute('data-bottom-nav', 'hidden');
                 document.documentElement.classList.add('bottom-nav-hidden');
                 document.documentElement.style.setProperty('--bottom-nav-height', '0px');
-                document.documentElement.style.setProperty('--bottom-nav-offset', 'env(safe-area-inset-bottom, 0px)');
+                document.documentElement.style.setProperty('--bottom-nav-offset', 'calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px))');
             }
         }
         return () => {
@@ -635,7 +635,7 @@ export function App() {
             style={{
                 ...(!isBottomNavVisible ? {
                     '--bottom-nav-height': '0px',
-                    '--bottom-nav-offset': 'env(safe-area-inset-bottom, 0px)',
+                    '--bottom-nav-offset': 'calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px))',
                 } : {})
             } as React.CSSProperties}
         >

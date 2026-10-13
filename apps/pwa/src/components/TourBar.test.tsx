@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { HELP_MAP, helpSheetFor, tourSteps, webHelpKey } from '@beanpool/core';
-import { TourBar } from './TourBar';
+import { TOUR_BAR_HEIGHT_VAR, TourBar } from './TourBar';
 import { HelpDialog } from './HelpDialog';
 import { getBundledGuide } from '../lib/guide';
 
@@ -38,6 +38,18 @@ describe('the tour bar', () => {
             });
         });
     }
+
+    it('while it is up its height rides on --bottom-nav-offset (the tabs\' bottom buttons sit above it), and is gone once it closes', () => {
+        const steps = tourSteps('web', { global: false, beans: true });
+        const tall = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ height: 193.6 } as DOMRect);
+        const { unmount } = render(<TourBar steps={steps} index={1} home={null} onNext={vi.fn()} onSkip={vi.fn()} onDone={vi.fn()} />);
+        expect(document.documentElement.style.getPropertyValue(TOUR_BAR_HEIGHT_VAR)).toBe('194px');
+        // The bar itself stays on the nav's own offset, not above its own height.
+        expect(screen.getByTestId('tour-bar').style.bottom).toBe('calc(var(--bottom-nav-offset, 0px) - var(--tour-bar-height, 0px))');
+        unmount();
+        tall.mockRestore();
+        expect(document.documentElement.style.getPropertyValue(TOUR_BAR_HEIGHT_VAR)).toBe('');
+    });
 
     it('is no dialog and holds nothing behind it: a labelled strip, no backdrop, no aria-modal', () => {
         const steps = tourSteps('web', { global: false, beans: true });

@@ -2,6 +2,8 @@
  * The tour's bar, the "?" dialog and the mobile header's pill on their own (scratch/global-node/DESIGN-getting-started-
  * fable.md §2, §4, §5), for e2e/tour-check.mjs: the real components, the real stylesheet, nothing from a node.
  * ?view=step&i=N[&global=1] · ?view=help&key=<help-map key> · ?view=header&title=<words>; &dark=1 for the dark scheme.
+ * A step also draws its tab's own bottom button (the Market's + ADD POST, the Map's +), with the classes and offset
+ * tour-check.mjs read out of MarketplacePage.tsx and MapPage.tsx (fabs.json), under the real stylesheet's offset.
  * The header row is App.tsx's own inline styles around the real pill (the sync dot as its 26 px box).
  */
 import { createRoot } from 'react-dom/client';
@@ -17,6 +19,7 @@ const view = q.get('view');
 const node = { global: q.get('global') === '1', beans: q.get('global') !== '1' };
 const steps = tourSteps('web', node);
 const home = { chips: ['steps', 'market', 'beans'], chipName: (t: string) => ({ steps: 'First steps', market: 'New in the Market', beans: 'Your Beans' } as Record<string, string>)[t], onHome: (t: string) => t === 'market', addChip() {}, moreCards() {} };
+const fabs = (await (await fetch('fabs.json')).json()) as Record<'market' | 'map', { className: string; bottom: string }>;
 function App() {
     if (view === 'header') {
         // The mobile header row as App.tsx draws it (its own inline styles), with the real pill; the sync dot as its 26 px box.
@@ -37,10 +40,12 @@ function App() {
         return <div className="bg-nature-50 dark:bg-nature-950" style={{ minHeight: '100vh' }}><HelpDialog sheet={sheet} tourOpen={false} canTour onReadPage={() => {}} onSearch={() => {}} onTour={() => {}} onClose={() => {}} /></div>;
     }
     const i = Number(q.get('i') ?? 0);
+    const fab = steps[i]?.tab === 'map' ? fabs.map : fabs.market;
     return (
-        <div className="bg-nature-50 dark:bg-nature-950" style={{ minHeight: '100vh', ['--bottom-nav-offset' as string]: '62px' }}>
+        <div className="bg-nature-50 dark:bg-nature-950" style={{ minHeight: '100vh' }}>
             <p className="p-4 text-nature-900 dark:text-white">The tab behind the bar.</p>
             <button id="behind" style={{ position: 'fixed', left: 16, top: 120, minHeight: 44 }}>A button behind</button>
+            <button id="fab" className={fab.className} style={{ bottom: fab.bottom }}>+ ADD POST</button>
             <TourBar steps={steps} index={i} home={i === steps.length - 1 ? home : null} onNext={() => {}} onSkip={() => {}} onDone={() => {}} />
         </div>
     );

@@ -1,10 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { tourStepCaption, type TourStep } from '@beanpool/core';
 import type { TourHome } from '../lib/tour-store';
 
 const primary = 'min-w-[96px] min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
 const quiet = 'min-w-[44px] min-h-[44px] px-3 rounded-xl border-0 bg-transparent text-sm font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
 const chip = 'min-h-[44px] px-3 rounded-full border text-[0.8125rem] font-bold break-words text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
+
+/** The CSS variable the bar publishes its height on: --bottom-nav-offset adds it (index.css). */
+export const TOUR_BAR_HEIGHT_VAR = '--tour-bar-height';
 
 /**
  * The tour's bar in the web app (scratch/global-node/DESIGN-getting-started-fable.md §2): a card-coloured strip above the
@@ -22,17 +25,31 @@ export function TourBar({ steps, index, home, onNext, onSkip, onDone }: {
     onDone: () => void;
 }) {
     const words = useRef<HTMLParagraphElement>(null);
+    const bar = useRef<HTMLElement>(null);
     useEffect(() => { words.current?.focus({ preventScroll: true }); }, [index]);
+    // While the bar is up its height rides on --bottom-nav-offset, so the tabs' bottom buttons (the Market's + ADD POST,
+    // which step 2 names; the Map's +) and the pages' bottom padding sit above it, never under it.
+    useLayoutEffect(() => {
+        const el = bar.current;
+        if (!el || typeof document === 'undefined') return;
+        const root = document.documentElement;
+        const publish = () => root.style.setProperty(TOUR_BAR_HEIGHT_VAR, `${Math.ceil(el.getBoundingClientRect().height)}px`);
+        publish();
+        const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish);
+        watch?.observe(el);
+        return () => { watch?.disconnect(); root.style.removeProperty(TOUR_BAR_HEIGHT_VAR); };
+    }, []);
     const step = steps[index];
     if (!step) return null;
     const last = index === steps.length - 1;
     const chips = last && home ? home.chips : [];
     return (
         <section
+            ref={bar}
             aria-label="A look around the app"
             data-testid="tour-bar"
             className="fixed left-0 right-0 md:left-auto md:right-4 md:w-[360px] md:rounded-2xl md:bottom-4 border-t md:border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 shadow-lg px-4 pt-3 pb-3 min-w-0"
-            style={{ bottom: 'var(--bottom-nav-offset, 0px)', zIndex: 90 }}
+            style={{ bottom: 'calc(var(--bottom-nav-offset, 0px) - var(--tour-bar-height, 0px))', zIndex: 90 }}
         >
             <p className="m-0 text-[0.6875rem] font-bold uppercase tracking-wide text-nature-700 dark:text-nature-300" data-testid="tour-step-caption">
                 {tourStepCaption(index, steps.length)}

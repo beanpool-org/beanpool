@@ -159,7 +159,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         expect(document.documentElement.getAttribute('data-bottom-nav')).toBe('hidden');
         expect(document.documentElement.classList.contains('bottom-nav-hidden')).toBe(true);
         expect(document.documentElement.style.getPropertyValue('--bottom-nav-height')).toBe('0px');
-        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('env(safe-area-inset-bottom, 0px)');
+        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px))');
 
         // Closing the profile restores bottom nav visibility
         const backButton = screen.getByRole('button', { name: /back/i });
@@ -201,7 +201,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         expect(document.documentElement.getAttribute('data-bottom-nav')).toBe('hidden');
         expect(document.documentElement.classList.contains('bottom-nav-hidden')).toBe(true);
         expect(document.documentElement.style.getPropertyValue('--bottom-nav-height')).toBe('0px');
-        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('env(safe-area-inset-bottom, 0px)');
+        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px))');
 
         // Close treasury
         const backButton = screen.getByRole('button', { name: /back/i });

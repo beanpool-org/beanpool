@@ -21,6 +21,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { listAutomationTokens } from '../automation-tokens.js';
+import { listOAuthGrants } from './oauth.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { logger } from '../logger.js';
@@ -99,8 +100,13 @@ function write(s: Stored, now: number): void {
 
 export interface LiveGrant { id: string; name: string; member: string; role: 'owner' | 'admin' }
 
-/** A grant that can still act: an agent token, not expired, its member an owner or admin now. */
+/** A grant that can still act: an agent token not expired, or an OAuth grant not idle 30 days; its member an owner or admin now. */
 export function grantStillLive(grantId: string, now = Date.now()): LiveGrant | null {
+    const o = listOAuthGrants(now).find((x) => x.id === grantId);
+    if (o) {
+        const r = nodeRoleOf(o.member);
+        return r === 'owner' || r === 'admin' ? { id: o.id, name: cleanMemberText(o.clientName, 60) || 'AI assistant', member: o.member, role: r } : null;
+    }
     const t = listAutomationTokens().find((x) => x.id === grantId && x.scope === 'agent');
     if (!t || (typeof t.expiresAt === 'number' && t.expiresAt <= now) || typeof t.createdBy !== 'string') return null;
     const role = nodeRoleOf(t.createdBy);

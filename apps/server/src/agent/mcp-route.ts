@@ -8,8 +8,9 @@
  *   2. `Origin` absent or this node's own public address, else 403 (a web page cannot drive it from a browser);
  *   3. POST only: GET (no server push in v1) and DELETE (no session to end) → 405; no other method is a route here, so the
  *      router answers PUT and PATCH 405 itself and the CORS layer answers OPTIONS 204, switch on or off, before any of this;
- *   4. a bearer that is an automation token of the `agent` scope, and nothing else (no session, cookie, password or other
- *      scope), whose maker is an owner or an admin NOW (lose the role, lose the assistant) → else 401 (403 for another scope);
+ *   4. a bearer that is an automation token of the `agent` scope or an OAuth access token this node issued (agent/oauth.ts,
+ *      slice S2), and nothing else (no session, cookie, password or other scope), whose member is an owner or an admin NOW
+ *      (lose the role, lose the assistant) → else 401 (403 for another scope), the 401 naming where to sign in (RFC 9728);
  *   5. 60 calls a minute and 2,000 a day per token → 429 in words;
  *   6. then the tools (agent/tools.ts), each answer redacted at its source, every tool call written to the AGENT log.
  * An `agent` token reaches nothing but this (admin-auth.ts checkAutomationToken refuses it everywhere else).
@@ -23,6 +24,7 @@ import {
 import type { RouteDeps } from '../routes/types.js';
 import { requireAdminRole } from '../admin-auth.js';
 import { looksLikeAutomationToken, noteAutomationTokenUse, verifyAutomationToken } from '../automation-tokens.js';
+import { looksLikeOAuthAccessToken, noteOAuthGrantUse, verifyAccessToken } from './oauth.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { directoryName, getMember, resolvePublicNodeUrl } from '../state-engine.js';
@@ -44,7 +46,7 @@ export function aiAssistantsAllowed(): boolean {
     return getLocalConfig().aiAssistantsAllowed !== false;
 }
 
-const UNAUTHORISED = "Send an AI assistant's token as `Authorization: Bearer bp_…`: an owner or an admin makes one in Settings → Connected assistants";
+const UNAUTHORISED = "Connect this assistant by adding this address as a connector in Claude or ChatGPT and approving on your phone, or send an owner's assistant token as `Authorization: Bearer bp_…` (an owner makes one in Settings → Connected assistants)";
 
 function jsonRpcError(ctx: any, status: number, message: string, code = -32000): void {
     ctx.status = status;
@@ -136,6 +138,16 @@ type GrantCheck = { ok: true; grant: AgentGrant } | { ok: false; status: number;
 export function agentGrantFrom(ctx: any): GrantCheck {
     const header = String(ctx.get?.('authorization') || '');
     const m = /^Bearer\s+(\S+)$/i.exec(header.trim());
+    if (m && looksLikeOAuthAccessToken(m[1])) {
+        const g = verifyAccessToken(m[1]);
+        if (!g) return { ok: false, status: 401, error: 'Invalid, revoked or expired token' };
+        const r = nodeRoleOf(g.member);
+        if (r !== 'owner' && r !== 'admin') return { ok: false, status: 401, error: 'Invalid, revoked or expired token', grantId: g.id };
+        return {
+            ok: true,
+            grant: { id: g.id, name: g.clientName || 'AI assistant', member: g.member, role: r, via: 'oauth', createdAt: g.createdAt, expiresAt: null },
+        };
+    }
     if (!m || !looksLikeAutomationToken(m[1])) return { ok: false, status: 401, error: UNAUTHORISED };
     const record = verifyAutomationToken(m[1]);
     if (!record) return { ok: false, status: 401, error: 'Invalid, revoked or expired token' };
@@ -258,7 +270,11 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         // 4. An agent token, its member an owner or admin now.
         const check = agentGrantFrom(ctx);
         if (!check.ok) {
-            if (check.status === 401) ctx.set('WWW-Authenticate', 'Bearer realm="beanpool", error="invalid_token"');
+            if (check.status === 401) {
+                // Where an OAuth client learns to sign in (RFC 9728 §5.1); a token client reads only the error.
+                const metadata = `${nodeUrlFor(ctx)}/.well-known/oauth-protected-resource${MCP_PATH}`;
+                ctx.set('WWW-Authenticate', `Bearer realm="beanpool", error="invalid_token", resource_metadata="${metadata}", scope="agent"`);
+            }
             const from = logAddressTag(clientLimiterKey(ctx));
             if (check.status === 401 && check.grantId) logRefusal('Assistant refused: its member is no longer an owner or admin', { grant: check.grantId, from }, 'demoted');
             else logRefusal('Assistant refused a request', { status: check.status, from, ...(check.grantId ? { grant: check.grantId } : {}) }, check.status === 403 ? '403' : '401');
@@ -274,7 +290,8 @@ export function createMcpRoutes(deps: RouteDeps): Router {
             jsonRpcError(ctx, 429, admitted.error);
             return;
         }
-        noteAutomationTokenUse(grant.id, `POST ${MCP_PATH}`);
+        if (grant.via === 'oauth') noteOAuthGrantUse(grant.id);
+        else noteAutomationTokenUse(grant.id, `POST ${MCP_PATH}`);
 
         // The body: read, capped and parsed already for a JSON request (https-server.ts); one that does not parse is a
         // parse error. Only a body that parser read goes on: one it did not take as JSON (a Content-Type spelled in

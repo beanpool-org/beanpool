@@ -11,7 +11,8 @@
  *   - icons drawn in currentColor (3:1);
  *   - light slabs left on a dark page (an opaque surface brighter than 50% luminance, bigger than 24×24 px; a control drawn
  *     inverted on purpose, `dark:bg-white` or a selected chip/tab up to 140×64 px with 4.5:1 ink, is not one);
- *   - the keyboard focus: each of the first Tab stops must show an outline or ring of 3:1 against what is behind it.
+ *   - the keyboard focus: each of the first Tab stops must show an outline or ring of 3:1 against what is behind it;
+ *   - hover: a control with both a dark fill and a hover fill keeps its words at AA under the pointer.
  *
  * Run:  pnpm --filter @beanpool/pwa dark-contrast-check
  *   DARK_SWEEP=1     every screen, every finding listed, never fails (the survey behind scratch/darkmode/REPORT-web-dark.md)
@@ -141,6 +142,12 @@ async function press(locator) {
 const tab = (label) => async (page) => {
     await page.getByTestId('mobile-bottom-nav').waitFor({ timeout: 30_000 });
     await press(page.getByTestId('mobile-bottom-nav').getByRole('button', { name: label }).first());
+    await wait(1_200);
+};
+/** The signed-out lobby has its own bottom nav. */
+const lobbyTab = (label) => async (page) => {
+    await page.getByTestId('lobby-bottom-nav').waitFor({ timeout: 30_000 });
+    await press(page.getByTestId('lobby-bottom-nav').getByRole('button', { name: label }).first());
     await wait(1_200);
 };
 const clickText = (text) => async (page) => {
@@ -311,6 +318,45 @@ function measure(themeIsDark) {
     };
 }
 
+/**
+ * A fill that changes on hover: `hover:bg-emerald-500` beat `dark:bg-emerald-700` (the dark variant is the weaker selector),
+ * white words on 2.5:1. Hover the controls that carry both a dark fill and a hover fill; their words must still read at AA.
+ */
+async function hoverStops(page) {
+    const found = [];
+    const targets = page.locator('button[class*="hover:bg-"][class*="dark:bg-"], a[class*="hover:bg-"][class*="dark:bg-"]');
+    const n = Math.min(await targets.count(), 8);
+    let hovered = 0;
+    for (let i = 0; i < n; i++) {
+        const el = targets.nth(i);
+        if (!(await el.isVisible().catch(() => false)) || await el.isDisabled().catch(() => true)) continue;
+        if (!(await el.hover({ timeout: 2_000 }).then(() => true).catch(() => false))) continue;
+        await wait(250);
+        hovered++;
+        const r = await el.evaluate((node) => {
+            const cvs = document.createElement('canvas');
+            cvs.width = cvs.height = 1;
+            const ctx = cvs.getContext('2d', { willReadFrequently: true });
+            const rgba = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); const d = ctx.getImageData(0, 0, 1, 1).data; return { r: d[0], g: d[1], b: d[2], a: d[3] / 255 }; };
+            const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+            const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+            const over = (t, u) => ({ r: t.r * t.a + u.r * (1 - t.a), g: t.g * t.a + u.g * (1 - t.a), b: t.b * t.a + u.b * (1 - t.a), a: 1 });
+            const layers = [];
+            for (let e = node; e; e = e.parentElement) { const bg = rgba(getComputedStyle(e).backgroundColor); if (bg.a > 0) { layers.push(bg); if (bg.a >= 0.999) break; } }
+            const behind = layers.reduceRight((acc, l) => over(l, acc), { r: 255, g: 255, b: 255, a: 1 });
+            const cs = getComputedStyle(node);
+            const fg = over(rgba(cs.color), behind);
+            const size = parseFloat(cs.fontSize);
+            const hex = (c) => `#${[c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+            return { el: node.tagName.toLowerCase(), text: (node.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 40), ratio: ratio(fg, behind), fg: hex(fg), bg: hex(behind),
+                need: size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700) ? 3 : 4.5 };
+        });
+        if (r.text && r.ratio < r.need - 0.005) found.push(r);
+    }
+    await page.mouse.move(0, 0);
+    return { hovered, found };
+}
+
 /** Tab through the first stops; each must draw an outline or ring of 3:1 against what is behind it. */
 async function focusStops(page) {
     const found = [];
@@ -356,8 +402,8 @@ const SCREENS = [
     { name: 'local-welcome', profile: 'local', who: null, check: true },
     { name: 'local-welcome-restore', profile: 'local', who: null, go: clickRole('button', /restore|12 words|already have/i) },
     { name: 'global-lobby', profile: 'global', who: null, check: true },
-    { name: 'global-lobby-market', profile: 'global', who: null, go: tab('Market') },
-    { name: 'global-lobby-map', profile: 'global', who: null, go: tab('Map') },
+    { name: 'global-lobby-market', profile: 'global', who: null, go: lobbyTab('Market') },
+    { name: 'global-lobby-map', profile: 'global', who: null, go: lobbyTab('Map') },
     { name: 'member-home', profile: 'local', who: 'member', check: true, ready: (p) => p.getByTestId('home-card-community').waitFor({ timeout: 30_000 }) },
     { name: 'member-home-edit', profile: 'local', who: 'member', go: clickTestId('home-edit-open') },
     { name: 'member-home-add-card', profile: 'local', who: 'member', go: clickTestId('home-add-open') },
@@ -371,11 +417,11 @@ const SCREENS = [
     { name: 'member-chat', profile: 'local', who: 'member', check: true, go: tab('Chat') },
     { name: 'member-chat-dm', profile: 'local', who: 'member', go: steps(tab('Chat'), clickText('Kofi')) },
     { name: 'member-people', profile: 'local', who: 'member', check: true, go: tab('People') },
-    { name: 'member-people-profile', profile: 'local', who: 'member', go: steps(tab('People'), clickText('Kofi')) },
+    { name: 'member-people-profile', profile: 'local', who: 'member', go: steps(tab('People'), clickRole('tab', /community/i), clickText('Kofi')) },
     { name: 'member-ledger', profile: 'local', who: 'member', check: true, go: tab('Ledger') },
     { name: 'member-settings', profile: 'local', who: 'member', check: true, go: clickRole('button', 'Settings') },
     { name: 'member-settings-account', profile: 'local', who: 'member', go: steps(clickRole('button', 'Settings'), clickText('⚠️ Account Deletion & Sign Out')) },
-    { name: 'member-invite', profile: 'local', who: 'member', go: clickRole('button', /^invite/i) },
+    { name: 'member-invite', profile: 'local', who: 'member', go: steps(tab('People'), clickRole('tab', /invites/i)) },
     { name: 'global-member-home', profile: 'global', who: 'member', check: true, ready: (p) => p.getByTestId('home-card-community').waitFor({ timeout: 30_000 }) },
     { name: 'global-member-market', profile: 'global', who: 'member', go: tab('Market') },
     { name: 'global-member-people', profile: 'global', who: 'member', go: tab('People') },
@@ -418,6 +464,7 @@ async function main() {
                 if (THEME === 'dark') {
                     Object.assign(r, await page.evaluate(measure, THEME === 'dark'));
                     r.focus = await focusStops(page);
+                    r.hover = await hoverStops(page);
                 }
             } catch (e) {
                 r.reached = false;
@@ -429,13 +476,14 @@ async function main() {
             if (THEME !== 'dark') { console.log(`  ${r.reached ? '📸' : '✗'} ${s.name}${r.error ? ` — ${r.error}` : ''}`); continue; }
             if (!r.reached) { console.log(`  ✗ ${s.name}: not reached — ${r.error}`); if (!SWEEP) failures.push(`${s.name}: not reached`); continue; }
             const bad = [...r.text.filter((x) => !x.disabled), ...r.placeholders.filter((x) => !x.disabled), ...r.fields.filter((x) => !x.disabled), ...r.icons.filter((x) => !x.disabled)];
-            const n = bad.length + r.slabs.length + r.focus.length;
-            console.log(`  ${n ? '✗' : '✓'} ${s.name}: ${r.counted.text} texts, ${r.counted.placeholders} placeholders, ${r.counted.fields} fields, ${r.counted.icons} icons measured; ${n ? `${n} below` : 'all at AA'}`);
+            const n = bad.length + r.slabs.length + r.focus.length + r.hover.found.length;
+            console.log(`  ${n ? '✗' : '✓'} ${s.name}: ${r.counted.text} texts, ${r.counted.placeholders} placeholders, ${r.counted.fields} fields, ${r.counted.icons} icons measured, ${r.hover.hovered} hovered; ${n ? `${n} below` : 'all at AA'}`);
             for (const x of r.text) console.log(`      text ${fmt(x)}`);
             for (const x of r.placeholders) console.log(`      placeholder ${fmt(x)}`);
             for (const x of r.fields) console.log(`      field edge ${fmt(x)}`);
             for (const x of r.icons) console.log(`      icon ${fmt(x)}`);
             for (const x of r.slabs) console.log(`      light slab ${x.bg} ${x.size} ${x.el} "${x.text}"`);
+            for (const x of r.hover.found) console.log(`      hover ${fmt(x)}`);
             for (const x of r.focus) console.log(`      focus ${x.how} ${x.ratio.toFixed(2)}:1 ${x.fg} on ${x.bg} ${x.el} "${x.text}"`);
             if (!SWEEP && n) failures.push(`${s.name}: ${n} below`);
         }

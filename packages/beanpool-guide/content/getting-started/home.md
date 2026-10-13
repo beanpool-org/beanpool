@@ -12,14 +12,25 @@ related: the-top-bar, browsing-the-market, your-profile, finding-a-community
 
 The phone and the web app show the same cards, with a few differences. This page says "on the phone" or "in the web app" where they differ.
 
-When a member first sees Home, a one-line tip appears under the first card. Tap **✕** to put it away.
+## Getting started
+
+A new member's Home starts nearly empty: one card, **Getting started**, between **Needs you** and **Your community** (on the global community, **Find your community** stays above it). It says "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs."
+
+- **Look around** starts a short tour. A bar at the bottom of the screen moves the app to each tab in turn and says what it is for, one or two sentences a step, with **Step 2 of 7** above. Tap **Next** to go on, or **Skip** to stop. The tab behind the bar works as usual: tap anything, or tap another tab and the tour follows you there.
+- The last step comes back to Home: **Add your first cards**. Tap a card to put it on Home, or **More cards** for the whole list. Tap **Done**. If you picked nothing, Home starts with the usual five (below).
+- **Skip**, on the card or the bar, ends the tour and gives you the usual five.
+- The tour never starts by itself. If you close the app part way, the card says "Pick up the tour at step 3".
+- Done or Skip is kept on your account, so the card does not come back on your other phones or browsers. To see the tour again, tap **?** at the top and **Take the tour again**.
+- If you had set up your Home before the tour existed, nothing changes for you. **Getting started** is in **Add a card**, under **Getting started**, if you want it.
+
+When Home first shows your cards, a one-line tip appears under the first card. Tap **✕** to put it away.
 
 - On the phone it says "This is your Home. Add a card at the bottom, or tap … on a card to move or remove it." It is shown once, and never again, whether or not you tap **✕**. Adding or removing a card also puts it away.
 - In the web app it says the same words. It comes back each time you open Home, until you tap **✕**.
 
 ## Your cards
 
-On the phone and in the web app, your Home is a list of cards you choose. A new member starts with five: **First steps**, **Tips**, **New in the Market** (**Near you** on the global community), **Coming up** and **From your community**. **What are you into?** and **Your way back in** come along too, and show only when they have something to say. **Needs you** is always at the top and **Your community** always at the bottom.
+On the phone and in the web app, your Home is a list of cards you choose. After the tour, the usual five are: **First steps**, **Tips**, **New in the Market** (**Near you** on the global community), **Coming up** and **From your community**. **What are you into?** and **Your way back in** come along too, and show only when they have something to say. **Needs you** is always at the top and **Your community** always at the bottom.
 
 - **Add a card**, on your community's card at the bottom of Home, opens a list of every card your community can show, in three groups: **For you**, **Around you** and **Getting started**. Tap **Add** beside a card to put it on Home. It goes to the top, just under **Needs you**, and Home scrolls up to show it.
 - A card that is already on Home says **On Home** instead of **Add**. Some cards can be added more than once, such as **A saved search**: they say how many you have, such as "2 of 5 on Home".
@@ -27,7 +38,7 @@ On the phone and in the web app, your Home is a list of cards you choose. A new 
 - **Sun and moon** asks whose place to use before it is added: **Your community** (the usual choice) or **Your area**.
 - A Home holds at most 24 cards. When it is full, the list says so, and you remove a card to add another.
 - Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Edit home** says "Your community's server needs an update before your cards follow you to other devices." They are sent again each time you open Home.
-- If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you start with the five, and Home tells you once: "Home now starts with fewer cards. Add a card brings the rest back."
+- If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** first, then the five, and Home tells you once: "Home now starts with fewer cards. Add a card brings the rest back."
 
 ## The cards
 
@@ -80,7 +91,7 @@ At the bottom of Home, on your community's card, tap **Edit home**.
 - **＋ Add a card** comes first. It opens the same list as **Add a card** on Home.
 - Then come the cards on your Home, in your order. Each has up and down arrows and its own **…** (Settings…, Move up, Move down, Remove). A saved search is listed by its words, and by **Offers** or **Needs** when it looks for only one, such as "eggs" or "Needs · eggs", so two searches are two different rows.
 - A card with nothing to show right now says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip, and **Sun and moon** says **Nothing to show now: no place is known.** while there is no place to work from.
-- Tap **Reset to defaults** to go back to the five cards a new member starts with.
+- Tap **Reset to defaults** to go back to the usual five cards.
 - There are no switches and no hidden list: a card you removed is in **Add a card**.
 - Only the cards your community can show are listed, on the phone and in the web app. For example, there is no **Your Beans** or **Your deals** on the global community.
 - **Needs you** always stays at the top, and **Your community** always stays at the bottom.

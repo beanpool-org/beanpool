@@ -11,7 +11,7 @@ The bar at the top of the screen is the same on every tab. From left to right:
 
 - **The bean:** your community, and this guide.
 - **The "needs you" icons:** only while something is waiting for you.
-- **The invite icon, Settings and your picture.**
+- **The ? icon, the invite icon, Settings and your picture.**
 
 ## The bean
 
@@ -39,7 +39,7 @@ Between the bean and the buttons on the right, small icons appear only while som
 - **A group of people:** new lines in your groups or event chats. Chats you have muted stay quiet here. The tap opens the chat, or the unread list in **Messages** if there are several.
 - **A shield:** only for people who help run your community. It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too.
 
-The icons stack from the right. The most important one sits next to the invite icon, and keeps its place as others come and go.
+The icons stack from the right. The most important one sits next to the ? icon, and keeps its place as others come and go.
 
 ### The number and the colour
 
@@ -65,6 +65,7 @@ While one of these shows, the invite icon is hidden.
 
 ## The buttons on the right
 
+- **The ? icon** (a question mark in a circle): help for the screen you are on. It opens a short sheet with what that screen is for, then **Read the guide page**, **Search the guide** and **Take the tour again**. It is on every tab, for members and guests. In the web app it sits between your picture and Settings at the top, and beside Settings at the bottom of the side bar on a wide screen.
 - **The invite icon** (a person with a plus): opens **Invites**, to invite someone or join another community. See "Joining BeanPool".
 - **Settings** (the sliders): opens **Settings**. Tap it again to go back to where you were.
 - **Your picture:** opens your own profile, as others see it.

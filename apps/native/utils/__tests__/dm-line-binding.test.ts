@@ -2417,8 +2417,11 @@ describe('the update\'s memory holds past the first pass and the first run (#187
         const getItem = vi.mocked(AsyncStorage.getItem);
         const real = getItem.getMockImplementation()!;
         getItem.mockImplementation(async (k: string) => { if (k === LINES) throw new Error('storage unavailable'); return real(k); });
+        const writes = () => vi.mocked(AsyncStorage.setItem).mock.calls.filter(([k]) => k === LINES).length;
+        const before = writes();
         try {
             await syncMessages(ana.publicKey);
+            expect(writes() - before).toBe(0);   // never written: not the seed's lines, nor a removal after the pin
             expect(h.store.get(LINES)).toBe('{}');
             expect(pinOf(dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
             expect(await sendTo(dm.id, 'The code is 4821')).toEqual(paused);

@@ -175,6 +175,8 @@ section {
     align-items: center;
     gap: 0.5rem;
 }
+/* the link is the tap target: at least 44px tall, though the picture stays its size (40px on a phone) */
+a.logo { min-height: 44px; }
 .logo span { 
     background: linear-gradient(135deg, var(--accent), #fb923c);
     -webkit-background-clip: text;
@@ -1674,7 +1676,8 @@ footer {
     /* the node commands were squeezed to a four-character column at 320px */
     .terminal-body { padding: 0.9rem 0.6rem; }
     .cta-step code { padding: 0.7rem 2.6rem 0.7rem 0.7rem; font-size: 0.8rem; }
-    .copy-btn { min-width: 40px; min-height: 40px; right: 0.2rem; bottom: 0.15rem; }
+    /* 44px to tap; 2px nearer the corner than at 40px, so the icon stays where it was */
+    .copy-btn { min-width: 44px; min-height: 44px; right: calc(0.2rem - 2px); bottom: calc(0.15rem - 2px); }
     .principle-text { white-space: normal; text-align: center; }
     /* these two had min-widths of 300px and 320px, which made the page scroll sideways on a phone */
     .newsletter-content, .newsletter-form-container { min-width: 0; width: 100%; }

@@ -14,6 +14,11 @@ import type { RouteDeps } from './types.js';
 import { requireAdminRole } from '../admin-auth.js';
 import { issueAutomationToken, listAutomationTokens, revokeAutomationToken, TOKEN_SCOPES } from '../automation-tokens.js';
 import { logger } from '../logger.js';
+import { noteSecurityEvent } from '../services/security-signal.js';
+import { forgetAgentGrant } from '../agent/limits.js';
+import { agentConnectedWords, agentDisconnectedWords } from '../agent/welcome.js';
+import { offersSuggestions } from '../agent/tools.js';
+import { cleanMemberText } from '../agent/fence.js';
 
 export const TOKENS_OWNER_ONLY = 'Only an owner of this node can make, see or revoke its automation tokens';
 export const TOKEN_NEEDS_KEY_CODE = 'token_needs_key';
@@ -65,6 +70,13 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
         logger.info('AUTH', 'Automation token made', {
             tokenId: res.record.id, scope: res.record.scope, issuedBy: createdBy.slice(0, 16), expiresAt: res.record.expiresAt,
         });
+        if (res.record.scope === 'agent') {
+            // An AI assistant connected (admin MCP design §8): told to the owners and the channel as a role change is.
+            noteSecurityEvent({
+                key: 'sec.agent', actor: createdBy, actorRole: 'owner',
+                detail: agentConnectedWords(cleanMemberText(res.record.name, 60), 'owner', true, offersSuggestions()),
+            });
+        }
         ctx.status = 201;
         ctx.body = { token: res.token, record: res.record };
     });
@@ -73,6 +85,7 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
         ctx.set('Cache-Control', 'no-store');
         if (!(await ownerOnly(ctx))) return;
         const id = String(ctx.params.id || '');
+        const revoked = listAutomationTokens().find((t) => t.id === id);
         if (!revokeAutomationToken(id)) {
             ctx.status = 404;
             ctx.body = { error: 'No such token' };
@@ -80,6 +93,10 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
         }
         const by = typeof (ctx.state as any)?.actor === 'string' && (ctx.state as any).actor ? (ctx.state as any).actor : 'owner:password';
         logger.info('AUTH', 'Automation token revoked', { tokenId: id, revokedBy: String(by).slice(0, 16) });
+        if (revoked?.scope === 'agent') {
+            forgetAgentGrant(id);
+            noteSecurityEvent({ key: 'sec.agent', actor: String(by), actorRole: 'owner', detail: agentDisconnectedWords(cleanMemberText(revoked.name, 60), 'owner') });
+        }
         ctx.body = { revoked: id };
     });
 

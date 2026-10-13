@@ -71,7 +71,7 @@ beforeEach(() => {
         root.render(createElement(ProposeDecisionModal, {
             isOpen: true, onClose: () => { }, onCreated: () => { },
             identity: { publicKey: ME, callsign: 'Me' }, commonsBalance: 100, treasuries: TREASURIES, members: [],
-        }));
+        }) as unknown as Parameters<Root['render']>[0]);
     });
 });
 afterEach(() => {
@@ -81,8 +81,8 @@ afterEach(() => {
 
 const text = () => container.textContent ?? '';
 const click = (node: Element | undefined | null) => { expect(node).toBeTruthy(); act(() => (node as HTMLElement).click()); };
-const radio = (label: string) => [...container.querySelectorAll('[role="radio"]')].find(r => r.textContent?.includes(label));
-const button = (label: string) => [...container.querySelectorAll('button')].find(b => b.textContent === label || b.getAttribute('aria-label') === label);
+const radio = (label: string) => Array.from(container.querySelectorAll('[role="radio"]')).find(r => r.textContent?.includes(label));
+const button = (label: string) => Array.from(container.querySelectorAll('button')).find(b => b.textContent === label || b.getAttribute('aria-label') === label);
 const type = (placeholder: string, value: string) => {
     const input = container.querySelector(`input[placeholder="${placeholder}"]`) as HTMLInputElement | null;
     expect(input, placeholder).toBeTruthy();

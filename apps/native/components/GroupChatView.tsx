@@ -47,7 +47,7 @@ import { chatIsLocked, groupChatNotice, groupChatShownLines, openGroupThread, ty
 import { isSealedGroupLine, searchShownLines } from '../utils/group-line-display';
 import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GROUP_KEYS_UNOPENABLE_TEXT } from '../utils/group-chat-keys';
 import {
-    isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel,
+    isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel, chatLifecycleFromRows,
     ENTERPRISE_CHAT_NOTICE,
     type YourChatMute,
 } from '../utils/your-groups';
@@ -285,7 +285,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/chats'); };
 
-    const name = view?.group?.name || group?.name || view?.conversation?.name || initialName || (kind === 'group' ? 'Group' : 'Enterprise');
+    // A project's chat says "project" and 🎯 (§3.1): "Your groups" carries the kind, as it carries the mute.
+    const lifecycle = kind === 'enterprise' ? chatLifecycleFromRows(yourGroupsStore.getState().items, id) : undefined;
+    const name = view?.group?.name || group?.name || view?.conversation?.name || initialName || (kind === 'group' ? 'Group' : lifecycle === 'bounded' ? 'Project' : 'Enterprise');
     const category = view?.group?.category || group?.category || null;
     const rawMessages: any[] = view?.messages || [];
     const isConvenor = !!view?.isConvenor;
@@ -521,6 +523,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             kind={kind}
             name={name}
             category={category}
+            lifecycle={lifecycle}
             detail={detail}
             onBack={goBack}
             onOpenOwner={openOwner}

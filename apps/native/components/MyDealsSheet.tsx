@@ -140,7 +140,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             color: theme === 'dark' ? colors.text.secondary : palette.gray600,
         },
         historyChipTextActive: {
-            color: colors.text.inverse,
+            color: theme === 'dark' ? colors.surface.app : colors.text.inverse, // white on the dark scheme's pale chip was 1.1:1
         },
 
         // Deal cards

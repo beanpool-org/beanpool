@@ -290,7 +290,7 @@ describe('what the approval screen says', () => {
     });
 
     it('says how long ago the computer asked, from which address, and "same network" only when it is', () => {
-        const base = { kind: 'ok' as const, browser: 'Firefox on Windows', expiresAt: 0, expiresInSeconds: 100 };
+        const base = { kind: 'ok' as const, browser: 'Firefox on Windows', expiresAt: 0, expiresInSeconds: 100, agent: null };
         expect(computerLines({ ...base, askedSecondsAgo: 40, fromAddress: '203.0.113.9', sameNetwork: true }, 0)).toEqual([
             'Computer: Firefox on Windows',
             'Asked 40 seconds ago',

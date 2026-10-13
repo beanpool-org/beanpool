@@ -20,7 +20,7 @@
  *
  * Nothing else is contacted: the phones' fetch is held to this node's address.
  */
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -542,6 +542,10 @@ describe('path B: a member confirms the new phone in person (design §4, S3)', (
 describe('review of #1844: path B against a node that rewrites names, wraps lists and chains; honest end screens; the old phone\'s card', () => {
     const benSees = async (ben: Phone, gs: readonly { id: string }[]) => { for (const g of gs) await rememberRosterNames(URL_BASE, await roster(ben, g.id)); };
     const memoryOf = (name: string) => JSON.parse(mem.async.get(`beanpool_name_keys:${URL_BASE}`) ?? '{}')[name.toLowerCase()];
+    // A case that fails part way leaves no hook of its own behind for the next one.
+    let hooksBefore: Hook[] = [];
+    beforeEach(() => { hooksBefore = [...hooks]; });
+    afterEach(() => { hooks.splice(0, hooks.length, ...hooksBefore); });
 
     it('MP: a misled Cat₂ never collects Zed\'s history through Ben\'s honest scan — refused at once, after one relabelled roster in a side group, and after a roster that leaves Zed out', async () => {
         await control('limiters');

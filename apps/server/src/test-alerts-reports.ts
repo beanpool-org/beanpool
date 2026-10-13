@@ -587,13 +587,14 @@ async function main(): Promise<void> {
     await settle(1000);
     const isAdmin11 = (e: { key: string; detail: string }) => e.key === 'sec.role' && /Someone was made an admin, by an owner\./.test(e.detail);
     const high11 = (e: { high?: boolean; priority: number }) => !!e.high || e.priority >= 5;
-    const h11 = alerts.getAlertsStatus().history;
+    // Oldest first (the card lists the newest first).
+    const h11 = alerts.getAlertsStatus().history.slice().reverse();
     const at11 = h11.findIndex(isAdmin11);
     assert(at11 >= 0 && !high11(h11[at11]) && !h11.some((e) => e.key.startsWith('reports.')), `11. 60 reminders push every report line out; someone made an admin after them (${h11.length} lines)`);
     // More reminders, until the admin made is the oldest line that is not high.
     const older = h11.slice(0, at11).filter((e) => !high11(e)).length;
     for (let i = 0; i < older; i++) await reminder(day++);
-    const h11b = alerts.getAlertsStatus().history;
+    const h11b = alerts.getAlertsStatus().history.slice().reverse();
     assert(h11b.length === 50 && h11b.find((e) => !high11(e)) === h11b.find(isAdmin11) && h11b.every((e) => !e.key.startsWith('reports.')),
         `11. 50 lines, none a report's, the admin made the oldest not high (${h11b.length}, ${older} more reminders)`);
     const p11 = ownerPushes().length;

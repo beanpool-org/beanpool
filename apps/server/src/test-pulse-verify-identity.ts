@@ -114,11 +114,14 @@ const issuedTokens = new Set<string>();
 const tokenOwner = new Map<string, Account>();
 const calls = { tiktokToken: 0, tiktokUserInfo: 0, igToken: 0, igMe: 0, igLong: 0, other: [] as string[] };
 const userInfoUrls: string[] = [];
+// Meta's user_id is a 17-digit JSON number: JSON.parse hands the node this rounded value, which is why the
+// stable id is /me's string id.
+const igUserId = (digits: string) => Number(digits);
 const IG_SCENARIOS: Record<string, { userId: number; me: { status: number; json: any } }> = {
-    'ig-good': { userId: 17841400000000001, me: { status: 200, json: { id: 'ig-app-scoped-1', username: 'IG_Jane' } } },
-    'ig-nameonly': { userId: 17841400000000002, me: { status: 200, json: { id: 'ig-app-scoped-2', name: 'Jane Display Name' } } },
+    'ig-good': { userId: igUserId('17841400000000001'), me: { status: 200, json: { id: 'ig-app-scoped-1', username: 'IG_Jane' } } },
+    'ig-nameonly': { userId: igUserId('17841400000000002'), me: { status: 200, json: { id: 'ig-app-scoped-2', name: 'Jane Display Name' } } },
     'ig-tester': {
-        userId: 17841400000000003,
+        userId: igUserId('17841400000000003'),
         me: { status: 400, json: { error: { message: 'Unsupported request - method type: get', type: 'IGApiException', code: 100 } } },
     },
 };

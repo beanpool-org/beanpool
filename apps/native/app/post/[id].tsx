@@ -1538,11 +1538,11 @@ export default function PostDetailModal() {
                                             <Pressable accessibilityRole="button" onPress={() => {
                                                 if (reqPubkey) router.push({ pathname: '/public-profile', params: { publicKey: reqPubkey, callsign: reqCallsign } });
                                             }}>
-                                                <Text style={[styles.requestName, { textDecorationLine: 'underline', color: palette.amber400 }]} numberOfLines={1}>
+                                                <Text style={[styles.requestName, { textDecorationLine: 'underline', color: colors.feedback.warning.fg }]} numberOfLines={1}>
                                                     🤝 {reqCallsign}
                                                 </Text>
                                             </Pressable>
-                                            <Text style={{ fontSize: 12, color: palette.amber400, marginTop: 2, fontWeight: '600' }}>
+                                            <Text style={{ fontSize: 12, color: colors.feedback.warning.fg, marginTop: 2, fontWeight: '600' }}>
                                                 {req.count > 0 ? `★ ${req.avgRating.toFixed(1)} (${req.count} reviews)` : '☆☆☆☆☆ No ratings yet'}
                                             </Text>
                                             <Text style={styles.requestAmt}>{req.hours ? `${req.hours} hours estimated` : 'Offered to fulfill'}</Text>

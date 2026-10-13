@@ -8,7 +8,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useStyles } from '../../app/ThemeContext';
 import { dmKeyChangeCopy, dmKeyChangeStyleSpec } from '../../utils/dm-key-change';
-import { keyCodeOf } from '../../utils/key-code';
+import { keyCodeOf, keyCodeSpoken } from '../../utils/key-code';
 import type { DmKeyChange } from '../../utils/db';
 
 export interface DmKeyChangedBannerProps {
@@ -43,7 +43,7 @@ export function DmKeyChangedBanner({ peerName, change, onContinue, onNotNow }: D
             <Text style={styles.body}>{copy.body}</Text>
             {code && (
                 <View style={styles.codeBox}>
-                    <Text style={styles.code} accessibilityLabel={`Key code ${code}`} selectable>{code}</Text>
+                    <Text style={styles.code} accessibilityLabel={`Key code: ${keyCodeSpoken(code)}`} selectable>{code}</Text>
                 </View>
             )}
             {copy.dateLine && <Text style={styles.dateLine}>{copy.dateLine}</Text>}

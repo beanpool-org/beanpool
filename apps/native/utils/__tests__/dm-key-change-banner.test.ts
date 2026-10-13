@@ -43,7 +43,7 @@ import { lightColors, darkColors } from '../../constants/colors';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
 import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText, DM_FIRST_SIGHT_LEAD } from '../dm-key-change';
-import { keyCodeOf } from '../key-code';
+import { keyCodeOf, keyCodeSpoken } from '../key-code';
 
 const CODE = /^\d{4} \d{4} \d{4} \d{4} \d{4}$/;
 
@@ -77,9 +77,13 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
         const text = host.textContent!;
         expect(text).toContain('The key behind "Ben" changed.');
         expect(text).toContain('Anything you send now would go to the new key. If Ben got a new phone and re-keyed, check with them first');
-        const code = host.querySelector('[aria-label^="Key code "]')!.textContent!;
+        const codeEl = host.querySelector('[aria-label^="Key code:"]')!;
+        const code = codeEl.textContent!;
         expect(code).toMatch(CODE);
         expect(code).toBe(keyCodeOf(newKey));
+        // A screen reader says each digit, never "four thousand…" (#1873 review, finding 9).
+        expect(codeEl.getAttribute('aria-label')).toBe(`Key code: ${keyCodeSpoken(code)}`);
+        expect(codeEl.getAttribute('aria-label')).not.toMatch(/\d\d/);
         expect(text).not.toContain('This community says');   // no date unless the node gives one (slice 3)
     });
 
@@ -131,7 +135,10 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
     it('Settings → My key code shows the same code Ben\'s banner shows on Ana\'s phone', () => {
         render(createElement(MyKeyCodeCard, { publicKey: newKey }));
         expect(host.textContent).toContain('My key code');
-        expect(host.querySelector('[aria-label^="My key code "]')!.textContent).toBe(keyCodeOf(newKey));
+        const mine = host.querySelector('[aria-label^="My key code:"]')!;
+        expect(mine.textContent).toBe(keyCodeOf(newKey));
+        expect(mine.getAttribute('aria-label')).toBe(`My key code: ${keyCodeSpoken(keyCodeOf(newKey)!)}`);
+        expect(mine.getAttribute('aria-label')).not.toMatch(/\d\d/);
         render(createElement(MyKeyCodeCard, { publicKey: null }));
         expect(host.textContent).toContain('Your key code shows here once this phone has your key.');
     });
@@ -216,6 +223,18 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         expect(src).toMatch(/peerName=\{keyChange\.name\}/);
         // At most 55% of the window at 320 dp and 1.3× text: the thread and the paused box keep the rest.
         expect(src).toMatch(/maxHeight: Math\.round\(windowHeight \* 0\.55\)/);
+    });
+    it('Settings shows My key code above the sign-in check\'s spinner, never behind it (#1873 review, finding 9)', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { join } = await import('node:path');
+        const src = readFileSync(join(process.cwd(), 'app', '(tabs)', 'settings.tsx'), 'utf8');
+        const card = src.indexOf('<MyKeyCodeCard publicKey={identity?.publicKey} />');
+        const spinner = src.indexOf('{protectionLoading ? (');
+        expect(card).toBeGreaterThan(src.indexOf("{mode === 'protection' && ("));
+        expect(card).toBeLessThan(spinner);
+        expect(src.split('<MyKeyCodeCard').length - 1).toBe(1);
+        // One keyCodeOf in the app: utils/key-code.ts's (the names list's twin is gone).
+        expect(readFileSync(join(process.cwd(), 'utils', 'names-list.ts'), 'utf8')).not.toMatch(/export (const|function) keyCodeOf/);
     });
     it('[id].tsx draws a line from the offered key as the fixed line in the middle of the chat, never its words (#1872 handover 2)', async () => {
         const { readFileSync } = await import('node:fs');

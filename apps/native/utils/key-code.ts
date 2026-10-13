@@ -18,3 +18,11 @@ export function keyCodeOf(publicKeyHex: string | null | undefined): string | nul
     if (!KEY_HEX.test(hex)) return null;
     return namesKeyCode(hex);
 }
+
+/**
+ * The code as a screen reader says it: every digit on its own, a pause between groups ("4 8 2 1, 0 9 3 7, …"), never
+ * "four thousand eight hundred…" (#1873 review, finding 9). The visible code stays the five groups of four.
+ */
+export function keyCodeSpoken(code: string): string {
+    return code.trim().split(/\s+/).map((group) => group.split('').join(' ')).join(', ');
+}

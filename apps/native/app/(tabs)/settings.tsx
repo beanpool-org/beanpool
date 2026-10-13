@@ -2086,6 +2086,11 @@ export default function SettingsScreen() {
                         This is how you get back into your account if you lose your phone.
                     </Text>
 
+                    {/* The code a chat partner checks when their phone says the key behind your name changed. Worked out
+                        from this phone's key alone, so it never waits behind the sign-in answer below (#1873 review, finding 9):
+                        an in-person check works with a slow network or none. */}
+                    <MyKeyCodeCard publicKey={identity?.publicKey} />
+
                     {/* Only the sign-in part waits for its answer (the key vault's, up to 20 s, or the community's): the
                         12 words below never wait behind it (PR #1336 review finding 9). */}
                     {protectionLoading ? (
@@ -2096,8 +2101,6 @@ export default function SettingsScreen() {
                             {/* In by 12 words with no sign-in: one way back, said plainly, with the sign-in offered (two-doors §2.5). */}
                             <OneWayBackCard place="settings" colors={colors} />
                             <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
-                            {/* The code a chat partner checks when their phone says the key behind your name changed. */}
-                            <MyKeyCodeCard publicKey={identity?.publicKey} />
                             {protectionNote && (
                                 <Text style={[styles.infoText, { marginBottom: 12 }]} accessibilityLiveRegion="polite">{protectionNote}</Text>
                             )}

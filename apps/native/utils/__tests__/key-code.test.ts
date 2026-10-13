@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
 import { namesKeyCode } from '@beanpool/core';
-import { keyCodeOf } from '../key-code';
+import { keyCodeOf, keyCodeSpoken } from '../key-code';
 
 /**
  * The code worked out a second way (node's own SHA-256, BigInt): SHA-256 of "beanpool-key-code-v1\n" + the lower-case hex
@@ -42,5 +42,15 @@ describe('keyCodeOf: the 20-digit code two people compare (Settings → My key c
         const a = randomBytes(32);
         const b = Buffer.from(a); b[31] ^= 1;
         expect(keyCodeOf(a.toString('hex'))).not.toBe(keyCodeOf(b.toString('hex')));
+    });
+
+    it('is spoken digit by digit, a pause between groups (#1873 review, finding 9)', () => {
+        expect(keyCodeSpoken('4821 0937 5510 2284 6603')).toBe('4 8 2 1, 0 9 3 7, 5 5 1 0, 2 2 8 4, 6 6 0 3');
+        for (let i = 0; i < 50; i++) {
+            const code = keyCodeOf(randomBytes(32).toString('hex'))!;
+            const spoken = keyCodeSpoken(code);
+            expect(spoken).not.toMatch(/\d\d/);
+            expect(spoken.replace(/\D/g, '')).toBe(code.replace(/\D/g, ''));
+        }
     });
 });

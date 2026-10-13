@@ -27,7 +27,8 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { defaultCards, localDay, skyToday, tipsFor } from '@beanpool/core';
+import { START_CARD_WORDS, localDay, skyToday, starterCards, tipsFor } from '@beanpool/core';
+import * as tourStore from '../lib/tour-store';
 import { removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
@@ -36,6 +37,8 @@ import { clearInAnotherTab, signOutInAnotherTab, signOutOnChannelOnly } from '..
 
 const ME: BeanPoolIdentity = { publicKey: 'a'.repeat(64), privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as BeanPoolIdentity;
 const NOW = new Date().toISOString();
+/** A member who ended the tour (Skip): a Home never saved is the starter set (DESIGN-getting-started-fable.md §1). The newcomer's own Home has its own tests below. */
+const TOUR_ENDED = { v: 1 as const, state: 'skipped' as const, at: '2026-10-01T00:00:00.000Z' };
 
 const EVERY_CARD = { v: 2, cards: ['safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'invite'].map(t => ({ id: t, type: t })), dismissed: {}, updatedAt: null };
 
@@ -43,7 +46,7 @@ function answer(over: Partial<HomeAnswer> = {}, cards: HomeAnswer['cards'] = {})
     return {
         generatedAt: NOW, profile: 'local',
         features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, guestListingsOnly: false },
-        me: { joinedAt: '2026-01-01T00:00:00.000Z', isKeeper: false, probation: null, interests: ['arts'], area: null, firstOffer: false, standing: 'member' },
+        me: { joinedAt: '2026-01-01T00:00:00.000Z', isKeeper: false, probation: null, interests: ['arts'], area: null, firstOffer: false, standing: 'member', tour: TOUR_ENDED },
         // A member whose account list holds every card (what version 1 drew by default); the frame's own cases set theirs.
         layout: EVERY_CARD,
         cards: {
@@ -1204,7 +1207,8 @@ function nodeKeeping(full: HomeAnswer, start: unknown) {
 const pause = async (ms = 50) => { await act(async () => { await new Promise(r => setTimeout(r, ms)); }); };
 /** An empty version-1 row: "Your way back in" put away on the web app before the frame, or its Reset. */
 const EMPTY_V1 = { v: 1, order: [], hidden: [], dismissed: { safety: '2026-09-01T00:00:00.000Z' }, updatedAt: '2026-09-01T00:00:00.000Z' };
-const newcomerTypes = () => defaultCards('local').map(c => c.type);
+/** The starter set (the newcomer's list before Getting started): what Reset gives and a member past the tour with no saved Home sees. */
+const newcomerTypes = () => starterCards().map(c => c.type);
 const savedLayouts = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c => c[1]['home.layout'] as unknown as ReturnType<typeof v2>).filter(Boolean);
 const lastCall = (m: { mock: { invocationCallOrder: number[] } }) => m.mock.invocationCallOrder.at(-1) ?? 0;
 
@@ -1932,5 +1936,95 @@ describe('sun and moon: worked out in the browser, from the place the answer hol
         expect(savedLayouts().at(-1)!.cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
         expect(vi.mocked(api.getHome).mock.calls.length).toBe(reads);
         expect(screen.getByTestId('home-live')).toHaveTextContent('Sun and moon added to Home');
+    });
+});
+
+// ── Getting started (scratch/global-node/DESIGN-getting-started-fable.md §1–§3) ──────────────────────────────────────
+describe('Getting started in the web app: a newcomer\'s Home is the card alone, the tour is theirs to start, its end is kept on the account', () => {
+    /** A member here for the first time: never saved a Home, never ended the tour. */
+    const newcomer = (over: Partial<HomeAnswer> = {}) => {
+        const a = answer({ layout: null });
+        const { tour: _t, ...me } = a.me!;
+        return { ...a, me, ...over } as HomeAnswer;
+    };
+    const tourWrites = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c => c[1] as Record<string, unknown>).filter(p => 'tour' in p).map(p => p.tour as { state: string });
+    const layoutWrites = () => vi.mocked(api.saveHomePreferences).mock.calls.map(c => c[1] as Record<string, unknown>).filter(p => 'home.layout' in p).map(p => (p['home.layout'] as { cards: { id: string }[] }).cards.map(c => c.id));
+    beforeEach(() => { tourStore.closeTour(); });
+
+    it('a newcomer sees Getting started and Your community, Look around and Skip, no "…"; it never starts by itself', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-start');
+        expect(cardIds()).toEqual(['start', 'community']);
+        expect(screen.getByTestId('home-start-words')).toHaveTextContent(START_CARD_WORDS);
+        expect(screen.getByTestId('home-start-look')).toHaveTextContent('Look around ›');
+        expect(within(screen.getByTestId('home-card-start')).queryByTestId('home-card-menu')).toBeNull();
+        expect(screen.queryByTestId('home-hint')).toBeNull();
+        expect(tourStore.currentTour()).toBeNull();
+    });
+
+    it('Look around starts the tour for this account with what Home knows of the node, and writes nothing', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-start-look'));
+        expect(tourStore.currentTour()).toMatchObject({ publicKey: ME.publicKey, step: 0, node: { global: false, beans: true } });
+        expect(api.saveHomePreferences).not.toHaveBeenCalled();
+        // The last step's chips, lent while Home is open: local, Beans on.
+        expect(tourStore.tourHome()!.chips).toEqual(['steps', 'market', 'beans']);
+    });
+
+    it('Skip on the card: one layout write with the starter set, the record "skipped", the card gone and the five drawn', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-start-skip'));
+        await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'skipped' })]));
+        expect(layoutWrites().at(-1)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'events', 'notices']);
+        await waitFor(() => expect(cardIds()).not.toContain('start'));
+        expect(cardIds()).toEqual(expect.arrayContaining(['market', 'community']));
+    });
+
+    it('Done made on another tab is applied as Home opens: a chip picked stays alone, the record says "done"', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer()));
+        const view = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-start-look'));
+        await act(async () => { tourStore.tourHome()!.addChip('beans'); });
+        await waitFor(() => expect(layoutWrites().at(-1)).toEqual(['beans', 'start']));
+        view.unmount();
+        act(() => { tourStore.endTour('done'); });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'done' })]));
+        expect(layoutWrites().at(-1)).toEqual(['beans']);
+    });
+
+    it('a tour ended on another device: no card, the starter set; a member with a saved Home sees no change', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer({ me: { ...newcomer().me!, tour: { v: 1, state: 'done', at: NOW } } as HomeAnswer['me'] })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+        expect(cardIds()).not.toContain('start');
+        expect(cardIds()).toEqual(expect.arrayContaining(['market', 'events']));
+        cleanup();
+        const saved = answer({ layout: EVERY_CARD as never });
+        const { tour: _t, ...me } = saved.me!;
+        vi.mocked(api.getHome).mockResolvedValue(fresh({ ...saved, me } as HomeAnswer));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+        expect(cardIds()).not.toContain('start');
+        expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse', 'market']));
+    });
+
+    it('a Skip the node did not take is kept in this browser and sent on the next Home open', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer()));
+        vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
+            if ('tour' in prefs) throw new Error('offline');
+            return { success: true, ...prefs } as never;
+        });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-start-skip'));
+        await waitFor(() => expect(tourStore.pendingTourRecord(ME.publicKey)).toMatchObject({ state: 'skipped' }));
+        cleanup();
+        vi.mocked(api.saveHomePreferences).mockReset().mockImplementation(async (_pk, prefs) => ({ success: true, ...prefs }) as never);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'skipped' })]));
+        expect(tourStore.pendingTourRecord(ME.publicKey)).toBeNull();
     });
 });

@@ -271,7 +271,7 @@ export default function LedgerScreen() {
         infoCardSub: { fontSize: 11, color: colors.text.muted, marginTop: 2 },
         forecastCard: { backgroundColor: colors.accent.tint, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default, gap: 6 },
         forecastDate: { fontSize: 13, fontWeight: '700', color: colors.accent.primary },
-        forecastSub: { flex: 1, fontSize: 12, color: colors.text.secondary },
+        forecastSub: { flex: 1, fontSize: 12, color: colors.text.body }, // on accent.tint: text.secondary is 4.22 there in dark
         forecastAmt: { fontSize: 15, fontWeight: '800', color: colors.accent.primary } as any,
         pledgeSection: { marginBottom: 12 },
         pledgeRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: colors.border.default },

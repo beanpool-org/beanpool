@@ -404,7 +404,7 @@ export default function MarketScreen() {
         },
         favPanelSub: {
             fontSize: 11,
-            color: colors.text.secondary,
+            color: colors.text.body, // on accent.tint: text.secondary is 4.22 there in dark
             marginBottom: 10,
         },
         favTagsContainer: {
@@ -457,7 +457,10 @@ export default function MarketScreen() {
             flex: 1,
         },
         favSummaryEditBadge: {
-            backgroundColor: colors.accent.border,
+            // a card-coloured badge with the sage outline: accent.primary is 4.34 on accent.border in light
+            backgroundColor: colors.surface.card,
+            borderWidth: 1,
+            borderColor: colors.accent.border,
             paddingHorizontal: 8,
             paddingVertical: 3,
             borderRadius: 8,
@@ -1239,7 +1242,7 @@ export default function MarketScreen() {
                             <Text style={styles.favPanelTitle}>★ CUSTOMIZE INTERESTS</Text>
                             <Pressable
                                 onPress={() => setIsCustomizerExpanded(false)}
-                                style={{ backgroundColor: colors.accent.border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}
+                                style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.accent.border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}
                                 accessibilityRole="button"
                             >
                                 <Text style={{ fontSize: 10, fontWeight: '800', color: colors.accent.primary }}>✕ HIDE</Text>

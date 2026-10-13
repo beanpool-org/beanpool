@@ -24,7 +24,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { INFORMAL_POLL_NOTE } from '../lib/informal-polls';
 import { marked, useFeatureMode } from '../lib/features';
-import { LocalCommunityLine } from './LocalCommunityMark';
+import { LocalCommunityLine, type LocalCommunityWays } from './LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '@beanpool/core';
 
@@ -42,9 +42,11 @@ interface PollCardProps {
     visitor?: boolean;
     /** The global community's polls (lib/informal-polls.ts): the card says it decides nothing. */
     informal?: boolean;
+    /** Where the 🏘️ line's sheet leads besides Start a community: Communities near you, How it works. */
+    localWays?: LocalCommunityWays;
 }
 
-export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, visitor = false, informal = false }: PollCardProps) {
+export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, visitor = false, informal = false, localWays }: PollCardProps) {
     const decisionsMarked = marked(useFeatureMode('decisions'));
     const [livePost, setLivePost] = useState<MarketplacePost>(post);
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
@@ -319,7 +321,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* Decisions live in a local community here: where one would bind, said once under the note (design §1 row 7). */}
             {decisionsMarked && (
             <div className="mb-1" data-testid="poll-decision-line">
-                <LocalCommunityLine feature="decisions" text={LOCAL_COMMUNITY_LINES.poll} />
+                <LocalCommunityLine feature="decisions" text={LOCAL_COMMUNITY_LINES.poll} {...localWays} />
             </div>
             )}
 

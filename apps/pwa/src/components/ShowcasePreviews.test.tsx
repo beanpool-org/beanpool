@@ -92,6 +92,20 @@ describe('preview mode asks the node for its info and nothing else, and writes n
         onlyInfo();
     });
 
+    it('Commons, each part by its own feature: enterprises alone, or the Decision alone under the Decisions strip', () => {
+        const { unmount } = render(<CommonsPreview enterprises decisions={false} />);
+        expect(screen.getByTestId('sample-enterprise')).toBeInTheDocument();
+        expect(screen.queryByTestId('sample-decision')).toBeNull();
+        unmount();
+        const second = render(<CommonsPreview enterprises={false} decisions />);
+        expect(screen.getByTestId('sample-decision')).toBeInTheDocument();
+        expect(screen.queryByTestId('sample-enterprise')).toBeNull();
+        expect(screen.getByTestId('local-community-strip')).toHaveTextContent(LOCAL_COMMUNITY_STRIP.lead.decisions);
+        second.unmount();
+        const { container } = render(<CommonsPreview enterprises={false} decisions={false} />);
+        expect(container).toBeEmptyDOMElement();
+    });
+
     it('My Deals: two sample deals; Approve and release opens the sheet', async () => {
         render(<DealsPreviewDialog onClose={() => {}} />);
         expect(screen.getAllByText(/Beans$/).length).toBeGreaterThanOrEqual(SAMPLE_COMMUNITY.deals.length);
@@ -165,6 +179,35 @@ describe('the marker inside a tappable card', () => {
         fireEvent.click(action);
         expect(card).not.toHaveBeenCalled();
         expect(screen.getByTestId('local-community-sheet').textContent).toContain(LOCAL_COMMUNITY_SHEET.features.escrow);
+        onlyInfo();
+    });
+});
+
+describe('the strip\'s ✕ is remembered, per node and feature, in this browser', () => {
+    it('collapsed, it stays one line when the screen is drawn again; ▾ opens it for good; another feature\'s strip stays open', async () => {
+        const { LocalCommunityStrip } = await import('./LocalCommunityMark');
+        const key = (f: string) => `bp_local_strip_collapsed:${window.location.host}:${f}`;
+        const first = render(<LocalCommunityStrip feature="beans" />);
+        fireEvent.click(screen.getByTestId('local-community-strip-close'));
+        expect(localStorage.getItem(key('beans'))).toBe('1');
+        first.unmount();
+
+        const again = render(<LocalCommunityStrip feature="beans" />);
+        expect(screen.getByTestId('local-community-strip-collapsed')).toHaveTextContent(LOCAL_COMMUNITY_STRIP.collapsed);
+        expect(screen.queryByTestId('local-community-strip')).toBeNull();
+        again.unmount();
+
+        const other = render(<LocalCommunityStrip feature="escrow" />);
+        expect(screen.getByTestId('local-community-strip')).toBeInTheDocument();
+        other.unmount();
+
+        const reopened = render(<LocalCommunityStrip feature="beans" />);
+        fireEvent.click(screen.getByTestId('local-community-strip-open'));
+        expect(screen.getByTestId('local-community-strip')).toBeInTheDocument();
+        expect(localStorage.getItem(key('beans'))).toBeNull();
+        reopened.unmount();
+        render(<LocalCommunityStrip feature="beans" />);
+        expect(screen.getByTestId('local-community-strip')).toBeInTheDocument();
         onlyInfo();
     });
 });

@@ -631,6 +631,25 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(sectionTabs()[0]).toContain('Decide');
     });
 
+    it('a node that shows previews with Decisions on and enterprises off: the real Decide tab, the sample enterprise, no sample Decision', async () => {
+        const info = { ...globalInfo, features: { ...globalInfo.features, decisions: true, enterprises: false, showcase: true } };
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(info);
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
+        expect(screen.queryByTestId('sample-decision')).toBeNull();
+        expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(true);
+    });
+
+    it('and with Decisions off and enterprises on: the sample Decision alone, no Decide tab, the real Commons pool', async () => {
+        const info = { ...globalInfo, features: { ...globalInfo.features, decisions: false, enterprises: true, showcase: true } };
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(info);
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
+        expect(screen.queryByTestId('sample-enterprise')).toBeNull();
+        expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(false);
+        expect(screen.getByText('Commons Pool')).toBeInTheDocument();
+    });
+
     it('an unanswered read keeps Decide: the node refuses a vote itself where it has none', async () => {
         vi.mocked(communityInfoOnce).mockRejectedValueOnce(new Error('offline'));
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);

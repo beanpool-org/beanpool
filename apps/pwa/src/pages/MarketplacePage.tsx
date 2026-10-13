@@ -994,7 +994,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             refresh();
                         }}
                         onOpenProfile={onOpenProfile}
-                        informal={informalPolls}
+                        informal={informalPolls} localWays={markWays}
                     />
                 </div>
             );
@@ -2809,7 +2809,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
                                                     aria-label={`Open poll: ${post.title}`}
                                                     className="self-start rounded-2xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
-                                                    <PollCard post={post} visitor viewMode="list" informal={informalPolls} />
+                                                    <PollCard post={post} visitor viewMode="list" informal={informalPolls} localWays={markWays} />
                                                 </div>
                                             ) : (
                                                 <VisitorCard post={post} beans={visitor.beans} distanceKm={eventDistance(post)} onOpen={() => setSelectedPost(post)} />
@@ -2987,7 +2987,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                             viewMode={viewMode}
                                                             onVoteSuccess={() => refresh()}
                                                             onOpenProfile={onOpenProfile}
-                                                            informal={informalPolls}
+                                                            informal={informalPolls} localWays={markWays}
                                                         />
                                                     </div>
                                                 );
@@ -3097,7 +3097,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                                 viewMode={viewMode}
                                                                 onVoteSuccess={() => refresh()}
                                                                 onOpenProfile={onOpenProfile}
-                                                                informal={informalPolls}
+                                                                informal={informalPolls} localWays={markWays}
                                                             />
                                                         </div>
                                                     );

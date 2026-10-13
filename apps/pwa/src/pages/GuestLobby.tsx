@@ -30,6 +30,7 @@ import { LedgerPreview } from '../components/ShowcasePreviews';
 import { modeFor } from '../lib/features';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
+const MemberGuide = lazy(() => import('../components/MemberGuide').then(m => ({ default: m.MemberGuide })));
 
 type LobbyTab = 'home' | 'marketplace' | 'map' | 'ledger';
 
@@ -56,6 +57,8 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
     const tabs = modeFor('beans', info) === 'preview' ? [...TABS, LEDGER_TAB] : TABS;
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [openPostId, setOpenPostId] = useState<string | null>(null);
+    // How it works, from a 🏘️ sheet: the guide page, over the lobby until Back.
+    const [guidePage, setGuidePage] = useState<string | null>(null);
     // The browser join over the lobby: where it opens ('guard' from Join, 'restore' from "Already have BeanPool?";
     // unset for its own first screen, which says when this browser can't hold a key).
     const [join, setJoin] = useState<{ start?: 'guard' | 'restore' } | null>(null);
@@ -107,8 +110,12 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
             setTab('map');
         } else if (to === 'ledger' && tabs.includes(LEDGER_TAB)) {
             setTab('ledger');
+        } else if (to === 'home') {
+            setTab('home');
+        } else if (to === 'guide' && contextId) {
+            setGuidePage(contextId);
         }
-        // Nothing else is open to a visitor.
+        // Nothing else is open to a visitor. Home and a guide page are where a 🏘️ sheet's ways lead.
     }
 
     function selectTab(id: LobbyTab) {
@@ -227,7 +234,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                         />
                     )}
                     {tab === 'ledger' && (
-                        <LedgerPreview onNearYou={() => selectTab('home')} />
+                        <LedgerPreview onNearYou={() => selectTab('home')} onGuide={(slug) => navigate('guide', slug)} />
                     )}
                     {tab === 'map' && (
                         <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}>
@@ -235,6 +242,14 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                         </Suspense>
                     )}
                 </main>
+
+                {guidePage && (
+                    <div className="fixed inset-0 z-[160] overflow-y-auto bg-nature-50 dark:bg-nature-950" data-testid="lobby-guide">
+                        <Suspense fallback={null}>
+                            <MemberGuide onBack={() => setGuidePage(null)} initialPage={guidePage} feedbackLive={false} />
+                        </Suspense>
+                    </div>
+                )}
 
                 {/* Bottom nav, mobile only: the lobby's two tabs. */}
                 <nav className="relative bottom-nav-bar flex md:hidden" data-testid="lobby-bottom-nav" style={{

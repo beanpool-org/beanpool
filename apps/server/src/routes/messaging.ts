@@ -18,6 +18,7 @@ import { fromEpochOf } from '../engine/group-keys.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
 import { accountsDeletedAmong } from '../engine/message-tombstone.js';
+import { withDmFormerKeys } from '../engine/key-succession.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
@@ -390,7 +391,8 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     const convs = listWithOwnWithheld(viewer, getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey)));
     const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
-    const conversations = convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null }));
+    // A DM's re-keyed people's signed former keys, to someone in it (engine/key-succession.ts withDmFormerKeys).
+    const conversations = withDmFormerKeys(convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null })), viewer);
     // The people in these chats who deleted their accounts, every line of whose is now blanked: the phone blanks the older
     // lines of theirs it holds, which its sync (the newest 50 of each chat) never brings again (accountsDeletedAmong).
     // Only people already listed above as in the caller's chats.
@@ -540,7 +542,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         const kept = withheldConversationOwnedBy(conversationId, viewer);
         if (kept) {
             ctx.body = {
-                conversation: withheldConversationView(kept),
+                conversation: withDmFormerKeys([withheldConversationView(kept)], viewer)[0],
                 messages: pageWithOwnWithheld(conversationId, viewer, clampLimit(ctx.query.limit), clampOffset(ctx.query.offset), () => []),
             };
             return;
@@ -633,7 +635,8 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         ? getConversationMessages(conversationId, l, o).filter((m: any) => groupLineForReader(m.metadata, fromEpoch))
         : getConversationMessages(conversationId, l, o);
     ctx.body = {
-        conversation: conv,
+        // As the list serves it: a DM's re-keyed people's former keys, to someone in it (withDmFormerKeys).
+        conversation: withDmFormerKeys([conv], viewer)[0],
         // A DM's lines with the signed reader's own withheld ones among them (engine/withheld-lines.ts): what they sent,
         // as they sent it. Only the reader's own, so the other person's read is the lines and nothing else.
         messages: conv.type === 'dm' && viewer && conv.participants.includes(viewer)

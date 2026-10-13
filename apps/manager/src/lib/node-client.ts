@@ -2419,6 +2419,8 @@ export interface AlertsStatus {
     /** Security events of the last day not yet acknowledged; absent on a server older than security alerts. */
     recent?: Array<{ key: string; title: string; at: number; priority: number; detail: string; count?: number }>;
     acknowledge?: boolean;
+    /** AI assistants today (admin MCP §8), counts only; absent on a server older than them. */
+    assistants?: { calls: number; connected: number };
 }
 
 export function getAlertsStatus(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AlertsStatus> {

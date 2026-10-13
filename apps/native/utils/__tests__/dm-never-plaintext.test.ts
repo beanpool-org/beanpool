@@ -88,7 +88,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { insertMessage, editMessage, sendImageMessage } from '../db';
+import { insertMessage, editMessage, sendImageMessage, _resetDmPeerPinsForTests } from '../db';
 import { openDmLine, isEncryptedNonce } from '../e2e-crypto';
 import { DmNotLockedError, isDmNotLocked, dmNotLockedLine, restoredDraft, refusedSendNotice } from '../dm-lock';
 import { GroupChatKeyError, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
@@ -141,6 +141,7 @@ function dm(participants: string[], type = 'dm') {
 
 beforeEach(() => {
     who.me = { publicKey: me.publicKey, privateKey: bytesToHex(me.seed) };   // the phone keeps the bare seed
+    _resetDmPeerPinsForTests();   // each test is a fresh phone: its storage keeps nothing, so no DM pin is held in memory either
     store.conversations.clear();
     store.participants.clear();
     store.messages.clear();

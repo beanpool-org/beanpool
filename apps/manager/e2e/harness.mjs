@@ -128,14 +128,15 @@ export async function launch() {
  * `hash` lets a caller open the key sign-in hand-off link instead (e.g. '#handoff=…&section=disputes').
  * `overrides` maps an API path to a function that edits the fixture's reply.
  * `handoffRole` is the role the hand-off link signs in as ('moderator' opens the moderator's Reports screen).
+ * `colorScheme` is the phone's light or dark setting (dark unless asked).
  */
-export async function openSettings(browser, origin, { width, height = 800, textScale = 1, screen = { tab: 'home' }, hash = '', signedIn = true, systemFont = false, overrides = {}, handoffRole = 'owner' }) {
+export async function openSettings(browser, origin, { width, height = 800, textScale = 1, screen = { tab: 'home' }, hash = '', signedIn = true, systemFont = false, overrides = {}, handoffRole = 'owner', colorScheme = 'dark' }) {
     const context = await browser.newContext({
         viewport: { width, height },
         deviceScaleFactor: 1,
         isMobile: width < 600,
         hasTouch: width < 600,
-        colorScheme: 'dark',
+        colorScheme,
     });
     const page = await context.newPage();
     const errors = [];

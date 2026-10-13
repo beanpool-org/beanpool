@@ -258,8 +258,19 @@ const REPORTS = [
     },
 ];
 
-/** The same reports as the moderation list reads them (GET /api/local/admin/reports): a post, a Pulse item, a member. */
+/**
+ * The same reports as the moderation list reads them (GET /api/local/admin/reports): a child-safety report on a post
+ * (the node lists those first, marked: the follow-up to #1895), a post, a Pulse item, a member.
+ */
 const LISTED_REPORTS = [
+    {
+        id: 'report-2000', reason: 'Child safety: keeps asking children in the comments to message him privately about the firewood',
+        childSafety: true,
+        createdAt: '2026-09-17T08:30:00.000Z', outcome: 'open', reporterCallsign: MEMBER_NAMES[3], targetCallsign: MEMBER_NAMES[6],
+        postId: 'post-2003', postTitle: 'Need a hand moving a fridge up two flights of stairs, Saturday morning, Riverbend-Upper-Esplanade',
+        postDescription: 'Saturday morning, will feed you afterwards.',
+        postAuthorCallsign: MEMBER_NAMES[6], postRemoved: false, pulseItem: null,
+    },
     {
         id: 'report-2001', reason: 'Listed the same secondhand generator in both the free and for-sale categories at once, twice this week',
         createdAt: '2026-09-18T09:12:00.000Z', outcome: 'open', reporterCallsign: MEMBER_NAMES[1], targetCallsign: MEMBER_NAMES[6],

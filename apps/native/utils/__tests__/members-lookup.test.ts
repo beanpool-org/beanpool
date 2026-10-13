@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const calls: string[] = [];
 const writes: any[] = [];
+const writtenTo: unknown[][] = [];
 let answer: { ok: boolean; body: unknown } | 'throw' = { ok: true, body: [] };
 vi.mock('../db', () => ({
     signedGet: vi.fn(async (path: string) => {
@@ -15,10 +16,11 @@ vi.mock('../db', () => ({
         const a = answer;
         return { ok: a.ok, json: async () => a.body };
     }),
-    applyDelta: vi.fn(async (delta: any) => { writes.push(delta); return true; }),
+    applyDelta: vi.fn(async (delta: any, ...copy: unknown[]) => { writes.push(delta); writtenTo.push(copy); return true; }),
+    copyForRead: vi.fn(async () => ({ dbName: 'beanpool_global.example.db', generation: 3 })),
 }));
 
-import { searchPath, nearPath, lookUpMembers, cardNeedsFetch, fetchCardByKey, asHeldRow, CARD_FRESH_MS } from '../members-lookup';
+import { searchPath, nearPath, lookUpMembers, cardNeedsFetch, fetchCardByKey, keepCards, asHeldRow, CARD_FRESH_MS } from '../members-lookup';
 import { communityListEmpty, communityListNote } from '../community-list-note';
 
 const KEY = 'c'.repeat(64);
@@ -26,6 +28,7 @@ const KEY = 'c'.repeat(64);
 beforeEach(() => {
     calls.length = 0;
     writes.length = 0;
+    writtenTo.length = 0;
     answer = { ok: true, body: [] };
 });
 
@@ -78,6 +81,24 @@ describe('a profile opened by key', () => {
         calls.length = 0;
         expect(await fetchCardByKey('escrow_x')).toBe('none');
         expect(calls).toEqual([]);
+    });
+
+    it('binds the card to the key asked, not the first row; writes it as a by-key answer, into the copy the read began in', async () => {
+        const OTHER = 'd'.repeat(64);
+        answer = { ok: true, body: [{ publicKey: OTHER, callsign: 'NotAsked' }, { publicKey: KEY, callsign: 'Cy', avatarUrl: null }] };
+        expect(await fetchCardByKey(KEY)).toBe('fetched');
+        expect(writes[0].members).toEqual([{ publicKey: KEY, callsign: 'Cy', avatarUrl: null }]);
+        // A by-key answer's null clears a removed photo (review of #1859, B2), in the copy open when it was asked (NB3).
+        expect(writes[0].membersByKey).toBe(true);
+        expect(writtenTo[0]).toEqual(['beanpool_global.example.db', 3]);
+    });
+
+    it('a DM from a search result keeps that card in the copy the search was read for', async () => {
+        answer = { ok: true, body: [{ publicKey: KEY, callsign: 'Cy' }] };
+        const rows = await lookUpMembers('/api/members?q=Cy&limit=20');
+        await keepCards(rows!);
+        expect(writes[0].membersFetched.keys).toEqual([KEY]);
+        expect(writtenTo[0]).toEqual(['beanpool_global.example.db', 3]);
     });
 });
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    planMembersCycle, cardsToDrop, membersKeysPath, neededKeys, isMemberKey,
+    planMembersCycle, cardsToDrop, membersKeysPath, neededKeys, isMemberKey, recheckCursor, RECHECK_MARGIN_MS,
     KEYS_BATCH, MISSING_BATCHES_PER_CYCLE, HELD_CARDS_MAX, type HeldCard,
 } from '../members-on-demand';
 
@@ -135,5 +135,15 @@ describe('members on demand: the pure rule', () => {
             .toBe(`/api/members?keys=${keys[0]},${keys[1]}&updatedAfter=2026-10-01T00%3A00%3A00.000Z`);
         expect(() => membersKeysPath([...keys, hex(r)])).toThrow();
         expect(() => membersKeysPath([])).toThrow();
+    });
+});
+
+describe('the re-check cursor (review of #1859, NB2)', () => {
+    it('is the oldest stamp less 5 minutes; none for no stamp or one that cannot be read', () => {
+        expect(RECHECK_MARGIN_MS).toBe(300_000);
+        expect(recheckCursor('2026-10-01T00:00:00.000Z')).toBe('2026-09-30T23:55:00.000Z');
+        expect(recheckCursor(null)).toBeNull();
+        expect(recheckCursor('not a time')).toBeNull();
+        expect(recheckCursor('1970-01-01T00:01:00.000Z')).toBe('1970-01-01T00:00:00.000Z');
     });
 });

@@ -170,6 +170,8 @@ vi.mock('../../app/ThemeContext', async () => {
 // The screens read it through useNodeProfile, the db's syncMessages from the phone's copy (getCachedNodeProfile): one answer.
 const community = vi.hoisted(() => ({
     membersOnDemand: true,
+    // On a real phone useNodeProfile starts null and answers a moment after the screen mounts; set, it answers this late.
+    lateMs: 0,
     area: { lat: -28.55, lng: 153.5 } as null | { lat: number; lng: number },
     profile() {
         const on = this.membersOnDemand;
@@ -179,7 +181,20 @@ const community = vi.hoisted(() => ({
         };
     },
 }));
-vi.mock('../use-node-profile', () => ({ useNodeProfile: () => community.profile() }));
+vi.mock('../use-node-profile', async () => {
+    const React = await import('react');
+    return {
+        useNodeProfile: () => {
+            const [late, setLate] = React.useState<ReturnType<typeof community.profile> | null>(null);
+            React.useEffect(() => {
+                if (!community.lateMs) return;
+                const t = setTimeout(() => setLate(community.profile()), community.lateMs);
+                return () => clearTimeout(t);
+            }, []);
+            return community.lateMs ? late : community.profile();
+        },
+    };
+});
 vi.mock('../node-profile', async (importOriginal) => ({
     ...(await importOriginal<object>()),
     getCachedNodeProfile: vi.fn(async () => community.profile()),
@@ -235,6 +250,7 @@ import NewMessageScreen from '../../app/new-message';
 import ChatsScreen from '../../app/(tabs)/chats';
 import PublicProfileScreen from '../../app/public-profile';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
+import { InvitePeopleSheet } from '../../components/InvitePeopleSheet';
 
 const realLoad = (Module as any)._load;
 beforeAll(() => {
@@ -255,6 +271,7 @@ beforeEach(async () => {
     nav.params = {};
     nav.pushed.length = 0;
     community.membersOnDemand = true;
+    community.lateMs = 0;
     community.area = { lat: -28.55, lng: 153.5 };
     globalThis.fetch = vi.fn(nodeFetch) as typeof fetch;
     const database = await db.getDb();
@@ -400,6 +417,7 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(text()).toContain('about 3 km');
                 expect(text()).not.toMatch(/Loading community|members on this node/);
                 expect(contrastOf('Near you: the 50 closest members. Search a name to find anyone else.', colors)).toBeGreaterThanOrEqual(4.5);
+                expect(contrastOf(' · about 3 km', colors)).toBeGreaterThanOrEqual(4.5);
                 await fits([OWN]);
                 // An answer is shown, not kept: the cards held are still only the member's own.
                 expect(await memberKeys()).toEqual([OWN]);
@@ -417,6 +435,19 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(name.getAttribute('data-lines')).toBe('1');
                 await type('Zz');
                 expect(text()).toContain('No members match your search.');
+                expect(contrastOf('No members match your search.', colors)).toBeGreaterThanOrEqual(4.5);
+                await fits([OWN]);
+            });
+
+            it('online, one letter typed: the cards held and "Type at least 2 letters", never "Connect" to a phone that is online', async () => {
+                await render(createElement(PeopleScreen));
+                node.requests.length = 0;
+                await type('Z');
+                expect(membersRequests()).toEqual([]);
+                expect(text()).toContain("People you've dealt with. Type at least 2 letters to search everyone.");
+                expect(text()).toContain('No one you have dealt with matches. Type at least 2 letters to search everyone.');
+                expect(text()).not.toContain('Connect to search everyone');
+                expect(contrastOf('No one you have dealt with matches. Type at least 2 letters to search everyone.', colors)).toBeGreaterThanOrEqual(4.5);
                 await fits([OWN]);
             });
 
@@ -426,6 +457,7 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(membersRequests()).toEqual([]);
                 expect(text()).toContain("Set your area to see who's near you. Search a name to find anyone.");
                 expect(text()).toContain('Type at least 2 letters of a name.');
+                expect(contrastOf('Type at least 2 letters of a name.', colors)).toBeGreaterThanOrEqual(4.5);
                 expect(text()).not.toContain('Loading');
                 await fits([OWN]);
             });
@@ -439,6 +471,7 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(text()).not.toContain('Riverstone');
                 await type('Ko');
                 expect(text()).toContain('No one you have dealt with matches. Connect to search everyone.');
+                expect(contrastOf('No one you have dealt with matches. Connect to search everyone.', colors)).toBeGreaterThanOrEqual(4.5);
                 expect(text()).not.toContain('Loading');
                 expect(contrastOf("People you've dealt with. Connect to search everyone.", colors)).toBeGreaterThanOrEqual(4.5);
                 await fits([OWN, ROSA]);
@@ -492,6 +525,46 @@ for (const scheme of ['light', 'dark'] as const) {
                 await type('Ko');
                 expect(text()).toContain('Kofi');
                 await fits([OWN, KOFI]);
+            });
+        });
+
+        describe('Invite people to a group', () => {
+            const sheet = () => createElement(InvitePeopleSheet, { isOpen: true, groupId: 'g1', groupName: 'Garden', existing: new Set<string>(), myPubkey: OWN, onClose: () => {}, onInvited: () => {} });
+
+            it('online, no card held: the picker\'s words, never "Nobody else is in this community"; a search asks the node', async () => {
+                await render(sheet());
+                expect(text()).toContain('No one here yet');
+                expect(text()).toContain('Type 2 letters of a name to find anyone in the community.');
+                expect(text()).not.toContain('Nobody else is in this community yet.');
+                expect(contrastOf('Type 2 letters of a name to find anyone in the community.', colors)).toBeGreaterThanOrEqual(4.5);
+                node.requests.length = 0;
+                await type('R');
+                expect(membersRequests()).toEqual([]);
+                expect(text()).toContain('Type at least 2 letters of a name to search everyone.');
+                await type('Ro');
+                expect(membersRequests()).toEqual(['/api/members?q=Ro&limit=20']);
+                expect(text()).toContain('Rosa');
+                await type('Zz');
+                expect(text()).toContain('No members match your search');
+                await fits([OWN]);
+            });
+
+            it('offline, a card held: the held card, and a search for anyone else says to connect', async () => {
+                await holdCard(KOFI, 'Kofi');
+                node.online = false;
+                await render(sheet());
+                expect(text()).toContain('Kofi');
+                await type('Ro');
+                expect(text()).toContain('No one you have dealt with matches');
+                expect(text()).toContain('Connect to search everyone.');
+                expect(text()).not.toContain('Nobody by that name.');
+                await fits([OWN, KOFI]);
+            });
+
+            it('a local community (switch absent) keeps its words', async () => {
+                community.membersOnDemand = false;
+                await render(sheet());
+                expect(text()).toContain('Nobody else is in this community yet.');
             });
         });
 
@@ -580,6 +653,21 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(text()).toContain('Kofi');
                 expect(text()).not.toContain('Connect to see more');
                 await fits([OWN, KOFI]);
+            });
+
+            it('the node profile known a moment after the screen mounts: each read once, the stale card fetched once', async () => {
+                community.lateMs = 30;
+                await holdCard(ROSA, 'Rosa');
+                await (await db.getDb()).runAsync('UPDATE members SET card_fetched_at = ? WHERE public_key = ?', ['2026-01-01T00:00:00.000Z', ROSA]);
+                nav.params = { publicKey: ROSA, callsign: 'Rosa' };
+                await render(createElement(PublicProfileScreen));
+                await settle(100);
+                const byPath: Record<string, number> = {};
+                for (const r of node.requests) { const p = r.split('?')[0].replace(/[0-9a-f]{64}/, ':key'); byPath[p] = (byPath[p] ?? 0) + 1; }
+                expect(membersRequests()).toEqual([`/api/members?keys=${ROSA}`]);
+                expect(Object.keys(byPath).length).toBeGreaterThan(1);
+                for (const [path, n] of Object.entries(byPath)) expect(n, path).toBe(1);
+                expect(text()).toContain('Rosa');
             });
 
             it('(a) a card held and fresh: no request for it, the name it holds', async () => {

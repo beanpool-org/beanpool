@@ -89,6 +89,7 @@ import { CommonsPreview } from '../../components/showcase/Previews';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 import * as db from '../db';
+import { pressEverything } from './press-everything';
 
 let host: HTMLDivElement;
 let root: Root;
@@ -298,16 +299,14 @@ for (const scheme of ['light', 'dark'] as const) {
                 createElement(LocalCommunityMark, { variant: 'strip', feature: 'beans' }),
                 createElement(CommonsPreview), createElement(YourBeansPreviewCard, { colors }),
                 createElement(MyDealsSheet, { visible: true, identity: null, onClose: () => {}, preview: true })));
-            // Every button, asked afresh after each press (a sheet's own buttons appear only once a marker opens it), and
-            // the strip's ✕ last, since it folds the strip's buttons away.
-            const pressed = new Set<Element>();
-            for (let i = 0; i < 300; i++) {
-                const next = Array.from(host.querySelectorAll('button')).find(b => !pressed.has(b) && b.getAttribute('aria-label') !== 'Make this shorter');
-                if (!next) break;
-                pressed.add(next);
-                await press(next);
-            }
+            // Every button, asked afresh after each press; each one that opens the sheet, then every button in the sheet,
+            // reopened for each (press-everything.ts); and the strip's ✕ last, since it folds the strip's buttons away.
+            const { pressed, sheetPresses } = await pressEverything(host, press, { key: b => b, skip: b => b.getAttribute('aria-label') === 'Make this shorter' });
             expect(pressed.size).toBeGreaterThanOrEqual(15);
+            // The sheet's own ways forward were pressed, from more than one marker.
+            for (const way of [LOCAL_COMMUNITY_SHEET.start, LOCAL_COMMUNITY_SHEET.nearYou, LOCAL_COMMUNITY_SHEET.howItWorks]) {
+                expect(sheetPresses.filter(x => x.endsWith(`→ ${way}`)).length, way).toBeGreaterThanOrEqual(5);
+            }
             await press(host.querySelector('[aria-label="Make this shorter"]')!);
             // The presses ran (each of the ways forward was taken), and none of them reached a node.
             expect(routes.pushed).toEqual(expect.arrayContaining(['/start-community', '/find-community', '/(tabs)/ledger']));

@@ -125,6 +125,7 @@ vi.mock('../../components/RepaymentCard', () => ({ RepaymentCard: () => { net.ca
 
 import LedgerScreen from '../../app/(tabs)/ledger';
 import { sampleBalance } from '../../components/showcase/sample-screens';
+import { pressEverything } from './press-everything';
 
 const NODE = 'https://global.example';
 /** The phone's copy of a node's profile, heard just now, so no screen asks the node again (nodeProfileIsFresh). */
@@ -336,21 +337,24 @@ for (const scheme of ['light', 'dark'] as const) {
 
         it('the net spy: every button in both tabs, pressed; nothing asked of a node, nothing written, nothing shared', async () => {
             await render(createElement(LedgerScreen));
-            const pressed = new Set<string>();
+            // Each tab's buttons, and every button of the sheet each one opens, reopened for each (press-everything.ts).
+            let pressedCount = 0;
+            const sheetPressed: string[] = [];
             for (const tab of ['Levels', 'Wallet']) {
                 await press(buttonNamed(new RegExp(`^${tab}$`))!);
-                for (let i = 0; i < 200; i++) {
-                    const next = Array.from(host.querySelectorAll('button')).find(b => {
-                        const key = `${tab}:${b.getAttribute('aria-label') ?? ''}:${b.textContent}`;
-                        return !pressed.has(key) && b.getAttribute('aria-label') !== 'Make this shorter';
-                    });
-                    if (!next) break;
-                    pressed.add(`${tab}:${next.getAttribute('aria-label') ?? ''}:${next.textContent}`);
-                    await press(next);
-                }
+                const { pressed, sheetPresses } = await pressEverything(host, press, {
+                    key: b => `${tab}:${b.getAttribute('aria-label') ?? ''}:${b.textContent}`,
+                    skip: b => b.getAttribute('aria-label') === 'Make this shorter',
+                    limit: 200,
+                });
+                pressedCount += pressed.size;
+                sheetPressed.push(...sheetPresses);
                 await closeSheet();
             }
-            expect(pressed.size).toBeGreaterThanOrEqual(20);
+            expect(pressedCount).toBeGreaterThanOrEqual(20);
+            for (const way of [LOCAL_COMMUNITY_SHEET.start, LOCAL_COMMUNITY_SHEET.nearYou, LOCAL_COMMUNITY_SHEET.howItWorks]) {
+                expect(sheetPressed.filter(x => x.endsWith(`→ ${way}`)).length, way).toBeGreaterThanOrEqual(4);
+            }
             // The ways forward were taken (the sheet's and the strip's), and nothing else left the screen.
             expect(routes.pushed).toEqual(expect.arrayContaining(['/start-community', '/find-community']));
             for (const to of routes.pushed) {

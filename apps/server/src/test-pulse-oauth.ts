@@ -12,6 +12,7 @@
  * 8. An OAuth-ingested item dedupes against the same item ingested manually earlier.
  * 9. Resubmission / tombstone restoration through OAuth ingestion.
  * 10. Public channel serialization (isVerified) accurately reflects verification state.
+ * 11. A username equal to the URL's host does not verify a channel (the URL match reads the path only).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-pulse-oauth.ts
  */
@@ -239,6 +240,35 @@ async function main(): Promise<void> {
     });
     assert(handleCaseVerify.status === 200, 'Case-insensitive real handle verification succeeds');
     assert(typeof handleCaseVerify.body.channel.oauthVerifiedAt === 'string', 'Channel marked oauthVerifiedAt');
+
+    // 2j: The URL match reads only the path. Every stored platform URL starts with the platform's own host, so
+    // matching the whole string let a username equal to that host verify any channel on the platform (#1822).
+    const dana = makeMember('Dana');
+    const hostCases = [
+        { platform: 'tiktok', raw: '@famous_creator', host: 'www.tiktok.com', real: 'famous_creator' },
+        { platform: 'instagram', raw: '@famous_creator', host: 'www.instagram.com', real: 'famous_creator' },
+        { platform: 'youtube', raw: '@famous_creator', host: 'www.youtube.com', real: 'famous_creator' },
+        { platform: 'soundcloud', raw: '@famous_creator', host: 'soundcloud.com', real: 'famous_creator' },
+        { platform: 'facebook', raw: 'famouspage', host: 'www.facebook.com', real: 'famouspage' },
+    ] as const;
+    for (const c of hostCases) {
+        const chan = addChannel({ ownerPubkey: dana, platform: c.platform, raw: c.raw, category: 'other' });
+        const hostVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${chan.id}/verify-oauth`, {
+            actor: dana,
+            body: { platform: c.platform, platformUsername: c.host },
+        });
+        assert(hostVerify.status === 400 && hostVerify.body.error === 'account_mismatch',
+            `${c.platform}: username "${c.host}" (the URL's host) is refused with account_mismatch`);
+
+        // With the handle cleared only the URL match can pass, so the real account still verifying proves the
+        // path is what is matched.
+        db.prepare('UPDATE creator_channels SET handle = NULL WHERE id = ?').run(chan.id);
+        const realVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${chan.id}/verify-oauth`, {
+            actor: dana,
+            body: { platform: c.platform, platformUsername: c.real },
+        });
+        assert(realVerify.status === 200, `${c.platform}: the real account still verifies through the URL path`);
+    }
 
     console.log('\n--- 3. OAuth Ingestion & Deduplication Against Manual Submission ---');
     const testVideoUrl = 'https://www.tiktok.com/@alice_pottery/video/7100000000000000001';

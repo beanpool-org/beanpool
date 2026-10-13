@@ -38,6 +38,27 @@ export function dmNotLockedLine(peerName?: string | null): string {
 }
 
 /**
+ * What a DM line throws when the node now lists someone else in place of the key this phone pinned for the chat
+ * (utils/dm-peer-pins.ts), before anything is written or sent: nothing is sealed to a key the member hasn't accepted.
+ */
+export class DmKeyChangedError extends Error {
+    constructor() {
+        super('The key behind this chat changed, so the message wasn\'t sent.');
+        this.name = 'DmKeyChangedError';
+    }
+}
+
+export function isDmKeyChanged(e: unknown): e is DmKeyChangedError {
+    return e instanceof DmKeyChangedError || (e as { name?: unknown } | null)?.name === 'DmKeyChangedError';
+}
+
+/** The one line the member sees while a key change waits: under the box, which stays disabled. */
+export function dmKeyChangedLine(peerName?: string | null): string {
+    const name = peerName?.trim();
+    return `The key behind ${name && name !== 'Loading...' ? name : 'this chat'} changed, so sending is paused. Nothing was sent.`;
+}
+
+/**
  * What goes back in the box after a send that couldn't be locked: the unsent words, and anything typed while it was
  * trying underneath them. Neither is lost.
  */
@@ -54,11 +75,13 @@ export function isKeyStoreUnread(e: unknown): boolean {
 
 /**
  * The line the DM screen shows for a send that threw, when the words go back in the box: a line that couldn't be locked,
- * or a key memory that couldn't be read (every send asks it first, a DM's too: #1815 review). Null: anything else, an
- * alert as before.
+ * a key memory that couldn't be read (every send asks it first, a DM's too: #1815 review), a key change waiting for the
+ * member, or DM pins that couldn't be read (utils/dm-peer-pins.ts). Null: anything else, an alert as before.
  */
 export function refusedSendNotice(e: unknown, peerName?: string | null): string | null {
     if (isDmNotLocked(e)) return dmNotLockedLine(peerName);
+    if (isDmKeyChanged(e)) return dmKeyChangedLine(peerName);
+    if ((e as { name?: unknown } | null)?.name === 'DmPinStoreError') return (e as Error).message;
     if (isKeyStoreUnread(e)) return (e as Error).message;
     return null;
 }

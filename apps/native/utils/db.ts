@@ -10,7 +10,8 @@ import {
     dmLineKind, dmQuoteLabel, dmQuoteFrom, isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
     type DMKeyContext, type DmPart,
 } from './e2e-crypto';
-import { DmNotLockedError, isNodeReadableChatType } from './dm-lock';
+import { DmNotLockedError, DmKeyChangedError, isNodeReadableChatType } from './dm-lock';
+import { readDmPeerPins, writeDmPeerPins, dmPinFor, dmPinId, pinAtFirstSight, applyDmListings, isDmPinStoreError, type DmPeerPins } from './dm-peer-pins';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress } from './node-url';
@@ -3863,6 +3864,18 @@ export async function syncMessages(publicKey: string) {
         // And anyone a page below shows as deleted (a tombstone of theirs), who may no longer be in that chat.
         const seenDeleted = new Set<string>();
 
+        // The DM pins (utils/dm-peer-pins.ts), read once for the pass and written once: the listing offers another key
+        // for a pinned DM, or pins one it meets for the first time, and never moves a pinned key. Kept apart from the rows
+        // below, so the prune at the end of the pass can't touch them. Unreadable: left alone (every send refuses).
+        if (myIdentity?.publicKey) {
+            try {
+                const pins = await readDmPeerPins(AsyncStorage, myIdentity.publicKey);
+                if (applyListingsToPins(pins, myIdentity.publicKey, convData.conversations)) await writeDmPeerPins(AsyncStorage, myIdentity.publicKey, pins);
+            } catch (e) {
+                console.warn('[Sync] Could not read or write the DM pins:', e);
+            }
+        }
+
         for (const conv of convData.conversations) {
             // Decide WITHOUT the lock whether this conversation row actually needs
             // writing. This loop runs on every full message-sync (badge backstop,
@@ -4220,19 +4233,62 @@ export async function getConversation(id: string, myPubkey?: string) {
     return await database.getFirstAsync<any>('SELECT name, post_id as postId FROM conversations WHERE id = ?', [id]);
 }
 
+/** A DM's key context as its pin has it (utils/dm-peer-pins.ts). */
+interface PinnedDmKeyContext extends DMKeyContext {
+    /** Keys this phone sealed the DM to before the pinned one: its old lines open under them too. */
+    formerPeers: string[];
+    /**
+     * True while nothing may be sealed here: the node lists another key in place of the pinned one, or the pin is a
+     * first sight that opens none of the thread's encrypted lines (a restored phone meeting a re-pointed DM).
+     */
+    keyChanged: boolean;
+}
+
+/**
+ * True when a first-seen pin opens one of the thread's newest encrypted lines, or the thread has none to check. A pin
+ * the phone took on the node's word, under which none of the lines it holds opens, is someone else's key (design §3.4).
+ */
+async function firstSightHolds(conversationId: string, ctx: DMKeyContext): Promise<boolean> {
+    const database = await getDb();
+    const rows = await database.getAllAsync<any>(
+        'SELECT id, author_pubkey, ciphertext, nonce, type, metadata FROM messages WHERE conversation_id = ? AND nonce LIKE ? ORDER BY timestamp DESC LIMIT 20',
+        [conversationId, `${V2_NONCE_PREFIX}%`]
+    );
+    if (!rows.length) return true;
+    const views = checkDmThread(rows.reverse().map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })), ctx, conversationId);
+    return rows.some(r => views.get(r.id)?.format != null);
+}
+
 /**
  * Resolve the E2E key context for a conversation, or null if it isn't a clean
  * 2-party DM (groups/system threads stay plaintext-v1 for now). Used to encrypt
  * outgoing and decrypt incoming direct messages (NAT-1).
+ *
+ * The peer is the key this phone pinned for the DM (utils/dm-peer-pins.ts), whatever the participant rows say: the node
+ * writes those, and a prune and relist can put anyone in them (#1863 review, T5). Rows that differ are put back to
+ * [me, the pinned key]. Without a pin the rows decide, as before, and the key they give is pinned (first sight). Throws
+ * DmPinStoreError when the pins can't be read: a send then refuses, and a thread reads as unverified.
  */
-async function getDmKeyContext(conversationId: string): Promise<DMKeyContext | null> {
+async function getDmKeyContext(conversationId: string): Promise<PinnedDmKeyContext | null> {
     const identity = await loadIdentity();
     if (!identity?.publicKey || !identity?.privateKey) return null;
     const database = await getDb();
     const conv = await database.getFirstAsync<any>('SELECT type, created_by FROM conversations WHERE id = ?', [conversationId]);
     if (!conv || conv.type !== 'dm') return null;
+    const pins = await readDmPeerPins(AsyncStorage, identity.publicKey);
     const parts = await database.getAllAsync<any>('SELECT public_key FROM conversation_participants WHERE conversation_id = ?', [conversationId]);
     let peers = parts.map(p => p.public_key).filter((pk: string) => pk && pk !== identity.publicKey);
+    const pin = dmPinFor(pins, conversationId);
+    if (pin) {
+        if (peers.length !== 1 || peers[0] !== pin.peer) {
+            await database.runAsync('DELETE FROM conversation_participants WHERE conversation_id = ? AND public_key NOT IN (?, ?)', [conversationId, identity.publicKey, pin.peer]).catch(() => {});
+            await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, pin.peer]).catch(() => {});
+            await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, identity.publicKey]).catch(() => {});
+        }
+        const ctx = { myEdPrivHex: identity.privateKey, peerEdPubHex: pin.peer, conversationId, formerPeers: pin.former ?? [], keyChanged: !!pin.offered };
+        if (!ctx.keyChanged && pin.by === 'first-seen') ctx.keyChanged = !(await firstSightHolds(conversationId, ctx));
+        return ctx;
+    }
 
     // Resilient fallback: if local participants cache hasn't populated yet, find peer from thread history or creator
     if (peers.length === 0) {
@@ -4252,7 +4308,39 @@ async function getDmKeyContext(conversationId: string): Promise<DMKeyContext | n
     }
 
     if (peers.length !== 1) return null; // not a clean 2-party DM — don't encrypt
-    return { myEdPrivHex: identity.privateKey, peerEdPubHex: peers[0], conversationId };
+    // First sight: the key this DM is sealed to from now on, kept where no sync or prune reaches.
+    if (pinAtFirstSight(pins, conversationId, peers[0], new Date().toISOString())) await writeDmPeerPins(AsyncStorage, identity.publicKey, pins);
+    const pinned = dmPinFor(pins, conversationId);
+    if (!pinned) return null;
+    const ctx = { myEdPrivHex: identity.privateKey, peerEdPubHex: pinned.peer, conversationId, formerPeers: [] as string[], keyChanged: false };
+    ctx.keyChanged = !(await firstSightHolds(conversationId, ctx));
+    return ctx;
+}
+
+/**
+ * What the node's listing of one or more conversations says about this account's DM pins: an offer where it names
+ * another key in place of a pinned one, the offer cleared where it names the pinned key again, and a first-sight pin for
+ * a DM it lists cleanly with one other person. `pins` is changed in place; true when it changed. The pinned key never
+ * moves here (utils/dm-peer-pins.ts applyDmListings). A listing of any type counts against a pin (a DM the node retypes
+ * is still the DM this phone pinned); only a DM's listing pins at first sight.
+ */
+function applyListingsToPins(pins: DmPeerPins, myPubkey: string, conversations: ReadonlyArray<any>): boolean {
+    const me = myPubkey.toLowerCase();
+    const byId = new Map<string, { others: string[]; dm: boolean }[]>();
+    for (const c of conversations) {
+        if (!c?.id || typeof c.id !== 'string' || !Array.isArray(c.participants)) continue;
+        const id = dmPinId(c.id);
+        const others = c.participants.filter((p: unknown): p is string => typeof p === 'string' && !!p && p.toLowerCase() !== me);
+        if (!byId.has(id)) byId.set(id, []);
+        byId.get(id)!.push({ others, dm: (c.type || 'dm') === 'dm' });
+    }
+    const now = new Date().toISOString();
+    let changed = false;
+    for (const [id, listings] of byId) {
+        if (!pins[id] && listings.some(l => !l.dm)) continue;
+        if (applyDmListings(pins, id, listings.map(l => l.others), now)) changed = true;
+    }
+    return changed;
 }
 
 /**
@@ -4277,6 +4365,12 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
                 await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conv.id, pk]);
             }
         }
+        // The DM's pin hears what the node says (an offer, never a move); an unreadable pin store refuses the send anyway.
+        const me = (await loadIdentity().catch(() => null))?.publicKey;
+        if (me) {
+            const pins = await readDmPeerPins(AsyncStorage, me).catch(() => null);
+            if (pins && applyListingsToPins(pins, me, [conv])) await writeDmPeerPins(AsyncStorage, me, pins).catch(() => {});
+        }
     } catch {
         // Offline or refused: the lock simply fails, and says so.
     } finally {
@@ -4284,15 +4378,38 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
     }
 }
 
-/** This DM's key context, asking the node for the conversation once if the phone can't resolve the other person. */
+/** The pin store unreadable is the send's answer (fail closed); any other failure resolving the key is "not locked". */
+function keepPinStoreError(e: unknown): null {
+    if (isDmPinStoreError(e)) throw e;
+    return null;
+}
+
+/**
+ * This DM's key context, asking the node for the conversation once if the phone can't resolve the other person.
+ * DmKeyChangedError while the node lists another key in place of the pinned one (nothing is sealed to a key the member
+ * hasn't accepted), DmPinStoreError when the pins can't be read: both before anything is written or sent.
+ */
 async function requireDmKeyContext(conversationId: string): Promise<DMKeyContext> {
-    let ctx = await getDmKeyContext(conversationId).catch(() => null);
+    let ctx = await getDmKeyContext(conversationId).catch(keepPinStoreError);
     if (!ctx) {
         await refreshConversationFromNode(conversationId);
-        ctx = await getDmKeyContext(conversationId).catch(() => null);
+        ctx = await getDmKeyContext(conversationId).catch(keepPinStoreError);
     }
     if (!ctx) throw new DmNotLockedError();
+    if (ctx.keyChanged) throw new DmKeyChangedError();
     return ctx;
+}
+
+/**
+ * True while this DM's sends are paused for a key change (utils/dm-peer-pins.ts): the DM screen disables its box and says
+ * so in one line. False for any other conversation, and when the pins can't be read (a send then says that itself).
+ */
+export async function isDmKeyChangePending(conversationId: string): Promise<boolean> {
+    try {
+        return !!(await getDmKeyContext(conversationId))?.keyChanged;
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -4530,7 +4647,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
         );
     }
     // Load the DM key context once so v2-encrypted rows can be decrypted in the map below.
-    let dmCtx: DMKeyContext | null = null;
+    let dmCtx: PinnedDmKeyContext | null = null;
     try { dmCtx = await getDmKeyContext(conversationId); } catch { dmCtx = null; }
     // A direct message: every conversation the node doesn't read by design (utils/dm-lock.ts). Its rows are judged by
     // the thread check below, whether or not this phone has the other person's key yet. Fails closed: a conversation
@@ -4585,7 +4702,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     // either; one the node moved or reordered, and every old-format line, is marked; the admin page's message is shown
     // as the community admins'. Only the node's own notices are left to the system formatting below.
     const lineViews = isDm
-        ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })), dmCtx, conversationId)
+        ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })), dmCtx, conversationId, dmCtx?.formerPeers)
         : null;
 
     return rows.map(row => {

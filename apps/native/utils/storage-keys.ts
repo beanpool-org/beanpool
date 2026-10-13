@@ -36,6 +36,15 @@ export function blockedUsersStoreKey(publicKey: string): string {
 }
 
 /**
+ * The key each of one account's direct messages is sealed to, as this phone pinned it (utils/dm-peer-pins.ts): an object,
+ * conversation id lower-cased → pin. Outside SQLite, so no sync, prune or wipe-and-fetch of the conversation rows can move
+ * it. Kept when the account leaves the phone, as its block list is (Marty, 13 Oct), and never read for another account.
+ */
+export function dmPeerPinsStoreKey(publicKey: string): string {
+    return `beanpool_dm_peer_pins:${publicKey.toLowerCase()}`;
+}
+
+/**
  * The communities this phone has been to, for the community switcher (utils/nodes.ts). Sign Out and "Replace this
  * phone's account" remove it with the account (utils/account-leaves-phone.ts).
  */

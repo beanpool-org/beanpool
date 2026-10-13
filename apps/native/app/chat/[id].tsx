@@ -11,7 +11,8 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, isDmKeyChangePending } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, type DmKeyChange } from '../../utils/db';
+import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
@@ -156,8 +157,9 @@ function ChatScreen({ id }: { id: string }) {
     // A DM line that couldn't be locked was not sent (utils/dm-lock): one plain line above the box, until a send goes.
     const [lockNotice, setLockNotice] = useState<string | null>(null);
     // The node lists another key in place of the one this phone pinned for the chat (utils/dm-peer-pins.ts): the box is
-    // disabled, with one line, until the member decides (slice 2's banner). Every send refuses meanwhile (db.ts).
-    const [keyChangePending, setKeyChangePending] = useState(false);
+    // disabled, with one line, until the member decides on the banner below the header. Every send refuses meanwhile (db.ts).
+    const [keyChange, setKeyChange] = useState<DmKeyChange | null>(null);
+    const keyChangePending = !!keyChange;
     const [menuOpen, setMenuOpen] = useState(false);
     const [muteOpen, setMuteOpen] = useState(false);
     const [mute, setMute] = useState<YourChatMute | null>(() => getKnownChatMute(String(id ?? '')));
@@ -505,7 +507,8 @@ function ChatScreen({ id }: { id: string }) {
             setFirstLoadDone(true);
         }
         messagesLenRef.current = data.length;
-        isDmKeyChangePending(id as string).then(setKeyChangePending, () => {});
+        // Unreadable pins: the banner stays as it was, and a send says why it refused.
+        getDmKeyChange(id as string).then(setKeyChange, () => {});
         if (identity?.publicKey) {
             await markConversationRead(id as string, identity.publicKey).catch(() => {});
         }
@@ -523,6 +526,20 @@ function ChatScreen({ id }: { id: string }) {
             }
             return data;
         });
+    };
+
+    // "Continue with the new key", after the member ticked that they checked the code with the person (pick 1). The pin
+    // moves only to the key whose code the banner showed: if the node offered another meanwhile, nothing moves.
+    const handleContinueWithNewKey = async (peer: string) => {
+        try {
+            const moved = await acceptOfferedPeer(id as string, peer);
+            if (!moved) {
+                Alert.alert('Nothing changed', 'The key on offer changed while you were checking. Look at the new code and check it again.');
+            }
+        } catch (e: any) {
+            Alert.alert('Nothing changed', e?.message || "This phone couldn't save your choice. Try again in a moment.");
+        }
+        await loadMessages(true).catch(() => {});
     };
 
     // Asked before the composer empties the box, so a refused send keeps what was typed.
@@ -1196,6 +1213,21 @@ function ChatScreen({ id }: { id: string }) {
                     <MaterialCommunityIcons name="dots-horizontal" size={28} color={colors.text.secondary} />
                 </Pressable>
             </View>
+
+            {/* The key behind this DM changed (utils/dm-peer-pins.ts): what changed, the new key's code, and the member's choice.
+                Keyed on the offered key, so a tick given for one code never carries over to another. Scrolls when it is
+                taller than the room left at 320 dp and 1.3× text. */}
+            {keyChange && (
+                <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} keyboardShouldPersistTaps="handled">
+                    <DmKeyChangedBanner
+                        key={keyChange.offeredPeer ?? 'none'}
+                        peerName={peerPubkey ? peerName : null}
+                        change={keyChange}
+                        onContinue={handleContinueWithNewKey}
+                        onNotNow={() => router.back()}
+                    />
+                </ScrollView>
+            )}
 
             {/* Pinned active-deals strip — per-deal actions live here (one card per live deal),
                 always visible so a Release/Review is never buried in the conversation scroll. */}

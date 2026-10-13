@@ -67,6 +67,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
 import { beansOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
+import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
 import { doorOfferedToAccount, globalStandingOnPhone, type GlobalStanding } from '../../utils/global-join-existing';
 import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
 import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
@@ -2095,6 +2096,8 @@ export default function SettingsScreen() {
                             {/* In by 12 words with no sign-in: one way back, said plainly, with the sign-in offered (two-doors §2.5). */}
                             <OneWayBackCard place="settings" colors={colors} />
                             <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
+                            {/* The code a chat partner checks when their phone says the key behind your name changed. */}
+                            <MyKeyCodeCard publicKey={identity?.publicKey} />
                             {protectionNote && (
                                 <Text style={[styles.infoText, { marginBottom: 12 }]} accessibilityLiveRegion="polite">{protectionNote}</Text>
                             )}

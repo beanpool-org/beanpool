@@ -1656,6 +1656,10 @@ export function initSchema() {
     moveGroupPicturesOutOfRows();
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
+    // Verified channels (#1830): the badge carries the account the platform named. Badges set before
+    // these columns proved nothing and are cleared at boot by clearUnprovenOauthBadges (state-engine.ts).
+    try { db.prepare(`ALTER TABLE creator_channels ADD COLUMN platform_account_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE creator_channels ADD COLUMN verified_handle TEXT`).run(); } catch { }
     db.exec(schemaSql);
 
     // signature_audiences: its CHECK allows `lost` (refusals for a name another community holds, engine/member-signature.ts).

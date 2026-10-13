@@ -4,6 +4,10 @@ import { PeopleSafetySection } from './PeopleSafetySection';
 import type { NodeProfile } from '../../lib/profiles';
 import { setKeySessionCsrfToken, setTfaSessionToken } from '../../lib/node-client';
 
+// The AI assistants' suggestions card lists from the node on mount (its own tests: AgentSuggestionsPanel.test.tsx); these
+// tests count the moderation calls alone.
+vi.mock('./AgentSuggestionsPanel', () => ({ AgentSuggestionsPanel: () => null }));
+
 const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',

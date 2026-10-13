@@ -19,6 +19,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, reportSubject, type NodeReport } from '../../lib/node-client';
 import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } from '../../lib/bulk-delete-posts';
 import { nodeCredential } from '../../lib/profiles';
+import { AgentSuggestionsPanel } from './AgentSuggestionsPanel';
 
 interface PeopleSafetySectionProps {
     activeNode: NodeProfile;
@@ -404,6 +405,11 @@ export function PeopleSafetySection({
                             )}
                         </SectionErrorBoundary>
                     )}
+
+                    {/* An AI assistant's suggestions (admin MCP S4): approved by its member, the report beside each. */}
+                    <SectionErrorBoundary sectionName="AI assistant suggestions" resetKey={activeNode.id}>
+                        <AgentSuggestionsPanel activeNode={activeNode} viewer={rolesViewer} onChanged={refreshReports} />
+                    </SectionErrorBoundary>
 
                     {/* Pending Reports List */}
                     <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 shadow-xl space-y-4">

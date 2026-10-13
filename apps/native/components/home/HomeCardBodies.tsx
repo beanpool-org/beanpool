@@ -441,3 +441,35 @@ export function SearchBody({ settings, card, nodeUrl, showsBeans, colors, onMore
         </>
     );
 }
+
+/**
+ * Getting started (scratch/global-node/DESIGN-getting-started-fable.md §1): a newcomer's Home until the tour ends. Its
+ * words, Look around › (or "Pick up the tour at step 3 ›" while one is part way) and Skip. It blocks nothing: every tab,
+ * Add a card and Edit home work with it sitting there. No "…": Skip is its remove.
+ */
+export function StartBody({ words, button, colors, onLookAround, onSkip }: {
+    words: string;
+    button: string;
+    colors: AppColors;
+    onLookAround: () => void;
+    onSkip: () => void;
+}) {
+    const s = homeStyles(colors);
+    return (
+        <View>
+            <Text style={{ fontSize: 15, lineHeight: 21, color: colors.text.body }} testID="home-start-words">{words}</Text>
+            <View style={[s.buttonRow, { flexWrap: 'wrap', alignItems: 'center' }]}>
+                <HomeButton colors={colors} primary text={button} onPress={onLookAround} testID="home-start-look" />
+                <Pressable
+                    onPress={onSkip}
+                    style={{ minHeight: HOME_TARGET_DP, minWidth: HOME_TARGET_DP, paddingHorizontal: 12, justifyContent: 'center' }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Skip the tour"
+                    testID="home-start-skip"
+                >
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.link }}>Skip</Text>
+                </Pressable>
+            </View>
+        </View>
+    );
+}

@@ -324,6 +324,7 @@ function measure(themeIsDark) {
  */
 async function hoverStops(page) {
     const found = [];
+    const seen = [];
     const targets = page.locator('button[class*="hover:bg-"][class*="dark:bg-"], a[class*="hover:bg-"][class*="dark:bg-"]');
     const n = Math.min(await targets.count(), 8);
     let hovered = 0;
@@ -352,10 +353,11 @@ async function hoverStops(page) {
             return { el: node.tagName.toLowerCase(), text: (node.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 40), ratio: ratio(fg, behind), fg: hex(fg), bg: hex(behind),
                 need: !words || size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700) ? 3 : 4.5 }; // a glyph alone is an icon: 3:1
         });
+        if (r.text) seen.push(`${r.ratio.toFixed(2)}:1 ${r.fg} on ${r.bg} "${r.text}"`);
         if (r.text && r.ratio < r.need - 0.005) found.push(r);
     }
     await page.mouse.move(0, 0);
-    return { hovered, found };
+    return { hovered, found, seen };
 }
 
 /** Tab through the first stops; each must draw an outline or ring of 3:1 against what is behind it. */

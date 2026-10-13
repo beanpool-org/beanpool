@@ -1,15 +1,17 @@
 /**
  * The old 12 words bring back a member's group history from before they changed phones (path A,
  * scratch/global-node/DESIGN-group-history-after-rekey-fable.md §3; utils/group-history-unlock.ts). The words are typed
- * here, held in this screen's state for the one run and cleared after it: never sent, never stored.
+ * here, box by box as on the restore screen (RecoveryWordsEntry), held in this screen's state for the one run and cleared
+ * when it starts: never sent, never stored.
  */
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { router, ErrorBoundary } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
 import { unlockGroupHistoryWithWords } from '../utils/db';
 import { yourGroupsStore } from '../components/useYourGroups';
+import { RecoveryWordsEntry } from '../components/RecoveryWordsEntry';
 import {
     OLD_WORDS_DONE, OLD_WORDS_NOT_THE_KEY, OLD_WORDS_OWNER, LOCKED_HISTORY_WORDS, oldWordsProgressText, oldWordsWithheldText,
 } from '../utils/group-history-unlock';
@@ -19,7 +21,8 @@ export { ErrorBoundary };
 export default function OldWordsUnlockScreen() {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const [typed, setTyped] = useState('');
+    const [words, setWords] = useState<string[]>(() => Array(12).fill(''));
+    const typedAny = words.some((w) => w.trim());
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState<string | null>(null);
     const [outcome, setOutcome] = useState<{ text: string; lines: string[]; ok: boolean } | null>(null);
@@ -28,11 +31,11 @@ export default function OldWordsUnlockScreen() {
         if (busy) return;
         setBusy(true);
         setOutcome(null);
-        const words = typed;
-        setTyped('');
+        const typed = words;
+        setWords(Array(12).fill(''));
         try {
             const groups = (yourGroupsStore.getState().items ?? []).filter((g) => g.kind === 'group').map((g) => ({ id: g.id, name: g.name }));
-            const r = await unlockGroupHistoryWithWords(words, groups, (d, t) => setProgress(oldWordsProgressText(d, t)));
+            const r = await unlockGroupHistoryWithWords(typed, groups, (d, t) => setProgress(oldWordsProgressText(d, t)));
             if (r.outcome === 'not_the_key') setOutcome({ text: OLD_WORDS_NOT_THE_KEY, lines: [], ok: false });
             else if (r.outcome === 'owner') setOutcome({ text: OLD_WORDS_OWNER, lines: [], ok: false });
             else setOutcome({ text: OLD_WORDS_DONE, lines: r.withheld.map((g) => oldWordsWithheldText(g.name)), ok: true });
@@ -51,23 +54,11 @@ export default function OldWordsUnlockScreen() {
             <Text style={[styles.body, { color: colors.text.secondary }]}>
                 Type the 12 words of the key this account used before you changed phones. They open your earlier messages on this phone and are never sent or kept.
             </Text>
-            <TextInput
-                style={[styles.input, { color: colors.text.body, borderColor: colors.border.default, backgroundColor: colors.surface.card }]}
-                value={typed}
-                onChangeText={setTyped}
-                multiline
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="off"
-                importantForAutofill="no"
-                spellCheck={false}
-                editable={!busy}
-                placeholder="word word word …"
-                placeholderTextColor={colors.text.muted}
-                accessibilityLabel="Your old 12 words"
-            />
-            <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary, opacity: busy || !typed.trim() ? 0.6 : 1 }]}
-                onPress={run} disabled={busy || !typed.trim()} accessibilityRole="button">
+            <View>
+                <RecoveryWordsEntry words={words} onChange={setWords} editable={!busy} label="Your old 12 words." colors={colors} />
+            </View>
+            <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary, opacity: busy || !typedAny ? 0.6 : 1 }]}
+                onPress={run} disabled={busy || !typedAny} accessibilityRole="button">
                 {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Unlock earlier messages</Text>}
             </Pressable>
             {!!progress && <Text style={[styles.body, { color: colors.text.secondary }]} accessibilityLiveRegion="polite">{progress}</Text>}
@@ -88,7 +79,6 @@ const styles = StyleSheet.create({
     page: { paddingHorizontal: 16, gap: 12 },
     title: { fontSize: 19, fontWeight: '800' },
     body: { fontSize: 15, lineHeight: 21 },
-    input: { minHeight: 96, borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 16, lineHeight: 22, textAlignVertical: 'top' },
     primaryBtn: { minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
     primaryText: { fontSize: 16, fontWeight: '800', textAlign: 'center' },
     box: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 },

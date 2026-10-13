@@ -6552,7 +6552,7 @@ export async function postGroupChatMessage(
  * A group history from before this member changed phones (utils/group-history-unlock.ts; DESIGN-group-history-after-
  * rekey-fable.md §3, §4): the old 12 words, typed here, over every group of this account.
  */
-export async function unlockGroupHistoryWithWords(typed: string, groups: HistoryGroup[], onProgress?: (done: number, total: number) => void): Promise<OldWordsResult> {
+export async function unlockGroupHistoryWithWords(typed: string | readonly string[], groups: HistoryGroup[], onProgress?: (done: number, total: number) => void): Promise<OldWordsResult> {
     const { nodeUrl, identity } = await groupKeyContext();
     return unlockWithOldWords({ nodeUrl, identity, store: groupKeyStore(), groups, typed, signedHere: await oldKeySignedHere(nodeUrl, identity), onProgress });
 }

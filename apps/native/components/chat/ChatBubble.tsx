@@ -71,6 +71,10 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
             {!!authorLabel && !removed && (
                 <Text style={styles.messageAuthor} numberOfLines={1}>{authorLabel}</Text>
             )}
+            {/* Its own line, free to wrap: the name's one line may be cut, the mark never is. */}
+            {!!authorLabel && !removed && !!item.authorHint && (
+                <Text style={styles.messageAuthorHint}>{item.authorHint}</Text>
+            )}
 
             {!!quote && !removed && (
                 <Pressable

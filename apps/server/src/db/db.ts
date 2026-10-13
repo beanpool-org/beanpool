@@ -1500,6 +1500,12 @@ export function initSchema() {
         })();
     } catch { /* the column is there already, or no table yet (schema.sql makes it with the column) */ }
 
+    // invalidated_keys: a completed re-key's succession statement, signed by the new key (group chats,
+    // DESIGN-group-chat-line-display-fable.md §5). NULL on every row from before: a re-key nobody has attested yet.
+    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_sig TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_at TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_stored_at TEXT`).run(); } catch { }
+
     // Escrow dispute arbitration (§5 item 2, §6 correction 2)
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }

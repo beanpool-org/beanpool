@@ -3,7 +3,7 @@ slug: home
 title: Home
 summary: What Home is, which cards it shows on the phone and in the web app, how to add, move or remove them, picking what you're into, and privacy when you sign out.
 help: This is your Home: a few cards on what needs you and what is on nearby. Add a card at the bottom, or tap … on one to move or remove it.
-related: the-top-bar, browsing-the-market, your-profile, finding-a-community
+related: the-top-bar, browsing-the-market, your-profile, finding-a-community, beans-and-the-global-community
 ---
 
 ## What Home is
@@ -51,11 +51,11 @@ Home shows only the cards that have something to tell you, in this order from to
 - **First steps on the global community:** post something free or for swap, and, if a community within 250 km of you is listed, a suggestion to ask it to let you in (that line never keeps the card open). It can also say the limits on a new account, such as how many posts and new chats you can make a day at first. It stays for your first 14 days, and after that until the post is done and the limits are over.
 - **Tips:** one short tip at a time about how BeanPool works, for members. Tap **Next** for the next one, or **Read more** to open the page of this guide it comes from. A new tip also shows on your first visit of a new day. The card goes by itself once you have seen every tip, or at once when you tap **Don't show tips again**. Adding it again with **Add a card** starts the tips again from the first one.
 - **What are you into?:** lets you star categories you like. Members only. It shows when you have no categories starred yet, or when you tap **Tune** on the Market card, and it stays on screen while you pick.
-- **Your deals:** shows your open deals and deals waiting on you. Not on the global community.
-- **Your enterprise:** shows requests waiting to be approved for enterprises you keep. It is called **Your project** when the one you keep is a project. Not on the global community.
+- **Your deals:** shows your open deals and deals waiting on you. Not on the global community: there, **My Deals** in the Market shows example deals from a local community instead.
+- **Your enterprise:** shows requests waiting to be approved for enterprises you keep. It is called **Your project** when the one you keep is a project. Not on the global community: there, **Commons** shows an example enterprise from a local community instead.
 - **Coming up:** upcoming events near you, with your RSVP.
 - **New in the Market:** the newest listings, with starred categories first. On the global community it is called **Near you**, and the nearest listings come first. Tap **Tune** to pick your interests, or **See all** to open the Market. While there are only a few listings, it may show a couple of example listings, marked as examples, if your community has them turned on.
-- **Decide:** open Decisions and open polls, as separate lines on the phone. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app it is one line, and tapping it opens Commons. Not on the global community: polls there are in the Market's **Polls**.
+- **Decide:** open Decisions and open polls, as separate lines on the phone. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app it is one line, and tapping it opens Commons. Not on the global community: polls there are in the Market's **Polls**, and **Commons** shows an example Decision from a local community.
 - **A saved search:** listings that match words you choose. You can have up to five. Its first line is your words and the distance, such as "eggs · within 5 km". Then come up to four listings, each opening the listing; **See more** opens the Market with your words already in its search. It finds what the Market's search finds, so "eggs" also finds listings with words that mean much the same. When nothing matches it says so, such as "No eggs within 5 km right now". A search you have just added or changed without a connection says "Shows when your community answers" until your community's server answers. To change the words, tap **…** then **Settings…**: the card stays where it is.
 - **Your groups:** your groups and chats, with unread message counts.
 - **Who joined:** people who joined this week. On a local community it shows names and faces. On the global community it shows only a count, by area, and no names.
@@ -93,7 +93,7 @@ At the bottom of Home, on your community's card, tap **Edit home**.
 - A card with nothing to show right now says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip, and **Sun and moon** says **Nothing to show now: no place is known.** while there is no place to work from.
 - Tap **Reset to defaults** to go back to the usual five cards.
 - There are no switches and no hidden list: a card you removed is in **Add a card**.
-- Only the cards your community can show are listed, on the phone and in the web app. For example, there is no **Your Beans** or **Your deals** on the global community.
+- Only the cards your community can show are listed, on the phone and in the web app. For example, the global community's list has no **Your Beans** or **Your deals**: there, the Ledger and **My Deals** show examples from a local community instead.
 - **Needs you** always stays at the top, and **Your community** always stays at the bottom.
 - **Find your community**, in your first 30 days on the global community, is not listed. It stays near the top for now.
 - **Your way back in** is listed, with its arrows and **…**, while it is on your Home.

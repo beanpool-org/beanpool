@@ -60,7 +60,7 @@ export const LOCAL_COMMUNITY_SHEET = Object.freeze({
     howItWorks: 'How it works',
     /** The guide page How it works opens, per feature. */
     guide: Object.freeze({
-        beans: 'the-bean',
+        beans: 'beans-and-the-global-community',
         escrow: 'a-deal-step-by-step',
         enterprises: 'enterprises',
         decisions: 'decisions',

@@ -1241,9 +1241,11 @@ function ChatScreen({ id }: { id: string }) {
             </View>
 
             {/* The key behind this DM changed (utils/dm-peer-pins.ts): what changed, the new key's code, and the member's choice.
-                Keyed on the offered key, so a tick given for one code never carries over to another. At most 55% of the
-                window, scrolling inside, so the thread and the paused box keep the rest at 320 dp and 1.3× text. Named
-                from the key's member row, never the conversation id. */}
+                Keyed on the offered key, so a tick given for one code never carries over to another. Its height is the
+                measured column's room once the composer, the deals bar, an open keyboard and a floor for the thread are
+                taken out: at most 55% of the column, at least 120 dp while the room has it (dmKeyBannerMaxHeight). It
+                scrolls inside, so the thread and the paused box keep the rest at 320 dp and 1.3× text. Named from the
+                key's member row, never the conversation id. */}
             <View style={styles.keyboardView} onLayout={measured('column')}>
             {keyChange && (
                 <ScrollView

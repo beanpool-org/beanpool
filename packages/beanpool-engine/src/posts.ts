@@ -250,6 +250,12 @@ export interface PostFilter {
      * so the planner may use that partial index), which walks the events in start order and stops at the limit.
      */
     upcomingUntil?: string;
+    /**
+     * A delta (`updatedAfter`) also sends each listing whose author changed their card since the cursor (members
+     * .profile_updated_at: a new name, a new face), for a member's set of listings on a node whose phones hold no card
+     * for their listings' authors (apps/server routes/marketplace.ts, `nearby=1`). Every other read is as without it.
+     */
+    authorCardsChanged?: boolean;
 }
 
 /**
@@ -922,6 +928,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
     upcomingUntil: null,
+    authorCardsChanged: null,
     id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
     includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
@@ -1553,6 +1560,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // MULTI-INDEX OR.
         where += " AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE board_standing_changed_at >= ?))";
         params.push(filter.updatedAfter, filter.updatedAfter);
+        // A member's set (`authorCardsChanged`): also each listing whose author changed their card since (a new name, a
+        // new face), so a phone that keeps no card for its listings' authors gets the new name within a cycle
+        // (DESIGN-global-members-by-area §2.1). members.profile_updated_at, which only a card edit moves, and which the
+        // member directory already gives every member: nothing a member could not read. On the members row the read already
+        // LEFT JOINs (m), so the cost follows the set, not the members whose card changed since the cursor (#1847 review NB1).
+        if (filter.authorCardsChanged) {
+            where += " OR m.profile_updated_at >= ?";
+            params.push(filter.updatedAfter);
+        }
         resend = new Set(viewer ? offBoardPostsToResend(db, viewer, viewerKeeps(), filter.updatedAfter, new Date().toISOString()) : []);
         if (resend.size > 0) {
             where += " OR p.id IN (SELECT value FROM json_each(?))";

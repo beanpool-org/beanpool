@@ -25,6 +25,14 @@ const store = vi.hoisted(() => ({
     asyncStore: new Map<string, string>([['beanpool_anchor_url', 'https://node.example']]),
 }));
 const partsOf = (id: string) => { if (!store.participants.has(id)) store.participants.set(id, new Set()); return store.participants.get(id)!; };
+/**
+ * Rows an `id IN (…)` lookup matches, in the order SQLite answers them: BINARY order, so upper case first (its index visits
+ * the IN list sorted), with the id an `ORDER BY id = ? DESC` asks for first (#1863 review, finding 4).
+ */
+const inSqliteOrder = <T>(rows: T[], idOf: (r: T) => string, first?: unknown) =>
+    [...rows].sort((a, b) => Number(idOf(b) === first) - Number(idOf(a) === first) || (idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0));
+/** The rows whose id matches `id` with ASCII case folded, as SQLite's NOCASE compares. */
+const convsNoCase = (id: string) => [...store.conversations.values()].filter((c) => c.id.toLowerCase() === String(id).toLowerCase());
 const mockDb = {
     execAsync: vi.fn(async () => undefined),
     closeAsync: vi.fn(async () => undefined),
@@ -32,20 +40,32 @@ const mockDb = {
     getFirstAsync: vi.fn(async (sql: string, params: any[] = []) => {
         if (/FROM group_chat_key_state/.test(sql)) return store.keyState.get(params[0]) ?? null;
         if (/FROM group_chat_epochs WHERE group_id = \? AND wrap IS NOT NULL/.test(sql)) return (store.epochs.get(params[0]) ?? []).some((e) => e.wrap) ? { y: 1 } : null;
-        if (/SELECT id FROM conversations WHERE id IN \(/.test(sql)) return params.map((p) => store.conversations.get(p)).find((c) => c?.type === 'dm') ?? null;
+        if (/SELECT id FROM conversations WHERE id IN \(/.test(sql)) {
+            const first = /ORDER BY id = \? DESC/.test(sql) ? params[params.length - 1] : undefined;
+            const ids = first === undefined ? params : params.slice(0, -1);
+            return inSqliteOrder(ids.map((p) => store.conversations.get(p)).filter((c) => c?.type === 'dm'), (c) => c!.id, first)[0] ?? null;
+        }
+        if (/FROM conversations WHERE id = \? COLLATE NOCASE AND type = 'dm'/.test(sql)) return convsNoCase(params[0]).find((c) => c.type === 'dm') ?? null;
         if (/FROM conversations WHERE id = \?/.test(sql)) return store.conversations.get(params[0]) ?? null;
         if (/SELECT conversation_id FROM messages WHERE conversation_id IN \(/.test(sql)) {
-            const ps = /ORDER BY conversation_id = \? DESC/.test(sql) ? params.slice(0, -1) : params;
+            const first = /ORDER BY conversation_id = \? DESC/.test(sql) ? params[params.length - 1] : undefined;
+            const ps = first === undefined ? params : params.slice(0, -1);
             const ids = ps.slice(0, -1);
             const prefix = String(ps[ps.length - 1]).replace(/%$/, '');
-            const m = [...store.messages.values()].find((x) => ids.includes(x.conversation_id) && String(x.nonce).startsWith(prefix));
+            const m = inSqliteOrder([...store.messages.values()].filter((x) => ids.includes(x.conversation_id) && String(x.nonce).startsWith(prefix)), (x) => x.conversation_id, first)[0];
             return m ? { conversation_id: m.conversation_id } : null;
+        }
+        if (/SELECT 1 AS y FROM messages WHERE conversation_id IN \(/.test(sql)) {
+            const ids = params.slice(0, -1);
+            const prefix = String(params[params.length - 1]).replace(/%$/, '');
+            return [...store.messages.values()].some((m) => ids.includes(m.conversation_id) && String(m.nonce).startsWith(prefix)) ? { y: 1 } : null;
         }
         if (/SELECT metadata FROM messages WHERE id/.test(sql)) return store.messages.get(params[0]) ?? null;
         if (/SELECT nonce, metadata FROM messages WHERE id/.test(sql)) return store.messages.get(params[0]) ?? null;
         return null;
     }),
     getAllAsync: vi.fn(async (sql: string, params: any[] = []) => {
+        if (/SELECT id FROM conversations WHERE id = \? COLLATE NOCASE/.test(sql)) return convsNoCase(params[0]).map((c) => ({ id: c.id }));
         if (/FROM group_chat_epochs WHERE group_id = \?/.test(sql)) return store.epochs.get(params[0]) ?? [];
         if (/SELECT public_key FROM conversation_participants WHERE conversation_id = \?/.test(sql)) return [...partsOf(params[0])].map((public_key) => ({ public_key }));
         return [];
@@ -361,6 +381,28 @@ describe('a known DM is one conversation whatever a link\'s case (#1841 confirma
         store.messages.set(randomUUID(), { id: randomUUID(), conversation_id: lineOnly, nonce: `${V2_NONCE_PREFIX}abc`, metadata: null });
         expect(await knownDmConversationId(lineOnly.toUpperCase())).toBe(lineOnly);
         expect(await knownDmConversationId(randomUUID().toUpperCase())).toBe(null);
+    });
+
+    it('a DM and a twin the node wrote under its id in capitals: each spelling asked answers itself, whatever order the DM list or SQLite gives (#1863 review, finding 1)', async () => {
+        fresh();
+        const d = randomUUID();
+        const D = d.toUpperCase();
+        for (const id of [d, D]) { store.conversations.set(id, { id, type: 'dm', created_by: null }); partsOf(id).add(ME.publicKey); }
+        partsOf(d).add(OTHER); partsOf(D).add(PUPPET.publicKey);
+        // No list: SQLite answers the IN lookup upper case first.
+        expect(await knownDmConversationId(d)).toBe(d);
+        expect(await knownDmConversationId(D)).toBe(D);
+        // A fresh list fills in the node's listing order, the twin first.
+        store.asyncStore.set(DM_SEEN, JSON.stringify([D, d]));
+        expect(await knownDmConversationId(d)).toBe(d);
+        expect(await routeChat(ASKS, d, {})).toEqual({ view: 'dm', screenId: d });
+        // Known only by sealed lines, kept under both spellings.
+        store.asyncStore.delete(DM_SEEN);
+        const e = randomUUID();
+        const E = e.toUpperCase();
+        for (const id of [E, e]) store.messages.set(randomUUID(), { id: randomUUID(), conversation_id: id, nonce: `${V2_NONCE_PREFIX}abc`, metadata: null });
+        expect(await knownDmConversationId(e)).toBe(e);
+        expect(await knownDmConversationId(E)).toBe(E);
     });
 });
 

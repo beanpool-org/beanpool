@@ -2,7 +2,7 @@
 slug: browsing-the-market
 title: Browsing the market
 summary: Find Offers and Needs with search, filters and distance.
-related: home, posting, a-deal-step-by-step, near-you, trust-badges
+related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 ---
 
 ## The Market tab
@@ -62,5 +62,7 @@ Tap a post to open it.
 - Tap their name to see their profile, reviews and trust.
 - **Report Post** if it is a scam, offensive or misleading.
 - **Block User** to hide their posts and chats on your phone. It also tells your admins. See "Blocking someone".
+
+On the global community a post has no price in Beans: it says what the person would like in return. Where the price would be, it says "🏘️ In a local community this is a price in Beans ›". In place of asking for it, the post shows **Request · Beans held safely 🏘️**: tap it to see how a deal works in a local community. Messaging the person works as anywhere. See "Beans and the global community".
 
 You cannot save or share a post yet.

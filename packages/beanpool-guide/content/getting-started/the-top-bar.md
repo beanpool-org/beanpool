@@ -78,6 +78,6 @@ Sometimes a green bar shows under the top bar:
 
 ## The tabs
 
-Under the top bar are the tabs: **Home**, **Market**, **Map**, **Talk**, **Commons** and **Ledger**. The name of each tab sits above its icon. On the phone, a community with no Beans, like the global community, does not show **Commons** or **Ledger**.
+Under the top bar are the tabs: **Home**, **Market**, **Map**, **Talk**, **Commons** and **Ledger**. The name of each tab sits above its icon. On the phone, a local community with no Beans does not show **Commons** or **Ledger**. The global community shows both, with examples from a local community. See "Beans and the global community".
 
 On a long page, tap the tab you are already on to jump back to the top. This works on every tab except **Map**.

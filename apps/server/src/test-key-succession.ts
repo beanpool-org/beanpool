@@ -12,6 +12,8 @@
  *       rebuilt when a statement lands
  *   K.  a second re-key keeps the first row's rekeyed_to and signature (key-move leaves invalidated_keys alone): the chain
  *       Ana₁ → Ana₂ → Ana₃ is two rows, served newest first, and walks from Ana₃ to Ana₁
+ *   K9. the node's cap (review of #1826, NB6): a member re-keyed nine times is served the newest eight, which walk; a
+ *       ninth served would make the phone's walker refuse the whole chain
  *   C.  replication: a whole snapshot, a delta from after the re-key and before the statement, and a copy in pages all
  *       carry both columns and agree (twin parity: exportSyncState and the spec a copy in pages reads by); a standby's merge takes a statement it lacks, never overwrites one
  *       with null, and takes none for another new key
@@ -32,7 +34,8 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setMemberPhoto, EXPORT_CATEGORIES } from '@beanpool/engine';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { mergeReplicatedInvalidatedKeys } from './engine/key-move.js';
-import { dmPublicKeyOf, keySuccessionCanonical, makeKeySuccession, walkKeySuccession } from '@beanpool/core';
+import { formerKeysReader } from './engine/key-succession.js';
+import { dmPublicKeyOf, keySuccessionCanonical, makeKeySuccession, walkKeySuccession, KEY_SUCCESSION_MAX } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
 
 let run = 0, passed = 0;
@@ -186,6 +189,30 @@ async function main(): Promise<void> {
         assert(walkKeySuccession({ memberPubkey: ana3.pk, formerKeys: a.formerKeys }, ana1.pk), 'and Ana₁ walks to Ana₃');
         const me = await call('GET', ana3, '/api/community/me');
         assert(JSON.stringify(me.body.rekeyedFrom?.map((r: any) => [r.pubkey, r.attested])) === JSON.stringify([[ana2.pk, true]]), '/me lists only the key Ana₃ replaced');
+    }
+
+    // ── K9. the node's cap of eight ──────────────────────────────────────────────────────────────────────
+    console.log('\n── K9. nine re-keys ──');
+    {
+        // keys[0] the oldest … keys[9] the current; each row attested by its successor, stamped in order.
+        const keys = Array.from({ length: 10 }, () => {
+            const seed = crypto.randomBytes(32);
+            return { seedHex: seed.toString('hex'), pk: Buffer.from(ed25519.getPublicKey(seed)).toString('hex') };
+        });
+        const insert = db.prepare(`INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to, succession_at, succession_sig, succession_stored_at)
+                                   VALUES (?, 'rekeyed', ?, ?, ?, ?, ?)`);
+        const statements = keys.slice(0, 9).map((k, i) => {
+            const at = new Date(Date.UTC(2026, 8, 1 + i)).toISOString();
+            const s = makeKeySuccession({ newEdPrivHex: keys[i + 1].seedHex, oldPubHex: k.pk, at });
+            insert.run(k.pk, at, keys[i + 1].pk, at, s.sig, at);
+            return { pubkey: s.pubkey, at: s.at, sig: s.sig };
+        });
+        const served = formerKeysReader()(keys[9].pk);
+        assert(KEY_SUCCESSION_MAX === 8 && served.length === 8, `nine attested re-keys: the newest eight are served (${served.length})`);
+        assert(JSON.stringify(served.map((f) => f.pubkey)) === JSON.stringify(keys.slice(1, 9).map((k) => k.pk).reverse()), 'newest first, keys₈ … keys₁');
+        assert(walkKeySuccession({ memberPubkey: keys[9].pk, formerKeys: served }, keys[1].pk), 'and the eight walk to the oldest served');
+        assert(!walkKeySuccession({ memberPubkey: keys[9].pk, formerKeys: [...served, statements[0]] }, keys[1].pk),
+            'a ninth served would make the walker refuse the whole chain: the cap keeps the eight usable');
     }
 
     // ── C. replication ────────────────────────────────────────────────────────────────────────────────

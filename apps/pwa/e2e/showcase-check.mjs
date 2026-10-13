@@ -295,9 +295,9 @@ async function globalMember(browser, root, dark) {
         console.log(`    reads while the previews were open (the app's own, Market, Map, People): ${api.join(', ')}`);
         const me = whole.filter((r) => r.url.startsWith(`${node.origin}/api/community/me`) && r.method === 'GET');
         check(me.length >= 1, `the reader's own features read from GET /api/community/me (${me.length} read(s) over the visit, other screens' included)`);
-        // The app's font (src/main.tsx) and the Map's tiles are asked of their hosts and aborted here; nothing else.
-        const others = [...offHost].filter((h) => h !== 'fonts.googleapis.com' && !/(^|\.)tile\.openstreetmap\.org$/.test(h));
-        check(others.length === 0, `no host but this machine, the app's font and the Map's tiles aside (aborted: ${[...offHost].join(', ') || 'none'})${others.length ? `; OTHER: ${others.join(', ')}` : ''}`);
+        // The Map's tiles are asked of their host and aborted here; nothing else (the app's fonts come from the node since #1858).
+        const others = [...offHost].filter((h) => !/(^|\.)tile\.openstreetmap\.org$/.test(h));
+        check(others.length === 0, `no host but this machine, the Map's tiles aside (aborted: ${[...offHost].join(', ') || 'none'})${others.length ? `; OTHER: ${others.join(', ')}` : ''}`);
     } finally {
         await context.close();
         await node.stop();

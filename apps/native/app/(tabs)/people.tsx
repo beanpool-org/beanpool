@@ -35,6 +35,9 @@ import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } fr
 import { WantsToJoin } from '../../components/WantsToJoin';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
 import { communitySwitched } from '../../utils/community-switch';
+import { lookUpMembers, nearPath, searchPath } from '../../utils/members-lookup';
+import { readNearbyAreaCopy } from '../../utils/nearby-area';
+import { communityListEmpty, communityListNote, type CommunityListNote } from '../../utils/community-list-note';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -198,6 +201,11 @@ export default function PeopleScreen() {
     // Where the node takes no invites (the worldwide community: anyone joins with a sign-in), nothing here makes one: no
     // code, QR or offline ticket, only the community's own link to share. Unknown (not heard yet, or an older node): as before.
     const makesInvites = invitesOn(nodeProfile?.features);
+    // On a community that says `membersOnDemand` (the worldwide one) this phone holds only the people it has dealt with:
+    // the list is the 50 nearest and a search, both asked of the node (utils/members-lookup.ts), and the cards held
+    // offline. Anywhere else, the whole list from the copy as always.
+    const membersOnDemand = nodeProfile?.features.membersOnDemand === true;
+    const [listNote, setListNote] = useState<CommunityListNote | null>(null);
     // A guest on a node that takes no invites has no code to enter: say so rather than offer a form every code fails.
     const guestNoInvites = isGuest && !makesInvites;
     // A guest of the global community joins it through its door, as the account on this phone (utils/global-join-existing.ts),
@@ -662,10 +670,44 @@ export default function PeopleScreen() {
             loadMembers(searchQuery, sortOption);
         }, 400);
         return () => clearTimeout(timeout);
-    }, [searchQuery, sortOption]);
+    }, [searchQuery, sortOption, membersOnDemand]);
+
+    /** The list asked of the node on a community that says `membersOnDemand`; false when it couldn't be (offline). */
+    const loadMembersOnDemand = async (query: string): Promise<boolean> => {
+        const typed = query.trim();
+        let rows: any[] | null;
+        let note: CommunityListNote;
+        if (typed !== '') {
+            const path = searchPath(typed);
+            // One letter asks the node nothing: the cards held, searched as always.
+            if (!path) return false;
+            rows = await lookUpMembers(path);
+            note = 'search';
+        } else {
+            const copy = await readNearbyAreaCopy(anchorUrl || await AsyncStorage.getItem('beanpool_anchor_url'), identity?.publicKey);
+            if (!copy?.area) {
+                rows = [];
+                note = 'noArea';
+            } else {
+                rows = await lookUpMembers(nearPath(copy.area));
+                note = 'near';
+            }
+        }
+        if (rows === null) return false;
+        const blocked = await getBlockedUsers();
+        setMembers(rows.filter(m => !blocked.includes(m.public_key)));
+        setListNote(note);
+        return true;
+    };
 
     const loadMembers = async (query = '', sort: SortOption = 'newest') => {
         try {
+            if (membersOnDemand) {
+                if (await loadMembersOnDemand(query)) return;
+                setListNote('held');
+            } else {
+                setListNote(null);
+            }
             const database = await getDb();
             
             let sql = 'SELECT * FROM members WHERE public_key NOT LIKE \'escrow_%\' AND public_key NOT LIKE \'project_%\'';
@@ -846,7 +888,7 @@ export default function PeopleScreen() {
                             autoCorrect={false}
                         />
                     </View>
-                    <View style={styles.sortRow}>
+                    {!membersOnDemand && <View style={styles.sortRow}>
                         {([['newest', 'clock-outline', 'Newest'], ['name', 'sort-alphabetical-ascending', 'Name'], ['friends', 'account-heart-outline', 'Friends'], ['trusted', 'shield-star-outline', 'Trusted'], ['active', 'lightning-bolt', 'Active']] as [SortOption, string, string][]).map(([key, icon, label]) => (
                             <Pressable
                                 key={key}
@@ -859,7 +901,7 @@ export default function PeopleScreen() {
                                 <Text style={[styles.sortPillText, sortOption === key && styles.sortPillTextActive]}>{label}</Text>
                             </Pressable>
                         ))}
-                    </View>
+                    </View>}
                     <FlatList
                         ref={listRef}
                         data={members}
@@ -878,15 +920,19 @@ export default function PeopleScreen() {
                         keyboardDismissMode="on-drag"
                         ListHeaderComponent={
                             <View style={styles.infoBanner}>
+                                {listNote ? (
+                                    <Text style={styles.infoText}>{communityListNote(listNote, searchQuery)}</Text>
+                                ) : (
                                 <Text style={styles.infoText}>
                                     {members.length} members on this node. Tap <Text style={styles.boldGreen}>+ Add</Text> to follow as a friend.
                                 </Text>
+                                )}
                             </View>
                         }
                         ListEmptyComponent={
                             <View style={{ padding: 40, alignItems: 'center' }}>
                                 <Text style={{ color: colors.text.muted, fontSize: 15, fontWeight: '500' }}>
-                                    {searchQuery ? 'No members match your search.' : 'Loading community...'}
+                                    {communityListEmpty(listNote, searchQuery)}
                                 </Text>
                             </View>
                         }
@@ -922,7 +968,7 @@ export default function PeopleScreen() {
                                         {isFriend && <Text style={styles.friendChip}>Friend</Text>}
                                     </View>
                                     <Text style={styles.dateText} numberOfLines={1}>
-                                        {joinDateText}
+                                        {joinDateText}{typeof item.distance_km === 'number' ? ` · about ${item.distance_km} km` : ''}
                                     </Text>
                                 </View>
                             </Pressable>

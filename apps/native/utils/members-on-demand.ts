@@ -114,7 +114,9 @@ export function readAbsent(raw: string | null, nowMs: number): Map<string, numbe
                 if (isMemberKey(k) && typeof at === 'number' && nowMs - at < ABSENT_RETRY_MS && at <= nowMs) absent.set(k, at);
             }
         }
-    } catch {}
+    } catch {
+        // Unreadable: nothing is absent, so every referenced key is asked for again.
+    }
     return absent;
 }
 

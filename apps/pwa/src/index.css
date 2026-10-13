@@ -318,6 +318,12 @@ html, body, #root {
   outline-color: #c0ccc0;
 }
 
+/* Fields that turn the outline off inline (Welcome, chat box) had no focus mark at all in dark. */
+:root.dark-theme :is(input, textarea, select)[style*="outline: none"]:focus-visible {
+  outline: 2px solid #c0ccc0 !important;
+  outline-offset: 0;
+}
+
 :root.dark-theme input::placeholder,
 :root.dark-theme textarea::placeholder {
   color: #9eaf9e;

@@ -10,7 +10,7 @@
  *   - placeholders (4.5:1) and the edges of text fields (3:1 against the page, unless the field's own fill stands out);
  *   - icons drawn in currentColor (3:1);
  *   - light slabs left on a dark page (an opaque surface brighter than 50% luminance, bigger than 24×24 px; a control drawn
- *     inverted on purpose, `dark:bg-white` with dark ink, is not one);
+ *     inverted on purpose, `dark:bg-white` or a selected chip/tab up to 140×64 px with 4.5:1 ink, is not one);
  *   - the keyboard focus: each of the first Tab stops must show an outline or ring of 3:1 against what is behind it.
  *
  * Run:  pnpm --filter @beanpool/pwa dark-contrast-check
@@ -128,6 +128,7 @@ async function press(locator) {
     await locator.click({ timeout: 10_000 }).catch(() => locator.dispatchEvent('click', undefined, { timeout: 10_000 }));
 }
 const tab = (label) => async (page) => {
+    await page.getByTestId('mobile-bottom-nav').waitFor({ timeout: 30_000 });
     await press(page.getByTestId('mobile-bottom-nav').getByRole('button', { name: label }).first());
     await wait(1_200);
 };
@@ -280,8 +281,11 @@ function measure(themeIsDark) {
         if (themeIsDark && !['IMG', 'VIDEO', 'CANVAS', 'svg', 'INPUT'].includes(el.tagName) && !el.closest('.leaflet-container')) {
             const bg = rgba(cs.backgroundColor);
             const r = el.getBoundingClientRect();
-            // Not a slab: a switch knob (24 px or less), or a control drawn inverted in dark on purpose (`dark:bg-white`, dark ink).
-            const inverted = /(^|\s)dark:bg-white(\s|$)/.test(el.getAttribute('class') || '');
+            // Not a slab: a switch knob (24 px or less), or a control drawn inverted in dark on purpose (`dark:bg-white`, or a
+            // selected chip or tab up to 140×64 px whose own ink reads at 4.5:1 on it).
+            const control = el.matches('button, a, [role="tab"]') && r.width <= 140 && r.height <= 64
+                && ratio(over(rgba(cs.color), bg), bg) >= 4.5;
+            const inverted = control || /(^|\s)dark:bg-white(\s|$)/.test(el.getAttribute('class') || '');
             if (bg.a >= 0.9 && r.width >= 20 && r.height >= 20 && lum(bg) > 0.5 && !inverted && (r.width > 24 || r.height > 24)) {
                 slabs.push({ el: describe(el), text: (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 50), bg: hex(bg), size: `${Math.round(r.width)}×${Math.round(r.height)}` });
             }
@@ -311,8 +315,10 @@ async function focusStops(page) {
             const rgba = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); const d = ctx.getImageData(0, 0, 1, 1).data; return { r: d[0], g: d[1], b: d[2], a: d[3] / 255 }; };
             const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
             const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
-            let behind = { r: 255, g: 255, b: 255, a: 1 };
-            for (let n = el.parentElement; n; n = n.parentElement) { const bg = rgba(getComputedStyle(n).backgroundColor); if (bg.a >= 0.9) { behind = bg; break; } }
+            // What the ring is drawn over: every layer behind it composited, translucent strips included.
+            const layers = [];
+            for (let n = el.parentElement; n; n = n.parentElement) { const bg = rgba(getComputedStyle(n).backgroundColor); if (bg.a > 0) { layers.push(bg); if (bg.a >= 0.999) break; } }
+            const behind = layers.reduceRight((acc, l) => ({ r: l.r * l.a + acc.r * (1 - l.a), g: l.g * l.a + acc.g * (1 - l.a), b: l.b * l.a + acc.b * (1 - l.a), a: 1 }), { r: 255, g: 255, b: 255, a: 1 });
             const outline = cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0 ? rgba(cs.outlineColor) : null;
             const ringColours = (cs.boxShadow && cs.boxShadow !== 'none') ? (cs.boxShadow.match(/(rgba?|oklch|color)\([^)]*\)/g) || []).map(rgba).filter((c) => c.a > 0.3) : [];
             const best = Math.max(0, outline ? ratio(outline, behind) : 0, ...ringColours.map((c) => ratio(c, behind)));

@@ -27,6 +27,11 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { markKeyChanged, rememberRosterNames } from '../utils/name-key-memory';
+import { verifiedFormerKeys } from '../utils/group-chat-crypto';
+import {
+    collapseLockedHistory, lockedHistoryRowText, LOCKED_HISTORY_ROW_ID, LOCKED_HISTORY_SHEET_TITLE, LOCKED_HISTORY_WORDS, LOCKED_HISTORY_ASK,
+    LOCKED_HISTORY_KEEP, NEW_PHONE_CONFIRM_ACTION,
+} from '../utils/group-history-unlock';
 import { anchorUrl } from '../utils/node-post';
 import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView } from 'react-native';
 import { router } from 'expo-router';
@@ -116,6 +121,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [rosterRows, setRosterRows] = useState<GroupMemberItem[]>([]);
     // Members whose name this phone saw on another key, with no statement from the new key reaching it (pick 3).
     const [keyChanged, setKeyChanged] = useState<Set<string>>(() => new Set());
+    // The sheet behind the one "from before you changed phones" row (DESIGN-group-history-after-rekey-fable.md §7).
+    const [historyOpen, setHistoryOpen] = useState(false);
     // Each sealed line's view (utils/group-line-display.ts), opened on this phone after each read.
     const [thread, setThread] = useState<OpenedGroupThread | null>(null);
     // "Securing the chat for N people…" while this phone makes a new key for a big group.
@@ -303,11 +310,23 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     // Locked by what this phone has verified, not by the node's word alone: once it held a key, always (finding 4).
     const locked = kind === 'group' && (chatIsLocked(view) || seenLocked);
 
+    // This member changed phones: their own row carries a verified former key (the line-display design's chain).
+    const changedPhones = useMemo(() => {
+        const mine = rosterRows.find(r => r.memberPubkey === me);
+        return !!mine && verifiedFormerKeys({ memberPubkey: mine.memberPubkey, formerKeys: mine.formerKeys }).length > 0;
+    }, [rosterRows, me]);
+
     /** The node's messages in the one shape every chat's components speak, plus what this phone still owes. */
     const messages: ChatMessage[] = useMemo(() => {
         // A locked chat's lines by the display rule; anything there unsealed is nobody's (utils/group-chat-lines.ts).
         // A name this phone saw on another key, with no statement from the new one: "(key changed)" (name-key-memory.ts).
-        const fromNode = markKeyChanged(groupChatShownLines(rawMessages, { locked, thread, me, kind }), keyChanged);
+        // The lines from before this member changed phones that wait for a key: one quiet row (group-history-unlock.ts).
+        const fromNode = collapseLockedHistory(markKeyChanged(groupChatShownLines(rawMessages, { locked, thread, me, kind }), keyChanged), {
+            changedPhones: kind === 'group' && locked && !!thread && changedPhones,
+            epochOf: (lineId) => thread?.views.get(lineId)?.epoch ?? null,
+            waiting: (lineId) => !!thread?.views.get(lineId)?.waitingKey,
+            row: (n) => ({ id: LOCKED_HISTORY_ROW_ID, senderId: '', text: lockedHistoryRowText(n), type: 'text', outgoing: false, timestamp: '' }),
+        });
         const mine: ChatMessage[] = pending.map(p => ({
             id: p.clientId,
             senderId: me || '',
@@ -320,7 +339,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             timestamp: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }));
         return [...fromNode, ...mine];
-    }, [rawMessages, pending, me, kind, locked, thread, keyChanged]);
+    }, [rawMessages, pending, me, kind, locked, thread, keyChanged, changedPhones]);
 
     const spokenCount = useMemo(
         () => rawMessages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM').length,
@@ -608,10 +627,12 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         { icon: 'account-plus', label: 'Invite people', hidden: kind !== 'group' || !isConvenor, onPress: () => { setMenuOpen(false); setInviteOpen(true); } },
         { icon: muted ? 'bell-ring-outline' : 'bell-off-outline', label: muteMenuLabel(mute), onPress: () => { setMenuOpen(false); if (muted) setMuteTo('off'); else setMuteOpen(true); } },
         { icon: 'magnify', label: 'Search this chat', hidden: kind !== 'group', onPress: () => { setMenuOpen(false); setSearchOpen(true); } },
+        { icon: 'cellphone-check', label: NEW_PHONE_CONFIRM_ACTION, hidden: kind !== 'group', onPress: () => { setMenuOpen(false); router.push('/confirm-new-phone'); } },
         { icon: 'information-outline', label: kind === 'group' ? 'Group info' : 'Enterprise page', onPress: () => { setMenuOpen(false); openOwner(); } },
     ];
 
     const renderMessage = (item: ChatMessage) => {
+        if (item.id === LOCKED_HISTORY_ROW_ID) return <LockedHistoryRow text={item.text} onPress={() => setHistoryOpen(true)} styles={styles} />;
         if (item.type === 'system' || item.senderId === 'SYSTEM') return <SystemLine text={item.text} styles={styles} />;
         // A sealed line that names nobody: one that couldn't be verified ("Unverified"), or one whose key isn't here yet.
         if (item.unattributed) return <SealedNoticeLine name={item.authorName ?? null} text={item.text} details={item.integrityNote ?? null} styles={styles} />;
@@ -817,6 +838,20 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 onPickMute={setMuteTo}
                 bottomInset={insets.bottom}
             />
+            <ChatMenuSheet
+                styles={chat}
+                menuOpen={historyOpen}
+                muteOpen={false}
+                title={LOCKED_HISTORY_SHEET_TITLE}
+                items={[
+                    { icon: 'form-textbox-password', label: LOCKED_HISTORY_WORDS, onPress: () => { setHistoryOpen(false); router.push('/old-words-unlock'); } },
+                    { icon: 'account-check-outline', label: LOCKED_HISTORY_ASK, onPress: () => { setHistoryOpen(false); router.push('/new-phone-code'); } },
+                    { icon: 'lock-outline', label: LOCKED_HISTORY_KEEP, onPress: () => setHistoryOpen(false) },
+                ]}
+                onClose={() => setHistoryOpen(false)}
+                onPickMute={() => { }}
+                bottomInset={insets.bottom}
+            />
 
             {kind === 'group' && (
                 <InvitePeopleSheet
@@ -849,6 +884,17 @@ function SealedNoticeLine({ name, text, details, styles }: { name: string | null
         <View style={styles.systemWrap} accessibilityRole="text">
             <Text style={styles.sealedText}>{name ? `${name}: ${text}` : text}</Text>
             {!!details && <Text style={styles.sealedDetails}>{details}</Text>}
+        </View>
+    );
+}
+
+/** §7: the one row the lines from before a phone change collapse into; quiet until tapped. */
+function LockedHistoryRow({ text, onPress, styles }: { text: string; onPress: () => void; styles: ReturnType<typeof makeStyles> }) {
+    return (
+        <View style={styles.systemWrap}>
+            <Pressable onPress={onPress} accessibilityRole="button" style={styles.lockedHistoryRow}>
+                <Text style={styles.lockedHistoryText}>{text}</Text>
+            </Pressable>
         </View>
     );
 }
@@ -889,6 +935,11 @@ const makeStyles = ({ colors }: ThemeContextType) =>
             backgroundColor: colors.surface.subtle, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
         },
         sealedDetails: { fontSize: 12, color: colors.text.muted, textAlign: 'center', marginTop: 2 },
+        lockedHistoryRow: {
+            minHeight: 48, justifyContent: 'center', alignSelf: 'stretch', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
+            backgroundColor: colors.surface.subtle,
+        },
+        lockedHistoryText: { fontSize: 14, lineHeight: 20, color: colors.text.secondary, textAlign: 'center' },
         securing: { marginHorizontal: 12, marginBottom: 6, fontSize: 13, color: colors.text.secondary, textAlign: 'center' },
         keyNotice: {
             marginHorizontal: 12, marginBottom: 6, padding: 8, borderRadius: 10, fontSize: 13, textAlign: 'center',

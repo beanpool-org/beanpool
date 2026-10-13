@@ -38,8 +38,32 @@ export const LOCKED_HISTORY_SHEET_BODY = "They were locked to your old phone's k
 export const LOCKED_HISTORY_WORDS = 'I have my old phone or old 12 words';
 export const LOCKED_HISTORY_ASK = 'Ask a member of the group to confirm this phone';
 export const LOCKED_HISTORY_KEEP = 'Keep them locked';
-/** Lines in the locked span sent by the member herself: why they read under her name with no words (§7). */
-export const LOCKED_HISTORY_OWN_LINES = 'Your own messages from then show your name; their words are locked with the rest.';
+/** The row's id in a chat's lines: the screen draws it as the one tappable row (GroupChatView). */
+export const LOCKED_HISTORY_ROW_ID = 'locked-history-before-phone-change';
+
+/**
+ * §7: in a group where this member changed phones (their roster row carries a verified former key), the lines waiting for
+ * a key from before the first epoch this phone reads collapse into one row, where the first of them was. Every other
+ * waiting line (a lost wrap, an epoch after the change) keeps its own sentence. Pure; `epochOf` is the line's epoch as
+ * the display rule read it, `waiting` whether it waits for a key.
+ */
+export function collapseLockedHistory<T extends { id: string }>(
+    lines: readonly T[], opts: { changedPhones: boolean; epochOf: (id: string) => number | null; waiting: (id: string) => boolean; row: (n: number) => T },
+): T[] {
+    if (!opts.changedPhones) return [...lines];
+    const readable = lines.filter((l) => !opts.waiting(l.id)).map((l) => opts.epochOf(l.id)).filter((e): e is number => e !== null);
+    const firstRead = readable.length ? Math.min(...readable) : Infinity;
+    const before = (l: T) => { const e = opts.epochOf(l.id); return opts.waiting(l.id) && e !== null && e < firstRead; };
+    const n = lines.filter(before).length;
+    if (n === 0) return [...lines];
+    const out: T[] = [];
+    let placed = false;
+    for (const l of lines) {
+        if (!before(l)) { out.push(l); continue; }
+        if (!placed) { out.push(opts.row(n)); placed = true; }
+    }
+    return out;
+}
 
 export const OLD_WORDS_NOT_THE_KEY = "These aren't the words of the key this account moved from.";
 export const OLD_WORDS_OWNER = "Your old words don't match the key this community says you moved from. Tell an owner.";
@@ -70,8 +94,8 @@ export function newPhoneConfirmText(name: string, groups: readonly string[]): st
     return `You're confirming this is ${name}'s new phone. Their old key wrote in ${groups.length} ${groups.length === 1 ? 'group' : 'groups'} you share: ${list}. `
         + `Only confirm if this phone is in ${name}'s hands: whoever holds it can read those groups' earlier messages that you can.`;
 }
-export function newPhoneProgressText(done: number, total: number): string {
-    return `Unlocking ${done} of ${total}…`;
+export function newPhoneProgressText(done: number): string {
+    return `Unlocking… ${done} handed over so far.`;
 }
 export function newPhoneDoneText(name: string): string {
     return `Done. ${name}'s new phone can read those conversations.`;

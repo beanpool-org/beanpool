@@ -30,6 +30,8 @@ import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDe
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
 import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import { unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, type HistoryGroup, type NewPhoneCheck, type OldWordsResult } from './group-history-unlock';
+import { oldKeySignedHere, rekeysToMe } from './key-succession';
 import { sqliteGroupKeyStore } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
@@ -6541,6 +6543,38 @@ export async function postGroupChatMessage(
         }
     }
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
+}
+
+/**
+ * A group history from before this member changed phones (utils/group-history-unlock.ts; DESIGN-group-history-after-
+ * rekey-fable.md §3, §4): the old 12 words, typed here, over every group of this account.
+ */
+export async function unlockGroupHistoryWithWords(typed: string, groups: HistoryGroup[], onProgress?: (done: number, total: number) => void): Promise<OldWordsResult> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return unlockWithOldWords({ nodeUrl, identity, store: groupKeyStore(), groups, typed, signedHere: await oldKeySignedHere(nodeUrl, identity), onProgress });
+}
+
+/** The code this new phone shows a member to confirm it (§4), or null when this phone knows no old key of its own. */
+export async function newPhoneCode(): Promise<string | null> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    let old = await oldKeySignedHere(nodeUrl, identity);
+    if (!old) {
+        const listed = (await rekeysToMe(nodeUrl, identity)).filter((r) => r.attested);
+        old = listed.length === 1 ? listed[0].pubkey : null;
+    }
+    return old ? newPhoneQrPayload(identity, old) : null;
+}
+
+/** A member's phone checks a scanned new-phone code (§4), over every group of this account. */
+export async function checkScannedNewPhone(scanned: string, groups: HistoryGroup[]): Promise<NewPhoneCheck> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return checkNewPhone({ nodeUrl, identity, groups, scanned });
+}
+
+/** "Confirm" (§4): hand the confirmed phone the epochs whose record names the old key this phone remembers. */
+export async function confirmScannedNewPhone(check: Extract<NewPhoneCheck, { ok: true }>, onProgress?: (handed: number) => void) {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return confirmNewPhone({ nodeUrl, identity, store: groupKeyStore(), check, onProgress });
 }
 
 let _groupKeyStore: GroupKeyStore | null = null;

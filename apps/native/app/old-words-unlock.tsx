@@ -10,12 +10,10 @@ import { router, ErrorBoundary } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
 import { palette } from '../constants/colors';
-import { unlockGroupHistoryWithWords } from '../utils/db';
+import { lockedHistoryRows, unlockGroupHistoryWithWords } from '../utils/db';
 import { yourGroupsStore } from '../components/useYourGroups';
 import { RecoveryWordsEntry } from '../components/RecoveryWordsEntry';
-import {
-    OLD_WORDS_DONE, OLD_WORDS_NOT_THE_KEY, OLD_WORDS_OWNER, LOCKED_HISTORY_WORDS, oldWordsProgressText, oldWordsWithheldText,
-} from '../utils/group-history-unlock';
+import { LOCKED_HISTORY_WORDS, oldWordsEnd, oldWordsProgressText } from '../utils/group-history-unlock';
 
 export { ErrorBoundary };
 
@@ -38,11 +36,12 @@ export default function OldWordsUnlockScreen() {
         const typed = words;
         setWords(Array(12).fill(''));
         try {
-            const groups = (yourGroupsStore.getState().items ?? []).filter((g) => g.kind === 'group').map((g) => ({ id: g.id, name: g.name }));
+            // Each group with the lines its chat last showed locked, so one the node answers empty is named, never "Done".
+            const locked = await lockedHistoryRows().catch(() => ({} as Record<string, number>));
+            const groups = (yourGroupsStore.getState().items ?? []).filter((g) => g.kind === 'group')
+                .map((g) => ({ id: g.id, name: g.name, locked: locked[g.id.toLowerCase()] ?? 0 }));
             const r = await unlockGroupHistoryWithWords(typed, groups, (d, t) => setProgress(oldWordsProgressText(d, t)));
-            if (r.outcome === 'not_the_key') setOutcome({ text: OLD_WORDS_NOT_THE_KEY, lines: [], ok: false });
-            else if (r.outcome === 'owner') setOutcome({ text: OLD_WORDS_OWNER, lines: [], ok: false });
-            else setOutcome({ text: OLD_WORDS_DONE, lines: r.withheld.map((g) => oldWordsWithheldText(g.name)), ok: true });
+            setOutcome(oldWordsEnd(r));
         } catch (e: any) {
             setOutcome({ text: e?.message || 'Something went wrong. Try again in a moment.', lines: [], ok: false });
         } finally {

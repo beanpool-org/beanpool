@@ -13,12 +13,12 @@ import { useTheme } from './ThemeContext';
 import { palette } from '../constants/colors';
 import { checkScannedNewPhone, confirmScannedNewPhone } from '../utils/db';
 import { yourGroupsStore } from '../components/useYourGroups';
-import { NEW_PHONE_CONFIRM_ACTION, newPhoneConfirmText, newPhoneDoneText, newPhoneProgressText, type NewPhoneCheck } from '../utils/group-history-unlock';
+import { NEW_PHONE_CONFIRM_ACTION, newPhoneConfirmText, newPhoneEnd, newPhoneProgressText, type NewPhoneCheck } from '../utils/group-history-unlock';
 
 export { ErrorBoundary };
 
 type Step = { kind: 'scan' } | { kind: 'checking' } | { kind: 'refused'; text: string } | { kind: 'confirm'; check: Extract<NewPhoneCheck, { ok: true }> }
-    | { kind: 'handing'; check: Extract<NewPhoneCheck, { ok: true }>; handed: number; planned: number | null } | { kind: 'done'; text: string };
+    | { kind: 'handing'; check: Extract<NewPhoneCheck, { ok: true }>; handed: number; planned: number | null } | { kind: 'done'; text: string; ok: boolean };
 
 /** The primary button's green: white on it is 5.5:1, where on brand.primary (emerald-500) it is 2.5:1 (e2e/locked-history-320.mjs). */
 const BUTTON_GREEN = palette.emerald700;
@@ -45,7 +45,7 @@ export default function ConfirmNewPhoneScreen() {
         setStep({ kind: 'handing', check, handed: 0, planned: null });
         try {
             const r = await confirmScannedNewPhone(check, (n, m) => setStep({ kind: 'handing', check, handed: n, planned: m }));
-            setStep({ kind: 'done', text: r.stopped ? `${newPhoneProgressText(r.total, r.planned)} The community asked this phone to slow down: scan again in a minute to carry on.` : newPhoneDoneText(check.name) });
+            setStep({ kind: 'done', ...newPhoneEnd(check.name, r) });
         } catch (e: any) {
             setStep({ kind: 'refused', text: e?.message || 'Something went wrong. Try again in a moment.' });
         }
@@ -102,7 +102,7 @@ export default function ConfirmNewPhoneScreen() {
             {step.kind === 'handing' && (step.planned === null ? <ActivityIndicator /> : (
                 <Text style={[styles.body, { color: colors.text.secondary }]} accessibilityLiveRegion="polite">{newPhoneProgressText(step.handed, step.planned)}</Text>
             ))}
-            {step.kind === 'done' && <Text style={[styles.body, { color: colors.text.body }]} accessibilityLiveRegion="polite">{step.text}</Text>}
+            {step.kind === 'done' && <Text style={[styles.body, { color: step.ok ? colors.text.body : colors.feedback.danger.fg }]} accessibilityLiveRegion="polite">{step.text}</Text>}
             <Pressable style={styles.secondaryBtn} onPress={() => router.back()} accessibilityRole="button">
                 <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{step.kind === 'done' ? 'Done' : 'Cancel'}</Text>
             </Pressable>

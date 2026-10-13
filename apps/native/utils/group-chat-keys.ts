@@ -748,13 +748,15 @@ export class GroupKeyring {
      * Who an epoch's maker wrapped it to, by the signed membersDigest alone (DESIGN-group-history-after-rekey-fable.md §4):
      * the record's own wraps' recipients when they are exactly the signed set, else those plus `candidate` when that is.
      * Never a roster, a chain or `missing`: the node can withhold a wrap from the list (then null), never add a name.
+     * `holder`, when given, is told whether the same list shows a live wrap to its key (the node's word, as a 201 is).
      */
-    private async signedRecipientsWith(epoch: number, candidate: string): Promise<Set<string> | null> {
+    private async signedRecipientsWith(epoch: number, candidate: string, holder?: { key: string; holds?: boolean }): Promise<Set<string> | null> {
         const stored = this.epochs.get(epoch);
         if (!stored) return null;
         try {
             verifyGroupEpochRecord(stored.record, { groupId: this.groupId, epoch });
             const a = await answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/${epoch}/wraps`, this.identity as BeanPoolIdentity));
+            if (holder) holder.holds = (Array.isArray(a?.wraps) ? a.wraps : []).some((w: any) => w && w.recipient === holder.key && !w.rejectedAt);
             const set = new Set<string>((Array.isArray(a?.wraps) ? a.wraps : [])
                 .filter((w: any) => w && (w.sig === null || w.sig === undefined) && w.wrapper === stored.record.createdBy && typeof w.recipient === 'string')
                 .map((w: any) => w.recipient as string));
@@ -780,8 +782,12 @@ export class GroupKeyring {
         if (oldKey === newKey || newKey === this.identity.publicKey || oldKey === this.identity.publicKey) return plan;
         for (const epoch of [...this.epochs.keys()].sort((x, y) => x - y)) {
             if (!this.holdsWrap(epoch)) continue;
-            const set = await this.signedRecipientsWith(epoch, oldKey);
+            const holder = { key: newKey, holds: false };
+            const set = await this.signedRecipientsWith(epoch, oldKey, holder);
             if (!set || !set.has(oldKey) || set.has(newKey)) continue;
+            // The new phone already holds it (an earlier confirmation, its own words, another member): nothing to hand, so
+            // a second scan says "Nothing to unlock" rather than counting the node's 409 as a refusal (#1844 review, finding 4).
+            if (holder.holds) continue;
             plan.push(epoch);
         }
         return plan;
@@ -790,12 +796,14 @@ export class GroupKeyring {
     /**
      * Hands `newKey` the epochs of `plan`, the list epochsForConfirmedPhone made for these two keys (so the screen can say
      * "N of M" before the first wrap): at most one open and one wrap per epoch. Stops at the node's speed limit
-     * (`stopped`): the screen tries again.
+     * (`stopped`): the screen tries again. `already`: the epochs the node answered 409 wrap_exists for (someone got there
+     * between the list and the post), which the new phone holds as much as one handed here.
      */
-    async handToConfirmedPhone(oldKey: string, newKey: string, plan: readonly number[], onEach?: (handed: number) => void): Promise<{ handed: number[]; stopped: boolean }> {
+    async handToConfirmedPhone(oldKey: string, newKey: string, plan: readonly number[], onEach?: (handed: number) => void): Promise<{ handed: number[]; already: number[]; stopped: boolean }> {
         await this.ensureLoaded();
         const handed: number[] = [];
-        if (oldKey === newKey || newKey === this.identity.publicKey || oldKey === this.identity.publicKey) return { handed, stopped: false };
+        const already: number[] = [];
+        if (oldKey === newKey || newKey === this.identity.publicKey || oldKey === this.identity.publicKey) return { handed, already, stopped: false };
         for (const epoch of plan) {
             const key = await this.keyFor(epoch);
             if (!key) continue;
@@ -803,10 +811,11 @@ export class GroupKeyring {
             const res = await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/wrap`,
                 { epoch, recipient: t.recipient, ephPub: t.ephPub, nonce: t.nonce, wrapped: t.wrapped, sig: t.sig }, this.identity as BeanPoolIdentity).catch(() => null);
             if (res?.status === 201) { handed.push(epoch); onEach?.(handed.length); }
-            else if (res?.status === 429) return { handed, stopped: true };
-            // 409 wrap_exists (her phone or another member got there first), 403, 404: nothing more to do for this epoch.
+            else if (res?.status === 429) return { handed, already, stopped: true };
+            else if (res?.status === 409 && (await res.json().catch(() => null))?.code === 'wrap_exists') already.push(epoch);
+            // 409 wrap_rejected, 403, 404: nothing more to do for this epoch, and it isn't there.
         }
-        return { handed, stopped: false };
+        return { handed, already, stopped: false };
     }
 
     /**

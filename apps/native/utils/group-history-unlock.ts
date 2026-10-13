@@ -94,6 +94,24 @@ export function oldWordsProgressText(done: number, total: number): string {
     return `Unlocking ${done} of ${total} ${total === 1 ? 'group' : 'groups'}…`;
 }
 export const OLD_WORDS_DONE = 'Done. Your earlier messages are unlocked on this phone.';
+/** "A", "A and B", "A, B and C". */
+const listOf = (names: readonly string[]) => (names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+export function oldWordsNothingText(groupNames: readonly string[]): string {
+    return `Nothing was handed over for ${listOf(groupNames)}. Try again later, or tell an owner.`;
+}
+export const OLD_WORDS_NOTHING_LISTED = 'Nothing was handed over: the community lists no earlier keys of yours that this phone lacks.';
+
+/**
+ * The old-words screen's end (review of #1844, finding 4): "Done" only when some group's keys landed; when none did, the
+ * groups the node withheld are named, never counted as done.
+ */
+export function oldWordsEnd(r: OldWordsResult): { text: string; lines: string[]; ok: boolean } {
+    if (r.outcome === 'not_the_key') return { text: OLD_WORDS_NOT_THE_KEY, lines: [], ok: false };
+    if (r.outcome === 'owner') return { text: OLD_WORDS_OWNER, lines: [], ok: false };
+    if (Object.values(r.unlocked).some((n) => n > 0)) return { text: OLD_WORDS_DONE, lines: r.withheld.map((g) => oldWordsWithheldText(g.name)), ok: true };
+    if (r.withheld.length > 0) return { text: oldWordsNothingText(r.withheld.map((g) => g.name)), lines: [], ok: false };
+    return { text: OLD_WORDS_NOTHING_LISTED, lines: [], ok: true };
+}
 
 export const NEW_PHONE_SHOW_TITLE = 'Ask a member to confirm this phone';
 export const NEW_PHONE_SHOW_BODY = 'Meet a member of your groups in person. They scan this code with "Confirm a member\'s new phone".';
@@ -122,9 +140,55 @@ export function newPhoneProgressText(done: number, total: number): string {
 export function newPhoneDoneText(name: string): string {
     return `Done. ${name}'s new phone can read those conversations.`;
 }
+export function newPhoneRefusedRestText(handed: number, planned: number): string {
+    return `Handed ${handed} of ${planned}. The community refused the rest: try again, or tell an owner.`;
+}
+export function newPhoneNothingText(name: string): string {
+    return `Nothing to unlock: this phone holds no earlier key of ${name}'s that the new phone lacks.`;
+}
+/**
+ * The confirming phone's end (review of #1844, finding 4): "Done" only when every planned key was handed; fewer is said
+ * as a count, none planned as nothing to unlock, and the node's slow-down as where it stopped.
+ */
+export function newPhoneEnd(name: string, r: { total: number; already?: number; planned: number; stopped: boolean }): { text: string; ok: boolean } {
+    const landed = r.total + (r.already ?? 0);
+    if (r.stopped) return { text: `${newPhoneProgressText(landed, r.planned)} The community asked this phone to slow down: scan again in a minute to carry on.`, ok: true };
+    if (r.planned === 0) return { text: newPhoneNothingText(name), ok: true };
+    if (landed < r.planned) return { text: newPhoneRefusedRestText(landed, r.planned), ok: false };
+    return { text: newPhoneDoneText(name), ok: true };
+}
 /** The new phone's own note of who confirmed it (§4): kept on this phone only, never published. */
 export function confirmedByText(name: string, at: number): string {
     return `Confirmed by ${name}, ${new Date(at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`;
+}
+
+// ─── What each chat last showed locked (§7's row), for the old-words screen ─────────────────────────────────────────
+
+const lockedKey = (nodeUrl: string, me: string) => `beanpool_locked_history:${nodeUrl.replace(/\/+$/, '')}:${me}`;
+
+/**
+ * Per group (its id lower-cased), how many lines its chat last showed in the "from before you changed phones" row. The
+ * old-words screen passes them as `locked`, so a group the node answers empty is named as withheld, never counted as done
+ * (review of #1844, finding 4). {} when none or unreadable.
+ */
+export async function lockedHistoryCounts(nodeUrl: string, me: string): Promise<Record<string, number>> {
+    try {
+        const v = JSON.parse((await AsyncStorage.getItem(lockedKey(nodeUrl, me))) ?? '{}');
+        if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+        return Object.fromEntries(Object.entries(v).filter((e): e is [string, number] => Number.isSafeInteger(e[1]) && (e[1] as number) > 0));
+    } catch {
+        return {};
+    }
+}
+
+/** Keeps one group's row count as its chat shows it now (0 forgets it); writes only when it changed. */
+export async function noteLockedHistoryCount(nodeUrl: string, me: string, groupId: string, n: number): Promise<void> {
+    const counts = await lockedHistoryCounts(nodeUrl, me);
+    const id = groupId.toLowerCase();
+    if ((counts[id] ?? 0) === n) return;
+    if (n > 0) counts[id] = n;
+    else delete counts[id];
+    try { await AsyncStorage.setItem(lockedKey(nodeUrl, me), JSON.stringify(counts)); } catch { /* the chat writes it again on its next load */ }
 }
 
 // ─── Path A: the old 12 words (§3) ──────────────────────────────────────────────────────────────────────────────────
@@ -151,7 +215,10 @@ export interface OldWordsResult {
     outcome: 'done' | 'not_the_key' | 'owner';
     /** Self-wraps the node stored, per group id. */
     unlocked: Record<string, number>;
-    /** Groups whose earlier keys the node didn't hand over (a refusal, or nothing that opened where lines are locked). */
+    /**
+     * Groups whose earlier keys didn't land: a refusal, or nothing stored where there was something to store (wraps served,
+     * or lines this phone shows locked: `locked`).
+     */
     withheld: HistoryGroup[];
     /** Served wraps that failed their record's commitment (junk): taken from none. */
     refused: number;
@@ -200,6 +267,7 @@ export async function unlockWithOldWords(input: {
             let opened = 0;
             let posted = 0;
             let failed = false;
+            const refusedBefore = result.refused;
             for (let page = 0; page < 50; page++) {
                 let a: FormerAnswer;
                 try {
@@ -248,7 +316,9 @@ export async function unlockWithOldWords(input: {
                 ring.noteWrapsLanded();
                 await ring.sync().catch(() => null);
             }
-            if (failed || (opened === 0 && (g.locked ?? 0) > 0)) result.withheld.push(g);
+            // Withheld: refused, or nothing landed where something should have (keys opened or served junk, or the chat
+            // shows lines locked). An empty answer for a group with locked lines is the node's to give: named, never "Done".
+            if (failed || (posted === 0 && (opened > 0 || result.refused > refusedBefore || (g.locked ?? 0) > 0))) result.withheld.push(g);
             done++;
             input.onProgress?.(done, input.groups.length);
         }
@@ -334,8 +404,9 @@ export async function checkNewPhone(input: {
 /**
  * "Confirm" (§4): for each shared group, hand the new key the epochs this phone holds whose signed record names the old
  * key and not the new one (GroupKeyring.epochsForConfirmedPhone, then handToConfirmedPhone). Every group's list is made
- * first, so progress reads "N of M". Returns how many went per group, how many were planned, and whether the node's
- * speed limit stopped it (the screen offers to carry on).
+ * first, so progress reads "N of M". Leaves out epochs the new phone already holds. Returns how many went per group, how
+ * many the node said were already there, how many were planned, and whether the node's speed limit stopped it (the
+ * screen offers to carry on).
  */
 export async function confirmNewPhone(input: {
     nodeUrl: string;
@@ -343,7 +414,7 @@ export async function confirmNewPhone(input: {
     store: GroupKeyStore;
     check: Extract<NewPhoneCheck, { ok: true }>;
     onProgress?: (handed: number, planned: number) => void;
-}): Promise<{ handed: Record<string, number>; total: number; planned: number; stopped: boolean }> {
+}): Promise<{ handed: Record<string, number>; total: number; already: number; planned: number; stopped: boolean }> {
     const { oldKey, newKey } = input.check;
     const plans: { ring: ReturnType<typeof groupKeyring>; id: string; epochs: number[] }[] = [];
     for (const g of input.check.groups) {
@@ -354,14 +425,16 @@ export async function confirmNewPhone(input: {
     const planned = plans.reduce((n, p) => n + p.epochs.length, 0);
     const handed: Record<string, number> = {};
     let total = 0;
+    let already = 0;
     input.onProgress?.(0, planned);
     for (const p of plans) {
-        const r = await p.ring.handToConfirmedPhone(oldKey, newKey, p.epochs, (n) => input.onProgress?.(total + n, planned));
+        const r = await p.ring.handToConfirmedPhone(oldKey, newKey, p.epochs, (n) => input.onProgress?.(total + already + n, planned));
         handed[p.id] = r.handed.length;
         total += r.handed.length;
-        if (r.stopped) return { handed, total, planned, stopped: true };
+        already += r.already.length;
+        if (r.stopped) return { handed, total, already, planned, stopped: true };
     }
-    return { handed, total, planned, stopped: false };
+    return { handed, total, already, planned, stopped: false };
 }
 
 // ─── The new phone's note of who confirmed it (§4) ─────────────────────────────────────────────────────────────────

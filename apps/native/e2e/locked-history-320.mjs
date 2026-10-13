@@ -7,8 +7,8 @@
  *
  * What is drawn: the chat's locked row, a waiting line and the member's own line from before the change
  * (components/LockedHistory.tsx); the sheet behind the row; the old-words screen with 12 eight-letter words typed box by
- * box and the owner sentence (app/old-words-unlock.tsx); the confirming member's screen at "Confirm" and at "Unlocking 42
- * of 120…" (app/confirm-new-phone.tsx); the new phone's code with its "Confirmed by" note (app/new-phone-code.tsx); the
+ * box, done with two groups withheld, nothing handed over, and the owner sentence (app/old-words-unlock.tsx); the
+ * confirming member's screen at "Confirm", at "Unlocking 42 of 120…" and at "Handed 3 of 120" (app/confirm-new-phone.tsx); the new phone's code with its "Confirmed by" note (app/new-phone-code.tsx); the
  * old phone's card with its words shown (components/KeyMovedCard.tsx).
  *
  * Text at 1.3× is Android's font scale: every Text and TextInput's fontSize and lineHeight times 1.3, layout in dp as
@@ -69,6 +69,7 @@ const STUBS = {
     'db': `
         const s = () => globalThis.__db;
         export const unlockGroupHistoryWithWords = (...a) => s().unlockGroupHistoryWithWords(...a);
+        export const lockedHistoryRows = (...a) => s().lockedHistoryRows(...a);
         export const newPhoneCode = (...a) => s().newPhoneCode(...a);
         export const newPhoneConfirmedNotes = (...a) => s().newPhoneConfirmedNotes(...a);
         export const newPhoneHandOvers = (...a) => s().newPhoneHandOvers(...a);
@@ -130,13 +131,18 @@ const WORDS = ['abstract', 'accident', 'acoustic', 'activity', 'aircraft', 'alph
 globalThis.__identity = { publicKey: 'a'.repeat(64), mnemonic: WORDS };
 const GROUPS = [{ id: 'g1', name: 'Mullumbimby Community Gardeners' }, { id: 'g2', name: 'Repair Café Convenors' }, { id: 'g3', name: 'Neighbourhood Watch' }];
 globalThis.__db = {
-    unlockGroupHistoryWithWords: async () => ({ outcome: q.get('words') === 'owner' ? 'owner' : 'done', unlocked: {}, refused: 0,
+    unlockGroupHistoryWithWords: async () => ({ outcome: q.get('words') === 'owner' ? 'owner' : 'done', unlocked: q.get('words') === 'done' ? { g3: 4 } : {}, refused: 0,
         withheld: q.get('words') === 'owner' ? [] : GROUPS.slice(0, 2) }),
+    lockedHistoryRows: async () => ({ g1: 1234, g2: 56 }),
     newPhoneCode: async () => JSON.stringify(['beanpool-new-phone/1', 'b'.repeat(64), 'c'.repeat(64), NAME]),
     newPhoneHandOvers: async () => new Set(),
     newPhoneConfirmedNotes: async () => [{ name: NAME, at: Date.UTC(2026, 9, 13) }, { name: 'Dovetail-Anneliese', at: Date.UTC(2026, 9, 12) }],
     checkScannedNewPhone: async () => ({ ok: true, name: NAME, oldKey: 'c'.repeat(64), newKey: 'b'.repeat(64), groups: GROUPS }),
-    confirmScannedNewPhone: (check, onProgress) => { setTimeout(() => onProgress?.(42, 120), 10); return new Promise(() => {}); },
+    confirmScannedNewPhone: (check, onProgress) => {
+        if (q.get('hand') === 'partial') return Promise.resolve({ handed: { g1: 3 }, total: 3, already: 0, planned: 120, stopped: false });
+        setTimeout(() => onProgress?.(42, 120), 10);
+        return new Promise(() => {});
+    },
 };
 const c = q.get('case');
 const Page = () => {
@@ -266,7 +272,7 @@ try {
         await open(`case=sheet&scheme=${scheme}`);
         await measure(`${scheme} · the sheet behind the row`);
 
-        for (const words of ['done', 'owner']) {
+        for (const words of ['done', 'nothing', 'owner']) {
             await open(`case=words&scheme=${scheme}&words=${words}`);
             const boxes = page.getByLabel(/Recovery word \d+/);
             const n = await boxes.count();
@@ -275,8 +281,8 @@ try {
             for (let i = 0; i < n; i++) await boxes.nth(i).fill(WORDS[i]);
             await measure(`${scheme} · old words, 12 eight-letter words typed box by box`);
             await button('Unlock earlier messages').click();
-            await page.getByText(words === 'owner' ? /Tell an owner/ : /Done\. Your earlier messages/).first().waitFor();
-            await measure(`${scheme} · old words, ${words === 'owner' ? 'the owner sentence' : 'done with two groups withheld'}`);
+            await page.getByText(words === 'owner' ? /Tell an owner/ : words === 'nothing' ? /Nothing was handed over for/ : /Done\. Your earlier messages/).first().waitFor();
+            await measure(`${scheme} · old words, ${words === 'owner' ? 'the owner sentence' : words === 'nothing' ? 'nothing handed over for two groups' : 'done with two groups withheld'}`);
         }
 
         await open(`case=confirm&scheme=${scheme}`);
@@ -285,6 +291,11 @@ try {
         await button('Confirm').click();
         await page.getByText('Unlocking 42 of 120…').waitFor();
         await measure(`${scheme} · confirming: Unlocking 42 of 120…`);
+        await open(`case=confirm&scheme=${scheme}&hand=partial`);
+        await page.getByText(/You're confirming this is/).waitFor();
+        await button('Confirm').click();
+        await page.getByText(/Handed 3 of 120\. The community refused the rest/).waitFor();
+        await measure(`${scheme} · confirming: Handed 3 of 120, the rest refused`);
 
         await open(`case=code&scheme=${scheme}`);
         await page.getByText(/Confirmed by Bartholomew/).waitFor();

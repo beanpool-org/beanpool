@@ -117,3 +117,25 @@ describe('the row, its sheet and the menu label at 320dp with 1.3× text', () =>
         expect(whole).toBeLessThan(width);
     });
 });
+
+describe('the end screens say what landed (review of #1844, finding 4)', () => {
+    const read = (p: string) => fs.readFileSync(path.join(__dirname, '../..', p), 'utf8');
+
+    it('the chat keeps its row\'s count once its keys are read; the old-words screen passes each group\'s count as `locked`', () => {
+        const view = read('components/GroupChatView.tsx');
+        expect(view).toMatch(/row: \(n\) => \(\{ id: LOCKED_HISTORY_ROW_ID,[^\n]*metadata: \{ lockedCount: n \} \}\)/);
+        expect(view).toMatch(/if \(kind !== 'group' \|\| !thread\) return;\n\s+noteLockedHistoryRow\(id, lockedRowCount\)/);
+        const words = read('app/old-words-unlock.tsx');
+        expect(words).toMatch(/const locked = await lockedHistoryRows\(\)/);
+        expect(words).toMatch(/locked: locked\[g\.id\.toLowerCase\(\)\] \?\? 0/);
+        expect(words).toMatch(/setOutcome\(oldWordsEnd\(r\)\);/);
+        expect(words).not.toMatch(/OLD_WORDS_DONE/);
+    });
+
+    it('the confirming screen ends with newPhoneEnd, in the danger colour when the community refused some', () => {
+        const confirm = read('app/confirm-new-phone.tsx');
+        expect(confirm).toMatch(/setStep\(\{ kind: 'done', \.\.\.newPhoneEnd\(check\.name, r\) \}\);/);
+        expect(confirm).toMatch(/step\.ok \? colors\.text\.body : colors\.feedback\.danger\.fg/);
+        expect(confirm).not.toMatch(/newPhoneDoneText/);
+    });
+});

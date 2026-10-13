@@ -47,7 +47,7 @@ import * as Crypto from 'expo-crypto';
 import {
     getGroupChat, postGroupChatMessage, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi, fetchGroupDetails,
     markThreadReadOnNode, toggleMessageReactionApi, editThreadMessage, deleteMessageApi, removeGroupChatMessage,
-    groupScreenKeyringFor,
+    groupScreenKeyringFor, noteLockedHistoryRow,
     type GroupItem, type GroupMemberItem,
 } from '../utils/db';
 import { chatIsLocked, groupChatNotice, groupChatShownLines, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
@@ -329,7 +329,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             changedPhones: kind === 'group' && locked && !!thread && changedPhones,
             epochOf: (lineId) => thread?.views.get(lineId)?.epoch ?? null,
             waiting: (lineId) => !!thread?.views.get(lineId)?.waitingKey,
-            row: (n) => ({ id: LOCKED_HISTORY_ROW_ID, senderId: '', text: lockedHistoryRowText(n), type: 'text', outgoing: false, timestamp: '' }),
+            row: (n) => ({ id: LOCKED_HISTORY_ROW_ID, senderId: '', text: lockedHistoryRowText(n), type: 'text', outgoing: false, timestamp: '', metadata: { lockedCount: n } }),
             // Her own lines from then, by a key of her own verified chain: under her name, with no words (§7).
             mine: (lineId) => servedAuthorKeys(rawById.get(lineId) ?? {}).some(k => myFormer.keys.has(k)),
             asMine: (l) => ({ ...l, text: LOCKED_OWN_LINE_TEXT, authorName: myFormer.name, unattributed: true }),
@@ -347,6 +347,14 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         }));
         return [...fromNode, ...mine];
     }, [rawMessages, rawById, pending, me, kind, locked, thread, keyChanged, changedPhones, myFormer]);
+
+    // The row's count, kept for the old-words screen: a group the node then answers empty is named there as withheld,
+    // never counted as done (review of #1844, finding 4). Only once the keys are read: before that nothing is known.
+    const lockedRowCount: number = messages.find(m => m.id === LOCKED_HISTORY_ROW_ID)?.metadata?.lockedCount ?? 0;
+    useEffect(() => {
+        if (kind !== 'group' || !thread) return;
+        noteLockedHistoryRow(id, lockedRowCount).catch(() => {});
+    }, [kind, id, thread, lockedRowCount]);
 
     const spokenCount = useMemo(
         () => rawMessages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM').length,

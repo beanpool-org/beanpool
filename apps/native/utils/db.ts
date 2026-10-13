@@ -32,10 +32,10 @@ import type { BeanPoolIdentity } from './identity';
 import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import {
     unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, handOversHeld, noteConfirmations, confirmedNotes,
-    type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
+    lockedHistoryCounts, noteLockedHistoryCount, type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
 } from './group-history-unlock';
 import { oldKeySignedHere, rekeysToMe } from './key-succession';
-import { isKeyReplacedAnswer, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
+import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
@@ -5376,6 +5376,8 @@ async function _signedRequest(endpoint: string, payload: any) {
         throw err;
     }
 
+    // The node took a write this key signed: the key is current here, so a replaced-key note goes (finding 5 of #1844).
+    void noteKeyAnswered(anchorUrl, identity.publicKey);
     return await res.json();
 }
 
@@ -5397,11 +5399,13 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
 
     let headers: Record<string, string> = { 'Accept': 'application/json', ...(options?.customHeaders || {}) };
     const identity = await loadIdentity();
+    let signed = false;
     if (identity?.privateKey && identity?.publicKey) {
         try {
             // The URL fetched below: its host is what is signed for, its path (no query) what the node checks.
             const signedHeaders = await buildSignedHeaders('GET', `${anchorUrl}${path}`, '', identity.privateKey, identity.publicKey);
             headers = { ...headers, ...signedHeaders };
+            signed = true;
         } catch (e) {
             console.warn('[signedGet] Could not sign GET request:', e);
         }
@@ -5412,7 +5416,7 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
         headers,
         signal: options?.signal,
     });
-    if (identity?.publicKey) watchForReplacedKey(anchorUrl, identity.publicKey, res);
+    if (identity?.publicKey) watchForReplacedKey(anchorUrl, identity.publicKey, res, signed);
     return res;
 }
 
@@ -6670,7 +6674,23 @@ async function historyGroups(nodeUrl: string, identity: BeanPoolIdentity, groups
  */
 export async function unlockGroupHistoryWithWords(typed: string | readonly string[], groups: HistoryGroup[], onProgress?: (done: number, total: number) => void): Promise<OldWordsResult> {
     const { nodeUrl, identity } = await groupKeyContext();
-    return unlockWithOldWords({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), typed, signedHere: await oldKeySignedHere(nodeUrl, identity), onProgress });
+    const r = await unlockWithOldWords({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), typed, signedHere: await oldKeySignedHere(nodeUrl, identity), onProgress });
+    // A group whose keys landed and wasn't withheld shows no locked row once its chat reloads; forget its count now, so a
+    // later run doesn't name it as withheld.
+    for (const id of Object.keys(r.unlocked)) if (!r.withheld.some((g) => g.id === id)) await noteLockedHistoryCount(nodeUrl, identity.publicKey, id, 0);
+    return r;
+}
+
+/** Per group (id lower-cased), the lines its chat last showed in the "from before you changed phones" row (§7). */
+export async function lockedHistoryRows(): Promise<Record<string, number>> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return lockedHistoryCounts(nodeUrl, identity.publicKey);
+}
+
+/** The chat view's row count for one group as it shows it now (0 when there is no row). */
+export async function noteLockedHistoryRow(groupId: string, n: number): Promise<void> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    await noteLockedHistoryCount(nodeUrl, identity.publicKey, groupId, n);
 }
 
 /** The code this new phone shows a member to confirm it (§4), or null when this phone knows no old key of its own. */

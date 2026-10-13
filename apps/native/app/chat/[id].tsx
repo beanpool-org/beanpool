@@ -14,7 +14,7 @@ import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, isKnownDmConversation, isHeldGroupChat } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
-import { chatRouteView } from '../../utils/chat-route';
+import { chatRouteView, askHeldGroup, askKnownDm, askRouteKind, screenIdOf, type ChatRouteAsks } from '../../utils/chat-route';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
@@ -92,6 +92,9 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
  * "Your groups" say the kind on the way in (`event=1`, `group=1`, `enterprise=1`); the conversation's type is the
  * fallback for an older link or a push.
  */
+/** What the route asks the phone (utils/chat-route.ts tests these wirings). */
+const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, isKnownDmConversation, getConversationKind };
+
 export default function ChatRoute() {
     const { id, event, group, enterprise, created, name, info } = useLocalSearchParams<{
         id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string; info?: string;
@@ -110,7 +113,7 @@ export default function ChatRoute() {
     useEffect(() => {
         if (!id) return;
         let alive = true;
-        isKnownDmConversation(String(id)).then(k => { if (alive) setKnownDm(k); }, () => { if (alive) setKnownDm(false); });
+        askKnownDm(ROUTE_ASKS, String(id)).then(k => { if (alive) setKnownDm(k); });
         return () => { alive = false; };
     }, [id]);
 
@@ -122,7 +125,7 @@ export default function ChatRoute() {
     useEffect(() => {
         if (!id) return;
         let alive = true;
-        isHeldGroupChat(String(id)).then(h => { if (alive) setHeldGroup(h); }, () => { if (alive) setHeldGroup('error'); });
+        askHeldGroup(ROUTE_ASKS, String(id)).then(h => { if (alive) setHeldGroup(h); });
         return () => { alive = false; };
     }, [id]);
 
@@ -130,21 +133,18 @@ export default function ChatRoute() {
         if (isEventChat || threadKind || !id) return;
         let alive = true;
         // No row yet (a push tap before the sync): the node is asked, so a group's chat opens in its own screen.
-        getConversationKind(String(id), { askNode: true }).then(kind => {
+        askRouteKind(ROUTE_ASKS, String(id)).then(kind => {
             if (!alive) return;
-            if (kind === 'event_thread') setIsEventChat(true);
-            else if (kind === 'group_thread') setThreadKind('group');
-            else if (kind === 'enterprise_thread') setThreadKind('enterprise');
+            if (kind === 'event') setIsEventChat(true);
+            else if (kind) setThreadKind(kind);
         });
         return () => { alive = false; };
     }, [id, isEventChat, threadKind]);
 
     const view = chatRouteView({ held: heldGroup, knownDm, isEventChat, threadKind });
     if (view === 'wait' || !id) return null;
-    // Ids are UUIDs, lower-case as the node makes them; a link or a push may carry one in capitals (push routes match
-    // them case-insensitively). The node-readable screens get the node's spelling, which is the one this phone's group
-    // key memory is kept under (isHeldGroupChat asks both).
-    const nodeId = String(id).toLowerCase();
+    // The node-readable screens get the node's spelling (lower-case), the one this phone's group key memory is kept under.
+    const nodeId = screenIdOf(String(id));
     if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={nodeId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     if (view === 'event') return <EventChatView eventId={nodeId} />;
     if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={nodeId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;

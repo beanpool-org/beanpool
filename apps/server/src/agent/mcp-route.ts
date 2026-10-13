@@ -244,13 +244,13 @@ export function createMcpRoutes(deps: RouteDeps): Router {
 
     // The owner switch. Reading it: any admin. Turning it on or off: an owner (requireAdminRole: never a token, and a
     // phone session asks for its unlock again). Owners are told either way.
-    router.get(AGENT_SWITCH_PATH, async (ctx) => {
+    router.get('/api/local/admin/agent/switch', async (ctx) => {
         ctx.set('Cache-Control', 'no-store');
         if (!(await deps.checkAdminAuth(ctx))) return;
         ctx.body = { allowed: aiAssistantsAllowed() };
     });
 
-    router.post(AGENT_SWITCH_PATH, async (ctx) => {
+    router.post('/api/local/admin/agent/switch', async (ctx) => {
         ctx.set('Cache-Control', 'no-store');
         if (!(await deps.checkAdminAuth(ctx))) return;
         if (!requireAdminRole(ctx, ['owner'], 'Only an owner can allow or stop AI assistants on this server')) return;

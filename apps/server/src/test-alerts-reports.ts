@@ -660,6 +660,29 @@ async function main(): Promise<void> {
     assert(more12.length === 1 && /9 more child-safety reports came in from the same member in the hour after their first was told/.test(more12[0].body)
         && more12[0].headers.priority === '5' && ownerPushes().length === p12 + 2,
         `12. their hour over: the 9 in one urgent line, pushed (${more12.length} lines, ${ownerPushes().length - p12} pushes)`);
+    // Step 1's member reports the same member again and picks "Child safety" (the review of #1895, finding 3): their
+    // report on file, still pending, becomes child safety and is told as a new one would be, once.
+    const pUp12 = ownerPushes().length;
+    const hUp12 = topicHits().length;
+    const up12 = await report(reporters[0], targets[0], alerts.CHILD_SAFETY_REASON);
+    await settle();
+    const lastUp12 = topicHits().at(-1)!;
+    assert(up12.status === 200 && up12.json?.duplicate === true && ownerPushes().length === pUp12 + 1 && topicHits().length === hUp12 + 1
+        && /a child-safety report waiting/.test(String(lastUp12.headers.title)) && lastUp12.headers.priority === '5',
+        `12. a member changes their pending report to "Child safety": pushed and told at once, urgent (${up12.status}, ${ownerPushes().length - pUp12} pushes, ${topicHits().length - hUp12} lines)`);
+    const rowsUp12 = db.prepare(`SELECT reason, status FROM abuse_reports WHERE reporter_pubkey = ? AND target_pubkey = ?`).all(reporters[0].pk, targets[0].pk) as Array<{ reason: string; status: string | null }>;
+    assert(rowsUp12.length === 1 && rowsUp12[0].reason.startsWith(`${alerts.CHILD_SAFETY_REASON}: quoted-words-`) && (rowsUp12[0].status ?? 'pending') === 'pending',
+        `12. still one report in the queue, its reason now the one they picked (${rowsUp12.length}, ${rowsUp12[0]?.reason.split(':')[0]})`);
+    const upAgain12 = await report(reporters[0], targets[0], alerts.CHILD_SAFETY_REASON);
+    await settle();
+    assert(upAgain12.json?.duplicate === true && ownerPushes().length === pUp12 + 1 && topicHits().length === hUp12 + 1,
+        `12. "Child safety" again on it tells nothing more (${ownerPushes().length - pUp12} pushes)`);
+    const down12 = await report(reporters[0], targets[0], 'Spam or scam');
+    await settle();
+    const rowsDown12 = db.prepare(`SELECT reason FROM abuse_reports WHERE reporter_pubkey = ? AND target_pubkey = ?`).all(reporters[0].pk, targets[0].pk) as Array<{ reason: string }>;
+    assert(down12.json?.duplicate === true && ownerPushes().length === pUp12 + 1 && topicHits().length === hUp12 + 1
+        && rowsDown12.length === 1 && alerts.pickedChildSafety(rowsDown12[0].reason),
+        '12. another reason after it changes nothing: the report stays child safety, and nothing is told');
     const plain12 = await report(plain, targets[0], 'Spam or scam');
     await settle();
     const last12 = topicHits().at(-1)!;

@@ -6729,6 +6729,23 @@ export function findPendingReport(reporterPubkey: string, targetPubkey: string, 
     };
 }
 
+/**
+ * A pending report given the reason its member picked when they reported the same thing again (POST /api/reports: a
+ * report changed to "Child safety"). Its updated_at moves, so a standby copies the new reason. Null once it is not
+ * pending.
+ */
+export function updatePendingReportReason(reportId: string, reason: string): AbuseReport | null {
+    const res = db.prepare(`UPDATE abuse_reports SET reason = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                             WHERE id = ? AND (status = 'pending' OR status IS NULL)`).run(reason.slice(0, 500), reportId);
+    if (res.changes === 0) return null;
+    const row = db.prepare(`SELECT id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at FROM abuse_reports WHERE id = ?`).get(reportId) as any;
+    return {
+        id: row.id, reporterPubkey: row.reporter_pubkey, targetPubkey: row.target_pubkey,
+        targetPostId: row.target_post_id ?? undefined, targetPulseItemId: row.target_pulse_item_id ?? undefined,
+        reason: row.reason, createdAt: row.created_at, status: 'pending',
+    };
+}
+
 /** True once the reporter has filed REPORTS_PER_REPORTER_PER_HOUR reports in the last hour. */
 export function isReportRateLimited(reporterPubkey: string, now: number = Date.now()): boolean {
     const since = new Date(now - 60 * 60 * 1000).toISOString();

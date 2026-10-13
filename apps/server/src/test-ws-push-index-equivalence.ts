@@ -14,8 +14,10 @@
  *      After every change and every push, the index's rules (WsClients.inspect): every open socket with a key is filed
  *      under exactly that key and nothing else is; with the cells built, they hold exactly the keys with an open socket
  *      and an area, each in its own cell. Then every socket closes, and the index is empty
- *      Members near a listing block its author and unblock them, between pushes too (#1812): both oracles skip a
- *      member who blocked the author and is no party of it, and every push is checked for that on its own
+ *      Members near a listing block its author and unblock them, its parties block it, and its author blocks members
+ *      near it, between pushes too (#1812): every push is checked on its own, both ways, against who it must reach
+ *      worked out from the rows: every party, blocked or not, and every member near it who did not block its author;
+ *      nobody else, so not a near non-party who did (#1831)
  *   2b. no code writes a socket's key but the connect (before the socket is in the set) and wsClients.setKey: a key
  *      written any other way would leave the socket filed under the old one (#1809 review, NB-1)
  *   3. the cost at 3,500 and 10,000 sockets: a push near a dense spot (its author blocked by 300 members) and one
@@ -136,9 +138,38 @@ async function main(): Promise<void> {
         for (let k = 0; k < n && near.length > 0; k++) made += addBlocks(near.splice(Math.floor(rand() * near.length), 1)[0], [author]).length;
         return made;
     };
-    let seededBlocks = 0;
-    for (const id of posts) if (rand() < 0.2) seededBlocks += blockNear(id, 4);
-    assert(seededBlocks > 0, `setup: ${seededBlocks} blocks by members near a listing of its author`);
+    // A party who blocked the author, whom every push of it still reaches: the member who took it, or one with an open
+    // deal on it (asked for, or taken and not yet done), near it or not.
+    const blockParty = (id: string): number => {
+        const p = db.prepare('SELECT author_pubkey, accepted_by FROM posts WHERE id = ?').get(id) as { author_pubkey: string; accepted_by: string | null };
+        let party = p.accepted_by;
+        if (!party || rand() < 0.5) {
+            party = rand() < 0.5 ? (pick(nearMembers(id)) ?? pick(members)) : pick(members);
+            if (party === p.author_pubkey) return 0;
+            db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 1, ?)')
+                .run(crypto.randomUUID(), id, party, p.author_pubkey, rand() < 0.5 ? 'requested' : 'pending');
+        }
+        return addBlocks(party, [p.author_pubkey]).length;
+    };
+    // The other direction: a listing's author blocks a member near it. A member's set never reads the author's list, so
+    // every push of it still reaches them.
+    const authorBlocksNear = (id: string): number => {
+        const near = nearMembers(id);
+        return near.length > 0 ? addBlocks(placeOf(id).author_pubkey, [pick(near)]).length : 0;
+    };
+    let seededBlocks = 0, seededParties = 0, seededAuthors = 0;
+    for (const id of posts) {
+        if (rand() < 0.2) seededBlocks += blockNear(id, 4);
+        if (rand() < 0.15) seededParties += blockParty(id);
+        if (rand() < 0.15) seededAuthors += authorBlocksNear(id);
+    }
+    assert(seededBlocks > 0 && seededParties > 0 && seededAuthors > 0,
+        `setup: ${seededBlocks} blocks by members near a listing of its author, ${seededParties} by its parties, ${seededAuthors} by authors of members near their listing`);
+    // No enterprise among this world's members (the node's own treasury is no party of any listing): a listing's parties
+    // are its author, its taker, its open deals' sides and a removal's, with no keepers, which the check below would
+    // otherwise have to add.
+    const treasury = db.prepare('SELECT 1 FROM members WHERE public_key = ? AND is_treasury = 1');
+    assert(members.every(pk => !treasury.get(pk)), 'setup: no enterprise among the members, so no keepers');
 
     // Every frame any fake socket got, as `<socket>|<frame>`.
     let frames: string[] = [];
@@ -239,8 +270,14 @@ async function main(): Promise<void> {
             area.loadMemberAreas();
             did('map loaded again whole');
         }
-        else if (r < 0.92) {
+        else if (r < 0.88) {
             if (blockNear(pick(posts), 1) > 0) did('a member near a listing blocks its author');
+        }
+        else if (r < 0.9) {
+            if (blockParty(pick(posts)) > 0) did("a listing's party blocks its author");
+        }
+        else if (r < 0.92) {
+            if (authorBlocksNear(pick(posts)) > 0) did("a listing's author blocks a member near it");
         }
         else if (r < 0.97) {
             const row = db.prepare('SELECT owner_pubkey, blocked_pubkey FROM member_blocks ORDER BY owner_pubkey, blocked_pubkey LIMIT 1 OFFSET ?')
@@ -256,7 +293,9 @@ async function main(): Promise<void> {
         const row = db.prepare('SELECT author_pubkey, lat, lng FROM posts WHERE id = ?').get(id) as { author_pubkey: string; lat: number | null; lng: number | null };
         const event = kind < 0.4 ? { type: 'new_post', post: { id, authorPublicKey: row.author_pubkey, title: 'x', lat: row.lat, lng: row.lng } }
             : kind < 0.8 ? { type: 'post_updated', id } : { type: 'post_removed', id };
-        const opts = rand() < 0.15 ? { listingParties: [pick(members), pick(members)] } : undefined;
+        // A removal's parties (a deal it just closed), now and then one who blocked the author.
+        const blocker = () => (db.prepare('SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey = ? LIMIT 1').get(row.author_pubkey) as { owner_pubkey: string } | undefined)?.owner_pubkey;
+        const opts = rand() < 0.15 ? { listingParties: [pick(members), (rand() < 0.5 ? blocker() : undefined) ?? pick(members)] } : undefined;
         return { event, opts };
     };
     const through = (index: boolean, p: { event: any; opts?: any }) => {
@@ -266,27 +305,38 @@ async function main(): Promise<void> {
         return { sent, frames: [...frames].sort() };
     };
 
-    // On its own, beside the two oracles: no frame of a push reaches a socket whose member blocked the listing's author,
-    // is near it, and is none of its parties (its author, the member who took it, an open deal's sides, a removal's).
-    let blockedNear = 0, blockedReached = 0;
-    const blockedExamples: string[] = [];
-    const checkBlocks = (p: { event: any; opts?: any }, sentTo: Set<number>) => {
+    // On its own, beside the two oracles, which share the broadcast's rule and so can never disagree about a block: who
+    // each push must reach, worked out from the rows without it, both ways. Every socket of a party (its author, the
+    // member who took it, an open deal's sides, a removal's), blocked or not, and, for a listing with a place, every
+    // socket whose member is near it and has not blocked its author (their own list, as their set reads it; never the
+    // author's) gets the frame; no other socket does, so a near non-party who blocked the author gets nothing.
+    const reach = { missed: 0, extra: 0, blockedNear: 0, blockedNearReached: 0, blockedParty: 0, blockedPartyReached: 0, authorBlockedNear: 0, authorBlockedNearReached: 0 };
+    const reachExamples: string[] = [];
+    const checkReach = (p: { event: any; opts?: any }, sentTo: Set<number>) => {
         const id = p.event.post?.id ?? p.event.id;
         const row = db.prepare('SELECT author_pubkey, accepted_by, lat, lng FROM posts WHERE id = ?').get(id) as { author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null };
-        if (row.lat == null || row.lng == null) return;
         const deals = db.prepare("SELECT buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending')").all(id) as { buyer_pubkey: string; seller_pubkey: string }[];
         const parties = new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...(p.opts?.listingParties ?? [])]);
-        const blockers = new Set((db.prepare('SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey = ?').all(row.author_pubkey) as { owner_pubkey: string }[]).map(b => b.owner_pubkey));
+        const blocked = db.prepare('SELECT 1 FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?');
+        const placed = row.lat != null && row.lng != null;
         for (const ws of live()) {
-            const pk = ws._memberPubkey;
-            if (!pk || !blockers.has(pk) || parties.has(pk)) continue;
-            const a = area.memberAreaFor(pk);
-            if (!a || haversineKm(a.lat, a.lng, row.lat, row.lng) > radiusKm) continue;
-            blockedNear++;
-            if (sentTo.has(ws.id)) {
-                blockedReached++;
-                if (blockedExamples.length < 3) blockedExamples.push(`${p.event.type} ${id}: socket ${ws.id} of a member who blocked its author`);
+            const pk = ws._memberPubkey as string | null;
+            const got = sentTo.has(ws.id);
+            let want = false;
+            if (pk && parties.has(pk)) {
+                want = true;
+                if (blocked.get(pk, row.author_pubkey)) { reach.blockedParty++; if (got) reach.blockedPartyReached++; }
+            } else if (pk && placed) {
+                const a = area.memberAreaFor(pk);
+                const near = !!a && haversineKm(a.lat, a.lng, row.lat!, row.lng!) <= radiusKm;
+                const theyBlocked = !!blocked.get(pk, row.author_pubkey);
+                want = near && !theyBlocked;
+                if (near && theyBlocked) { reach.blockedNear++; if (got) reach.blockedNearReached++; }
+                if (near && !theyBlocked && blocked.get(row.author_pubkey, pk)) { reach.authorBlockedNear++; if (got) reach.authorBlockedNearReached++; }
             }
+            if (want === got) continue;
+            if (want) reach.missed++; else reach.extra++;
+            if (reachExamples.length < 4) reachExamples.push(`${p.event.type} ${id}: socket ${ws.id} ${want ? 'missed' : 'reached and should not be'}`);
         }
     };
 
@@ -301,7 +351,7 @@ async function main(): Promise<void> {
         inspect(`a ${p.event.type} push`);
         reached += full.frames.length;
         if (full.frames.length === 0) emptyPushes++;
-        checkBlocks(p, new Set(indexed.frames.map(f => Number(f.slice(0, f.indexOf('|'))))));
+        checkReach(p, new Set(indexed.frames.map(f => Number(f.slice(0, f.indexOf('|'))))));
         if (full.sent !== indexed.sent || full.frames.join('\n') !== indexed.frames.join('\n')) {
             differ++;
             if (firstDiffs.length < 3) {
@@ -316,14 +366,20 @@ async function main(): Promise<void> {
     for (const d of firstDiffs) say(`   ${d}`, true);
     for (const what of ['connect', 'disconnect', 'dies on a send', 'area set or moved', 'area cleared', 'area imported',
         're-key, the new phone connects', 'member removed', 'mid-join socket joins', 'map loaded again whole',
-        'a member near a listing blocks its author', 'an unblock']) {
+        'a member near a listing blocks its author', "a listing's party blocks its author", "a listing's author blocks a member near it", 'an unblock']) {
         assert((changes[what] ?? 0) > 0, `the run made the change "${what}" (${changes[what] ?? 0} times)`);
     }
     assert(reached > PUSHES, `the pushes reached sockets: ${reached} frames over ${PUSHES} pushes (${emptyPushes} reached none)`);
     assert(differ === 0, `${PUSHES} pushes: the index and the full loop send the same frames to the same sockets (${differ} differ; seed ${SEED})`);
-    for (const e of blockedExamples) say(`   ${e}`, true);
-    assert(blockedNear > 0 && blockedReached === 0,
-        `no push reached a member near its listing who blocked its author and is none of its parties: ${blockedReached} of ${blockedNear} such sockets (seed ${SEED})`);
+    for (const e of reachExamples) say(`   ${e}`, true);
+    assert(reach.missed === 0 && reach.extra === 0,
+        `${PUSHES} pushes reached exactly their parties and the members near them who did not block the author: ${reach.missed} sockets missed, ${reach.extra} reached and should not be (seed ${SEED})`);
+    assert(reach.blockedNear > 0 && reach.blockedNearReached === 0,
+        `no push reached a member near its listing who blocked its author and is none of its parties: ${reach.blockedNearReached} of ${reach.blockedNear} such sockets (seed ${SEED})`);
+    assert(reach.blockedParty > 0 && reach.blockedPartyReached === reach.blockedParty,
+        `every push reached its parties who blocked its author: ${reach.blockedPartyReached} of ${reach.blockedParty} such sockets (seed ${SEED})`);
+    assert(reach.authorBlockedNear > 0 && reach.authorBlockedNearReached === reach.authorBlockedNear,
+        `every push reached the members near it whom its author blocked (the author's list is not theirs): ${reach.authorBlockedNearReached} of ${reach.authorBlockedNear} such sockets (seed ${SEED})`);
     for (const e of brokenExamples) say(`   ${e}`, true);
     assert(Object.keys(broken).length === 0,
         `the index kept its rules after each of ${inspections} changes and pushes (broken after: ${JSON.stringify(broken)}; seed ${SEED})`);

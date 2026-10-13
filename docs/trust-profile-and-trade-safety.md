@@ -51,8 +51,22 @@ Good news: most "track record" signals are **already computed** server-side in
 | **Invited by** | graduated: always show the *fact* + inviter's *tier*; show the **name** only when the inviter is the viewer / their friend / a mutual; else "an established member" | Name is only useful when you can actually ask them; otherwise it's pure exposure of the inviter |
 | Reports / flags | never raw counts; moderation **outcomes** only | Defamation + brigading risk |
 
-Opt-outs: per-user "show me as a mutual connection" (default on); inviter "show me as the
-inviter on people I bring in" (default on within community).
+Opt-outs:
+- **"Show me as a connection in common"** (built; default on). Settings → Legal & Privacy, phone and web. Stored as the
+  member's own preference `show_as_connection_in_common` (`member_preferences`), served to them alone. Turned off, the
+  member is never named or counted as anyone's connection in common, so it never turns a band green
+  (`getTrustProfileForViewer`; checked in `test-trust-mutuals` T10).
+- Inviter "show me as the inviter on people I bring in" (default on within community): planned, **not built**.
+
+Adding a friend is visible and bounded, because a connection in common is made of friendships both ways:
+- The person added is told: a quiet line on their People tab, "*name* added you · Add back", phone and web (no push).
+  Only adds made after a server first ran this are shown (no backfill), for 30 days, until they add back or either
+  blocks the other; 20 named, then "and N more" (`GET /api/friends/added-you`, their own only; engine/friends-added-you.ts).
+- A member adds at most **100 people a day** (`friendAddsPerDay`, config/writer-limits.ts). Removing someone and adding
+  again frees nothing. The 101st is refused in words, with when it lets up, never silently dropped (the phone no longer
+  writes its own row before the node has answered).
+- An add to someone you blocked is refused, saying so. An add from someone who blocked you is refused in the words a key
+  that is no member gets, so the block is never told (`member_blocks`, the web's block list).
 
 ### Suggested "trust at a glance" layout
 1. Tier badge · member since · last active

@@ -526,7 +526,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <span className="text-3xl select-none">{balanceInfo.tier?.emoji || '🌱'}</span>
                             <div className="min-w-0">
                                 <h4 className="font-extrabold text-nature-950 dark:text-white text-base truncate">{balanceInfo.tier?.name || 'Member'}</h4>
-                                <p className="text-xs text-nature-450 dark:text-nature-500 mt-0.5">{Math.round(balanceInfo.earnedCredit || 0)} trust points</p>
+                                <p className="text-xs text-nature-450 dark:text-nature-400 mt-0.5">{Math.round(balanceInfo.earnedCredit || 0)} trust points</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-1.5">

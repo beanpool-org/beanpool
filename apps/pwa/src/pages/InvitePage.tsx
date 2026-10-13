@@ -478,15 +478,15 @@ export function InvitePage({ identity }: Props) {
                                 <div key={inv.code} className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 opacity-70">
                                     <div className="flex flex-col gap-1">
                                         {inv.intendedFor && (
-                                            <span className="text-[13px] text-nature-500 dark:text-nature-400 font-medium">
+                                            <span className="text-[13px] text-nature-500 dark:text-nature-300 font-medium">
                                                 For: {inv.intendedFor}
                                             </span>
                                         )}
-                                        <span className="font-mono text-[13px] text-nature-500 dark:text-nature-500 line-through break-all" title={inv.code}>
+                                        <span className="font-mono text-[13px] text-nature-500 dark:text-nature-300 line-through break-all" title={inv.code}>
                                             {inv.code.length > 20 ? `${inv.code.substring(0, 16)}...` : inv.code.toUpperCase()}
                                         </span>
                                     </div>
-                                    <p className="text-nature-400 dark:text-nature-600 text-[11px] font-semibold mt-2 uppercase tracking-wide">
+                                    <p className="text-nature-400 dark:text-nature-300 text-[11px] font-semibold mt-2 uppercase tracking-wide">
                                         Used {inv.usedAt ? new Date(inv.usedAt).toLocaleDateString() : ''}
                                     </p>
                                 </div>

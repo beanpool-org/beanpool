@@ -1059,7 +1059,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 {isPulsePost ? '🗞️ DAILY PULSE' : `${selectedPost.type === 'offer' ? '🔵 Offer' : '🟠 Need'} · ${cat?.label ?? selectedPost.category}`}
                             </span>
                         </div>
-                        <span className="text-xs font-semibold text-nature-500">{ago}</span>
+                        <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">{ago}</span>
                     </div>
 
                     {/* Content */}
@@ -2833,7 +2833,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             ) : (
                                 <div 
                                     onClick={() => setIsCustomizerExpanded(true)}
-                                    className="mb-4 p-3 rounded-2xl border border-violet-200/60 dark:border-violet-850 bg-violet-50/20 dark:bg-violet-950/10 backdrop-blur-sm flex items-center justify-between text-xs font-medium text-violet-850 dark:text-violet-300 hover:bg-violet-50/50 dark:hover:bg-violet-950/25 transition-all cursor-pointer shadow-sm"
+                                    className="mb-4 p-3 rounded-2xl border border-violet-200/60 dark:border-violet-900 bg-violet-50/20 dark:bg-violet-950/10 backdrop-blur-sm flex items-center justify-between text-xs font-medium text-violet-850 dark:text-violet-300 hover:bg-violet-50/50 dark:hover:bg-violet-950/25 transition-all cursor-pointer shadow-sm"
                                 >
                                     <div className="flex items-center gap-2 overflow-hidden">
                                         <span className="text-violet-600 dark:text-violet-400 font-bold">★</span>
@@ -3034,7 +3034,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 return (
                                     <div key={title} className="flex flex-col gap-1.5 mb-2">
                                         <div className="flex items-center gap-3 mt-2 mb-1">
-                                            <span className="text-xs font-black uppercase tracking-widest text-nature-450 dark:text-nature-500 whitespace-nowrap">
+                                            <span className="text-xs font-black uppercase tracking-widest text-nature-450 dark:text-nature-400 whitespace-nowrap">
                                                 {title}
                                             </span>
                                             <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />

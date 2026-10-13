@@ -141,7 +141,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                     {/* Totals only. Who voted which way is nobody's business but their own, and the server never
                         sends it: there is no voter list here to leak. */}
                     <div className="text-xs text-nature-600 dark:text-nature-400">{view.tallyLine}</div>
-                    <div className="text-[11px] text-nature-500 dark:text-nature-500 leading-relaxed">
+                    <div className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                         It passes if more than half of those who answer say yes. Votes are secret, and nobody sees who voted which way.
                     </div>
 
@@ -201,7 +201,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                             {busy ? 'Proposing…' : 'Propose'}
                         </button>
                     </div>
-                    <p className="text-[11px] text-nature-500 dark:text-nature-500 leading-relaxed">
+                    <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                         Proposing counts as your yes. The vote runs for 14 days, and closes at once if the lead comes back.
                     </p>
                 </form>

@@ -825,7 +825,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                         {p.type?.toUpperCase()}
                                                                     </div>
                                                                     <div className="flex items-center gap-1">
-                                                                        <span className="font-black text-sm text-indigo-600 dark:text-indigo-400">{p.credits ?? '?'}</span>
+                                                                        <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{p.credits ?? '?'}</span>
                                                                         <span className="text-[10px]">🫘</span>
                                                                     </div>
                                                                 </div>

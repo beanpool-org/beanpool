@@ -347,9 +347,10 @@ async function hoverStops(page) {
             const cs = getComputedStyle(node);
             const fg = over(rgba(cs.color), behind);
             const size = parseFloat(cs.fontSize);
+            const words = /[\p{L}\p{N}]/u.test(node.innerText || '');
             const hex = (c) => `#${[c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
             return { el: node.tagName.toLowerCase(), text: (node.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 40), ratio: ratio(fg, behind), fg: hex(fg), bg: hex(behind),
-                need: size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700) ? 3 : 4.5 };
+                need: !words || size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700) ? 3 : 4.5 }; // a glyph alone is an icon: 3:1
         });
         if (r.text && r.ratio < r.need - 0.005) found.push(r);
     }

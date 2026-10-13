@@ -323,7 +323,7 @@ export function InvitePage({ identity }: Props) {
                     className={`flex-1 py-3 rounded-xl border-none text-[14px] font-bold cursor-pointer transition-all shadow-sm ${
                         activeSection === 'invites' 
                             ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' 
-                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-200 dark:hover:bg-nature-700'
+                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
                     🎟️ Invites
@@ -333,7 +333,7 @@ export function InvitePage({ identity }: Props) {
                     className={`flex-1 py-3 rounded-xl border-none text-[14px] font-bold cursor-pointer transition-all shadow-sm ${
                         activeSection === 'tree' 
                             ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' 
-                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-200 dark:hover:bg-nature-700'
+                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
                     🌳 Tree
@@ -369,7 +369,7 @@ export function InvitePage({ identity }: Props) {
                         placeholder="Who is this invite for? (For your records)"
                         value={intendedFor}
                         onChange={e => setIntendedFor(e.target.value)}
-                        className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
+                        className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
                     />
 
                     <button

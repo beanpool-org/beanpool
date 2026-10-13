@@ -2366,7 +2366,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             try { localStorage.setItem('marketplace_view_mode', next); } catch {}
                             return next;
                         })}
-                        className="w-9 h-9 rounded-full flex-shrink-0 border bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 transition-colors shadow-sm flex items-center justify-center text-md hover:shadow-md cursor-pointer"
+                        className="w-9 h-9 rounded-full flex-shrink-0 border bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-800 transition-colors shadow-sm flex items-center justify-center text-md hover:shadow-md cursor-pointer"
                         title={viewMode === 'grid' ? "Switch to List View" : (viewMode === 'list' ? "Switch to Compact View" : "Switch to Card View")}
                         aria-label={viewMode === 'grid' ? "Switch to List View" : (viewMode === 'list' ? "Switch to Compact View" : "Switch to Card View")}
                     >
@@ -3214,7 +3214,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {!selectedPost && !isVisitor && (
                 <button
                     onClick={() => onNavigate?.('map-post')}
-                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.25rem)] md:bottom-6 right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
+                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.25rem)] md:bottom-6 right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 dark:from-terra-700 dark:to-terra-800 dark:hover:from-terra-800 dark:hover:to-terra-900 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
                     style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.25rem)' }}
                 >
                     <span className="text-lg leading-none block group-hover:rotate-90 transition-transform duration-300">+</span> ADD POST

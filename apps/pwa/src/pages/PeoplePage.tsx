@@ -294,7 +294,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                             placeholder="🔍 Search members..."
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            className="w-full p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all placeholder:text-nature-400"
+                            className="w-full p-3 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all placeholder:text-nature-400"
                         />
                         {searchQuery && (
                             <div className="text-xs text-nature-400 mt-1.5 font-medium">

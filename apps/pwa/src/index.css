@@ -89,6 +89,8 @@
   --danger: #e5967f;
   --on-danger: #1d231d;
   --link: #93c5fd;
+  /* A visitor listing's Offer / Need / Poll / Event word on the dark card (the 500s were 2.6 to 4.2:1 on #384038). */
+  --post-type-offer: #34d399; --post-type-need: #f0a08a; --post-type-poll: #c4b5fd; --post-type-event: #c4b5fd;
   --legal-link: var(--link); /* Welcome's Terms and Privacy links: #3b82f6 was 3.5:1 on the dark backdrop */
   /* Trust levels: the 400 inks on a tint of the same hue over the dark card (light slabs before, 13 Oct). */
   --tier-newcomer: #4ade80; --tier-newcomer-bg: #1f3a27; --tier-newcomer-border: #2f6b44;

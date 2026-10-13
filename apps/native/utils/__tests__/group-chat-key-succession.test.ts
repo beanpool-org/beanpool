@@ -61,7 +61,7 @@ import { signedGet, signedPost } from '../node-post';
 import { groupKeyring, memoryGroupKeyStore, forgetGroupKeys, joinGroupWithEpoch, type GroupKeyStore } from '../group-chat-keys';
 import { sendSealedGroupLine, openGroupThread, chatIsLocked } from '../group-chat-lines';
 import { GROUP_LINE_FORMER_MEMBER, earlierKeyDetails, type DisplayRosterRow } from '../group-line-display';
-import { attestOwnRekeys, postKeySuccession, unattestedRekeys, keySuccessionPromptText, KEY_SUCCESSION_PROMPT_YES, KEY_SUCCESSION_PROMPT_NO } from '../key-succession';
+import { attestJustCompletedRekey, attestOwnRekeys, postKeySuccession, rekeyToAsk, unattestedRekeys, keySuccessionPromptText, KEY_SUCCESSION_PROMPT_YES, KEY_SUCCESSION_PROMPT_NO } from '../key-succession';
 import type { BeanPoolIdentity } from '../identity';
 
 const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url).href);
@@ -225,7 +225,7 @@ describe('a member who changes phones keeps their name on their old lines', () =
         expect(await control<any[]>('sql', { sql: 'SELECT epoch FROM group_key_wraps WHERE group_id = ? AND recipient_pubkey = ?', params: [g, cat2.identity.publicKey], all: true })).toEqual([]);
 
         // Cat₂ confirms, as her new phone does right after its own re-key.
-        expect(await attestOwnRekeys(URL_BASE, cat2.identity)).toBe(1);
+        expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
         forgetGroupKeys();
         const v = await shown(ana, g);
         const line = v.visible.find((l) => l.text === 'Cat on her old phone');
@@ -285,11 +285,11 @@ describe('a member who changes phones keeps their name on their old lines', () =
         await join_(ana1, g);
         await say(ana1, g, 'from her first phone');
         const ana2 = await rekeyed(ana1, 'Anaa');
-        expect(await attestOwnRekeys(URL_BASE, ana2.identity)).toBe(1);
+        expect(await attestJustCompletedRekey(URL_BASE, ana2.identity)).toBe(1);
         const ana3 = await rekeyed(ana2, 'Anaa');
         forgetGroupKeys();
         expect(nameOf(await shown(ben, g), 'from her first phone')).toBe(GROUP_LINE_FORMER_MEMBER);
-        expect(await attestOwnRekeys(URL_BASE, ana3.identity)).toBe(1);
+        expect(await attestJustCompletedRekey(URL_BASE, ana3.identity)).toBe(1);
         forgetGroupKeys();
         expect(nameOf(await shown(ben, g), 'from her first phone')).toBe('Anaa');
         // A node that drops the middle statement: the chain is broken, and the line names nobody.
@@ -320,12 +320,34 @@ describe('a member who changes phones keeps their name on their old lines', () =
         // "Not me": nothing is sent, and the line still names nobody.
         forgetGroupKeys();
         expect(nameOf(await shown(ben, g), 'Dee before the re-key')).toBe(GROUP_LINE_FORMER_MEMBER);
-        // "Yes, that was me".
-        expect(await attestOwnRekeys(URL_BASE, dee2.identity, pending)).toBe(1);
+        // "Yes, that was me", to the one date the prompt shows.
+        const ask = await rekeyToAsk(URL_BASE, dee2.identity);
+        expect(ask?.pubkey).toBe(dee.identity.publicKey);
+        expect(await attestOwnRekeys(URL_BASE, dee2.identity, [ask!])).toBe(1);
         expect(await unattestedRekeys(URL_BASE, dee2.identity)).toEqual([]);
         forgetGroupKeys();
         expect(nameOf(await shown(ben, g), 'Dee before the re-key')).toBe('Dee');
         // Asked again (a second sign-in): the node keeps the first; nothing changes.
         expect(await postKeySuccession(URL_BASE, dee2.identity, dee.identity.publicKey, '2026-10-05T00:00:00.000Z')).toBe('already');
+    });
+
+    it('§8: a node listing a second old key for a brand-new key gets no statement when the re-key completes; the prompt asks one date at a time', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const eve = phone('Eve');
+        const zed = phone('Zed');
+        await control('members', { members: [{ key: eve.identity.publicKey, callsign: 'Eve' }, { key: zed.identity.publicKey, callsign: 'Zed' }] });
+        const g = await newGroup(ben, 'Second old key');
+        await join_(zed, g);
+        await say(zed, g, 'Zed wrote this');
+        const eve2 = await rekeyed(eve, 'Eve');
+        // The dishonest part: Zed's key listed as also re-keyed to Eve's new key.
+        await control('sql', { sql: `INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to) VALUES (?, 'rekeyed', '2026-01-01T00:00:00.000Z', ?)`, params: [zed.identity.publicKey, eve2.identity.publicKey] });
+        expect((await unattestedRekeys(URL_BASE, eve2.identity)).map((r) => r.pubkey).sort()).toEqual([eve.identity.publicKey, zed.identity.publicKey].sort());
+        expect(await attestJustCompletedRekey(URL_BASE, eve2.identity)).toBe(0);
+        expect(await control<any[]>('sql', { sql: 'SELECT public_key FROM invalidated_keys WHERE rekeyed_to = ? AND succession_sig IS NOT NULL', params: [eve2.identity.publicKey], all: true })).toEqual([]);
+        expect((await rekeyToAsk(URL_BASE, eve2.identity))?.pubkey).toBe(eve.identity.publicKey);
+        forgetGroupKeys();
+        expect(nameOf(await shown(ben, g), 'Zed wrote this')).toBe('Zed');
     });
 });

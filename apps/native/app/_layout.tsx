@@ -47,6 +47,7 @@ import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
+import { attestOwnRekeys, keySuccessionPromptText, operatorContact, rekeyToAsk, KEY_SUCCESSION_PROMPT_NO, KEY_SUCCESSION_PROMPT_YES } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -144,6 +145,16 @@ function patternScreenLayout({ options, children }: { options: { presentation?: 
             </View>
         </AppLockSurface>
     );
+}
+
+/** "Not me" on the re-key prompt: nothing is signed, and the admins' contact is offered when the owner publishes one. */
+async function tellAdminsNotMe(nodeUrl: string): Promise<void> {
+    const { email, phone } = await operatorContact(nodeUrl);
+    Alert.alert('Nothing was confirmed', "If you didn't ask for a new key, tell this community's admins: someone else may have moved your account.", [
+        { text: 'Close', style: 'cancel' },
+        ...(email ? [{ text: 'Email the admins', onPress: () => { Linking.openURL(`mailto:${email}`).catch(() => {}); } }] : []),
+        ...(phone ? [{ text: 'Call the admins', onPress: () => { Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`).catch(() => {}); } }] : []),
+    ]);
 }
 
 function RootLayoutNav() {
@@ -729,6 +740,30 @@ function RootLayoutNav() {
             sub.remove();
             waits.forEach((cancel) => cancel());
         };
+    }, [identity?.publicKey]);
+
+    // A re-key to this key nobody has confirmed (an admin-path re-key, or one an older app completed): asked once per run,
+    // with §6's words (line-display design §5, §6; utils/key-succession.ts), one date at a time, and never about a re-key
+    // this run just did itself (rekeyToAsk waits for its own confirmation). "Yes, that was me" signs that one statement, and
+    // the member's old group lines show under their name again; "Not me" signs nothing and offers the admins' contact.
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        let current = true;
+        let cancel: (() => void) | null = null;
+        (async () => {
+            const nodeUrl = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+            if (!nodeUrl || !current) return;
+            const ask = await rekeyToAsk(nodeUrl, identity);
+            if (!current || !ask) return;
+            cancel = whenAppShows(() => {
+                if (!current) return;
+                Alert.alert('Was this you?', keySuccessionPromptText(ask.at), [
+                    { text: KEY_SUCCESSION_PROMPT_NO, style: 'cancel', onPress: () => { void tellAdminsNotMe(nodeUrl); } },
+                    { text: KEY_SUCCESSION_PROMPT_YES, onPress: () => { attestOwnRekeys(nodeUrl, identity, [ask]).catch(() => {}); } },
+                ]);
+            });
+        })().catch(() => {});
+        return () => { current = false; cancel?.(); };
     }, [identity?.publicKey]);
 
     // Set up notification deep-link handler

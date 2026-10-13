@@ -31,6 +31,7 @@ import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { buildRosterView } from '../utils/group-roster';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
+import { KEY_CHANGED_HINT } from '../utils/name-key-memory';
 
 interface GroupDetailModalProps {
     group: GroupItem | null;
@@ -39,6 +40,8 @@ interface GroupDetailModalProps {
     myPubkey?: string;
     onMembershipChanged?: () => void;
     onPostToGroup?: (group: GroupItem) => void;
+    /** Members whose name this phone saw on another key, with no statement from the new key (utils/name-key-memory.ts). */
+    keyChanged?: ReadonlySet<string>;
 }
 
 export function GroupDetailModal({
@@ -47,7 +50,8 @@ export function GroupDetailModal({
     onClose,
     myPubkey,
     onMembershipChanged,
-    onPostToGroup
+    onPostToGroup,
+    keyChanged,
 }: GroupDetailModalProps) {
     const { colors } = useTheme();
     const [loading, setLoading] = useState(false);
@@ -845,7 +849,7 @@ export function GroupDetailModal({
                                         <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign || '?'} size={36} />
                                         <View style={styles.memberInfo}>
                                             <Text style={styles.memberCallsign} numberOfLines={1}>
-                                                {m.callsign || m.memberPubkey.slice(0, 10)}{row.isYou ? ' (You)' : ''}
+                                                {m.callsign || m.memberPubkey.slice(0, 10)}{row.isYou ? ' (You)' : ''}{keyChanged?.has(m.memberPubkey) ? ` ${KEY_CHANGED_HINT}` : ''}
                                             </Text>
                                             {/* The badge says LEAD on the one row it belongs to. It wraps rather than
                                                 squeezing the callsign at 320dp with 1.3× text. */}

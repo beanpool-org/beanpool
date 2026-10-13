@@ -226,23 +226,34 @@ export interface DmPinBook {
     /**
      * Run `change` on this account's pins after every change queued before it; written through when it returns true.
      * `fresh`: storage held nothing for this account when the copy was read and nothing has been written since, so this is
-     * the first change a build with pins makes for it (the sync's seed from the phone's own rows, design §3.4 amendment).
+     * the first change a build with pins makes for it (design §3.4 amendment, the update case). The book's own seed
+     * (`seedWhenNew`) has already run on the pins then.
      */
     update(myPubkey: string, change: (pins: DmPeerPins, state: { fresh: boolean }) => boolean): Promise<boolean>;
     /** Drop every copy: the next ask reads storage again (a fresh app session). */
     forget(): void;
 }
 
+/**
+ * `seedWhenNew`: called once per account per app run, the first time the book finds storage holding nothing for it, and
+ * awaited before that read returns; what it returns is run on the pins at the account's first change, whoever makes it.
+ * So it sees the rows this phone held before this run asked for the pins, and a caller that reads the pins before it
+ * writes rows from the node (the sync pass, a push's refresh, a key resolve) never has those rows seeded (fix-4 item 5).
+ * Kept when a write is refused and the copy dropped: rows written since are not the phone's own from before.
+ */
 export function createDmPinBook(storage: PinStorage, seedWhenNew?: (myPubkey: string) => Promise<(pins: DmPeerPins) => boolean>): DmPinBook {
     const copies = new Map<string, Promise<DmPeerPins>>();
     const queues = new Map<string, Promise<unknown>>();
     const absent = new Set<string>();
+    const seeds = new Map<string, Promise<(pins: DmPeerPins) => boolean>>();
     function read(myPubkey: string): Promise<DmPeerPins> {
         const key = dmPeerPinsStoreKey(myPubkey);
         const held = copies.get(key);
         if (held) return held;
-        const loading = readStoredPins(storage, myPubkey).then((r) => {
+        const loading = readStoredPins(storage, myPubkey).then(async (r) => {
             if (r.absent) absent.add(key); else absent.delete(key);
+            if (r.absent && seedWhenNew && !seeds.has(key)) seeds.set(key, seedWhenNew(myPubkey));
+            await seeds.get(key);
             return r.pins;
         });
         copies.set(key, loading);
@@ -256,8 +267,9 @@ export function createDmPinBook(storage: PinStorage, seedWhenNew?: (myPubkey: st
             const pins = await copy;
             const fresh = absent.has(key);
             // The account's first change on a build with pins, whoever makes it: the phone's own rows first (the update).
-            if (fresh && seedWhenNew) (await seedWhenNew(myPubkey))(pins);
-            if (!change(pins, { fresh }) && !(fresh && seedWhenNew)) return false;
+            const seed = fresh ? seeds.get(key) : undefined;
+            if (seed) (await seed)(pins);
+            if (!change(pins, { fresh }) && !seed) return false;
             try {
                 await writeDmPeerPins(storage, myPubkey, pins);
                 absent.delete(key);
@@ -270,7 +282,7 @@ export function createDmPinBook(storage: PinStorage, seedWhenNew?: (myPubkey: st
         queues.set(key, turn);
         return turn;
     }
-    return { read, update, forget: () => { copies.clear(); queues.clear(); absent.clear(); } };
+    return { read, update, forget: () => { copies.clear(); queues.clear(); absent.clear(); seeds.clear(); } };
 }
 
 /** The entry kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */

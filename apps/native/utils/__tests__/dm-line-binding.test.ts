@@ -1553,6 +1553,26 @@ describe('the update seed holds whoever writes the pins first (#1872/#1873 confi
             expect(await sendTo(dm.id, 'The code is 4821')).toEqual({ err: 'DmKeyChangedError', puppetRead: false });
         });
     }
+
+    // The seed is final only for rows this phone held before this build wrote any from the node: the rows are read when
+    // the pins are first found absent, and the push path reads the pins before it writes the node's rows.
+    it('a restored phone opens Ben\'s DM from a push before its first sync (the node answers [Ana, PUPPET]), then the screen loads his history: the node\'s rows never seed a checked pin, the lines decide (P13\'s pause)', async () => {
+        await aQuestionAndAnAnswer();
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        lineFrom(puppet, dm, 'New phone, same Ben. What is the door code?');
+        for (const t of ['messages', 'conversation_participants', 'conversations', 'members']) sql.exec(`DELETE FROM ${t}`);
+        h.me = { publicKey: ana.publicKey, privateKey: ana.privateKey };   // restored from the 12 words: no rows, no pins
+        h.store.delete(PINS(ana));
+        h.store.delete('beanpool_dm_conversations_seen');
+        restarted();
+        expect(await getConversationKind(dm.id, { askNode: true })).toBe('dm');   // the push tap asks the node what the chat is
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, by: 'first-seen' });
+        expect(pinOf(ana, dm.id).checked).toBeUndefined();
+        await syncSingleConversation(dm.id);   // the DM screen loads the thread
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey, firstSight: true } });
+        expect(await sendTo(dm.id, 'The code is 4821')).toEqual({ err: 'DmKeyChangedError', puppetRead: false });
+    });
 });
 
 describe('first sight is decided by the thread\'s own lines; the listing only offers (§3.4 amendment, #1872 review finding 4)', () => {

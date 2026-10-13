@@ -3974,7 +3974,9 @@ export async function syncMessages(publicKey: string) {
             try {
                 const held = await dmPeersHeld();
                 await dmPins.update(me, (pins, { fresh }) => {
-                    const seeded = seedPinsFromRows(pins, me, held, fresh);
+                    // The book seeded the rows held before this run asked for the pins, checked; any held beyond those
+                    // were written since, from the node, and pin unchecked: the lines judge them first.
+                    const seeded = seedPinsFromRows(pins, me, held, false);
                     const listed = applyListingsToPins(pins, me, convData.conversations);
                     // Written on the first pass even with nothing to pin, so only rows held before this build seed checked.
                     return seeded || listed || fresh;
@@ -4341,7 +4343,11 @@ export async function getConversation(id: string, myPubkey?: string) {
     return await database.getFirstAsync<any>('SELECT name, post_id as postId FROM conversations WHERE id = ?', [id]);
 }
 
-/** This phone's DM pins, one copy per account in memory, changed through one queue (utils/dm-peer-pins.ts). */
+/**
+ * This phone's DM pins, one copy per account in memory, changed through one queue (utils/dm-peer-pins.ts). The rows a
+ * build with pins first meets an account with are read when the pins are first found absent, before any row from the
+ * node is written in this run (every writer of a DM's participant rows reads the pins first): the update's seed.
+ */
 const dmPins = createDmPinBook(AsyncStorage, async (me) => {
     const held = await dmPeersHeld();
     return (pins) => seedPinsFromRows(pins, me, held, true);
@@ -4606,6 +4612,10 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
         const conv = (await res.json())?.conversation;
         if (!conv?.id || typeof conv.type !== 'string') return;
         const database = await getDb();
+        // The pins before the node's rows: on the account's first meeting with pins, the update's seed reads the rows held
+        // before these (dmPins), so the node's answer is only ever a listing, judged on the thread's lines.
+        const me = (await loadIdentity().catch(() => null))?.publicKey;
+        if (me) await dmPins.read(me).catch(() => {});
         await database.runAsync(
             'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
             [conv.id, await heldConversationType(conv.id, conv.type), conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString()]
@@ -4616,7 +4626,6 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
             }
         }
         // The DM's pin hears what the node says (an offer, never a move); an unreadable pin store refuses the send anyway.
-        const me = (await loadIdentity().catch(() => null))?.publicKey;
         if (me) await dmPins.update(me, (pins) => applyListingsToPins(pins, me, [conv])).catch(() => {});
     } catch {
         // Offline or refused: the lock simply fails, and says so.
@@ -5342,6 +5351,8 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
+    // The pins before the node's answer is written (see refreshConversationFromNode): its rows are never the update's seed.
+    await dmPins.read(identity.publicKey).catch(() => {});
 
     const body: any = { type, participants, createdBy };
     if (name) body.name = name;

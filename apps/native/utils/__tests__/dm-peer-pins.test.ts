@@ -194,6 +194,34 @@ describe('createDmPinBook: one copy per account, one queue (#1872 review, findin
         expect(await book.update(ME, (p) => pinAtFirstSight(p, D1, PUPPET, NOW))).toBe(true);
         expect(Object.keys(stored(s)).sort()).toEqual([D0, D1].sort());
     });
+
+    it('the update\'s seed sees the rows held when the pins were first found absent, not rows written after that read, even across a refused write; a new run reads again', async () => {
+        const s = memory();
+        let refuse = true;
+        const rows: Array<[string, string]> = [[D0, BEN]];
+        const seen: string[][] = [];
+        const seedWhenNew = async () => {
+            const held = rows.map(([id, pk]) => `${id}:${pk}`);
+            seen.push(held);
+            return (pins: DmPeerPins) => { let c = false; for (const h of held) { const [id, pk] = h.split(':'); if (pinAtFirstSight(pins, id, pk, NOW, undefined, true)) c = true; } return c; };
+        };
+        const book = createDmPinBook({ getItem: s.getItem, setItem: async (k, v) => { if (refuse) throw new Error('disk full'); await s.setItem(k, v); } }, seedWhenNew);
+        await book.read(ME);
+        expect(seen).toEqual([[`${D0}:${BEN}`]]);
+        rows.push([D1, PUPPET]);   // the node's answer, written after the read
+        await expect(book.update(ME, (p) => applyDmListings(p, D1, [[PUPPET]], NOW))).rejects.toBeInstanceOf(DmPinStoreError);
+        refuse = false;
+        expect(await book.update(ME, (p) => applyDmListings(p, D1, [[PUPPET]], NOW))).toBe(true);
+        expect(seen).toHaveLength(1);
+        expect(stored(s)).toEqual({ [D0]: { peer: BEN, since: NOW, by: 'first-seen', checked: true }, [D1]: { peer: PUPPET, since: NOW, by: 'first-seen' } });
+        // A store that holds pins is never seeded; a new run with nothing stored reads the rows again.
+        book.forget();
+        await book.read(ME);
+        expect(seen).toHaveLength(1);
+        const other = 'ee'.repeat(32);
+        await book.read(other);
+        expect(seen).toHaveLength(2);
+    });
 });
 
 describe('first sight judged on the thread (§3.4 amendment): judgeFirstSight, applySightVerdict, the rule-5 record', () => {

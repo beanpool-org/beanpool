@@ -20,6 +20,7 @@ import { buildSettingsSigninQr } from '@beanpool/core';
 import type { RouteDeps } from '../routes/types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { directoryName } from '../state-engine.js';
+import { nodeRoleOf } from '../engine/node-roles.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import {
@@ -88,8 +89,13 @@ async function formFields(ctx: any): Promise<Record<string, string> | null> {
     return out;
 }
 
-/** Owners are told of a new connection, or of a grant a reused code or refresh token revoked (high: a copied token). */
-function tellOwners(kind: 'connected' | 'reuse' | 'revoked', grant: OAuthGrantView, role: 'owner' | 'admin' | null): void {
+/**
+ * Owners are told of a new connection, or of a grant a reused code or refresh token revoked (high: a copied token). The role
+ * named is its member's now (null: read here).
+ */
+function tellOwners(kind: 'connected' | 'reuse' | 'revoked', grant: OAuthGrantView, given: 'owner' | 'admin' | null): void {
+    const live = nodeRoleOf(grant.member);
+    const role = given ?? (live === 'owner' || live === 'admin' ? live : null);
     const name = `${cleanMemberText(grant.clientName, 60) || 'unnamed'}, sending to ${redirectHost(grant.redirectUri)}`;
     if (kind === 'connected') {
         noteSecurityEvent({

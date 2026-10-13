@@ -43,6 +43,7 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetPairingsForTests } from './settings-signin-pairing.js';
 import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
 import { db } from './db/db.js';
+import { getAlertsStatus } from './services/alerts.js';
 import { setSecurityAlertHandler } from './services/security-signal.js';
 import { OAUTH_PENDING_MAX, OAUTH_PENDING_TTL_MS, registerClient, resetOAuthForTests } from './agent/oauth.js';
 
@@ -328,6 +329,10 @@ async function main(): Promise<void> {
         const m1 = await manualConnect(owner, 'Reuse Check');
         assert(m1.token.status === 200 && m1.access.startsWith('bpo_') && (await mcpStatus(m1.access)) === 200,
             `a hand-made consent by the owner gives a working token (${show(m1.token)})`);
+        assert(notes.some(n => n.key === 'sec.agent' && /Reuse Check/.test(n.detail) && /connected by an owner: it can .*take a backup/.test(n.detail)),
+            `an owner's connection is told as an owner's, with backups (${JSON.stringify(notes.filter(n => /Reuse Check/.test(n.detail)).map(n => n.detail))})`);
+        const alerts = getAlertsStatus() as any;
+        assert(alerts?.assistants?.connected >= 2, `the Alerts card counts OAuth assistants as connected (${JSON.stringify(alerts?.assistants)})`);
         const reuse = await call('POST', '/oauth/token', { form: { grant_type: 'authorization_code', code: m1.code, client_id: m1.clientId, redirect_uri: REDIRECT, code_verifier: m1.verifier } });
         assert(reuse.status === 400 && reuse.body?.error === 'invalid_grant', `a reused code → invalid_grant (${show(reuse)})`);
         assert((await mcpStatus(m1.access)) === 401, "…and the grant it made is revoked: its access token answers 401");

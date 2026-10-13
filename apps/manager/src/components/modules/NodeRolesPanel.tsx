@@ -167,8 +167,9 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
         try {
             setRoles(await fetchNodeRoles(activeNode.url, nodeCredential(activeNode), tfa));
             setLoadError(null);
-        } catch (e: any) {
-            setLoadError(e?.message || 'Could not load the list');
+        } catch (e: unknown) {
+            const msg = (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)) || 'Could not load the list';
+            setLoadError(msg);
         } finally {
             setLoading(false);
         }
@@ -250,8 +251,9 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
             resetAdd();
             await load();
             onChanged?.();
-        } catch (e: any) {
-            setNotice({ kind: 'error', text: e?.message || 'The node did not accept that.' });
+        } catch (e: unknown) {
+            const msg = (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)) || 'The node did not accept that.';
+            setNotice({ kind: 'error', text: msg });
             setConfirmingAdd(false);
         } finally {
             setBusy(false);
@@ -269,8 +271,9 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
             setRemoving(null);
             await load();
             onChanged?.();
-        } catch (e: any) {
-            setNotice({ kind: 'error', text: e?.message || 'The node did not accept that.' });
+        } catch (e: unknown) {
+            const msg = (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)) || 'The node did not accept that.';
+            setNotice({ kind: 'error', text: msg });
             setRemoving(null);
         } finally {
             setBusy(false);

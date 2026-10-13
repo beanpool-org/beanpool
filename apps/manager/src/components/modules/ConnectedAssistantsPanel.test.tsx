@@ -18,7 +18,7 @@ const grant = (over: Record<string, unknown> = {}) => ({
 type Call = { url: string; method: string; body: any };
 
 /** A fake node: the list is `state.grants`; connecting pushes one; disconnecting removes it; the preview answers its tools. */
-function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown }) {
+function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown }) {
     const calls: Call[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any, init?: RequestInit) => {
         const url = String(input);
@@ -27,7 +27,7 @@ function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'a
         calls.push({ url, method, body });
         if (url.endsWith('/api/local/admin/agent/grants') && method === 'GET') {
             return new Response(JSON.stringify({
-                allowed: state.allowed ?? true, mcpUrl: 'https://mullum.example/mcp', role: state.role ?? 'owner', canConnect: state.canConnect ?? true,
+                allowed: state.allowed ?? true, mcpUrl: 'https://mullum.example/mcp', role: state.role ?? 'owner', canConnect: state.canConnect ?? true, canConnectOAuth: true,
                 seesAll: state.seesAll ?? true, defaultDays: 30, maxDays: 90, perMember: 5, grants: state.grants,
             }), { status: 200 });
         }
@@ -54,6 +54,7 @@ function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'a
                     { name: 'take_backup', title: 'Take a backup', description: 'Reads nothing.\nNever returns a file.', write: true, memberText: false },
                 ] }), { status: 200 });
             }
+            if (state.previewStatus) return new Response(JSON.stringify(state.previewBody ?? { error: 'refused' }), { status: state.previewStatus });
             return new Response(JSON.stringify({ tool: body.tool, ok: true, rows: 1, result: { community: 'Mullumbimby', members: 42, args: body.args } }), { status: 200 });
         }
         return new Response('{}', { status: 200 });
@@ -119,10 +120,22 @@ describe('ConnectedAssistantsPanel', () => {
         expect(screen.getByText(/Adam · admin · by token/)).toBeInTheDocument();
     });
 
-    it('an admin is told only owners connect one for now, theirs coming with the phone\'s approval: no Connect button', async () => {
-        const calls = fakeNode({ grants: [grant({ mine: true, member: 'Adam', role: 'admin' })], role: 'admin', canConnect: false, seesAll: false });
+    it('an admin connects from their assistant with the phone\'s approval (S2): the address and the steps, no token form', async () => {
+        const calls = fakeNode({
+            grants: [grant({ mine: true, member: 'Adam', role: 'admin' }), grant({ id: 'oa0123456789', name: 'Claude', mine: true, member: 'Adam', role: 'admin', via: 'oauth', sendsTo: 'claude.ai', expiresAt: null })],
+            role: 'admin', canConnect: false, seesAll: false,
+        });
         render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
-        expect(await screen.findByTestId('agent-admin-soon')).toHaveTextContent(/only an owner connects an AI assistant here.*phone’s\s+approval/);
+        const steps = await screen.findByTestId('agent-connect-oauth');
+        expect(steps).toHaveTextContent('https://mullum.example/mcp');
+        expect(steps).toHaveTextContent(/Settings → Connectors → Add custom connector → paste it/);
+        expect(steps).toHaveTextContent(/Approve on your phone.*type the two digits/);
+        expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
+        expect(screen.getByTestId('agent-admin-oauth')).toHaveTextContent(/Only an owner makes a token/);
+        expect(screen.queryByTestId('agent-admin-soon')).toBeNull();
+        // The OAuth assistant's own name is never shown without the host its answers go to.
+        expect(screen.getByTestId('agent-grant-sends-to')).toHaveTextContent('Sends what it reads to claude.ai');
+        expect(screen.getByText(/approved on the phone/)).toBeInTheDocument();
         expect(screen.queryByTestId('agent-needs-key')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull();
         expect(screen.queryByLabelText('Assistant’s name')).toBeNull();
@@ -178,5 +191,16 @@ describe('ConnectedAssistantsPanel', () => {
         fireEvent.click(within(tools[1]).getByRole('button', { name: 'Show its answer' }));
         expect(await within(tools[1]).findByTestId('agent-preview-answer')).toHaveTextContent('"community": "Mullumbimby"');
         expect(calls.find((c) => c.body?.tool === 'reports_list')?.body).toEqual({ grant: '0123456789ab', tool: 'reports_list', args: { include_text: true } });
+    });
+
+    it('with assistants off, an admin\'s preview says it is turned off, never "It would be told" (#1865 finding 2)', async () => {
+        fakeNode({ grants: [], role: 'admin', canConnect: false, seesAll: false, allowed: false, previewStatus: 409, previewBody: { error: 'AI assistants are turned off on this server: an owner turns them on here first' } });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'What would my assistant see?' }));
+        fireEvent.click((await screen.findAllByRole('button', { name: 'Show its answer' }))[0]);
+        const answer = await screen.findByTestId('agent-preview-answer');
+        expect(answer).toHaveTextContent(/^Turned off: an assistant is told nothing/);
+        expect(answer).not.toHaveTextContent(/It would be told/);
+        expect(screen.queryByTestId('agent-connect-oauth')).toBeNull();
     });
 });

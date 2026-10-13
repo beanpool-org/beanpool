@@ -28,7 +28,7 @@ import { PhotoCarousel } from '../../components/PhotoCarousel';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
 import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
 import { blockUser } from '../../utils/blocklist';
-import { colors, palette } from '../../constants/colors';
+import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EventDetail } from '../../components/EventDetail';
 import { isHiddenAuthor } from '../../utils/posts-view';
@@ -1147,7 +1147,7 @@ export default function PostDetailModal() {
                                         You are the Payee. Fulfill the terms exactly as agreed, then ask the Payer to release your credits. You will receive the net amount minus 1.5% transaction fee<Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> (100% community owned)</Text> (retained to balance the pool).
                                     </Text>
                                     <View style={{ backgroundColor: colors.feedback.danger.bg, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}>
-                                        <Text style={{ color: palette.red700, fontSize: 13, textAlign: 'center', fontWeight: '700' }}>
+                                        <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, textAlign: 'center', fontWeight: '700' }}>
                                             Note: If this post is still visible here, you have not yet received your credits.
                                         </Text>
                                     </View>
@@ -1215,7 +1215,7 @@ export default function PostDetailModal() {
                 {isOwnPost && (post.status === 'completed' || activeTx?.status === 'completed') && (
                     <View style={styles.confirmBox}>
                         <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>✅ Deal Completed</Text>
-                        <Text style={{ color: palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
+                        <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
                             This deal has concluded successfully and credits have been processed on the Ledger.
                         </Text>
                     </View>
@@ -1338,7 +1338,7 @@ export default function PostDetailModal() {
                     <View style={styles.ownPostActions}>
                         <View style={styles.confirmBox}>
                             <Text style={[styles.confirmBoxTitle, { color: '#d97706' }]}>⏸️ Offer paused</Text>
-                            <Text style={{ color: palette.gray600, fontSize: 13, textAlign: 'center' }}>
+                            <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center' }}>
                                 This offer is hidden from the marketplace and isn't counting toward your credit line. Re-activate it to make it live again.
                             </Text>
                         </View>
@@ -1387,7 +1387,7 @@ export default function PostDetailModal() {
                         {myRequest ? (
                             <View style={styles.confirmBox}>
                                 <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>Deal Established</Text>
-                                <Text style={{ color: palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
+                                <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
                                     {isOffer ? (
                                         `You have committed ${myRequest.credits} credits ${myRequest.hours ? `(${myRequest.hours} hours)` : ''} to a Trust Wallet for this offer.`
                                     ) : (
@@ -1407,8 +1407,8 @@ export default function PostDetailModal() {
                                 <Text style={styles.confirmBoxTitle}>{isOffer ? 'Accept this Offer?' : 'Offer to Fulfill?'}</Text>
                                 
                                 <View style={{ backgroundColor: colors.feedback.warning.bg, padding: 12, borderRadius: 8, borderColor: colors.feedback.warning.border, borderWidth: 1, marginBottom: 16 }}>
-                                    <Text style={{ color: palette.orange700, fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>🔒 Trust Wallet Protocol</Text>
-                                    <Text style={{ color: palette.gray600, fontSize: 12, lineHeight: 18 }}>
+                                    <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange700, fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>🔒 Trust Wallet Protocol</Text>
+                                    <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 12, lineHeight: 18 }}>
                                         {isOffer ? (
                                             <>
                                                 {`By proceeding, you commit ${post.price_type === 'fixed' ? post.credits : `your authorized`} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee`}

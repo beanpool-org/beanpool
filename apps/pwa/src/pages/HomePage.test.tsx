@@ -27,7 +27,7 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { START_CARD_WORDS, localDay, skyToday, starterCards, tipsFor } from '@beanpool/core';
+import { START_CARD_WORDS, TOUR_WORDS, localDay, skyToday, starterCards, tipsFor, tourSteps } from '@beanpool/core';
 import * as tourStore from '../lib/tour-store';
 import { removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
@@ -1971,6 +1971,29 @@ describe('Getting started in the web app: a newcomer\'s Home is the card alone, 
         expect(api.saveHomePreferences).not.toHaveBeenCalled();
         // The last step's chips, lent while Home is open: local, Beans on.
         expect(tourStore.tourHome()!.chips).toEqual(['steps', 'market', 'beans']);
+    });
+
+    it('on global with the showcase on, the tour has the Commons and Ledger preview steps, as the phone\'s does (T5): 9 steps, not 7', async () => {
+        const features = { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true };
+        const stepsFor = async (over: Record<string, unknown>) => {
+            tourStore.closeTour();
+            vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer({ profile: 'global', features: { ...features, ...over } })));
+            const view = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            fireEvent.click(await screen.findByTestId('home-start-look'));
+            const run = tourStore.currentTour()!;
+            view.unmount();
+            return { node: run.node, steps: tourSteps('web', run.node) };
+        };
+        const off = await stepsFor({});
+        expect(off.steps.map(s => s.id)).toEqual(['home', 'market', 'map', 'chat', 'people', 'top', 'cards']);
+        expect(off.node.showcase).toBeFalsy();
+        const on = await stepsFor({ showcase: true });
+        expect(on.steps.map(s => s.id)).toEqual(['home', 'market', 'map', 'commons', 'chat', 'people', 'ledger', 'top', 'cards']);
+        expect(on.node).toMatchObject({ global: true, beans: false, showcase: true });
+        // The previews' own words: an example, in a local community.
+        expect(on.steps.find(s => s.id === 'commons')).toMatchObject({ tab: 'projects', words: TOUR_WORDS.commonsGlobal });
+        expect(on.steps.find(s => s.id === 'ledger')).toMatchObject({ tab: 'ledger', words: TOUR_WORDS.ledgerGlobal });
+        expect(api.saveHomePreferences).not.toHaveBeenCalled();
     });
 
     it('Skip on the card: one layout write with the starter set, the record "skipped", the card gone and the five drawn', async () => {

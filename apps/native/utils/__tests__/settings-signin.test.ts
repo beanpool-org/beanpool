@@ -31,6 +31,7 @@ import {
     readSigninScan, scanProblemMessage, lookupPairing, buildSigninRequest, signinMessage,
     approveComputerSignin, declineComputerSignin, formatShortCode,
     SIGNIN_QUESTION, SIGNIN_WARNING, computerLines, formatTimeLeft, confirmDigitsLine,
+    AGENT_QUESTION, AGENT_WARNING, agentLines,
     DIGITS_PRIVATE, DIGITS_SHOWN_MS, digitsDone,
 } from '../settings-signin';
 import { rememberRequestSigning, resetRequestSigningForTests } from '../request-signing-version';
@@ -119,7 +120,7 @@ describe('asking the node about the pairing', () => {
         const calls = mockFetch([{ status: 200, body: { shortCode: 'K7F3QX', browser: 'Firefox on Windows', expiresAt: 5 } }]);
         expect(await lookupPairing(qr)).toEqual({
             kind: 'ok', browser: 'Firefox on Windows', expiresAt: 5,
-            expiresInSeconds: null, askedSecondsAgo: null, fromAddress: null, sameNetwork: false,
+            expiresInSeconds: null, askedSecondsAgo: null, fromAddress: null, sameNetwork: false, agent: null,
         });
         expect(calls[0].url).toBe(`https://mullum.beanpool.org/api/local/admin/auth/pairing/${ID}`);
     });
@@ -131,8 +132,17 @@ describe('asking the node about the pairing', () => {
         } }]);
         expect(await lookupPairing(qr)).toEqual({
             kind: 'ok', browser: 'Chrome on macOS', expiresAt: 5,
-            expiresInSeconds: 95, askedSecondsAgo: 25, fromAddress: '203.0.113.9', sameNetwork: true,
+            expiresInSeconds: 95, askedSecondsAgo: 25, fromAddress: '203.0.113.9', sameNetwork: true, agent: null,
         });
+    });
+
+    it("reads an AI assistant's consent: its own name and the host its answers go to; a host that isn't one is dropped", async () => {
+        mockFetch([{ status: 200, body: { shortCode: 'K7F3QX', browser: 'Chrome on macOS', expiresAt: 5, agent: { name: 'Claude\u202E', sendsTo: 'Claude.AI' } } }]);
+        const look = await lookupPairing(qr);
+        expect(look.kind === 'ok' && look.agent).toEqual({ name: 'Claude', sendsTo: 'claude.ai' });
+        mockFetch([{ status: 200, body: { shortCode: 'K7F3QX', browser: 'Chrome on macOS', expiresAt: 5, agent: { name: 'Claude', sendsTo: 'evil.example/claude.ai path' } } }]);
+        const bad = await lookupPairing(qr);
+        expect(bad.kind === 'ok' && bad.agent).toBeNull();
     });
 
     it('signs the lookup as the app signs a GET, so the node may show this admin where the computer asked from', async () => {
@@ -195,6 +205,13 @@ describe('the approval request', () => {
         expect(declined).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org' });
         expect(d.url.endsWith('/decline')).toBe(true);
         expect(signedBy(declined.signature, signedRequestBytes(settingsSigninText('mullum.beanpool.org', 'decline', ID, 'K7F3QX')))).toBe(true);
+    });
+
+    it("says the screen showed an AI assistant (agentShown) on an approval only when it did, never on a decline", async () => {
+        const shown = JSON.parse((await buildSigninRequest('approve', qr, identity, undefined, true)).init.body as string);
+        expect(shown).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org', confirm: true, agentShown: true });
+        expect(JSON.parse((await buildSigninRequest('approve', qr, identity)).init.body as string).agentShown).toBeUndefined();
+        expect(JSON.parse((await buildSigninRequest('decline', qr, identity, undefined, true)).init.body as string).agentShown).toBeUndefined();
     });
 
     it('never sends a private key', async () => {
@@ -273,7 +290,7 @@ describe('what the approval screen says', () => {
     });
 
     it('says how long ago the computer asked, from which address, and "same network" only when it is', () => {
-        const base = { kind: 'ok' as const, browser: 'Firefox on Windows', expiresAt: 0, expiresInSeconds: 100 };
+        const base = { kind: 'ok' as const, browser: 'Firefox on Windows', expiresAt: 0, expiresInSeconds: 100, agent: null };
         expect(computerLines({ ...base, askedSecondsAgo: 40, fromAddress: '203.0.113.9', sameNetwork: true }, 0)).toEqual([
             'Computer: Firefox on Windows',
             'Asked 40 seconds ago',
@@ -306,5 +323,30 @@ describe('what the approval screen says', () => {
         expect(digitsDone(1)).toEqual({ enabled: false, label: 'Done (0:01)' });
         expect(digitsDone(0)).toEqual({ enabled: true, label: 'Done' });
         expect(digitsDone(-5_000)).toEqual({ enabled: true, label: 'Done' });
+    });
+});
+
+describe("an AI assistant's consent (admin MCP S2)", () => {
+    it("never shows the assistant's name without the host its answers go to, and asks the assistant question", () => {
+        const lines = agentLines({ name: 'Claude', sendsTo: 'claude.ai' });
+        expect(lines[0]).toBe('Assistant: “Claude” (the name it gave itself)');
+        expect(lines[1]).toBe('Sends what it reads to: claude.ai');
+        expect(agentLines({ name: '', sendsTo: 'chatgpt.com' })).toContain('Sends what it reads to: chatgpt.com');
+        expect(AGENT_QUESTION).toBe('Did you just add this community to an AI assistant?');
+        expect(AGENT_WARNING).toMatch(/sent you this code/);
+    });
+
+    it('the Connect press sends agentShown after the unlock', async () => {
+        const qr = { nodeUrl: 'https://mullum.beanpool.org', pairingId: ID, shortCode: 'K7F3QX' };
+        const calls = mockFetch([{ status: 200, body: { success: true, role: 'admin', confirmCode: '42' } }]);
+        const out = await approveComputerSignin({ qr, identity, communityName: 'Mullum', agentShown: true });
+        expect(out).toEqual({ kind: 'approved', confirmCode: '42' });
+        expect(JSON.parse(calls[0].init?.body as string).agentShown).toBe(true);
+    });
+
+    it("an older node's 426 (or an owner-or-admin refusal) is shown as the node words it", async () => {
+        const qr = { nodeUrl: 'https://mullum.beanpool.org', pairingId: ID, shortCode: 'K7F3QX' };
+        mockFetch([{ status: 426, body: { error: 'Update the BeanPool app to connect an AI assistant', code: 'agent_app_too_old' } }]);
+        expect(await approveComputerSignin({ qr, identity, communityName: 'Mullum' })).toEqual({ kind: 'refused', message: 'Update the BeanPool app to connect an AI assistant' });
     });
 });

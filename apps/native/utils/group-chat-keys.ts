@@ -734,6 +734,107 @@ export class GroupKeyring {
         }
         return sent;
     }
+
+    /**
+     * A wrap to this phone's own key landed outside a sync (its own self-wrap from the old words, or a member's top-ups
+     * after an in-person confirmation; DESIGN-group-history-after-rekey-fable.md §7): the next sync asks at once for the
+     * epochs it holds no wrap for, instead of waiting out the minute.
+     */
+    noteWrapsLanded(): void {
+        this.lastHoleFetch = 0;
+    }
+
+    /**
+     * Who an epoch's maker wrapped it to, by the signed membersDigest alone (DESIGN-group-history-after-rekey-fable.md §4):
+     * the record's own wraps' recipients when they are exactly the signed set, else those plus `candidate` when that is.
+     * Never a roster, a chain or `missing`: the node can withhold a wrap from the list (then null), never add a name.
+     * `holder`, when given, is told whether the same list shows a live wrap to its key (the node's word, as a 201 is).
+     */
+    private async signedRecipientsWith(epoch: number, candidate: string, holder?: { key: string; holds?: boolean }): Promise<Set<string> | null> {
+        const stored = this.epochs.get(epoch);
+        if (!stored) return null;
+        try {
+            verifyGroupEpochRecord(stored.record, { groupId: this.groupId, epoch });
+            const a = await answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/${epoch}/wraps`, this.identity as BeanPoolIdentity));
+            if (holder) holder.holds = (Array.isArray(a?.wraps) ? a.wraps : []).some((w: any) => w && w.recipient === holder.key && !w.rejectedAt);
+            const set = new Set<string>((Array.isArray(a?.wraps) ? a.wraps : [])
+                .filter((w: any) => w && (w.sig === null || w.sig === undefined) && w.wrapper === stored.record.createdBy && typeof w.recipient === 'string')
+                .map((w: any) => w.recipient as string));
+            if (groupEpochCoversExactly(stored.record, [...set])) return set;
+            set.add(candidate);
+            return groupEpochCoversExactly(stored.record, [...set]) ? set : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * A member's new phone, confirmed in person (DESIGN-group-history-after-rekey-fable.md §4, Marty's picks 1, 2 and 4 of
+     * 13 Oct): hand `newKey` every epoch of this group this phone holds whose SIGNED record names `oldKey` and not
+     * `newKey`, and nothing else. The caller has checked on this phone that `oldKey` is the key this phone itself
+     * remembers under the member's name (name-key-memory.ts) and that `newKey` is the code scanned from the phone in front
+     * of the member (group-history-unlock.ts checkNewPhone). The node is in none of the three: a roster, a chain,
+     * `missing` or a members answer it doctors changes nothing here. One wraps read per epoch held. `said`, when given, counts
+     * the epochs left out because the node's list shows the new key a live wrap: the node's word, which the screen says as such.
+     */
+    async epochsForConfirmedPhone(oldKey: string, newKey: string, said?: { held: number }): Promise<number[]> {
+        await this.ensureLoaded();
+        const plan: number[] = [];
+        if (oldKey === newKey || newKey === this.identity.publicKey || oldKey === this.identity.publicKey) return plan;
+        for (const epoch of [...this.epochs.keys()].sort((x, y) => x - y)) {
+            if (!this.holdsWrap(epoch)) continue;
+            const holder = { key: newKey, holds: false };
+            const set = await this.signedRecipientsWith(epoch, oldKey, holder);
+            if (!set || !set.has(oldKey) || set.has(newKey)) continue;
+            // The new phone already holds it (an earlier confirmation, its own words, another member): nothing to hand, so
+            // a second scan says so rather than counting the node's 409 as a refusal (#1844 review, finding 4). It is the node's
+            // word, and the screen says it is (confirmation 1 of #1844, finding 4).
+            if (holder.holds) { if (said) said.held++; continue; }
+            plan.push(epoch);
+        }
+        return plan;
+    }
+
+    /**
+     * Hands `newKey` the epochs of `plan`, the list epochsForConfirmedPhone made for these two keys (so the screen can say
+     * "N of M" before the first wrap): at most one open and one wrap per epoch. Stops at the node's speed limit
+     * (`stopped`): the screen tries again. `already`: the epochs the node answered 409 wrap_exists for (someone got there
+     * between the list and the post), which the new phone holds as much as one handed here.
+     */
+    async handToConfirmedPhone(oldKey: string, newKey: string, plan: readonly number[], onEach?: (handed: number) => void): Promise<{ handed: number[]; already: number[]; stopped: boolean }> {
+        await this.ensureLoaded();
+        const handed: number[] = [];
+        const already: number[] = [];
+        if (oldKey === newKey || newKey === this.identity.publicKey || oldKey === this.identity.publicKey) return { handed, already, stopped: false };
+        for (const epoch of plan) {
+            const key = await this.keyFor(epoch);
+            if (!key) continue;
+            const t = makeTopUp(key, { myEdPrivHex: this.identity.privateKey, groupId: this.groupId, epoch, recipientPubHex: newKey });
+            const res = await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/wrap`,
+                { epoch, recipient: t.recipient, ephPub: t.ephPub, nonce: t.nonce, wrapped: t.wrapped, sig: t.sig }, this.identity as BeanPoolIdentity).catch(() => null);
+            if (res?.status === 201) { handed.push(epoch); onEach?.(handed.length); }
+            else if (res?.status === 429) return { handed, already, stopped: true };
+            else if (res?.status === 409 && (await res.json().catch(() => null))?.code === 'wrap_exists') already.push(epoch);
+            // 409 wrap_rejected, 403, 404: nothing more to do for this epoch, and it isn't there.
+        }
+        return { handed, already, stopped: false };
+    }
+
+    /**
+     * The wraps this phone holds that another member made for it after the epoch's maker (top-ups): who wrapped which
+     * epoch. The new phone reads it before and after a member's in-person confirmation, for its local "Confirmed by" note
+     * (DESIGN-group-history-after-rekey-fable.md §4). Only wraps that open here count.
+     */
+    async toppedUpBy(): Promise<{ epoch: number; wrapper: string }[]> {
+        await this.ensureLoaded();
+        const out: { epoch: number; wrapper: string }[] = [];
+        for (const [epoch, e] of this.epochs) {
+            const w = e.wrap?.wrapper;
+            if (!w || w === e.record.createdBy || w === this.identity.publicKey) continue;
+            if (await this.keyFor(epoch)) out.push({ epoch, wrapper: w });
+        }
+        return out;
+    }
 }
 
 /** Two copies of an epoch record's signed header are the same record. */

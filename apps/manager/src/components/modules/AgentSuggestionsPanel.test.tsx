@@ -70,6 +70,8 @@ describe('AgentSuggestionsPanel', () => {
         // Approve and Decline are the card's own, after the reason, not inside it.
         expect(within(reason).queryByRole('button')).toBeNull();
         expect(within(item).getAllByRole('button').map((b) => b.textContent)).toEqual(['Approve', 'Decline']);
+        // No "nothing left to approve" hint beside a working Approve (#1868 confirmation, mutant U8d).
+        expect(screen.queryByTestId('agent-approve-hint')).toBeNull();
     });
 
     it('Approve sends the existing route\'s own call, with the suggestion id, under this session', async () => {

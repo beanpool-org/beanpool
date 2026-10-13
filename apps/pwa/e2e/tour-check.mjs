@@ -2,8 +2,10 @@
 /**
  * Getting started at the floor (scratch/global-node/DESIGN-getting-started-fable.md): the tour's bar on every step
  * (local 9, global 7), the "?" dialog for each tab, and the mobile header's pill with each tab's title, in headless
- * Chromium at 320 x 569 with 130% text, light and dark. Fails on sideways scroll, a control under 44 px, words over
- * four lines, contrast under 4.5:1, an axe (WCAG 2 A/AA) violation, a title under the pill or the sync dot, the bar
+ * Chromium at 320 x 569 with 130% text, light and dark (the header also at 360, 375, 390, 412 and 430 px, 100% and 130%
+ * text). Fails on sideways scroll, a control under 44 px, words over four lines, contrast under 4.5:1, an axe (WCAG 2
+ * A/AA) violation, a title whose box meets the real sync chip's or the pill's (or covers the "?"), a title not centred
+ * in the room between them, a cut title without its ellipsis, the bar
  * covering a button above it, or the bar covering the tab's own bottom button (the Market's + ADD POST, which step 2
  * names, and the Map's +: their classes and offset are read from the pages themselves). Nothing here talks to a node; every request off this machine is aborted.
  *
@@ -31,7 +33,7 @@ execFileSync(path.join(BIN, 'esbuild'), [path.join(PWA, 'e2e', 'tour-harness.tsx
     '--define:process.env.NODE_ENV="production"', '--define:import.meta.env={"DEV":false,"PROD":true,"MODE":"production","BASE_URL":"/"}', '--define:__APP_VERSION__="harness"',
     '--banner:js=globalThis.process = globalThis.process || { env: {} };', '--loader:.png=dataurl', '--log-level=error'], { cwd: PWA, env: { ...process.env, NODE_PATH: path.join(PWA, 'node_modules') } });
 execFileSync(path.join(BIN, 'tailwindcss'), ['-c', 'tailwind.config.js', '-i', 'src/index.css', '-o', path.join(DIR, 'app.css'),
-    '--content', 'src/components/TourBar.tsx,src/components/HelpDialog.tsx,src/components/HeaderControls.tsx,src/components/LobbyHeader.tsx,e2e/tour-harness.tsx,' + path.join(DIR, 'fabs.json')], { cwd: PWA, stdio: 'ignore' });
+    '--content', 'src/components/TourBar.tsx,src/components/HelpDialog.tsx,src/components/HeaderControls.tsx,src/components/SyncChip.tsx,src/components/LobbyHeader.tsx,e2e/tour-harness.tsx,' + path.join(DIR, 'fabs.json')], { cwd: PWA, stdio: 'ignore' });
 const AXE = fs.readFileSync(path.join(PWA, '..', '..', 'node_modules', 'axe-core', 'axe.min.js'), 'utf8');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
@@ -78,11 +80,21 @@ const measure = () => {
         out.lobby = { bean: Math.round(bean.right), words: [Math.round(w.left), Math.round(w.right)], right: Math.round(right.left), whole: t.scrollWidth <= t.clientWidth,
             helpTappable: document.elementFromPoint(help.left + help.width / 2, help.top + help.height / 2)?.closest('[data-testid="lobby-help"]') != null, fits: right.right <= innerWidth, title: [Math.round(tr.left), Math.round(tr.right)] };
     }
-    const pill = document.getElementById('pill');
-    if (pill) {
-        const p = pill.firstElementChild.getBoundingClientRect(), t = document.getElementById('title').getBoundingClientRect(), s = document.getElementById('sync').getBoundingClientRect();
-        out.header = { pill: [Math.round(p.left), Math.round(p.right)], title: [Math.round(t.left), Math.round(t.right)], gapToPill: Math.round(p.left - t.right), gapToSync: Math.round(t.left - s.right), fits: p.right <= innerWidth };
-    }
+    // Each header row: the title's box against the real chip's and the pill's, and where its words sit in the room between.
+    out.headers = [...document.querySelectorAll('header[data-row]')].map(h => {
+        const t = h.querySelector('[data-testid="header-title"]');
+        const title = t.getBoundingClientRect(), chip = h.querySelector('[data-testid="sync-chip"]').getBoundingClientRect(), pill = h.querySelector('[data-testid="header-pill"]').getBoundingClientRect();
+        const help = h.querySelector('[data-testid="header-help"]').getBoundingClientRect();
+        const meets = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+        const cs = getComputedStyle(t), cut = t.scrollWidth > t.clientWidth + 1;
+        // The words' own middle: the content box's (cut, the words fill it) or the laid-out text's.
+        const range = document.createRange(); range.selectNodeContents(t); const w = range.getBoundingClientRect();
+        const pl = parseFloat(cs.paddingLeft), mid = cut ? title.left + parseFloat(cs.borderLeftWidth) + pl + (t.clientWidth - pl - parseFloat(cs.paddingRight)) / 2 : (w.left + w.right) / 2;
+        return { row: h.dataset.row, chip: [Math.round(chip.left), Math.round(chip.right)], title: [Math.round(title.left), Math.round(title.right)], pill: [Math.round(pill.left), Math.round(pill.right)],
+            gapToChip: Math.round(title.left - chip.right), gapToPill: Math.round(pill.left - title.right), meets: meets(title, chip) || meets(title, pill),
+            offCentre: Math.round((mid - (chip.right + pill.left) / 2) * 10) / 10, cut, ellipsis: cs.textOverflow === 'ellipsis',
+            helpTappable: document.elementFromPoint(help.left + help.width / 2, help.top + help.height / 2)?.closest('[data-testid="header-help"]') != null, fits: pill.right <= innerWidth };
+    });
     return out;
 };
 for (const dark of [false, true]) {
@@ -121,12 +133,27 @@ for (const dark of [false, true]) {
         for (const r of [m.dialog.text, ...m.dialog.rows]) if (r !== null && r < 4.5) problems.push(scheme + ' help ' + key + ' contrast ' + r);
         if (v.length) problems.push(scheme + ' help ' + key + ' axe ' + v.join(' '));
     }
-    for (const title of ['Market', 'Marketplace', 'Commons', 'People', 'Ledger', 'Home', 'Map', 'Chat', 'The Pulse']) {
-        const m = await open('view=header&title=' + encodeURIComponent(title));
-        rows.push([scheme, 'header ' + title, JSON.stringify(m.header)]);
-        if (title !== 'Marketplace' && (!m.header.fits || m.header.gapToPill < 0 || m.header.gapToSync < 0)) problems.push(scheme + ' header ' + title + ' overlaps ' + JSON.stringify(m.header));
-        if (m.scrollW > 320) problems.push(scheme + ' header ' + title + ': sideways ' + m.scrollW);
+    // The mobile header at every phone width, at 100% and 130% text: every title against every chip (tour-harness.tsx).
+    await page.goto(origin + '/index.html?view=header' + (dark ? '&dark=1' : ''), { waitUntil: 'load' });
+    const scale = await page.addStyleTag({ content: '/* the text size */' });
+    for (const text of [100, 130]) {
+        await scale.evaluate((el, pc) => { el.textContent = 'html { font-size: ' + pc + '% !important; }'; }, text);
+        for (const width of [320, 360, 375, 390, 412, 430]) {
+            await page.setViewportSize({ width, height: 2400 }); // every row on screen, so the "?" can be hit-tested
+            await page.waitForTimeout(60);
+            const m = await page.evaluate(measure);
+            const at = scheme + ' header ' + width + ' px ' + text + '%';
+            if (m.scrollW > width) problems.push(at + ': sideways ' + m.scrollW);
+            for (const r of m.headers) {
+                rows.push([at, r.row, JSON.stringify({ chip: r.chip, title: r.title, pill: r.pill, gapToChip: r.gapToChip, gapToPill: r.gapToPill, offCentre: r.offCentre, cut: r.cut })]);
+                if (r.meets || r.gapToChip < 0 || r.gapToPill < 0) problems.push(at + ' ' + r.row + ': the title meets the chip or the pill ' + JSON.stringify(r));
+                if (!r.helpTappable || !r.fits) problems.push(at + ' ' + r.row + ': the "?" is covered or the pill is off screen ' + JSON.stringify(r));
+                if (!r.cut && Math.abs(r.offCentre) > 1.5) problems.push(at + ' ' + r.row + ': the title is ' + r.offCentre + ' px off the middle of the room ' + JSON.stringify(r));
+                if (r.cut && !r.ellipsis) problems.push(at + ' ' + r.row + ': the title is cut without an ellipsis ' + JSON.stringify(r));
+            }
+        }
     }
+    await page.setViewportSize({ width: 320, height: 569 });
     for (const title of ['Home', 'Market', 'Map']) {
         const m = await open('view=lobby&title=' + encodeURIComponent(title));
         rows.push([scheme, 'lobby header ' + title, JSON.stringify(m.lobby)]);

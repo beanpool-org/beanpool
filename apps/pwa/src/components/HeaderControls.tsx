@@ -1,14 +1,31 @@
+import type { ReactNode } from 'react';
 import { openHelp } from '../lib/tour-store';
 
 /** The pill's width: profile, the "?" and Settings (72 px before the "?"). */
 export const HEADER_PILL_PX = 100;
-/** The sync dot's box on the header's left. */
-export const HEADER_SYNC_PX = 26;
+
 /**
- * The header's title sits in the middle of the room between the sync dot and the pill, not of the screen: at 320 px
- * with 130% text, centred on the screen it ran under the wider pill (measured: "Commons" by 24 px).
+ * The mobile header's title: the tab's name in the middle of the room the row leaves between the sync chip and the pill
+ * (the row's flexible middle, so the chip's real width counts: "● Online" is 82 px at 320 px with 130% text, not a
+ * 26 px dot), cut with an ellipsis where that room is narrower than the name, never drawn over either. The padding is
+ * room for the words' glow (text-rainbow's shadow; the cut clips at the padding box), given back by the margins so the
+ * words sit where they always did. `children`: what opens under the title (the community's status).
  */
-export const HEADER_TITLE_SHIFT_PX = -(HEADER_PILL_PX - HEADER_SYNC_PX) / 2;
+export function HeaderTitle({ title, onClick, children }: { title: string; onClick?: () => void; children?: ReactNode }) {
+    return (
+        <div className="relative z-10 flex-1 min-w-0 flex justify-center items-center px-2.5">
+            <span
+                data-testid="header-title"
+                className="font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center cursor-pointer truncate"
+                style={{ margin: '-2px -10px -10px', padding: '10px' }}
+                onClick={onClick}
+            >
+                {title}
+            </span>
+            {children}
+        </div>
+    );
+}
 
 /** The "?" (DESIGN-getting-started-fable.md §4–§5): help for the screen you're on, in the pill and the sidebar. */
 export function HelpIcon({ className }: { className: string }) {
@@ -22,7 +39,7 @@ export function HelpIcon({ className }: { className: string }) {
 /** The mobile header's pill: your profile, the "?" and Settings (its own file so its fit at 320 px can be measured alone). */
 export function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
     return (
-        <div style={{
+        <div data-testid="header-pill" style={{
             display: 'flex',
             alignItems: 'center',
             gap: '0.4rem',
@@ -32,6 +49,7 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
             border: '1px solid var(--border-secondary)',
             height: '26px', // Geometric balance with SyncStatus
             width: `${HEADER_PILL_PX}px`,
+            flexShrink: 0,
             justifyContent: 'center',
         }}>
             <button

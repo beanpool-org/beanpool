@@ -35,7 +35,7 @@ import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
-import { HEADER_TITLE_SHIFT_PX, HeaderControls, HelpIcon } from './components/HeaderControls';
+import { HeaderControls, HeaderTitle, HelpIcon } from './components/HeaderControls';
 import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
@@ -628,6 +628,41 @@ export function App() {
         { id: 'ledger', label: 'Ledger', emoji: '📊' },
     ];
 
+    // The community's status, opened from the header's title (or, on the map, its name).
+    const communityStatus = showCommunityStatus && communityHealth && (
+        <div 
+            className="absolute top-full mt-2 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 rounded-xl shadow-xl p-4 min-w-[220px] z-50 pointer-events-auto"
+            onClick={e => e.stopPropagation()}
+        >
+            <div className="flex items-center gap-2 mb-3">
+                <span className={`w-2.5 h-2.5 rounded-full ${communityHealth.online ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]'}`} />
+                <span className="font-bold text-sm text-nature-900 dark:text-white">
+                    {communityHealth.online ? 'Online' : 'Offline'}
+                </span>
+            </div>
+            <div className="space-y-1.5 text-xs text-nature-600 dark:text-nature-300">
+                <div className="flex justify-between">
+                    <span>Node:</span>
+                    <span className="font-mono font-semibold">{communityHealth.nodeName || communityHealth.callsign || 'Local'}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span>Members:</span>
+                    <span className="font-mono font-semibold">{communityHealth.memberCount ?? communityHealth.tree?.totalMembers ?? 0}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span>Active Posts:</span>
+                    <span className="font-mono font-semibold">{communityHealth.postCount ?? communityHealth.activity?.totalPosts ?? 0}</span>
+                </div>
+            </div>
+            <button
+                onClick={() => setShowCommunityStatus(false)}
+                className="mt-3 w-full py-1 text-xs font-semibold text-center text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-white transition-colors"
+            >
+                Close
+            </button>
+        </div>
+    );
+
     return (
         <div 
             className={`flex h-screen overflow-hidden text-text-primary ${!isBottomNavVisible ? 'bottom-nav-hidden' : ''}`}
@@ -796,21 +831,17 @@ export function App() {
                 }}>
                     <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
 
-                    <div className="relative z-10" style={{ marginTop: '12px' }}>
-                        <SyncStatus isMember={!isGuest} />
+                    <div className="relative z-10 shrink-0" style={{ marginTop: '12px' }}>
+                        <SyncStatus isMember={!isGuest} stacked />
                     </div>
 
-                    <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
-                        {activeTab !== 'map' || showSettings ? (
-                            <span 
-                                className="font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center cursor-pointer" 
-                                style={{ marginTop: '8px', transform: `translateX(${HEADER_TITLE_SHIFT_PX}px)` }}
-                                onClick={toggleCommunityStatus}
-                            >
-                                {/* The tab's own name, as the lobby's: at 320 px with 130% text "Marketplace" ran under the pill. */}
-                                {activeTab === 'pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label}
-                            </span>
-                        ) : (
+                    {activeTab !== 'map' || showSettings ? (
+                        // The tab's own name, as the lobby's, in the room between the chip and the pill (cut, never under either).
+                        <HeaderTitle title={(activeTab === 'pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label) ?? ''} onClick={toggleCommunityStatus}>
+                            {communityStatus}
+                        </HeaderTitle>
+                    ) : (
+                        <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
                             <div 
                                 className="relative flex items-center gap-1.5 pointer-events-auto cursor-pointer" 
                                 style={{ transform: 'translateX(-12px) translateY(-2px)' }}
@@ -823,42 +854,9 @@ export function App() {
                                     aria-label={`Version ${displayVersion}`}
                                 >v{displayVersion}</span>
                             </div>
-                        )}
-
-                        {showCommunityStatus && communityHealth && (
-                            <div 
-                                className="absolute top-full mt-2 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 rounded-xl shadow-xl p-4 min-w-[220px] z-50 pointer-events-auto"
-                                onClick={e => e.stopPropagation()}
-                            >
-                                <div className="flex items-center gap-2 mb-3">
-                                    <span className={`w-2.5 h-2.5 rounded-full ${communityHealth.online ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]'}`} />
-                                    <span className="font-bold text-sm text-nature-900 dark:text-white">
-                                        {communityHealth.online ? 'Online' : 'Offline'}
-                                    </span>
-                                </div>
-                                <div className="space-y-1.5 text-xs text-nature-600 dark:text-nature-300">
-                                    <div className="flex justify-between">
-                                        <span>Node:</span>
-                                        <span className="font-mono font-semibold">{communityHealth.nodeName || communityHealth.callsign || 'Local'}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Members:</span>
-                                        <span className="font-mono font-semibold">{communityHealth.memberCount ?? communityHealth.tree?.totalMembers ?? 0}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Active Posts:</span>
-                                        <span className="font-mono font-semibold">{communityHealth.postCount ?? communityHealth.activity?.totalPosts ?? 0}</span>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setShowCommunityStatus(false)}
-                                    className="mt-3 w-full py-1 text-xs font-semibold text-center text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-white transition-colors"
-                                >
-                                    Close
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                            {communityStatus}
+                        </div>
+                    )}
 
                     <HeaderControls
                         showSettings={showSettings}

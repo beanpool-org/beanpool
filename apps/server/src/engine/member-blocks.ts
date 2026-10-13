@@ -194,7 +194,7 @@ export function blockersOfKept(key: string): ReadonlySet<string> {
     if (db.inTransaction) return blockersOf(key);
     let state = watching ? readWatchState() : null;
     if (state?.triggers !== COUNTED_TRIGGERS.length) {
-        if (watching) console.warn(`[member-blocks] ${state?.triggers ?? 0} of the ${COUNTED_TRIGGERS.length} triggers counting block-list writes were gone; kept lists emptied, triggers made again`);
+        if (watching) console.warn(`[member-blocks] only ${state?.triggers ?? 0} of the ${COUNTED_TRIGGERS.length} triggers counting block-list writes were left; kept lists emptied, triggers made again`);
         kept.clear();
         keptKeys = 0;
         keptAt = -1;

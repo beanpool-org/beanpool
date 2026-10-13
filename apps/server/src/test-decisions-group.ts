@@ -24,7 +24,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, tickDecisions, removeGroupMember, joinGroup, postGroupThreadMessage, createPost, requestPost, setMemberRole, GROUP_CLOSED,
-    setUserStatusRow, registerPushToken,
+    setUserStatusRow, registerPushToken, purgeMemberSelf,
     GROUP_LEAD_CANDIDATE_HELD, setGroupRoleByVote, replaceGroupLeadByVote, removeGroupMemberByVote,
 } from './state-engine.js';
 import { GROUP_CLOSED_TO_POSTS } from './engine/posts.js';
@@ -514,6 +514,15 @@ async function main(): Promise<void> {
     const sProp = await signedFetch('POST', `/api/groups/${gq}/succession/propose`, { candidatePubkey: bq.pubKeyHex }, aq);
     assert(row(shut).status === 'executed' && sRead.body?.canPropose === false && sProp.status === 403 && sProp.body?.error === GROUP_CLOSED,
         `a closed group takes no silence vote (read canPropose ${sRead.body?.canPropose}; propose ${sProp.status} ${sProp.body?.error ?? ''})`);
+
+    // #1794 review N-b: a deleted account is named "Deleted Member" on the card (its anonymised callsign), never left as a key.
+    const [ln, an, bn, cn] = ['LN7', 'AN7', 'BN7', 'CN7'].map(n => makeMember(n));
+    const gn = makeGroup('Names Seven', [{ id: ln, role: 'convenor' }, { id: an, role: 'member' }, { id: bn, role: 'member' }, { id: cn, role: 'member' }]);
+    const nVote = (await propose(gn, an, { effect: 'replace_lead_convenor', subject: bn.pubKeyHex, title: 'BN7 leads' })).body.decision.id;
+    const purged = purgeMemberSelf(an.pubKeyHex);
+    const nCard = (await list(gn, cn)).body?.decisions?.find((x: any) => x.id === nVote);
+    assert(purged.ok && nCard?.names?.[an.pubKeyHex] === 'Deleted Member' && nCard?.names?.[bn.pubKeyHex] === 'BN7',
+        `a deleted author is named "Deleted Member" on the card, the subject by callsign (got ${JSON.stringify(nCard?.names)}, purge ${purged.message})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

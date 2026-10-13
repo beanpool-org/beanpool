@@ -29,7 +29,9 @@ function notFound(ctx: any): void {
 /**
  * The callsigns of the vote's author and subject (#1794 N7). A removed voter's screen has no roster to name them from, and
  * a callsign is what the community directory already shows any member; every reader of a card is already on its roll
- * or in the group. Someone with no callsign (an account deleted) is left out, and the apps say "someone in the group".
+ * or in the group. A deleted account keeps a row whose callsign is "Deleted Member" (state-engine purgeMemberSelf), so the
+ * card names them that, which is true. Only a key with no member row, or a blank callsign, is left out, and the apps then
+ * say "someone in the group".
  */
 function cardNames(d: Decision): Record<string, string> {
     const names: Record<string, string> = {};

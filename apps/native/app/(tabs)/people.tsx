@@ -949,9 +949,15 @@ export default function PeopleScreen() {
                             <View style={styles.infoBanner}>
                                 {listNote ? (
                                     <Text style={styles.infoText}>{communityListNote(listNote, searchQuery)}</Text>
-                                ) : (
+                                ) : profileKnown && !membersOnDemand ? (
                                 <Text style={styles.infoText}>
                                     {members.length} members on this node. Tap <Text style={styles.boldGreen}>+ Add</Text> to follow as a friend.
+                                </Text>
+                                ) : (
+                                // The node's profile not known yet, or its list not read yet on a community that says
+                                // `membersOnDemand`: the cards held are not the node's members, so no count (review of #1859, NB-1).
+                                <Text style={styles.infoText}>
+                                    Tap <Text style={styles.boldGreen}>+ Add</Text> to follow as a friend.
                                 </Text>
                                 )}
                             </View>

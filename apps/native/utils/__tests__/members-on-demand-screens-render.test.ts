@@ -119,10 +119,15 @@ vi.mock('expo-navigation-bar', () => ({ setBackgroundColorAsync: vi.fn(async () 
 // The phone's database: the real utils/db on its real schema, in memory.
 const sql = new DatabaseSync(':memory:');
 const sqlParams = (p: unknown) => (p === undefined ? [] : Array.isArray(p) ? p : [p]) as any[];
+// A read the test holds back: one whose statement matches `match` answers `ms` late (a slow phone's disk).
+const slowRead: { match: RegExp | null; ms: number } = { match: null, ms: 0 };
 const adapter = {
     runAsync: async (q: string, p?: unknown) => { const r = sql.prepare(q).run(...sqlParams(p)); return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) }; },
     execAsync: async (q: string) => { sql.exec(q); },
-    getAllAsync: async (q: string, p?: unknown) => sql.prepare(q).all(...sqlParams(p)),
+    getAllAsync: async (q: string, p?: unknown) => {
+        if (slowRead.match?.test(q)) await new Promise(r => setTimeout(r, slowRead.ms));
+        return sql.prepare(q).all(...sqlParams(p));
+    },
     getFirstAsync: async (q: string, p?: unknown) => sql.prepare(q).get(...sqlParams(p)) ?? null,
     closeAsync: async () => {},
     withTransactionAsync: async (cb: () => Promise<void>) => { await cb(); },
@@ -280,6 +285,7 @@ beforeEach(async () => {
     community.membersOnDemand = true;
     community.showcase = false;
     community.lateMs = 0;
+    slowRead.match = null;
     community.area = { lat: -28.55, lng: 153.5 };
     globalThis.fetch = vi.fn(nodeFetch) as typeof fetch;
     const database = await db.getDb();
@@ -485,6 +491,30 @@ for (const scheme of ['light', 'dark'] as const) {
                 await fits([OWN, ROSA]);
             });
 
+            it('the node profile known a moment after the screen mounts: no count of the cards held, before it or after', async () => {
+                community.lateMs = 30;
+                await render(createElement(PeopleScreen));
+                // Before the profile: the list is the cards held, which are not the node's members (review of #1859, NB-1).
+                expect(text()).not.toMatch(/members on this node/);
+                expect(text()).toContain('Tap + Add to follow as a friend.');
+                await settle(60);
+                // Known, and the node's list not read yet: still no count.
+                expect(text()).not.toMatch(/members on this node/);
+                await fits([OWN]);
+            });
+
+            it('a local community whose profile comes a moment late: no count until it comes, then the count of the whole copy', async () => {
+                community.membersOnDemand = false;
+                community.lateMs = 30;
+                await holdCard(ROSA, 'Rosa');
+                await render(createElement(PeopleScreen));
+                expect(text()).not.toMatch(/members on this node/);
+                expect(text()).toContain('Rosa');
+                await settle(60);
+                expect(text()).toContain('2 members on this node. Tap + Add to follow as a friend.');
+                expect(membersRequests()).toEqual([]);
+            });
+
             it('a local community (switch absent): the whole list from the copy as today, and nothing asked of /api/members', async () => {
                 community.membersOnDemand = false;
                 await holdCard(ROSA, 'Rosa');
@@ -676,6 +706,22 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(Object.keys(byPath).length).toBeGreaterThan(1);
                 for (const [path, n] of Object.entries(byPath)) expect(n, path).toBe(1);
                 expect(text()).toContain('Rosa');
+            });
+
+            it('a card fetched by key before the screen\'s own read lands: the late read never puts the stale card back', async () => {
+                await holdCard(ROSA, 'Old Name');
+                await (await db.getDb()).runAsync('UPDATE members SET card_fetched_at = ? WHERE public_key = ?', ['2026-01-01T00:00:00.000Z', ROSA]);
+                // The screen's first reads (the card, the listings) answer after the node's card has landed (review of #1859, NB-3).
+                slowRead.match = /FROM posts\s+WHERE author_pubkey = \?/;
+                slowRead.ms = 80;
+                nav.params = { publicKey: ROSA };
+                await render(createElement(PublicProfileScreen));
+                await settle(20);
+                expect(membersRequests()).toEqual([`/api/members?keys=${ROSA}`]);
+                expect(text()).toContain('Rosa');
+                await settle(120);
+                expect(text()).toContain('Rosa');
+                expect(text()).not.toContain('Old Name');
             });
 
             it('(a) a card held and fresh: no request for it, the name it holds', async () => {

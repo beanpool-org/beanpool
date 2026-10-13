@@ -44,7 +44,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const isGrid = viewMode === 'grid';
     // How far, as the node measured it (S5): one tag for every layout, nothing without a number.
     const distanceTag = typeof distanceKm === 'number' && Number.isFinite(distanceKm) ? (
-        <span data-testid="card-distance" className="text-[10px] font-black text-nature-500 dark:text-nature-450 inline-flex items-center gap-1 shrink-0">
+        <span data-testid="card-distance" className="text-[10px] font-black text-nature-500 dark:text-nature-400 inline-flex items-center gap-1 shrink-0">
             <span aria-hidden="true">📍</span>
             <span>{formatDistance(distanceKm)}</span>
         </span>
@@ -191,7 +191,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {youPill}
                             {pausedPill}
                             {categoryConfig && (
-                                <span className="text-[10px] font-black text-nature-500 dark:text-nature-450 flex items-center gap-1">
+                                <span className="text-[10px] font-black text-nature-500 dark:text-nature-400 flex items-center gap-1">
                                     <span>{categoryConfig.emoji}</span>
                                     <span>{categoryConfig.label}</span>
                                 </span>

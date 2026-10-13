@@ -35,16 +35,16 @@ interface Props {
 // `min` = the credit backing the floor (vouch + earned + granted); `floor` = the floor on ENTERING
 // the tier (floors slide continuously between them). Only presentation lives here.
 const TIER_LOOK: Record<TierName, { color: string; bg: string; border: string; blurb: string; perks: string[] }> = {
-    Newcomer: { color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0',
+    Newcomer: { color: 'var(--tier-newcomer)', bg: 'var(--tier-newcomer-bg)', border: 'var(--tier-newcomer-border)',
       blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
       perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits after first trade (needs positive balance)'] },
-    Resident: { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe',
+    Resident: { color: 'var(--tier-resident)', bg: 'var(--tier-resident-bg)', border: 'var(--tier-resident-border)',
       blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
       perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
-    Steward:  { color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe',
+    Steward:  { color: 'var(--tier-steward)', bg: 'var(--tier-steward-bg)', border: 'var(--tier-steward-border)',
       blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
       perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
-    Elder:    { color: '#d97706', bg: '#fffbeb', border: '#fde68a',
+    Elder:    { color: 'var(--tier-elder)', bg: 'var(--tier-elder-bg)', border: 'var(--tier-elder-border)',
       blurb: "A pillar of the commons — the deepest possible credit line and the community's highest recognition.",
       perks: ['Credit floor can reach -2000 (the maximum)', 'Recognised as a community Elder'] },
 };
@@ -377,7 +377,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 <button
                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
                         activeTab === 'trust'
-                            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-extrabold'
+                            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-300 font-extrabold'
                             : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600'
                     }`}
                     onClick={() => setActiveTab('trust')}
@@ -387,7 +387,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 <button
                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
                         activeTab === 'financials'
-                            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-extrabold'
+                            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-300 font-extrabold'
                             : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600'
                     }`}
                     onClick={() => setActiveTab('financials')}
@@ -406,8 +406,8 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                             {/* Circular progress ring around the emoji */}
                             <div className="shrink-0">
                                 <svg width="80" height="80" viewBox="0 0 100 100">
-                                    <circle cx="50" cy="50" r="42" fill="none" stroke="#e2e8f0" strokeWidth="6" />
-                                    <circle cx="50" cy="50" r="42" fill="none" stroke={tier.color} strokeWidth="6"
+                                    <circle cx="50" cy="50" r="42" fill="none" style={{ stroke: 'var(--tier-track)' }} strokeWidth="6" />
+                                    <circle cx="50" cy="50" r="42" fill="none" style={{ stroke: tier.color }} strokeWidth="6"
                                         strokeLinecap="round"
                                         strokeDasharray={`${journeyPct * 263.9} 263.9`}
                                         transform="rotate(-90 50 50)" />
@@ -417,7 +417,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                             <div className="flex-1 min-w-0">
                                 <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>YOUR TRUST LEVEL</span>
                                 <div className="text-2xl font-black leading-tight mt-0.5" style={{ color: tier.color }}>{tier.name}</div>
-                                <div className="text-xs font-semibold text-nature-500 mt-1">Level {tierIdx + 1} of {TIERS.length} · {ec} trust</div>
+                                <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">Level {tierIdx + 1} of {TIERS.length} · {ec} trust</div>
                                 <div className="text-xs font-semibold mt-2 text-nature-700 dark:text-nature-300">
                                     {nextTier
                                         ? <><span className="font-black" style={{ color: tier.color }}>{creditsToNext}</span> more trust to {nextTier.emoji} {nextTier.name}</>
@@ -431,13 +431,13 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-nature-100 dark:border-nature-800" style={{ borderColor: tier.border }}>
                             <button
                                 onClick={() => { if (canSend) { setActiveTab('financials'); setShowSend(true); } }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600 hover:bg-emerald-100' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 dark:border-nature-800 text-nature-400 cursor-default'}`}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 dark:border-nature-800 text-nature-400 dark:text-nature-300 cursor-default'}`}
                                 style={{ font: 'inherit' }}
                             >
                                 <span>{canSend ? '💸' : '🔒'}</span>
                                 <span>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</span>
                             </button>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600">
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
                                 <span>✓</span>
                                 <span>Invite Members</span>
                             </div>
@@ -460,14 +460,14 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         onClick={() => setSelectedLevel(i)}
                                         className="flex flex-col items-center py-3 px-1 rounded-xl border-2 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1"
                                         style={{
-                                            background: isSel ? t.bg : '#fff',
-                                            borderColor: isSel ? t.color : '#e5e7eb',
+                                            background: isSel ? t.bg : 'var(--tier-card)',
+                                            borderColor: isSel ? t.color : 'var(--tier-card-border)',
                                             opacity: reached ? 1 : 0.55,
                                             fontFamily: 'inherit',
                                         }}
                                     >
                                         <span className="text-3xl leading-none">{t.emoji}</span>
-                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: reached ? t.color : '#9ca3af' }}>{t.name}</span>
+                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: reached ? t.color : 'var(--tier-unreached)' }}>{t.name}</span>
                                         <span className="text-[9px] font-semibold text-nature-400 mt-1 leading-none">
                                             {tierIdx === i ? "You're here" : reached ? 'Reached' : `${t.min} trust`}
                                         </span>
@@ -487,7 +487,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                 <div className="text-xl font-black" style={{ color: sel.color }}>{sel.name}</div>
                                 <div className="text-xs text-nature-400 font-semibold">Level {selLevel + 1} of {TIERS.length}</div>
                             </div>
-                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, backgroundColor: selReached ? sel.bg : '#f9fafb', color: selReached ? sel.color : '#9ca3af' }}>
+                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, backgroundColor: selReached ? sel.bg : 'var(--tier-chip)', color: selReached ? sel.color : 'var(--tier-unreached)' }}>
                                 {selCurrent ? "You're here" : selReached ? 'Reached ✓' : '🔒 Locked'}
                             </span>
                         </div>
@@ -498,11 +498,11 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div className="flex items-start gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">
                             <span className="mt-0.5">⚖️</span>
                             <div className="flex-1">
-                                <div className="text-[13px] text-nature-600 dark:text-nature-400 font-semibold">
+                                <div className="text-[13px] text-nature-600 dark:text-nature-300 font-semibold">
                                     {selCurrent ? 'Your current floor' : selReached ? 'Floor from this tier' : 'Floor starts at'}
                                 </div>
                                 {selCurrent && (
-                                    <div className="text-[10px] text-nature-400 mt-0.5">Grows deeper as you trade more</div>
+                                    <div className="text-[10px] text-nature-400 dark:text-nature-300 mt-0.5">Grows deeper as you trade more</div>
                                 )}
                             </div>
                             <span className="text-xl font-black font-mono" style={{ color: sel.color }}>
@@ -529,7 +529,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     {nextTier && (
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
                             <h3 className="font-extrabold text-[15px] text-nature-950 dark:text-white mb-2">🚀 Reach {nextTier.emoji} {nextTier.name}</h3>
-                            <p className="text-sm font-black text-indigo-650 dark:text-indigo-400 mb-2">{creditsToNext} trust to go</p>
+                            <p className="text-sm font-black text-indigo-650 dark:text-indigo-300 mb-2">{creditsToNext} trust to go</p>
                             <p className="text-xs text-nature-500 leading-relaxed mb-4">
                                 Trust grows with the real value you trade. Trading with someone NEW counts fastest —
                                 value with any one partner is capped, so a wide circle beats repeat trades with the same person.
@@ -564,7 +564,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         <div className="text-[9px] font-bold text-nature-400 uppercase sm:tracking-wider mt-1 [overflow-wrap:anywhere]">{a.label}</div>
                                     </div>
                                     <div className="mt-3">
-                                        <div className="w-full h-1 bg-nature-100 dark:bg-nature-850 rounded-full overflow-hidden">
+                                        <div className="w-full h-1 bg-nature-100 dark:bg-nature-900 rounded-full overflow-hidden">
                                             <div className="h-full rounded-full" style={{ width: `${Math.min(100, a.pct * 100)}%`, backgroundColor: a.color }} />
                                         </div>
                                         <span className="text-[8px] font-bold text-nature-400 mt-1 block">{a.foot}</span>
@@ -595,7 +595,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
 
                         <button
                             onClick={() => setShowCommonsInfo(true)}
-                            className="flex-1 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 text-center shadow-sm hover:bg-nature-50 dark:hover:bg-nature-850 hover:border-nature-300 dark:hover:border-nature-700 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                            className="flex-1 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 text-center shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 hover:border-nature-300 dark:hover:border-nature-700 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30"
                         >
                             <p className="text-nature-500 dark:text-nature-400 text-sm font-semibold mb-2 flex items-center justify-center gap-1">
                                 Commons Pool <span className="text-xs text-nature-400">ⓘ</span>
@@ -613,7 +613,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     {/* Send credits */}
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
                         {!canSend && (
-                            <div className="bg-nature-50 dark:bg-nature-850/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
+                            <div className="bg-nature-50 dark:bg-nature-900/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
                                 <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
                                     {earned <= 0
                                         ? '🔒 Direct sends unlock after your first completed trade on the Marketplace, and require a positive balance.'
@@ -647,13 +647,13 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                     </button>
 
                                     {showMemberPicker && (
-                                        <div className="absolute left-0 right-0 mt-1 bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-850 rounded-xl shadow-xl z-20 max-h-56 overflow-y-auto">
+                                        <div className="absolute left-0 right-0 mt-1 bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-700 rounded-xl shadow-xl z-20 max-h-56 overflow-y-auto">
                                             <input
                                                 type="text"
                                                 placeholder="Search members..."
                                                 value={memberSearch}
                                                 onChange={(e) => setMemberSearch(e.target.value)}
-                                                className="w-full p-3 border-b border-nature-100 dark:border-nature-850 bg-transparent text-sm focus:outline-none text-nature-900 dark:text-white"
+                                                className="w-full p-3 border-b border-nature-100 dark:border-nature-700 bg-transparent text-sm focus:outline-none text-nature-900 dark:text-white"
                                             />
                                             {filteredMembers.length === 0 ? (
                                                 <div className="p-4 text-xs text-nature-400 text-center">No members found</div>
@@ -694,7 +694,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                     if (!isNaN(parsedAmount) && parsedAmount > 0) {
                                         // Peer transfers are fee-free — recipient receives the full amount.
                                         return (
-                                            <div className="bg-nature-100 dark:bg-nature-850 rounded-xl p-3 mb-4 text-xs space-y-1.5 border border-nature-200 dark:border-nature-800">
+                                            <div className="bg-nature-100 dark:bg-nature-900 rounded-xl p-3 mb-4 text-xs space-y-1.5 border border-nature-200 dark:border-nature-800">
                                                 <div className="flex justify-between items-center text-nature-750 dark:text-nature-300">
                                                     <span>Recipient receives:</span>
                                                     <span className="font-mono font-bold text-nature-950 dark:text-white">{parsedAmount.toFixed(2)} B</span>
@@ -790,7 +790,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                     alert(`Export failed${e instanceof Error && e.message ? `: ${e.message}` : ''}`);
                                 }
                             }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 rounded-lg text-[11px] font-bold hover:bg-nature-200 transition-colors border border-nature-200 dark:border-nature-750 shadow-sm cursor-pointer"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 rounded-lg text-[11px] font-bold hover:bg-nature-200 transition-colors border border-nature-200 dark:border-nature-700 shadow-sm cursor-pointer"
                         >
                             ⬇️ Export mine
                         </button>

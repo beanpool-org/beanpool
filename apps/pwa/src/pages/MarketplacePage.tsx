@@ -2505,7 +2505,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         className={`w-full py-2 rounded-2xl border text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-sm ${
                             categoryFilter !== 'all'
                                 ? 'bg-indigo-600 border-indigo-700 text-white shadow-soft dark:bg-indigo-500 dark:border-indigo-500'
-                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-850 text-nature-600 dark:text-nature-350 hover:bg-oat-50 dark:hover:bg-nature-900/60'
+                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-900/60'
                         }`}
                     >
                         {(MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter)?.emoji) || '🏷️'}
@@ -2534,7 +2534,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         className={`w-full py-2 rounded-2xl border text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-sm ${
                             radiusSettings
                                 ? 'bg-amber-600 border-amber-700 text-white shadow-soft dark:bg-amber-500 dark:border-amber-500'
-                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-850 text-nature-600 dark:text-nature-350 hover:bg-oat-50 dark:hover:bg-nature-900/60'
+                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-900/60'
                         }`}
                     >
                         <span>📍</span>
@@ -2806,7 +2806,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <h4 className="text-xs font-black text-violet-800 dark:text-violet-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                                         <span>★</span> Customize Interests
                                     </h4>
-                                    <p className="text-nature-500 dark:text-nature-450 text-xs mb-3">
+                                    <p className="text-nature-500 dark:text-nature-400 text-xs mb-3">
                                         Select categories to prioritize in your personalized "★ For You" feed.
                                     </p>
                                     <div className="flex flex-wrap gap-1.5">

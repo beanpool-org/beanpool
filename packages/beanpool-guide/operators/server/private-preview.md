@@ -23,4 +23,4 @@ The Manager shows whether it is on, under Node Identity ("Private preview: on" o
 
 ## Inviting someone
 
-In the Manager, make a seed invite and send it to the person. You can also sign in to the app as an owner or admin and make an invite there. Once they join, they are an ordinary member.
+In the Manager, open **People & Safety**, then **Invites & QR**, press **Generate** to make a pass, and send it to the person. You can also sign in to the app as an owner or admin and make an invite there. Once they join, they are an ordinary member.

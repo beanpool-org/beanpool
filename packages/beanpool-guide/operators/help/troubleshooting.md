@@ -43,12 +43,12 @@ Run it again: a data folder it had moved out of the way is put back before the s
 - "Too many wrong admin passwords": wait, try from another network, or sign in from the app. See Rate limits.
 - Lost the password: see Signing in.
 - Lost the two-factor code: see Access and security.
-- Settings keeps signing you out: sign-ins from the app last 2 hours unused, 12 hours at most, and end when the server restarts.
+- Settings keeps signing you out: a sign-in from the app's Manage button ends after 15 minutes unused (press Manage again to come straight back). A computer signed in by scanning a code ends after 2 hours unused. Both end after 12 hours at most, and when the server restarts.
 
 ## Members cannot join
 
 - Check the invite has not been used or passed its 30 days.
-- Invites made in Settings while signed in from the app are not real codes. See Members and invites.
+- Only an owner or admin can make invites in Settings (a moderator cannot), and the global community has no invites. See Members and invites.
 - Check Invites is not switched off under Gateway & Peers.
 
 ## Getting help

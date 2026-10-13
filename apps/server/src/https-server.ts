@@ -180,6 +180,7 @@ import { requestNonces, verifyMemberSignature } from './engine/member-signature.
 import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason } from '@beanpool/core';
 import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
+import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSampleId } from './sample-id-guard.js';
 
 
 // X-1: replay protection for signed requests. A signed request is valid for SIGNATURE_FRESHNESS_MS around its
@@ -768,6 +769,12 @@ function untrackConnection(ws: any) {
  * body, and every correctly signed PATCH failed signature verification against an empty body.
  */
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/** 400 `sample_id`: a write carried an id from the sample community (sample-id-guard.ts). Nothing past the parser runs. */
+function refuseSampleId(ctx: Koa.Context): void {
+    ctx.status = 400;
+    ctx.body = { error: SAMPLE_ID_MESSAGE, code: SAMPLE_ID_REFUSAL };
+}
 
 /** /api and /ws, ignoring case: answers that are never documents, so they carry no document headers. */
 function isApiOrWsPath(requestPath: string): boolean {
@@ -1436,6 +1443,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     // JSON body parser middleware
     app.use(async (ctx, next) => {
         if (MUTATING_METHODS.has(ctx.method)) {
+            // No write carries an id from the sample community (sample-id-guard.ts): its path and query first, before a byte
+            // of the body is read, and its body's ids once parsed, below.
+            if (urlCarriesSampleId(ctx.path, ctx.query)) return refuseSampleId(ctx);
             if (ctx.request.type === 'application/json' || ctx.get('content-type')?.includes('json')) {
                 // A2-10: reject an over-limit body up-front by Content-Length so a
                 // well-behaved client gets a clean 413 before we read a byte. The
@@ -1492,6 +1502,7 @@ export async function startHttpsServer(port: number): Promise<number> {
                 (ctx as any).requestBody = {};
                 (ctx.request as any).body = {};
             }
+            if (bodyCarriesSampleId((ctx as any).requestBody)) return refuseSampleId(ctx);
         }
         await next();
     });

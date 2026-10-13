@@ -9,7 +9,7 @@ related: decisions, rules, polls, enterprises
 
 - A Decision is for something your community's server can carry out: removing or suspending a member, freezing or unfreezing someone's credit, choosing who may vouch, or paying beans from the Commons. For anything else, start a Poll instead.
 - A Decision cannot remove or suspend an owner or admin of your community's server. See "Rules and how decisions work".
-- You can propose once you have completed a trade, or an admin has given you a trust badge. A vouch alone is not enough.
+- You can propose once you have completed a trade, or an admin has given you a trust badge. Your community's admins can always propose. A vouch alone is not enough.
 - You can have one open Decision at a time.
 - The global community has no Decisions, so there is nothing to propose there. See "Voting on a Decision".
 

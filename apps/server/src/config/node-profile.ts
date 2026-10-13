@@ -154,6 +154,12 @@ export interface ProfileSwitches {
      *  phone, in `features`, to stop reading the directory whole. Its own switch rather than `nearbyListings`'s (Marty,
      *  2026-10-13): a self-hosted community with thousands of members may turn it on without by-area listings. */
     membersOnDemand: boolean;
+    /** A feature switched off here is shown, not hidden: the apps preview it from the sample community Example Valley
+     *  (@beanpool/core sample-community.ts) under the 🏘️ Local community marker, with every action opening the sheet
+     *  that leads to a local community (DESIGN-global-showcase-fable.md §4, Marty 2026-10-13). Reported in `features`
+     *  only while on. Off (a local community): a feature its operator turned off is hidden, as before, since they
+     *  meant it. On or off, nothing about what the node does changes, and no write carries a sample id (sample-id-guard.ts). */
+    showcase: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -186,6 +192,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         announceProfiles: true,
         nearbyListings: false,
         membersOnDemand: false,
+        showcase: false,
     },
     global: {
         openJoin: true,
@@ -223,6 +230,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         // Nor a directory of 20,000 strangers on every phone: each holds the cards it has a reason for and searches the
         // node for the rest (Marty, 2026-10-13).
         membersOnDemand: true,
+        // Global is where a stranger meets BeanPool (Marty, 2026-10-12): what lives in a local community is shown, not hidden.
+        showcase: true,
     },
 };
 
@@ -282,6 +291,9 @@ export interface NodeFeatures {
      *  and the people its owner or an admin invites get in, and a visitor sees nothing. The apps show the preview's
      *  message instead of the doors. Absent otherwise, so a node not in a preview answers exactly as before. */
     privatePreview?: true;
+    /** Present, and true, only where `showcase` is on: the apps preview a switched-off feature from the sample community
+     *  instead of hiding it. Absent (a local community, or a server from before it): hidden, exactly as before. */
+    showcase?: true;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -441,6 +453,7 @@ export function getNodeFeatures(): NodeFeatures {
         wordsDoor: s.openJoin && !s.ssoRequiredForJoin,
         ...(s.nearbyListings ? { nearbyListings: { ...nearbyListingsLimits() } } : {}),
         ...(s.membersOnDemand ? { membersOnDemand: true as const } : {}),
+        ...(s.showcase ? { showcase: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite.
     if (isPrivatePreview()) return { ...features, openJoin: false, wordsDoor: false, privatePreview: true };

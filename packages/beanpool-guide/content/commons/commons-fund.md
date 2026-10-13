@@ -13,6 +13,7 @@ Beans come into it from:
 
 - the 1.5% market fee on every completed trade;
 - the circulation fee on large balances. See "The circulation fee".
+- members who pay in themselves, with **Pay the Commons** on the **Ledger**. A member paying back a debt to the Commons enters the pay-back code an admin shared, and the payment comes off the debt at once.
 
 ## Seeing it
 

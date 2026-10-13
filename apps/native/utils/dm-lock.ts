@@ -45,3 +45,20 @@ export function restoredDraft(unsent: string, typedSince: string): string {
     const since = typedSince.trim();
     return since ? `${unsent}\n${since}` : unsent;
 }
+
+/** The phone couldn't read its group key memory (group-chat-keys.ts GroupChatKeyError, code 'store'): nothing went. */
+export function isKeyStoreUnread(e: unknown): boolean {
+    const x = e as { name?: unknown; code?: unknown } | null;
+    return x?.name === 'GroupChatKeyError' && x.code === 'store';
+}
+
+/**
+ * The line the DM screen shows for a send that threw, when the words go back in the box: a line that couldn't be locked,
+ * or a key memory that couldn't be read (every send asks it first, a DM's too: #1815 review). Null: anything else, an
+ * alert as before.
+ */
+export function refusedSendNotice(e: unknown, peerName?: string | null): string | null {
+    if (isDmNotLocked(e)) return dmNotLockedLine(peerName);
+    if (isKeyStoreUnread(e)) return (e as Error).message;
+    return null;
+}

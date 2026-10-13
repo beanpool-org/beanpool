@@ -111,13 +111,15 @@ async function main() {
         let ahead3 = 0;
         Date.now = () => realNow3() + ahead3;
         try {
-            // 400 small trading groups this month: a refresh gives a turn after each, so it is still reading when the
+            // 4,000 small trading groups this month: a refresh gives a turn after each, so it is still reading when the
             // checkpoint comes, however many turns Clean storage gives first.
-            for (let i = 0; i < 400; i++) {
-                member(`wbg-c${i}a`, 90);
-                member(`wbg-c${i}b`, 90);
-                trade(`wbg-c${i}a`, `wbg-c${i}b`, 5, 5);
-            }
+            db.transaction(() => {
+                for (let i = 0; i < 4000; i++) {
+                    member(`wbg-c${i}a`, 90);
+                    member(`wbg-c${i}b`, 90);
+                    trade(`wbg-c${i}a`, `wbg-c${i}b`, 5, 5);
+                }
+            })();
             clearWashTradingCache();
             const before = slowSteps(() => getWashTradingEnforcement()); // background mode
             ahead3 = WASH_KEEP_MS;

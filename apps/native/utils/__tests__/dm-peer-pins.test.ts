@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmOpenPeers, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, type DmPeerPins } from '../dm-peer-pins';
+import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmOpenPeers, acceptOffer, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, type DmPeerPins } from '../dm-peer-pins';
 import { dmPeerPinsStoreKey } from '../storage-keys';
 
 // The pin store itself (utils/dm-peer-pins.ts): what a listing may do to a pin, and what an unreadable store does. The
@@ -107,5 +107,38 @@ describe('pinAtFirstSight and dmOpenPeers', () => {
 
     it('old lines open under the pinned key first, then the ones before it', () => {
         expect(dmOpenPeers({ peer: PUPPET, since: NOW, by: 'member', former: [BEN, PUPPET] })).toEqual([PUPPET, BEN]);
+    });
+});
+
+describe('acceptOffer: the member\'s "Continue with the new key" (slice 2)', () => {
+    const LATER = '2026-10-15T00:00:00.000Z';
+    it('moves the pin to the key on offer, by the member, the old key first in former (pick 3), the offer gone', () => {
+        const pins: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen', former: [OTHER], offered: { peer: PUPPET, at: NOW } } };
+        expect(acceptOffer(pins, D0.toUpperCase(), PUPPET.toUpperCase(), LATER)).toBe(true);
+        expect(pins[D0]).toEqual({ peer: PUPPET, since: LATER, by: 'member', former: [BEN, OTHER] });
+    });
+    it('never to a key that isn\'t on offer, nor when several keys are listed (peer null), nor with no pin', () => {
+        const pins: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen', offered: { peer: PUPPET, at: NOW } } };
+        const before = JSON.stringify(pins);
+        expect(acceptOffer(pins, D0, OTHER, LATER)).toBe(false);
+        expect(acceptOffer(pins, D0, BEN, LATER)).toBe(false);
+        expect(acceptOffer(pins, D0, 'not a key', LATER)).toBe(false);
+        expect(JSON.stringify(pins)).toBe(before);
+        const several: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen', offered: { peer: null, at: NOW } } };
+        expect(acceptOffer(several, D0, PUPPET, LATER)).toBe(false);
+        expect(acceptOffer({}, D0, PUPPET, LATER)).toBe(false);
+    });
+    it('a first-seen pin with no offer: the member keeps that key as theirs, and only that key', () => {
+        const pins: DmPeerPins = { [D0]: { peer: PUPPET, since: NOW, by: 'first-seen' } };
+        expect(acceptOffer(pins, D0, BEN, LATER)).toBe(false);
+        expect(acceptOffer(pins, D0, PUPPET, LATER)).toBe(true);
+        expect(pins[D0]).toEqual({ peer: PUPPET, since: LATER, by: 'member' });
+        expect(acceptOffer(pins, D0, PUPPET, LATER)).toBe(false);   // a member's pin with no offer: nothing to continue with
+    });
+    it('the former list holds each key once, never the pinned one', () => {
+        const pins: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'member', former: [PUPPET, OTHER], offered: { peer: PUPPET, at: NOW } } };
+        expect(acceptOffer(pins, D0, PUPPET, LATER)).toBe(true);
+        expect(pins[D0].former).toEqual([BEN, OTHER]);
+        expect(dmOpenPeers(pins[D0])).toEqual([PUPPET, BEN, OTHER]);
     });
 });

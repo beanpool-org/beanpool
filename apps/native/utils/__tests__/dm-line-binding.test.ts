@@ -77,7 +77,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending } from '../db';
+import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, getDmKeyChange, acceptOfferedPeer } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice } from '../dm-lock';
 import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
@@ -1234,6 +1234,135 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         expect((await shows(dm)).map((l) => l.text)).toEqual(['Shall I cancel the order?', 'No']);
         const r = await trySend(dm.id, 'Welcome back');
         expect(r.sent.map((l) => ({ benNew: reads(benNew, l), benOld: reads(ben, l) }))).toEqual([{ benNew: 'Welcome back', benOld: null }]);
+    });
+
+    // Slice 2: the banner's state (getDmKeyChange), the member's "Continue with the new key" (acceptOfferedPeer) and the
+    // Inbox tag, through the same real sync, send and read paths.
+    const tagOf = async (who: Person, id: string) => (await getConversations(who.publicKey)).find((c: any) => c.id === id)?.keyChanged;
+    const snapshot = (who: Person, id: string) => ({
+        pins: h.store.get(PINS(who)) ?? null,
+        participants: participantsOf(id),
+        messages: sql.prepare('SELECT id, author_pubkey, ciphertext, nonce FROM messages WHERE conversation_id = ? ORDER BY id').all(id),
+    });
+    /** Ben re-keys honestly (engine/key-move.ts): the node moves his participant row and his lines' author to the new key. */
+    function benRekeys(benNew: Person) {
+        dm.participants = [ana.publicKey, benNew.publicKey];
+        for (const l of node.lines) if (l.authorPubkey === ben.publicKey) l.authorPubkey = benNew.publicKey;
+    }
+
+    it('P3 (an honest re-key): the banner offers Ben\'s new key; after Ana continues, the new key reads her line, the old key never gets one, and Ben\'s old lines and photo still open (former = [Ben])', async () => {
+        await phoneOf(ana);
+        await says(ana, dm, 'Shall I cancel the order?');
+        await phoneOf(ben);
+        await says(ben, dm, 'No');
+        await sendImageMessage(dm.id, 'data:image/jpeg;base64,QkVOUw==', '');
+        const photo = node.lines[node.lines.length - 1];
+        await phoneOf(ana);
+        const benNew = person('Ben (new phone)');
+        benRekeys(benNew);
+        await syncMessages(ana.publicKey);
+
+        // The banner's state, the Inbox tag, and a send refused before anything leaves.
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, offered: { peer: benNew.publicKey } });
+        expect(await getDmKeyChange(dm.id)).toEqual({ offeredPeer: benNew.publicKey, firstSight: false });
+        expect(await tagOf(ana, dm.id)).toBe(true);
+        const refused = await trySend(dm.id, 'Is that you?');
+        expect({ err: refused.err?.name, sent: refused.sent.length }).toEqual({ err: 'DmKeyChangedError', sent: 0 });
+
+        // Continue with a key that isn't the one on offer: nothing moves.
+        expect(await acceptOfferedPeer(dm.id, puppet.publicKey)).toBe(false);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, by: 'first-seen', offered: { peer: benNew.publicKey } });
+
+        expect(await acceptOfferedPeer(dm.id, benNew.publicKey)).toBe(true);
+        expect(pinOf(ana, dm.id)).toEqual({ peer: benNew.publicKey, since: expect.any(String), by: 'member', former: [ben.publicKey] });
+        expect(await getDmKeyChange(dm.id)).toBeNull();
+        expect(await tagOf(ana, dm.id)).toBe(false);
+
+        const shown = await shows(dm);
+        expect(shown.slice(0, 2).map((l) => l.text)).toEqual(['Shall I cancel the order?', 'No']);
+        expect(shown.map((l) => l.text)).not.toContain(NOT_VERIFIED);
+        expect(await getDecryptedAttachment(dm.id, photo.id)).toMatch(/chat-images\//);
+        expect(fs.readFileSync(`${h.cacheDir}/chat-images/${photo.id}.jpg`, 'utf8')).toBe('QkVOUw==');
+
+        const r = await trySend(dm.id, 'Welcome back');
+        expect(r.err).toBeNull();
+        expect(r.sent.map((l) => ({ benNew: reads(benNew, l), benOld: reads(ben, l), puppet: reads(puppet, l) }))).toEqual([{ benNew: 'Welcome back', benOld: null, puppet: null }]);
+        // Ben's old key never received a line after the move, and PUPPET none at all.
+        expect(node.lines.filter((l) => l.authorPubkey === ana.publicKey && reads(puppet, l) !== null)).toEqual([]);
+        // A sync after the move leaves the member's pin where they put it.
+        await syncMessages(ana.publicKey);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: benNew.publicKey, by: 'member', former: [ben.publicKey] });
+        expect(pinOf(ana, dm.id).offered).toBeUndefined();
+    });
+
+    it('P12: reading the banner again ("Not now", or the next poll) writes nothing; "Continue" rewrites the participant rows to [Ana, the new key] and marks the pin the member\'s', async () => {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        const benNew = person('Ben (new phone)');
+        benRekeys(benNew);
+        await syncMessages(ana.publicKey);
+        expect(await getDmKeyChange(dm.id)).toEqual({ offeredPeer: benNew.publicKey, firstSight: false });
+        const before = snapshot(ana, dm.id);
+        expect(before.participants).toEqual([ana.publicKey, ben.publicKey].sort());
+        // "Not now" calls nothing; what the screen asks on its next load is the same read.
+        expect(await getDmKeyChange(dm.id)).toEqual({ offeredPeer: benNew.publicKey, firstSight: false });
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(snapshot(ana, dm.id)).toEqual(before);
+
+        expect(await acceptOfferedPeer(dm.id, benNew.publicKey)).toBe(true);
+        const after = snapshot(ana, dm.id);
+        expect(after.participants).toEqual([ana.publicKey, benNew.publicKey].sort());
+        expect(after.messages).toEqual(before.messages);
+        expect(JSON.parse(after.pins!)[dm.id.toLowerCase()]).toMatchObject({ peer: benNew.publicKey, by: 'member', former: [ben.publicKey] });
+        // Continuing twice moves nothing more.
+        expect(await acceptOfferedPeer(dm.id, benNew.publicKey)).toBe(false);
+        expect(snapshot(ana, dm.id)).toEqual(after);
+    });
+
+    it('a third key offered between the banner and the tap: "Continue" for the key Ana checked moves nothing', async () => {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        const benNew = person('Ben (new phone)');
+        benRekeys(benNew);
+        await syncMessages(ana.publicKey);
+        const banner = await getDmKeyChange(dm.id);
+        expect(banner?.offeredPeer).toBe(benNew.publicKey);
+        dm.participants = [ana.publicKey, puppet.publicKey];   // the node swaps the offer while Ana is on the phone to Ben
+        await syncMessages(ana.publicKey);
+        // The screen's next read shows a new banner for PUPPET's key (keyed on it, so Ana's tick for Ben's code is gone).
+        expect(await getDmKeyChange(dm.id)).toEqual({ offeredPeer: puppet.publicKey, firstSight: false });
+        const before = snapshot(ana, dm.id);
+        expect(await acceptOfferedPeer(dm.id, banner!.offeredPeer!)).toBe(false);
+        expect(snapshot(ana, dm.id)).toEqual(before);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey } });
+        const r = await trySend(dm.id, 'Still there?');
+        expect({ err: r.err?.name, sent: r.sent.length }).toEqual({ err: 'DmKeyChangedError', sent: 0 });
+    });
+
+    it('several other keys listed in place of the pinned one: the banner offers none, and nothing can be continued with', async () => {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        const benNew = person('Ben (new phone)');
+        dm.participants = [ana.publicKey, benNew.publicKey, puppet.publicKey];
+        await syncMessages(ana.publicKey);
+        expect(await getDmKeyChange(dm.id)).toEqual({ offeredPeer: null, firstSight: false });
+        expect(await acceptOfferedPeer(dm.id, benNew.publicKey)).toBe(false);
+        expect(await acceptOfferedPeer(dm.id, puppet.publicKey)).toBe(false);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, by: 'first-seen' });
+    });
+
+    it('a restored phone that met the DM with someone else in it (P4\'s set-up): the banner says none of the earlier lines open, and Continue keeps that key as the member\'s', async () => {
+        await aQuestionAndAnAnswer();
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        h.store.delete(PINS(ana));
+        await phoneOf(ana);
+        expect(await getDmKeyChange(dm.id)).toEqual({ offeredPeer: puppet.publicKey, firstSight: true });
+        expect(await acceptOfferedPeer(dm.id, ben.publicKey)).toBe(false);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, by: 'first-seen' });
+        expect(await acceptOfferedPeer(dm.id, puppet.publicKey)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, by: 'member' });
+        expect(pinOf(ana, dm.id).former).toBeUndefined();
+        expect(await getDmKeyChange(dm.id)).toBeNull();
     });
 
     it('pins are kept per account: another account on the phone neither reads nor moves Ana\'s', async () => {

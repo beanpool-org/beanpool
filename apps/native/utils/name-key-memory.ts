@@ -25,7 +25,8 @@ export interface RememberedKey {
     /**
      * The keys this phone saw this name on before a move a statement confirmed, newest first (at most 8): what an in-person
      * confirmation of the member's new phone checks against (DESIGN-group-history-after-rekey-fable.md §4), so a phone the
-     * node tells "her old key was Zed's" never hands Zed's epochs.
+     * node tells "her old key was Zed's" never hands Zed's epochs. A key the name moved to with no statement never enters it
+     * unless a later chain reaches the key that move left (§4 amendment): a relabelled roster can't put Zed's key here.
      */
     was?: string[];
 }
@@ -71,7 +72,12 @@ export function noteRosterNames(memory: NameKeyMemory, roster: readonly MemoryRo
             if (seen.changedFrom && reaches(seen.changedFrom)) next[n] = { key: r.memberPubkey, was: withWas(seen.was, seen.changedFrom) };
             else if (seen.changedFrom) changed.add(r.memberPubkey);
         } else if (reaches(seen.key)) {
-            next[n] = { key: r.memberPubkey, was: withWas(seen.was, seen.key) };
+            // An unconfirmed move taints the name (DESIGN-group-history-after-rekey-fable.md, §4 amendment; review of #1844,
+            // finding 1): a chain to the key it moved TO confirms nothing, so the mark and changedFrom stay and that key never
+            // enters `was`. Only a chain that also reaches the key the move left (each link the newer key's signature) confirms it.
+            if (!seen.changedFrom) next[n] = { key: r.memberPubkey, was: withWas(seen.was, seen.key) };
+            else if (reaches(seen.changedFrom)) next[n] = { key: r.memberPubkey, was: withWas(withWas(seen.was, seen.changedFrom), seen.key) };
+            else { next[n] = { key: r.memberPubkey, changedFrom: seen.changedFrom, ...(seen.was ? { was: seen.was } : {}) }; changed.add(r.memberPubkey); }
         } else {
             next[n] = { key: r.memberPubkey, changedFrom: seen.changedFrom ?? seen.key, ...(seen.was ? { was: seen.was } : {}) };
             changed.add(r.memberPubkey);
@@ -96,9 +102,11 @@ export async function rememberRosterNames(nodeUrl: string, roster: readonly Memo
 }
 
 /**
- * The keys this phone itself saw `callsign` on before, other than `current`: its `was` list and an unconfirmed
- * `changedFrom`, and the remembered key when the phone hasn't seen the move yet. [] when it never knew the name, or the
- * memory can't be read. Read only: nothing the node says now goes in.
+ * The keys this phone saw `callsign` on before, other than `current`: its `was` list, an unconfirmed `changedFrom`, and
+ * the remembered key when the phone hasn't seen the move yet. While a move is unconfirmed (`changedFrom` set), only keys
+ * from before it count: the remembered key is the one the node moved the name to (§4 amendment). [] when it never knew the
+ * name, or the memory can't be read. Read only: nothing the node says now goes in, though every entry came from a roster
+ * it served earlier; what the node can't rewrite is the order in which the phone saw them.
  */
 export async function keysThisPhoneKnewFor(nodeUrl: string, callsign: string, current: string): Promise<string[]> {
     try {
@@ -106,7 +114,7 @@ export async function keysThisPhoneKnewFor(nodeUrl: string, callsign: string, cu
         const memory = raw ? (JSON.parse(raw) as NameKeyMemory) : {};
         const seen = memory && typeof memory === 'object' ? memory[nameKey(callsign)] : undefined;
         if (!seen || typeof seen.key !== 'string') return [];
-        const keys = [seen.key, ...(Array.isArray(seen.was) ? seen.was : []), seen.changedFrom].filter((k): k is string => typeof k === 'string' && k !== current);
+        const keys = [...(seen.changedFrom ? [] : [seen.key]), ...(Array.isArray(seen.was) ? seen.was : []), seen.changedFrom].filter((k): k is string => typeof k === 'string' && k !== current);
         return [...new Set(keys)];
     } catch {
         return [];

@@ -291,8 +291,10 @@ const fold = (s: string) => s.trim().replace(/[A-Z]/g, (c) => c.toLowerCase());
 /**
  * The confirming member's phone checks a scanned code (§4), all on this phone: the new key is the current key of an
  * active row with the code's name in a members list read now; that row's verified chain names the code's old key; and
- * THIS phone's own memory says the name was on that old key (name-key-memory.ts: it saw it, the node can't write it
- * now). The last one is the anchor: a phone the node once told "her old key was Zed's" refuses, never hands Zed's.
+ * THIS phone's memory says the name was on that old key before any move the phone saw without a statement
+ * (name-key-memory.ts). The last one is the anchor. The memory was written from rosters the node served, so it holds only
+ * through its order (§4 amendment): once a name moved to a key with no statement from that key over the one it left, the
+ * key it moved to never counts, so a phone the node once showed "Cat" on Zed's key refuses, never hands Zed's.
  */
 export async function checkNewPhone(input: {
     nodeUrl: string;

@@ -10,7 +10,8 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}) } }));
 
-import { noteRosterNames, markKeyChanged, KEY_CHANGED_DETAILS, KEY_CHANGED_HINT } from '../name-key-memory';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { noteRosterNames, markKeyChanged, keysThisPhoneKnewFor, KEY_CHANGED_DETAILS, KEY_CHANGED_HINT } from '../name-key-memory';
 import { makeKeySuccession } from '../group-chat-crypto';
 
 const person = () => { const seed = randomBytes(32); return { seedHex: bytesToHex(seed), pub: bytesToHex(ed25519.getPublicKey(seed)) }; };
@@ -97,5 +98,61 @@ describe('name ↔ key memory', () => {
         const again = noteRosterNames(first.memory, [{ memberPubkey: ana1.pub, callsign: 'Ána' }, { memberPubkey: mal.pub, callsign: 'ána' }]);
         expect(again.changed.size).toBe(0);
         expect(Object.keys(again.memory).sort()).toEqual(['ána', 'Ána'].sort());
+    });
+    describe('§4 amendment (review of #1844, finding 1): an unconfirmed move taints a name', () => {
+        const cat1 = person();
+        const cat2 = person();
+        const cat3 = person();
+        const zed = person();
+        const claim = (by: { seedHex: string }, old: string) => {
+            const s = makeKeySuccession({ newEdPrivHex: by.seedHex, oldPubHex: old, at: '2026-10-13T04:00:00.000Z' });
+            return { pubkey: s.pubkey, at: s.at, sig: s.sig };
+        };
+        const knew = async (memory: object, current: string) => {
+            vi.mocked(AsyncStorage.getItem).mockResolvedValueOnce(JSON.stringify(memory));
+            return keysThisPhoneKnewFor('https://n.example', 'Cat', current);
+        };
+
+        it('MP: "Cat" shown once on Zed\'s key, then her new key\'s chain reaching only Zed\'s: the mark stays and Zed never enters her history', async () => {
+            const first = noteRosterNames({}, [{ memberPubkey: cat1.pub, callsign: 'Cat' }]).memory;
+            const relabelled = noteRosterNames(first, [{ memberPubkey: zed.pub, callsign: 'Cat' }]);
+            expect(relabelled.memory.cat).toEqual({ key: zed.pub, changedFrom: cat1.pub });
+            // Before her new key shows, the phone's knowledge of "Cat" is the key before the move, never the key it moved to.
+            expect(await knew(relabelled.memory, cat2.pub)).toEqual([cat1.pub]);
+            // Her new key's chain (the node misled her new phone once) reaches Zed's key only; Zed is left out of the roster.
+            const misled = noteRosterNames(relabelled.memory, [{ memberPubkey: cat2.pub, callsign: 'Cat', formerKeys: [claim(cat2, zed.pub)] }]);
+            expect(misled.memory.cat).toEqual({ key: cat2.pub, changedFrom: cat1.pub });
+            expect([...misled.changed]).toEqual([cat2.pub]);
+            expect(await knew(misled.memory, cat2.pub)).toEqual([cat1.pub]);
+            // Served again, it still confirms nothing.
+            const again = noteRosterNames(misled.memory, [{ memberPubkey: cat2.pub, callsign: 'Cat', formerKeys: [claim(cat2, zed.pub)] }]);
+            expect(again.memory.cat).toEqual({ key: cat2.pub, changedFrom: cat1.pub });
+            expect([...again.changed]).toEqual([cat2.pub]);
+        });
+
+        it('a chain that passes through the key the name moved to and reaches the key it left confirms both moves', async () => {
+            const first = noteRosterNames({}, [{ memberPubkey: cat1.pub, callsign: 'Cat' }]).memory;
+            const unattested = noteRosterNames(first, [{ memberPubkey: cat2.pub, callsign: 'Cat' }]).memory;
+            const both = noteRosterNames(unattested, [{ memberPubkey: cat3.pub, callsign: 'Cat', formerKeys: [claim(cat3, cat2.pub), claim(cat2, cat1.pub)] }]);
+            expect(both.changed.size).toBe(0);
+            expect(both.memory.cat).toEqual({ key: cat3.pub, was: [cat2.pub, cat1.pub] });
+            expect(await knew(both.memory, cat3.pub)).toEqual([cat2.pub, cat1.pub]);
+        });
+
+        it('the cost: a middle key never attested is not learned; the phone knows only the key before it', async () => {
+            const first = noteRosterNames({}, [{ memberPubkey: cat1.pub, callsign: 'Cat' }]).memory;
+            const unattested = noteRosterNames(first, [{ memberPubkey: cat2.pub, callsign: 'Cat' }]).memory;
+            const after = noteRosterNames(unattested, [{ memberPubkey: cat3.pub, callsign: 'Cat', formerKeys: [claim(cat3, cat2.pub)] }]);
+            expect(after.memory.cat).toEqual({ key: cat3.pub, changedFrom: cat1.pub });
+            expect([...after.changed]).toEqual([cat3.pub]);
+            expect(await knew(after.memory, cat3.pub)).toEqual([cat1.pub]);
+        });
+
+        it('with no unconfirmed move, the remembered key still counts (the honest re-key)', async () => {
+            const first = noteRosterNames({}, [{ memberPubkey: cat1.pub, callsign: 'Cat' }]).memory;
+            expect(await knew(first, cat2.pub)).toEqual([cat1.pub]);
+            const confirmed = noteRosterNames(first, [{ memberPubkey: cat2.pub, callsign: 'Cat', formerKeys: [claim(cat2, cat1.pub)] }]).memory;
+            expect(await knew(confirmed, cat3.pub)).toEqual([cat2.pub, cat1.pub]);
+        });
     });
 });

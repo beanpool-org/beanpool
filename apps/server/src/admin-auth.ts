@@ -181,6 +181,7 @@ export interface PasswordAuthOptions {
 }
 
 export const TOKEN_REFUSED_CODE = 'token_not_allowed';
+export const AGENT_TOKEN_ELSEWHERE_ERROR = "An AI assistant's token reaches this server's assistant endpoint (/mcp) and nothing else";
 export const TOKEN_OWNER_ONLY_ERROR = 'An automation token never makes owner-only changes: sign in to Settings as an owner';
 
 /**
@@ -190,6 +191,7 @@ export const TOKEN_OWNER_ONLY_ERROR = 'An automation token never makes owner-onl
  *   read     GET/HEAD, and the POSTs that only read (READ_ONLY_POSTS); admin level.
  *   backups  BACKUPS_SCOPE_ROUTES and nothing else; owner level on those routes alone.
  *   admin    every route an admin may use; admin level, so every owner-only route refuses it.
+ *   agent    no route here at all: an AI assistant's token reaches `/mcp` alone, which reads it itself (agent/mcp-route.ts).
  * No scope reaches signing in, sessions or the tokens themselves (isRefusedToEveryToken), nor an owner-only change
  * (requireAdminRole, requirePhoneStepUp). What it does is the issuing owner's (ctx.state.actor), marked with the
  * token's id (ctx.state.viaToken), and every use is logged with the route, never the secret.
@@ -227,6 +229,7 @@ function checkAutomationToken(ctx: any, presented: string): boolean {
         logger.warn('AUTH', 'Automation token outside its scope', { tokenId: record.id, scope: record.scope, route: `${method} ${reqPath}` });
         return false;
     };
+    if (record.scope === 'agent') return refuse(AGENT_TOKEN_ELSEWHERE_ERROR);
     if (isRefusedToEveryToken(method, reqPath)) return refuse('An automation token cannot sign in, open a session or manage tokens');
     if (record.scope === 'read' && !isReadRequest(ctx)) return refuse('This token can only read');
     if (record.scope === 'backups' && !isBackupsScopeRoute(method, reqPath)) return refuse('This token can only take and read backups');

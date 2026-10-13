@@ -81,6 +81,7 @@ export function readAgent(v: unknown): AgentAsking | null {
     if (!v || typeof v !== 'object') return null;
     const a = v as { name?: unknown; sendsTo?: unknown };
     if (typeof a.sendsTo !== 'string' || !HOST_SHAPE.test(a.sendsTo)) return null;
+    // eslint-disable-next-line no-control-regex -- removing control characters is the point
     const name = typeof a.name === 'string' ? a.name.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 60) : '';
     return { name, sendsTo: a.sendsTo.toLowerCase() };
 }

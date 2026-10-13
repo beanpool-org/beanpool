@@ -1442,6 +1442,10 @@ async function main(): Promise<void> {
             'POST /api/local/admin/agent/preview',
             // An assistant's suggestions (agent/suggestions-route.ts): a person's own session only; approve is the existing route.
             'GET /api/local/admin/agent/suggestions', 'POST /api/local/admin/agent/suggestions/:id/decline',
+            // The OAuth door (agent/oauth-route.ts): metadata, registration, the consent page and its two calls, token, revoke.
+            'GET /.well-known/oauth-protected-resource', 'GET /.well-known/oauth-protected-resource/mcp', 'GET /.well-known/oauth-authorization-server',
+            'POST /oauth/register', 'GET /oauth/authorize', 'POST /oauth/authorize/:id/wait', 'POST /oauth/authorize/:id/confirm',
+            'POST /oauth/token', 'POST /oauth/revoke',
         ]);
         const ID_BY_PREFIX: Array<[RegExp, string]> = [
             [/^\/api\/groups\//, prunedClub.id], [/^\/api\/marketplace\/posts\/:id\/chat/, clubEvent.id], [/^\/api\/marketplace\/posts\//, offer.id], [/^\/api\/commons\/decisions\//, 'dec-sentinel'],

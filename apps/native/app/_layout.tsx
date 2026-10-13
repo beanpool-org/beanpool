@@ -47,7 +47,7 @@ import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
-import { attestOwnRekeys, keySuccessionPromptText, operatorContact, rekeyToAsk, KEY_SUCCESSION_PROMPT_NO, KEY_SUCCESSION_PROMPT_YES } from '../utils/key-succession';
+import { attestOwnRekeys, declineRekey, keySuccessionPromptText, operatorContact, rekeyToAsk, KEY_SUCCESSION_PROMPT_NO, KEY_SUCCESSION_PROMPT_YES } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -743,9 +743,10 @@ function RootLayoutNav() {
     }, [identity?.publicKey]);
 
     // A re-key to this key nobody has confirmed (an admin-path re-key, or one an older app completed): asked once per run,
-    // with §6's words (line-display design §5, §6; utils/key-succession.ts), one date at a time, and never about a re-key
-    // this run just did itself (rekeyToAsk waits for its own confirmation). "Yes, that was me" signs that one statement, and
-    // the member's old group lines show under their name again; "Not me" signs nothing and offers the admins' contact.
+    // with §6's words (line-display design §5, §6; utils/key-succession.ts), only when the node lists exactly one, and never
+    // about a re-key this run just did itself (rekeyToAsk waits for its own confirmation). "Yes, that was me" signs that one
+    // statement, and the member's old group lines show under their name again; "Not me" signs nothing, is remembered so
+    // the prompt doesn't come back, and offers the admins' contact.
     useEffect(() => {
         if (!identity?.publicKey) return;
         let current = true;
@@ -758,7 +759,7 @@ function RootLayoutNav() {
             cancel = whenAppShows(() => {
                 if (!current) return;
                 Alert.alert('Was this you?', keySuccessionPromptText(ask.at), [
-                    { text: KEY_SUCCESSION_PROMPT_NO, style: 'cancel', onPress: () => { void tellAdminsNotMe(nodeUrl); } },
+                    { text: KEY_SUCCESSION_PROMPT_NO, style: 'cancel', onPress: () => { declineRekey(nodeUrl, identity, ask).catch(() => {}); void tellAdminsNotMe(nodeUrl); } },
                     { text: KEY_SUCCESSION_PROMPT_YES, onPress: () => { attestOwnRekeys(nodeUrl, identity, [ask]).catch(() => {}); } },
                 ]);
             });

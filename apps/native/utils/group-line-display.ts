@@ -117,12 +117,17 @@ export function nameSigner(signer: string, line: Pick<ServedGroupLine, 'authorPu
     { name: string; nameHint: string | null; details: string | null } {
     const row = ctx.roster.find((r) => r.memberPubkey === signer);
     if (row) return { name: row.callsign || signer.slice(0, 8), nameHint: null, details: null };
-    for (const r of ctx.roster) {
+    // A claim is only the claimant's word: when two rows' chains both reach the signer, neither is named, whatever order
+    // the node lists them in (review of #1826, NB3; §6's words for a key this phone can't place).
+    const claims = ctx.roster.flatMap((r) => {
         const former = Array.isArray(r.formerKeys) ? r.formerKeys.find((f) => f?.pubkey === signer) : undefined;
-        if (former && walked(r, signer, ctx)) {
-            const name = r.callsign || r.memberPubkey.slice(0, 8);
-            return { name, nameHint: null, details: earlierKeyDetails(name, former.at) };
-        }
+        return former && walked(r, signer, ctx) ? [{ r, former }] : [];
+    });
+    if (claims.length > 1) return { name: GROUP_LINE_FORMER_MEMBER, nameHint: null, details: null };
+    if (claims.length === 1) {
+        const { r, former } = claims[0];
+        const name = r.callsign || r.memberPubkey.slice(0, 8);
+        return { name, nameHint: null, details: earlierKeyDetails(name, former.at) };
     }
     const nodeName = (line.authorPubkey === signer ? line.authorCallsign : null) || ctx.nodeNameOf?.(signer) || null;
     if (nodeName) return { name: nodeName, nameHint: GROUP_LINE_NOT_IN_GROUP, details: null };

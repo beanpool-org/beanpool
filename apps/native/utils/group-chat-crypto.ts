@@ -28,6 +28,7 @@ import {
     makeKeySuccession,
     verifyKeySuccession,
     walkKeySuccession,
+    KEY_SUCCESSION_MAX,
     detectMentions,
     isGroupEncryptedNonce,
     GROUP_NONCE_PREFIX,
@@ -57,6 +58,26 @@ export type {
     FormerKey, GroupEpochProgress, GroupEpochReason, GroupEpochRecord, GroupKeyWrap, GroupLineBinding, GroupLinePart, GroupLinePayload,
     GroupLineVerifyMemo, GroupServedWrap, GroupTopUp, MakeGroupEpochInput, OpenedGroupLine,
 };
+
+/**
+ * Every former key a roster row's chain verifies to, newest first, in ONE walk: exactly the keys k for which
+ * walkKeySuccession(row, k) is true, with each statement's signature checked once instead of once per later key (review
+ * of #1826, NB8: a k-hop chain cost k(k+1)/2 verifies through the walker; the design's "verified once", §4 2b).
+ */
+export function verifiedFormerKeys(row: { memberPubkey: string; formerKeys?: readonly FormerKey[] | null }): string[] {
+    const chain = Array.isArray(row?.formerKeys) ? row.formerKeys : [];
+    if (typeof row?.memberPubkey !== 'string' || chain.length > KEY_SUCCESSION_MAX) return [];
+    const seen = new Set<string>([row.memberPubkey]);
+    const out: string[] = [];
+    let successor = row.memberPubkey;
+    for (const former of chain) {
+        if (!former || seen.has(former.pubkey) || !verifyKeySuccession(former, successor)) break;
+        out.push(former.pubkey);
+        seen.add(former.pubkey);
+        successor = former.pubkey;
+    }
+    return out;
+}
 
 /** A new epoch: a fresh key wrapped to every recipient, signed. Yields to the UI every 10 wraps (the progress line). */
 export function makeEpochRecord(input: MakeGroupEpochInput, progress?: GroupEpochProgress): Promise<{ record: GroupEpochRecord; groupKey: Uint8Array }> {

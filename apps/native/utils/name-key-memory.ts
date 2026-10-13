@@ -7,10 +7,14 @@
  * "(key changed)" beside the name, as Signal marks a safety-number change. A re-key the member confirmed is no change.
  * The mark stays until such a statement is served. The web app keeps nothing (parent design §4).
  *
- * Per community and per name (case-insensitive), in AsyncStorage: { key, changedFrom? }.
+ * A claim is only the claimant's word (review of #1826, NB4): a chain reaching a key that is another row's current key in
+ * the same roster doesn't count, and a name two rows share is neither moved nor cleared.
+ *
+ * Per community and per name (ASCII case folded, as the node's own lower(callsign) uniqueness is), in AsyncStorage:
+ * { key, changedFrom? }.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { walkKeySuccession, type FormerKey } from './group-chat-crypto';
+import { verifiedFormerKeys, type FormerKey } from './group-chat-crypto';
 
 export const KEY_CHANGED_HINT = '(key changed)';
 
@@ -27,7 +31,8 @@ export interface MemoryRosterRow {
     formerKeys?: readonly FormerKey[] | null;
 }
 
-const nameKey = (callsign: string) => callsign.trim().toLowerCase();
+/** SQLite's lower() folds ASCII only, so "Ána" and "ána" are two members on the node, and two names here. */
+const nameKey = (callsign: string) => callsign.trim().replace(/[A-Z]/g, (c) => c.toLowerCase());
 
 /**
  * The memory after seeing `roster`, and the keys to mark "(key changed)". Pure: a name first seen is remembered; a name
@@ -36,11 +41,20 @@ const nameKey = (callsign: string) => callsign.trim().toLowerCase();
 export function noteRosterNames(memory: NameKeyMemory, roster: readonly MemoryRosterRow[]): { memory: NameKeyMemory; changed: Set<string> } {
     const next: NameKeyMemory = { ...memory };
     const changed = new Set<string>();
-    for (const r of roster) {
-        if (!r?.callsign || typeof r.memberPubkey !== 'string') continue;
+    const current = new Set(roster.filter((r) => typeof r?.memberPubkey === 'string').map((r) => r.memberPubkey));
+    const named = roster.filter((r): r is MemoryRosterRow & { callsign: string } => !!r?.callsign && typeof r.memberPubkey === 'string');
+    const rowsNamed = new Map<string, number>();
+    for (const r of named) rowsNamed.set(nameKey(r.callsign), (rowsNamed.get(nameKey(r.callsign)) ?? 0) + 1);
+    for (const r of named) {
         const n = nameKey(r.callsign);
         const seen = next[n];
-        const reaches = (k: string) => walkKeySuccession({ memberPubkey: r.memberPubkey, formerKeys: r.formerKeys ?? [] }, k);
+        if ((rowsNamed.get(n) ?? 0) > 1) {
+            // Two rows with one name: the node is saying two things; the memory keeps what it had, mark included.
+            if (seen?.changedFrom && seen.key === r.memberPubkey) changed.add(r.memberPubkey);
+            continue;
+        }
+        const former = new Set(verifiedFormerKeys(r).filter((k) => !current.has(k)));
+        const reaches = (k: string) => former.has(k);
         if (!seen) {
             next[n] = { key: r.memberPubkey };
         } else if (seen.key === r.memberPubkey) {

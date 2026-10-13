@@ -70,4 +70,32 @@ describe('name ↔ key memory', () => {
         expect(shown[3].integrityNote).toBe(`Sent from an earlier key of Ana's, replaced 3 Oct 2026. ${KEY_CHANGED_DETAILS}`);
         expect(markKeyChanged(lines, new Set())).toEqual(lines);
     });
+
+    it('review of #1826 NB4: a chain over a key still in the same roster counts for nothing; a name two rows share is left as it was', () => {
+        const pup = person();
+        const byPup = makeKeySuccession({ newEdPrivHex: pup.seedHex, oldPubHex: ana1.pub, at: '2026-10-03T04:00:00.000Z' });
+        const pupClaim = [{ pubkey: byPup.pubkey, at: byPup.at, sig: byPup.sig }];
+        const first = noteRosterNames({}, [{ memberPubkey: ana1.pub, callsign: 'Ana' }]).memory;
+        // Shared name: the real Ana and a puppet both "Ana", the puppet claiming her (current) key. Nothing moves or marks.
+        const both = [{ memberPubkey: ana1.pub, callsign: 'Ana' }, { memberPubkey: pup.pub, callsign: 'Ana', formerKeys: pupClaim }];
+        let m = first;
+        for (let i = 0; i < 3; i++) {
+            const seen = noteRosterNames(m, both);
+            expect(seen.changed.size).toBe(0);
+            expect(seen.memory.ana).toEqual({ key: ana1.pub });
+            m = seen.memory;
+        }
+        // The node renames the real Ana and gives "Ana" to the puppet with that claim: a change, marked on the puppet.
+        const renamed = noteRosterNames(first, [{ memberPubkey: ana1.pub, callsign: 'Ann' }, { memberPubkey: pup.pub, callsign: 'Ana', formerKeys: pupClaim }]);
+        expect([...renamed.changed]).toEqual([pup.pub]);
+        expect(renamed.memory.ana).toEqual({ key: pup.pub, changedFrom: ana1.pub });
+    });
+
+    it('names fold case as the node does (ASCII only): "Ána" and "ána" are two names', () => {
+        const first = noteRosterNames({}, [{ memberPubkey: ana1.pub, callsign: 'Ána' }, { memberPubkey: mal.pub, callsign: 'ána' }]);
+        expect(first.changed.size).toBe(0);
+        const again = noteRosterNames(first.memory, [{ memberPubkey: ana1.pub, callsign: 'Ána' }, { memberPubkey: mal.pub, callsign: 'ána' }]);
+        expect(again.changed.size).toBe(0);
+        expect(Object.keys(again.memory).sort()).toEqual(['ána', 'Ána'].sort());
+    });
 });

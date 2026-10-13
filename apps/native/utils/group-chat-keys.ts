@@ -21,7 +21,7 @@
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import {
-    makeEpochRecord, openMyKey, verifyGroupEpochRecord, groupEpochCoversExactly, makeTopUp, GroupKeyNotVerifiedError, walkKeySuccession,
+    makeEpochRecord, openMyKey, verifyGroupEpochRecord, groupEpochCoversExactly, makeTopUp, GroupKeyNotVerifiedError, verifiedFormerKeys,
     type FormerKey, type GroupEpochProgress, type GroupEpochReason, type GroupEpochRecord, type GroupLineVerifyMemo, type GroupServedWrap,
 } from './group-chat-crypto';
 
@@ -162,8 +162,12 @@ export class GroupKeyring {
     /**
      * Each shown member's former keys this phone has verified (core walkKeySuccession over the row's `formerKeys`): a
      * chain their current key signed, never the node's `rekeyed_to` (line-display design §4 2b, §5). Read with the list.
+     * A claim is only the claimant's word, so a key that is this phone's, a shown member's current key, or one two shown
+     * members claim is nobody's former key here (review of #1826, finding 1 and NB3).
      */
     private formerOf = new Map<string, string[]>();
+    /** Each row's verified chain, by (member, the chain as served): one walk per chain while the keyring lives (NB8). */
+    private chainWalks = new Map<string, string[]>();
     /** Each epoch's recipients by its signed record (…/keys/:epoch/wraps, digests re-derived): who may be topped up. */
     private recordRecipients = new Map<number, Set<string>>();
     /** Epochs this phone made and the node said it stored, not yet served back: a served record that verifies replaces one. */
@@ -352,18 +356,37 @@ export class GroupKeyring {
             const rows = await answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/members`, this.identity as BeanPoolIdentity));
             if (!Array.isArray(rows)) return null;
             const active = rows.filter((m: any) => m?.status === 'active' && typeof m.memberPubkey === 'string');
-            this.shown = new Set(active.map((m: any) => m.memberPubkey as string));
-            this.formerOf = new Map();
+            const shown = new Set<string>(active.map((m: any) => m.memberPubkey as string));
+            this.shown = shown;
+            const claimed = new Map<string, string[]>();
+            const claims = new Map<string, number>();
             for (const m of active) {
-                const chain: FormerKey[] = Array.isArray(m.formerKeys) ? m.formerKeys : [];
-                const verified = chain.map((f) => f?.pubkey).filter((k): k is string => typeof k === 'string'
-                    && walkKeySuccession({ memberPubkey: m.memberPubkey, formerKeys: chain }, k));
-                if (verified.length > 0) this.formerOf.set(m.memberPubkey, verified);
+                const verified = this.walkedChain(m.memberPubkey, Array.isArray(m.formerKeys) ? m.formerKeys : []);
+                if (verified.length === 0) continue;
+                claimed.set(m.memberPubkey, verified);
+                for (const k of verified) claims.set(k, (claims.get(k) ?? 0) + 1);
             }
-            return this.shown;
+            this.formerOf = new Map();
+            for (const [current, verified] of claimed) {
+                const kept = verified.filter((k) => k !== this.identity.publicKey && !shown.has(k) && claims.get(k) === 1);
+                if (kept.length > 0) this.formerOf.set(current, kept);
+            }
+            return shown;
         } catch {
             return null;
         }
+    }
+
+    /** A row's verified former keys (verifiedFormerKeys), walked once per (member, chain) while this keyring lives. */
+    private walkedChain(member: string, chain: FormerKey[]): string[] {
+        const id = `${member}|${JSON.stringify(chain)}`;
+        let verified = this.chainWalks.get(id);
+        if (!verified) {
+            if (this.chainWalks.size >= 4096) this.chainWalks.clear();
+            verified = verifiedFormerKeys({ memberPubkey: member, formerKeys: chain });
+            this.chainWalks.set(id, verified);
+        }
+        return verified;
     }
 
     /**
@@ -418,30 +441,36 @@ export class GroupKeyring {
     }
 
     /**
-     * The record's own wraps' recipients plus, for each shown member whose key is not among them, none or one of their
-     * verified former keys: the first such set the signed membersDigest names, or null. Tries at most 256 sets.
+     * The record's own wraps' recipients plus, for some shown members whose key is not among them, one of their verified
+     * former keys each: the first such set the signed membersDigest names, or null. Smallest completions first (one
+     * member's key, then two members', …), so the usual case, one re-key, costs at most one try per verified former key
+     * whatever the roster's order (review of #1826, NB7). Tries at most 256 sets.
      */
     private completedBySuccession(record: GroupEpochRecord, set: Set<string>): Set<string> | null {
         const choices = [...this.formerOf.entries()]
             .filter(([current, former]) => !set.has(current) && !former.some((k) => set.has(k)))
-            .map(([, former]) => [null, ...former]);
-        if (choices.length === 0) return null;
+            .map(([, former]) => former);
         let tried = 0;
-        const pick = (i: number, chosen: string[]): Set<string> | null => {
-            if (tried >= 256) return null;
-            if (i === choices.length) {
+        const pick = (from: number, left: number, chosen: string[]): Set<string> | null => {
+            if (left === 0) {
                 tried++;
-                if (chosen.length === 0) return null;
                 const candidate = new Set([...set, ...chosen]);
                 return groupEpochCoversExactly(record, [...candidate]) ? candidate : null;
             }
-            for (const k of choices[i]) {
-                const found = pick(i + 1, k ? [...chosen, k] : chosen);
-                if (found) return found;
+            for (let i = from; i <= choices.length - left; i++) {
+                for (const k of choices[i]) {
+                    if (tried >= 256) return null;
+                    const found = pick(i + 1, left - 1, [...chosen, k]);
+                    if (found) return found;
+                }
             }
             return null;
         };
-        return pick(0, []);
+        for (let size = 1; size <= choices.length && tried < 256; size++) {
+            const found = pick(0, size, []);
+            if (found) return found;
+        }
+        return null;
     }
 
     /** The key for an epoch if it is already open (no work): what the line display reads synchronously. */
@@ -639,7 +668,11 @@ export class GroupKeyring {
      * wrapped it to, by the record's signature (review of #1788, finding 1; director's decision a): a junk wrap's repair.
      * A newcomer is never handed an epoch from before them. A re-keyed member's new key is in no old record: they are
      * handed an old epoch only when a former key their current key signed for (a verified succession chain, served with
-     * the members list; line-display design §5) is one that epoch's record names (review of #1788, NB2).
+     * the members list; line-display design §5) is one that epoch's record names (review of #1788, NB2), AND that key
+     * has left the key set by this phone's own records: the newest epoch this phone made is after it and doesn't name
+     * the key (review of #1826, finding 1; the director's own-record rule). A chain proves the new key's claim, not the
+     * old key's owner; the node's members answer can leave anyone out, and a puppet can make records, so only a record
+     * this phone signed says a key has gone. Until this phone makes one, the re-keyed member waits for a member who has.
      */
     async serveMissing(max = 10): Promise<number> {
         await this.ensureLoaded();
@@ -655,6 +688,13 @@ export class GroupKeyring {
         if (!(answer.missing ?? []).some((m) => m?.pubkey !== this.identity.publicKey)) return 0;
         const shown = await this.readShownRoster();
         if (!shown) return 0;
+        // Read once, the first time a former key is asked about: the newest epoch this phone made, and who it names.
+        let own: { epoch: number; names: Set<string> | null } | null | undefined;
+        const left = async (k: string, epoch: number): Promise<boolean> => {
+            if (k === this.identity.publicKey) return false;
+            if (own === undefined) own = await this.ownNewestRecord();
+            return !!own && own.epoch > epoch && !!own.names && !own.names.has(k);
+        };
         let sent = 0;
         for (const m of answer.missing ?? []) {
             if (m.pubkey === this.identity.publicKey || !shown.has(m.pubkey)) continue;
@@ -663,7 +703,12 @@ export class GroupKeyring {
                 const key = await this.keyFor(epoch);
                 if (!key) continue;
                 const recipients = await this.recipientsOf(epoch);
-                if (!recipients || !(recipients.has(m.pubkey) || (this.formerOf.get(m.pubkey) ?? []).some((k) => recipients.has(k)))) continue;
+                if (!recipients) continue;
+                let named = recipients.has(m.pubkey);
+                for (const k of named ? [] : this.formerOf.get(m.pubkey) ?? []) {
+                    if (recipients.has(k) && await left(k, epoch)) { named = true; break; }
+                }
+                if (!named) continue;
                 const t = makeTopUp(key, { myEdPrivHex: this.identity.privateKey, groupId: this.groupId, epoch, recipientPubHex: m.pubkey });
                 const res = await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/wrap`,
                     { epoch, recipient: t.recipient, ephPub: t.ephPub, nonce: t.nonce, wrapped: t.wrapped, sig: t.sig }, this.identity as BeanPoolIdentity).catch(() => null);
@@ -673,6 +718,20 @@ export class GroupKeyring {
             }
         }
         return sent;
+    }
+
+    /**
+     * The newest epoch this phone's identity made, by the records this phone holds (brought up to the node first), and
+     * the recipients its signature names (recipientsOf: verified, the wraps re-derived to its membersDigest). Null when
+     * this phone has made none; `names` null when the record can't be read or doesn't verify.
+     */
+    private async ownNewestRecord(): Promise<{ epoch: number; names: Set<string> | null } | null> {
+        await this.sync().catch(() => null);
+        let newest = 0;
+        for (const e of this.epochs.values()) {
+            if (e.record?.createdBy === this.identity.publicKey && !this.badRecords.has(e.epoch) && e.epoch > newest) newest = e.epoch;
+        }
+        return newest > 0 ? { epoch: newest, names: await this.recipientsOf(newest) } : null;
     }
 }
 

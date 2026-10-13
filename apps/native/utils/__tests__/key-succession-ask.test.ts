@@ -6,6 +6,8 @@
  *   and each is asked about at sign-in;
  * - the sign-in prompt waits for a re-key this run just completed, so a member is never asked about the one they just did;
  * - "Yes, that was me" signs the one date the prompt showed;
+ * - one statement per key per node, ever, remembered on the phone; no prompt when the node lists more than one re-key,
+ *   attested or not; "Not me" is remembered, so the prompt doesn't come back (review of #1826, NB5);
  * - "Not me" offers only a well-formed contact the owner published.
  *
  * The node is a stand-in here (signedGet/signedPost mocked); the statements are core's real ones, checked as the node
@@ -17,6 +19,14 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { verifyKeySuccession } from '@beanpool/core';
 
+const stored = vi.hoisted(() => new Map<string, string>());
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async (key: string) => stored.get(key) ?? null),
+        setItem: vi.fn(async (key: string, value: string) => { stored.set(key, value); }),
+        removeItem: vi.fn(async (key: string) => { stored.delete(key); }),
+    },
+}));
 const node = vi.hoisted(() => ({
     rows: [] as { pubkey: string; at: string; attested: boolean }[],
     posts: [] as { oldPubkey: string; at: string; sig: string }[],
@@ -35,13 +45,13 @@ vi.mock('../node-post', () => ({
     }),
 }));
 
-import { attestJustCompletedRekey, attestOwnRekeys, operatorContact, rekeyToAsk, unattestedRekeys } from '../key-succession';
+import { attestJustCompletedRekey, attestOwnRekeys, declineRekey, operatorContact, rekeyToAsk, unattestedRekeys } from '../key-succession';
 
 const person = () => { const seed = randomBytes(32); return { privateKey: bytesToHex(seed), publicKey: bytesToHex(ed25519.getPublicKey(seed)) }; };
 const URL_BASE = 'https://node.test';
 
 describe('when the phone signs for an old key', () => {
-    beforeEach(() => { node.rows = []; node.posts = []; node.postDelayMs = 0; });
+    beforeEach(() => { node.rows = []; node.posts = []; node.postDelayMs = 0; stored.clear(); });
 
     it('right after its own re-key: signs the one re-key the node lists, with a statement the node accepts', async () => {
         const me = person();
@@ -72,16 +82,52 @@ describe('when the phone signs for an old key', () => {
         expect(await completing).toBe(1);
     });
 
-    it('"Yes, that was me" signs only the date the prompt showed; the next sign-in asks about the next', async () => {
+    it('"Yes, that was me" signs the one date the prompt showed', async () => {
+        const me = person();
+        const only = { pubkey: person().publicKey, at: '2026-10-03T04:00:00.000Z', attested: false };
+        node.rows = [only];
+        const ask = await rekeyToAsk(URL_BASE, me as any);
+        expect(ask?.pubkey).toBe(only.pubkey);
+        expect(await attestOwnRekeys(URL_BASE, me as any, [ask!])).toBe(1);
+        expect(node.posts.map((p) => p.oldPubkey)).toEqual([only.pubkey]);
+        expect(await rekeyToAsk(URL_BASE, me as any)).toBeNull();
+    });
+
+    it('a node listing more than one re-key to this key, attested or not, gets no prompt and no statement', async () => {
         const me = person();
         const newer = { pubkey: person().publicKey, at: '2026-10-03T04:00:00.000Z', attested: false };
         const older = { pubkey: person().publicKey, at: '2026-10-01T04:00:00.000Z', attested: false };
         node.rows = [newer, older];
+        expect(await rekeyToAsk(URL_BASE, me as any)).toBeNull();
+        expect(await attestOwnRekeys(URL_BASE, me as any, [newer])).toBe(0);
+        node.rows = [{ ...older, attested: true }, newer];
+        expect(await rekeyToAsk(URL_BASE, me as any)).toBeNull();
+        expect(await attestOwnRekeys(URL_BASE, me as any)).toBe(0);
+        expect(node.posts).toHaveLength(0);
+    });
+
+    it('one statement per key per node: once this phone has signed, a re-key the node lists later is neither asked about nor signed', async () => {
+        const me = person();
+        const mine = { pubkey: person().publicKey, at: '2026-10-03T04:00:00.000Z', attested: false };
+        node.rows = [mine];
+        expect(await attestJustCompletedRekey(URL_BASE, me as any)).toBe(1);
+        // The node forgets it was confirmed, and lists another old key instead.
+        const other = { pubkey: person().publicKey, at: '2026-10-04T04:00:00.000Z', attested: false };
+        node.rows = [other];
+        expect(await rekeyToAsk(URL_BASE, me as any)).toBeNull();
+        expect(await attestOwnRekeys(URL_BASE, me as any, [other])).toBe(0);
+        expect(node.posts.map((p) => p.oldPubkey)).toEqual([mine.pubkey]);
+    });
+
+    it('"Not me" is remembered: the same re-key is not asked about again', async () => {
+        const me = person();
+        const r = { pubkey: person().publicKey, at: '2026-10-03T04:00:00.000Z', attested: false };
+        node.rows = [r];
         const ask = await rekeyToAsk(URL_BASE, me as any);
-        expect(ask?.pubkey).toBe(newer.pubkey);
-        expect(await attestOwnRekeys(URL_BASE, me as any, [ask!])).toBe(1);
-        expect(node.posts.map((p) => p.oldPubkey)).toEqual([newer.pubkey]);
-        expect((await rekeyToAsk(URL_BASE, me as any))?.pubkey).toBe(older.pubkey);
+        expect(ask?.pubkey).toBe(r.pubkey);
+        await declineRekey(URL_BASE, me as any, ask!);
+        expect(await rekeyToAsk(URL_BASE, me as any)).toBeNull();
+        expect(node.posts).toHaveLength(0);
     });
 
     it('"Not me" offers only a contact that is a plain address or number', async () => {

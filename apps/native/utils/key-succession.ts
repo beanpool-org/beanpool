@@ -11,14 +11,20 @@
  *   - the new phone, right after its own re-key completes (app/rekey-code.tsx): the member just did it, so no question.
  *     Only when the node lists exactly one re-key to this brand-new key: a node listing more is asking it to sign for keys
  *     the member never saw, and each is left to the prompt;
- *   - a later sign-in, when GET /api/community/me lists a re-key to this key with `attested: false` (an admin-path re-key,
- *     or one an older app completed): only after §6's prompt, one date at a time, and "Not me" signs nothing. The prompt
- *     waits for a re-key this run just completed, so a member is never asked about the one they just did.
+ *   - a later sign-in, when GET /api/community/me lists exactly one re-key to this key, with `attested: false` (an
+ *     admin-path re-key, or one an older app completed): only after §6's prompt, and "Not me" signs nothing and is
+ *     remembered, so the prompt doesn't come back to wear the member down. The prompt waits for a re-key this run just
+ *     completed, so a member is never asked about the one they just did.
+ *
+ * One statement per key per node, ever, remembered on this phone (review of #1826, NB5): an honest node lists exactly
+ * one re-key to a key (completeRekey refuses a new key that is a member's or was invalidated), so a node listing more,
+ * attested or not, is asking for keys the member never saw, and gets no statement and no prompt.
  *
  * The date signed is the node's date for the re-key (`rekeyedFrom[].at`), shown in the prompt; the old key is the one
  * the node names. That is the honest limit (§8): a dishonest node could show a member the wrong old key at that moment;
  * the member sees a date, and nothing changes after.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import { makeKeySuccession } from './group-chat-crypto';
@@ -75,7 +81,50 @@ export async function rekeysToMe(nodeUrl: string, identity: BeanPoolIdentity): P
     }
 }
 
-/** The re-keys to this key nobody has confirmed yet: what §6's prompt asks about at sign-in. */
+/** What this phone remembers of one key on one node: the old key it signed for, and the re-keys the member said "Not me" to. */
+interface SuccessionMemory {
+    signed?: string;
+    declined?: string[];
+}
+const memoryKey = (nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey'>) =>
+    `beanpool_key_succession:${nodeUrl.replace(/\/+$/, '')}|${identity.publicKey}`;
+const rowId = (r: Pick<RekeyedFrom, 'pubkey' | 'at'>) => `${r.pubkey}|${r.at}`;
+
+async function readMemory(nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey'>): Promise<SuccessionMemory | null> {
+    try {
+        const raw = await AsyncStorage.getItem(memoryKey(nodeUrl, identity));
+        const m = raw ? JSON.parse(raw) : {};
+        return m && typeof m === 'object' ? m : {};
+    } catch {
+        return null;
+    }
+}
+
+async function writeMemory(nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey'>, patch: SuccessionMemory): Promise<void> {
+    const m = (await readMemory(nodeUrl, identity)) ?? {};
+    await AsyncStorage.setItem(memoryKey(nodeUrl, identity), JSON.stringify({ ...m, ...patch })).catch(() => { });
+}
+
+/** "Not me" (§6): this re-key is never asked about again on this phone. */
+export async function declineRekey(nodeUrl: string, identity: BeanPoolIdentity, r: RekeyedFrom): Promise<void> {
+    const m = (await readMemory(nodeUrl, identity)) ?? {};
+    await writeMemory(nodeUrl, identity, { declined: [...new Set([...(m.declined ?? []), rowId(r)])] });
+}
+
+/**
+ * The one re-key this key may still sign for on this node, or null: the node lists exactly one, unconfirmed; this phone
+ * has signed none here; and (for the prompt) the member hasn't said "Not me" to it. Null when the memory can't be read.
+ */
+async function theOneToSign(nodeUrl: string, identity: BeanPoolIdentity, opts: { declinedCounts: boolean }): Promise<RekeyedFrom | null> {
+    const listed = await rekeysToMe(nodeUrl, identity);
+    if (listed.length !== 1 || listed[0].attested) return null;
+    const m = await readMemory(nodeUrl, identity);
+    if (!m || m.signed) return null;
+    if (opts.declinedCounts && (m.declined ?? []).includes(rowId(listed[0]))) return null;
+    return listed[0];
+}
+
+/** The re-keys to this key nobody has confirmed yet, as the node lists them. */
 export async function unattestedRekeys(nodeUrl: string, identity: BeanPoolIdentity): Promise<RekeyedFrom[]> {
     return (await rekeysToMe(nodeUrl, identity)).filter((r) => !r.attested);
 }
@@ -95,18 +144,16 @@ export async function postKeySuccession(nodeUrl: string, identity: BeanPoolIdent
 }
 
 /**
- * Confirms every re-key to this key the node lists as unconfirmed (or only `only`, when given): the one re-key this phone
- * just did (attestJustCompletedRekey), or the one §6's prompt showed when the member says "Yes, that was me". Returns how
- * many were stored.
+ * Confirms the one re-key to this key the node lists, when it is unconfirmed and this phone has signed none on this node
+ * (and, when `only` is given, it is the one §6's prompt showed and the member said "Yes, that was me" to): 1 if stored,
+ * else 0. A statement once sent (stored, or one the node already had) is remembered: this key signs no other here.
  */
 export async function attestOwnRekeys(nodeUrl: string, identity: BeanPoolIdentity, only?: readonly RekeyedFrom[]): Promise<number> {
-    const rows = only ?? await unattestedRekeys(nodeUrl, identity);
-    let stored = 0;
-    for (const r of rows) {
-        if (r.attested) continue;
-        if ((await postKeySuccession(nodeUrl, identity, r.pubkey, r.at)) === 'stored') stored++;
-    }
-    return stored;
+    const r = await theOneToSign(nodeUrl, identity, { declinedCounts: false });
+    if (!r || (only && !only.some((o) => o.pubkey === r.pubkey && o.at === r.at))) return 0;
+    const sent = await postKeySuccession(nodeUrl, identity, r.pubkey, r.at);
+    if (sent !== 'refused') await writeMemory(nodeUrl, identity, { signed: r.pubkey });
+    return sent === 'stored' ? 1 : 0;
 }
 
 /** The confirmation this run's own re-key is sending, if any: the sign-in prompt waits for it. */
@@ -114,22 +161,22 @@ let justCompleted: Promise<unknown> | null = null;
 
 /**
  * Right after this phone's own re-key (app/rekey-code.tsx): confirms the one re-key the node lists to this key, asking
- * nothing. Signs nothing when the node lists none or more than one (each is then asked about at sign-in). Returns how
+ * nothing. Signs nothing when the node lists none or more than one (nor is the member asked: theOneToSign). Returns how
  * many were stored.
  */
 export function attestJustCompletedRekey(nodeUrl: string, identity: BeanPoolIdentity): Promise<number> {
-    const run = (async () => {
-        const pending = await unattestedRekeys(nodeUrl, identity);
-        return pending.length === 1 ? attestOwnRekeys(nodeUrl, identity, pending) : 0;
-    })();
+    const run = attestOwnRekeys(nodeUrl, identity);
     justCompleted = run.catch(() => 0);
     return run;
 }
 
-/** The newest re-key to this key nobody has confirmed, for §6's prompt at sign-in, or null. Waits for this run's own. */
+/**
+ * The re-key §6's prompt asks about at sign-in, or null: the one the node lists, unconfirmed, that this key hasn't signed
+ * for and the member hasn't said "Not me" to. Nothing when the node lists more than one. Waits for this run's own.
+ */
 export async function rekeyToAsk(nodeUrl: string, identity: BeanPoolIdentity): Promise<RekeyedFrom | null> {
     if (justCompleted) await justCompleted;
-    return (await unattestedRekeys(nodeUrl, identity))[0] ?? null;
+    return theOneToSign(nodeUrl, identity, { declinedCounts: true });
 }
 
 /** How to reach this community's admins, as its owner chose to publish it (GET /api/local/community-info): for "Not me". */

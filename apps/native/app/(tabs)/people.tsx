@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MemberAvatar } from '../../components/MemberAvatar';
+import { AddedYouLines } from '../../components/AddedYouLines';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
@@ -829,6 +830,7 @@ export default function PeopleScreen() {
                     </View>
                 ) : friends.length === 0 ? (
                     <View style={styles.emptyContainer}>
+                        {identity?.publicKey ? <View style={{ alignSelf: 'stretch' }}><AddedYouLines myKey={identity.publicKey} onAddedBack={() => loadFriends(true)} /></View> : null}
                         <Text style={styles.emptyEmoji}>👫</Text>
                         <Text style={styles.emptyTitle}>No friends yet</Text>
                         <Text style={styles.emptyDesc}>Go to Community to browse members and add friends.</Text>
@@ -837,6 +839,7 @@ export default function PeopleScreen() {
                     <FlatList
                         ref={listRef}
                         data={friends}
+                        ListHeaderComponent={identity?.publicKey ? <AddedYouLines myKey={identity.publicKey} onAddedBack={() => loadFriends(true)} /> : null}
                         keyExtractor={(item, index) => `${item.publicKey}_${index}`}
                         contentContainerStyle={[styles.list, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 16 }]}
                         renderItem={({ item, index }) => {
@@ -1021,7 +1024,12 @@ export default function PeopleScreen() {
                                         if (isFriend) {
                                             await removeFriendLocal(identity.publicKey, item.public_key);
                                         } else {
-                                            await addFriendLocal(identity.publicKey, item.public_key);
+                                            // Refused by the node (100 adds a day, or someone you blocked): said, not dropped.
+                                            try {
+                                                await addFriendLocal(identity.publicKey, item.public_key);
+                                            } catch (e: any) {
+                                                Alert.alert('Not added', e?.message || 'Your community did not add them.');
+                                            }
                                         }
                                         loadFriends();
                                     }}

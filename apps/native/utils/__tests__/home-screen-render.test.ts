@@ -148,6 +148,8 @@ import { getBundledGuide } from '../guide';
 const NODE = 'https://mullum.beanpool.org';
 const iso = (ms: number) => new Date(ms).toISOString();
 const H = 3600_000;
+/** A member who ended the tour (Skip): a Home never saved is the starter set (DESIGN-getting-started-fable.md §1). The newcomer's own Home: tour-render.test.ts. */
+const TOUR_ENDED = { v: 1 as const, state: 'skipped' as const, at: '2026-10-01T00:00:00.000Z' };
 
 /**
  * A member who has every card of version 1 on their list (as one who edited with an older app and hid nothing), so each
@@ -160,7 +162,7 @@ function localMember(): HomeAnswer {
     return {
         generatedAt: iso(now), profile: 'local',
         features: { beans: true, escrow: true, invites: true, exampleListings: false, decisions: true },
-        me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member' },
+        me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member', tour: TOUR_ENDED },
         layout: everyV1Card(now),
         cards: {
             steps: { joinedAt: iso(now - 3 * 24 * H), firstOffer: false, firstPost: false, photo: false, interests: false, invited: false, area: false, knocked: null },
@@ -673,7 +675,7 @@ function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
     return {
         generatedAt: iso(now), profile,
         features: local ? LOCAL_FEATURES : GLOBAL_FEATURES,
-        me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: true, probation: null, interests: ['food'], area: null, firstOffer: variant === 1, standing: 'member' },
+        me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: true, probation: null, interests: ['food'], area: null, firstOffer: variant === 1, standing: 'member', tour: TOUR_ENDED },
         layout: everyV1Card(now),
         cards: {
             needs: { items: needs },
@@ -1347,7 +1349,7 @@ function globalMember(days = 3): HomeAnswer {
     return {
         generatedAt: iso(now), profile: 'global', features: GLOBAL_FEATURES,
         me: {
-            joinedAt, isKeeper: false, interests: [], area: null, firstOffer: false, standing: 'member',
+            joinedAt, isKeeper: false, interests: [], area: null, firstOffer: false, standing: 'member', tour: TOUR_ENDED,
             probation: { onProbation: true, rules: 'words', limits: { posts: { limit: 2 }, photos: { limit: 4 }, new_dm_recipients: { limit: 3 } }, endsWhen: { hours: 168, keptPosts: 3 } },
         },
         layout: everyV1Card(now),

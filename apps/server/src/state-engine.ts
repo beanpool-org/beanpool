@@ -7,7 +7,7 @@ import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
-import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing } from './config/node-role.js';
+import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing, onNodeRoleChange } from './config/node-role.js';
 import { expoPushHeaders } from './config/expo-access-token.js';
 import { sanitizeMessage } from './sanitize-message.js';
 import {
@@ -848,6 +848,17 @@ export function initStateEngine(): void {
     };
     setTimeout(metricsAudit, 2.5 * 60 * 1000);
     setInterval(metricsAudit, 24 * 60 * 60 * 1000);
+
+    // The wash analysis on a take-over in this process (#1811): the standby's may predate the final copy by minutes, so it
+    // is dropped and a fresh one started in the background; a floor read before that lands works one out in one go.
+    if (!washTakeoverHooked) {
+        washTakeoverHooked = true;
+        onNodeRoleChange((role) => {
+            if (role !== 'primary') return;
+            engine.clearWashTradingCache(db);
+            void engine.refreshWashTradingInBackground(db);
+        });
+    }
 
     if (getNodeRole() === 'primary') runMainServerMigrations();
 
@@ -2002,6 +2013,19 @@ export function getWashTradingEnforcement(): WashAnalysis {
 
 export function clearWashTradingCache() {
     engine.clearWashTradingCache(db);
+}
+
+/** Whether initStateEngine has set the wash analysis's take-over hook (once a process). */
+let washTakeoverHooked = false;
+
+/**
+ * The wash analysis's first refresh, in the background, once the server listens (index.ts), on a node with Beans on: so
+ * the first floor read finds one landed rather than working one out in one go (engine trust.ts getWashTradingEnforcement).
+ * Where Beans are off nothing reads a floor that has trades in it. Resolves when it has landed, or not.
+ */
+export function startWashTradingRefreshAtBoot(): Promise<void> | null {
+    if (!getProfileSwitches().beans) return null;
+    return engine.refreshWashTradingInBackground(db);
 }
 
 /** How many complete wash analyses have run for the node's database, by any path (a test counts them). */

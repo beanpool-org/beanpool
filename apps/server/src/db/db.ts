@@ -7,7 +7,7 @@ import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migrati
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
 import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
-import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto } from '@beanpool/engine';
+import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
@@ -156,10 +156,13 @@ export function getDbDataVersion(): number {
 /**
  * Close the probe, for a restore about to replace state.db (routes/backup.ts). While it is open, closing `db` is not the
  * last close, so SQLite leaves state.db-wal behind unfolded, and the next open plays it over whatever file is put there.
+ * The wash analysis's read-only handle (engine trust.ts runWashAnalysisInSlices) closes with it, for the same reason: a
+ * refresh reading through it then lands nothing, and the next opens a new one.
  */
 export function closeDbDataVersionProbe(): void {
     try { changeProbe?.close(); } catch { /* closed either way */ }
     changeProbe = null;
+    closeWashSnapshotHandle(db);
 }
 // A2-31 / SRV-7 — ACCEPTED RISK (documented, intentional): FK enforcement is OFF so
 // out-of-order P2P/backup sync can insert rows whose referenced parent hasn't

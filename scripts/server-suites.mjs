@@ -295,6 +295,7 @@ export const SUITES = [
     'test-trust-tiers-one-source',
     'test-vouch-covenant',
     'test-wash-sybil-defense',
+    'test-wash-background',
     'test-apple-probe',
     'test-apple-return',
     'test-recovery-backup-durability',

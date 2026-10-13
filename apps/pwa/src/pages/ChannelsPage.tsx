@@ -200,7 +200,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                 <button
                     type="button"
                     onClick={onViewFeed}
-                    className="text-xs sm:text-sm font-bold text-terra-600 dark:text-terra-400 hover:text-terra-700 bg-transparent border-none cursor-pointer p-1 transition-colors whitespace-nowrap"
+                    className="text-xs sm:text-sm font-bold text-terra-600 dark:text-terra-400 hover:text-terra-700 dark:hover:text-terra-300 bg-transparent border-none cursor-pointer p-1 transition-colors whitespace-nowrap"
                     aria-label="View The Pulse community feed"
                 >
                     View Feed ↗

@@ -2227,7 +2227,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => handleRemoveThreadMessage(m.id)}
                                                                 disabled={threadRemovingId === m.id}
                                                                 aria-label={`Remove message from ${authorName}`}
-                                                                className="py-1 px-2 -my-1 -mx-2 text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline cursor-pointer bg-transparent border-none rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                className="py-1 px-2 -my-1 -mx-2 text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 hover:underline cursor-pointer bg-transparent border-none rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                                                 title="Remove message"
                                                             >
                                                                 {threadRemovingId === m.id ? 'Removing...' : 'Remove'}

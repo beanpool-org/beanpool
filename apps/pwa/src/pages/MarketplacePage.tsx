@@ -1411,7 +1411,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <div className="flex flex-col mb-3">
                                         <button 
                                             onClick={() => { if (onOpenProfile) onOpenProfile(req.sellerPublicKey || req.buyerPublicKey); }}
-                                            className="font-bold text-nature-900 dark:text-white text-sm text-left hover:text-emerald-600 transition-colors flex items-center gap-1"
+                                            className="font-bold text-nature-900 dark:text-white text-sm text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-1"
                                         >
                                             <span className="text-amber-600">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign}</span>
                                         </button>

@@ -697,7 +697,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all ${
                                     activeTab === 'listings'
                                         ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold'
-                                        : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600'
+                                        : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600 dark:hover:text-nature-200'
                                 }`}
                                 onClick={() => setActiveTab('listings')}
                             >
@@ -707,7 +707,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all ${
                                     activeTab === 'reviews'
                                         ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold'
-                                        : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600'
+                                        : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600 dark:hover:text-nature-200'
                                 }`}
                                 onClick={() => setActiveTab('reviews')}
                             >
@@ -718,7 +718,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all ${
                                         activeTab === 'given'
                                             ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold'
-                                            : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600'
+                                            : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600 dark:hover:text-nature-200'
                                     }`}
                                     onClick={() => setActiveTab('given')}
                                 >

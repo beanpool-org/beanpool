@@ -113,7 +113,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
             <button
                 type="button"
                 onClick={onBack}
-                className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0"
+                className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 dark:hover:text-nature-200 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0"
             >
                 <span className="text-xl leading-none" aria-hidden="true">←</span> Back to Market
             </button>

@@ -42,7 +42,7 @@ vi.mock('../db', () => ({}));
 import { lightColors, darkColors } from '../../constants/colors';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
-import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText } from '../dm-key-change';
+import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText, DM_FIRST_SIGHT_LEAD } from '../dm-key-change';
 import { keyCodeOf } from '../key-code';
 
 const CODE = /^\d{4} \d{4} \d{4} \d{4} \d{4}$/;
@@ -114,11 +114,18 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
         expect(host.textContent).toContain('there is no one key to continue with');
     });
 
-    it('the node\'s re-key date is a line of words only when it gives one; the first-sight case says none of the earlier lines open', () => {
+    it('the node\'s re-key date is a line of words only when it gives one; the first-sight case opens with the amendment\'s sentence, true after a restore or an update', () => {
         render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: true, rekeyedAt: '2026-10-03T09:00:00.000Z' }, onContinue: vi.fn(), onNotNow: vi.fn() }));
         expect(host.textContent).toContain('This community says the account was re-keyed on 3 Oct 2026.');
-        expect(host.textContent).toContain('None of the earlier messages here open with the key this community now gives for Ben.');
+        expect(host.textContent).toContain(`${DM_FIRST_SIGHT_LEAD} The earlier messages here came from a different key than the one this community now gives for Ben.`);
+        expect(DM_FIRST_SIGHT_LEAD).toBe('This phone is checking this chat from the start, as it does after you restore it or update the app.');
         expect(rekeyedOnText('not a date')).toBeNull();
+    });
+
+    it('a change after a sync (not first sight) never says the phone is checking from the start', () => {
+        render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: false }, onContinue: vi.fn(), onNotNow: vi.fn() }));
+        expect(host.textContent).not.toContain(DM_FIRST_SIGHT_LEAD);
+        expect(host.textContent).not.toContain('This community says');
     });
 
     it('Settings → My key code shows the same code Ben\'s banner shows on Ana\'s phone', () => {
@@ -158,7 +165,56 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
 });
 
 describe('the banner\'s words', () => {
+    it('with no name for the key (the directory has none), say "this person": never the conversation id (#1873 review, finding 2)', () => {
+        for (const peerName of [null, undefined, '', '  ']) {
+            const copy = dmKeyChangeCopy({ peerName, code: '1111 2222 3333 4444 5555', firstSight: false });
+            expect(copy.title).toBe('The key behind "this person" changed.');
+            expect(copy.confirm).toBe('I checked with this person: the key code in their Settings matches this one.');
+        }
+    });
     it('never name the node\'s "Loading..." placeholder', () => {
         expect(dmKeyChangeCopy({ peerName: 'Loading...', code: '1111 2222 3333 4444 5555', firstSight: false }).title).toBe('The key behind "this person" changed.');
+    });
+});
+
+// #1873 review: the DM screen keys the banner on the offered key, so a tick given for one code never carries over to a
+// new one (mutant M14 survived every test). A source pin on [id].tsx, and the behaviour of that keying.
+describe('the banner on the DM screen is keyed on the offered key', () => {
+    beforeEach(() => { theme.colors = lightColors; });
+    it('[id].tsx renders it with key={keyChange.offeredPeer ?? \'none\'}', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { join } = await import('node:path');
+        const src = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
+        expect(src).toMatch(/<DmKeyChangedBanner\s+key=\{keyChange\.offeredPeer \?\? 'none'\}/);
+    });
+    it('a ticked banner whose offered key changes comes back unticked, and Continue does nothing until ticked again', async () => {
+        const k2 = randomBytes(32).toString('hex');
+        const other = randomBytes(32).toString('hex');
+        const onContinue = vi.fn();
+        const show = (offeredPeer: string) => render(createElement(DmKeyChangedBanner, { key: offeredPeer, peerName: 'Ben', change: { offeredPeer, firstSight: false }, onContinue, onNotNow: vi.fn() }));
+        show(k2);
+        await click(host.querySelector('[role="checkbox"]'));
+        show(other);
+        expect(host.querySelector('[role="checkbox"]')!.getAttribute('aria-checked')).toBe('false');
+        await click(button('Continue with the new key'));
+        expect(onContinue).not.toHaveBeenCalled();
+    });
+});
+
+// Slice 1's handover (d) and the #1873 review's findings 2 and 3, on the DM screen (a source pin: the screen itself
+// needs a device). Rule 5 is asked only after the key change, whose check judges first sight first.
+describe('the DM screen: the rule-5 line, the banner\'s name and its height', () => {
+    it('[id].tsx asks isDmUnplaced only when no key change is waiting, disables the box with DM_UNPLACED_LINE and offers no Continue for it', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { join } = await import('node:path');
+        const src = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
+        expect(src).toMatch(/getDmKeyChange\(id as string\)\.then\(async \(change\) => \{\s*setKeyChange\(change\);\s*setUnplaced\(change \? false : await isDmUnplaced\(id as string\)\);/);
+        expect(src).toMatch(/disabled=\{keyChangePending \|\| unplaced\}/);
+        expect(src).toMatch(/notice=\{keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : unplaced \? DM_UNPLACED_LINE : lockNotice\}/);
+        expect(src).toMatch(/const canSendNow = \(\) => [^;]*!unplaced/);
+        // The banner is named from the key's member row (getDmKeyChange), never the screen's id-fragment fallback.
+        expect(src).toMatch(/peerName=\{keyChange\.name\}/);
+        // At most 55% of the window at 320 dp and 1.3× text: the thread and the paused box keep the rest.
+        expect(src).toMatch(/maxHeight: Math\.round\(windowHeight \* 0\.55\)/);
     });
 });

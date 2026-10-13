@@ -59,6 +59,12 @@ export function dmKeyChangedLine(peerName?: string | null): string {
 }
 
 /**
+ * The one line under the box when first sight found lines it couldn't place (utils/dm-peer-pins.ts rule 5, design §3.4
+ * amendment): no key is pinned, nothing is offered, so there is no Continue. It names no key.
+ */
+export const DM_UNPLACED_LINE = "This chat's messages were sealed to keys this phone can't place. You can read it, but sending needs a new chat, or ask an owner.";
+
+/**
  * What goes back in the box after a send that couldn't be locked: the unsent words, and anything typed while it was
  * trying underneath them. Neither is lost.
  */

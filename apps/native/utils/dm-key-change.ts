@@ -30,7 +30,11 @@ export interface DmKeyChangeCopyInput {
     peerName?: string | null;
     /** The new key's code (utils/key-code.ts), or null when there is no one key to continue with. */
     code: string | null;
-    /** The first-sight case: no earlier key on this phone, only earlier lines that don't open under this one. */
+    /**
+     * The first-sight case (§3.4 amendment, rules 3-4): this phone is checking the chat from the start (after a restore,
+     * or an update meeting a DM with two keys in its rows), and the earlier messages came from another key than the one
+     * on offer.
+     */
     firstSight: boolean;
     /** The date the node says the account was re-keyed (slice 3), when it says so. */
     rekeyedAt?: string;
@@ -47,6 +51,9 @@ export interface DmKeyChangeCopy {
     notNowLabel: string;
 }
 
+/** The first-sight banner's opening sentence (design §3.4 amendment), true after a restore and after an update alike. */
+export const DM_FIRST_SIGHT_LEAD = 'This phone is checking this chat from the start, as it does after you restore it or update the app.';
+
 /** The banner's words. */
 export function dmKeyChangeCopy({ peerName, code, firstSight, rekeyedAt }: DmKeyChangeCopyInput): DmKeyChangeCopy {
     const name = nameOf(peerName);
@@ -60,8 +67,10 @@ export function dmKeyChangeCopy({ peerName, code, firstSight, rekeyedAt }: DmKey
             dateLine, confirm: null, continueLabel: null, notNowLabel: 'Not now',
         };
     }
+    // The first-sight case opens with the amendment's sentence, worded so it is true after an update too (P17), not only
+    // after a restore.
     const body = firstSight
-        ? `None of the earlier messages here open with the key this community now gives for ${name}. Anything you send would go to that key. Check with ${name} first, in person or on a call: their key code should be`
+        ? `${DM_FIRST_SIGHT_LEAD} The earlier messages here came from a different key than the one this community now gives for ${name}. Anything you send now would go to the new key. Check with ${name} first, in person or on a call: their key code should be`
         : `Anything you send now would go to the new key. If ${name} got a new phone and re-keyed, check with them first, in person or on a call: their key code should be`;
     return {
         title, body, dateLine,

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,7 +11,8 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, isDmUnplaced, type DmKeyChange } from '../../utils/db';
+import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
@@ -31,7 +32,7 @@ import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
-import { refusedSendNotice, restoredDraft, dmKeyChangedLine } from '../../utils/dm-lock';
+import { refusedSendNotice, restoredDraft, dmKeyChangedLine, DM_UNPLACED_LINE } from '../../utils/dm-lock';
 import {
     buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
@@ -160,6 +161,12 @@ function ChatScreen({ id }: { id: string }) {
     // disabled, with one line, until the member decides on the banner below the header. Every send refuses meanwhile (db.ts).
     const [keyChange, setKeyChange] = useState<DmKeyChange | null>(null);
     const keyChangePending = !!keyChange;
+    // First sight found lines it couldn't place (rule 5 of the §3.4 amendment): no key is pinned and nothing is offered, so
+    // the box is disabled with one line and there is no Continue. Every send refuses meanwhile (db.ts).
+    const [unplaced, setUnplaced] = useState(false);
+    // The banner never takes more than about half the screen at 320 dp and 1.3× text: the thread and the paused box keep
+    // the rest (#1873 review, finding 3). It scrolls inside that.
+    const { height: windowHeight } = useWindowDimensions();
     const [menuOpen, setMenuOpen] = useState(false);
     const [muteOpen, setMuteOpen] = useState(false);
     const [mute, setMute] = useState<YourChatMute | null>(() => getKnownChatMute(String(id ?? '')));
@@ -507,8 +514,12 @@ function ChatScreen({ id }: { id: string }) {
             setFirstLoadDone(true);
         }
         messagesLenRef.current = data.length;
-        // Unreadable pins: the banner stays as it was, and a send says why it refused.
-        getDmKeyChange(id as string).then(setKeyChange, () => {});
+        // Unreadable pins: the banner stays as it was, and a send says why it refused. Rule 5 is asked after the key change,
+        // whose check judges first sight first.
+        getDmKeyChange(id as string).then(async (change) => {
+            setKeyChange(change);
+            setUnplaced(change ? false : await isDmUnplaced(id as string));
+        }, () => {});
         if (identity?.publicKey) {
             await markConversationRead(id as string, identity.publicKey).catch(() => {});
         }
@@ -534,16 +545,20 @@ function ChatScreen({ id }: { id: string }) {
         try {
             const moved = await acceptOfferedPeer(id as string, peer);
             if (!moved) {
-                Alert.alert('Nothing changed', 'The key on offer changed while you were checking. Look at the new code and check it again.');
+                const now = await getDmKeyChange(id as string).catch(() => undefined);
+                if (now === null) Alert.alert('Nothing changed', 'This chat no longer offers that key, so nothing was moved.');
+                else Alert.alert('Nothing changed', 'The key on offer changed while you were checking. Look at the new code and check it again.');
             }
         } catch (e: any) {
-            Alert.alert('Nothing changed', e?.message || "This phone couldn't save your choice. Try again in a moment.");
+            Alert.alert('Nothing changed', isDmPinStoreError(e) || !e?.message
+                ? "This phone couldn't read or save who this chat is with, so nothing was moved. Try again in a moment."
+                : e.message);
         }
         await loadMessages(true).catch(() => {});
     };
 
     // Asked before the composer empties the box, so a refused send keeps what was typed.
-    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current;
+    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !unplaced && !sendingRef.current;
 
     // The composer owns the box and hands over the text it has already cleared and put under its sweep.
     const handleSend = async (currentDraft: string) => {
@@ -1215,13 +1230,14 @@ function ChatScreen({ id }: { id: string }) {
             </View>
 
             {/* The key behind this DM changed (utils/dm-peer-pins.ts): what changed, the new key's code, and the member's choice.
-                Keyed on the offered key, so a tick given for one code never carries over to another. Scrolls when it is
-                taller than the room left at 320 dp and 1.3× text. */}
+                Keyed on the offered key, so a tick given for one code never carries over to another. At most 55% of the
+                window, scrolling inside, so the thread and the paused box keep the rest at 320 dp and 1.3× text. Named
+                from the key's member row, never the conversation id. */}
             {keyChange && (
-                <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} keyboardShouldPersistTaps="handled">
+                <ScrollView style={{ flexGrow: 0, flexShrink: 1, maxHeight: Math.round(windowHeight * 0.55) }} keyboardShouldPersistTaps="handled">
                     <DmKeyChangedBanner
                         key={keyChange.offeredPeer ?? 'none'}
-                        peerName={peerPubkey ? peerName : null}
+                        peerName={keyChange.name}
                         change={keyChange}
                         onContinue={handleContinueWithNewKey}
                         onNotNow={() => router.back()}
@@ -1407,8 +1423,8 @@ function ChatScreen({ id }: { id: string }) {
                         styles={chat}
                         onSend={handleSend}
                         canSend={canSendNow}
-                        disabled={keyChangePending}
-                        notice={keyChangePending ? dmKeyChangedLine(peerName) : lockNotice}
+                        disabled={keyChangePending || unplaced}
+                        notice={keyChangePending ? dmKeyChangedLine(keyChange?.name) : unplaced ? DM_UNPLACED_LINE : lockNotice}
                         placeholder="Message..."
                         accessibilityLabel="Message"
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}

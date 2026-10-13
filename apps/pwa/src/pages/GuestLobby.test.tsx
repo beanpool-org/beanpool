@@ -137,7 +137,8 @@ function homeBody(member: boolean, profile: 'global' | 'local' = 'global') {
         generatedAt: NOW, profile,
         features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true, exampleListings: true, openJoin: true },
         ...(member ? {} : { welcome: true }),
-        me: member ? { joinedAt: NOW, isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member' } : null,
+        // A member past the tour (Skip): their Home is the starter set, so the listings are on it (DESIGN-getting-started-fable.md §1).
+        me: member ? { joinedAt: NOW, isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member', tour: { v: 1, state: 'skipped', at: NOW } } : null,
         layout: null,
         cards: {
             find: { point: null, communities: [], communityCount: 3, nearbyPosts: null, watches: member ? [] : null, knock: null, directoryFetchedAt: null },

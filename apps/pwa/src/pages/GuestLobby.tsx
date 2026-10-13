@@ -29,6 +29,11 @@ import { FormerAddressBanner } from '../components/FormerAddressBanner';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
 
+import { helpSheetFor, webHelpKey } from '@beanpool/core';
+import { HelpDialog } from '../components/HelpDialog';
+import { MemberGuide } from '../components/MemberGuide';
+import { getBundledGuide } from '../lib/guide';
+
 type LobbyTab = 'home' | 'marketplace' | 'map';
 
 const TABS: { id: LobbyTab; label: string; emoji: string }[] = [
@@ -49,6 +54,18 @@ interface Props {
 
 export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPostTaken }: Props) {
     const [tab, setTab] = useState<LobbyTab>('home');
+    // The "?" (DESIGN-getting-started-fable.md §4–§5): help for the lobby's tab; its guide opens over the lobby.
+    const [helpOpen, setHelpOpen] = useState(false);
+    const [guideAt, setGuideAt] = useState<string | null | undefined>(undefined);
+    const helpWords = helpSheetFor(getBundledGuide(), webHelpKey({ tab, lobby: true }));
+    const helpButton = (className: string) => (
+        <button type="button" onClick={() => setHelpOpen(true)} aria-label="Help for this screen" title="Help for this screen" data-testid="lobby-help"
+            className={`${className} flex items-center justify-center bg-transparent border-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400`}>
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+            </svg>
+        </button>
+    );
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [openPostId, setOpenPostId] = useState<string | null>(null);
     // The browser join over the lobby: where it opens ('guard' from Join, 'restore' from "Already have BeanPool?";
@@ -164,7 +181,8 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                         </button>
                     ))}
                 </nav>
-                <div className="p-3 border-t border-nature-200 dark:border-nature-800 bg-nature-100/50 dark:bg-nature-900/50">
+                <div className="p-3 border-t border-nature-200 dark:border-nature-800 bg-nature-100/50 dark:bg-nature-900/50 flex items-center gap-2">
+                    {helpButton('shrink-0 min-w-[44px] min-h-[44px] rounded-xl text-nature-700 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60')}
                     {headerJoin('w-full min-h-[44px] rounded-xl text-sm')}
                 </div>
             </aside>
@@ -195,8 +213,27 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                         style={{ maxWidth: 'calc(100% - 190px)' }}>
                         {title}
                     </h1>
-                    {headerJoin('relative z-10 min-h-[36px] px-4 rounded-full text-sm shadow-md')}
+                    <div className="relative z-10 flex items-center gap-1">
+                        {helpButton('min-w-[44px] min-h-[44px] rounded-full text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]')}
+                        {headerJoin('min-h-[36px] px-4 rounded-full text-sm shadow-md')}
+                    </div>
                 </header>
+                {helpOpen && (
+                    <HelpDialog
+                        sheet={helpWords}
+                        tourOpen={false}
+                        canTour={false}
+                        onClose={() => setHelpOpen(false)}
+                        onReadPage={() => { setHelpOpen(false); setGuideAt(helpWords.slug); }}
+                        onSearch={() => { setHelpOpen(false); setGuideAt(null); }}
+                        onTour={() => setHelpOpen(false)}
+                    />
+                )}
+                {guideAt !== undefined && (
+                    <div className="fixed inset-0 overflow-y-auto bg-white dark:bg-nature-950" style={{ zIndex: 1100 }} data-testid="lobby-guide">
+                        <MemberGuide onBack={() => setGuideAt(undefined)} initialPage={guideAt ?? undefined} />
+                    </div>
+                )}
 
                 <main style={{
                     flex: 1,

@@ -45,7 +45,7 @@ import { pruneAgedOut } from './engine/plain-tables.js';
 import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
 import { pruneOldActivity, renameMemberInActivity } from './db/activity-feed-db.js';
-import { scrubChannelRows } from './engine/creator-channels.js';
+import { scrubChannelRows, clearUnprovenOauthBadges } from './engine/creator-channels.js';
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
@@ -646,6 +646,8 @@ export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
+    clearUnprovenOauthBadges();
     clearEnterpriseFloorCache();
     migrateLegacyState();
     // NODE_PROFILE decides what the node runs as; node_config.nodeProfile records it, and a main server recorded as

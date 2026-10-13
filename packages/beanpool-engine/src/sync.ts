@@ -119,6 +119,9 @@ export interface SyncCreatorChannel {
     isPrimaryVideo: boolean;
     supportsAutolist: boolean;
     oauthVerifiedAt: string | null;
+    /** The verified account's stable platform id (#1830). Optional: a sender before #1830 has none. */
+    platformAccountId?: string | null;
+    verifiedHandle?: string | null;
     postCountSeen: number | null;
     autopublish: boolean;
     syndicateToNode: boolean;
@@ -1158,6 +1161,8 @@ function creatorChannelOfRow(row: any): SyncCreatorChannel {
         isPrimaryVideo: row.is_primary_video === 1,
         supportsAutolist: row.supports_autolist === 1,
         oauthVerifiedAt: row.oauth_verified_at ?? null,
+        platformAccountId: row.platform_account_id ?? null,
+        verifiedHandle: row.verified_handle ?? null,
         postCountSeen: row.post_count_seen ?? null,
         autopublish: row.autopublish === 1,
         syndicateToNode: row.syndicate_to_node === 1,

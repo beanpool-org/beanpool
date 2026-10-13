@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — Exchange for Communities, Not Commercial Banks</title>
-    <meta name="description" content="BeanPool is a free app your community uses to trade help, goods and skills with each other, in Beans instead of money. Join by invitation from someone in your community. iPhone, Android and web.">
+    <meta name="description" content="BeanPool is a free app a community runs for itself to trade help, goods and skills in Beans instead of money. Find or start a community near you, or join with an invite; the global community opens to everyone soon. iPhone, Android and web.">
+    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="style.css?v=2.5">
+    <link rel="stylesheet" href="style.css?v=2.6">
 </head>
 <body>
     <!-- Navigation Bar -->
@@ -98,7 +99,7 @@
                             <div class="not-item-icon">✕</div>
                             <div class="not-item-content">
                                 <strong>Not Corporate Debt or Extraction</strong>
-                                <p>No interest, no banks, and no middlemen. 100% of circulation funds your Commons.</p>
+                                <p>No interest, no banks, no middlemen. The only fees are small and go to your community's own Commons pool, never to us.</p>
                             </div>
                         </div>
                         <div class="not-card-item">
@@ -111,18 +112,34 @@
                     </div>
                 </div>
 
-                <!-- Right: how to join -->
+                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
+                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
+                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
+                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
+                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
-                        <span class="hero-cta-tag">Got an invite?</span>
-                        <h3>Join your community</h3>
-                        <p>You join BeanPool through someone who is already in your community. Install the app, then open the invite link or scan the QR code they gave you. Invites work once and last 30 days.</p>
+                        <span class="hero-cta-tag">Three ways in</span>
+                        <h3>Start where you are</h3>
                     </div>
 
-                    <div class="hero-actions-grid">
-                        <a href="getting-started.html" class="btn btn-primary font-header">How to join →</a>
-                        <a href="#run-a-node" class="btn btn-ghost">Start a community</a>
+                    <div class="hero-doors">
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: href="https://global.beanpool.org"; sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you." -->
+                            <a href="getting-started.html#global" class="btn btn-primary font-header">Try it now, worldwide</a>
+                            <p>The global community opens to everyone soon, with no invite: look around, post something free or for swap, and find a community near you. It is a private preview today, so start by getting the app.</p>
+                        </div>
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
+                            <a href="#find-or-start" class="btn btn-ghost">Find or start a community</a>
+                            <p>See the communities already running, or start one on a spare computer or a small rented server. Asking one near you to let you in comes soon, when the global community opens.</p>
+                        </div>
+                        <div class="hero-door">
+                            <a href="getting-started.html#invite" class="btn btn-ghost">Got an invite?</a>
+                            <p>Install the app and open the link or scan the QR code a member gave you; an invite works once and lasts 30 days.</p>
+                        </div>
                     </div>
+                    <p class="hero-web-note">Beans live in local communities. The global community shows you around and leads you to one. It shows you how Beans work there, with an example community.</p>
 
                     <div class="hero-logos-group">
                         <div class="hero-store-grid">
@@ -154,7 +171,7 @@
                                 </svg>
                             </a>
                         </div>
-                        <p class="hero-web-note">No app store? Open your community's web address in your phone's browser and add it to your home screen.</p>
+                        <p class="hero-web-note">No app store? Both the global community and your own community open in your phone's browser; add them to your home screen.</p>
                     </div>
                     <!-- Where to find us: small round links, same destinations as the menu -->
                     <div class="hero-social-row">
@@ -223,20 +240,38 @@
         </div>
     </section>
 
+    <!-- What BeanPool is: one paragraph and three "not" lines, one column -->
+    <section id="what-it-is">
+        <div class="container what-it-is">
+            <div class="section-header">
+                <h2>What BeanPool is</h2>
+            </div>
+            <p class="what-it-is-lead">A community runs BeanPool on its own small server. Members post what they can offer and what they need, and trade in Beans. A Bean is not money you buy: it is a record that someone helped someone. Everyone starts at zero. When you help, your balance goes up; when you are helped, it goes down; across the community the balances always add up to zero. Nobody issues Beans, nobody lends them at interest, and nobody cashes them out. A small fee on each trade goes to the community's own pool, which its members spend by vote. The app is free and open source; a community picks its own server, and the data on it is theirs.</p>
+            <ul class="what-it-is-not">
+                <li><strong>Not a cryptocurrency.</strong> No blockchain, no token, nothing to buy or sell. Your 12 words only unlock your own account.</li>
+                <li><strong>Not a bank.</strong> Credit comes from your own trading, with no interest: your line opens after your first completed trade.</li>
+                <li><strong>Not a company in the middle.</strong> BeanPool takes nothing from a trade, and shows no ads.</li>
+            </ul>
+            <!-- Needs Marty's OK (copy §2): the closing history line -->
+            <p class="what-it-is-history">Mutual credit is old: LETS groups ran it on paper for decades, and Switzerland's WIR has run one since 1934. Paperwork is what wore most of them out. BeanPool is the paperwork, done by the app.</p>
+        </div>
+    </section>
+
     <!-- How It Works Section -->
     <section id="how-it-works">
         <div class="container">
             <div class="section-header">
                 <h2>How It Works</h2>
-                <p>From an invite to your first trade.</p>
+                <p>From the first screen to your first trade.</p>
             </div>
             <div class="steps-grid">
                 <div class="step-card glass-panel">
                     <div class="step-icon">📩</div>
                     <div class="step-number">01</div>
                     <div>
-                        <h3>1. Get an invite</h3>
-                        <p>Someone already in your community sends you an invite link or a QR code. Open it in the app and pick your callsign &mdash; the name people will know you by.</p>
+                        <h3>1. Come in by one of three doors</h3>
+                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
+                        <p>Open the invite a member sent you; soon you can also try the global community with no invite and, from there, ask a community near you to let you in. Either way you pick the name people will know you by.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -273,7 +308,7 @@
         <div class="container">
             <div class="section-header">
                 <h2>What You Can Do</h2>
-                <p>The phone app has six tabs: Market, Map, Talk, Pulse, Commons and Ledger, where you see your balance and your trades.</p>
+                <p>The app opens on Home, a set of cards you choose. Behind it: the Market, the Map, Talk (Chat in the web app), People, the Pulse, the Commons and the Ledger, where you see your balance and your trades.</p>
             </div>
             <div class="features-grid">
                 <div class="feature-card glass-panel">
@@ -285,7 +320,8 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Map</h3>
-                    <p>See what is on offer near you. You place every pin yourself: use your location once, at the moment you post, or drop the pin by hand. BeanPool never tracks where you are. Enterprise and event pins can be set to Approximate, which rounds the spot to about 100&nbsp;m. Pins are public: anyone who opens your community's map can see them.</p>
+                    <p>See what is on offer near you. You place every pin yourself: use your location once, at the moment you post, or drop the pin by hand. BeanPool never tracks where you are. Enterprise and event pins can be set to Approximate, which rounds the spot to about 100&nbsp;m. Pins are seen by the members of your community. When the global community opens to everyone, a visitor there sees listings and roughly where they are, but no names, no faces and no exact spots.</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no faces and no exact spots." -->
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -296,7 +332,7 @@
 
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">💬</div>
-                    <h3>Talk</h3>
+                    <h3>Talk (Chat in the web app)</h3>
                     <p>Message anyone in your community. Direct messages between two members are end-to-end encrypted: your community's node carries them but cannot read them. Enterprise discussions and event chats can be read by the people who run your community's node, so they can be moderated &mdash; the app says so on each of those chats.</p>
                 </div>
 
@@ -418,6 +454,7 @@
 
     <!-- Live Nodes Map Section -->
     <section id="live-nodes">
+        <span id="find-or-start"></span>
         <div class="container">
             <div class="section-header">
                 <h2>Find Your Local Exchange</h2>
@@ -462,8 +499,9 @@
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
-                    <h3>Private from the first boot <span class="new-pill">New</span></h3>
-                    <p>Since v1.2.21 a node keeps its members' messages and balances to signed-in members from the moment it starts &mdash; there is nothing to switch on. The Market, the map, enterprises and Decisions stay open, so a neighbour can see what is happening before they join. The community's activity feed, which names the members in a completed trade and the Beans involved, is for members only.</p>
+                    <h3>Private from the first boot</h3>
+                    <p>A community's listings, map, messages and balances are for its members from the moment its node starts; there is nothing to switch on. Someone who opens its address without an account is pointed to the global community, which opens to everyone soon.</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -546,6 +584,23 @@ docker compose exec beanpool-node beanpool claim</code>
         </div>
     </section>
 
+    <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
+         13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
+         first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
+         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+
+    <div class="partner-block">
+        <h3>The BeanPool Project</h3>
+        <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
+        <ul>
+            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
+            <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
+        </ul>
+        <p>Source and licence: <a href="https://github.com/beanpool-org/beanpool">github.com/beanpool-org/beanpool</a> (MIT).</p>
+    </div>
+    PARTNER-BLOCK end -->
+
     <!-- Footer Module -->
     <footer>
         <div class="container">
@@ -575,6 +630,6 @@ docker compose exec beanpool-node beanpool claim</code>
         </div>
     </footer>
 
-    <script src="main.js?v=1.7"></script>
+    <script src="main.js?v=1.8"></script>
 </body>
 </html>

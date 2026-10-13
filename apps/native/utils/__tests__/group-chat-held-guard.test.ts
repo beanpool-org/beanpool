@@ -50,6 +50,7 @@ const mockDb = {
     withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { await cb(); }),
     getFirstAsync: vi.fn(async (sql: string, params: any[] = []) => {
         if (groupRead(sql)) return null;
+        if (/SELECT id FROM conversations WHERE id IN \(/.test(sql)) return params.map((p) => store.conversations.get(p)).find((c) => c?.type === 'dm') ?? null;
         if (/FROM conversations WHERE id = \?/.test(sql)) return store.conversations.get(params[0]) ?? null;
         if (/SELECT metadata FROM messages WHERE id/.test(sql)) return store.messages.get(params[0]) ?? null;
         if (/SELECT nonce, metadata FROM messages WHERE id/.test(sql)) return store.messages.get(params[0]) ?? null;

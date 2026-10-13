@@ -23,6 +23,7 @@ const mockDb = {
     closeAsync: vi.fn(async () => undefined),
     withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { await cb(); }),
     getFirstAsync: vi.fn(async (sql: string, params: any[] = []) => {
+        if (/SELECT id FROM conversations WHERE id IN \(/.test(sql)) return params.map((p) => store.conversations.get(p)).find((c) => c?.type === 'dm') ?? null;
         if (/FROM conversations WHERE id = \?/.test(sql)) return store.conversations.get(params[0]) ?? null;
         if (/SELECT author_pubkey FROM messages WHERE conversation_id = \?/.test(sql)) {
             return [...store.messages.values()].find(m => m.conversation_id === params[0] && m.author_pubkey !== params[1] && m.author_pubkey !== 'SYSTEM') ?? null;

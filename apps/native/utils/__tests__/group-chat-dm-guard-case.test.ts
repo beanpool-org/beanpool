@@ -5,8 +5,9 @@
  * group keys and stays DM-sealed; the group screen opens its keys only through the DM guard; and a held group's lines
  * are signed and routed under the group's own id, however the caller spelled it. Ported from the review's driver (K1,
  * K2, K3, K6; scratch/reviews/opus-1841-scripts/zz-review-1841-db.test.ts), its measurements flipped to assertions.
- * Mock style from group-chat-held-guard.test.ts: device modules stubbed, a stand-in for SQLite (its NOCASE lookups
- * folded as SQLite folds ASCII), and a fake node that keeps a posted epoch and matches ids however spelled.
+ * Mock style from group-chat-held-guard.test.ts: device modules stubbed, a stand-in for SQLite (its `id IN (…)` lookups
+ * match each spelling exactly, as SQLite's index does), and a fake node that keeps a posted epoch and matches ids however
+ * spelled.
  */
 import { describe, it, expect, vi, afterAll } from 'vitest';
 import Module from 'node:module';
@@ -24,8 +25,6 @@ const store = vi.hoisted(() => ({
     asyncStore: new Map<string, string>([['beanpool_anchor_url', 'https://node.example']]),
 }));
 const partsOf = (id: string) => { if (!store.participants.has(id)) store.participants.set(id, new Set()); return store.participants.get(id)!; };
-/** The rows whose id matches `id` with ASCII case folded, as SQLite's NOCASE compares. */
-const convsNoCase = (id: string) => [...store.conversations.values()].filter((c) => c.id.toLowerCase() === String(id).toLowerCase());
 const mockDb = {
     execAsync: vi.fn(async () => undefined),
     closeAsync: vi.fn(async () => undefined),
@@ -33,19 +32,19 @@ const mockDb = {
     getFirstAsync: vi.fn(async (sql: string, params: any[] = []) => {
         if (/FROM group_chat_key_state/.test(sql)) return store.keyState.get(params[0]) ?? null;
         if (/FROM group_chat_epochs WHERE group_id = \? AND wrap IS NOT NULL/.test(sql)) return (store.epochs.get(params[0]) ?? []).some((e) => e.wrap) ? { y: 1 } : null;
-        if (/FROM conversations WHERE id = \? COLLATE NOCASE AND type = 'dm'/.test(sql)) return convsNoCase(params[0]).find((c) => c.type === 'dm') ?? null;
+        if (/SELECT id FROM conversations WHERE id IN \(/.test(sql)) return params.map((p) => store.conversations.get(p)).find((c) => c?.type === 'dm') ?? null;
         if (/FROM conversations WHERE id = \?/.test(sql)) return store.conversations.get(params[0]) ?? null;
-        if (/SELECT 1 AS y FROM messages WHERE conversation_id IN \(/.test(sql)) {
+        if (/SELECT conversation_id FROM messages WHERE conversation_id IN \(/.test(sql)) {
             const ids = params.slice(0, -1);
             const prefix = String(params[params.length - 1]).replace(/%$/, '');
-            return [...store.messages.values()].some((m) => ids.includes(m.conversation_id) && String(m.nonce).startsWith(prefix)) ? { y: 1 } : null;
+            const m = [...store.messages.values()].find((x) => ids.includes(x.conversation_id) && String(x.nonce).startsWith(prefix));
+            return m ? { conversation_id: m.conversation_id } : null;
         }
         if (/SELECT metadata FROM messages WHERE id/.test(sql)) return store.messages.get(params[0]) ?? null;
         if (/SELECT nonce, metadata FROM messages WHERE id/.test(sql)) return store.messages.get(params[0]) ?? null;
         return null;
     }),
     getAllAsync: vi.fn(async (sql: string, params: any[] = []) => {
-        if (/SELECT id FROM conversations WHERE id = \? COLLATE NOCASE/.test(sql)) return convsNoCase(params[0]).map((c) => ({ id: c.id }));
         if (/FROM group_chat_epochs WHERE group_id = \?/.test(sql)) return store.epochs.get(params[0]) ?? [];
         if (/SELECT public_key FROM conversation_participants WHERE conversation_id = \?/.test(sql)) return [...partsOf(params[0])].map((public_key) => ({ public_key }));
         return [];

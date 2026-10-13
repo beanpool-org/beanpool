@@ -2592,28 +2592,35 @@ async function rememberDmConversations(ids: string[]): Promise<void> {
 }
 
 /**
- * True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. The
- * held check, the keyring and the group screens fold an id's case (a link or a push can carry it in capitals), so this
- * folds it too: otherwise one id in capitals reaches a group's keys on a known DM's own id, and makes it a held group
- * whose lines go to the roster the node shows (#1841 review, finding 1). The encrypted-line lookup asks every spelling
- * this phone holds a row under, the id as given, and lower- and upper-case, so it keeps its index.
+ * The spelling of the id this phone knows a DM by, or null when it knows no DM by any spelling of `conversationId`: the
+ * DM list's, the dm row's, or the id an encrypted line was kept under. The held check, the keyring and the group screens
+ * fold an id's case (a link or a push can carry it in capitals), so this folds it too: otherwise one id in capitals
+ * reaches a group's keys on a known DM's own id, and makes it a held group whose lines go to the roster the node shows
+ * (#1841 review, finding 1). The two SQLite lookups ask the id as given, lower- and upper-case, so both keep their index:
+ * a COLLATE NOCASE compare scanned the whole table for every row holdDmTypes asks about (#1841 confirmation 1, finding
+ * 2). A DM the node lists in a mixed-case spelling is in the DM list, which folds any spelling.
  */
-export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
-    if (!conversationId) return false;
+export async function knownDmConversationId(conversationId: string): Promise<string | null> {
+    if (!conversationId) return null;
     const folded = conversationId.toLowerCase();
-    for (const seen of await dmConversationsSeen()) if (seen.toLowerCase() === folded) return true;
+    for (const seen of await dmConversationsSeen()) if (seen.toLowerCase() === folded) return seen;
     try {
         const database = await getDb();
-        const conv = await database.getFirstAsync<any>("SELECT type FROM conversations WHERE id = ? COLLATE NOCASE AND type = 'dm' LIMIT 1", [conversationId]);
-        if (conv?.type === 'dm') return true;
-        const spelt = await database.getAllAsync<any>('SELECT id FROM conversations WHERE id = ? COLLATE NOCASE', [conversationId]);
-        const ids = [...new Set([conversationId, folded, conversationId.toUpperCase(), ...(spelt ?? []).map((r: any) => r?.id).filter((s: unknown): s is string => typeof s === 'string')])];
+        const ids = [...new Set([conversationId, folded, conversationId.toUpperCase()])];
+        const marks = ids.map(() => '?').join(', ');
+        const conv = await database.getFirstAsync<any>(`SELECT id FROM conversations WHERE id IN (${marks}) AND type = 'dm' LIMIT 1`, ids);
+        if (typeof conv?.id === 'string') return conv.id;
         const row = await database.getFirstAsync<any>(
-            `SELECT 1 AS y FROM messages WHERE conversation_id IN (${ids.map(() => '?').join(', ')}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]);
-        return !!row;
+            `SELECT conversation_id FROM messages WHERE conversation_id IN (${marks}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]);
+        return typeof row?.conversation_id === 'string' ? row.conversation_id : null;
     } catch {
-        return false;
+        return null;
     }
+}
+
+/** True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. */
+export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
+    return (await knownDmConversationId(conversationId)) !== null;
 }
 
 /**

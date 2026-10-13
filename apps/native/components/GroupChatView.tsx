@@ -124,6 +124,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [searchQuery, setSearchQuery] = useState('');
     const [invitedCount, setInvitedCount] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    // The node refused the chat as to someone not in the group now (403 or 404), not a read that failed.
+    const [refused, setRefused] = useState(false);
     const [sending, setSending] = useState(false);
     const [pending, setPending] = useState<PendingMessage[]>([]);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -227,6 +229,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             return msgs;
         } catch (e: any) {
             setError(e?.message || 'Could not open this chat.');
+            setRefused(kind === 'group' && (e?.status === 403 || e?.status === 404));
             return null;
         } finally {
             inFlight.current = false;
@@ -538,7 +541,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     lands them here (info=1), so the votes the node answers them show below (#1784 review B1). */}
                 {kind === 'group' && openInfo && (
                     <ScrollView contentContainerStyle={{ padding: 16 }}>
-                        <GroupDecisions groupId={id} myPubkey={me ?? null} people={[]} />
+                        <GroupDecisions groupId={id} myPubkey={me ?? null} people={[]} votesOnly={refused} />
                     </ScrollView>
                 )}
             </View>

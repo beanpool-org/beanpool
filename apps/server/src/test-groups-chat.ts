@@ -156,6 +156,14 @@ async function main(): Promise<void> {
         'Social Circle is the default, and a stored "project" row reads as Team');
     const garden = createGroup({ name: 'Garden Crew', joinPolicy: 'request_to_join', createdBy: alice });
     assert(garden.category === 'social', 'a group created without a category is a Social Circle');
+    // #1814 review N-e: "Project Team" is gone, so the node refuses it on both ways in (a project is the Beans kind now).
+    const before = (db.prepare('SELECT COUNT(*) AS c FROM groups').get() as any).c;
+    assertThrows(() => createGroup({ name: 'Old Team', joinPolicy: 'open', createdBy: alice, category: 'project' }),
+        /Invalid group category: project/, 'a new group with the dropped category "project" is refused');
+    assert((db.prepare('SELECT COUNT(*) AS c FROM groups').get() as any).c === before, 'and nothing is stored');
+    assertThrows(() => updateGroup(garden.id, alice, { category: 'project' }),
+        /Invalid group category: project/, 'an existing group cannot be changed to it either');
+    assert((db.prepare('SELECT category FROM groups WHERE id = ?').get(garden.id) as any).category === 'social', 'and keeps its own');
     const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(garden.id) as any;
     assert(conv?.type === 'group_thread', "the group's chat is one group_thread conversation");
     assert(conv?.name === 'Garden Crew', "named after the group");

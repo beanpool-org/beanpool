@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState, Animated } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
@@ -52,7 +52,8 @@ import { protectionFrom } from '../utils/protection-state';
 import { NO_WORDS_WAY_BACK, noWordsBeforeWipe, signInReplacedNote } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
-import { colors, palette } from '../constants/colors';
+import { palette, type AppColors } from '../constants/colors';
+import { useOnboardingColors } from './ThemeContext';
 import {
     checkSsoRestore, finishSsoRestore, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords, vaultKeepsNoCopyFor,
     waitingSsoRestore, type PendingVaultRestore, type RestoredFromVault,
@@ -111,6 +112,12 @@ function joinedLabel(joinedAt: string | null | undefined): string {
 }
 
 export default function WelcomeScreen() {
+    // Onboarding follows light/dark like the rest of the app: the classic light tokens in light (exactly as before),
+    // the app's dark tokens in dark. See utils/onboarding-colors.ts.
+    const { colors, dark } = useOnboardingColors();
+    const { styles, profileStyles, stepperStyles, guideStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+    // Accent ink for text and spinners on the page; filled blue buttons keep blue600 under white text in both.
+    const accentInk = dark ? palette.blue400 : palette.blue600;
     const params = useGlobalSearchParams();
     const incomingUrl = Linking.useURL();
     // Only a link that carries an invite concerns this screen (utils/welcome-invite.ts). `useURL()` also changes on a
@@ -1872,7 +1879,7 @@ export default function WelcomeScreen() {
     if (mode === 'profileSetup' && pendingIdentity) {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={2} />
                     <View style={styles.card}>
@@ -1923,7 +1930,7 @@ export default function WelcomeScreen() {
 
                         {loading && (
                             <View style={{ alignItems: 'center', marginVertical: 12 }}>
-                                <ActivityIndicator color={palette.blue600} />
+                                <ActivityIndicator color={accentInk} />
                                 <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 4 }}>Processing image...</Text>
                             </View>
                         )}
@@ -1975,14 +1982,14 @@ export default function WelcomeScreen() {
     if (mode === 'seedBackup' && pendingIdentity) {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={3} />
                     <View style={styles.card}>
                         {/* In by 12 words (two-doors design §2.5): what the words are, first; a sign-in is offered below the
                             tickbox, as a second way back. Once one is added, the panel every sign-in member sees. */}
                         {wordsMember ? (
-                            <WordsBackupNote />
+                            <WordsBackupNote colors={colors} />
                         ) : (
                         <KeeperProtectionPanel
                             protection={protection}
@@ -2081,7 +2088,7 @@ export default function WelcomeScreen() {
                               out for yourself which number went with which word.
                             */}
                             {/* No screenshots of the words (a screenshot is the copy most easily found by someone else): they wait for the block. */}
-                            <NoScreenCapture fallback={<ActivityIndicator color={palette.blue600} style={{ marginVertical: 24 }} />}>
+                            <NoScreenCapture fallback={<ActivityIndicator color={accentInk} style={{ marginVertical: 24 }} />}>
                             {pendingWords ? pendingWords.map((word, i) => (
                                 <View
                                     key={i}
@@ -2093,7 +2100,7 @@ export default function WelcomeScreen() {
                                     <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>
                                 </View>
                             )) : (
-                                <ActivityIndicator color={palette.blue600} style={{ marginVertical: 24 }} />
+                                <ActivityIndicator color={accentInk} style={{ marginVertical: 24 }} />
                             )}
                             </NoScreenCapture>
                         </View>
@@ -2156,6 +2163,7 @@ export default function WelcomeScreen() {
                             </Pressable>
                         )}
                         <LinkSignInSheet
+                            colors={colors}
                             visible={showLinkSheet}
                             identity={pendingIdentity}
                             url={GLOBAL_NODE_URL}
@@ -2204,7 +2212,7 @@ export default function WelcomeScreen() {
     if (mode === 'onboardingGuide' && pendingIdentity) {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={4} />
                     <View style={styles.card}>
@@ -2228,7 +2236,7 @@ export default function WelcomeScreen() {
                                 </Text>
                             </View>
                             <View style={[guideStyles.highlightBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.35)' }]}>
-                                <Text style={[guideStyles.highlightText, { color: palette.amber700 || '#b45309' }]}>
+                                <Text style={[guideStyles.highlightText, { color: dark ? palette.amber400 : (palette.amber700 || '#b45309') }]}>
                                     🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> To keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.
                                 </Text>
                             </View>
@@ -2368,7 +2376,7 @@ export default function WelcomeScreen() {
     if (mode === 'create') {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView
                     behavior="padding"
                     style={{ flex: 1 }}
@@ -2488,7 +2496,7 @@ export default function WelcomeScreen() {
                                 <Text style={styles.error}>{error}</Text>
                                 {(error.includes('already been used') || error.includes('already used')) && (
                                     <Pressable
-                                        style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: palette.blue50 || '#eff6ff', borderRadius: 8, borderWidth: 1, borderColor: palette.blue200 || '#bfdbfe', alignItems: 'center' }}
+                                        style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: dark ? colors.feedback.info.bg : (palette.blue50 || '#eff6ff'), borderRadius: 8, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : (palette.blue200 || '#bfdbfe'), alignItems: 'center' }}
                                         onPress={() => leaveUnlessNextIsOut(nextOutRef, () => {
                                             setError(null);
                                             setMode('recover');
@@ -2496,7 +2504,7 @@ export default function WelcomeScreen() {
                                         disabled={loading}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={{ color: palette.blue600 || '#2563eb', fontWeight: 'bold', fontSize: 13 }}>
+                                        <Text style={{ color: dark ? palette.blue400 : (palette.blue600 || '#2563eb'), fontWeight: 'bold', fontSize: 13 }}>
                                             🔑 Recover an existing account with seed phrase →
                                         </Text>
                                     </Pressable>
@@ -2564,7 +2572,7 @@ export default function WelcomeScreen() {
             : 'The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.';
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                     <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                         <OnboardingStepper step={1} />
@@ -2573,7 +2581,7 @@ export default function WelcomeScreen() {
 
                             {globalPhase === 'checking' && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                    <ActivityIndicator size="large" color={palette.blue600} />
+                                    <ActivityIndicator size="large" color={accentInk} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
                                         Connecting to the global community…
                                     </Text>
@@ -2626,7 +2634,7 @@ export default function WelcomeScreen() {
                                     </Text>
                                     {loading && (
                                         <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                            <ActivityIndicator size="large" color={palette.blue600} />
+                                            <ActivityIndicator size="large" color={accentInk} />
                                         </View>
                                     )}
                                     {error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
@@ -2637,6 +2645,7 @@ export default function WelcomeScreen() {
                                         busy={doorWork.busy}
                                         wordsProblem={wordsState?.phase === 'failed' ? DOOR_WORK_MESSAGES.solverUnavailable : null}
                                         signInNote={signInNote}
+                                        colors={colors}
                                     />
                                 </>
                             )}
@@ -2655,7 +2664,7 @@ export default function WelcomeScreen() {
 
                                     {loading && (
                                         <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                            <ActivityIndicator size="large" color={palette.blue600} />
+                                            <ActivityIndicator size="large" color={accentInk} />
                                         </View>
                                     )}
 
@@ -2725,7 +2734,7 @@ export default function WelcomeScreen() {
                                         <Text style={[styles.fieldHint, { marginTop: 12 }]} accessibilityLiveRegion="polite">{doorWork.busy}</Text>
                                     )}
                                     {/* Join tapped before the work was done: it finishes here, and Back still works. */}
-                                    {wordsWay && workWaiting && <DoorWorkProgress state={wordsState} />}
+                                    {wordsWay && workWaiting && <DoorWorkProgress state={wordsState} colors={colors} />}
 
                                     <Pressable
                                         style={[styles.primaryBtn, { marginTop: 16 }]}
@@ -2750,7 +2759,7 @@ export default function WelcomeScreen() {
 
                             {globalPhase === 'joining' && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                    <ActivityIndicator size="large" color={palette.blue600} />
+                                    <ActivityIndicator size="large" color={accentInk} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
                                         {doorNotice ?? 'Joining the global community…'}
                                     </Text>
@@ -2780,7 +2789,7 @@ export default function WelcomeScreen() {
     if (mode === 'member') {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
                         <Text style={styles.title} accessibilityRole="header">🔑 Restore your account</Text>
@@ -2800,7 +2809,7 @@ export default function WelcomeScreen() {
                             <View style={styles.ssoRecoverRow}>
                                 <Text style={styles.ssoRecoverBtnText}>🌐 Recover with Social</Text>
                                 <View style={styles.ssoRecoverLogos}>
-                                    {Platform.OS === 'ios' && <AppleLogo size={16} color="#1D4ED8" />}
+                                    {Platform.OS === 'ios' && <AppleLogo size={16} color={dark ? palette.blue400 : '#1D4ED8'} />}
                                     <GoogleLogo size={16} />
                                     <FacebookLogo size={16} />
                                 </View>
@@ -2836,7 +2845,7 @@ export default function WelcomeScreen() {
         const hasOutgoingSeed = hasMnemonic(outgoingIdentity);
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                     <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                         <View style={styles.card}>
@@ -2944,7 +2953,7 @@ export default function WelcomeScreen() {
     if (mode === 'recover') {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView
                     behavior="padding"
                     style={{ flex: 1 }}
@@ -3009,7 +3018,7 @@ export default function WelcomeScreen() {
         const offeredHere = (p: SsoProvider) => !hasVault() || ssoAtCommunity === p;
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView
                     behavior="padding"
                     style={{ flex: 1 }}
@@ -3130,7 +3139,7 @@ export default function WelcomeScreen() {
 
                             {loading && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                    <ActivityIndicator size="large" color={palette.blue600} />
+                                    <ActivityIndicator size="large" color={accentInk} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
                                         {ssoProgressMessage || 'Verifying sign-in...'}
                                     </Text>
@@ -3186,7 +3195,7 @@ export default function WelcomeScreen() {
         const waitingUntil = !ssoReleased && ssoWaiting?.holdId && ssoWaiting.until ? ssoWaiting.until : null;
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView
                     behavior="padding"
                     style={{ flex: 1 }}
@@ -3285,7 +3294,7 @@ export default function WelcomeScreen() {
 
                                     {loading && (
                                         <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                            <ActivityIndicator size="large" color={palette.blue600} />
+                                            <ActivityIndicator size="large" color={accentInk} />
                                             <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
                                                 {ssoProgressMessage || 'Verifying sign-in...'}
                                             </Text>
@@ -3346,7 +3355,7 @@ export default function WelcomeScreen() {
     const pinnedTop = globalOffer ? homeTop : null;
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" />
+            <StatusBar style={dark ? 'light' : 'dark'} />
             {/* Scrolls: at 320dp and 1.3x text, the button, the hint and the paste offer are taller than a small phone. */}
             <ScrollView contentContainerStyle={pinnedTop !== null ? [styles.homeContent, { paddingTop: pinnedTop }] : [styles.homeContent, styles.homeCentred]}>
                 <View style={styles.homeMain} onLayout={(e) => { if (!globalOffer) setHomeTop(e.nativeEvent.layout.y); }}>
@@ -3411,6 +3420,7 @@ export default function WelcomeScreen() {
     );
 }
 
+function makeStyles(colors: AppColors, dark: boolean) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.page },
     homeContent: { flexGrow: 1, padding: 24, alignItems: 'center' },
@@ -3423,13 +3433,13 @@ const styles = StyleSheet.create({
     headerSubtitle: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', marginBottom: 32, lineHeight: 24 },
     card: { width: '100%', backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
     inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
-    inviteVerifiedText: { color: palette.green700 || '#15803d', fontSize: 14, lineHeight: 20 },
+    inviteVerifiedText: { color: dark ? palette.emerald400 : (palette.green700 || '#15803d'), fontSize: 14, lineHeight: 20 },
     clipboardHintBtn: { marginTop: 20, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
-    clipboardHintText: { color: palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+    clipboardHintText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
     clipboardHintBox: { marginTop: 20, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 16, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', alignItems: 'center', width: '100%' },
     homePasteSystemBtn: { width: 170, height: 44, marginTop: 12 },
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
-    tosLink: { color: palette.blue600, textDecorationLine: 'underline' },
+    tosLink: { color: dark ? palette.blue400 : palette.blue600, textDecorationLine: 'underline' },
     inviteOnlyHint: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 22, marginTop: 4 },
     restoreSecondaryBtn: {
         marginTop: 20,
@@ -3450,7 +3460,7 @@ const styles = StyleSheet.create({
         elevation: 1,
     },
     restoreSecondaryBtnText: {
-        color: palette.blue600,
+        color: dark ? palette.blue400 : palette.blue600,
         fontSize: 15,
         fontWeight: '700',
     },
@@ -3484,7 +3494,7 @@ const styles = StyleSheet.create({
         minHeight: 44,
     },
     restorePromptBtnText: {
-        color: palette.blue600,
+        color: dark ? palette.blue400 : palette.blue600,
         fontSize: 14,
         fontWeight: '700',
     },
@@ -3508,23 +3518,23 @@ const styles = StyleSheet.create({
     memberBtn: { backgroundColor: palette.blue600, paddingVertical: 18, paddingHorizontal: 12, borderRadius: 14, alignItems: 'center', width: '100%', marginBottom: 12, shadowColor: palette.blue600, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 14, elevation: 6 },
     memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700' },
     secondaryBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border.strong, padding: 16, borderRadius: 14, alignItems: 'center', width: '100%' },
-    secondaryBtnText: { color: palette.gray600, fontSize: 16, fontWeight: '600' },
+    secondaryBtnText: { color: dark ? colors.text.secondary : palette.gray600, fontSize: 16, fontWeight: '600' },
 
     // Member sub-options
-    ssoRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#93C5FD', backgroundColor: '#EFF6FF', alignItems: 'center', marginBottom: 10 },
+    ssoRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : '#93C5FD', backgroundColor: dark ? colors.feedback.info.bg : '#EFF6FF', alignItems: 'center', marginBottom: 10 },
     // The label shrinks and wraps; the logos keep their size. A label that could not shrink made the row wider than
     // the button at 320dp or with enlarged text, and the centred row spilled past both edges.
     ssoRecoverRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, maxWidth: '100%' },
-    ssoRecoverBtnText: { color: '#1D4ED8', fontSize: 16, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
+    ssoRecoverBtnText: { color: dark ? palette.blue400 : '#1D4ED8', fontSize: 16, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
     ssoRecoverLogos: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
     recoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.recoverBorder, backgroundColor: colors.onboarding.recoverBg, alignItems: 'center', marginBottom: 10 },
-    recoverBtnText: { color: palette.amber800, fontSize: 16, fontWeight: '700' },
+    recoverBtnText: { color: dark ? palette.amber400 : palette.amber800, fontSize: 16, fontWeight: '700' },
     socialRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.socialRecoverBorder, backgroundColor: colors.onboarding.socialRecoverBg, alignItems: 'center', marginBottom: 10 },
-    socialRecoverBtnText: { color: palette.emerald700, fontSize: 16, fontWeight: '700' },
+    socialRecoverBtnText: { color: dark ? palette.emerald400 : palette.emerald700, fontSize: 16, fontWeight: '700' },
 
     primaryBtn: { backgroundColor: palette.blue600, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
-    disabledBtn: { backgroundColor: palette.slate300 },
+    disabledBtn: { backgroundColor: dark ? palette.neutral700 : palette.slate300 },
     // Identity-overwrite guard (confirm-replace screen)
     emphasis: { fontWeight: '700', color: colors.text.heading },
     replaceWarnBox: { backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 14, marginBottom: 16 },
@@ -3541,7 +3551,7 @@ const styles = StyleSheet.create({
     backBtnText: { color: colors.text.secondary, fontSize: 14 },
     error: { color: colors.feedback.danger.solid, fontSize: 14, marginBottom: 16, textAlign: 'center' },
     checkbox: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, padding: 12, backgroundColor: colors.surface.subtle, borderRadius: 8 },
-    checkboxActive: { backgroundColor: palette.blue100 },
+    checkboxActive: { backgroundColor: dark ? colors.feedback.info.bg : palette.blue100 },
     checkboxText: { color: colors.text.heading, fontSize: 14, fontWeight: '600' },
     seedGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
     seedCell: { width: '31%', backgroundColor: colors.surface.subtle, borderRadius: 8, padding: 8, marginBottom: 8, alignItems: 'center' },
@@ -3611,7 +3621,7 @@ const profileStyles = StyleSheet.create({
     trinityLabel: {
         fontSize: 13,
         fontWeight: '600',
-        color: palette.gray600,
+        color: dark ? colors.text.secondary : palette.gray600,
     },
     avatarGrid: {
         flexDirection: 'row',
@@ -3684,7 +3694,8 @@ const stepperStyles = StyleSheet.create({
         justifyContent: 'center',
     },
     dotCheck: {
-        color: colors.text.inverse,
+        // Dark ink on the green dot in both schemes: white on green500 read 2.28:1, this reads 6.36:1.
+        color: palette.green950,
         fontSize: 9,
         fontWeight: '800',
     },
@@ -3726,7 +3737,7 @@ const guideStyles = StyleSheet.create({
     },
     cardText: {
         fontSize: 14,
-        color: palette.gray600,
+        color: dark ? colors.text.secondary : palette.gray600,
         lineHeight: 20,
     },
     highlightBox: {
@@ -3739,7 +3750,7 @@ const guideStyles = StyleSheet.create({
     },
     highlightText: {
         fontSize: 13,
-        color: palette.green800,
+        color: dark ? palette.emerald400 : palette.green800,
         lineHeight: 18,
     },
     bulletRow: {
@@ -3758,7 +3769,7 @@ const guideStyles = StyleSheet.create({
     bulletTitle: {
         fontSize: 14,
         fontWeight: '600',
-        color: palette.gray700,
+        color: dark ? colors.text.body : palette.gray700,
         marginBottom: 2,
     },
     bulletText: {
@@ -3768,8 +3779,11 @@ const guideStyles = StyleSheet.create({
     },
     bulletItem: {
         fontSize: 13,
-        color: palette.gray600,
+        color: dark ? colors.text.secondary : palette.gray600,
         lineHeight: 18,
         marginBottom: 8,
     }
 });
+
+return { styles, profileStyles, stepperStyles, guideStyles };
+}

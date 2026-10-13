@@ -47,7 +47,7 @@ import * as Crypto from 'expo-crypto';
 import {
     getGroupChat, postGroupChatMessage, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi, fetchGroupDetails,
     markThreadReadOnNode, toggleMessageReactionApi, editThreadMessage, deleteMessageApi, removeGroupChatMessage,
-    groupKeyringFor,
+    groupScreenKeyringFor,
     type GroupItem, type GroupMemberItem,
 } from '../utils/db';
 import { chatIsLocked, groupChatNotice, groupChatShownLines, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
@@ -266,7 +266,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const openThreadRef = useRef<(answer: any) => void>(() => { });
     openThreadRef.current = (served: any) => {
         lastAnswer.current = served;
-        groupKeyringFor(id)
+        // Through the DM guard: a known DM gets no keys synced here, whichever route drew this screen (#1841 review, 1).
+        groupScreenKeyringFor(id)
             .then(async ring => {
                 const held = await ring.seenLocked();
                 setSeenLocked(held);

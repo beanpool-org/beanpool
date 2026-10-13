@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import type { SavedNode } from '../utils/nodes';
-import { colors, palette } from '../constants/colors';
+import { palette, type AppColors } from '../constants/colors';
+import { useOnboardingColors } from '../app/ThemeContext';
 
 /**
  * The communities this device has joined before, one tap each. Shared by node-mismatch (switch
@@ -20,6 +22,8 @@ export function SavedNodePicker({
     /** Marks the row whose address is already in the field. */
     selectedUrl?: string | null;
 }) {
+    const { colors, dark } = useOnboardingColors();
+    const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     if (nodes.length === 0) return null;
     return (
         <View style={styles.pickerWrap}>
@@ -51,18 +55,20 @@ export function SavedNodePicker({
     );
 }
 
-const styles = StyleSheet.create({
-    pickerWrap: { marginBottom: 18 },
-    label: { fontSize: 14, color: palette.gray700, fontWeight: '600', marginBottom: 6 },
-    nodeRow: {
-        flexDirection: 'row', alignItems: 'center', gap: 10,
-        minHeight: 48, paddingVertical: 14, paddingHorizontal: 14, marginBottom: 8,
-        backgroundColor: colors.surface.app, borderRadius: 12,
-        borderWidth: 1, borderColor: colors.border.default,
-    },
-    nodeRowSelected: { borderColor: palette.blue600 },
-    nodeRowName: { color: colors.text.heading, fontSize: 15, fontWeight: '700' },
-    nodeRowUrl: { color: colors.text.secondary, fontSize: 12, marginTop: 2 },
-    nodeRowChevron: { color: colors.text.muted, fontSize: 22, fontWeight: '300' },
-    hint: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 16 },
-});
+function makeStyles(colors: AppColors, dark: boolean) {
+    return StyleSheet.create({
+        pickerWrap: { marginBottom: 18 },
+        label: { fontSize: 14, color: dark ? colors.text.body : palette.gray700, fontWeight: '600', marginBottom: 6 },
+        nodeRow: {
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            minHeight: 48, paddingVertical: 14, paddingHorizontal: 14, marginBottom: 8,
+            backgroundColor: colors.surface.app, borderRadius: 12,
+            borderWidth: 1, borderColor: colors.border.default,
+        },
+        nodeRowSelected: { borderColor: palette.blue600 },
+        nodeRowName: { color: colors.text.heading, fontSize: 15, fontWeight: '700' },
+        nodeRowUrl: { color: colors.text.secondary, fontSize: 12, marginTop: 2 },
+        nodeRowChevron: { color: colors.text.muted, fontSize: 22, fontWeight: '300' },
+        hint: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 16 },
+    });
+}

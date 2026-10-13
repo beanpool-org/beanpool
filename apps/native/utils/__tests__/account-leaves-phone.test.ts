@@ -301,8 +301,23 @@ describe('Delete this account from this phone (a community that doesn\'t recogni
         expect(identityRemovedAt()).toBeGreaterThan(Math.max(...vi.mocked(fetch).mock.invocationCallOrder));
         expect(await loadIdentity()).toBeNull();
         expect(JSON.parse(mem.async.get(SAVED_NODES_STORE_KEY) ?? '[]').map((n: { url: string }) => n.url)).toEqual([MULLUM, BELLINGEN]);
-        expect(removeCommunityCaches).not.toHaveBeenCalled();
         expect(mem.async.has(PUSH_REGISTERED_AT_STORE_KEY)).toBe(false);
+    });
+
+    it('the identity leaves, so its group key memory goes from every community file, as at Sign Out: the open copy\'s tables dropped, every copy removed, before the key goes; the saved list stays (director, #1815 review finding 2)', async () => {
+        await kimsPhone();
+        nodes();
+
+        await deleteAccountFromThisPhone(kim);
+
+        expect(clearDB).toHaveBeenCalledWith({ identityLeaves: true });
+        expect(removeCommunityCaches).toHaveBeenCalledTimes(1);
+        expect([...vi.mocked(removeCommunityCaches).mock.calls[0][0]].sort()).toEqual([MULLUM, BELLINGEN, BYRON].sort());
+        expect(vi.mocked(removeCommunityCaches).mock.calls[0][1]).toEqual({ everyCopy: true });
+        expect(callOrder(clearDB)).toBeLessThan(callOrder(removeCommunityCaches));
+        expect(callOrder(removeCommunityCaches)).toBeLessThan(identityRemovedAt());
+        expect(JSON.parse(mem.async.get(SAVED_NODES_STORE_KEY) ?? '[]').map((n: { url: string }) => n.url)).toEqual([MULLUM, BELLINGEN]);
+        expect(await loadIdentity()).toBeNull();
     });
 
     it('a community that can\'t be reached doesn\'t stop the delete', async () => {
@@ -388,6 +403,29 @@ describe('each community\'s cached copy', () => {
         // Each database's side files before the database itself, as for a listed one.
         const order = vi.mocked(FileSystem.deleteAsync).mock.calls.map(([uri]) => String(uri));
         expect(order.indexOf(`${dir}/${wiped}-wal`)).toBeLessThan(order.indexOf(`${dir}/${wiped}`));
+    });
+
+    it('Sign Out and "Delete this account from this phone" both take every community file, an unlisted one a Wipe left too (its group key rows go with it), and nothing else there (#1815 review finding 2)', async () => {
+        const real = await vi.importActual<typeof import('../community-cache')>('../community-cache');
+        const dir = 'file:///data/user/0/org.beanpool.app/files/SQLite';
+        const wiped = 'community_byron.beanpool.org_0123456789abcdef0123456789abcdef.db';
+        const mullum = 'community_mullum.beanpool.org_0f80ace00fd23a4b8c3a33f625a40a87.db';
+        for (const [door, leave] of [['Sign Out', () => signOutOfThisPhone(kim, { namesCopiesSaved: true })], ['node-mismatch delete', () => deleteAccountFromThisPhone(kim)]] as const) {
+            vi.mocked(FileSystem.deleteAsync).mockClear();
+            vi.mocked(clearDB).mockClear();
+            vi.mocked(removeCommunityCaches).mockImplementation(real.removeCommunityCaches);
+            vi.mocked(FileSystem.readDirectoryAsync).mockResolvedValue([wiped, `${wiped}-wal`, mullum, 'notes.db']);
+            await kimsPhone();
+            nodes();
+
+            await leave();
+
+            const removed = new Set(vi.mocked(FileSystem.deleteAsync).mock.calls.map(([uri]) => String(uri).slice(dir.length + 1)));
+            for (const f of [wiped, `${wiped}-wal`, mullum]) expect(removed.has(f), `${door}: ${f}`).toBe(true);
+            expect(removed.has('notes.db'), door).toBe(false);
+            expect(clearDB, door).toHaveBeenCalledWith({ identityLeaves: true });
+            expect(await loadIdentity(), door).toBeNull();
+        }
     });
 
     it('one community leaving (the account stays) lists nothing: only that community\'s copy goes', async () => {

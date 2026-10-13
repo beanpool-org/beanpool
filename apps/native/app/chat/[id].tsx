@@ -14,6 +14,7 @@ import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, isKnownDmConversation, isHeldGroupChat } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
+import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
@@ -29,7 +30,7 @@ import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
-import { isDmNotLocked, dmNotLockedLine, restoredDraft } from '../../utils/dm-lock';
+import { refusedSendNotice, restoredDraft } from '../../utils/dm-lock';
 import {
     buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
@@ -79,65 +80,43 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
     );
 }
 
+/** What the route asks the phone (utils/chat-route.ts tests these wirings). */
+const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, isKnownDmConversation, getConversationKind };
+
 /**
- * `/chat/:id` serves two kinds of conversation. A DM or group is the screen below. An event chat is its
- * own screen (docs/events-on-the-map.md §2.2): node-readable `plaintext-v1`, members that follow the
- * RSVPs, a host who can remove a message, read-only once the event ends — none of which the DM pipeline
- * below (E2E, edits, reactions, deals) knows about, and all of which it would quietly get wrong.
+ * `/chat/:id` serves several kinds of conversation, and utils/chat-route.ts decides which screen, in this order: a group
+ * whose keys this phone has held (its group chat, sealed or refused), a known DM (the DM screen), an event chat, a group's
+ * or an enterprise's thread, else a DM. An event chat is its own screen (docs/events-on-the-map.md §2.2): node-readable
+ * `plaintext-v1`, members that follow the RSVPs, a host who can remove a message, read-only once the event ends — none of
+ * which the DM pipeline below (E2E, edits, reactions, deals) knows about, and all of which it would quietly get wrong.
  *
- * Both callers that can open one — the Inbox row and the event detail — say so with `event=1`, so a DM
- * never waits on a database read to decide. The lookup is the fallback for an older link or a push.
+ * Nothing draws until the phone has asked its own key memory, its DM list and the conversation's kind (a SecureStore read
+ * and a few small SQLite reads; the node only when there is no row yet): every screen here can post, and which one may is
+ * what is being decided. Every fact is asked of one id, lower-cased, and a group's screen gets that id, so no spelling is
+ * a DM to one check and a group to the next (routeChat; #1841 review, findings 1 and 4). The Inbox row, the event detail
+ * and "Your groups" say the kind on the way in (`event=1`, `group=1`, `enterprise=1`); the conversation's type is the
+ * fallback for an older link or a push.
  */
 export default function ChatRoute() {
     const { id, event, group, enterprise, created, name, info } = useLocalSearchParams<{
         id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string; info?: string;
     }>();
-    const [isEventChat, setIsEventChat] = useState(event === '1');
-    // A group's chat and an enterprise's public discussion thread are node-readable threads like the event chat, on
-    // their own screen with the one owner header (groups decision 9). "Your groups" says which on the way in.
-    const [threadKind, setThreadKind] = useState<'group' | 'enterprise' | null>(
-        group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null,
-    );
-
-    // A DM stays a DM (utils/db.ts, the DM guard): a conversation this phone has seen as a DM, or that holds an encrypted
-    // line, opens only in the DM screen below, whatever type the node now gives it or a link says. Asked before any
-    // node-readable view opens; null while asking.
-    const [knownDm, setKnownDm] = useState<boolean | null>(null);
+    // The answer for the id it was asked of: a new id draws nothing until its own answer is in.
+    const [route, setRoute] = useState<{ for: string; answer: ChatRouteAnswer } | null>(null);
     useEffect(() => {
         if (!id) return;
         let alive = true;
-        isKnownDmConversation(String(id)).then(k => { if (alive) setKnownDm(k); }, () => { if (alive) setKnownDm(false); });
+        setRoute(null);
+        routeChat(ROUTE_ASKS, String(id), { event: event === '1', thread: group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null })
+            .then(answer => { if (alive) setRoute({ for: String(id), answer }); });
         return () => { alive = false; };
-    }, [id]);
+    }, [id, event, group, enterprise]);
 
-    // A group whose keys this phone has held opens only in its group chat (sealed or refused), whatever type the local
-    // row says, with no row (a sync pruned it, a push tap landed first), or whatever a link says: never the DM screen or
-    // the event chat, which would send it readable words (confirmation of #1788, finding 1). Null while asking.
-    const [heldGroup, setHeldGroup] = useState<boolean | null>(null);
-    useEffect(() => {
-        if (!id) return;
-        let alive = true;
-        isHeldGroupChat(String(id)).then(h => { if (alive) setHeldGroup(h); }, () => { if (alive) setHeldGroup(false); });
-        return () => { alive = false; };
-    }, [id]);
-
-    useEffect(() => {
-        if (isEventChat || threadKind || !id) return;
-        let alive = true;
-        getConversationKind(String(id)).then(kind => {
-            if (!alive) return;
-            if (kind === 'event_thread') setIsEventChat(true);
-            else if (kind === 'group_thread') setThreadKind('group');
-            else if (kind === 'enterprise_thread') setThreadKind('enterprise');
-        });
-        return () => { alive = false; };
-    }, [id, isEventChat, threadKind]);
-
-    if (knownDm) return <ChatScreen />;
-    if (knownDm === null || heldGroup === null) return null;
-    if (heldGroup && id) return <GroupChatView kind="group" id={String(id)} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
-    if (isEventChat && id) return <EventChatView eventId={String(id)} />;
-    if (threadKind && id) return <GroupChatView kind={threadKind} id={String(id)} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
+    if (!id || !route || route.for !== String(id)) return null;
+    const { view, screenId } = route.answer;
+    if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
+    if (view === 'event') return <EventChatView eventId={screenId} />;
+    if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     return <ChatScreen />;
 }
 
@@ -564,12 +543,13 @@ function ChatScreen() {
             }
             setLockNotice(null);
         } catch (err: any) {
-            if (isDmNotLocked(err)) {
-                // Nothing went. The words go back in the box (with anything typed since), an edit stays an edit, and
-                // the next Send tries the lock again.
+            const refused = refusedSendNotice(err, peerPubkey ? peerName : null);
+            if (refused) {
+                // Nothing went (the line couldn't be locked, or the phone couldn't read its group key memory). The words
+                // go back in the box (with anything typed since), an edit stays an edit, and the next Send tries again.
                 hapticWarning();
                 composerRef.current?.setText(restoredDraft(currentDraft, composerRef.current?.currentText() ?? ''));
-                setLockNotice(dmNotLockedLine(peerPubkey ? peerName : null));
+                setLockNotice(refused);
                 return;
             }
             Alert.alert(wasEditing ? "Edit Failed" : "Message Failed", err.message || "Could not execute send.");
@@ -642,7 +622,8 @@ function ChatScreen() {
                     await insertMessage(id as string, identity.publicKey, item.text, metaStr, item.id);
                     setLockNotice(null);
                 } catch (e: any) {
-                    if (isDmNotLocked(e)) setLockNotice(dmNotLockedLine(peerPubkey ? peerName : null));
+                    const refused = refusedSendNotice(e, peerPubkey ? peerName : null);
+                    if (refused) setLockNotice(refused);
                     else Alert.alert('Message Failed', e.message || 'Could not resend.');
                 }
                 loadMessages(true);
@@ -678,7 +659,8 @@ function ChatScreen() {
                 loadMessages();
             } catch (err: any) {
                 hapticWarning();
-                if (isDmNotLocked(err)) setLockNotice(dmNotLockedLine(peerPubkey ? peerName : null));
+                const refused = refusedSendNotice(err, peerPubkey ? peerName : null);
+                if (refused) setLockNotice(refused);
                 else Alert.alert('Image Failed', err.message || 'Could not send image.');
             } finally {
                 sendingRef.current = false;

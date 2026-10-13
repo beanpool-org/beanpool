@@ -31,6 +31,7 @@ import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { buildRosterView } from '../utils/group-roster';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
+import { KEY_CHANGED_HINT } from '../utils/name-key-memory';
 
 interface GroupDetailModalProps {
     group: GroupItem | null;
@@ -39,6 +40,8 @@ interface GroupDetailModalProps {
     myPubkey?: string;
     onMembershipChanged?: () => void;
     onPostToGroup?: (group: GroupItem) => void;
+    /** Members whose name this phone saw on another key, with no statement from the new key (utils/name-key-memory.ts). */
+    keyChanged?: ReadonlySet<string>;
 }
 
 export function GroupDetailModal({
@@ -47,7 +50,8 @@ export function GroupDetailModal({
     onClose,
     myPubkey,
     onMembershipChanged,
-    onPostToGroup
+    onPostToGroup,
+    keyChanged,
 }: GroupDetailModalProps) {
     const { colors } = useTheme();
     const [loading, setLoading] = useState(false);
@@ -173,11 +177,14 @@ export function GroupDetailModal({
             marginTop: 16,
         },
         memberRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
             paddingVertical: 10,
             borderBottomWidth: StyleSheet.hairlineWidth,
             borderBottomColor: colors.border.default,
+        },
+        // The avatar, the name and badge, and the buttons the viewer may use, on one line.
+        memberLine: {
+            flexDirection: 'row',
+            alignItems: 'center',
         },
         memberInfo: {
             flex: 1,
@@ -345,6 +352,15 @@ export function GroupDetailModal({
             fontSize: 11,
             color: colors.text.secondary,
             fontWeight: '600',
+        },
+        // Under the member's line, indented to the name (the avatar's 36 and memberInfo's 12): the whole sheet's width,
+        // whatever buttons the viewer has (review of #1826, confirmation 1, NB4).
+        memberKeyChanged: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text.muted,
+            marginTop: 2,
+            marginLeft: 48,
         },
         // "lead convenor" beside the LEAD badge. flexShrink so it gives way before the badge does at 320dp.
         leadNote: {
@@ -842,59 +858,67 @@ export function GroupDetailModal({
                                 const highlight = row.isLead || m.role === 'convenor';
                                 return (
                                     <View key={m.memberPubkey} style={styles.memberRow}>
-                                        <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign || '?'} size={36} />
-                                        <View style={styles.memberInfo}>
-                                            <Text style={styles.memberCallsign} numberOfLines={1}>
-                                                {m.callsign || m.memberPubkey.slice(0, 10)}{row.isYou ? ' (You)' : ''}
-                                            </Text>
-                                            {/* The badge says LEAD on the one row it belongs to. It wraps rather than
-                                                squeezing the callsign at 320dp with 1.3× text. */}
-                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
-                                                <View style={[styles.roleBadge, highlight && styles.roleBadgeConvenor]}>
-                                                    <Text style={[styles.roleBadgeText, highlight && styles.roleBadgeConvenorText]} numberOfLines={1}>
-                                                        {row.isLead ? 'LEAD' : m.role.toUpperCase()}
-                                                    </Text>
+                                        <View style={styles.memberLine}>
+                                            <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign || '?'} size={36} />
+                                            <View style={styles.memberInfo}>
+                                                <Text style={styles.memberCallsign} numberOfLines={1}>
+                                                    {m.callsign || m.memberPubkey.slice(0, 10)}{row.isYou ? ' (You)' : ''}
+                                                </Text>
+                                                {/* The badge says LEAD on the one row it belongs to. It wraps rather than
+                                                    squeezing the callsign at 320dp with 1.3× text. */}
+                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                                                    <View style={[styles.roleBadge, highlight && styles.roleBadgeConvenor]}>
+                                                        <Text style={[styles.roleBadgeText, highlight && styles.roleBadgeConvenorText]} numberOfLines={1}>
+                                                            {row.isLead ? 'LEAD' : m.role.toUpperCase()}
+                                                        </Text>
+                                                    </View>
+                                                    {row.isLead && (
+                                                        <Text style={styles.leadNote} numberOfLines={1}>lead convenor</Text>
+                                                    )}
                                                 </View>
-                                                {row.isLead && (
-                                                    <Text style={styles.leadNote} numberOfLines={1}>lead convenor</Text>
-                                                )}
                                             </View>
+                                            {/* Role and ✕ only where the viewer may actually act: never on the lead, and
+                                                never on another convenor unless the viewer IS the lead. */}
+                                            {(row.canChangeRole || row.canRemove || row.canHandOverLead) && (
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
+                                                    {row.canHandOverLead && (
+                                                        <Pressable
+                                                            style={styles.manageBtn}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={`Make ${m.callsign || 'this member'} the lead convenor`}
+                                                            onPress={() => handleHandOverLeadTo(m.memberPubkey, m.callsign)}
+                                                        >
+                                                            <MaterialCommunityIcons name="shield-star-outline" size={18} color={colors.text.secondary} />
+                                                        </Pressable>
+                                                    )}
+                                                    {row.canChangeRole && (
+                                                        <Pressable
+                                                            style={styles.manageBtn}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={`Change role for ${m.callsign || 'this member'}`}
+                                                            onPress={() => handleChangeRole(m.memberPubkey, m.role, m.callsign)}
+                                                        >
+                                                            <Text style={styles.manageBtnText} numberOfLines={1}>Role</Text>
+                                                        </Pressable>
+                                                    )}
+                                                    {row.canRemove && (
+                                                        <Pressable
+                                                            style={[styles.manageBtn, { borderColor: colors.feedback.danger.solid }]}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={`Remove ${m.callsign || 'this member'} from the group`}
+                                                            onPress={() => handleRemoveMember(m.memberPubkey, m.callsign)}
+                                                        >
+                                                            <MaterialCommunityIcons name="close" size={18} color={colors.feedback.danger.solid} />
+                                                        </Pressable>
+                                                    )}
+                                                </View>
+                                            )}
                                         </View>
-                                        {/* Role and ✕ only where the viewer may actually act: never on the lead, and
-                                            never on another convenor unless the viewer IS the lead. */}
-                                        {(row.canChangeRole || row.canRemove || row.canHandOverLead) && (
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
-                                                {row.canHandOverLead && (
-                                                    <Pressable
-                                                        style={styles.manageBtn}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel={`Make ${m.callsign || 'this member'} the lead convenor`}
-                                                        onPress={() => handleHandOverLeadTo(m.memberPubkey, m.callsign)}
-                                                    >
-                                                        <MaterialCommunityIcons name="shield-star-outline" size={18} color={colors.text.secondary} />
-                                                    </Pressable>
-                                                )}
-                                                {row.canChangeRole && (
-                                                    <Pressable
-                                                        style={styles.manageBtn}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel={`Change role for ${m.callsign || 'this member'}`}
-                                                        onPress={() => handleChangeRole(m.memberPubkey, m.role, m.callsign)}
-                                                    >
-                                                        <Text style={styles.manageBtnText} numberOfLines={1}>Role</Text>
-                                                    </Pressable>
-                                                )}
-                                                {row.canRemove && (
-                                                    <Pressable
-                                                        style={[styles.manageBtn, { borderColor: colors.feedback.danger.solid }]}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel={`Remove ${m.callsign || 'this member'} from the group`}
-                                                        onPress={() => handleRemoveMember(m.memberPubkey, m.callsign)}
-                                                    >
-                                                        <MaterialCommunityIcons name="close" size={18} color={colors.feedback.danger.solid} />
-                                                    </Pressable>
-                                                )}
-                                            </View>
+                                        {/* Its own line under the member's: beside the name, the one line cut it for
+                                            every name on a convenor's roster at 320dp (NB9); inside the name's column,
+                                            the lead's three buttons left 66px and "changed)" broke mid-word (NB4). */}
+                                        {keyChanged?.has(m.memberPubkey) && (
+                                            <Text style={styles.memberKeyChanged}>{KEY_CHANGED_HINT}</Text>
                                         )}
                                     </View>
                                 );

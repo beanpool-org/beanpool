@@ -540,6 +540,8 @@ export default function LedgerScreen() {
             </View>
 
             {/* ── Medallion shelf: every level at a glance, tap to inspect ── */}
+            {/* Levels are merit badges (#1838): one not reached yet keeps its own colours and a dashed edge, something to
+                grow into. Never a lock, never faded or greyed as if it were out of bounds. */}
             <Text style={styles.sectionLabel}>ALL LEVELS</Text>
             <View style={styles.shelf}>
                 {TIERS.map((t: any, i: number) => {
@@ -551,10 +553,10 @@ export default function LedgerScreen() {
                             accessibilityRole="button"
                             accessibilityState={{ selected: isSel }}
                             onPress={() => setSelectedLevel(i)}
-                            style={[styles.shelfItem, isSel && { borderColor: t.color, backgroundColor: t.bg }]}
+                            style={[styles.shelfItem, !reached && !isSel && { borderColor: t.border, borderStyle: 'dashed' }, isSel && { borderColor: t.color, backgroundColor: t.bg }]}
                         >
-                            <TrustBadge level={LEVEL_KEYS[i]} size={46} locked={!reached} />
-                            <Text style={[styles.shelfName, { color: reached ? t.color : colors.text.muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{t.name}</Text>
+                            <TrustBadge level={LEVEL_KEYS[i]} size={46} ahead={!reached} />
+                            <Text style={[styles.shelfName, { color: t.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{t.name}</Text>
                             <Text style={styles.shelfState} numberOfLines={1}>
                                 {tierIdx === i ? "You're here" : reached ? 'Reached' : `${t.min} trust`}
                             </Text>
@@ -566,14 +568,14 @@ export default function LedgerScreen() {
             {/* ── Selected-level detail ── */}
             <View style={[styles.detailCard, { borderColor: sel.border }]}>
                 <View style={styles.detailHeader}>
-                    <TrustBadge level={LEVEL_KEYS[selLevel]} size={44} locked={!selReached} />
+                    <TrustBadge level={LEVEL_KEYS[selLevel]} size={44} ahead={!selReached} />
                     <View style={{ flex: 1 }}>
                         <Text style={[styles.detailName, { color: sel.color }]}>{sel.name}</Text>
                         <Text style={styles.shelfState}>Level {selLevel + 1} of {TIERS.length}</Text>
                     </View>
-                    <View style={[styles.detailStatePill, { borderColor: sel.border, backgroundColor: selReached ? sel.bg : colors.surface.app }]}>
-                        <Text style={[styles.detailStateText, { color: selReached ? sel.color : colors.text.muted }]}>
-                            {selCurrent ? "You're here" : selReached ? 'Reached ✓' : '🔒 Locked'}
+                    <View style={[styles.detailStatePill, { borderColor: sel.border, borderStyle: selReached ? 'solid' : 'dashed', backgroundColor: sel.bg }]}>
+                        <Text style={[styles.detailStateText, { color: sel.color }]}>
+                            {selCurrent ? "You're here" : selReached ? 'Reached ✓' : selLevel === tierIdx + 1 ? 'Next level' : 'Up ahead'}
                         </Text>
                     </View>
                 </View>
@@ -600,7 +602,7 @@ export default function LedgerScreen() {
 
                 {sel.perks.map((p: string) => (
                     <View key={p} style={styles.detailPerkRow}>
-                        <MaterialCommunityIcons name={selReached ? 'check-circle' : 'circle-outline'} size={15} color={selReached ? colors.brand.primary : colors.border.strong} />
+                        <MaterialCommunityIcons name={selReached ? 'check-circle' : 'circle-outline'} size={15} color={selReached ? colors.brand.primary : sel.color} />
                         <Text style={styles.detailPerkText}>{p}</Text>
                     </View>
                 ))}

@@ -4,8 +4,9 @@
  * group_line_signers. Records and wraps are stored exactly as the node served them: ciphertext, nothing an outsider could
  * open without this member's seed (design §4: "cache nothing secret"). The opened keys are never written. Rows are kept
  * under "<identity>/<group>" (GroupKeyring's key), so another identity on this phone starts on its own. A Force Resync or
- * a Wipe keeps the four tables (the sticky lock and the highest epoch are security facts); only clearDB({ identityLeaves })
- * on Sign Out drops them.
+ * a Wipe keeps the four tables (the sticky lock and the highest epoch are security facts). When the identity leaves (Sign
+ * Out, the self-delete purge, Replace) clearDB({ identityLeaves }) drops them in the open file, and every community file
+ * on the phone goes, a Wipe's unlisted one too (community-cache.ts `everyCopy`).
  */
 import type { GroupKeyStore, StoredGroupEpoch } from './group-chat-keys';
 

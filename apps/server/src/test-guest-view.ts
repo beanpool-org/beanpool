@@ -1161,6 +1161,8 @@ async function main(): Promise<void> {
         /** A write's own body, in place of BAIT, where BAIT won't reach the part of it that could hand back a person. */
         const BODIES: Record<string, Record<string, unknown>> = {
             'POST /api/trust/profile': { targetPubkey: alice.pk },
+            // A succession statement naming Alice's key as the caller's old one (line-display design §5).
+            'POST /api/community/me/key-succession': { oldPubkey: alice.pk, at: '2026-10-03T04:00:00.000Z', sig: 'A'.repeat(86) + '==' },
             'POST /api/friends/add': { friendPubkey: alice.pk },
             // Anyone holding a code or a ticket, naming a member's key they have not signed for.
             'POST /api/invite/redeem': { code, publicKey: alice.pk, callsign: 'Sentinel joiner' },
@@ -1208,6 +1210,7 @@ async function main(): Promise<void> {
             'POST /api/names/health/settings': { debtLinePct: 90, quietDays: 30 },
             'POST /api/names/consent': { version: '1:50:60' },
             'POST /api/local/admin/community-health': { debtLinePct: 90 },
+            'POST /api/local/admin/start-community-url': { url: 'https://start.example.org/how' },
             // An enterprise's keepers' vote: paying Alice out of the enterprise, and a yes on a vote.
             'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
                 params: { to: alice.pk, amount: 1 } },
@@ -1236,7 +1239,8 @@ async function main(): Promise<void> {
             'GET /api/commons/balance', 'GET /api/commons/decisions', 'POST /api/commons/decisions', 'GET /api/commons/decisions/:id',
             'POST /api/commons/decisions/:id/vote', 'GET /api/commons/projects', 'POST /api/commons/projects', 'POST /api/commons/projects/delete',
             'POST /api/commons/projects/update', 'POST /api/commons/pay', 'GET /api/commons/repayment',
-            'GET /api/community/consent-terms', 'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/me', 'POST /api/community/me/area', 'GET /api/community/members',
+            'GET /api/community/consent-terms', 'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/me', 'POST /api/community/me/area',
+            'POST /api/community/me/key-succession', 'GET /api/community/members',
             'GET /api/community/membership/:publicKey', 'POST /api/community/register',
             'GET /api/crowdfund/projects', 'POST /api/crowdfund/projects', 'GET /api/crowdfund/projects/:id', 'POST /api/crowdfund/projects/:id/pledge',
             'POST /api/crowdfund/projects/delete', 'POST /api/crowdfund/projects/update',
@@ -1310,6 +1314,7 @@ async function main(): Promise<void> {
             'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
             'GET /api/local/admin/known-floor/member/:pubkey',
             'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health',
+            'POST /api/local/admin/start-community-url',
             'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
             'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',
             'POST /api/local/admin/members/:pubkey/burst/remove',

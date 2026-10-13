@@ -83,7 +83,7 @@ With no Cloudflare or other proxy in front (your own domain, straight to the ser
 The server watches itself every minute and tells its owners when it needs them:
 
 - the disk is 80, 90 or 95% full (for three minutes running; it clears once it is four points below, 76% for the 80% alert);
-- backups going off the server fail twice in a row, none has arrived for two intervals, or destinations are set but nothing goes to them (no recovery code yet, or none of them can be used);
+- backups going off the server fail twice in a row, none has arrived for an interval and a half (or an interval and an hour, if that is longer), or destinations are set but nothing goes to them (no recovery code yet, or none of them can be used);
 - no backup leaves the server and backups are not locked to a recovery code (a weekly nudge to the owners only);
 - scheduled snapshots fail twice in a row;
 - the server stopped without shutting down and started again three times in 15 minutes (told at the third start; restarting it yourself, for example with docker compose up -d, does not count), or stopped without shutting down;
@@ -109,7 +109,7 @@ A standby tells its own changes on its own channel and in its own Alerts card, a
 
 Each alert is told once when it starts, again every 24 hours while it lasts, and once when it is resolved: when it has been over for 15 minutes. One that comes back within those 15 minutes is not told again, so something swinging on and off sends one message, not one for each swing.
 
-**Owners always hear.** Each owner gets a push on their phone (one for everything that started in the same minute, and at most one a day for each alert, unless it gets worse; security changes as above), whatever their Marketplace Activity setting, and a banner in Settings until it is over. Admins and moderators are not told, and only an owner can open **Appliance & Data**, then **Alerts**.
+**Owners always hear.** Each owner gets a push on their phone (one for everything that started in the same minute, and at most one a day for each alert, unless it gets worse; security changes as above), whatever their Marketplace Activity setting, and a banner in Settings until it is over. Admins and moderators are not told, and only an owner can open the **Alerts** card: **Appliance & Data**, then **Backups & Restore**.
 
 **Your own channel, if you want one.** In the Alerts card, add an ntfy topic (for example https://ntfy.sh/ followed by a long name nobody can guess: the topic's name is its password) or any address that takes a JSON POST, with an optional token. Or put ALERTS_WEBHOOK_URL, ALERTS_WEBHOOK_FORMAT (ntfy or json) and ALERTS_WEBHOOK_TOKEN in .env and run docker compose up -d. **Send a test** checks it arrives. The channel is yours: nothing goes through BeanPool, and with no channel set nothing leaves the server.
 
@@ -133,7 +133,7 @@ Only an owner can write off an escrow, and only on the main server. A standby pi
 
 ### A balance that isn't a number
 
-Every balance should be a number of Beans. If one isn't (it holds Infinity, text, or nothing at all), the total can't add up, and the audit says how many "balances that are not a number" it found. Nothing in Settings mends one, and the server never guesses a value for it. A take-over still finishes on such a ledger, and its last screen says the ledger doesn't add up.
+Every balance should be a number of Beans. If one isn't (it holds Infinity, text, or nothing at all), the total can't add up, and the audit card shows the drift as "not a number". The audit at start-up writes how many "balances that are not a finite number" it found to the server's log. Nothing in Settings mends one, and the server never guesses a value for it. A take-over still finishes on such a ledger, and its last screen says the ledger doesn't add up.
 
 That includes the Commons pot's own row, COMMONS_POOL. If it holds no number of Beans when the server starts (text, nothing, or Infinity), the server treats the pot as unknown and says so in its log with a 🛑 line. It never writes 0 or anything else over the row, and no Beans move at all until you mend it: no deal, refund, removal, account deletion or payment from the Commons. Members who try are told "Payments are paused on this community while its admins fix a problem with its accounts." A Decision that moves Beans (a grant or a write-off) waits, and is carried out on the first check after the row is mended, and no new grant can be proposed meanwhile. A removal whose grace window ends during the pause waits too, and once the row is mended its grace window opens again for 24 hours, so an admin can still halt it. Everything that moves no Beans still works: other Decisions go ahead, an admin can halt a vote or a removal, and a moderator can take down a listing with no deal on it. Mend it as soon as you see it, as below.
 

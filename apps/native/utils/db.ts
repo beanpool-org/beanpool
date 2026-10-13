@@ -20,7 +20,7 @@ import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
+import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -31,7 +31,7 @@ import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
 import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import { sqliteGroupKeyStore } from './group-chat-store';
-import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT } from './group-chat-lines';
+import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
@@ -60,6 +60,8 @@ async function forgetCachedChatImage(messageId: string): Promise<void> {
  * Using the synchronous API available in expo-sqlite version 14.x+ 
  */
 let db: SQLite.SQLiteDatabase | null = null;
+/** The community file each open handle is for: a group's key store reads only its own community's (groupKeyStore). */
+const dbFileOf = new WeakMap<object, string>();
 let dbInitialized = false;
 let dbInitPromise: Promise<void> | null = null;
 
@@ -146,6 +148,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
             if (url && isPlainNodeAddress(url)) await addSavedNode(url);
             
             db = await SQLite.openDatabaseAsync(expectedDbName, { useNewConnection: true });
+            dbFileOf.set(db, expectedDbName);
             
             // Hardcode native concurrent locking parameters per-connection
             await db.execAsync(`
@@ -2588,27 +2591,62 @@ async function rememberDmConversations(ids: string[]): Promise<void> {
     if (seen.size !== before) await AsyncStorage.setItem(DM_SEEN_KEY, JSON.stringify([...seen])).catch(() => {});
 }
 
-/** True for a conversation this phone has seen as a DM, or that holds an encrypted line. */
+/**
+ * True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. The
+ * held check, the keyring and the group screens fold an id's case (a link or a push can carry it in capitals), so this
+ * folds it too: otherwise one id in capitals reaches a group's keys on a known DM's own id, and makes it a held group
+ * whose lines go to the roster the node shows (#1841 review, finding 1). The encrypted-line lookup asks every spelling
+ * this phone holds a row under, the id as given, and lower- and upper-case, so it keeps its index.
+ */
 export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
     if (!conversationId) return false;
-    if ((await dmConversationsSeen()).has(conversationId)) return true;
+    const folded = conversationId.toLowerCase();
+    for (const seen of await dmConversationsSeen()) if (seen.toLowerCase() === folded) return true;
     try {
         const database = await getDb();
+        const conv = await database.getFirstAsync<any>("SELECT type FROM conversations WHERE id = ? COLLATE NOCASE AND type = 'dm' LIMIT 1", [conversationId]);
+        if (conv?.type === 'dm') return true;
+        const spelt = await database.getAllAsync<any>('SELECT id FROM conversations WHERE id = ? COLLATE NOCASE', [conversationId]);
+        const ids = [...new Set([conversationId, folded, conversationId.toUpperCase(), ...(spelt ?? []).map((r: any) => r?.id).filter((s: unknown): s is string => typeof s === 'string')])];
         const row = await database.getFirstAsync<any>(
-            "SELECT 1 AS y FROM messages WHERE conversation_id = ? AND nonce LIKE ? LIMIT 1", [conversationId, `${V2_NONCE_PREFIX}%`]);
-        if (row) return true;
-        const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
-        return conv?.type === 'dm';
+            `SELECT 1 AS y FROM messages WHERE conversation_id IN (${ids.map(() => '?').join(', ')}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]);
+        return !!row;
     } catch {
         return false;
     }
 }
 
-/** The type this phone keeps for a conversation the node calls `nodeType`: a known DM stays one. */
-async function heldConversationType(conversationId: string, nodeType: string | null | undefined): Promise<string> {
+/**
+ * True if this identity has held keys of a group with this id, read straight from its key memory (the rows GroupKeyring
+ * keeps, without opening one), so a sync can ask it of every conversation it writes. Throws when they can't be read.
+ * Asked of the id lower-cased, as groupKeyring() keeps the rows: any spelling of a held group's id is held.
+ */
+async function heldInKeyMemory(conversationId: string, myPub?: string | null): Promise<boolean> {
+    const pub = myPub ?? (await loadIdentity())?.publicKey;
+    if (!pub || !conversationId) return false;
+    const database = await getDb();
+    const key = `${pub}/${conversationId.toLowerCase()}`;
+    const st = await database.getFirstAsync<any>('SELECT highest FROM group_chat_key_state WHERE group_id = ?', [key]);
+    if (Number(st?.highest ?? 0) > 0) return true;
+    return !!(await database.getFirstAsync<any>('SELECT 1 AS y FROM group_chat_epochs WHERE group_id = ? AND wrap IS NOT NULL LIMIT 1', [key]));
+}
+
+/**
+ * The type this phone keeps for a conversation the node calls `nodeType`. A group whose keys this phone has held stays
+ * its group and is never remembered as a DM, whatever the node calls it: one answer typing it `dm` would otherwise move
+ * it to the DM screen for good, every line DM-sealed to whoever the node lists (confirmation 2 of #1788, finding 2). A
+ * known DM stays one. When the key memory can't be read, this answer remembers nothing as a DM; the next sync asks again.
+ */
+async function heldConversationType(conversationId: string, nodeType: string | null | undefined, myPub?: string | null): Promise<string> {
     const t = nodeType || 'dm';
+    let held: boolean | null;
+    try { held = await heldInKeyMemory(conversationId, myPub); } catch { held = null; }
+    if (held) {
+        if (t !== 'group_thread') console.warn(`[group guard] the node calls held group ${String(conversationId).slice(0, 8)} a ${t}: ignored, it stays a group`);
+        return 'group_thread';
+    }
     if (t === 'dm') {
-        await rememberDmConversations([conversationId]);
+        if (held !== null) await rememberDmConversations([conversationId]);
         return 'dm';
     }
     if (await isKnownDmConversation(conversationId)) {
@@ -2634,10 +2672,19 @@ async function holdDmTypes(): Promise<void> {
     } catch {}
 }
 
-export async function getConversationKind(conversationId: string): Promise<string | null> {
+/**
+ * The kind of conversation this phone keeps for an id. `askNode`: with no row yet (a push tap, a link before the sync),
+ * ask the node once and keep its answer (the DM guard and the held guard applied), so a group's chat opens in its own
+ * screen rather than the DM one (confirmation 2 of #1788, finding 3).
+ */
+export async function getConversationKind(conversationId: string, opts: { askNode?: boolean } = {}): Promise<string | null> {
     try {
         const database = await getDb();
-        const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        let row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        if (!row && opts.askNode) {
+            await refreshConversationFromNode(conversationId);
+            row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        }
         const type = row?.type ?? null;
         // A known DM is a DM, whatever type its row says, or with no row (the node dropped it): the DM guard above.
         if (type !== 'dm' && await isKnownDmConversation(conversationId)) return 'dm';
@@ -3820,7 +3867,7 @@ export async function syncMessages(publicKey: string) {
             }
 
             // The type this phone keeps (a known DM stays one: the DM guard); an existing row's type is never rewritten.
-            const heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type) : (conv.type || 'dm');
+            const heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type, myIdentity?.publicKey) : (conv.type || 'dm');
             if (needsConvWrite) {
             await acquireSyncLock();
             try {
@@ -4305,9 +4352,14 @@ async function lockForConversation(conversationId: string, text: string, line: D
     // A group's chat is locked since group chats step 2 (slice 3 here): sealed under the group's key, with its epoch in the
     // metadata the node checks. Only a node from before locked chats, which this phone never saw locked, still reads it.
     const groupLine = await sealForGroupConversation(conversationId, text, line);
+    if (groupLine === 'readable') return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
     if (groupLine) return groupLine;
     if (await isNodeReadableConversation(conversationId)) {
-        return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
+        // An event's or an enterprise's thread by its type (their own screens post to their own routes; this is the DM
+        // screen's path): readable only to a node whose own chat answer for this id says it isn't locked, never on a type
+        // alone (confirmation 2 of #1788, finding 3).
+        if (await nodeChatIsUnlocked(conversationId)) return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
+        throw new DmNotLockedError();
     }
     return lockWith(await requireDmKeyContext(conversationId), text, line);
 }
@@ -4316,7 +4368,10 @@ async function lockForConversation(conversationId: string, text: string, line: D
  * True once this phone has held a key of the group with this id (its own key memory: an epoch verified, opened or made,
  * kept per identity), whatever the node or the local row now calls the conversation. Such a group is locked here for good:
  * every path that can post into it seals or refuses (director's decision b). With no node or no identity nothing can be
- * sent at all, so that answers false.
+ * sent at all, so that answers false. When the phone can't read its key memory (a SQLite error, a community switched
+ * under it) this throws GROUP_KEY_STORE_UNREAD_TEXT: every send and edit that asks refuses, never "not held" (confirmation
+ * 2 of #1788, finding 1). A link or a push can carry a group's id in capitals (push routes match ids case-insensitively):
+ * groupKeyring() lower-cases it, so every spelling asks the group's one keyring.
  */
 export async function isHeldGroupChat(conversationId: string): Promise<boolean> {
     let ring: GroupKeyring;
@@ -4333,26 +4388,59 @@ async function heldGroupRefusal(groupId: string): Promise<GroupChatKeyError> {
     return new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
 }
 
-/** True only when the node answers this group's chat with no `encryption`: a node from before locked chats (§14.3). */
-async function nodeChatIsUnlocked(groupId: string): Promise<boolean> {
+/** How the node answers this group's chat: 'unlocked' (no `encryption`), 'locked', or null (refused, unreachable). */
+async function nodeChatAnswer(groupId: string): Promise<'unlocked' | 'locked' | null> {
     try {
         const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=1`);
-        if (!res.ok) return false;
+        if (!res.ok) return null;
         const answer = await res.json().catch(() => null);
-        return !!answer && typeof answer === 'object' && !chatIsLocked(answer);
+        if (!answer || typeof answer !== 'object') return null;
+        return chatIsLocked(answer) ? 'locked' : 'unlocked';
     } catch {
-        return false;
+        return null;
     }
 }
 
-/** A group chat line sealed by the keyring's pre-seal rules, or null when this conversation isn't a locked group's. */
-async function sealForGroupConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata: Record<string, unknown> } | null> {
+/** True only when the node answers this group's chat with no `encryption`: a node from before locked chats (§14.3). */
+async function nodeChatIsUnlocked(groupId: string): Promise<boolean> {
+    return (await nodeChatAnswer(groupId)) === 'unlocked';
+}
+
+/**
+ * Why an edit of a group line the node answered 404 sent nothing: the node answers the chat, so it no longer has the
+ * line; or it refuses this phone the chat too (a removed member). The phone's own words, never the node's (confirmation
+ * 2 of #1788, J2).
+ */
+async function editRefusal(groupId: string): Promise<GroupChatKeyError> {
+    if (await nodeChatAnswer(groupId)) return new GroupChatKeyError(GROUP_EDIT_LINE_GONE_TEXT, 'refused');
+    return new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
+}
+
+/**
+ * A group chat line sealed by the keyring's pre-seal rules; 'readable' only when this phone never held the group's keys
+ * and the node's own chat answer for it has no `encryption` (a node from before locked chats, §14.3); null when the
+ * conversation isn't a group's (a DM, an event's or an enterprise's thread).
+ */
+async function sealForGroupConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata: Record<string, unknown> } | 'readable' | null> {
     const database = await getDb();
-    const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
-    if (await isKnownDmConversation(conversationId)) return null;
-    // A group this phone has held keys of is its group whatever the row says, or with no row (a sync pruned it, a push
-    // landed before it): the phone's own key memory decides, never the node's or the row's type (confirmation of #1788, 1).
-    if (row?.type !== 'group_thread' && !(await isHeldGroupChat(conversationId))) return null;
+    let row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
+    // A group this phone has held keys of is its group whatever the row says, with no row (a sync pruned it, a push landed
+    // before it), or once something called it a DM: the phone's own key memory decides, never the node's or the row's
+    // type (confirmation of #1788, 1), and it is asked FIRST (confirmation 2, finding 2). Only a group never held can be
+    // a known DM, and that returns before prepareToSeal: no group key is ever synced for a known DM, so it never becomes
+    // held (the key-making paths below refuse it too, refuseGroupKeysForDm).
+    const held = await isHeldGroupChat(conversationId);
+    if (!held) {
+        if (await isKnownDmConversation(conversationId)) return null;
+        if (!row) {
+            // Not on this phone yet (a push tap or a link before the sync wrote it): ask the node what it is first, so a
+            // group's first line goes through the keys and the node's own chat answer, never out readable on a missing row
+            // (confirmation 2 of #1788, finding 3).
+            await refreshConversationFromNode(conversationId);
+            row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
+        }
+        if (row?.type !== 'group_thread') return null;
+    }
     const ring = await groupKeyringFor(conversationId);
     let sealedUnder: { epoch: number; key: Uint8Array };
     try {
@@ -4362,8 +4450,8 @@ async function sealForGroupConversation(conversationId: string, text: string, li
         // only to an old node, by its own chat answer (no `encryption`), and only while this phone never held a key of
         // this group (review of #1788, finding 4; director's decision b).
         if (e instanceof GroupKeysRequestError && e.status === 404) {
-            if (await ring.seenLocked()) throw await heldGroupRefusal(conversationId);
-            if (await nodeChatIsUnlocked(conversationId)) return null;
+            if (held || await ring.seenLocked()) throw await heldGroupRefusal(conversationId);
+            if (await nodeChatIsUnlocked(conversationId)) return 'readable';
             throw new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
         }
         throw e;
@@ -4371,7 +4459,7 @@ async function sealForGroupConversation(conversationId: string, text: string, li
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
     const sealed = sealLine(text, {
-        myEdPrivHex: identity.privateKey, groupKey: sealedUnder.key, groupId: conversationId, epoch: sealedUnder.epoch,
+        myEdPrivHex: identity.privateKey, groupKey: sealedUnder.key, groupId: ring.groupId, epoch: sealedUnder.epoch,
         messageId: line.messageId, after: line.after ?? null, replyToId: line.replyToId ?? null,
     });
     return { ...sealed, metadata: { epoch: sealedUnder.epoch } };
@@ -6202,6 +6290,8 @@ export interface GroupMemberItem {
     joinedAt: string;
     invitedBy: string | null;
     updatedAt?: string;
+    /** The member's earlier keys, each signed for by its successor (a node from before line-display design §5 sends none). */
+    formerKeys?: FormerKey[] | null;
 }
 
 /** Signed request helper supporting arbitrary HTTP methods (POST, PATCH, DELETE) */
@@ -6372,14 +6462,16 @@ export async function createGroupApi(groupData: {
  */
 export async function joinGroupApi(groupId: string, info?: { joinPolicy?: string | null; viewerStatus?: string | null; onProgress?: (done: number, total: number) => void }): Promise<any> {
     const { nodeUrl, identity } = await groupKeyContext();
-    return joinGroupWithEpoch(nodeUrl, identity, groupKeyStore(), { id: groupId, joinPolicy: info?.joinPolicy, viewerStatus: info?.viewerStatus },
+    await refuseGroupKeysForDm(groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl)));
+    return joinGroupWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), { id: groupId, joinPolicy: info?.joinPolicy, viewerStatus: info?.viewerStatus },
         info?.onProgress ? { onProgress: info.onProgress } : undefined);
 }
 
 /** A convenor approves a request: the approved member's first key is made here, in the same request (§2.3). */
 export async function approveGroupMemberApi(groupId: string, memberPubkey: string, onProgress?: (done: number, total: number) => void): Promise<any> {
     const { nodeUrl, identity } = await groupKeyContext();
-    return approveWithEpoch(nodeUrl, identity, groupKeyStore(), groupId, memberPubkey, { memberPubkey, action: 'approve' },
+    await refuseGroupKeysForDm(groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl)));
+    return approveWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), groupId, memberPubkey, { memberPubkey, action: 'approve' },
         onProgress ? { onProgress } : undefined);
 }
 
@@ -6449,11 +6541,14 @@ export async function voteGroupSuccessionApi(groupId: string, proposalId: string
  * the node marks the key stale and the next member to write makes a new one.
  */
 export async function leaveGroupApi(groupId: string, memberPubkey: string, onProgress?: (done: number, total: number) => void): Promise<boolean> {
-    const path = `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`;
     const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+    // Under the group's own id (lower-case), as its epochs are: a removal carries one (#1841 review, finding 3).
+    const path = `/api/groups/${encodeURIComponent(ring.groupId)}/members/${encodeURIComponent(memberPubkey)}`;
+    if (memberPubkey !== identity.publicKey) await refuseGroupKeysForDm(ring);
     const res = memberPubkey === identity.publicKey
         ? await signedRequestWithMethod('DELETE', path)
-        : await removeWithEpoch(nodeUrl, identity, groupKeyStore(), groupId, memberPubkey, async (body) => {
+        : await removeWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), groupId, memberPubkey, async (body) => {
             const bodyString = JSON.stringify(body);
             const headers = await buildSignedHeaders('DELETE', `${nodeUrl}${path}`, bodyString, identity.privateKey, identity.publicKey);
             return fetch(`${nodeUrl}${path}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers }, body: bodyString });
@@ -6526,26 +6621,51 @@ export async function postGroupChatMessage(
     lock?: { after?: string | null; mentionCandidates?: { pubkey: string; callsign: string | null | undefined }[]; onProgress?: (done: number, total: number) => void },
 ): Promise<any> {
     const { nodeUrl, identity } = await groupKeyContext();
-    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore());
-    if (lock || await ring.seenLocked()) {
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+    await refuseGroupKeysForDm(ring);
+    if (lock || await isHeldGroupChat(groupId)) {
         try {
-            return await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(), {
+            return await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), {
                 groupId, text, clientId: clientId || Crypto.randomUUID(), replyToId, after: lock?.after, mentionCandidates: lock?.mentionCandidates,
                 progress: lock?.onProgress ? { onProgress: lock.onProgress } : undefined,
             });
         } catch (e) {
-            if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw await heldGroupRefusal(groupId);
+            if (e instanceof GroupKeysRequestError && e.status === 404 && await isHeldGroupChat(groupId)) throw await heldGroupRefusal(groupId);
             throw e;
         }
     }
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
 }
 
-let _groupKeyStore: GroupKeyStore | null = null;
-/** This phone's group key store (SQLite, the node's own file: utils/group-chat-store.ts). */
-export function groupKeyStore(): GroupKeyStore {
-    if (!_groupKeyStore) _groupKeyStore = sqliteGroupKeyStore(getDb as any);
-    return _groupKeyStore;
+const _groupKeyStores = new Map<string, GroupKeyStore>();
+/**
+ * This phone's group key store for one community (SQLite, that community's own file: utils/group-chat-store.ts). It reads
+ * and writes only that file: once the phone has switched to another community, every call throws (the keyring refuses,
+ * GROUP_KEY_STORE_UNREAD_TEXT) rather than read the other file and take a held group for never held (confirmation 2 of
+ * #1788, finding 1).
+ */
+export function groupKeyStore(nodeUrl: string): GroupKeyStore {
+    const file = getDatabaseFilenameForNode(nodeUrl);
+    let s = _groupKeyStores.get(file);
+    if (!s) {
+        s = sqliteGroupKeyStore(async () => {
+            const database = await getDb();
+            if (dbFileOf.get(database) !== file) throw new Error('This phone has switched community since this chat was opened.');
+            return database as any;
+        });
+        _groupKeyStores.set(file, s);
+    }
+    return s;
+}
+
+/**
+ * A conversation this phone knows as a DM, and has never held a group's keys for, gets no group keys here: nothing is
+ * posted, edited, joined or rotated under its id as a group's. Group keys are what make a group held, and a held group
+ * is asked first everywhere, so this keeps a known DM from ever becoming one (confirmation 2 of #1788, finding 2).
+ */
+async function refuseGroupKeysForDm(ring: GroupKeyring): Promise<void> {
+    if (await ring.seenLocked()) return;
+    if (await isKnownDmConversation(ring.groupId)) throw new GroupChatKeyError(GROUP_KEYS_FOR_DM_TEXT, 'refused');
 }
 
 async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolIdentity }> {
@@ -6559,7 +6679,18 @@ async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolI
 /** One group's keyring on this node, for this identity (shared for the session: the opened keys with it). */
 export async function groupKeyringFor(groupId: string): Promise<GroupKeyring> {
     const { nodeUrl, identity } = await groupKeyContext();
-    return groupKeyring(nodeUrl, identity, groupId, groupKeyStore());
+    return groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+}
+
+/**
+ * The keyring a group's screen opens, syncs and serves missing keys from (components/GroupChatView.tsx): refused with
+ * GROUP_KEYS_FOR_DM_TEXT for a conversation this phone knows as a DM and never held a group's keys for, so no key is
+ * synced onto a known DM's id whichever route drew the screen (#1815 review E3b, made structural; #1841 review, finding 1).
+ */
+export async function groupScreenKeyringFor(groupId: string): Promise<GroupKeyring> {
+    const ring = await groupKeyringFor(groupId);
+    await refuseGroupKeysForDm(ring);
+    return ring;
 }
 
 /** An enterprise's discussion thread — public to every member of the community, not only its keepers. */
@@ -6670,12 +6801,14 @@ export async function removeGroupChatMessage(groupId: string, messageId: string)
  */
 export async function editThreadMessage(messageId: string, newText: string, line: { groupId: string; metadata: any; locked: boolean }): Promise<any> {
     const { nodeUrl, identity } = await groupKeyContext();
-    const ring = groupKeyring(nodeUrl, identity, line.groupId, groupKeyStore());
-    if (line.locked || await ring.seenLocked()) {
+    const ring = groupKeyring(nodeUrl, identity, line.groupId, groupKeyStore(nodeUrl));
+    await refuseGroupKeysForDm(ring);
+    if (line.locked || await isHeldGroupChat(line.groupId)) {
         try {
-            return await editSealedGroupLine(nodeUrl, identity, groupKeyStore(), { groupId: line.groupId, messageId, metadata: line.metadata, text: newText });
+            return await editSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId: line.groupId, messageId, metadata: line.metadata, text: newText });
         } catch (e) {
-            if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw await heldGroupRefusal(line.groupId);
+            // Only the edit route answers 404 here (a keys sync that fails is retried as "no key"): the line, not the keys.
+            if (e instanceof GroupKeysRequestError && e.status === 404) throw await editRefusal(line.groupId);
             throw e;
         }
     }

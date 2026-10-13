@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/operators by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>First-time setup — BeanPool operator manual</title>
+    <meta name="description" content="The first start of your server, claiming it with your phone, the first owner, and what the setup wizard does and does not do.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker">Operator manual · Setting up</p>
+        <h1>First-time setup</h1>
+        <p class="lede">The first start of your server, claiming it with your phone, the first owner, and what the setup wizard does and does not do.</p>
+        <h2>Before the first start</h2>
+        <p>Your server keeps everything in one folder, <strong>data</strong>, next to docker-compose.yml. The server sees it as /data. Back up that folder and you have backed up the whole community.</p>
+        <p>A new server has no admin password, and you do not put one in the .env file. If ADMIN_PASSWORD is there, a new server ignores it, and its log says so once. The community's first owner claims it with a one-time claim code instead: see Claim your community: the address, then your phone, below.</p>
+        <p>On its first start the server makes the claim code and puts it in a file, data/claim-code.txt, that only the server can read. It never prints the code in the log, because the log is kept for as long as the server runs and gets copied into support requests. beanpool claim shows it to you. You can also read it with: docker compose exec beanpool-node cat /data/claim-code.txt</p>
+        <h3>Servers that still have a password</h3>
+        <p>A server set up before the claim code keeps its admin password exactly as it was. Its first password was the ADMIN_PASSWORD in .env, or one the server made up and put in data/first-admin-password.txt. Read that file with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Until you change the password in Access &amp; Security, every start reminds you in the log that the file is still there, without printing the password. The file is deleted the moment you change it. The server reads ADMIN_PASSWORD only on its first start, so to change the password, use Settings.</p>
+        <h2>What the first start creates</h2>
+        <ul>
+            <li><strong>data/genesis.json</strong> and <strong>data/community.key</strong>: your community's own key. This key is not a person and is not the owner. Once you make a recovery code, a backup from Settings carries both, locked. Until then only a copy of the data folder does: see Backups and replicas.</li>
+            <li><strong>data/state.db</strong>: the database, with every member, post, deal and vote.</li>
+            <li><strong>data/local-config.json</strong>: two-factor settings, gateway settings, the replication token if this server is a backup or has one, and the claim code's scrambled copy until it is used. On a server that still has an admin password, that password's scrambled copy too.</li>
+            <li><strong>data/claim-code.txt</strong>: the one-time claim code, in plain text, until a phone claims the community with it. Then it is deleted. A backup from Settings never carries it.</li>
+            <li><strong>data/first-admin-password.txt</strong>: only on a server set up before the claim code with ADMIN_PASSWORD empty. The password the server made up, in plain text, until you change it. A backup from Settings never carries it, but a copy of the whole data folder does: change the password before you copy the folder anywhere.</li>
+        </ul>
+        <h2>Claim your community: the address, then your phone</h2>
+        <p>The last step of an install, on the server:</p>
+        <p>docker compose exec beanpool-node beanpool claim</p>
+        <ul>
+            <li>It asks for a name for your community's address, ending in <strong>.beanpool.org</strong> (or give it with --name cairns). It waits up to three minutes for the name to go live and reach your server. A name that waits for approval by the BeanPool project moves over by itself once approved. A name that is taken: it says why and asks for another. Press Enter to skip; use --address https://your.domain for your own address, or --no-name to set one later in Settings. Nothing here needs the BeanPool project: if its address service is down, the claim still works.</li>
+            <li>Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it.</li>
+            <li>It shows the one-time claim code and a QR code. Open BeanPool on your phone, then <strong>Claim a community</strong>, or scan the QR code. That phone becomes the owner, and the code is used up.</li>
+        </ul>
+        <p>If the community already has an owner, it says so: use beanpool recover instead. To make an owner without a phone claim, give the key the phone shows in Settings: beanpool claim --key KEY --callsign NAME. It prints that owner's break-glass code once, and the community is told.</p>
+        <h2>Open Settings</h2>
+        <p>Go to your server's address followed by <strong>/settings</strong>, for example https://example.org/settings. While your community has no owner yet, the page shows how to claim it: see A community with no owner yet, below. Once it has one, owners and admins sign in from the BeanPool app: see Signing in to Settings. On a server that still has an admin password, you can also sign in with it. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. Settings does not open on the password alone: nothing else opens until the server accepts a code from the authenticator. Do it straight away: until then, tools that send the password with every request are refused too (give them an automation token instead, see Access and security). Then Settings, and the setup wizard, open.</p>
+        <h2>A community with no owner yet</h2>
+        <p>On a new server, the sign-in page at /settings first says <strong>This community has no owner yet.</strong> and shows how to claim it: see Claim your community: the address, then your phone above.</p>
+        <p>The page's QR code carries only your server's address, as it is in the browser's address bar, and a short number that names the waiting code. It never carries the code itself: anyone can open this page, so the code is only ever read on the server. The address is written out under the QR code too, so you can check it. Open the page at the address the app will use (for example https://yourtown.beanpool.org/settings), not the server's home-network address. When opened at an unlisted address, the page shows <strong>Open this page at … to scan</strong> instead of the QR code, because the node answers only at its listed names.</p>
+        <p>The page checks every few seconds, and the moment the community has an owner it turns into the normal sign-in by itself. It stops checking while the tab is in the background, and checks again when you come back to it. Only when the first check fails does the page show the normal sign-in (a later failure keeps the card), so a server that still has a password can always be signed in to with it.</p>
+        <p>Below the claim, <strong>This server also has an admin password</strong> opens the password sign-in, only on a server that still has one. A new server has no admin password, so it does not show it.</p>
+        <h2>The setup wizard</h2>
+        <p>While your community has no members, Settings opens with a setup wizard. You can skip it, and open it again later from Home. It records that you finished it in this browser only.</p>
+        <figure><img src="images/cold-start.webp" alt="The first-time setup wizard in Settings" loading="lazy"><figcaption>The first-time setup wizard in Settings</figcaption></figure>
+        <p>What it does:</p>
+        <ul>
+            <li><strong>Step 1</strong> saves your community's name and checks that your server answers at its address. If either fails, it says which, and what to check, with <strong>Retry</strong> and <strong>Continue anyway</strong>. If you continue, the step is marked ⚠ instead of ✓. If two-factor sign-in is already on and you have not typed a code this session, it asks for one with <strong>Enter 2FA code</strong>, then saves.</li>
+            <li><strong>Step 2</strong> depends on how you signed in. <strong>Signed in with your phone's key as an owner</strong> (Manage in the app, or a computer that scanned the code from your phone), it says <strong>You are the owner.</strong> and asks you to add a second owner soon: if this phone is lost, a second owner can still manage the community. Once they have joined, open People &amp; Safety → Owners &amp; admins and add them as an owner. Keys do not need the 2FA code, so this version sets up no two-factor sign-in and has no codes or kit to show; the step is marked ✓.</li>
+            <li><strong>Step 2, signed in with the admin password or an admin's key</strong>, is two-factor sign-in. If you signed in with the password, you set it up on the card before the wizard, so the wizard says it is already on. Otherwise it offers <strong>Set up 2FA</strong>: tap it, scan the code with an authenticator app, and type the 6-digit code it shows. Two-factor is on only once the server accepts that code; then the wizard shows your backup codes and a recovery kit to download. Save them before you leave the step: the server keeps only a scrambled copy, so they cannot be shown again. If two-factor was already on, the wizard says so and has no codes to show. While it is asking the server, it says <strong>Checking whether 2FA is on</strong>; if it could not find out, it says so, with <strong>Retry</strong>. The kit holds your server's address and those backup codes, nothing else. It never holds the admin password. Only an owner can set up 2FA, so with an admin's key the server refuses; the wizard shows why, and an owner can finish it later in Access &amp; Security.</li>
+            <li>This version of <strong>Step 2</strong> also explains how your phone becomes an owner. See The first owner below.</li>
+            <li><strong>Step 3</strong> can create your first enterprise and post its first offer. If a member is already an owner, it makes them the enterprise's first keeper. On a new server nobody is, so it says no keeper will be set; add one later under Shared Projects &amp; Economy. If any part fails, it shows the server's reason, with <strong>Retry</strong> (which repeats only the parts that failed) and <strong>Continue anyway</strong>.</li>
+            <li><strong>Step 4</strong> explains how the commons fills. A new community's commons starts at 0 beans. Nothing, not even this wizard, can put beans into it by hand.</li>
+            <li><strong>Step 5</strong> makes three founding invites, with QR codes you can print. If the server refuses or cannot be reached, it stops and shows the reason, with no code. Try again, or make invites later under People &amp; Safety. On the global community it always refuses, because invites are off there: skip it.</li>
+        </ul>
+        <p>A step shows ✓ only when it really happened. You can move on from any step without finishing it.</p>
+        <p>What it does not do yet:</p>
+        <ul>
+            <li>It does not save a region or a map location. Set those later under Node Identity.</li>
+        </ul>
+        <h2>The first owner</h2>
+        <p>The first time you make an invite on an empty server, it creates a member called <strong>Admin</strong> as the first owner. Nobody holds that member's key, so nobody can sign in as it. It exists so the first invites have someone to come from.</p>
+        <p>When the first real people have joined, give owner to at least one of them. As the password holder, open People &amp; Safety, open the person and choose <strong>👑 Grant Owner</strong>. Settings now has an owner who can sign in from their phone. Keep at least two owners.</p>
+        <p><strong>On the global community</strong> there is no first invite and no Admin member, because invites are switched off there (see Members and invites). The first owner joins like everyone else: in the BeanPool app, through the open door, with 12 secret words or a sign-in. Owners have no new-account limits, whichever way they joined. Then, as the password holder, open People &amp; Safety, open that member and choose <strong>👑 Grant Owner</strong>. From then on their phone opens Settings as owner from the app's Manage button.</p>
+        <h2>Then</h2>
+        <ul>
+            <li>Switch on two-factor sign-in (Access &amp; Security).</li>
+            <li>Set up backups (Backups and restore).</li>
+            <li>Invite your first members.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><strong>Signing in to Settings</strong> (in Settings, under Manual)</li>
+            <li><strong>Access and security</strong> (in Settings, under Manual)</li>
+            <li><strong>Owners, admins and moderators</strong> (in Settings, under Manual)</li>
+            <li><strong>Members and invites</strong> (in Settings, under Manual)</li>
+            <li><strong>Backups and replicas</strong> (in Settings, under Manual)</li>
+        </ul>
+        <p class="guide-foot">The whole manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Only this part of it is on the website. Manual version 117.</p>
+    </main>
+</body>
+</html>

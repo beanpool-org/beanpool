@@ -150,7 +150,7 @@ export function consentWords(clientName: string, sendsTo: string, community: str
             'It will read: the server\'s health, backups and totals; the reports waiting for moderators; the join requests; what needs an admin now.',
             'It can take a backup (owners only) and SUGGEST actions, which change nothing until you approve them on your phone.',
             'It can never read messages, balances, keys, addresses, photos or logs, or change settings, roles, keys or money.',
-            `To connect it, scan this code with the BeanPool app on your phone (Manage → Manage from a computer), check that the phone names ${sendsTo}, and type the two digits it shows.`,
+            `To connect it, scan this code with the BeanPool app on your phone (Manage → Manage this community from a computer), check that the phone names ${sendsTo}, and type the two digits it shows.`,
         ],
     };
 }

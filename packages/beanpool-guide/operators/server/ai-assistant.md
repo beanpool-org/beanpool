@@ -5,11 +5,26 @@ summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor) to your serv
 related: access-and-security, reports-and-takedowns, backups-and-replicas, roles, what-the-server-sees
 ---
 
-An owner can connect their own AI assistant to the server, and ask it things like "what needs me?", "summarise the open reports" or "are the backups all right?". The assistant is yours: you bring it, and the company that runs it (Anthropic, OpenAI and so on) receives what it reads. Nothing of BeanPool's talks to an AI, and the server keeps no AI key. For now only owners connect one; admins will connect theirs from the same card, approved on their phone, in a coming update. Until then an admin's card says so, and **What would my assistant see?** shows them what theirs will read.
+An owner or an admin can connect their own AI assistant to the server, and ask it things like "what needs me?", "summarise the open reports" or "are the backups all right?". The assistant is yours: you bring it, and the company that runs it (Anthropic, OpenAI and so on) receives what it reads. Nothing of BeanPool's talks to an AI, and the server keeps no AI key.
 
-The server decides what an assistant can read, not the assistant. It answers an assistant only at one address, **/mcp**, with its own redacted answers. An assistant that tries any other part of Settings with its token is refused.
+The server decides what an assistant can read, not the assistant. It answers an assistant only at one address, **/mcp**, with its own redacted answers. An assistant that tries any other part of Settings with what it was given is refused.
 
-## Connecting one
+## Connecting from Claude or ChatGPT (owners and admins)
+
+Under Appliance & Data, then Access & Security, **Connected assistants** shows four steps:
+
+- Copy the address: your server's address with /mcp at the end.
+- In Claude or ChatGPT: Settings, Connectors, **Add custom connector**, and paste it.
+- Your assistant opens a page on your server. It says which assistant is asking **and the address its answers go to** (for Claude, claude.ai), and what it will read. Scan the code on that page with the BeanPool app (Manage, then **Manage this community from a computer**). The phone asks "Did you just add this community to an AI assistant?" and shows the same address. Press **Connect**, pass the phone's unlock, and type the phone's two digits on the page.
+- Ask it: "what needs me?"
+
+No key or token is shown, and none is stored anywhere you can lose it. The assistant gets a pass that lasts an hour and renews itself; if it isn't used for 30 days, approve it again. It acts as you, with your role: if you stop being an owner or admin, it stops too. Each member can have at most 5 connected this way. Only an owner or an admin can approve one; a moderator's or a member's phone is refused. The phone must be a BeanPool app that can show which assistant is asking: an older one is told to update.
+
+## A page asking you to approve an assistant you didn't add
+
+Anyone can make an assistant and give it any name, including "Claude". So the page and the phone never show the name alone: they show the address its answers go to beside it. If someone sends you a link or a code and asks you to approve "your assistant", or the address isn't the assistant you just added (claude.ai, chatgpt.com), press **No** on the phone and close the page. Whoever you approve reads what your assistant would read. If you approved one by mistake, disconnect it (below).
+
+## A token for a desktop agent (owners)
 
 Under Appliance & Data, then Access & Security, **Connected assistants**:
 
@@ -19,7 +34,7 @@ Under Appliance & Data, then Access & Security, **Connected assistants**:
 - In Claude Code, **Copy command** gives one line that does both. In Claude Desktop, Cursor and other assistants, add a custom connector with the address, and send the token as the header Authorization, written as Bearer, a space, then the token.
 - Ask it: "what needs me?"
 
-Connecting one is a new key to your server, so from the phone's Manage it is asked as an owner's other changes are: if you unlocked the phone more than 5 minutes ago, Settings says **Confirm it's you first** and you press Manage in the app again. Each member can have at most 5 assistants connected; one whose days are up doesn't count. A server on your own network with its own certificate needs the desktop app told to trust it (for Claude Desktop and Claude Code, the NODE_EXTRA_CA_CERTS setting).
+Admins connect theirs from their assistant, as above: only an owner makes a token. Connecting one is a new key to your server, so from the phone's Manage it is asked as an owner's other changes are: if you unlocked the phone more than 5 minutes ago, Settings says **Confirm it's you first** and you press Manage in the app again. Each member can have at most 5 assistants connected; one whose days are up doesn't count. A server on your own network with its own certificate needs the desktop app told to trust it (for Claude Desktop and Claude Code, the NODE_EXTRA_CA_CERTS setting).
 
 The other owners get a message when anyone connects or disconnects an assistant, and the alerts card shows each day's counts: calls, assistants connected, suggestions made and suggestions approved. Connected counts the ones that can still call: not expired, and their member still an owner or admin.
 
@@ -45,7 +60,7 @@ Each card says which assistant suggested it and for whom, and shows **the report
 - **Approve** does exactly what Settings' own button does, as you: dismissing, removing or restoring through the same step, with the same rules (a moderator's limits, the confirmations that step asks for). The log line says it came from a suggestion by that assistant. Members are told as when you act yourself.
 - **Decline** deletes it; nothing changes. An owner can decline any assistant's suggestion; only its own member can approve one.
 - Each assistant can have at most 10 suggestions waiting and make 30 a day, one per report. Once you decline one, that assistant can't suggest anything about the same report for 48 hours. A suggestion goes away after 48 hours, when its assistant is disconnected, and stops counting when its member is no longer an owner or admin.
-- If the report was dismissed or acted on since the assistant suggested dismissing it or removing what was reported, there is nothing left to approve: the card keeps only Decline.
+- If the report was dismissed or acted on since the assistant suggested dismissing it or removing what was reported, or the post it suggested restoring was removed since, there is nothing left to approve: the card keeps only Decline.
 - While an owner has AI assistants turned off, their waiting suggestions are hidden and can't be approved. Turned back on within the 48 hours, they wait again.
 
 An assistant can't approve a suggestion, its own or anyone's, and can't reach the moderation steps itself. It can't suggest lifting a mute, answering a join request or sending an announcement yet: those stay with you.
@@ -68,13 +83,17 @@ Each assistant can make 60 calls a minute and 2,000 a day; past either the serve
 
 ## Disconnecting
 
-**Disconnect** beside an assistant stops it at once: its next call is refused. An owner sees every assistant on the server, with the member it acts for, their role, when it was last used and its calls today, and can disconnect any of them. An admin sees and disconnects their own.
+**Disconnect** beside an assistant stops it at once: its next call is refused. An owner sees every assistant on the server, with the member it acts for, their role, how it was connected (by token, or approved on the phone, with the address its answers go to), when it was last used and its calls today, and can disconnect any of them. An admin sees and disconnects their own. Removing the connector in Claude or ChatGPT disconnects it too.
+
+If the server sees a used pass presented a second time, someone else may hold a copy: it disconnects that assistant at once and tells the owners as an urgent alert. Its member can connect it again from their phone.
+
+Assistants connected from the phone belong to this server alone: they are never in a backup or a standby's copy, so after a standby takes over, connect them again.
 
 An assistant also stops on its own when its days are up, or when the member it acts for stops being an owner or admin. An owner who becomes an admin keeps theirs, as an admin's assistant (no backups). If a laptop with a token on it is lost or someone may have copied the token, disconnect that assistant and connect it again.
 
 ## Turning AI assistants off
 
-AI assistants are allowed unless an owner turns them off: the card's **Turn AI assistants off**. While they are off, no assistant can connect, /mcp answers nobody, and an admin's **What it sees** shows no answers. Turning them on again lets the assistants still connected back in. Only owners can turn them on or off, and the other owners are told.
+AI assistants are allowed unless an owner turns them off: the card's **Turn AI assistants off**. While they are off, no assistant can connect, /mcp and the connecting pages answer nobody (as if they were not there), and an admin's **What it sees** says they are turned off instead of showing answers. Turning them on again lets the assistants still connected back in. Only owners can turn them on or off, and the other owners are told.
 
 ## What the server logs
 

@@ -11,6 +11,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } from '../utils/db';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { keepCards, lookUpMembers, searchPath } from '../utils/members-lookup';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
@@ -161,6 +163,10 @@ export default function NewMessageScreen() {
     }));
 
     const [searchQuery, setSearchQuery] = useState('');
+    // On a community that says `membersOnDemand` the phone holds only the people this member has dealt with: recents and
+    // friends come from those, and a search of 2 letters or more also asks the node (DESIGN-global-members-by-area §2.3).
+    const membersOnDemand = useNodeProfile()?.features.membersOnDemand === true;
+    const [nodeResults, setNodeResults] = useState<any[]>([]);
     const searchRef = useRef<TextInput>(null);
 
     // ── Data state ──────────────────────────────────────────────────────────
@@ -209,6 +215,22 @@ export default function NewMessageScreen() {
         load();
     }, [identity?.publicKey]);
 
+    useEffect(() => {
+        if (!membersOnDemand) return;
+        const path = searchPath(searchQuery);
+        if (!path) {
+            setNodeResults([]);
+            return;
+        }
+        let cancelled = false;
+        const timeout = setTimeout(async () => {
+            const rows = await lookUpMembers(path);
+            // Offline the held cards are the results, filtered as always.
+            if (!cancelled) setNodeResults(rows ?? []);
+        }, 400);
+        return () => { cancelled = true; clearTimeout(timeout); };
+    }, [searchQuery, membersOnDemand]);
+
     // ── Search / sort (memo) ────────────────────────────────────────────────
     const filteredMembers = useMemo(() => {
         let list = allMembers;
@@ -221,6 +243,11 @@ export default function NewMessageScreen() {
             );
         }
 
+        if (nodeResults.length > 0) {
+            const shown = new Set(list.map(m => m.public_key));
+            list = [...list, ...nodeResults.filter(m => !shown.has(m.public_key) && m.public_key !== identity?.publicKey)];
+        }
+
         // Friends-first sort, then alphabetical
         return [...list].sort((a, b) => {
             const aF = friendPubkeys.has(a.public_key) ? 0 : 1;
@@ -228,20 +255,22 @@ export default function NewMessageScreen() {
             if (aF !== bF) return aF - bF;
             return (a.callsign || '').localeCompare(b.callsign || '');
         });
-    }, [allMembers, searchQuery, friendPubkeys]);
+    }, [allMembers, searchQuery, friendPubkeys, nodeResults, identity?.publicKey]);
 
     // ── Handlers ────────────────────────────────────────────────────────────
     const handleSelectMember = useCallback(async (pubkey: string) => {
         if (!identity?.publicKey || creating) return;
         setCreating(pubkey);
         try {
+            const fromNode = nodeResults.find(m => m.public_key === pubkey);
+            if (fromNode) await keepCards([fromNode]);
             const apiConv = await createConversationApi('dm', [identity.publicKey, pubkey], identity.publicKey);
             router.replace(`/chat/${apiConv.id}`);
         } catch (e: any) {
             console.error('[NewMessage] Create conversation error:', e);
             setCreating(null);
         }
-    }, [identity?.publicKey, creating]);
+    }, [identity?.publicKey, creating, nodeResults]);
 
 
 

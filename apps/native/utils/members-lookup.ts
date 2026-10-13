@@ -87,3 +87,10 @@ export async function fetchCardByKey(key: string): Promise<'fetched' | 'none' | 
         return 'unreachable';
     }
 }
+
+/** Keep the cards of results the member acted on (a DM started from a search result, §2.2.4), stamped now. */
+export async function keepCards(rows: readonly any[]): Promise<void> {
+    const keys = rows.map(r => r?.public_key ?? r?.publicKey).filter(isMemberKey);
+    if (keys.length === 0) return;
+    await applyDelta({ members: rows, membersFetched: { keys, at: new Date().toISOString() } }).catch(() => false);
+}

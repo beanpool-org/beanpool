@@ -2033,7 +2033,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                                 audienceScope === 'public'
                                     ? 'bg-nature-850 dark:bg-white text-white dark:text-nature-950 border-nature-900 shadow-sm'
-                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
+                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
                             🌍 Everyone (Public)
@@ -2053,7 +2053,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                     audienceScope === 'group'
                                         ? 'bg-emerald-600 dark:bg-emerald-700 border-emerald-600 text-white shadow-sm'
-                                        : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
+                                        : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                 }`}
                             >
                                 👥 Group ({userGroups.length})

@@ -1965,7 +1965,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         {showNewPost && (
             <div
                 data-testid="map-new-post-panel"
-                className="fixed bottom-[calc(var(--bottom-nav-offset)+0.5rem)] md:bottom-4 left-3 right-3 md:left-[16.75rem] md:right-auto md:w-[30rem] md:max-w-[calc(100vw-17.5rem)] max-h-[60vh] overflow-y-auto bg-white/95 dark:bg-nature-900/95 backdrop-blur-xl rounded-3xl p-5 z-[1000] shadow-soft border border-nature-200 dark:border-nature-800 overscroll-contain"
+                className="fixed bottom-[calc(var(--bottom-nav-offset)+0.5rem)] md:bottom-4 left-3 right-3 md:left-[16.75rem] md:right-auto md:w-[30rem] md:max-w-[calc(100vw-17.5rem)] max-h-[60vh] supports-[height:100dvh]:max-h-[min(60vh,calc(100dvh_-_var(--bottom-nav-offset)_-_4.5rem))] overflow-y-auto bg-white/95 dark:bg-nature-900/95 backdrop-blur-xl rounded-3xl p-5 z-[1000] shadow-soft border border-nature-200 dark:border-nature-800 overscroll-contain"
                 style={{ bottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}
             >
                 <div className="flex justify-between items-center mb-4">

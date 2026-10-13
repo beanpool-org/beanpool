@@ -171,7 +171,7 @@ export function LocalCommunityMark(props: MarkProps) {
                     </Pressable>
                 </View>
                 <Text style={[s.stripText, { color: colors.text.body }]}>
-                    <Text style={{ fontWeight: '800' }}>{LOCAL_COMMUNITY_STRIP.lead[props.feature]}</Text> {LOCAL_COMMUNITY_STRIP.body}
+                    <Text style={{ fontWeight: '800' }}>{LOCAL_COMMUNITY_STRIP.lead[props.feature]}</Text> {LOCAL_COMMUNITY_STRIP.body[props.feature]}
                 </Text>
                 <Pressable onPress={() => router.push(SHEET_ROUTES.start)} accessibilityRole="button"
                     style={[s.stripButton, { backgroundColor: tone.fg, borderColor: tone.fg }]}>

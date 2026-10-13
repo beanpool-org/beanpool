@@ -12,6 +12,7 @@
 import { db } from '../db/db.js';
 import { KEY_SUCCESSION_MAX, verifyKeySuccession, type FormerKey } from '@beanpool/core';
 import { bumpMembersVersion } from './versions.js';
+import { accountsDeletedAmong } from './message-tombstone.js';
 
 const PUBKEY_HEX = /^[0-9a-f]{64}$/;
 
@@ -82,11 +83,15 @@ export function formerKeysReader(): (memberPubkey: string) => FormerKey[] {
     };
 }
 
-/** Each statement's verdict, by everything its signature covers: a member's DM list is read on every sync. */
+/**
+ * Each statement's verdict, by everything its signature covers: a member's DM list is read on every sync. Keyed as JSON,
+ * never joined with a separator: `at` holds colons, so a row with `at` cut at one and the rest moved onto `sig` would
+ * join to a verified statement's key and be served from here unchecked (#1871 review NB2).
+ */
 const verdicts = new Map<string, boolean>();
 const VERDICTS_MAX = 4096;
 function statementVerifies(former: FormerKey, successor: string): boolean {
-    const key = `${successor}:${former.pubkey}:${former.at}:${former.sig}`;
+    const key = JSON.stringify([successor, former.pubkey, former.at, former.sig]);
     let ok = verdicts.get(key);
     if (ok === undefined) {
         ok = verifyKeySuccession(former, successor);
@@ -122,20 +127,28 @@ export function verifiedFormerKeysReader(): (memberPubkey: string) => FormerKey[
  *
  * Only on a DM, only to `viewer` when they are in it, and only for a participant with a chain: a DM in which nobody has
  * re-keyed is served exactly as before, and an app from before the field reads past it.
+ *
+ * Never for a participant who deleted their account (#1871 review NB4): the deletion takes these keys out of the logs and
+ * push notices (state-engine.ts purgeMemberSelf), nothing seals to a former key (sealing only ever needs the current key;
+ * the node does not refuse a line to a deleted account, as its send route checks only the sender), and its
+ * `invalidated_keys` rows stay only so the old keys are still refused. A group roster leaves them out too (groups.ts).
  */
 export function withDmFormerKeys<T extends { type?: string; participants?: readonly string[] }>(
     conversations: T[], viewer: string | undefined,
 ): (T & { formerKeys?: Record<string, FormerKey[]> })[] {
     if (!viewer) return conversations;
     let formerKeysOf: ((memberPubkey: string) => FormerKey[]) | null = null;
-    return conversations.map((c) => {
-        if (c.type !== 'dm' || !Array.isArray(c.participants) || !c.participants.includes(viewer)) return c;
+    const chains = conversations.map((c) => {
+        if (c.type !== 'dm' || !Array.isArray(c.participants) || !c.participants.includes(viewer)) return [];
         formerKeysOf ??= verifiedFormerKeysReader();
-        let formerKeys: Record<string, FormerKey[]> | null = null;
-        for (const p of c.participants) {
-            const chain = formerKeysOf(p);
-            if (chain.length > 0) (formerKeys ??= {})[p] = chain;
-        }
-        return formerKeys ? { ...c, formerKeys } : c;
+        const of = formerKeysOf;
+        return c.participants.map((p) => [p, of(p)] as const).filter(([, chain]) => chain.length > 0);
+    });
+    const named = chains.flatMap((ps) => ps.map(([p]) => p));
+    if (named.length === 0) return conversations;
+    const deleted = new Set(accountsDeletedAmong(named));
+    return conversations.map((c, i) => {
+        const kept = chains[i].filter(([p]) => !deleted.has(p));
+        return kept.length > 0 ? { ...c, formerKeys: Object.fromEntries(kept) } : c;
     });
 }

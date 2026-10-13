@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 120,
-  "hash": "378bcdf17f618f5d90674296c967c8a59f684d7a1cf9ab3efc44b0b55c38dfd0",
+  "version": 122,
+  "hash": "b439c42a6b00f53d9dcaa854f90353daa7bf6dc4c1f5a316f668b2d56af4a43e",
   "sections": [
     {
       "id": "setup",
@@ -47,7 +47,7 @@
     {
       "id": "server",
       "title": "Running the server",
-      "summary": "Backups, updates and health, the app's floor, your address and peers, rate limits, and AI assistants.",
+      "summary": "Backups, updates and health, the app's floor, your address and peers, rate limits, showing what a local community does, and AI assistants.",
       "slugs": [
         "backups-and-replicas",
         "updates-and-health",
@@ -55,6 +55,7 @@
         "address-and-peers",
         "rate-limits",
         "private-preview",
+        "showcase",
         "ai-assistant"
       ]
     },
@@ -3242,12 +3243,12 @@
           "type": "ul",
           "items": [
             "the first report is told at once: \"A new report came in (spam or scam). 3 reports wait in the Manager's Reports queue.\" The ones after it, for an hour, come as one line when the hour is over: \"49 more reports came in in the hour after the first was told (spam or scam 13, offensive content 12, other 24)\". To change the hour, put ALERTS_REPORT_FOLD_MINUTES in .env (1 to 1440 minutes) and run docker compose up -d;",
-            "a report in the child-safety category (picked from the list, or written in) is urgent, and never folded into the hour's line. Each member's first in their hour is told and pushed at once; the rest of that member's hour comes as one urgent line when it ends, pushed: \"9 more child-safety reports came in from the same member in the hour after their first was told\". So one member reporting all hour sends 2 pushes, not 10. Your server tells at most 10 of these lines an hour; past that (a flood from many members), the reports are counted into one urgent line, told and pushed within about 10 minutes: \"86 more child-safety reports came in, from 12 members, past the 10 lines an hour this server tells on their own\". None is dropped, and every one is in the Reports queue at once."
+            "a report in the child-safety category is urgent: members pick **Child safety** in the report list (phone and web), and a report from an older app that says it in words (\"CSAM\", \"sexual abuse of a minor\") counts too. It is never folded into the hour's line. Each member's first in their hour is told and pushed at once; the rest of that member's hour comes as one urgent line when it ends, pushed: \"9 more child-safety reports came in from the same member in the hour after their first was told\". So one member reporting all hour sends 2 pushes, not 10. Your server tells at most 10 of these lines an hour; past that (a flood from many members), the reports are counted into one urgent line, told and pushed within about 10 minutes: \"86 more child-safety reports came in, from 12 members, past the 10 lines an hour this server tells on their own\". None is dropped, and every one is in the Reports queue at once."
           ]
         },
         {
           "type": "p",
-          "text": "These go to the owners and the admins (who work the queue), on their phones and on your channel. An admin's push carries the report lines alone, never the owners' other alerts. They say how many and what kind, from the reason the member picked; never who reported whom, and never what they wrote. Open the Manager's Reports queue to read them. Report lines never push another alert out of the alert history or the channel's queue: past 50 lines, report lines make room first, and the same report line is counted (×14) rather than kept again. In a message held while your channel was down, they come after every other line."
+          "text": "These go to the owners and the admins (who work the queue), on their phones and on your channel. An admin's push carries the report lines alone, never the owners' other alerts. They say how many and what kind, from the reason the member picked; never who reported whom, and never what they wrote. Open the Manager's Reports queue to read them: there each report shows who sent it and what they wrote. Report lines never push another alert out of the alert history or the channel's queue: past 50 lines, report lines make room first, and the same report line is counted (×14) rather than kept again. In a message held while your channel was down, they come after every other line."
         },
         {
           "type": "p",
@@ -3890,6 +3891,126 @@
       ]
     },
     {
+      "slug": "showcase",
+      "title": "Showing what a local community does",
+      "summary": "The showcase switch: whether the apps show a switched-off feature from an example community or hide it. On for a global community, off for a local one, and yours to change. Where Start a community leads.",
+      "section": "server",
+      "related": [
+        "members-and-invites",
+        "private-preview",
+        "rate-limits",
+        "first-time-setup"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What it does"
+        },
+        {
+          "type": "p",
+          "text": "A community can have some features switched off: Beans, deals that hold Beans until the job is done, enterprises and the Commons pool, crowdfunds, Decisions and invites. A global community has all of these off."
+        },
+        {
+          "type": "p",
+          "text": "One switch, **showcase**, says what the apps do with a feature that is off:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**On:** the apps show it, filled from **Example Valley**, a made-up community built into the apps, under one marker: **🏘️ Local community**. The Ledger shows an example member, Commons an example enterprise and Decision, and the Market's My Deals two example deals.",
+            "**Off:** a feature that is off is hidden, as before. On the phone, with Beans off, the Commons and Ledger tabs go."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "With showcase on, every button that would move Beans, make a deal, vote, pledge or invite opens one sheet, **Why this lives in a local community**. It says why in a line, then offers **Start a community** and, where it can, **Communities near you** and **How it works**."
+        },
+        {
+          "type": "p",
+          "text": "The explainers on those screens are the real ones. Nobody in Example Valley has a name: rows read \"a neighbour\", \"the Commons\" or \"the Example Valley Bakery\". In the web app, visitors who haven't joined also get an example Ledger tab beside Home, Market and Map."
+        },
+        {
+          "type": "h2",
+          "text": "The defaults"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A global community** (NODE_PROFILE=global): on. It is where strangers first meet BeanPool, so what lives in a local community is shown, not hidden.",
+            "**A local community:** off. If you switched a feature off, you meant it, and the apps should not show it as something your community has."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "On a local community with every feature on, the switch changes nothing: there is nothing switched off to show."
+        },
+        {
+          "type": "h2",
+          "text": "What it never changes"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "It changes only what the apps show. A feature that is off stays off on the server, and its routes refuse as before.",
+            "Example Valley never reaches your database. Every id in it starts with sample-, and the server refuses any write that names one as an id with 400 (sample_id), before any other check. Free text is never refused for it, so a member can still write \"sample-sale\".",
+            "The server reports the switch in its features only while it is on. An app from before this feature never reads it, and hides what is off, as before."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Changing it"
+        },
+        {
+          "type": "p",
+          "text": "There is no screen for it in Settings. It is a row in the server's node_config, nodeProfile.showcase, set to true or false."
+        },
+        {
+          "type": "p",
+          "text": "To turn it off on a global community, run on the server: docker compose exec -u node beanpool-node node -e \"require('better-sqlite3')('/data/state.db').prepare(\\\"INSERT INTO node_config (key, value) VALUES ('nodeProfile.showcase', 'false') ON CONFLICT(key) DO UPDATE SET value = excluded.value\\\").run()\""
+        },
+        {
+          "type": "p",
+          "text": "To turn it on on a local community, run the same with 'true' in place of 'false'."
+        },
+        {
+          "type": "p",
+          "text": "To go back to your profile's default, delete the row: docker compose exec -u node beanpool-node node -e \"require('better-sqlite3')('/data/state.db').prepare(\\\"DELETE FROM node_config WHERE key = 'nodeProfile.showcase'\\\").run()\""
+        },
+        {
+          "type": "p",
+          "text": "The server reads it at once. Then restart it, so the take-over keys your standby holds carry the change too: docker compose restart beanpool-node. A standby gets the row itself at its next copy."
+        },
+        {
+          "type": "p",
+          "text": "Members' phones keep the community's settings for up to an hour, so allow an hour for every phone to change. The web app reads them each time it is opened."
+        },
+        {
+          "type": "p",
+          "text": "A value other than true or false is ignored, and the log says so once."
+        },
+        {
+          "type": "h2",
+          "text": "Where Start a community leads"
+        },
+        {
+          "type": "p",
+          "text": "The sheet's **Start a community** leads to a page on how to run a community. With nothing set, that is https://beanpool.org/#run-a-node. Your community doesn't need it: you can name your own page instead."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "An owner sets it with POST /api/local/admin/start-community-url and a url, or null for the default. It must start https://, have no user name or password in it, and be at most 300 characters.",
+            "Or set the row startCommunityUrl in node_config, the same way as above. A value that isn't such an address is ignored, and the default is used.",
+            "It travels to your standby with the community's other settings, and is reported to the apps on /api/community/info."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The web app links it from its Start a community screen. The phone app's own Start a community screen doesn't read it yet: it links beanpool.org's page."
+        }
+      ]
+    },
+    {
       "slug": "ai-assistant",
       "title": "AI assistants",
       "summary": "Connecting your own AI assistant (Claude, ChatGPT, Cursor) to your server, what it sees and never sees, the suggestions you approve, its limits, and disconnecting it.",
@@ -4054,7 +4175,7 @@
         },
         {
           "type": "p",
-          "text": "If the server sees a used pass presented a second time, someone else may hold a copy: it disconnects that assistant at once and tells the owners as an urgent alert. Its member can connect it again from their phone. The rule is strict on purpose: Claude and ChatGPT renew their pass from their own servers, one renewal at a time, so they never trip it. An assistant that sent two renewals at once, or sent one again after its answer was lost, is disconnected the same way, and the alert can then be a false one: connect it again from the phone."
+          "text": "If the server sees a used pass presented a second time, someone else may hold a copy: it disconnects that assistant at once and tells the owners as an urgent alert. Its member can connect it again from their phone. The rule is strict on purpose: Claude and ChatGPT renew their pass from their own servers, one renewal at a time, so they should not trip it. An assistant that sent two renewals at once, or sent one again after its answer was lost, is disconnected the same way, and the alert can then be a false one: connect it again from the phone."
         },
         {
           "type": "p",

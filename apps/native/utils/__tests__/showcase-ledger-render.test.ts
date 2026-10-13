@@ -256,6 +256,7 @@ for (const scheme of ['light', 'dark'] as const) {
             const strips = host.querySelectorAll('[data-testid="local-community-strip"]');
             expect(strips).toHaveLength(1);
             expect(strips[0].textContent).toContain(LOCAL_COMMUNITY_STRIP.lead.beans);
+            expect(strips[0].textContent).toContain(LOCAL_COMMUNITY_STRIP.body.beans);
             expect(text()).toContain(`${SAMPLE_COMMUNITY.name} · ${SAMPLE_COMMUNITY.member}`);
             expect(host.querySelector('[data-avatar]')!.getAttribute('data-avatar')).toBe(SAMPLE_COMMUNITY.member);
             expect(host.querySelector('[data-avatar]')!.getAttribute('data-pubkey')).toBe('');

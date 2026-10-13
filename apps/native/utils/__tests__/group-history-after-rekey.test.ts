@@ -1075,4 +1075,155 @@ describe('confirmation 1 of #1844: a chain in the wrong order, a lookalike name,
         console.log(`MEASURED ALREADY: junk slot shown → "${end.text}", 0 posted; without it, handed ${again.total} of ${again.planned}`);
         expect(elsewhere).toEqual([]);
     });
+
+    /**
+     * Confirmation 2 of #1844 (scratch/reviews/opus-1844-confirm2.md, findings 1-2 and informational 3-4), carried as
+     * documented behaviour the way FS(b) is: what §4 amendment 2 (worded 14 Oct) accepts. Each passes on today's code; a
+     * change that makes one fail changes what the design and the guide (talk/groups.md) say, so update them together.
+     */
+    describe('confirmation 2 of #1844, documented behaviour: what the in-person check cannot refuse, and what it refuses for good', () => {
+        const namesOf = (key: string) => JSON.parse(mem.async.get(byKeyKey()) ?? '{}')[key];
+
+        it('LN-HIDDEN, the first-sight residual in its strongest form: a phone that knew Cat on her key but was never shown Zed\'s row follows the node: the lookalike passes, "Done", and an honest scan hands Zed\'s epochs, also in a group Cat was never in', async () => {
+            const { ben, zed, cat, g, h, ctx } = await poisonSetup('v');
+            const noZed = (rows: any[]) => rows.filter((m) => m.memberPubkey !== pk(zed));
+            // From its first roster load, this phone never sees Zed's row (his lines show as a former member's).
+            await withHook(rowsHook(/\/members$/, noZed), () => benSees(ben, [g, h]));
+            expect(memoryOf(cat.name)).toEqual({ key: pk(cat) });
+            expect(memoryOf(zed.name)).toBeUndefined();
+            expect(namesOf(pk(zed))).toBeUndefined();
+            const look = 'Cаtv'; // "Catv" with a Cyrillic а
+            const cat2 = await rekeyed(cat, look);
+            const misled = claim(cat2, pk(zed));
+            const herRow = (m: any) => (m.memberPubkey === pk(cat2) ? { ...m, formerKeys: [misled], callsign: look } : m);
+            hooks.push(rowsHook(/\/members$/, (rows) => rows.map(herRow)));
+            await join_(cat2, h);
+            await fromEpoch1(g, pk(cat2));
+            await fromEpoch1(h, pk(cat2));
+            // A first sight of the lookalike, on Zed's key (H, hers left out); then G, Zed left out: a chain over Zed's key.
+            await withHook(rowsHook(`/api/groups/${h}/members`, (rows) => rows.filter((m) => m.memberPubkey !== pk(cat2)).map((m) => (m.memberPubkey === pk(zed) ? { ...m, callsign: look } : m))),
+                () => benSees(ben, [h]));
+            expect(memoryOf(look)).toEqual({ key: pk(zed) });
+            await withHook(rowsHook(`/api/groups/${g}/members`, (rows) => noZed(rows).map(herRow)), () => benSees(ben, [g]));
+            expect(memoryOf(look)).toEqual({ key: pk(cat2), was: [pk(zed)] });
+            expect(namesOf(pk(zed))).toEqual([look]);
+            expect(memoryOf(cat.name)).toEqual({ key: pk(cat) });
+            // Nothing on this phone ever tied Zed's key to anyone else: the check passes in both groups.
+            const check = await withHook(rowsHook(/\/members$/, (rows) => noZed(rows).map(herRow)), () => checkNewPhone({ ...ctx, scanned: newPhoneQrPayload(cat2.identity, pk(zed)) }));
+            expect(check.ok).toBe(true);
+            if (!check.ok) return;
+            expect(check.name).toBe(look);
+            expect(check.groups.map((x) => x.name).sort()).toEqual(['G', 'H']);
+            const done = await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check });
+            expect(done).toMatchObject({ total: 3, planned: 3, stopped: false });
+            expect(newPhoneEnd(check.name, done)).toEqual({ text: newPhoneDoneText(look), ok: true });
+            const handed = await topUps(pk(ben), pk(cat2));
+            expect([...handed].sort()).toEqual([`${g}#2`, `${g}#3`, `${h}#1`].sort());
+            forgetGroupKeys();
+            const readG = await reads(cat2, g);
+            expect(readG).toContain(`${zed.name}: Zed before Cat`);
+            console.log(`MEASURED LN-HIDDEN: check ok under "${check.name}" for G and H; "${newPhoneEnd(check.name, done).text}"; handed ${done.total} of ${done.planned}; Cat₂ reads G ${JSON.stringify(readG)}`);
+            expect(elsewhere).toEqual([]);
+        });
+
+        it('ZEDNAME, the human limit: a new phone the node names exactly as Zed passes a phone with a full honest memory, and the confirm screen says it is Zed\'s new phone: only the person holding it can tell', async () => {
+            const { ben, zed, cat, g, ctx } = await poisonSetup('z');
+            await benSees(ben, [g]);
+            expect(memoryOf(zed.name)).toEqual({ key: pk(zed) });
+            expect(memoryOf(cat.name)).toEqual({ key: pk(cat) });
+            expect(namesOf(pk(zed))).toEqual([zed.name]);
+            const cat2 = await rekeyed(cat, zed.name);
+            const misled = claim(cat2, pk(zed));
+            hooks.push(rowsHook(/\/members$/, (rows) => rows.filter((m) => m.memberPubkey !== pk(zed)).map((m) => (m.memberPubkey === pk(cat2) ? { ...m, formerKeys: [misled], callsign: zed.name } : m))));
+            await fromEpoch1(g, pk(cat2));
+            const check = await checkNewPhone({ ...ctx, groups: [ctx.groups[0]], scanned: newPhoneQrPayload(cat2.identity, pk(zed)) });
+            expect(check.ok).toBe(true);
+            if (!check.ok) return;
+            expect(check.name).toBe(zed.name);
+            const screen = newPhoneConfirmText(check.name, check.groups.map((x) => x.name));
+            expect(screen).toContain(`this is ${zed.name}'s new phone`);
+            await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check });
+            expect([...await topUps(pk(ben), pk(cat2))].sort()).toEqual([`${g}#2`, `${g}#3`].sort());
+            console.log(`MEASURED ZEDNAME: check ok under "${check.name}"; screen "${screen}"`);
+            expect(elsewhere).toEqual([]);
+        });
+
+        it('RENAME, the accepted cost, for good on that phone: a member renamed on the node and then honestly re-keyed is refused by a phone that saw both names, under either name, and twenty more honest rosters change nothing (her own 12 words still work)', async () => {
+            await control('limiters');
+            forgetGroupKeys();
+            mem.async.delete(memKey());
+            mem.async.delete(byKeyKey());
+            const ben = phone('Benr');
+            const cat = phone('Catr');
+            await control('members', { members: [ben, cat].map((p) => ({ key: pk(p), callsign: p.name })) });
+            const g = await newGroup(ben, 'Rename G');
+            await say(ben, g, 'one');
+            await join_(cat, g);
+            await writes(cat, g, 'two');
+            await benSees(ben, [g]);
+            expect(namesOf(pk(cat))).toEqual(['Catr']);
+            // The node renames her: every roster from here says "Catherine" on her key (and later on her new one).
+            const newName = 'Catherine';
+            const renamed = (keys: string[]) => rowsHook(/\/members$/, (rows) => rows.map((m) => (keys.includes(m.memberPubkey) ? { ...m, callsign: newName } : m)));
+            hooks.push(renamed([pk(cat)]));
+            await benSees(ben, [g]);
+            expect(memoryOf(newName)).toEqual({ key: pk(cat) });
+            expect(namesOf(pk(cat))).toEqual(['Catr', newName]);
+            const cat2 = await rekeyed(cat, newName);
+            expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
+            hooks.splice(hooks.length - 1, 1);
+            hooks.push(renamed([pk(cat), pk(cat2)]));
+            await benSees(ben, [g]);
+            expect(memoryOf(newName)).toEqual({ key: pk(cat2), was: [pk(cat)] });
+            const ctx = { nodeUrl: URL_BASE, identity: ben.identity, groups: [{ id: g, name: 'Rename G' }] };
+            // On a phone a rename and a lookalike relabel have one shape (same key, new name): refused under the new name...
+            const check = await checkNewPhone({ ...ctx, scanned: newPhoneQrPayload(cat2.identity, pk(cat)) });
+            expect(check).toEqual({ ok: false, reason: 'mismatch', text: newPhoneKeyWasOtherText(newName, 'Catr') });
+            // ...and the old name is not the one the community lists for her new phone.
+            const oldName = await checkNewPhone({ ...ctx, scanned: JSON.stringify([NEW_PHONE_QR_TAG, pk(cat2), pk(cat), 'Catr']) });
+            expect(oldName.ok).toBe(false);
+            for (let i = 0; i < 20; i++) await benSees(ben, [g]);
+            expect(namesOf(pk(cat))).toEqual(['Catr', newName]);
+            expect(await checkNewPhone({ ...ctx, scanned: newPhoneQrPayload(cat2.identity, pk(cat)) })).toEqual(check);
+            expect(await topUps(pk(ben), pk(cat2))).toEqual([]);
+            console.log(`MEASURED RENAME: new name → ${JSON.stringify(check)}; old name → ${JSON.stringify(oldName)}; after 20 more rosters still refused`);
+            expect(elsewhere).toEqual([]);
+        });
+
+        it('AWAY, two attested re-keys while this phone loaded no roster: the memory skips the middle key, so a code naming it is refused and one naming the first hands only the first key\'s epoch; the middle key\'s stays locked unless she types its words', async () => {
+            await control('limiters');
+            forgetGroupKeys();
+            mem.async.delete(memKey());
+            mem.async.delete(byKeyKey());
+            const ben = phone('Benq');
+            const cat = phone('Catq');
+            const dov = phone('Dovq');
+            await control('members', { members: [ben, cat, dov].map((p) => ({ key: pk(p), callsign: p.name })) });
+            const g = await newGroup(ben, 'Away G');
+            await say(ben, g, 'one');
+            await join_(cat, g);
+            await writes(cat, g, 'two');
+            await benSees(ben, [g]);
+            expect(memoryOf(cat.name)).toEqual({ key: pk(cat) });
+            const cat2 = await rekeyed(cat, cat.name);
+            expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
+            await join_(dov, g); // a new epoch, wrapped to her middle key: she writes under it
+            await writes(cat2, g, 'three');
+            const cat3 = await rekeyed(cat2, cat.name);
+            expect(await attestJustCompletedRekey(URL_BASE, cat3.identity)).toBe(1);
+            await benSees(ben, [g]);
+            expect(memoryOf(cat.name)).toEqual({ key: pk(cat3), was: [pk(cat)] });
+            const ctx = { nodeUrl: URL_BASE, identity: ben.identity, groups: [{ id: g, name: 'Away G' }] };
+            const middle = await checkNewPhone({ ...ctx, scanned: newPhoneQrPayload(cat3.identity, pk(cat2)) });
+            expect(middle).toMatchObject({ ok: false, reason: 'mismatch' });
+            const first = await checkNewPhone({ ...ctx, scanned: newPhoneQrPayload(cat3.identity, pk(cat)) });
+            expect(first.ok).toBe(true);
+            if (!first.ok) return;
+            const done = await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check: first });
+            expect(done).toMatchObject({ total: 1, planned: 1, stopped: false });
+            expect(await topUps(pk(ben), pk(cat3))).toEqual([`${g}#2`]);
+            console.log(`MEASURED AWAY: memory {key: C3, was: [C1]}; code naming C2 → mismatch; code naming C1 → handed ${done.total} of ${done.planned} (G#2; her C2-era G#3 not among them)`);
+            expect(elsewhere).toEqual([]);
+        });
+    });
 });

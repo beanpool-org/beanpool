@@ -8,7 +8,7 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { getMemberTrustProfile, washTradingAnalysisSteps, drainSteps } from './trust.js';
+import { getMemberTrustProfile, washTradingAnalysisSteps, drainSteps, runStepsInSlices } from './trust.js';
 
 type Db = Database.Database;
 
@@ -196,29 +196,17 @@ export function computeWashSybilMetrics(db: Db): WashSybilMetrics {
 /**
  * computeWashSybilMetrics, giving the event loop a turn (setImmediate) whenever a slice of steps has held it for
  * `sliceMs` (default 20): one step is one member's floor, one cohort member, or one cluster of the wash-trading analysis,
- * most well under a millisecond. A slice can't split a step, and a few are long: the analysis's first (trust.ts
- * washTradingAnalysisSteps: every pair's totals, then a pass over the pairs) grows with the completed trades, 243 ms warm
- * and 826 ms cold at 101,400 of them, and the last 30 days' trades and the cohort query took 45-60 ms there (#1793's
- * review). So a slice holds the loop up to that long, however small `sliceMs` is. In one go it held a node for 20 s at
- * 20,000 members and 226 s at 100,000 (the global load test, 2026-10-11), answering nothing meanwhile.
- * `onYield` is called at each turn given (a test counts them). Rows written between slices are read as they stand
+ * most well under a millisecond (trust.ts runStepsInSlices). A slice can't split a step, and a few are long: the
+ * analysis's pair totals (trust.ts washTradingAnalysisSteps) are read a page of buyers a step, and the last 30 days'
+ * trades and the cohort query took 45-60 ms at 101,400 trades (#1793's review). So a slice holds the loop up
+ * to that long, however small `sliceMs` is. In one go it held a node for 20 s at 20,000 members and 226 s at 100,000
+ * (the global load test, 2026-10-11), answering nothing meanwhile. `onYield` is called at each turn given (a test counts them). Rows written between slices are read as they stand
  * when their step comes; the numbers are the one-go numbers on a database nothing writes to meanwhile.
  */
 export async function computeWashSybilMetricsInSlices(
     db: Db, opts: { sliceMs?: number; onYield?: () => void } = {},
 ): Promise<WashSybilMetrics> {
-    const sliceMs = opts.sliceMs ?? 20;
-    const steps = washSybilMetricsSteps(db);
-    let sliceStart = performance.now();
-    for (;;) {
-        const r = steps.next();
-        if (r.done) return r.value;
-        if (performance.now() - sliceStart >= sliceMs) {
-            opts.onYield?.();
-            await new Promise<void>((resolve) => setImmediate(resolve));
-            sliceStart = performance.now();
-        }
-    }
+    return runStepsInSlices(washSybilMetricsSteps(db), opts);
 }
 
 /**

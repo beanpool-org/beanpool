@@ -39,7 +39,7 @@ A new group's chat asks **Who do you want to invite?**
 - Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**).
 - Or tap **Not now** to skip it.
 
-Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** (on the global community, under **Find groups** in **Talk**). When they join, the chat says so.
+Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). When they join, the chat says so.
 
 ## The group's chat
 
@@ -87,7 +87,7 @@ When your account moves to a new phone with a new key, the group messages from b
 - **Ask a member of the group to confirm this phone**: your new phone shows a code. Meet a member of the group in person; they open the group's chat menu, tap **Confirm new phone** and scan it. Their phone hands yours the earlier keys it holds for the groups you share.
 - **Keep them locked**: nothing changes. Your own messages from then show under your name, without their words.
 
-**When you confirm someone else's new phone**, your phone checks the code against what it remembers of that person's old key. Only confirm a new phone for someone you've chatted with in that group before, on this phone, and only with the phone in their hands: whoever holds it can read the earlier messages you can. If your phone says **Don't continue; tell an owner**, stop. It means what your phone saw before doesn't match what the server says now. That also happens when the person changed their name since your phone last saw them: ask an owner. A phone that was just restored from its 12 words, or never opened that group, has seen too little to check: it says it never knew their old key, or it may believe what the server says. Let a member who has been chatting with them confirm instead.
+**When you confirm someone else's new phone**, your phone checks the code against what it remembers of that person's old key. Only confirm a new phone for someone you've chatted with in that group before, on this phone, and only with the phone in their hands: whoever holds it can read the earlier messages you can. If your phone says **Don't continue; tell an owner**, stop. It means what your phone saw before doesn't match what the server says now. It also says that, for good, about someone who changed their name after your phone had seen them: to a phone, a new name on their key looks just like a stranger's name put there, so a phone that saw both names can never confirm them in person again. Their own old 12 words still work, and so does a member whose phone only ever saw the new name. A phone that was just restored from its 12 words, or never opened that group, has seen too little to check: it says it never knew their old key, or it may believe what the server says. Let a member who has been chatting with them confirm instead.
 
 At the end your phone says what happened: **Done** only when it handed every key across, **Handed 3 of 5** when the server refused some. When the server says their new phone already holds some, your phone says **the community says** so, because it can't see into the other phone: if the new phone still can't read those messages, tell an owner.
 
@@ -100,7 +100,7 @@ In **Commons**, under **Groups**, **Groups you could join** lists the groups you
 
 An **Invite Only** group is hidden from everyone who is not in it or invited to it.
 
-The global community has no **Commons** tab. There, tap **Talk**, then **Groups**, then **Find groups**: it opens the same list. Before you are in any group, the link is **Find a group to join**.
+On the phone, a local community with no Beans has no **Commons** tab. There, tap **Talk**, then **Groups**, then **Find groups**: it opens the same list. Before you are in any group, the link is **Find a group to join**. The global community has the **Commons** tab: its groups are there, under an example from a local community (see "Beans and the global community").
 
 If a convenor removed you from a group, you cannot join it again by yourself.
 
@@ -108,7 +108,7 @@ While your account is suspended, you cannot start a group, join one, ask to join
 
 ## Joining by invitation
 
-A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. On the global community it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it, and who can read its chat.
+A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it, and who can read its chat.
 
 - Tap **Join the group**. You land in its chat.
 - Tap **Not now** to decide later. The invitation stays.

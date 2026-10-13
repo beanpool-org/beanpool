@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { reportAbuse } from '../lib/api';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../lib/reportReasons';
 
 interface Props {
     isOpen: boolean;
@@ -12,13 +13,6 @@ interface Props {
     targetPulseItemId?: string;
     onReported?: () => void;
 }
-
-const REPORT_REASONS = [
-    'Spam or scam',
-    'Offensive content',
-    'Misleading post',
-    'Other',
-];
 
 export function ReportModal({
     isOpen,
@@ -95,7 +89,7 @@ export function ReportModal({
             <div
                 ref={modalCardRef}
                 tabIndex={-1}
-                className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-xl flex flex-col gap-4 outline-none"
+                className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl w-full max-w-md max-h-full overflow-y-auto p-5 sm:p-6 shadow-xl flex flex-col gap-4 outline-none"
             >
                 <div className="flex items-center justify-between border-b border-nature-100 dark:border-nature-800 pb-3">
                     <h3 id="report-modal-title" className="text-base font-bold text-nature-950 dark:text-white flex items-center gap-2">
@@ -142,6 +136,9 @@ export function ReportModal({
                             );
                         })}
                     </div>
+                    <p className="mt-2 text-xs text-nature-600 dark:text-nature-300">
+                        <span className="font-bold">{CHILD_SAFETY_REASON}:</span> {CHILD_SAFETY_HINT}
+                    </p>
                 </div>
 
                 <div>

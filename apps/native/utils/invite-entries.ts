@@ -1,6 +1,6 @@
 /**
  * People → Invites on a node that takes no invites (`features.invites === false`: the worldwide community,
- * apps/server config/node-profile.ts). Anyone joins it with a sign-in, so there is nothing to make: no code, no QR, no
+ * apps/server config/node-profile.ts). Anyone joins it with 12 words or a sign-in, so there is nothing to make: no code, no QR, no
  * offline ticket. What's left is the community's own link to share, a plain address and no more (design §1: "a link
  * is just marketing"). Every local community, and a node too old to say, as before (node-profile.ts invitesOn).
  *
@@ -50,9 +50,15 @@ export function invitesOffRefusal(status: number, body: unknown, features?: Node
 /**
  * Said to a guest (a phone with an account elsewhere that added this community) of the global community once it has said
  * its door is open: the way in is the door, with the account on this phone (app/join-global.tsx), under this button.
+ * The ways it names are the door's own (joinWays): 12 words or a sign-in where it offers both, else a sign-in.
  */
-export const GUEST_DOOR_TEXT = 'You are visiting as a guest. Join as the account on this phone: sign in once and choose your name. Your key and your 12 words stay the same, and nothing changes in your other communities.';
-export const GUEST_DOOR_BUTTON = '🌍 Join with a sign-in';
+export function guestDoorText(features: NodeFeatures | null | undefined): string {
+    const how = wordsDoorOn(features) ? 'use its 12 words or sign in once' : 'sign in once';
+    return `You are visiting as a guest. Join as the account on this phone: ${how}, and choose your name. Your key and your 12 words stay the same, and nothing changes in your other communities.`;
+}
+export function guestDoorButton(features: NodeFeatures | null | undefined): string {
+    return `🌍 Join with ${joinWays(features)}`;
+}
 
 /**
  * Said to a guest on a node that takes no invites where no door is offered: a node other than the global community (the

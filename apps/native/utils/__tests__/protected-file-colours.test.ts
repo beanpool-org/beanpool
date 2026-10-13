@@ -40,11 +40,15 @@ const MAIN: Record<string, readonly [string, string]> = {
     'text.muted': ['#a0a29a', '#6b7280'],
 };
 
-/** A pair a protected screen draws: `ink` (words, an icon, a dot, a line) on `ground`. A token path or a fixed hex. */
+/**
+ * A pair a protected screen draws: `ink` (words, an icon, a dot, a line) on `ground`. A token path or a fixed hex.
+ * `wasOnMain` is the [ink, ground] the same spot drew on main, when Marty has since pointed it at other tokens.
+ */
 interface Pair {
     at: string;
     ink: string;
     ground: string;
+    wasOnMain?: readonly [string, string];
 }
 
 const text = (token: string): Pair[] =>
@@ -54,10 +58,14 @@ const PAIRS: Pair[] = [
     { at: 'map.tsx:348 + ADD POST, white on the floating button', ink: '#ffffff', ground: 'action.fab' },
     { at: 'map.tsx:351 the pin-drop banner, white on blue', ink: '#ffffff', ground: 'feedback.info.solid' },
     { at: 'map.tsx:376 the validation toast, white on red', ink: '#ffffff', ground: 'feedback.danger.solid' },
-    { at: 'map.tsx:381 the required-field *', ink: 'feedback.danger.solid', ground: 'surface.card' },
-    { at: "map.tsx:1087 a missing field's red border", ink: 'feedback.danger.solid', ground: 'surface.app' },
+    // Marty's edit of 14 Oct (#1904): the * and the missing field's border take the red ink, the Reach chooser and the
+    // category chip the commit fill, and the chip's Offers/Needs fills the library's commit and action fills.
+    { at: 'map.tsx:381 the required-field *', ink: 'feedback.danger.fg', ground: 'surface.card', wasOnMain: ['feedback.danger.solid', 'surface.card'] },
+    { at: "map.tsx:1087 a missing field's red border", ink: 'feedback.danger.fg', ground: 'surface.app', wasOnMain: ['feedback.danger.solid', 'surface.app'] },
     { at: 'map.tsx:408/438/1371/1662 green words: category tick, pricing tip, author, (100% community owned)', ink: 'brand.primary', ground: 'surface.card' },
-    { at: 'map.tsx:488/499 the Reach chooser and :1253 the category chip, white on brand.dark', ink: '#ffffff', ground: 'brand.dark' },
+    { at: 'map.tsx:488/499 the Reach chooser and :1253 the category chip, white on brand.fill', ink: '#ffffff', ground: 'brand.fill', wasOnMain: ['#ffffff', 'brand.dark'] },
+    { at: 'map.tsx:1253 the category chip on Offers, white on brand.fill', ink: '#ffffff', ground: 'brand.fill', wasOnMain: ['#ffffff', '#10b981'] },
+    { at: 'map.tsx:1253 the category chip on Needs, white on action.fab', ink: '#ffffff', ground: 'action.fab', wasOnMain: ['#ffffff', '#ea580c'] },
     { at: 'map.tsx:417/476 the price tip pill and the cash nudge', ink: 'feedback.warning.fg', ground: 'feedback.warning.bg' },
     { at: 'map.tsx:475 the cash checkbox, white tick on gold', ink: '#ffffff', ground: 'feedback.warning.solid' },
     { at: 'map.tsx:1661 Learn more ⓘ in gold', ink: 'feedback.warning.solid', ground: 'surface.card' },
@@ -92,13 +100,9 @@ const PALETTE_ON_MAIN: Record<string, string> = {
 
 /**
  * Pairs that read worse than on main and wait for Marty's edit to the protected file; `floor` is what they reach now,
- * so they cannot get worse still. Both are `feedback.danger.solid` used as a line or a glyph on the dark sheet, where
- * one token cannot be both the deep fill under white words (the toast, :376) and a red that reads on near-black.
+ * so they cannot get worse still. None since his edit of 14 Oct (the * and a missing field's border, map.tsx:381/1087).
  */
-const AWAITING_MARTY: Record<string, { floor: number; fix: string }> = {
-    'dark map.tsx:381 the required-field *': { floor: 2.69, fix: 'map.tsx:381 requiredStar color → colors.feedback.danger.fg (9.17 on the card)' },
-    "dark map.tsx:1087 a missing field's red border": { floor: 3.06, fix: 'map.tsx:1087 borderColor/shadowColor → colors.feedback.danger.fg (10.43)' },
-};
+const AWAITING_MARTY: Record<string, { floor: number; fix: string }> = {};
 
 const THEMES = [
     ['light', lightColors, 0],
@@ -122,7 +126,8 @@ function onMain(token: string, theme: 0 | 1): string {
 const CASES = THEMES.flatMap(([name, tree, index]) =>
     PAIRS.map((p) => {
         const now = contrastRatio(resolve(tree, p.ink), resolve(tree, p.ground));
-        const main = contrastRatio(onMain(p.ink, index), onMain(p.ground, index));
+        const [mainInk, mainGround] = p.wasOnMain ?? [p.ink, p.ground];
+        const main = contrastRatio(onMain(mainInk, index), onMain(mainGround, index));
         return { key: `${name} ${p.at}`, now, main, ink: resolve(tree, p.ink), ground: resolve(tree, p.ground) };
     }),
 );

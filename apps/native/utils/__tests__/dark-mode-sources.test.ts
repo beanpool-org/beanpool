@@ -153,7 +153,12 @@ describe('dark mode: themed screens draw with the theme', () => {
         'app/(tabs)/settings.tsx': ["'#000000'"],                          // Confirm Sign Out on the dark scheme's bright danger button
         'components/NeedsYouIcons.tsx': ["'#1f2937'"],                     // the count on its white or accent dot
     };
-    const PROTECTED = new Set(['app/(tabs)/map.tsx', 'components/GlobalHeader.tsx']); // off-limits; map.tsx's are the map style's
+    const PROTECTED = new Set(['components/GlobalHeader.tsx']); // off-limits
+    // map.tsx is judged since Marty's colour edit of 14 Oct (#1904), except values that are not words: Google's dark map
+    // style (its `color` paints the map itself, :59-73) and the colour emoji's fallback on a photo-less pin card (:1341).
+    const NOT_WORDS: Record<string, string[]> = {
+        'app/(tabs)/map.tsx': ['"#242f3e"', '"#746855"', '"#263c3f"', '"#38414e"', '"#212a37"', '"#1f2835"', '"#2f3948"', '"#17263c"', '"#515c6d"', "'#000'"],
+    };
     // A fill token given to `color`: since #1904 a fill is the same deep value in both themes (emerald-700, red-700,
     // orange-700, indigo-600), so as words on the dark card it reads 2.7–3.2:1. Words take the ink tokens (brand.primary,
     // feedback.*.fg, accent.primary). Ink tokens and text.* are not judged here (text.muted is a known open item).
@@ -164,7 +169,7 @@ describe('dark mode: themed screens draw with the theme', () => {
             .filter(s => themed(s.src) && !PROTECTED.has(s.file))
             .flatMap(s => darkValues(s.file, s.src, 'color')
                 .filter(({ value }) => {
-                    if (DARK_TEXT_ON_PALE_OK[s.file]?.includes(value)) return false;
+                    if (DARK_TEXT_ON_PALE_OK[s.file]?.includes(value) || NOT_WORDS[s.file]?.includes(value)) return false;
                     if (darkStep.test(value)) return true;
                     const c = /^['"]/.test(value) || FILL_TOKEN.test(value) ? resolve(value) : undefined;
                     return !!c && c.alpha >= 0.5 && contrast(c.hex, darkColors.surface.card) < 4.5;

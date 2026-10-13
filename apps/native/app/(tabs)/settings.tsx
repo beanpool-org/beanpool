@@ -223,8 +223,6 @@ export default function SettingsScreen() {
         segmentText: { fontSize: 13, fontWeight: '500', color: colors.text.secondary, textAlign: 'center' },
         segmentTextSelected: { fontWeight: '700', color: colors.text.heading },
 
-        // ─── Light Color Schemes ───
-
         // ─── Danger Zone ───
         dangerGroup: {
             backgroundColor: colors.surface.card, borderRadius: 16, overflow: 'hidden',
@@ -1968,7 +1966,7 @@ export default function SettingsScreen() {
                             accessibilityHint="Choose to remove account from device or permanently delete from node"
                         >
                             <View style={[styles.menuIconWrap, { backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50 }]}><Text style={styles.menuIcon}>⚠️</Text></View>
-                            <Text style={[styles.menuText, { flex: 1, color: theme === 'dark' ? colors.feedback.danger.fg : colors.feedback.danger.fg }]}>Account Deletion & Sign Out</Text>
+                            <Text style={[styles.menuText, { flex: 1, color: colors.feedback.danger.fg }]}>Account Deletion & Sign Out</Text>
                             <Text style={[styles.menuChevron, { color: palette.red300 }]}>›</Text>
                         </Pressable>
                     </View>

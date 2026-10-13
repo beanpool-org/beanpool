@@ -1252,7 +1252,7 @@ function ChatScreen({ id }: { id: string }) {
                     ]}>
                         <Text style={[styles.statusBadgeText,
                             postContext.status === 'active' ? { color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark } :
-                            postContext.status === 'pending' ? { color: theme === 'dark' ? colors.feedback.warning.fg : colors.feedback.warning.fg } :
+                            postContext.status === 'pending' ? { color: colors.feedback.warning.fg } :
                             { color: theme === 'dark' ? colors.text.secondary : palette.gray600 }
                         ]}>{postContext.status?.toUpperCase() || 'UNKNOWN'}</Text>
                     </View>
@@ -1263,7 +1263,7 @@ function ChatScreen({ id }: { id: string }) {
             {pendingTx && pendingTx.isPayer && postContext?.status === 'pending' && (
                 <View style={[styles.inlineActionBar, { flexDirection: 'column' }]}>
                     <View style={{ width: '100%', marginBottom: 10 }}>
-                        <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+                        <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
                             ⚠️ Action Required: Release Credits
                         </Text>
                         <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber900, fontSize: 11, textAlign: 'center', paddingHorizontal: 16 }}>

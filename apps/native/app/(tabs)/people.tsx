@@ -1032,7 +1032,7 @@ export default function PeopleScreen() {
                 <KeyboardAwareScrollView ref={listRef} contentContainerStyle={[styles.list, { paddingBottom: 16 }]} bottomOffset={16}>
                     {isGuest ? (
                         <View style={{ backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber200 }}>
-                            <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : colors.feedback.warning.fg, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
+                            <Text style={{ color: colors.feedback.warning.fg, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
                                 ⚠️ Guest Connection Mode
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber700, fontSize: 13, lineHeight: 18 }}>
@@ -1219,7 +1219,7 @@ export default function PeopleScreen() {
 
                     {isGuest && (
                         <View style={{ marginTop: 8, backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.danger.border : palette.red300, marginBottom: 32 }}>
-                            <Text style={{ color: theme === 'dark' ? colors.feedback.danger.fg : colors.feedback.danger.fg, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
+                            <Text style={{ color: colors.feedback.danger.fg, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
                                 🛠️ Connection Troubleshooting
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.red800, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>

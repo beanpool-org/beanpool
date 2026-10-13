@@ -66,7 +66,7 @@ import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
 import { VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
 import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
-import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../lib/reportReasons';
+import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_REASONS } from '../lib/reportReasons';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -1996,12 +1996,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     className="w-full p-2.5 rounded-lg bg-white border border-red-200 text-nature-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer mb-2"
                                 >
                                     <option value="">Select a reason...</option>
-                                    <option value="Spam or scam">Spam or scam</option>
-                                    <option value="Offensive content">Offensive content</option>
-                                    <option value="Misleading post">Misleading post</option>
-                                    <option value="Harassment">Harassment</option>
-                                    <option value={CHILD_SAFETY_REASON}>{CHILD_SAFETY_REASON}</option>
-                                    <option value="Other">Other</option>
+                                    {/* The one shared list (lib/reportReasons.ts), as in ReportModal: "Child safety" is told at once. */}
+                                    {REPORT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
                                 </select>
                                 <p className="text-xs text-nature-800 mb-2">
                                     <span className="font-bold">{CHILD_SAFETY_REASON}:</span> {CHILD_SAFETY_HINT}

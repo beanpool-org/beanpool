@@ -27,6 +27,7 @@ import { PhotoCarousel } from './PhotoCarousel';
 import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
+import { ReportReasonBox } from './ReportReasonBox';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
@@ -158,21 +159,17 @@ export function EventDetail({ post }: EventDetailProps) {
         ]);
     };
 
-    const report = () => {
+    // The same short reason list as a post (ReportReasonBox): "Child safety" is told to the owners at once.
+    const [reporting, setReporting] = useState(false);
+    const report = async (reason: string) => {
         if (!identity?.publicKey) return;
-        Alert.alert('Report this event?', "This community's moderators will review it.", [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Report', style: 'destructive', onPress: async () => {
-                    try {
-                        await reportAbuse(identity.publicKey, p.author_pubkey || p.authorPublicKey, 'Event reported from the event screen', post.id);
-                        Alert.alert('Reported', 'Thanks. A moderator will take a look.');
-                    } catch (e: any) {
-                        Alert.alert('Not sent', e?.message || 'Could not reach the node.');
-                    }
-                },
-            },
-        ]);
+        try {
+            await reportAbuse(identity.publicKey, p.author_pubkey || p.authorPublicKey, reason, post.id);
+            setReporting(false);
+            Alert.alert('Reported', "Thanks. This community's moderators will take a look.");
+        } catch (e: any) {
+            Alert.alert('Not sent', e?.message || 'Could not reach the node.');
+        }
     };
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
@@ -345,9 +342,12 @@ export function EventDetail({ post }: EventDetailProps) {
                 )}
 
                 {!isHost && identity?.publicKey && (
-                    <Pressable onPress={report} style={styles.reportBtn} accessibilityRole="button" accessibilityLabel="Report event">
-                        <Text style={styles.reportText}>🚩 Report event</Text>
-                    </Pressable>
+                    <>
+                        <Pressable onPress={() => setReporting((r) => !r)} style={styles.reportBtn} accessibilityRole="button" accessibilityLabel="Report event" accessibilityState={{ expanded: reporting }}>
+                            <Text style={styles.reportText}>🚩 Report event</Text>
+                        </Pressable>
+                        {reporting && <ReportReasonBox onSubmit={report} onCancel={() => setReporting(false)} />}
+                    </>
                 )}
             </ScrollView>
 

@@ -611,7 +611,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 transition-colors relative">
                     <button
                         onClick={() => setMode('profile')}
-                        className="absolute top-4 right-4 text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 transition-all"
+                        className="absolute top-4 right-4 text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 dark:hover:bg-terra-900/60 dark:hover:text-terra-300 transition-all"
                     >
                         ✏️ Edit Profile
                     </button>

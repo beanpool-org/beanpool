@@ -102,7 +102,7 @@ import { getOffboxHealth } from '../services/offbox-backups.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
-import { likeContains } from '@beanpool/engine';
+import { likeContains, withoutTradeParty } from '@beanpool/engine';
 
 // The most post ids one POST /api/local/admin/posts/bulk-delete takes. The manager (PeopleSafetySection.tsx) and the
 // node's own settings page (static/settings.js) send longer lists in batches of this size, one after another.
@@ -1047,8 +1047,11 @@ router.post('/api/local/admin/data', async (ctx) => {
         }),
         profiles: getAllProfiles(),
         // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt. Polls carry their counts and not
-        // who voted for what: that is for members (includeVoters), and the manager never shows it.
-        posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled'),
+        // who voted for what: that is for members (includeVoters), and the manager never shows it. A listing someone took
+        // shows its status and dates, not who took it or its deal (withoutTradeParty): a trade shows only its two people,
+        // and an admin's look at one is the logged one, /admin/disputes (queue item 29, Marty 4 Oct). The manager and
+        // the settings page read none of the three.
+        posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled').map(withoutTradeParty),
         health: healthFor(ctx),
         reports: getReports().reports,
         reportCount: getReportCount(),

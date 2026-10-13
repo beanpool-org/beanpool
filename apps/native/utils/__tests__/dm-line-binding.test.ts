@@ -2962,6 +2962,21 @@ describe('the update\'s memory covers every community on the phone (§3.4 amendm
         expect(await sendTo(dmB.id, 'The code is 4821')).toEqual(paused);
     });
 
+    it('the gate for a new chat: with the pin store unreadable, starting a DM asks the node nothing and writes nothing; the member is told the store\'s sentence', async () => {
+        await phoneOf(ana);
+        restarted();   // a later run, whose pin store can't be read
+        const cat = person('Cat');
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const real = getItem.getMockImplementation()!;
+        getItem.mockImplementation(async (k: string) => { if (k === dmPeerPinsStoreKey(ana.publicKey)) throw new Error('storage unavailable'); return real(k); });
+        const calls = fetchMock.mock.calls.length;
+        let err: any = null;
+        try { await createConversationApi('dm', [ana.publicKey, cat.publicKey], ana.publicKey); } catch (e) { err = e; } finally { getItem.mockImplementation(real); }
+        expect(err?.message).toBe(DM_PIN_STORE_UNREAD_TEXT);
+        expect(fetchMock.mock.calls.length).toBe(calls);
+        expect((sql.prepare('SELECT COUNT(*) AS n FROM conversation_participants WHERE public_key = ?').get(cat.publicKey) as any).n).toBe(0);
+    });
+
     it('C1 (amendment 5 §6 reading c): a held DM pinned unchecked from the listing while the held lines were unreadable keeps them through a later pin write for another DM; its send is judged on them: paused on Ben, PUPPET reads nothing', async () => {
         const LINES = () => dmLinesAtUpdateStoreKey(ana.publicKey, FILE_A);
         const stored = () => JSON.parse(h.store.get(LINES()) ?? 'null') as Record<string, any[]> | null;

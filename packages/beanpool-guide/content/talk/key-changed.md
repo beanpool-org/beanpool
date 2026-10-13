@@ -11,7 +11,7 @@ Every message between two people is locked so that only the other person's phone
 
 If your community now names a different key for the person, your phone stops and tells you, instead of quietly sending to the new key. At the top of the chat you see **The key behind "Ben" changed.** The message box is greyed out and says sending is paused.
 
-Your earlier messages with them still read as before.
+Your earlier messages with them usually still read as before. On a phone you have just restored or set up again, some may show as **couldn't be verified** until you decide.
 
 This is on the phone app. The web app doesn't remember keys yet.
 
@@ -26,6 +26,7 @@ Your phone can't tell these apart by itself. You can, with the key code.
 
 - The banner shows a code: 20 digits in five groups of four.
 - Ask the person to open **Settings**, then **Account Protection**, and read you **My key code**.
+- **My key code** is on the phone app only. If the person uses only the web app, they can't read it to you yet: tap **Not now** until they can open the phone app.
 - Check it **in person, or on a phone or video call** where you know it's them. Don't check it by a message in BeanPool: if the key is wrong, so is whoever answers.
 - If every digit matches, tick **I checked with Ben: the key code in their Settings matches this one**, then tap **Continue with the new key**.
 
@@ -41,7 +42,17 @@ If the code doesn't match, don't continue. Tell the person and your community's 
 
 ## If the banner offers no key to continue with
 
-Sometimes the community lists more than one other key in a chat between two people. There is then no one key to continue with, so the banner only offers **Not now**. To keep talking, start a new chat with the person and check their key code there.
+Sometimes the community lists more than one other key in a chat between two people. There is then no one key to continue with, so the banner only offers **Not now**.
+
+To keep talking, you can start a new chat with the person. A new chat shows no code to compare, so your phone can't check the key there. Talk to them in person or on a call first, and be careful what you send in it.
+
+## If the banner says your phone is checking the chat from the start
+
+After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with **This phone is checking this chat from the start, as it does after you restore it or update the app.** Check the code with the person as above.
+
+## If the message box says your phone can't place the keys
+
+Sometimes the earlier messages in a chat were locked to keys your phone can't match to anyone. The message box then says **This chat's messages were sealed to keys this phone can't place.** You can still read the chat, but there is nothing to continue with. To keep talking, start a new chat with the person, or ask one of your community's owners.
 
 ## If the community gives a date
 

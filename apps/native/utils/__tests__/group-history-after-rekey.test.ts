@@ -957,11 +957,14 @@ describe('confirmation 1 of #1844: a chain in the wrong order, a lookalike name,
         const herRow = (m: any) => (m.memberPubkey === pk(cat2) ? { ...m, formerKeys: [misled] } : m);
         hooks.push(rowsHook(/\/members$/, (rows) => rows.map(herRow)));
         await fromEpoch1(g, pk(cat2));
+        const code = JSON.stringify([NEW_PHONE_QR_TAG, pk(cat2), pk(zed), cat.name]);
+        // Scanned before this phone sees her new row: the move to Zed's key is unconfirmed, so his key never counts.
+        expect(await checkNewPhone({ ...ctx, scanned: code })).toEqual({ ok: false, reason: 'mismatch', text: newPhoneMismatchText(cat.name) });
         await withHook(rowsHook(`/api/groups/${g}/members`, (rows) => noZed(rows).map(herRow)), () => benSees(ben, [g]));
         expect(memoryOf(cat.name)).toEqual({ key: pk(cat2), changedFrom: pk(cat) });
         // The key's names say nothing against it (it was only ever "Catm" here): the memory refuses.
         const check = await withHook(rowsHook(`/api/groups/${g}/members`, (rows) => noZed(rows).map(herRow)),
-            () => checkNewPhone({ ...ctx, scanned: JSON.stringify([NEW_PHONE_QR_TAG, pk(cat2), pk(zed), cat.name]) }));
+            () => checkNewPhone({ ...ctx, scanned: code }));
         expect(check).toEqual({ ok: false, reason: 'mismatch', text: newPhoneMismatchText(cat.name) });
         expect(await topUps(pk(ben), pk(cat2))).toEqual([]);
         expect(elsewhere).toEqual([]);

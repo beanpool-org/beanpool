@@ -1952,6 +1952,18 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, by: 'first-seen', checked: true });
     });
 
+    it('P23b: a restored phone served PUPPET\'s 20 lines (dated after Ben\'s) before Ben\'s 30: by arrival Ben\'s lines are the new end, not the listed key\'s: rule 5, nothing goes (either end read by date would pin)', async () => {
+        await bensHistory(30);
+        const bens = [...node.lines];
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        const puppets = Array.from({ length: 20 }, (_, i) => saysTo(puppet, dm, `PUPPET ${i}`));
+        node.serve = () => [...puppets, ...bens];
+        await restoredPhone();
+        expect(await isDmKeyChangePending(dm.id)).toBe(false);
+        expect(await isDmUnplaced(dm.id)).toBe(true);
+        expect(await sendTo(dm.id, 'Hello Ben', [puppet, ben])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+    });
+
     /** PUPPET's copy of a line, under its id: sealed to Ana as PUPPET's own (Ben's lines) or in Ana's name (hers), marked edited. */
     function rewrittenByPuppet(l: Line): void {
         const text = `PUPPET wrote over ${l.id.slice(0, 4)}`;
@@ -1960,6 +1972,8 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         Object.assign(l, { ciphertext: copy.ciphertext, nonce: copy.nonce, editedAt: new Date().toISOString() });
     }
 
+    // The pin's memory starts at the update (§3.7, amendment 3 companion a): what the phone held then is judged before the
+    // first sync writes, so a rewrite or tombstone the node serves after it moves nothing.
     for (const closed of [false, true]) {
         it(`P24: the update with P21's rows held, and a first sync that rewrites every one of Ben's lines with PUPPET's${closed ? ', the app closed before Ana opens the chat' : ''}: judged on the lines held first, Ben pinned; the rewritten lines show the fixed line, never PUPPET's words`, async () => {
             await bensHistoryHeld(30);

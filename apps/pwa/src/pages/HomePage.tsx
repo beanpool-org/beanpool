@@ -35,7 +35,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
 import {
     NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, dayLabel, dealsLine,
-    decideLine, distanceText, findBody, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, starredFirst,
+    decideLine, distanceText, findBody, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
     SKY_NO_PLACE_LINE, searchCardFor, skyOf, stepLines, toggleInterest,
     type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
@@ -55,6 +55,12 @@ import { loadRadiusSettings } from '../lib/geo';
 import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide } from '../lib/guide';
+import {
+    START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourRecord, tourSteps, type TourProgress,
+} from '@beanpool/core';
+import {
+    keepPendingTourRecord, lendTourHome, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, useTour,
+} from '../lib/tour-store';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
 import { EXAMPLE_BADGE, EXAMPLE_LISTINGS, EXAMPLES_HEADING, EXAMPLES_NOTE, exampleLabel } from '../lib/example-listings';
 import { NO_BEANS_TERMS_TEXT, PLACE_AFTER_JOIN, VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
@@ -175,6 +181,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const [pointProblem, setPointProblem] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
+    /** The tour ended in this browser (Done or Skip) before the account's answer says so (DESIGN-getting-started-fable.md §2). */
+    const [tourOver, setTourOver] = useState(false);
+    const tourOverRef = useRef(false);
+    tourOverRef.current = tourOver;
+    /** A tour part way in this browser, for "Pick up the tour at step n ›". */
+    const [tourProgress, setTourProgress] = useState<TourProgress | null>(null);
+    const { run: tourRun, pendingEnd, pendingAgain } = useTour();
     // The Tips card's record as changed on this landing (Next, Don't show, Edit home); another landing's is not this one's.
     const [tipsChanged, setTipsChanged] = useState<{ landing: string; record: TipsRecord } | null>(null);
     const tipsRef = useRef<TipsRecord | null>(null);
@@ -616,7 +629,82 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
 
     const now = Date.now();
     const myInterests = interests ?? answer?.me?.interests ?? [];
-    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView }) : [];
+    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView, tourOver }) : [];
+    /** The layout edits start from: the one drawn, or the starter set for a Home never saved once the tour has ended. */
+    const drawnBase = () => shownLayout(answerRef.current, drawnRef.current, { tourOver: tourOverRef.current });
+    const startUp = shown.some(c => c.type === 'start');
+
+    // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
+    // The bar is App's (lib/tour-store.ts); Home lends it the chips (Add's own path) and applies the end as it opens: one
+    // layout write, then the account's record. Nothing here starts a tour by itself.
+    const tourNode = { global: String(answer?.profile) === 'global', beans: answer?.features.beans !== false };
+    const tourTotal = tourSteps('web', tourNode).length;
+    const member = !!answer?.me && !answer.welcome && !visitor;
+    const chips = member && answer ? tourChips(frameOf(answer), null, { members: answer.cards.community?.members ?? null }) : [];
+    const addToHomeRef = useRef<(type: string) => void>(() => {});
+    async function sendTourRecord(pk: string, record: ReturnType<typeof tourRecord>) {
+        try {
+            await saveHomePreferences(pk, { tour: record });
+            keepPendingTourRecord(pk, null);
+        } catch (err) {
+            // Offline or a node that is down: kept in this browser and sent on the next Home open. A node that refuses it
+            // outright (4xx: a node from before the tour) drops it, as the phone does: the layout write ends the card here.
+            const status = (err as { status?: number } | null)?.status;
+            keepPendingTourRecord(pk, typeof status === 'number' && status >= 400 && status < 500 ? null : record);
+        }
+    }
+    function applyTourEnd(kind: 'done' | 'skipped') {
+        if (!publicKey) return;
+        const answered = answerRef.current;
+        tourOverRef.current = true;
+        setTourOver(true);
+        setTourProgress(null);
+        if (answered?.me && !answered.welcome) {
+            changeLayout(() => endTourLayout(drawnRef.current, { pinned: pinnedCards(frameOf(answered), Date.now()) }), { reread: true });
+        }
+        if (kind === 'done') { setHintOpen(false); writeFlag(hintKey(publicKey)); }
+        else setHintOpen(!readFlag(hintKey(publicKey)));
+        void sendTourRecord(publicKey, tourRecord(kind));
+    }
+    function tourAgain() {
+        if (!publicKey) return;
+        const answered = answerRef.current;
+        tourOverRef.current = false;
+        setTourOver(false);
+        // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
+        if (answered?.me && drawnRef.current) {
+            const r = addCard(drawnRef.current, 'start', Date.now(), { pinned: pinnedCards(frameOf(answered), Date.now()) });
+            if (r.ok) changeLayout(() => r.layout);
+        }
+        void sendTourRecord(publicKey, tourRecord('open'));
+        startTour(publicKey, tourNode, 0);
+    }
+    useEffect(() => {
+        if (!publicKey || !member) return;
+        const kind = takePendingEnd(publicKey);
+        if (kind) applyTourEnd(kind);
+        if (takeTourAgain(publicKey)) tourAgain();
+    }, [publicKey, member, pendingEnd, pendingAgain]);
+    // A tour part way is read whenever the bar closes; a Done or Skip the node didn't take is sent again.
+    useEffect(() => {
+        if (!publicKey || !member) return;
+        setTourProgress(tourRun ? null : readProgress(publicKey));
+        const pending = pendingTourRecord(publicKey);
+        if (pending && !tourRun) void sendTourRecord(publicKey, pending);
+    }, [publicKey, member, landing, !!tourRun]);
+    const chipsKey = chips.join(',');
+    useEffect(() => {
+        if (!member || !answer) { lendTourHome(null); return; }
+        const profileName = String(answer.profile);
+        lendTourHome({
+            chips,
+            chipName: (t) => cardName(t, profileName),
+            onHome: (t) => listOf(drawnBase()).some(c => c.type === t),
+            addChip: (t) => addToHomeRef.current(t),
+            moreCards: () => setPickerOpen(true),
+        });
+    }, [member, answer, layout, tourOver, chipsKey]);
+    useEffect(() => () => lendTourHome(null), []);
     const interestsShown = shown.some(c => c.type === 'interests');
     // A card shown as Home opened stays open for the visit (a first tap must not take it away).
     useEffect(() => {
@@ -632,7 +720,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         const epoch = landedEpoch();
         const answered = answerRef.current;
         if (epoch === null || !answered?.me || answered.welcome) return false;
-        const before = drawnRef.current;
+        // A Home never saved is the starter set once the tour has ended: edits start from what is drawn.
+        const before = shownLayout(answered, drawnRef.current, { tourOver: tourOverRef.current });
         const next = make(before);
         if (!next) return false;
         if (overRef.current === undefined && !layoutRef.current && layoutV1Of(answered.layout)?.empty) {
@@ -775,11 +864,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
      * left. Remove on Tips does what "Don't show tips again" does: the record holds it too.
      */
     function removeFromHome(id: string, inDialog = false) {
-        const card = shown.find(c => c.id === id) ?? listOf(drawnRef.current).find(c => c.id === id);
+        const card = shown.find(c => c.id === id) ?? listOf(drawnBase()).find(c => c.id === id);
         if (!card) return;
         if (card.type === 'tips') { tipsDontShow(inDialog); return; }
         const name = cardLabelName(card, profile);
-        const onList = listOf(drawnRef.current).some(c => c.id === id);
+        const onList = listOf(drawnBase()).some(c => c.id === id);
         // The interests card opened from Tune without being on the list just closes.
         if (onList && !changeLayout((l) => removeCard(l, id, Date.now(), pins))) return;
         // From Edit home, the dialog keeps focus on its nearest row: the page behind a modal never takes it.
@@ -795,10 +884,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         focusAfterHide.current = [...ids.slice(at + 1), ...ids.slice(0, Math.max(at, 0)).reverse()];
     }
 
+    addToHomeRef.current = (type: string) => addToHome(type);
     /** Add (§1.3): first, under Needs you; the picker closes, the page goes to the top, it is said, and focus goes to its "…". */
     function addToHome(type: string, settings?: Record<string, unknown>) {
         setPickerOpen(false);
-        const r = addCard(drawnRef.current, type, Date.now(), { settings, pinned: pins });
+        const r = addCard(drawnBase(), type, Date.now(), { settings, pinned: pins });
         if (!r.ok) return;
         const mark = { id: r.id, read: false };
         // Read once the save is answered (§2.4); sun and moon is worked out here and needs nothing from the node.
@@ -825,7 +915,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         if (!publicKey || landedEpoch() === null) return;
         if (!inDialog) focusAround('tips');
         keepTips(dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
-        const tipsCard = listOf(drawnRef.current).find(c => c.type === 'tips');
+        const tipsCard = listOf(drawnBase()).find(c => c.type === 'tips');
         if (tipsCard) changeLayout((l) => removeCard(l, tipsCard.id, Date.now(), pins));
         setLive(removedLine(cardTitle('tips', a)));
     }
@@ -965,6 +1055,26 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                                 : <HomeLine key={l.text} onClick={l.go} label={label}>{body}</HomeLine>;
                         })}
                         {limits && <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid="home-steps-limits">{limits}</p>}
+                    </HomeCard>
+                );
+            }
+            case 'start': {
+                // Getting started (DESIGN-getting-started-fable.md §1): no "…", Skip is its remove; it blocks nothing.
+                const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
+                return (
+                    <HomeCard key={id} {...common} menu={undefined}>
+                        <p data-testid="home-start-words" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{START_CARD_WORDS}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button type="button" data-testid="home-start-look"
+                                onClick={() => { if (publicKey) startTour(publicKey, tourNode, resumeStep(tourProgress, tourTotal)); }}
+                                className={`${btn} border-0 bg-emerald-700 hover:bg-emerald-800 text-white focus-visible:ring-emerald-400`}>
+                                {startCardButton(tourProgress, tourTotal)}
+                            </button>
+                            <button type="button" data-testid="home-start-skip" aria-label="Skip the tour" onClick={() => applyTourEnd('skipped')}
+                                className={`${btn} border-0 bg-transparent text-emerald-800 dark:text-emerald-300 focus-visible:ring-emerald-500`}>
+                                Skip
+                            </button>
+                        </div>
                     </HomeCard>
                 );
             }
@@ -1253,7 +1363,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
     // Edit home's rows (§1.3): the cards on Home in order, without the fixed two and a pinned card.
     const editCards = editOpen && !isVisitor
-        ? cardOrder(layout, pins).filter(c => c.type !== FIXED_FIRST && c.type !== FIXED_LAST && !pins.includes(c.type) && cardOnNode(c.type, frameOf(a)))
+        ? cardOrder(shownLayout(a, layout, { tourOver }), pins).filter(c => c.type !== FIXED_FIRST && c.type !== FIXED_LAST && !pins.includes(c.type) && cardOnNode(c.type, frameOf(a)))
         : [];
     const editRows: EditHomeRow[] = editCards.map(c => ({
                 id: c.id,
@@ -1265,7 +1375,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             }));
     // A saved search's distance needs a point the node measures from: the member's area, or the place this browser shared.
     const hasPoint = !!point || !!a.me?.area;
-    const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), layout, null, pins, tipsAllSeen ? { tips: 'All tips seen' } : {}) : null;
+    const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: 'All tips seen' } : {}) : null;
 
     return (
         <div ref={pageRef} className="max-w-xl mx-auto px-4 pt-2 pb-6 min-w-0" data-testid="home-page">
@@ -1292,7 +1402,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                             </button>
                         </p>
                     )}
-                    {i === 0 && hintOpen && !isVisitor && (
+                    {i === 0 && hintOpen && !isVisitor && !startUp && (
                         <p data-testid="home-hint" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
                             <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
                             <button type="button" aria-label="Close this tip" onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}

@@ -11,11 +11,14 @@
  * - Kept in local-config.json as `automationTokens`, this server's own: left out of every backup file, the stager's copy
  *   and the take-over bundle (engine/replication-manifest.ts LOCAL_CONFIG_FIELDS, per-server).
  * - Revoked by any owner; a revoked token is refused on its next request.
+ * - The `agent` scope (admin MCP design §2) is an AI assistant's way in: it reaches `/mcp` and nothing else
+ *   (admin-auth.ts checkAutomationToken refuses it on every other route; agent/mcp-route.ts reads it). It lives
+ *   AGENT_TOKEN_DEFAULT_DAYS unless the owner picks a shorter or longer time, never past AGENT_TOKEN_MAX_DAYS.
  */
 import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, type AutomationTokenRecord } from './config/local-config.js';
 
-export const TOKEN_SCOPES = ['read', 'backups', 'admin'] as const;
+export const TOKEN_SCOPES = ['read', 'backups', 'admin', 'agent'] as const;
 export type TokenScope = (typeof TOKEN_SCOPES)[number];
 
 export const TOKEN_PREFIX = 'bp_';
@@ -24,6 +27,10 @@ const TOKEN_SHAPE = /^bp_([0-9a-f]{12})_([0-9a-f]{64})$/;
 export const TOKEN_NAME_MAX = 60;
 /** At most this many tokens on a node: a list an owner can read in Settings. */
 export const TOKEN_LIMIT = 50;
+const DAY_MS = 24 * 60 * 60_000;
+/** An agent token's life when the owner picks none, and the longest it may have (design §10: 30 days, 90 at most). */
+export const AGENT_TOKEN_DEFAULT_DAYS = 30;
+export const AGENT_TOKEN_MAX_DAYS = 90;
 /** last-used-at is written to local-config.json at most this often per token; the list shows it to the minute. */
 const LAST_USED_WRITE_MS = 60_000;
 
@@ -119,6 +126,11 @@ export function issueAutomationToken(input: { name: unknown; scope: unknown; exp
         const n = Number(input.expiresAt);
         if (!Number.isFinite(n) || n <= now) return { ok: false, error: 'The expiry must be a time in the future' };
         expiresAt = Math.floor(n);
+    }
+    // An agent token's secret sits in a laptop file, readable by any process there: it never lives for ever.
+    if (input.scope === 'agent') {
+        if (expiresAt === null) expiresAt = now + AGENT_TOKEN_DEFAULT_DAYS * DAY_MS;
+        if (expiresAt > now + AGENT_TOKEN_MAX_DAYS * DAY_MS) return { ok: false, error: `An AI assistant's token lives at most ${AGENT_TOKEN_MAX_DAYS} days` };
     }
     const list = records();
     if (list.length >= TOKEN_LIMIT) return { ok: false, error: `This node has ${TOKEN_LIMIT} tokens: revoke one first` };

@@ -2558,11 +2558,18 @@ CREATE TABLE IF NOT EXISTS rekey_audit_log (
 CREATE INDEX IF NOT EXISTS idx_rekey_audit_log_old ON rekey_audit_log(old_pubkey);
 CREATE INDEX IF NOT EXISTS idx_rekey_audit_log_new ON rekey_audit_log(new_pubkey);
 
+-- A completed re-key's succession statement (group chats, DESIGN-group-chat-line-display-fable.md §5): the new key's
+-- signature naming this key as its own before it (`succession_sig`), over the `succession_at` it signed. Set once, by the
+-- member's new key (POST /api/community/me/key-succession), never changed. `succession_stored_at` is this node's clock
+-- when it was set: a delta finds an attested row by it, since `invalidated_at` does not move.
 CREATE TABLE IF NOT EXISTS invalidated_keys (
-    public_key     TEXT PRIMARY KEY,
-    reason         TEXT NOT NULL,
-    invalidated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    rekeyed_to     TEXT
+    public_key           TEXT PRIMARY KEY,
+    reason               TEXT NOT NULL,
+    invalidated_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    rekeyed_to           TEXT,
+    succession_sig       TEXT,
+    succession_at        TEXT,
+    succession_stored_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_invalidated_keys_rekeyed_to ON invalidated_keys(rekeyed_to);
 

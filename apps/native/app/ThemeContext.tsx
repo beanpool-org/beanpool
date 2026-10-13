@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SystemUI from 'expo-system-ui';
 import * as NavigationBar from 'expo-navigation-bar';
 import { lightColors, darkColors, earthColors, slateColors } from '../constants/colors';
+import { onboardingColors } from '../utils/onboarding-colors';
 import {
     type ResolvedTheme,
     type ThemePreference,
@@ -135,6 +136,12 @@ export function useTheme() {
         throw new Error('useTheme must be used within a ThemeProvider');
     }
     return context;
+}
+
+/** Light or dark tokens for the onboarding screens; see utils/onboarding-colors.ts. */
+export function useOnboardingColors() {
+    const { theme } = useTheme();
+    return useMemo(() => onboardingColors(theme), [theme]);
 }
 
 export function useStyles<T extends Record<string, any>>(

@@ -687,10 +687,13 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
 
     it('Safety Backup for a 12-words member: the words note first, the tickbox, then "Add a sign-in as a second way back"', () => {
         const backup = between(src('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'onboardingGuide' && pendingIdentity)");
-        expect(backup).toMatch(/\{wordsMember \? \(\s*<WordsBackupNote \/>/);
+        // The note takes the screen's light/dark tokens (utils/onboarding-colors.ts).
+        expect(backup).toMatch(/\{wordsMember \? \(\s*<WordsBackupNote colors=\{colors\} \/>/);
+        const note = backup.indexOf('<WordsBackupNote colors={colors} />');
         const tick = backup.indexOf("I've saved these words");
         const add = backup.indexOf('WORDS_BACKUP_TEXT.addSignIn');
-        expect(tick).toBeGreaterThan(backup.indexOf('<WordsBackupNote />'));
+        expect(note).toBeGreaterThan(-1);
+        expect(tick).toBeGreaterThan(note);
         expect(add).toBeGreaterThan(tick);
         // The phone's lock for a key the join didn't make, as the protection sheet asks it.
         expect(backup).toMatch(/<LinkSignInSheet[\s\S]*askPhoneLock=\{!pendingWordsAreNew\}/);

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 124,
-  "hash": "74848a18bc20853bb78381b015949ccf9b7feff74c5d9e22b436404dc455e8aa",
+  "version": 125,
+  "hash": "3a7064e39a8bc4f6813ca0b694d889ed11f51f0445002cc4ebdb83532506971f",
   "sections": [
     {
       "id": "about",
@@ -293,7 +293,7 @@
         },
         {
           "type": "p",
-          "text": "An **enterprise** is a shared project that trades in its own name: a community garden, a bakery, a tool library. It is run by **keepers**, led by a **lead keeper**. Keepers can pledge some of their own trust to give the enterprise a credit line."
+          "text": "An **enterprise** keeps going and trades in its own name: a bakery, a tool library, a market stall. It is run by **keepers**, led by a **lead keeper**. Keepers can pledge some of their own trust to give the enterprise a credit line."
         },
         {
           "type": "p",
@@ -563,13 +563,13 @@
           "items": [
             "Some groups are open to anyone. Some need a convenor to approve you. Some are by invitation only.",
             "**Any convenor** can approve and invite members, remove a member or an observer, change a member's or an observer's role, make someone a convenor, remove posts and messages, and edit the group and who can join it.",
-            "**Only the lead convenor** can remove a convenor, or take the convenor role off someone.",
-            "**Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin — admins have no say inside a group.",
+            "**Only the lead convenor** can remove a convenor, or take the convenor role off someone. The group's own vote can also do that.",
+            "**Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin — admins have no say inside a group. Apart from the lead handing it over, only the group's own vote can choose a new lead.",
             "**A suspended convenor:** while a convenor's account is suspended, they cannot use any convenor power, and their own powers as lead wait too. They stay a convenor, and the lead stays the lead; it all works again when the suspension ends. Other convenors carry on as usual, and members keep chatting and posting. A suspended member cannot start or join a group either, until the suspension ends.",
             "**Handing the lead over:** the lead can make someone else the lead. It can be another convenor, or a member, who becomes a convenor at the same time. Once it is done, the lead cannot take it back.",
             "**Leaving, as the lead:** hand the lead over first. If nobody else is in the group, the lead can simply leave.",
             "The last convenor cannot step down or be removed while the group still has other members.",
-            "Groups do not hold binding votes. To ask a group what it thinks, post a Poll to the group.",
+            "**A group's own vote.** A group's members and convenors can vote on the group's own things: choose a new lead convenor, make someone a convenor, make a convenor a member, remove someone from the group, change who can join it, or close it. Any member or convenor can propose one; observers watch but do not vote. Everyone who was a member or convenor when it opened can vote. More than half of them must vote. Removing someone and closing the group need 60% Yes; the rest need more than half. It runs 7 days, or ends sooner once the answer can't change, and then the app carries it out by itself. Votes are secret and cannot be changed. A group's vote never moves Beans and never changes anyone's standing in the community, and admins cannot stop it. You will find it on the group's page, under **Decisions**. To ask a group what it thinks without changing anything, post a Poll to the group.",
             "**A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Only people who were already there on that day take part: members who joined the group by then, or convenors made convenors by then. Anyone who joined, or was made a convenor, after that cannot propose, be proposed or vote, and is not counted. If you leave the group and join again, you count from when you joined again. If nobody who was there is left, no vote can open, and the group's screen says so. Any of those who take part can propose someone from among them, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. While the lead's account is suspended, nothing they do counts as coming back. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. You will find the vote on the group's own screen, above the roster.",
             "**A rogue lead convenor** can be removed by a community Decision. This is coming in a later update."
           ]
@@ -652,7 +652,7 @@
         },
         {
           "type": "p",
-          "text": "On a Decision or a Poll, yes, until the vote closes. On a keeper or convenor vote, no."
+          "text": "On a Decision or a Poll, yes, until the vote closes. On a keeper vote, a group's own vote, or a convenor vote, no."
         },
         {
           "type": "h2",
@@ -970,7 +970,7 @@
             "**Tips:** one short tip at a time about how BeanPool works, for members. Tap **Next** for the next one, or **Read more** to open the page of this guide it comes from. A new tip also shows on your first visit of a new day. The card goes by itself once you have seen every tip, or at once when you tap **Don't show tips again**. Adding it again with **Add a card** starts the tips again from the first one.",
             "**What are you into?:** lets you star categories you like. Members only. It shows when you have no categories starred yet, or when you tap **Tune** on the Market card, and it stays on screen while you pick.",
             "**Your deals:** shows your open deals and deals waiting on you. Not on the global community.",
-            "**Your enterprise:** shows requests waiting to be approved for enterprises you keep. Not on the global community.",
+            "**Your enterprise:** shows requests waiting to be approved for enterprises you keep. It is called **Your project** when the one you keep is a project. Not on the global community.",
             "**Coming up:** upcoming events near you, with your RSVP.",
             "**New in the Market:** the newest listings, with starred categories first. On the global community it is called **Near you**, and the nearest listings come first. Tap **Tune** to pick your interests, or **See all** to open the Market. While there are only a few listings, it may show a couple of example listings, marked as examples, if your community has them turned on.",
             "**Decide:** open Decisions and open polls, as separate lines on the phone. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app it is one line, and tapping it opens Commons. Not on the global community: polls there are in the Market's **Polls**.",
@@ -1200,14 +1200,14 @@
         },
         {
           "type": "p",
-          "text": "The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**. On the global community there is one more, **Your Area**, after **Your Photo**."
+          "text": "The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**. In a web browser on the global community there is one more, **Your Area**, after **Your Photo**. The phone app's first join of the global community has no area step: set it in **Settings**, under **Your area**."
         },
         {
           "type": "ul",
           "items": [
             "**Your Photo:** choose a photo or one of the ready-made pictures. You must pick one before **Next** works. People trade more easily with a face or a picture they recognise.",
             "**← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others.",
-            "**Your Area** (on the global community only): **Roughly where are you?** The global community shows you what's on offer near you: the nearest 500 listings within 250 km. Tap **Use my location**, or **Type a town or suburb**. Your area is kept to about 10 km, never your exact spot: your phone or browser rounds it before it is sent. Other members see how far away you are, and a poll you make is shown at your area. **Skip for now** sends nothing and asks for nothing; you still get in, and you see the newest listings worldwide until you set it. You can change or clear it any time in **Settings**, under **Your area**.",
+            "**Your Area** (in a web browser on the global community, and in the phone app when you join the global community with an account you already have): **Roughly where are you?** The global community shows you what's on offer near you: the nearest 500 listings within 250 km. Tap **Use my location**, or **Type a town or suburb**. Your area is kept to about 10 km, never your exact spot: your phone or browser rounds it before it is sent. Other members see how far away you are, and a poll you make is shown at your area. **Skip for now** sends nothing and asks for nothing; you still get in, and you see the newest listings worldwide until you set it. You can change or clear it any time in **Settings**, under **Your area**.",
             "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community with a sign-in, this step also shows your sign-in protecting your account. If you joined it with 12 words, it says first that these 12 words are your account, and offers **Add a sign-in as a second way back**: you can skip that too.",
             "**How it Works:** a short tour. Tap **Let's Begin!** to start."
           ]
@@ -1636,7 +1636,7 @@
         },
         {
           "type": "p",
-          "text": "You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, and the short tour of how BeanPool works."
+          "text": "You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, roughly where you are (on the global community), and the short tour of how BeanPool works."
         },
         {
           "type": "h2",
@@ -1777,9 +1777,9 @@
           "type": "ul",
           "items": [
             "**A handshake:** a deal is waiting for you. Someone is waiting for you to accept their request, or a deal you are in is not finished yet. If there is one, the tap opens that deal. If there are more, it opens **My Deals**.",
-            "**A ballot box:** a vote you have not cast yet. The tap opens **Commons**, at **Decide**. A vote you cannot cast yet does not count here, for example one that needs you to finish a trade first.",
+            "**A ballot box:** a vote you have not cast yet. The tap opens **Commons**, at **Decide**. If the first vote is one in a group or a keepers' vote in an enterprise, the tap opens that group or enterprise instead. A vote you cannot cast yet does not count here, for example one that needs you to finish a trade first.",
             "**A speech bubble:** an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens **Talk**, at **Messages**, showing only the unread ones.",
-            "**A group of people:** new lines in your groups or event chats. Chats you have muted stay quiet here. The tap opens the chat, or the unread list in **Messages** if there are several.",
+            "**A group of people:** new lines in your groups, enterprise chats or event chats. Chats you have muted stay quiet here. The tap opens the chat, or **Talk**, at **Groups**, if there are several.",
             "**A shield:** only for people who help run your community. It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too."
           ]
         },
@@ -1866,7 +1866,7 @@
         },
         {
           "type": "p",
-          "text": "Under the top bar are the tabs: **Home**, **Market**, **Map**, **Talk**, **Commons** and **Ledger**. The name of each tab sits above its icon."
+          "text": "Under the top bar are the tabs: **Home**, **Market**, **Map**, **Talk**, **Commons** and **Ledger**. The name of each tab sits above its icon. On the phone, a community with no Beans, like the global community, does not show **Commons** or **Ledger**."
         },
         {
           "type": "p",
@@ -1913,9 +1913,9 @@
         {
           "type": "ul",
           "items": [
-            "**Your community:** its name, and whether its server can be reached right now. Tap it to switch to another community or add one.",
+            "**Your community:** its name, and whether its server can be reached right now. On the phone, under it, **Your communities**: tap one to switch to it, or tap **Add a community**.",
             "**Guides:** how BeanPool works, the rules and how decisions are made, and common questions.",
-            "**How to use the app:** one short page for each task, grouped the way the app is: Home, Market, Map, Talk, Pulse, Commons, Ledger and Settings.",
+            "**How to use the app:** one short page for each task, grouped the way the app is: Getting started, Market, Map, Talk, Pulse, Commons, Ledger and Settings and safety.",
             "**The BeanPool project:** what is new in this version, and a link to the website beanpool.org, with a **Share** button to send it to a friend."
           ]
         },
@@ -1992,7 +1992,7 @@
             "**About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.",
             "**About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**.",
             "**Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual** in the side bar.",
-            "**Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**."
+            "**Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**. If the phone then shows two digits, type them on the computer within 30 seconds."
           ]
         },
         {
@@ -2356,7 +2356,8 @@
             "**Posting an Offer or a Need:** use **New Post** on the **Map** page.",
             "**Appearance:** the choice is called **Same as device** instead of \"Same as phone\".",
             "**Blocking:** Settings says **Manage Blocked Members**. Your community keeps your blocks with your account, so they come back when you sign in on any browser, and signing out leaves nothing about them on the computer. The people who run your community's server can see whom you blocked. Blocking and unblocking need a connection: without one, the web app says so and nothing changes. Blocks made in the phone app stay on the phone and do not show here.",
-            "**Chats:** the web chat has **Report** and **Block** buttons at the top."
+            "**Chats:** the web chat has **Report** and **Block** buttons at the top.",
+            "**Your area:** on the global community the web app's Settings has **Your area** too, and its Market and Map start from it. See \"Your area\"."
           ]
         },
         {
@@ -2425,7 +2426,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first."
+          "text": "Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first. If you have already let the app use your location, the list and compact views show listings nearest first instead, under **Nearest first**, with polls under **Polls**. **For You** keeps its own order."
         },
         {
           "type": "p",
@@ -2433,7 +2434,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community, the web app shows the listings near you first: the nearest within your **Distance**, or within 250 km of your area (the rough place you give the community when you join, or in **Settings**), each with how far it is. A line above the list says which. Near your area it has **Show everywhere** for the newest from everywhere; with a **Distance**, open **Distance** and tap **Reset** for that. See \"Finding things near you\"."
+          "text": "On the global community, the web app shows the listings near you first: the nearest within your **Distance**, or within 250 km of your area (the rough place you give the community when you join, or in **Settings**), each with how far it is. A line above the list says which. Near your area it has **Show everywhere** for the newest from everywhere; with a **Distance**, open **Distance** and tap **Reset** for that. On the phone, the global community keeps the listings nearest your area, so those are what the Market shows. See \"Finding things near you\"."
         },
         {
           "type": "p",
@@ -2449,7 +2450,7 @@
         },
         {
           "type": "p",
-          "text": "Type in **Search marketplace...** at the top. On a small phone it may just say **Search**. The search also finds related words: \"fruit\" finds \"lemon\". Without a connection, it searches what is already on your phone."
+          "text": "Type in **Search marketplace...** at the top. On a small phone it may just say **Search**. The search also finds related words: \"fruit\" finds \"lemon\". It finds words in Chinese, Japanese and Thai too, and leaves out posts by people you have blocked. Without a connection, it searches what is already on your phone."
         },
         {
           "type": "h2",
@@ -3104,6 +3105,14 @@
         },
         {
           "type": "h2",
+          "text": "On the global community, on the phone"
+        },
+        {
+          "type": "p",
+          "text": "The phone keeps the listings nearest your area: up to 500, within 250 km. It also keeps your own listings, and any you have a deal, a chat or an answer on. The Market and the Map show what the phone keeps. With no area set, it keeps the newest listings instead, and a line above the Market says so. See \"Your area\"."
+        },
+        {
+          "type": "h2",
           "text": "Events near you"
         },
         {
@@ -3238,13 +3247,14 @@
             "Locking proves a message came from one of the two of you, not which one: the other person, with the help of the people who run your server, could put words in your name.",
             "All of this rests on your app having the other person's real key, which it gets from your community's server, as the encryption itself does. In the web app it also rests on the app itself, which your community's server sends to your browser. The phone app comes from the app store.",
             "A message that cannot be locked is not sent. If the app cannot find the other person's key yet, or locking fails, your words stay in the message box with a line saying so. Send again in a moment. Your community's server also refuses a message between two people that is not locked.",
-            "The notices BeanPool adds to a chat about a deal are not encrypted: beans held for the trade, paid out, or given back when it is cancelled, the amount, and how an admin settled a stuck trade and why. The people who run your community's server can read them.",
+            "The notices BeanPool adds to a chat about a deal are not encrypted: Beans held for the trade, paid out, or given back when it is cancelled, the amount, and how an admin settled a stuck trade and why. The people who run your community's server can read them.",
             "The server also knows who messaged whom, and when, which message each one answers, and sees the emoji reactions. A message an older version of the app sent without the lock stays readable on the server.",
-            "Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them, and the server could write in them in anyone's name.",
+            "A group's chat on the phone is **end-to-end encrypted** too: only the group's members can read it, and the people who run your community's server cannot. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions. You see a group's chat only from the day you joined: nothing written before is shown, and your phone never holds the key to it. A message that cannot be locked is not sent. A line that cannot be checked as written by a member reads **This message couldn't be verified.**, as nobody's. If your community's server is older and cannot lock group chats yet, the chat says so, and the server can read it. When the server is updated, those earlier messages are removed, and a line in the chat says so. See \"Groups\".",
+            "The web app cannot yet read or write in a group's chat: your community's server turns away a group message that is not locked, and the web app does not lock them. Use the phone for a group's chat.",
+            "Enterprise and event chats are not encrypted. The people who run your community's server can read them, and the server could write in them in anyone's name.",
             "A chat between two people can never be turned into one of those. Once your app has seen a chat as one between two people, or it holds an encrypted message, it stays one, whatever the server says: it opens only as that chat, with all the checks above, and what you send in it is always locked. A phone or browser that has never seen the chat, and is given none of its encrypted messages, can't tell: to it, such a chat looks like any other group's chat, readable by the server. In the web app that also goes for a browser that has been signed out since, a private window, or one whose site data was cleared: the web app forgets which chats were between two people. The phone app keeps that list.",
             "Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.",
             "Deleting your account does the same to every message you wrote, in every kind of chat, and deletes the photos you sent. See \"Leaving or deleting your account\".",
-            "A group's chat can also be read by the group's members.",
             "An event's chat can also be read by the host and everyone going.",
             "An enterprise's chat can be read by any member of your community. It is the enterprise's public discussion, the same one its page shows, and anyone in the community can write in it too. It is not a private chat for its keepers."
           ]
@@ -3314,7 +3324,7 @@
         {
           "type": "ul",
           "items": [
-            "In **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form.",
+            "In **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form. (On the **Projects** or **Enterprises** chip, the **+** starts a project or an enterprise instead.)",
             "Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.",
             "Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group** and **Guild**.",
             "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
@@ -3352,7 +3362,7 @@
           "type": "ul",
           "items": [
             "Tap the group's name at the top of the chat to see the group: its members, **Leave Group**, and for convenors, **Convenor Tools**.",
-            "The **⋮** menu has **Invite people** (convenors), **Mute notifications** and **Group info**.",
+            "The **⋮** menu has **Invite people** (convenors), **Mute notifications**, **Search this chat** and **Group info**. The search runs on your phone, not on your community's server.",
             "Joins, leaves and role changes show in the chat as small grey lines.",
             "Write **@** and someone's name to alert them. See \"Mentions\".",
             "The newest message sits just above the message box, and stays there when the keyboard opens. Scroll up to read back; a new message arriving then waits for you rather than dragging you down."
@@ -3360,7 +3370,21 @@
         },
         {
           "type": "p",
-          "text": "A group's chat is not end-to-end encrypted. Its members and the people who run your community's server can read it. The chat says so above the message box. Private things belong in a chat between two people."
+          "text": "A group's chat on the phone is end-to-end encrypted: only the group's members can read it, not the people who run your community's server. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "You see the chat only from the day you joined. Nothing written before is shown, and your phone never holds the key to it.",
+            "When someone is removed, or leaves, the group makes a new key. In a group of 10 or more the chat says **Securing the chat for N people…** while your phone makes it.",
+            "A message that cannot be locked is not sent. It shows **! not delivered**, and a line above the message box can say why. Tap it to **Resend** or **Discard** it.",
+            "A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**",
+            "If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The web app cannot yet read or write in a group's chat; use the phone. An enterprise's chat is not encrypted: see \"Messages\"."
         },
         {
           "type": "h2",
@@ -3437,7 +3461,7 @@
         },
         {
           "type": "p",
-          "text": "A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. On the global community it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it, and that its chat is not private."
+          "text": "A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. On the global community it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it, and who can read its chat."
         },
         {
           "type": "ul",
@@ -3485,7 +3509,7 @@
         },
         {
           "type": "p",
-          "text": "**Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin."
+          "text": "**Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin. Apart from the lead handing it over, only a vote of the group can choose a new lead. See \"Votes in a group\"."
         },
         {
           "type": "p",
@@ -3509,7 +3533,7 @@
         },
         {
           "type": "p",
-          "text": "**When the lead goes quiet.** Nobody can take the lead off the lead, so a lead who stops using the app would leave the group stuck. After 30 days with no activity from them, the group can vote a new lead in instead. Open the group and look just above the **Roster**: a panel appears there naming the lead and how long they have been away. Nothing shows while a group's lead is active — apart from one line saying how the last vote ended, which stays for two weeks after it closes."
+          "text": "**When the lead goes quiet.** After 30 days with no activity from the lead, the group has a second way to vote a new lead in. (Its members can also vote for a new lead at any time: see \"Votes in a group\".) Open the group and look just above the **Roster**: a panel appears there naming the lead and how long they have been away. Nothing shows while a group's lead is active — apart from one line saying how the last vote ended, which stays for two weeks after it closes."
         },
         {
           "type": "p",
@@ -3563,7 +3587,7 @@
         },
         {
           "type": "p",
-          "text": "**Being told.** Everyone on the vote but the person who proposed it gets one notification when it opens, unless they muted the group's chat or turned chat notifications off. It names nobody: it says a vote opened in one of your groups. Tap it and the group opens on its **Decisions**. On Home, an open vote you haven't cast shows under **Needs you** and opens the group too."
+          "text": "**Being told.** Everyone on the vote but the person who proposed it gets one notification when it opens, unless they muted the group's chat or turned chat notifications off. It names no person: its title is the group's name and it says a vote opened. Tap it and the group opens on its **Decisions**. On Home, an open vote you haven't cast shows under **Needs you** and opens the group too."
         },
         {
           "type": "p",
@@ -3581,7 +3605,7 @@
           "type": "ul",
           "items": [
             "Removing a rogue lead convenor by a community Decision. Coming in a later update.",
-            "Groups in the web app. Today the new Groups list, chats and invitations are in the phone app."
+            "A group's chat and invitations in the web app. Today they are in the phone app. The web app's Commons can list groups, start one, join one and vote in one, but it cannot read or write in a group's chat."
           ]
         }
       ]
@@ -3639,7 +3663,7 @@
         },
         {
           "type": "p",
-          "text": "Some members are chosen by the community to welcome newcomers. They can vouch for a new member, which gives that person a small credit line to start with. On the person's profile, they tap **Vouch for Member** and choose **Light** (25), **Standard** (50) or **Deep** (100). No beans leave the voucher's own wallet."
+          "text": "Some members are chosen by the community to welcome newcomers. They can vouch for a new member, which gives that person a small credit line to start with. On the person's profile, they tap **Vouch for Member** and choose **Light** (25), **Standard** (50) or **Deep** (100). No Beans leave the voucher's own wallet."
         },
         {
           "type": "p",
@@ -4141,7 +4165,7 @@
           "items": [
             "A Decision is for something your community's server can carry out: removing or suspending a member, freezing or unfreezing someone's credit, choosing who may vouch, or paying beans from the Commons. For anything else, start a Poll instead.",
             "A Decision cannot remove or suspend an owner or admin of your community's server. See \"Rules and how decisions work\".",
-            "You can propose once you have completed a trade, or an admin has given you a trust badge. A vouch alone is not enough.",
+            "You can propose once you have completed a trade, or an admin has given you a trust badge. Your community's admins can always propose. A vouch alone is not enough.",
             "You can have one open Decision at a time.",
             "The global community has no Decisions, so there is nothing to propose there. See \"Voting on a Decision\"."
           ]
@@ -4432,7 +4456,7 @@
             "A **Description**, and a photo if you like.",
             "**Note for people who are going:** only they will see it. A good place for the exact address or a gate code.",
             "**Who can see it:** your whole community, or one group.",
-            "If you keep a project or enterprise or look after a group, **Post as** lets you post the event in its name. A group hosts for its own members only; an enterprise hosts for the whole community, so an enterprise event is never group-only.",
+            "If you keep a project or enterprise or are a convenor of a group, **Post as** lets you post the event in its name. A group hosts for its own members only; an enterprise hosts for the whole community, so an enterprise event is never group-only.",
             "Tap **Create**. Your event is in the Market and on the Map."
           ]
         },
@@ -4514,7 +4538,7 @@
         },
         {
           "type": "p",
-          "text": "At the bottom, **Report Enterprise** if something is wrong."
+          "text": "At the bottom, **Report Enterprise** (**Report Project** on a project) if something is wrong."
         },
         {
           "type": "h2",
@@ -4594,7 +4618,7 @@
           "items": [
             "Open the enterprise.",
             "Under **Ask to join as a keeper**, enter how much of your trust to back it with. Zero is allowed.",
-            "Tap **Request to join as keeper**."
+            "Tap **Request to join as a keeper**."
           ]
         },
         {
@@ -4624,7 +4648,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **Step down as keeper**, then **Step down**."
+          "text": "Tap **Step down as a keeper**, then **Step down**."
         },
         {
           "type": "ul",
@@ -4703,7 +4727,8 @@
           "type": "ul",
           "items": [
             "the 1.5% market fee on every completed trade;",
-            "the circulation fee on large balances. See \"The circulation fee\"."
+            "the circulation fee on large balances. See \"The circulation fee\".",
+            "members who pay in themselves, with **Pay the Commons** on the **Ledger**. A member paying back a debt to the Commons enters the pay-back code an admin shared, and the payment comes off the debt at once."
           ]
         },
         {
@@ -5047,7 +5072,7 @@
         {
           "type": "ul",
           "items": [
-            "**Ledger**, then **Levels:** your badge, how much trust you have, and how much more to the next. **All levels** shows every badge; ones you have not reached yet are marked with a lock. That only means \"not yet\", not that something is locked away.",
+            "**Ledger**, then **Levels:** your badge, how much trust you have, and how much more to the next. **All levels** shows every badge. One you have not reached yet says **Next level** or **Up ahead**, with how much trust it takes: something to grow into, never something kept from you.",
             "**What builds your trust:** how much you have traded, with how many people, and your rating.",
             "On posts and profiles, next to each member's name."
           ]
@@ -5273,8 +5298,9 @@
           "type": "ul",
           "items": [
             "Chats between two people are end-to-end encrypted: a message that cannot be locked is not sent. The notices BeanPool adds to a chat about a deal, such as its amount, are not encrypted. See \"Messages\".",
+            "On the phone, a group's chat is end-to-end encrypted too, on a community whose server has been updated to lock group chats: the server holds scrambled words. It still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions. The chat says whether it is locked. On a server that has not been updated, it can still read the group's chat.",
             "Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See \"The Pulse\".",
-            "Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust.",
+            "Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats, enterprise chats, and group chats on a server that has not been updated to lock them. Choose a community whose people you trust.",
             "If you delete your account, every message you wrote reads **This message was deleted** and the photos you sent are deleted. The server's own daily copies made before then keep them for up to 14 days. A backup an owner downloaded keeps them until the owner deletes it. See \"Leaving or deleting your account\".",
             "If you linked a sign-in account, joined with one, or added one later, your community's server keeps a locked copy of your account for it. The people who run that server can open it. Only your 12 words need nobody. See \"Getting your account back\".",
             "On the global community, its moderators can see which accounts joined from the same internet connection within a day of each other, but never the connection itself, so they can deal with a burst of fake accounts in one go. See \"Reporting a problem\".",
@@ -5790,7 +5816,7 @@
         },
         {
           "type": "p",
-          "text": "Alerts about someone trying to recover your account always come through. You cannot turn those off."
+          "text": "Two alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, and that an admin started moving your account to a new phone. If you run your community's server, its alerts about the server always come through too."
         },
         {
           "type": "h2",

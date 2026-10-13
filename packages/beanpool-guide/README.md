@@ -82,4 +82,4 @@ pnpm test
 If the check says a change "edits the pages AND publishes them", restore main's published copy with the `git checkout <commit> -- packages/beanpool-guide/generated apps/website/guide` it prints, then run `generate`.
 
 ### 4.1 Website Isolation
-Per protocol policy, the operator manual is not published on the public website (`PUBLISH_OPERATORS_WEBSITE = false`). The website output directory `apps/website/guide/` contains zero operator pages or operator image assets.
+Only one page of the operator manual is published on the public website: First-time setup (`OPERATOR_PAGES_ON_WEBSITE = ['first-time-setup']` in `scripts/build.mjs`; Marty, 2026-10-13). The rest stays in node Settings until the security weak spots it describes are fixed (Marty, 2026-09-19). `apps/website/guide/operators/` holds only `first-time-setup.html` and its one picture, `images/cold-start.webp`: no index, no `operators.json`. A Related page that is not published is named there without a link.

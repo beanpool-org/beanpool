@@ -17,7 +17,7 @@ import { NEW_PHONE_CONFIRM_ACTION, newPhoneConfirmText, newPhoneDoneText, newPho
 export { ErrorBoundary };
 
 type Step = { kind: 'scan' } | { kind: 'checking' } | { kind: 'refused'; text: string } | { kind: 'confirm'; check: Extract<NewPhoneCheck, { ok: true }> }
-    | { kind: 'handing'; check: Extract<NewPhoneCheck, { ok: true }>; handed: number } | { kind: 'done'; text: string };
+    | { kind: 'handing'; check: Extract<NewPhoneCheck, { ok: true }>; handed: number; planned: number | null } | { kind: 'done'; text: string };
 
 export default function ConfirmNewPhoneScreen() {
     const { colors } = useTheme();
@@ -38,10 +38,10 @@ export default function ConfirmNewPhoneScreen() {
     };
 
     const confirm = async (check: Extract<NewPhoneCheck, { ok: true }>) => {
-        setStep({ kind: 'handing', check, handed: 0 });
+        setStep({ kind: 'handing', check, handed: 0, planned: null });
         try {
-            const r = await confirmScannedNewPhone(check, (n) => setStep({ kind: 'handing', check, handed: n }));
-            setStep({ kind: 'done', text: r.stopped ? `${newPhoneProgressText(r.total)} The community asked this phone to slow down: scan again in a minute to carry on.` : newPhoneDoneText(check.name) });
+            const r = await confirmScannedNewPhone(check, (n, m) => setStep({ kind: 'handing', check, handed: n, planned: m }));
+            setStep({ kind: 'done', text: r.stopped ? `${newPhoneProgressText(r.total, r.planned)} The community asked this phone to slow down: scan again in a minute to carry on.` : newPhoneDoneText(check.name) });
         } catch (e: any) {
             setStep({ kind: 'refused', text: e?.message || 'Something went wrong. Try again in a moment.' });
         }
@@ -95,9 +95,9 @@ export default function ConfirmNewPhoneScreen() {
                     </Pressable>
                 </>
             )}
-            {step.kind === 'handing' && (
-                <Text style={[styles.body, { color: colors.text.secondary }]} accessibilityLiveRegion="polite">{newPhoneProgressText(step.handed)}</Text>
-            )}
+            {step.kind === 'handing' && (step.planned === null ? <ActivityIndicator /> : (
+                <Text style={[styles.body, { color: colors.text.secondary }]} accessibilityLiveRegion="polite">{newPhoneProgressText(step.handed, step.planned)}</Text>
+            ))}
             {step.kind === 'done' && <Text style={[styles.body, { color: colors.text.body }]} accessibilityLiveRegion="polite">{step.text}</Text>}
             <Pressable style={styles.secondaryBtn} onPress={() => router.back()} accessibilityRole="button">
                 <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{step.kind === 'done' ? 'Done' : 'Cancel'}</Text>

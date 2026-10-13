@@ -61,6 +61,7 @@ import { signedGet, signedPost } from '../node-post';
 import { groupKeyring, memoryGroupKeyStore, forgetGroupKeys, joinGroupWithEpoch, type GroupKeyStore } from '../group-chat-keys';
 import {
     unlockWithOldWords, oldKeyFromWords, newPhoneQrPayload, parseNewPhoneQr, checkNewPhone, confirmNewPhone, newPhoneConfirmText, NEW_PHONE_QR_TAG,
+    handOversHeld, noteConfirmations, confirmedNotes, newPhoneProgressText,
 } from '../group-history-unlock';
 import { rememberRosterNames } from '../name-key-memory';
 import { sendSealedGroupLine, openGroupThread, chatIsLocked } from '../group-chat-lines';
@@ -401,6 +402,10 @@ describe('path B: a member confirms the new phone in person (design §4, S3)', (
         const zedCode = JSON.stringify([NEW_PHONE_QR_TAG, pk(cat2), pk(phone('Zed')), 'Cata']);
         expect(await checkNewPhone({ ...ctx, scanned: zedCode })).toMatchObject({ ok: false, reason: 'mismatch' });
 
+        // What her new phone holds from other members while its code is on screen (new-phone-code.tsx): nothing yet.
+        const catBefore = await handOversHeld(URL_BASE, cat2.identity, cat2.store, groups);
+        expect(catBefore.size).toBe(0);
+
         const check = await checkNewPhone({ ...ctx, scanned: code });
         expect(check.ok).toBe(true);
         if (!check.ok) return;
@@ -422,8 +427,8 @@ describe('path B: a member confirms the new phone in person (design §4, S3)', (
         };
         hooks.push(doctor);
         const mark = bodies.length;
-        const counted = { opens: 0 };
-        const done = await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check, onProgress: () => { counted.opens++; } });
+        const progress: [number, number][] = [];
+        const done = await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check, onProgress: (n, m) => { progress.push([n, m]); } });
         hooks.splice(hooks.indexOf(doctor), 1);
         expect(done.stopped).toBe(false);
         // Expected, from the node's rows: {e : Cata's old key ∈ rec(e), her new key ∉ rec(e)} in the shared groups (Ben holds
@@ -437,6 +442,12 @@ describe('path B: a member confirms the new phone in person (design §4, S3)', (
         expect(expected.length).toBeGreaterThan(0);
         expect((await topUps(pk(ben), pk(cat2))).sort()).toEqual(expected.sort());
         expect(done.total).toBe(expected.length);
+        // "N of M": the whole list is made before the first wrap, so M is known from the start and N reaches it.
+        expect(done.planned).toBe(expected.length);
+        expect(progress[0]).toEqual([0, expected.length]);
+        expect(progress[progress.length - 1]).toEqual([expected.length, expected.length]);
+        expect(new Set(progress.map(([, m]) => m))).toEqual(new Set([expected.length]));
+        expect(newPhoneProgressText(42, 120)).toBe('Unlocking 42 of 120…');
         expect(posts(mark, /\/keys\/wrap$/).length).toBe(expected.length);
         expect(posts(mark, /\/keys\/wrap$/).every((b) => JSON.parse(b.body).recipient === pk(cat2))).toBe(true);
         expect((await topUps(pk(ben), pk(cat2))).filter((x) => x.startsWith(without))).toEqual([]);
@@ -445,6 +456,13 @@ describe('path B: a member confirms the new phone in person (design §4, S3)', (
         const benEpochs = (await sql('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ? AND group_id IN (?, ?, ?)', [pk(ben), ...groups.map((g) => g.id)]))[0].n;
         expect(wrapsReads).toBeLessThanOrEqual(benEpochs);
         console.log(`MEASURED path B: handed ${done.total} = expected ${expected.length} across ${groups.length} shared groups under doctoring; wraps reads ${wrapsReads} ≤ Ben's epochs ${benEpochs}`);
+        // Her new phone keeps its own note of who confirmed it: Ben, by the name the members list gives the key that
+        // wrapped keys which open on her phone. Nothing about it is posted (the only posts are Ben's wraps, counted above).
+        const notesMark = bodies.length;
+        const notes = await noteConfirmations({ nodeUrl: URL_BASE, identity: cat2.identity, store: cat2.store, groups, before: catBefore });
+        expect(notes.map((n) => n.name)).toEqual(['Benn']);
+        expect((await confirmedNotes(URL_BASE, pk(cat2))).map((n) => n.name)).toEqual(['Benn']);
+        expect(bodies.slice(notesMark).filter((b) => b.method !== 'GET')).toEqual([]);
         // Her new phone reads them, under the names.
         forgetGroupKeys();
         for (const g of groups) expect(await reads(cat2, g.id)).toEqual(expect.arrayContaining([`Cata: Cat in ${g.name}`, `Dove: Dov in ${g.name}`]));

@@ -30,7 +30,10 @@ import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDe
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
 import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
-import { unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, type HistoryGroup, type NewPhoneCheck, type OldWordsResult } from './group-history-unlock';
+import {
+    unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, handOversHeld, noteConfirmations, confirmedNotes,
+    type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
+} from './group-history-unlock';
 import { oldKeySignedHere, rekeysToMe } from './key-succession';
 import { sqliteGroupKeyStore } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT } from './group-chat-lines';
@@ -6572,9 +6575,22 @@ export async function checkScannedNewPhone(scanned: string, groups: HistoryGroup
 }
 
 /** "Confirm" (§4): hand the confirmed phone the epochs whose record names the old key this phone remembers. */
-export async function confirmScannedNewPhone(check: Extract<NewPhoneCheck, { ok: true }>, onProgress?: (handed: number) => void) {
+export async function confirmScannedNewPhone(check: Extract<NewPhoneCheck, { ok: true }>, onProgress?: (handed: number, planned: number) => void) {
     const { nodeUrl, identity } = await groupKeyContext();
     return confirmNewPhone({ nodeUrl, identity, store: groupKeyStore(), check, onProgress });
+}
+
+/** While this new phone's code is on screen (§4): the keys other members had already handed it, to compare with later. */
+export async function newPhoneHandOvers(groups: HistoryGroup[]): Promise<Set<string>> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return handOversHeld(nodeUrl, identity, groupKeyStore(), groups);
+}
+
+/** The members who confirmed this phone since `before`, kept as local notes; every note, newest first. */
+export async function newPhoneConfirmedNotes(before: Set<string> | null, groups: HistoryGroup[]): Promise<ConfirmedNote[]> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    if (!before) return confirmedNotes(nodeUrl, identity.publicKey);
+    return noteConfirmations({ nodeUrl, identity, store: groupKeyStore(), groups, before });
 }
 
 let _groupKeyStore: GroupKeyStore | null = null;

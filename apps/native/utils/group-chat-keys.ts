@@ -749,17 +749,31 @@ export class GroupKeyring {
      * `newKey`, and nothing else. The caller has checked on this phone that `oldKey` is the key this phone itself
      * remembers under the member's name (name-key-memory.ts) and that `newKey` is the code scanned from the phone in front
      * of the member (group-history-unlock.ts checkNewPhone). The node is in none of the three: a roster, a chain,
-     * `missing` or a members answer it doctors changes nothing here. At most one open and one wrap per epoch. Stops at
-     * the node's speed limit (`stopped`): the screen tries again.
+     * `missing` or a members answer it doctors changes nothing here. One wraps read per epoch held.
      */
-    async handToConfirmedPhone(oldKey: string, newKey: string, onEach?: (handed: number) => void): Promise<{ handed: number[]; stopped: boolean }> {
+    async epochsForConfirmedPhone(oldKey: string, newKey: string): Promise<number[]> {
         await this.ensureLoaded();
-        const handed: number[] = [];
-        if (oldKey === newKey || newKey === this.identity.publicKey || oldKey === this.identity.publicKey) return { handed, stopped: false };
+        const plan: number[] = [];
+        if (oldKey === newKey || newKey === this.identity.publicKey || oldKey === this.identity.publicKey) return plan;
         for (const epoch of [...this.epochs.keys()].sort((x, y) => x - y)) {
             if (!this.holdsWrap(epoch)) continue;
             const set = await this.signedRecipientsWith(epoch, oldKey);
             if (!set || !set.has(oldKey) || set.has(newKey)) continue;
+            plan.push(epoch);
+        }
+        return plan;
+    }
+
+    /**
+     * Hands `newKey` the epochs of `plan`, the list epochsForConfirmedPhone made for these two keys (so the screen can say
+     * "N of M" before the first wrap): at most one open and one wrap per epoch. Stops at the node's speed limit
+     * (`stopped`): the screen tries again.
+     */
+    async handToConfirmedPhone(oldKey: string, newKey: string, plan: readonly number[], onEach?: (handed: number) => void): Promise<{ handed: number[]; stopped: boolean }> {
+        await this.ensureLoaded();
+        const handed: number[] = [];
+        if (oldKey === newKey || newKey === this.identity.publicKey || oldKey === this.identity.publicKey) return { handed, stopped: false };
+        for (const epoch of plan) {
             const key = await this.keyFor(epoch);
             if (!key) continue;
             const t = makeTopUp(key, { myEdPrivHex: this.identity.privateKey, groupId: this.groupId, epoch, recipientPubHex: newKey });
@@ -770,6 +784,22 @@ export class GroupKeyring {
             // 409 wrap_exists (her phone or another member got there first), 403, 404: nothing more to do for this epoch.
         }
         return { handed, stopped: false };
+    }
+
+    /**
+     * The wraps this phone holds that another member made for it after the epoch's maker (top-ups): who wrapped which
+     * epoch. The new phone reads it before and after a member's in-person confirmation, for its local "Confirmed by" note
+     * (DESIGN-group-history-after-rekey-fable.md §4). Only wraps that open here count.
+     */
+    async toppedUpBy(): Promise<{ epoch: number; wrapper: string }[]> {
+        await this.ensureLoaded();
+        const out: { epoch: number; wrapper: string }[] = [];
+        for (const [epoch, e] of this.epochs) {
+            const w = e.wrap?.wrapper;
+            if (!w || w === e.record.createdBy || w === this.identity.publicKey) continue;
+            if (await this.keyFor(epoch)) out.push({ epoch, wrapper: w });
+        }
+        return out;
     }
 }
 

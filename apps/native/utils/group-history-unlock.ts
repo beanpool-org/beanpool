@@ -26,6 +26,7 @@ import { signedGet, signedPost } from './node-post';
 import { groupKeyring, type GroupKeyStore } from './group-chat-keys';
 import { makeTopUp, openMyKey, verifiedFormerKeys, verifyGroupEpochRecord, type GroupEpochRecord, type GroupServedWrap } from './group-chat-crypto';
 import { keysThisPhoneKnewFor } from './name-key-memory';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ─── What the screens say (§7, §3, §4) ──────────────────────────────────────────────────────────────────────────────
 
@@ -96,11 +97,15 @@ export function newPhoneConfirmText(name: string, groups: readonly string[]): st
     return `You're confirming this is ${name}'s new phone. Their old key wrote in ${groups.length} ${groups.length === 1 ? 'group' : 'groups'} you share: ${list}. `
         + `Only confirm if this phone is in ${name}'s hands: whoever holds it can read those groups' earlier messages that you can.`;
 }
-export function newPhoneProgressText(done: number): string {
-    return `Unlocking… ${done} handed over so far.`;
+export function newPhoneProgressText(done: number, total: number): string {
+    return `Unlocking ${done} of ${total}…`;
 }
 export function newPhoneDoneText(name: string): string {
     return `Done. ${name}'s new phone can read those conversations.`;
+}
+/** The new phone's own note of who confirmed it (§4): kept on this phone only, never published. */
+export function confirmedByText(name: string, at: number): string {
+    return `Confirmed by ${name}, ${new Date(at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`;
 }
 
 // ─── Path A: the old 12 words (§3) ──────────────────────────────────────────────────────────────────────────────────
@@ -308,7 +313,8 @@ export async function checkNewPhone(input: {
 
 /**
  * "Confirm" (§4): for each shared group, hand the new key the epochs this phone holds whose signed record names the old
- * key and not the new one (GroupKeyring.handToConfirmedPhone). Returns how many went per group, and whether the node's
+ * key and not the new one (GroupKeyring.epochsForConfirmedPhone, then handToConfirmedPhone). Every group's list is made
+ * first, so progress reads "N of M". Returns how many went per group, how many were planned, and whether the node's
  * speed limit stopped it (the screen offers to carry on).
  */
 export async function confirmNewPhone(input: {
@@ -316,17 +322,98 @@ export async function confirmNewPhone(input: {
     identity: BeanPoolIdentity;
     store: GroupKeyStore;
     check: Extract<NewPhoneCheck, { ok: true }>;
-    onProgress?: (handed: number) => void;
-}): Promise<{ handed: Record<string, number>; total: number; stopped: boolean }> {
-    const handed: Record<string, number> = {};
-    let total = 0;
+    onProgress?: (handed: number, planned: number) => void;
+}): Promise<{ handed: Record<string, number>; total: number; planned: number; stopped: boolean }> {
+    const { oldKey, newKey } = input.check;
+    const plans: { ring: ReturnType<typeof groupKeyring>; id: string; epochs: number[] }[] = [];
     for (const g of input.check.groups) {
         const ring = groupKeyring(input.nodeUrl, input.identity, g.id, input.store);
         await ring.sync().catch(() => null);
-        const r = await ring.handToConfirmedPhone(input.check.oldKey, input.check.newKey, (n) => input.onProgress?.(total + n));
-        handed[g.id] = r.handed.length;
-        total += r.handed.length;
-        if (r.stopped) return { handed, total, stopped: true };
+        plans.push({ ring, id: g.id, epochs: await ring.epochsForConfirmedPhone(oldKey, newKey) });
     }
-    return { handed, total, stopped: false };
+    const planned = plans.reduce((n, p) => n + p.epochs.length, 0);
+    const handed: Record<string, number> = {};
+    let total = 0;
+    input.onProgress?.(0, planned);
+    for (const p of plans) {
+        const r = await p.ring.handToConfirmedPhone(oldKey, newKey, p.epochs, (n) => input.onProgress?.(total + n, planned));
+        handed[p.id] = r.handed.length;
+        total += r.handed.length;
+        if (r.stopped) return { handed, total, planned, stopped: true };
+    }
+    return { handed, total, planned, stopped: false };
+}
+
+// ─── The new phone's note of who confirmed it (§4) ─────────────────────────────────────────────────────────────────
+
+/** Per group, the epochs another member wrapped to this phone (GroupKeyring.toppedUpBy), as "epoch:wrapper". */
+export async function handOversHeld(nodeUrl: string, identity: BeanPoolIdentity, store: GroupKeyStore, groups: readonly HistoryGroup[]): Promise<Set<string>> {
+    const out = new Set<string>();
+    for (const g of groups) {
+        const ring = groupKeyring(nodeUrl, identity, g.id, store);
+        // The code is on screen: this phone is waiting for a member's wraps now, so it asks without the minute's wait.
+        ring.noteWrapsLanded();
+        await ring.sync().catch(() => null);
+        for (const t of await ring.toppedUpBy().catch(() => [])) out.add(`${g.id}#${t.epoch}:${t.wrapper}`);
+    }
+    return out;
+}
+
+/**
+ * Who handed this phone keys since `before` (handOversHeld, read while its new-phone code was on screen): each member's
+ * key, most epochs first. A top-up that opens here is a key that member held; their name is the members list's.
+ */
+export function handedSince(before: ReadonlySet<string>, after: ReadonlySet<string>): string[] {
+    const count = new Map<string, number>();
+    for (const x of after) {
+        if (before.has(x)) continue;
+        const w = x.slice(x.lastIndexOf(':') + 1);
+        count.set(w, (count.get(w) ?? 0) + 1);
+    }
+    return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([w]) => w);
+}
+
+export interface ConfirmedNote { name: string; at: number }
+const NOTES_MAX = 5;
+const notesKey = (nodeUrl: string, me: string) => `beanpool_new_phone_confirmed:${nodeUrl}:${me}`;
+
+/** The "Confirmed by" notes this phone kept (newest first); [] when none or unreadable. */
+export async function confirmedNotes(nodeUrl: string, me: string): Promise<ConfirmedNote[]> {
+    try {
+        const v = JSON.parse((await AsyncStorage.getItem(notesKey(nodeUrl, me))) ?? '[]');
+        return Array.isArray(v) ? v.filter((n): n is ConfirmedNote => typeof n?.name === 'string' && Number.isFinite(n?.at)).slice(0, NOTES_MAX) : [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * After a member's confirmation (§4): the members who handed this phone keys since `before`, by the names the groups'
+ * members lists give their keys, kept as this phone's own "Confirmed by" notes. Returns every note, newest first.
+ */
+export async function noteConfirmations(input: {
+    nodeUrl: string; identity: BeanPoolIdentity; store: GroupKeyStore; groups: readonly HistoryGroup[]; before: ReadonlySet<string>;
+}): Promise<ConfirmedNote[]> {
+    const me = input.identity.publicKey;
+    const keys = handedSince(input.before, await handOversHeld(input.nodeUrl, input.identity, input.store, input.groups));
+    const names = new Map<string, string>();
+    for (const g of input.groups) {
+        if (keys.every((k) => names.has(k))) break;
+        try {
+            const res = await signedGet(input.nodeUrl, `/api/groups/${encodeURIComponent(g.id)}/members`, input.identity);
+            const rows = res.ok ? await res.json() : [];
+            for (const r of Array.isArray(rows) ? rows : []) {
+                if (keys.includes(r?.memberPubkey) && typeof r.callsign === 'string' && !names.has(r.memberPubkey)) names.set(r.memberPubkey, r.callsign);
+            }
+        } catch { /* the next group's list may name them */ }
+    }
+    const found = keys.map((k) => names.get(k)).filter((n): n is string => !!n);
+    return found.length ? keepConfirmedNotes(input.nodeUrl, me, found) : confirmedNotes(input.nodeUrl, me);
+}
+
+/** Keeps a note for each name, newest first; on this phone only. */
+export async function keepConfirmedNotes(nodeUrl: string, me: string, names: readonly string[], at = Date.now()): Promise<ConfirmedNote[]> {
+    const next = [...names.map((name) => ({ name, at })), ...(await confirmedNotes(nodeUrl, me)).filter((n) => !names.includes(n.name))].slice(0, NOTES_MAX);
+    try { await AsyncStorage.setItem(notesKey(nodeUrl, me), JSON.stringify(next)); } catch { /* a note, not a record: the history itself is in the keys */ }
+    return next;
 }

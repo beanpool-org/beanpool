@@ -285,6 +285,7 @@ export const SUITES = [
     'test-members-snapshot',
     'test-roster-snapshots',
     'test-members-directory-cost',
+    'test-members-on-demand',
     'test-member-photos-out-of-rows',
     'test-group-pictures-out-of-rows',
     'test-group-rosters-photo-urls',

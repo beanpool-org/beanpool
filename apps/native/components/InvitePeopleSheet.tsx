@@ -17,6 +17,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { getInvitablePeople, inviteGroupMemberApi } from '../utils/db';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { lookUpMembers, searchPath } from '../utils/members-lookup';
+import { pickerEmpty } from '../utils/community-list-note';
 import { MemberAvatar } from './MemberAvatar';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
 
@@ -41,6 +44,13 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
     const [query, setQuery] = useState('');
     const [picked, setPicked] = useState<Set<string>>(new Set());
     const [sending, setSending] = useState(false);
+    // On a community that says `membersOnDemand`: the people this member has dealt with, and a search of 2 letters or
+    // more asks the node (utils/members-lookup.ts). Anywhere else, the whole list as always.
+    const membersOnDemand = useNodeProfile()?.features.membersOnDemand === true;
+    const [nodeResults, setNodeResults] = useState<{ publicKey: string; callsign: string; avatarUrl: string | null }[]>([]);
+    // What became of the node search, for the empty list's words (the New message picker's): never "Nobody else is in
+    // this community" over a list that is only the people this member has dealt with (review of #1859, B3).
+    const [nodeSearch, setNodeSearch] = useState<'none' | 'answered' | 'unreachable'>('none');
 
     useEffect(() => {
         if (!isOpen) return;
@@ -48,16 +58,37 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
         setQuery('');
         setMembers(null);
         let alive = true;
-        getInvitablePeople().then(m => { if (alive) setMembers(m); }).catch(() => { if (alive) setMembers([]); });
+        getInvitablePeople(membersOnDemand ? { membersOnDemand } : undefined).then(m => { if (alive) setMembers(m); }).catch(() => { if (alive) setMembers([]); });
         return () => { alive = false; };
-    }, [isOpen]);
+    }, [isOpen, membersOnDemand]);
+
+    useEffect(() => {
+        if (!membersOnDemand) return;
+        const path = searchPath(query);
+        if (!path) {
+            setNodeResults([]);
+            setNodeSearch('none');
+            return;
+        }
+        let alive = true;
+        const timeout = setTimeout(async () => {
+            const rows = await lookUpMembers(path);
+            if (!alive) return;
+            setNodeResults((rows ?? []).map(r => ({ publicKey: r.public_key, callsign: r.callsign, avatarUrl: r.avatar_url })));
+            setNodeSearch(rows === null ? 'unreachable' : 'answered');
+        }, 400);
+        return () => { alive = false; clearTimeout(timeout); };
+    }, [query, membersOnDemand]);
 
     const shown = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return (members || [])
+        const held = (members || [])
             .filter(m => m.publicKey !== myPubkey)
             .filter(m => !q || (m.callsign || '').toLowerCase().includes(q));
-    }, [members, query, myPubkey]);
+        if (nodeResults.length === 0) return held;
+        const seen = new Set(held.map(m => m.publicKey));
+        return [...held, ...nodeResults.filter(m => m.publicKey !== myPubkey && !seen.has(m.publicKey))];
+    }, [members, query, myPubkey, nodeResults]);
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
@@ -82,6 +113,8 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
         name: { flex: 1, minWidth: 0, fontSize: 16, fontWeight: '600', color: colors.text.body },
         already: { fontSize: 12, color: colors.text.muted, flexShrink: 0 },
         empty: { padding: 24, textAlign: 'center', color: colors.text.secondary, fontSize: 14 },
+        emptyTitle: { paddingTop: 24, paddingHorizontal: 24, textAlign: 'center', color: colors.text.body, fontSize: 15, fontWeight: '700' },
+        emptySubtitle: { paddingTop: 4, paddingHorizontal: 24, paddingBottom: 24, textAlign: 'center', color: colors.text.secondary, fontSize: 14 },
         footer: { paddingHorizontal: 16, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
         inviteBtn: {
             minHeight: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
@@ -161,6 +194,11 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                         keyboardShouldPersistTaps="handled"
                         ListEmptyComponent={members === null
                             ? <ActivityIndicator style={{ padding: 24 }} color={colors.brand.primary} accessibilityLabel="Loading people" />
+                            : membersOnDemand
+                            ? <View>
+                                <Text style={styles.emptyTitle}>{pickerEmpty(query, nodeSearch).title}</Text>
+                                <Text style={styles.emptySubtitle}>{pickerEmpty(query, nodeSearch).subtitle}</Text>
+                              </View>
                             : <Text style={styles.empty}>{query ? 'Nobody by that name.' : 'Nobody else is in this community yet.'}</Text>}
                         renderItem={({ item }) => {
                             const already = existing.has(item.publicKey);

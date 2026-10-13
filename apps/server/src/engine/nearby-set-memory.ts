@@ -69,7 +69,14 @@ function unpack(p: Packed): string[] {
     return out;
 }
 
-const sizeOf = (p: Packed) => (Array.isArray(p) ? p.reduce((n, s) => n + Buffer.byteLength(s, 'utf8'), 0) : p.length);
+/**
+ * What an id kept as a string costs beyond its UTF-8 bytes: its 8-byte slot in the array, the string's 16-byte header and
+ * its padding to 8 bytes (measured on Node 22 and 26: 32 bytes for a 3-character id, 64 for a UUID kept as a string). A
+ * member chooses their listing's id (engine/posts.ts), and one such id among a set's nearest keeps the whole set as
+ * strings: counted at their bytes alone, those sets held 2-2.9× the budget (the review of #1810, finding 3).
+ */
+const STRING_ID_OVERHEAD_BYTES = 32;
+const sizeOf = (p: Packed) => (Array.isArray(p) ? p.reduce((n, s) => n + Buffer.byteLength(s, 'utf8') + STRING_ID_OVERHEAD_BYTES, 0) : p.length);
 
 interface Entry {
     /** The set's ids in the canonical order, packed. */

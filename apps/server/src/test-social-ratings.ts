@@ -1,5 +1,5 @@
 /**
- * Integration & unit tests for engine/social.ts (addRating, addFriend, removeFriend, setGuardian).
+ * Integration & unit tests for engine/social.ts (addRating, getRatings, addFriend, removeFriend, setGuardian).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-social-ratings.ts
  */
@@ -8,7 +8,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
-import { initStateEngine, seedGenesisMember, addRating, addFriend, removeFriend } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, addRating, addFriend, removeFriend, getRatings } from './state-engine.js';
 import { db } from './db/db.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { bootInto, indexes, tmp } from './schema-upgrade-test-harness.js';
@@ -141,6 +141,20 @@ async function main() {
     assert(indexes(db, 'ratings').includes('idx_ratings_target_pubkey'), 'a fresh database has idx_ratings_target_pubkey');
     assert(/SEARCH ratings USING (COVERING )?INDEX idx_ratings_target_pubkey/.test(plan(db)) && !/SCAN ratings/.test(plan(db)),
         `a floor's ratings read searches by index, not a scan (${plan(db)})`);
+
+    // 5. getRatings lists the newest first, and ratings stamped in the same millisecond newest row first. With the
+    // index above the planner sorts after a search by target_pubkey, so an untied ORDER BY created_at DESC gave ties
+    // oldest row first, where walking idx_ratings_created_at backwards had given newest first (#1813's review, finding 1).
+    const dave = 'pubkey_dave_social_4';
+    seedGenesisMember(dave, 'dave');
+    const tie = '2026-10-12T09:00:00.000Z';
+    const insertRating = db.prepare(`INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars, created_at) VALUES (?, ?, ?, 'provider', 5, ?)`);
+    insertRating.run('tie-c', dave, alice, tie);
+    insertRating.run('tie-a', dave, bob, tie);
+    insertRating.run('tie-b', dave, charlie, tie);
+    insertRating.run('earlier', dave, bob, '2026-10-12T08:59:59.999Z');
+    const order = getRatings(dave).map(r => r.id).join(',');
+    assert(order === 'tie-b,tie-a,tie-c,earlier', `same-millisecond ratings come newest row first (${order})`);
 
     // An old node: its database as the last boot left it, without the index, with ratings in it. The next boot builds it.
     const dir = tmp('ratings-index');

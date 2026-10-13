@@ -1462,7 +1462,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             }}
                                             disabled={accepting}
-                                            className="flex-1 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors"
+                                            className="flex-1 py-1.5 rounded-md bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors"
                                         >
                                             Approve & Hold in Trust
                                         </button>
@@ -2037,7 +2037,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPhotos(selectedPost.photos || []);
                                         setEditMode(true);
                                     }}
-                                    className="w-full py-3.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-[15px] transition-all shadow-md"
+                                    className="w-full py-3.5 rounded-xl bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 font-bold text-white text-[15px] transition-all shadow-md"
                                 >
                                     ✏️ Edit Post
                                 </button>
@@ -3280,7 +3280,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </p>
                         <button
                             onClick={() => { setShowContributionRequired(false); onNavigate?.('map-post'); }}
-                            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-colors mb-2"
+                            className="w-full py-3 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold transition-colors mb-2"
                         >
                             ➕ Create an Offer
                         </button>

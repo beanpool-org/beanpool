@@ -736,7 +736,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                             setQuizInitialMode('deep');
                                                             setShowQuizModal(true);
                                                         }}
-                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
                                                     >
                                                         🧭 More accurate
                                                     </button>
@@ -781,7 +781,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 setQuizInitialMode('quick');
                                                 setShowQuizModal(true);
                                             }}
-                                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
+                                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
                                         >
                                             ⚡ Take 60s Quiz
                                         </button>
@@ -1301,7 +1301,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                                 <button
                                     onClick={handleCopySeed}
-                                    className="w-full py-3 mb-2 rounded-xl font-bold bg-terra-500 hover:bg-terra-600 text-white border-none cursor-pointer transition-colors text-sm shadow-sm"
+                                    className="w-full py-3 mb-2 rounded-xl font-bold bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 text-white border-none cursor-pointer transition-colors text-sm shadow-sm"
                                 >
                                     {seedCopied ? '✅ Copied to Clipboard!' : '📋 Copy All Words'}
                                 </button>

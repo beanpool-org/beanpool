@@ -158,7 +158,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                                 disabled={busy}
                                 onClick={() => handleVote('yes')}
                                 aria-label={`Vote yes to make ${candidateName} the lead convenor`}
-                                className="flex-1 min-w-[7rem] py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                                className="flex-1 min-w-[7rem] py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                             >
                                 {busy ? 'Voting…' : 'Yes'}
                             </button>

@@ -336,7 +336,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                                             onClick={() => handleChangeCategory(channel.id, cat.id)}
                                                             className={`flex items-center gap-1.5 p-2 rounded-lg text-xs font-semibold border text-left cursor-pointer transition-colors ${
                                                                 isSelected
-                                                                    ? 'bg-terra-500 border-terra-500 text-white shadow-xs'
+                                                                    ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-xs'
                                                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-nature-200 hover:bg-nature-100 dark:hover:bg-nature-700'
                                                             }`}
                                                         >
@@ -451,7 +451,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                             onClick={() => setCategory(c.id)}
                                             className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                                 active
-                                                    ? 'bg-terra-500 border-terra-500 text-white shadow-sm'
+                                                    ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
                                                     : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700'
                                             }`}
                                         >

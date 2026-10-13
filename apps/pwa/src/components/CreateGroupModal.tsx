@@ -201,7 +201,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: Props) {
                     <button
                         type="submit"
                         disabled={submitting || !name.trim()}
-                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
                     >
                         {submitting ? 'Creating...' : 'Create Group (You become Convenor)'}
                     </button>

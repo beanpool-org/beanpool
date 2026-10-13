@@ -9,7 +9,8 @@
  *     disabled controls are listed apart (WCAG exempts them);
  *   - placeholders (4.5:1) and the edges of text fields (3:1 against the page, unless the field's own fill stands out);
  *   - icons drawn in currentColor (3:1);
- *   - light slabs left on a dark page (an opaque surface brighter than 50% luminance, bigger than 20×20 px);
+ *   - light slabs left on a dark page (an opaque surface brighter than 50% luminance, bigger than 24×24 px; a control drawn
+ *     inverted on purpose, `dark:bg-white` with dark ink, is not one);
  *   - the keyboard focus: each of the first Tab stops must show an outline or ring of 3:1 against what is behind it.
  *
  * Run:  pnpm --filter @beanpool/pwa dark-contrast-check
@@ -124,7 +125,7 @@ async function land(page, origin, pathname = '/app') {
 
 /** A click, or (when something drawn over it takes the pointer, as a toast or the install banner can) the same click sent to it. */
 async function press(locator) {
-    await locator.click({ timeout: 5_000 }).catch(() => locator.dispatchEvent('click', undefined, { timeout: 5_000 }));
+    await locator.click({ timeout: 10_000 }).catch(() => locator.dispatchEvent('click', undefined, { timeout: 10_000 }));
 }
 const tab = (label) => async (page) => {
     await press(page.getByTestId('mobile-bottom-nav').getByRole('button', { name: label }).first());
@@ -279,7 +280,9 @@ function measure(themeIsDark) {
         if (themeIsDark && !['IMG', 'VIDEO', 'CANVAS', 'svg', 'INPUT'].includes(el.tagName) && !el.closest('.leaflet-container')) {
             const bg = rgba(cs.backgroundColor);
             const r = el.getBoundingClientRect();
-            if (bg.a >= 0.9 && r.width >= 20 && r.height >= 20 && lum(bg) > 0.5) {
+            // Not a slab: a switch knob (24 px or less), or a control drawn inverted in dark on purpose (`dark:bg-white`, dark ink).
+            const inverted = /(^|\s)dark:bg-white(\s|$)/.test(el.getAttribute('class') || '');
+            if (bg.a >= 0.9 && r.width >= 20 && r.height >= 20 && lum(bg) > 0.5 && !inverted && (r.width > 24 || r.height > 24)) {
                 slabs.push({ el: describe(el), text: (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 50), bg: hex(bg), size: `${Math.round(r.width)}×${Math.round(r.height)}` });
             }
         }

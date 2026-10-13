@@ -335,7 +335,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                             setQuizInitialMode('deep');
                                             setShowQuizModal(true);
                                         }}
-                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
                                     >
                                         🧭 More accurate
                                     </button>
@@ -376,7 +376,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                 setQuizInitialMode('quick');
                                 setShowQuizModal(true);
                             }}
-                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
+                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
                         >
                             ⚡ Take 60s Quiz
                         </button>

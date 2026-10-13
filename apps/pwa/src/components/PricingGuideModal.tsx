@@ -416,7 +416,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         <button
                                             type="submit"
                                             disabled={reportSubmitting}
-                                            className="flex-1 py-2 min-h-[44px] rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50"
+                                            className="flex-1 py-2 min-h-[44px] rounded-xl text-xs font-semibold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50"
                                         >
                                             {reportSubmitting ? 'Submitting...' : 'Submit'}
                                         </button>

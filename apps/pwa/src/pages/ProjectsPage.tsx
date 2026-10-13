@@ -325,7 +325,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     setCreateError(null);
                                 }
                             }}
-                            className="bg-accent hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
+                            className="bg-accent dark:bg-nature-700 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                         >
                             {activeSection === 'groups' ? '+ Create Group' : '+ Propose'}
                         </button>
@@ -380,7 +380,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             <span className="flex items-center gap-1">
                                 <span>{tab.emoji}</span>
                                 {tab.key === 'decide' && openDecisionsCount > 0 && (
-                                    <span className="bg-accent text-white text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-bold leading-none">
+                                    <span className="bg-accent dark:bg-nature-700 text-white text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-bold leading-none">
                                         {openDecisionsCount}
                                     </span>
                                 )}
@@ -485,7 +485,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             </p>
                             <button
                                 onClick={() => setShowCreateGroupModal(true)}
-                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
+                                className="px-4 py-2 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
                             >
                                 + Create a Group
                             </button>
@@ -567,7 +567,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     setShowNewModal(true);
                                     setCreateError(null);
                                 }}
-                                className="bg-accent hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
+                                className="bg-accent dark:bg-nature-700 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
                             >
                                 + Propose a Project
                             </button>
@@ -907,7 +907,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 <button
                                     type="submit"
                                     disabled={creating || preparingPhoto}
-                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm disabled:opacity-50"
+                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white font-bold text-sm disabled:opacity-50"
                                 >
                                     {creating ? 'Submitting…' : preparingPhoto ? 'Preparing photo…' : 'Propose Enterprise 🌱'}
                                 </button>

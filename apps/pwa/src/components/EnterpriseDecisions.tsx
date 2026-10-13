@@ -33,7 +33,7 @@ export interface EnterpriseDecisionsProps {
 }
 
 const btn = 'min-h-[44px] px-4 rounded-xl font-bold text-sm';
-const btnYes = `${btn} bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50`;
+const btnYes = `${btn} bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white disabled:opacity-50`;
 const btnNo = `${btn} border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-nature-100 disabled:opacity-50`;
 
 export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, earnedSurplus, lifecycle }: EnterpriseDecisionsProps) {
@@ -209,7 +209,7 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSu
     };
 
     const chip = (on: boolean) => `min-h-[44px] px-3 py-1 rounded-2xl border text-sm max-w-full break-words text-left ${on
-        ? 'bg-emerald-600 border-emerald-600 text-white font-bold'
+        ? 'bg-emerald-600 dark:bg-emerald-700 border-emerald-600 text-white font-bold'
         : 'border-nature-300 dark:border-nature-600 text-nature-900 dark:text-nature-100 bg-white dark:bg-nature-900'}`;
     const label = 'block text-sm font-bold text-nature-900 dark:text-nature-100 mt-3 mb-1';
     const input = 'w-full min-w-0 rounded-xl border border-nature-300 dark:border-nature-600 bg-nature-50 dark:bg-nature-950 px-3 py-2 text-base text-nature-900 dark:text-nature-100';
@@ -305,7 +305,7 @@ export function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose,
     };
 
     const chip = (on: boolean) => `min-h-[44px] px-3 py-1 rounded-2xl border text-sm max-w-full break-words text-left ${on
-        ? 'bg-emerald-600 border-emerald-600 text-white font-bold'
+        ? 'bg-emerald-600 dark:bg-emerald-700 border-emerald-600 text-white font-bold'
         : 'border-nature-300 dark:border-nature-600 text-nature-900 dark:text-nature-100 bg-white dark:bg-nature-900'}`;
     const label = 'block text-sm font-bold text-nature-900 dark:text-nature-100 mt-3 mb-1';
     const input = 'w-full min-w-0 rounded-xl border border-nature-300 dark:border-nature-600 bg-nature-50 dark:bg-nature-950 px-3 py-2 text-base text-nature-900 dark:text-nature-100';

@@ -372,7 +372,7 @@ export function GroupDetailModal({
                                                             onClick={() => handleApprove(p.memberPubkey)}
                                                             disabled={actionLoading}
                                                             aria-label={`Approve join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
-                                                            className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
+                                                            className="px-2 py-1 rounded bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
                                                         >
                                                             Approve
                                                         </button>
@@ -516,7 +516,7 @@ export function GroupDetailModal({
                                     onClose();
                                     onPostToGroup(groupData);
                                 }}
-                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 <span aria-hidden="true">✏️ </span>Post to {groupData.name}
                             </button>
@@ -548,7 +548,7 @@ export function GroupDetailModal({
                                 type="button"
                                 onClick={handleJoin}
                                 disabled={actionLoading}
-                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 {groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
                             </button>

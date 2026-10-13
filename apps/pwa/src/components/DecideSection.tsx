@@ -178,7 +178,7 @@ export function DecideSection({
                             disabled={!canPropose || hasOpenDecision}
                             className={`w-full sm:w-auto py-2.5 px-5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                 canPropose && !hasOpenDecision
-                                    ? 'bg-accent hover:bg-emerald-500 text-white'
+                                    ? 'bg-accent dark:bg-nature-700 hover:bg-emerald-500 text-white'
                                     : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700/50'
                             }`}
                         >
@@ -393,7 +393,7 @@ export function DecideSection({
                                                     type="button"
                                                     onClick={() => handleVote(item, true)}
                                                     disabled={votingId === item.id || buttons.yes.disabled || !!blocker}
-                                                    className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                                                    className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 text-white font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                                                 >
                                                     <span aria-hidden="true">👍</span>
                                                     <span>{votingId === item.id ? 'Recording...' : buttons.yes.label}</span>

@@ -455,7 +455,7 @@ export function InvitePage({ identity }: Props) {
                                             </button>
                                             <button 
                                                 onClick={() => handleShare(inv.code)} 
-                                                className="p-2 rounded-lg bg-emerald-600 border-none text-white hover:bg-emerald-700 cursor-pointer shadow-sm transition-colors"
+                                                className="p-2 rounded-lg bg-emerald-600 dark:bg-emerald-700 border-none text-white hover:bg-emerald-700 cursor-pointer shadow-sm transition-colors"
                                                 aria-label="Share invite link"
                                                 title="Share invite link"
                                             >

@@ -2661,7 +2661,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : '#10b981',
+                                    background: loading ? '#555' : 'var(--cta-go, #10b981)',
                                     color: '#fff', fontSize: '1rem',
                                     fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',

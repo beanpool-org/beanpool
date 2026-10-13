@@ -254,7 +254,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             <button
                                                 type="button"
                                                 onClick={() => handleMessage(f.publicKey)}
-                                                className="bg-emerald-600 border-none text-white rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                className="bg-emerald-600 dark:bg-emerald-700 border-none text-white rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 title={`Message ${f.callsign}`}
                                                 aria-label={`Message ${f.callsign}`}
                                             >
@@ -340,7 +340,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 type="button"
                                                 onClick={() => handleAddFriend(m.publicKey)}
                                                 aria-label={`Add ${m.callsign} as friend`}
-                                                className="bg-emerald-600 border-none text-white rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                className="bg-emerald-600 dark:bg-emerald-700 border-none text-white rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                             >
                                                 + Add
                                             </button>

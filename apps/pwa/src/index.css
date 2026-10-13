@@ -34,6 +34,7 @@
   --tier-resident: #2563eb; --tier-resident-bg: #eff6ff; --tier-resident-border: #bfdbfe;
   --tier-steward: #7c3aed; --tier-steward-bg: #f5f3ff; --tier-steward-border: #ddd6fe;
   --tier-elder: #d97706; --tier-elder-bg: #fffbeb; --tier-elder-border: #fde68a;
+  --cta-go: #10b981;
   --sync-guest: #d97706; --sync-guest-bg: #fffbeb; --sync-offline: #ef4444;
   --tier-track: #e2e8f0; --tier-card: #fff; --tier-card-border: #e5e7eb; --tier-chip: #f9fafb; --tier-unreached: #9ca3af;
   --success: #647664;         /* nature-600 */
@@ -93,6 +94,7 @@
   --tier-resident: #93c5fd; --tier-resident-bg: #1e2f45; --tier-resident-border: #2f4f7a;
   --tier-steward: #c4b5fd; --tier-steward-bg: #2e2645; --tier-steward-border: #4c3d7a;
   --tier-elder: #fcd34d; --tier-elder-bg: #3a2f17; --tier-elder-border: #6b5520;
+  --cta-go: #047857;
   --sync-guest: #fcd34d; --sync-guest-bg: #3a2f17; --sync-offline: #f87171;
   --tier-track: #434e43; --tier-card: #2a322a; --tier-card-border: #434e43; --tier-chip: #384038; --tier-unreached: #9eaf9e;
   --success: #809380;

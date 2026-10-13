@@ -362,7 +362,7 @@ export function PulseIntakePage({
                                     }}
                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                         isSelected
-                                            ? 'bg-terra-500 border-terra-500 text-white shadow-sm'
+                                            ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
                                             : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700'
                                     }`}
                                     aria-pressed={isSelected}
@@ -392,7 +392,7 @@ export function PulseIntakePage({
                                     onClick={() => setSelectedCategory(cat.id)}
                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                         isSelected
-                                            ? 'bg-terra-500 border-terra-500 text-white shadow-sm'
+                                            ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
                                             : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700'
                                     }`}
                                     aria-pressed={isSelected}

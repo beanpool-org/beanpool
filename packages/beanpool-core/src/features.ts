@@ -60,7 +60,7 @@ export const LOCAL_COMMUNITY_SHEET = Object.freeze({
     howItWorks: 'How it works',
     /** The guide page How it works opens, per feature. */
     guide: Object.freeze({
-        beans: 'the-bean',
+        beans: 'beans-and-the-global-community',
         escrow: 'a-deal-step-by-step',
         enterprises: 'enterprises',
         decisions: 'decisions',
@@ -68,18 +68,24 @@ export const LOCAL_COMMUNITY_SHEET = Object.freeze({
     } satisfies Record<ShowcaseFeature, string>),
 });
 
-/** The strip across the top of a preview screen: the bold first sentence per feature, then the common body. */
+/** The strip across the top of a preview screen: a one-line bold lead per feature, then that feature's own body (≤ 3 lines at 320 px / 1.3×). */
 export const LOCAL_COMMUNITY_STRIP = Object.freeze({
     lead: Object.freeze({
-        beans: 'An example ledger from a local community.',
-        escrow: 'Example deals from a local community.',
-        enterprises: 'An example enterprise from a local community.',
-        decisions: 'An example Decision from a local community.',
-        invites: 'An example from a local community.',
+        beans: 'An example ledger.',
+        escrow: 'Example deals.',
+        enterprises: 'An example Commons.',
+        decisions: 'An example Decision.',
+        invites: 'An example invitation.',
     } satisfies Record<ShowcaseFeature, string>),
-    body: 'Help earns Beans, getting help spends them, so help can go round in circles, not just pairs. Beans switch on where neighbours can vouch for who\'s who: in local communities today, and here once identity checks arrive.',
-    /** The strip collapsed with ✕, remembered per node and feature on the device. */
-    collapsed: '🏘️ An example from a local community · Why? ›',
+    body: Object.freeze({
+        beans: 'Help earns Beans, getting help spends them, so help can go round, not just back.',
+        escrow: 'A deal holds the Beans until the job is done. Neither side has to go first.',
+        enterprises: 'Neighbours pool Beans for shared enterprises, and vote on what the pool funds.',
+        decisions: 'One member, one vote. A Decision that passes carries itself out.',
+        invites: 'A member vouches for each newcomer, so neighbours know who\'s who.',
+    } satisfies Record<ShowcaseFeature, string>),
+    /** The strip collapsed with ✕, remembered per node and feature on the device. One line at 320 px / 1.3×. */
+    collapsed: '🏘️ An example · Why? ›',
     /** The header over the preview, with the Example chip. */
     header: 'Example Valley · an example member',
 });

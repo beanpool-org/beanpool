@@ -19,7 +19,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import { invitesOn, readNodeProfile } from '../node-profile';
 import {
     communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, joinWays, bringSomeoneHereText, invitesOffFallback, GUEST_NO_INVITES_TEXT, GUEST_AT_GLOBAL_WAITING_TEXT, guestNoInvitesText,
-    GUEST_DOOR_TEXT, GUEST_DOOR_BUTTON, onlyAdminsInvite, mayInviteHere, mayMakeOfflineTicket, offlineTicketRefusal, adminsOnlyText,
+    guestDoorText, guestDoorButton, onlyAdminsInvite, mayInviteHere, mayMakeOfflineTicket, offlineTicketRefusal, adminsOnlyText,
     adminsOnlyRefusal, ADMINS_ONLY_FALLBACK, MEMBER_TICKET_REFUSED_TEXT,
 } from '../invite-entries';
 
@@ -182,16 +182,26 @@ describe('People → Invites goes through the helpers (source check)', () => {
         // The door's words before the no-invites sentence, which is left for where no door is offered.
         const banner = src.slice(src.indexOf('⚠️ Guest Connection Mode'), src.indexOf('{!guestNoInvites && ('));
         expect(banner.indexOf('guestDoor')).toBeGreaterThan(0);
-        expect(banner.indexOf('GUEST_DOOR_TEXT')).toBeLessThan(banner.indexOf('guestNoInvitesText'));
+        expect(banner.indexOf('guestDoorText(nodeProfile?.features)')).toBeGreaterThan(0);
+        expect(banner.indexOf('guestDoorText')).toBeLessThan(banner.indexOf('guestNoInvitesText'));
         // The way in: the door's screen, under its own guard.
         const button = banner.slice(banner.indexOf('{guestDoor && ('));
         expect(button).toContain("router.push('/join-global')");
-        expect(button).toContain('{GUEST_DOOR_BUTTON}');
+        expect(button).toContain('{guestDoorButton(nodeProfile?.features)}');
+        expect(button).toContain('accessibilityLabel={`Join the global community with ${joinWays(nodeProfile?.features)}`}');
         expect(count("router.push('/join-global')")).toBe(1);
-        expect(GUEST_DOOR_TEXT).toMatch(/account on this phone/);
-        expect(GUEST_DOOR_TEXT).toMatch(/12 words stay the same/);
-        expect(GUEST_DOOR_TEXT).toMatch(/nothing changes in your other communities/);
-        expect(GUEST_DOOR_BUTTON).toMatch(/sign-in/);
+        for (const features of [{ wordsDoor: true }, {}, null] as const) {
+            const text = guestDoorText(features as never);
+            expect(text).toMatch(/account on this phone/);
+            expect(text).toMatch(/12 words stay the same/);
+            expect(text).toMatch(/nothing changes in your other communities/);
+        }
+        // The global community takes 12 words or a sign-in (apps/server config/node-profile.ts, ssoRequiredForJoin false):
+        // the guest's button and words say both; a door from before the 12-words door says a sign-in alone.
+        expect(guestDoorButton({ wordsDoor: true } as never)).toBe('🌍 Join with 12 words or a sign-in');
+        expect(guestDoorText({ wordsDoor: true } as never)).toMatch(/: use its 12 words or sign in once, and choose your name\./);
+        expect(guestDoorButton({} as never)).toBe('🌍 Join with a sign-in');
+        expect(guestDoorText(null)).toMatch(/: sign in once, and choose your name\./);
     });
 });
 

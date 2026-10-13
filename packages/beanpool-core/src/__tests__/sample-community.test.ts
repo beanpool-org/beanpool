@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_COMMUNITY, SAMPLE_ID_PREFIX, isSampleId } from '../sample-community.js';
 import {
@@ -128,11 +130,18 @@ describe('the marker and the sheet words (design §1, §2)', () => {
         for (const f of SHOWCASE_FEATURES) {
             expect(LOCAL_COMMUNITY_SHEET.features[f].length, f).toBeGreaterThan(20);
             expect(LOCAL_COMMUNITY_SHEET.guide[f], f).toMatch(/^[a-z0-9-]+$/);
-            expect(LOCAL_COMMUNITY_STRIP.lead[f], f).toMatch(/from a local community\.$/);
+            expect(LOCAL_COMMUNITY_STRIP.lead[f], f).toMatch(/^(An e|E)xample [^.]+\.$/);
         }
         expect([LOCAL_COMMUNITY_SHEET.start, LOCAL_COMMUNITY_SHEET.nearYou, LOCAL_COMMUNITY_SHEET.howItWorks])
             .toEqual(['Start a community', 'Communities near you', 'How it works']);
         expect(LOCAL_COMMUNITY_SHEET.title).toBe('Why this lives in a local community');
+    });
+
+    it('How it works opens a page in the guide; on the Ledger sheet, the page on Beans and the global community', () => {
+        const manifest = JSON.parse(readFileSync(fileURLToPath(new URL('../../../beanpool-guide/content/manifest.json', import.meta.url)), 'utf8'));
+        const pages = new Set<string>(manifest.sections.flatMap((s: { pages: string[] }) => s.pages));
+        for (const f of SHOWCASE_FEATURES) expect(pages.has(LOCAL_COMMUNITY_SHEET.guide[f]), `${f} → ${LOCAL_COMMUNITY_SHEET.guide[f]}`).toBe(true);
+        expect(LOCAL_COMMUNITY_SHEET.guide.beans).toBe('beans-and-the-global-community');
     });
 
     it('never locks, never talks tiers or nodes, never shows a Ʀ', () => {
@@ -145,8 +154,28 @@ describe('the marker and the sheet words (design §1, §2)', () => {
         }
     });
 
+    // The strip's web budget at 320 px and 130% text (scratch/global-node/COPY-showcase-strips-fable.md): about 26
+    // characters a line, so a one-line bold lead and a body of at most three lines. The pill above already says
+    // Local community, so the strip need not.
+    it('each strip fits its budget at 320 px / 130%: a lead of one line, a body of three, a collapsed row of one', () => {
+        for (const f of SHOWCASE_FEATURES) {
+            expect(LOCAL_COMMUNITY_STRIP.lead[f].length, f).toBeLessThanOrEqual(24);
+            expect(typeof LOCAL_COMMUNITY_STRIP.body[f], f).toBe('string');
+            expect(LOCAL_COMMUNITY_STRIP.body[f].length, f).toBeGreaterThan(20);
+            expect(LOCAL_COMMUNITY_STRIP.body[f].length, f).toBeLessThanOrEqual(80);
+        }
+        expect(LOCAL_COMMUNITY_STRIP.collapsed.length).toBeLessThanOrEqual(24);
+        expect(LOCAL_COMMUNITY_STRIP.collapsed.startsWith('🏘️ ')).toBe(true);
+    });
+
+    it('no strip promises Beans, or anything else, arriving here', () => {
+        for (const [path, v] of strings(LOCAL_COMMUNITY_STRIP)) {
+            expect(v, path).not.toMatch(/\b(here|global|once|soon|later|yet|arrive|arrives|coming|switch(es)? on)\b/i);
+        }
+    });
+
     it('the words are frozen', () => {
-        for (const o of [LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_SHEET.features, LOCAL_COMMUNITY_SHEET.guide, LOCAL_COMMUNITY_STRIP, LOCAL_COMMUNITY_STRIP.lead, LOCAL_COMMUNITY_LINES, SHOWCASE_FEATURES]) {
+        for (const o of [LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_SHEET.features, LOCAL_COMMUNITY_SHEET.guide, LOCAL_COMMUNITY_STRIP, LOCAL_COMMUNITY_STRIP.lead, LOCAL_COMMUNITY_STRIP.body, LOCAL_COMMUNITY_LINES, SHOWCASE_FEATURES]) {
             expect(Object.isFrozen(o)).toBe(true);
         }
     });

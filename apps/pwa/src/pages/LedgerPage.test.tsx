@@ -280,14 +280,41 @@ describe('the Ledger with members on demand (review of #1861, N1)', () => {
         expect(getMembers).not.toHaveBeenCalled();
     });
 
+    // The confirmation review of #1861's fix round, F2 (LG7): the node's answer can hold the member themself.
+    it('global: the search never offers the member themself', async () => {
+        info.value = { profile: 'global', features: { membersOnDemand: true } };
+        vi.mocked(getMemberCards).mockResolvedValue([
+            { publicKey: identity.publicKey, callsign: 'Dalia-me', joinedAt: '2026-01-01' },
+            { publicKey: DANA, callsign: 'Dana', joinedAt: '2026-01-01' },
+        ]);
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await openPicker();
+        fireEvent.change(screen.getByPlaceholderText('Search members...'), { target: { value: 'da' } });
+        expect(await screen.findByRole('button', { name: /Dana/ })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Dalia-me/ })).toBeNull();
+    });
+
     it('local: the directory is read as before, once at open and on each refresh, and no small form is asked', async () => {
         vi.mocked(getMembers).mockResolvedValue([{ publicKey: DANA, callsign: 'Dana' }] as any);
         render(<LedgerPage identity={identity} isMember={true} />);
         await waitFor(() => expect(getMembers).toHaveBeenCalledTimes(1));
         await openPicker();
         expect(await screen.findByText('Dana')).toBeInTheDocument();
+        // F2 (LG6): typing in a local node's picker filters the list it has; it never searches the node.
+        fireEvent.change(screen.getByPlaceholderText('Search members...'), { target: { value: 'da' } });
+        await new Promise(r => setTimeout(r, 600));
+        expect(screen.getByText('Dana')).toBeInTheDocument();
         await syncPast2s();
         expect(getMembers).toHaveBeenCalledTimes(2);
+        expect(getMemberCards).not.toHaveBeenCalled();
+    });
+
+    // F2 (LG9): a guest on a local node never reads the directory, as before the switch.
+    it('local: a guest reads no directory, at open or once the node has said it reads whole', async () => {
+        render(<LedgerPage identity={identity} isMember={false} />);
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+        expect(getMembers).not.toHaveBeenCalled();
         expect(getMemberCards).not.toHaveBeenCalled();
     });
 });

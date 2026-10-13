@@ -91,6 +91,22 @@ export interface NodeProfile {
     features: NodeFeatures;
     /** When this phone last heard it from the node (ISO). */
     checkedAt: string;
+    /**
+     * Where Start a community's "How to run a node" leads on this node (apps/server config/start-community.ts), when it
+     * names an address an app may open for a stranger. Absent: beanpool.org's (utils/start-community.ts runANodeUrl).
+     */
+    startCommunityUrl?: string;
+}
+
+/** The server's own rule (config/start-community.ts cleanStartCommunityUrl): https, a host, no user name or password, at most 300 characters, no spaces. */
+function openableStartUrl(v: unknown): string | null {
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    if (!s || s.length > 300 || /\s/.test(s)) return null;
+    let u: URL;
+    try { u = new URL(s); } catch { return null; }
+    if (u.protocol !== 'https:' || !u.hostname || u.username || u.password) return null;
+    return s;
 }
 
 const CACHE_KEY = 'beanpool_node_profiles';
@@ -109,7 +125,7 @@ function cacheKey(url: string): string {
  */
 export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProfile | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-    const b = body as { profile?: unknown; features?: unknown };
+    const b = body as { profile?: unknown; features?: unknown; startCommunityUrl?: unknown };
     const features: NodeFeatures = {};
     if (b.features && typeof b.features === 'object') {
         const f = b.features as Record<string, unknown>;
@@ -122,7 +138,8 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
             features.nearbyListings = { radiusKm: n.radiusKm, max: n.max };
         }
     }
-    return { profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString() };
+    const startCommunityUrl = openableStartUrl(b.startCommunityUrl);
+    return { profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString(), ...(startCommunityUrl ? { startCommunityUrl } : {}) };
 }
 
 async function readCache(): Promise<Record<string, NodeProfile>> {

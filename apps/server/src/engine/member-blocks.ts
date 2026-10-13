@@ -123,12 +123,31 @@ export function blockersOf(key: string): Set<string> {
  */
 let blocksVersion = 0;
 let watching = false;
-/** What blockersOfKept read, by key, at `keptAt`; emptied whenever the version moves on. */
+/** What blockersOfKept read, by key, at `keptAt` and `keptAtData`; emptied whenever either moves on. */
 const kept = new Map<string, Set<string>>();
 let keptAt = -1;
+/**
+ * The connection's `PRAGMA data_version` when the kept lists were read. It moves when ANOTHER connection commits to
+ * state.db (an ops tool in its own process, a script, a second handle in this one), which no trigger of this
+ * connection sees: the belt to the triggers' braces (#1867). It moves for a write to any table, not only
+ * member_blocks, so another connection's write empties the kept lists whatever it wrote: only the next read pays.
+ */
+let keptAtData = -1;
 let keptKeys = 0;
 /** The most keys the kept lists hold together (an author nobody blocked counts as one). Past it they start again. */
 export const KEPT_BLOCKERS_MAX = 100_000;
+
+const COUNTED_OPS = ['INSERT', 'UPDATE', 'DELETE'] as const;
+const COUNTED_TRIGGERS = COUNTED_OPS.map(op => `member_blocks_${op.toLowerCase()}_counted`);
+type Pluck = { get(...params: unknown[]): unknown };
+/**
+ * Read at every kept read (~2 µs together, #1867): how many of the counting triggers are still there, and the
+ * connection's data_version. SQLite drops TEMP triggers without a word: a `PRAGMA temp_store` set at run time, the table
+ * dropped and made again, or the transaction that made them rolled back. Prepared at the first kept read.
+ */
+let countingTriggers: Pluck | null = null;
+let dataVersion: Pluck | null = null;
+const triggersLeft = () => countingTriggers!.get() as number;
 
 /** The block lists' version (blocksVersion above). */
 export function blockListsVersion(): number {
@@ -136,18 +155,29 @@ export function blockListsVersion(): number {
 }
 
 /**
- * Has SQLite count every write to member_blocks on this connection from now on (blocksVersion). Once per process; the
- * first kept read calls it, so nothing was kept before the count began. Its triggers are TEMP: on this connection
- * only, never stored in the database, never copied, and gone with the process.
+ * Has SQLite count every write to member_blocks on this connection from now on (blocksVersion), and answers whether
+ * all three counting triggers are there. Its triggers are TEMP: on this connection only, never stored in the database,
+ * never copied, and gone with the process. Never inside a transaction: one rolled back would take the triggers with
+ * it. Not exported: only blockersOfKept may start the count, and only with its kept lists emptied, so nothing is kept
+ * from before the count began.
  */
-export function watchBlockWrites(): void {
-    if (watching) return;
-    db.function('member_blocks_written', { deterministic: false }, () => { blocksVersion++; return null; });
-    for (const op of ['INSERT', 'UPDATE', 'DELETE']) {
-        db.exec(`CREATE TEMP TRIGGER IF NOT EXISTS member_blocks_${op.toLowerCase()}_counted AFTER ${op} ON main.member_blocks
-                 BEGIN SELECT member_blocks_written(); END`);
+function watchBlockWrites(): boolean {
+    if (db.inTransaction) return false;
+    if (!watching) {
+        db.function('member_blocks_written', { deterministic: false }, () => { blocksVersion++; return null; });
+        countingTriggers = db.prepare(`SELECT COUNT(*) FROM temp.sqlite_master WHERE type = 'trigger' AND tbl_name = 'member_blocks'
+            AND name IN (${COUNTED_TRIGGERS.map(n => `'${n}'`).join(', ')})`).pluck();
+        dataVersion = db.prepare('PRAGMA data_version').pluck();
+        watching = true;
     }
-    watching = true;
+    try {
+        COUNTED_OPS.forEach((op, i) => db.exec(`CREATE TEMP TRIGGER IF NOT EXISTS ${COUNTED_TRIGGERS[i]} AFTER ${op} ON main.member_blocks
+                     BEGIN SELECT member_blocks_written(); END`));
+    } catch (e) {
+        console.error('[member-blocks] could not make the triggers counting block-list writes; reading the table at every push:', e);
+        return false;
+    }
+    return triggersLeft() === COUNTED_TRIGGERS.length;
 }
 
 /**
@@ -155,14 +185,30 @@ export function watchBlockWrites(): void {
  * blocked by 10,000 members cost 3.5 ms a push to read, #1831). The next read after any write to member_blocks reads
  * the table again, so a block or an unblock holds from the next push, as before. Inside a transaction it reads the
  * table and keeps nothing: a write there may still be rolled back, and the rollback writes no row.
+ *
+ * Before it serves a kept list it checks that nothing could have written unseen (#1867): another connection's commit
+ * (data_version) empties the kept lists; a counting trigger gone empties them too, and makes the three again, since
+ * every write from then on is counted and nothing kept from before is used (rebuilt rather than refused, so a dropped
+ * trigger costs one read, not #1831's 3.5 ms at every push from then on). If they can't be made, it reads the table
+ * and keeps nothing.
  */
 export function blockersOfKept(key: string): ReadonlySet<string> {
     if (db.inTransaction) return blockersOf(key);
-    watchBlockWrites();
-    if (keptAt !== blocksVersion) {
+    const left = watching ? triggersLeft() : 0;
+    if (left !== COUNTED_TRIGGERS.length) {
+        if (watching) console.warn(`[member-blocks] only ${left} of the ${COUNTED_TRIGGERS.length} triggers counting block-list writes were left; kept lists emptied, triggers made again`);
+        kept.clear();
+        keptKeys = 0;
+        keptAt = -1;
+        if (!watchBlockWrites()) return blockersOf(key);
+    }
+    // Read before the table, so another connection's commit after it moves it past what is kept.
+    const data = dataVersion!.get() as number;
+    if (keptAt !== blocksVersion || keptAtData !== data) {
         kept.clear();
         keptKeys = 0;
         keptAt = blocksVersion;
+        keptAtData = data;
     }
     const known = kept.get(key);
     if (known) return known;

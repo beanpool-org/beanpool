@@ -26,7 +26,7 @@ import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../compo
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
 import { RepaymentCard } from '../../components/RepaymentCard';
-import { useShowcaseMode } from '../../utils/use-reader-features';
+import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleBalance, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
@@ -57,9 +57,13 @@ export default function LedgerScreen() {
     const { identity } = useIdentity();
     // On a node that previews Beans (the showcase, DESIGN-global-showcase-fable §1 row 3), Example Valley's ledger.
     // The same screen either way: in preview it reads Example Valley (components/showcase/sample-screens.ts) instead of
-    // the node, and every press that would move Beans or export opens the marker's sheet.
-    const beansMode = useShowcaseMode('beans');
+    // the node, and every press that would move Beans or export opens the marker's sheet. Until the phone's copy of the
+    // node's profile is read (a moment, no network) the mode is unknown and the screen asks the node nothing: a preview
+    // never asks for the reader's own ledger first.
+    const beansMode = useShowcaseModeOnceKnown('beans');
     const preview = beansMode === 'preview';
+    // Each load's answers land only while it is the latest: one begun under another mode never draws over the sample.
+    const loadGen = useRef(0);
     const [sheetOpen, setSheetOpen] = useState(false);
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -345,14 +349,17 @@ export default function LedgerScreen() {
     }));
 
     const loadData = () => {
-        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); return; }
+        const gen = ++loadGen.current;
+        if (beansMode === undefined) return;
+        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); setEscrowTotal(0); setPledgeHistory([]); return; }
+        const latest = <T,>(set: (v: T) => void) => (v: T) => { if (gen === loadGen.current) set(v); };
         if (identity?.publicKey) {
-            getBalance(identity.publicKey).then(setBalanceState).catch(console.error);
-            getTransactions(identity.publicKey).then(setTxns).catch(console.error);
+            getBalance(identity.publicKey).then(latest(setBalanceState)).catch(console.error);
+            getTransactions(identity.publicKey).then(latest(setTxns)).catch(console.error);
             getBlockedUsers().then(list => setBlocked(new Set(list))).catch(() => {});
-            getMemberProfile(identity.publicKey).then(p => setAvatarUrl(p?.avatar_url || null)).catch(console.error);
-            getEscrowTotal(identity.publicKey).then(setEscrowTotal).catch(() => {});
-            getPledgeHistory(identity.publicKey).then(setPledgeHistory).catch(() => {});
+            getMemberProfile(identity.publicKey).then(latest(p => setAvatarUrl(p?.avatar_url || null))).catch(console.error);
+            getEscrowTotal(identity.publicKey).then(latest(setEscrowTotal)).catch(() => {});
+            getPledgeHistory(identity.publicKey).then(latest(setPledgeHistory)).catch(() => {});
         }
     };
 
@@ -380,7 +387,7 @@ export default function LedgerScreen() {
         }
     };
     const loadMembers = () => {
-        if (preview) return;
+        if (preview || beansMode === undefined) return;
         getAllCommunityMembers().then(m => setMembers(m.filter(mm => mm.publicKey !== identity?.publicKey))).catch(console.error);
     };
 
@@ -391,7 +398,7 @@ export default function LedgerScreen() {
             const s2 = DeviceEventEmitter.addListener('sync_data_updated', loadData);
             const s3 = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (list: string[]) => setBlocked(new Set(Array.isArray(list) ? list : [])));
             return () => { s1.remove(); s2.remove(); s3.remove(); };
-        }, [identity, preview])
+        }, [identity, beansMode])
     );
 
     const handleSend = async () => {
@@ -533,16 +540,16 @@ export default function LedgerScreen() {
                     }
                 </View>
 
-                {/* Quick actions */}
+                {/* Quick actions (in preview Send is the marker's action, as on the Wallet tab) */}
                 <View style={styles.perksRow}>
-                    <Pressable
+                    {preview ? <LocalCommunityMark variant="action" feature="beans" label="Send Beans" /> : <Pressable
                         accessibilityRole="button"
                         style={[styles.perkPill, { borderColor: canSend ? palette.green200 : colors.border.default, backgroundColor: canSend ? palette.green50 : colors.surface.app }]}
                         onPress={openSend}
                     >
                         <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
                         <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</Text>
-                    </Pressable>
+                    </Pressable>}
                     <View style={[styles.perkPill, { borderColor: palette.green200, backgroundColor: palette.green50 }]}>
                         <MaterialCommunityIcons name="check-circle" size={13} color={colors.brand.primary} />
                         <Text style={[styles.perkText, { color: colors.brand.dark }]}>Invite Members</Text>
@@ -1012,7 +1019,7 @@ export default function LedgerScreen() {
             )}
 
             {/* Working off a debt (#1597): what is left, and Pay the Commons (a pay-back code from an admin). */}
-            {!preview && <RepaymentCard />}
+            {beansMode !== undefined && !preview && <RepaymentCard />}
 
             {/* ── Tab bar ── */}
             <View style={styles.tabBar} onLayout={e => { tabBarY.current = e.nativeEvent.layout.y; }}>

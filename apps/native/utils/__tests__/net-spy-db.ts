@@ -9,6 +9,9 @@
  * swallows that, and nothing is recorded. The object has no `then`, so the module never reads as a promise.
  *
  *   vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls));
+ *
+ * `answer`, when given, may answer a call itself (a test that holds the node's answer and lets it land later); a call it
+ * leaves (`undefined`) waits forever, as above. Every call is recorded either way.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,11 +30,11 @@ export function dbExportNames(): { functions: string[]; classes: string[]; strin
     return { functions, classes, strings };
 }
 
-export function dbStandIn(calls: string[]): Record<string, unknown> {
+export function dbStandIn(calls: string[], answer?: (name: string, args: unknown[]) => Promise<unknown> | undefined): Record<string, unknown> {
     const { functions, classes, strings } = dbExportNames();
     const out: Record<string, unknown> = { ...strings };
     for (const name of functions) {
-        const record = { [name](..._args: unknown[]) { calls.push(`db.${name}`); return new Promise(() => {}); } }[name];
+        const record = { [name](...args: unknown[]) { calls.push(`db.${name}`); return answer?.(name, args) ?? new Promise(() => {}); } }[name];
         out[name] = record;
     }
     for (const name of classes) {

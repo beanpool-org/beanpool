@@ -36,7 +36,13 @@ describe('the preview sources', () => {
         const ledger = read('app/(tabs)/ledger.tsx');
         // One component (design §4): the member's own Ledger, fed the sample only in preview, never a second screen.
         expect(ledger).not.toMatch(/LedgerPreview/);
-        expect(ledger).toMatch(/if \(preview\) \{ setBalanceState\(sampleBalance\(\)\); setTxns\(sampleTransactions\(\)\); return; \}/);
+        // Nothing until the mode is known (the phone's copy of the profile read), then the sample in preview; a live
+        // answer lands only while its load is the latest, so one begun before the switch never draws over the sample.
+        expect(ledger).toMatch(/const loadData = \(\) => \{\s*const gen = \+\+loadGen\.current;\s*if \(beansMode === undefined\) return;\s*if \(preview\) \{ setBalanceState\(sampleBalance\(\)\); setTxns\(sampleTransactions\(\)\); setEscrowTotal\(0\); setPledgeHistory\(\[\]\); return; \}/);
+        expect(ledger).toMatch(/const beansMode = useShowcaseModeOnceKnown\('beans'\);/);
+        for (const read of ['getBalance', 'getTransactions', 'getMemberProfile', 'getEscrowTotal', 'getPledgeHistory']) {
+            expect(ledger, read).toMatch(new RegExp(`${read}\\(identity\\.publicKey\\)\\.then\\(latest\\(`));
+        }
         expect(ledger).not.toMatch(/SAMPLE_COMMUNITY/);
         const commons = read('app/(tabs)/projects.tsx');
         expect(commons).toMatch(/enterprisesPreview \? <View style=\{\{ marginHorizontal: -16 \}\}><CommonsPreview \/><\/View> : null/);
@@ -49,12 +55,13 @@ describe('the preview sources', () => {
         for (const fn of ['loadMembers = () =>', 'handleSend = async () =>', 'handleExport = async () =>', 'openSend = async () =>']) {
             const at = ledger.indexOf(fn);
             expect(at, fn).toBeGreaterThan(-1);
-            expect(ledger.slice(at, at + 140), fn).toMatch(/\{\s*if \(preview\) (return;|\{ setSheetOpen\(true\); return; \})/);
+            expect(ledger.slice(at, at + 140), fn).toMatch(/\{\s*if \(preview( \|\| beansMode === undefined)?\) (return;|\{ setSheetOpen\(true\); return; \})/);
         }
-        expect(ledger).toMatch(/\{preview \? <LocalCommunityMark variant="action" feature="beans" label="Send Beans" \/> : <Pressable/);
+        // Send is the marker's action on both tabs: Levels' quick Send and the Wallet's.
+        expect(ledger.match(/\{preview \? <LocalCommunityMark variant="action" feature="beans" label="Send Beans" \/> : <Pressable/g)).toHaveLength(2);
         expect(ledger).toMatch(/\{preview \? <LocalCommunityMark variant="action" feature="beans" label="Export CSV" \/> : \(/);
         expect(ledger).toMatch(/\{showSend && !preview && \(/);
-        expect(ledger).toMatch(/\{!preview && <RepaymentCard \/>\}/);
+        expect(ledger).toMatch(/\{beansMode !== undefined && !preview && <RepaymentCard \/>\}/);
     });
 
     it("My Deals in preview is the member's own sheet: the sample loads before any node call, and no press reaches a review or a listing", () => {

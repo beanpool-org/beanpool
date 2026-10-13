@@ -11,7 +11,7 @@ import { useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ShowcaseFeature, FeatureMode } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
-import { useNodeProfile } from './use-node-profile';
+import { useNodeProfileState } from './use-node-profile';
 import { effectiveFeatures, readNodeProfile, showcaseMode, type NodeFeatures } from './node-profile';
 import { signedGet } from './node-post';
 import type { BeanPoolIdentity } from './identity';
@@ -46,10 +46,12 @@ export interface ReaderFeatures {
     reader: NodeFeatures | null;
     /** The two together: what this reader may do here. */
     effective: NodeFeatures | null;
+    /** Whether this phone's own copy of the node's profile has been read (useNodeProfileState's `copyRead`). */
+    known: boolean;
 }
 
 export function useReaderFeatures(): ReaderFeatures {
-    const profile = useNodeProfile();
+    const { profile, copyRead } = useNodeProfileState();
     const { identity } = useIdentity();
     const [reader, setReader] = useState<NodeFeatures | null>(null);
     useFocusEffect(
@@ -74,11 +76,21 @@ export function useReaderFeatures(): ReaderFeatures {
     const node = profile?.features ?? null;
     // One object per change, so a screen's memo that reads it doesn't recompute on every draw.
     const effective = useMemo(() => (node ? effectiveFeatures(node, reader) : null), [node, reader]);
-    return { node, reader, effective };
+    return { node, reader, effective, known: copyRead };
 }
 
 /** One feature's mode for this reader: live, read-only, preview or hidden. */
 export function useShowcaseMode(feature: ShowcaseFeature): FeatureMode {
     const { node, reader } = useReaderFeatures();
     return showcaseMode(feature, node, reader);
+}
+
+/**
+ * useShowcaseMode, but `undefined` until this phone's own copy of the node's profile has been read (a moment, no network).
+ * For a screen that asks the node for a feature's data as it comes into view: it asks nothing until the mode is known,
+ * so the worldwide community's Ledger, in preview, never asks for the reader's own ledger first.
+ */
+export function useShowcaseModeOnceKnown(feature: ShowcaseFeature): FeatureMode | undefined {
+    const { node, reader, known } = useReaderFeatures();
+    return known ? showcaseMode(feature, node, reader) : undefined;
 }

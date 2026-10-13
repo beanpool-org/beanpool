@@ -339,7 +339,7 @@ export const darkColors = {
 
     // Brand + accent
     brand: {
-        primary: brandDark.ink.brand,     // emerald-500: reads on the page, never under white words
+        primary: brandDark.ink.brand,     // emerald-400: reads on every page and card of both apps, never under white words
         fill: brandDark.commit.fill,      // emerald-700: the same deep fill as light
         dark: palette.emerald600,         // main's value: the protected map.tsx paints it as a fill under white words (3.77)
         tint: palette.emerald950,

@@ -21,7 +21,9 @@ import {
     contrastRatio,
 } from '../brand-colours.js';
 
-const DOC = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../docs/brand-colours.md');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+const DOC = resolve(ROOT, 'docs/brand-colours.md');
+const WEB_CSS = resolve(ROOT, 'apps/pwa/src/index.css');
 
 describe('contrastRatio', () => {
     it('matches WCAG reference values', () => {
@@ -48,12 +50,26 @@ describe('brand colours are readable in both themes', () => {
         for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'chip.ok', 'chip.warn', 'chip.danger', 'ink.brand', 'ink.success', 'ink.danger', 'ink.accent']) {
             expect(roles, role).toContain(role);
         }
-        expect(pairs.filter((p) => p.theme === 'light').length).toBe(pairs.filter((p) => p.theme === 'dark').length);
-        // fills: on/fill + on/hover; chips: ink/tint; inks: one per ground.
+        // fills: on/fill + on/hover; chips: ink/tint; inks: one per ground of that theme.
         const inks = Object.keys(BRAND_COLOURS.ink).length;
         const chips = Object.keys(BRAND_COLOURS.chip).length;
         const fills = Object.keys(BRAND_COLOURS).length - 2;
-        expect(pairs.filter((p) => p.theme === 'light').length).toBe(fills * 2 + chips + inks * INK_GROUNDS.light.length);
+        for (const theme of ['light', 'dark'] as const) {
+            expect(pairs.filter((p) => p.theme === theme).length, theme).toBe(fills * 2 + chips + inks * INK_GROUNDS[theme].length);
+        }
+    });
+
+    it("judges inks on every page, card and sunken ground the web app declares (index.css), in both themes", () => {
+        // Each of --bg-primary / --bg-secondary / --bg-card is declared twice: under :root (light), then under
+        // :root.dark-theme (dark). Dark --bg-secondary (#384038) sits under words in Messages, the consent card and the
+        // radius picker; leaving it out let 4.23:1 and 3.88:1 inks pass (review of #1904, finding 4).
+        const css = readFileSync(WEB_CSS, 'utf8');
+        for (const name of ['primary', 'secondary', 'card']) {
+            const values = [...css.matchAll(new RegExp(`--bg-${name}:\\s*(#[0-9a-fA-F]{6})`, 'g'))].map((m) => m[1].toLowerCase());
+            expect(values.length, `--bg-${name} declarations in index.css`).toBe(2);
+            expect(INK_GROUNDS.light, `light --bg-${name}`).toContain(values[0]);
+            expect(INK_GROUNDS.dark, `dark --bg-${name}`).toContain(values[1]);
+        }
     });
 
     it.each(pairs.map((p) => [`${p.theme} ${p.role} ${p.pair}`, p] as const))('%s', (_label, p) => {
@@ -81,7 +97,7 @@ describe('brandColours(theme)', () => {
         const dark = brandColours('dark');
         expect(light.cta.fill).toBe('#b85236');
         expect(light.ink.brand).toBe('#047857');
-        expect(dark.ink.brand).toBe('#10b981');
+        expect(dark.ink.brand).toBe('#34d399');
         expect(dark.chip.ok.tint).toBe('#022c22');
         for (const { path, colour } of brandColourLeaves()) {
             const get = (tree: unknown) => path.split('.').reduce((n, k) => (n as Record<string, unknown>)[k], tree);
@@ -104,7 +120,7 @@ describe('CSS for the web app and the manager', () => {
         }
         expect(css).toContain('--bp-cta-fill: #b85236;');
         expect(css).toContain('--bp-chip-ok-ink: #065f46;');
-        expect(css).toContain('--bp-ink-brand: #10b981;');
+        expect(css).toContain('--bp-ink-brand: #34d399;');
     });
 
     it('takes other selectors', () => {

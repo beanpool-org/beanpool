@@ -22,7 +22,8 @@ Every pair is at least **4.5:1** (WCAG 2.x AA for normal text), in both themes. 
 130 %, in the sun, where a button label is still "small" text; 3.0 is allowed only for a role listed in
 `LARGE_TEXT_ROLES` (none today). `packages/beanpool-core/src/__tests__/brand-colours.test.ts` computes every pair and
 fails below the bar: words on each fill and its hover, each chip's ink on its tint, and each ink on every page and
-card of both apps (`INK_GROUNDS`).
+card of both apps (`INK_GROUNDS`; the test reads the web's three grounds per theme from `apps/pwa/src/index.css`, so
+a new or changed web ground is judged too). In dark the web's `--bg-secondary` (`#384038`) is the hardest ground.
 
 ## The roles
 
@@ -55,9 +56,9 @@ matches the file.
 | `chip.warn.ink` | `#92400e` | `#fcd34d` |
 | `chip.danger.tint` | `#fee2e2` | `#450a0a` |
 | `chip.danger.ink` | `#b91c1c` | `#fca5a5` |
-| `ink.brand` | `#047857` | `#10b981` |
+| `ink.brand` | `#047857` | `#34d399` |
 | `ink.success` | `#047857` | `#34d399` |
-| `ink.danger` | `#b91c1c` | `#f87171` |
+| `ink.danger` | `#b91c1c` | `#fca5a5` |
 | `ink.accent` | `#4f46e5` | `#a5b4fc` |
 
 What each is for, and its ratios (the same in both themes for fills; lowest page or card for inks):
@@ -71,10 +72,10 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `gold` | Vouch, Approve, rating (charcoal words) | 7.46 / 9.60 | same |
 | `accent` | chat's send and unread badge, progress, selected toggles | 6.29 / 7.90 | same |
 | `chip.ok` / `warn` / `danger` | verified tick, Offer/Need, counts | 6.78 / 6.37 / 5.30 | 9.94 / 10.39 / 8.51 |
-| `ink.brand` | the brand green as words and icons | 4.77 | 5.21 |
-| `ink.success` | success messages, ticks | 4.77 | 6.88 |
-| `ink.danger` | errors, destructive links | 5.63 | 4.78 |
-| `ink.accent` | the indigo accent as words and icons | 5.47 | 6.63 |
+| `ink.brand` | the brand green as words and icons | 4.77 | 5.58 |
+| `ink.success` | success messages, ticks | 4.77 | 5.58 |
+| `ink.danger` | errors, destructive links | 5.63 | 5.65 |
+| `ink.accent` | the indigo accent as words and icons | 5.47 | 5.38 |
 
 ## Not covered (they keep their own hex)
 

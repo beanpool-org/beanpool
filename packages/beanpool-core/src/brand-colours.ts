@@ -48,7 +48,6 @@ const TERRA_700 = '#a3472e';
 const EMERALD_100 = '#d1fae5';
 const EMERALD_300 = '#6ee7b7';
 const EMERALD_400 = '#34d399';
-const EMERALD_500 = '#10b981';
 const EMERALD_700 = '#047857';
 const EMERALD_800 = '#065f46';
 const EMERALD_950 = '#022c22';
@@ -62,7 +61,6 @@ const ORANGE_700 = '#c2410c';
 const ORANGE_800 = '#9a3412';
 const RED_100 = '#fee2e2';
 const RED_300 = '#fca5a5';
-const RED_400 = '#f87171';
 const RED_700 = '#b91c1c';
 const RED_800 = '#991b1b';
 const RED_950 = '#450a0a';
@@ -109,11 +107,11 @@ export const BRAND_COLOURS = {
     /** Words and icons drawn straight on a page or card (never on one of the fills above). */
     ink: {
         /** The brand green as text, icons, links-in-green: the phone's `brand.primary`. */
-        brand: themed(EMERALD_700, EMERALD_500),
+        brand: themed(EMERALD_700, EMERALD_400),
         /** Success messages and ticks. */
         success: themed(EMERALD_700, EMERALD_400),
         /** Errors and destructive links. */
-        danger: themed(RED_700, RED_400),
+        danger: themed(RED_700, RED_300),
         /** The indigo accent as text and icons. */
         accent: themed(INDIGO_600, INDIGO_300),
     },
@@ -148,6 +146,7 @@ export const INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
         '#141a1a', // phone pattern ground
         '#1d231d', // web --bg-primary (nature-950)
         '#2a322a', // web --bg-card
+        '#384038', // web --bg-secondary (nature-800): message rows, consent cards, the radius picker
     ],
 };
 

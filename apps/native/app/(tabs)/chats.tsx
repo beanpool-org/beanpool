@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter, RefreshControl } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
+import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal } from '../../utils/db';
@@ -31,6 +32,11 @@ export default function ChatsScreen() {
     // and PeopleScreen reads that param off whichever route it is mounted on.
     const talkParams = useLocalSearchParams<{ view?: string; filter?: string }>();
     const [talkView, setTalkView] = useState<TalkView>(initialTalkView(talkParams.view));
+    // The "?" names Groups' and People's own guide pages while Talk shows them (DESIGN-getting-started-fable.md §4).
+    useFocusEffect(React.useCallback(() => {
+        setHelpContext(talkView === 'messages' ? null : talkView);
+        return () => setHelpContext(null);
+    }, [talkView]));
 
     React.useEffect(() => {
         if (talkParams.view === 'people') {

@@ -439,6 +439,16 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 )}
 
                 <View style={styles.headerRightIcons}>
+                    {/* Help for the screen you're on (DESIGN-getting-started-fable.md §4-5): the sheet is (tabs)/_layout.tsx's. */}
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Help for this screen"
+                        style={styles.iconBtn}
+                        onPress={() => DeviceEventEmitter.emit('open_help')}
+                        testID="header-help"
+                    >
+                        <MaterialCommunityIcons name="help-circle-outline" size={24} color="#ffffff" />
+                    </TouchableOpacity>
                     {/* The pill already says Join / Connect, so the invite icon only shows for members. */}
                     {!needsJoinOrConnect && (
                         <TouchableOpacity

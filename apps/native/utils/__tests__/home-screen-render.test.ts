@@ -134,6 +134,8 @@ import { draftIdentity, wipeIdentityScopedStorage } from '../identity';
 import { rememberKnock } from '../knock';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
+import * as tourStore from '../tour-store';
+import { START_CARD_WORDS } from '@beanpool/core';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { AccessibilityInfo, AppState, DeviceEventEmitter } from 'react-native';
@@ -148,6 +150,8 @@ import { getBundledGuide } from '../guide';
 const NODE = 'https://mullum.beanpool.org';
 const iso = (ms: number) => new Date(ms).toISOString();
 const H = 3600_000;
+/** A member who ended the tour (Skip): a Home never saved is the starter set (DESIGN-getting-started-fable.md §1). The newcomer's own Home: tour-render.test.ts. */
+const TOUR_ENDED = { v: 1 as const, state: 'skipped' as const, at: '2026-10-01T00:00:00.000Z' };
 
 /**
  * A member who has every card of version 1 on their list (as one who edited with an older app and hid nothing), so each
@@ -160,7 +164,7 @@ function localMember(): HomeAnswer {
     return {
         generatedAt: iso(now), profile: 'local',
         features: { beans: true, escrow: true, invites: true, exampleListings: false, decisions: true },
-        me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member' },
+        me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member', tour: TOUR_ENDED },
         layout: everyV1Card(now),
         cards: {
             steps: { joinedAt: iso(now - 3 * 24 * H), firstOffer: false, firstPost: false, photo: false, interests: false, invited: false, area: false, knocked: null },
@@ -673,7 +677,7 @@ function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
     return {
         generatedAt: iso(now), profile,
         features: local ? LOCAL_FEATURES : GLOBAL_FEATURES,
-        me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: true, probation: null, interests: ['food'], area: null, firstOffer: variant === 1, standing: 'member' },
+        me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: true, probation: null, interests: ['food'], area: null, firstOffer: variant === 1, standing: 'member', tour: TOUR_ENDED },
         layout: everyV1Card(now),
         cards: {
             needs: { items: needs },
@@ -1347,7 +1351,7 @@ function globalMember(days = 3): HomeAnswer {
     return {
         generatedAt: iso(now), profile: 'global', features: GLOBAL_FEATURES,
         me: {
-            joinedAt, isKeeper: false, interests: [], area: null, firstOffer: false, standing: 'member',
+            joinedAt, isKeeper: false, interests: [], area: null, firstOffer: false, standing: 'member', tour: TOUR_ENDED,
             probation: { onProbation: true, rules: 'words', limits: { posts: { limit: 2 }, photos: { limit: 4 }, new_dm_recipients: { limit: 3 } }, endsWhen: { hours: 168, keptPosts: 3 } },
         },
         layout: everyV1Card(now),
@@ -2661,6 +2665,159 @@ describe('sun and moon: worked out on the phone, from the place it already has (
     });
 });
 
+// ── Getting started (scratch/global-node/DESIGN-getting-started-fable.md §1–§3) ──────────────────────────────────────
+describe('Getting started: a newcomer\'s Home is the card alone, the tour is theirs to start, and its end is kept on the account', () => {
+    /** A member here for the first time: never saved a Home, never ended the tour, no copy on the phone. */
+    const newcomer = (): HomeAnswer => {
+        const a = localMember();
+        const { tour: _t, ...me } = a.me!;
+        return { ...a, me, layout: null };
+    };
+    const prefsPosts = (from = 0) => node.requests.slice(from).filter(r => r.method === 'POST' && new URL(r.url).pathname === '/api/members/preferences');
+    beforeEach(() => {
+        tourStore.closeTour();
+        node.answer = newcomer();
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+    });
+
+    it('a newcomer sees Getting started between Needs you and Your community, with Look around and Skip, no "…"; the five are asked for already', async () => {
+        await render();
+        expect(cards()).toEqual(['start', 'community']);
+        expect(document.querySelector('[data-testid="home-start-words"]')!.textContent).toBe(START_CARD_WORDS);
+        expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe('Look around ›');
+        expect(byLabel('Skip the tour')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-card-start-menu"]')).toBeNull();
+        // The starter set's bodies come with the first read, so Skip draws them with no second read.
+        expect(new URL(homeReads()[0].url).searchParams.get('cards')!.split(',')).toEqual(expect.arrayContaining(['steps', 'events', 'market', 'notices']));
+        // Never auto-plays.
+        expect(tourStore.currentTour()).toBeNull();
+    });
+
+    it('Look around starts the tour for this account at step 1 and sends nothing; the bar is the tab layout\'s, Home stays live', async () => {
+        await render();
+        const before = node.requests.length;
+        await act(async () => { (document.querySelector('[data-testid="home-start-look"]') as HTMLElement).click(); });
+        await settle();
+        expect(tourStore.currentTour()).toMatchObject({ publicKey: who.identity.publicKey, step: 0 });
+        expect(node.requests.slice(before).filter(r => r.method === 'POST')).toEqual([]);
+        // Nothing is blocked: Add a card still opens while the tour runs.
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await settle();
+        expect(document.querySelector('[data-testid="add-card-sheet"]')).not.toBeNull();
+    });
+
+    it('Skip: one layout write with the starter set, the account\'s record "skipped", the card gone and the five drawn', async () => {
+        await render();
+        const from = node.requests.length;
+        await act(async () => { byLabel('Skip the tour')!.click(); });
+        await settle(20);
+        const posts = prefsPosts(from).map(r => JSON.parse(r.body).preferences);
+        const layoutWrite = posts.find(p => 'home.layout' in p);
+        expect(layoutWrite['home.layout'].cards.map((c: { id: string }) => c.id)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'events', 'notices']);
+        expect(posts.find(p => 'tour' in p)?.tour).toMatchObject({ v: 1, state: 'skipped' });
+        expect(cards()).not.toContain('start');
+        expect(cards()).toEqual(expect.arrayContaining(['steps', 'market', 'events']));
+    });
+
+    it('the chips go on Home through the picker\'s own add; Done with a pick keeps the pick alone and writes "done"', async () => {
+        await render();
+        const home = tourStore.tourHome()!;
+        expect(home.chips).toEqual(['steps', 'market', 'beans']);
+        await act(async () => { home.addChip('beans'); });
+        await settle(20);
+        expect(tourStore.tourHome()!.onHome('beans')).toBe(true);
+        const from = node.requests.length;
+        await act(async () => { tourStore.tourHome()!.end('done'); });
+        await settle(20);
+        const posts = prefsPosts(from).map(r => JSON.parse(r.body).preferences);
+        expect(posts.find(p => 'home.layout' in p)['home.layout'].cards.map((c: { id: string }) => c.id)).toEqual(['beans']);
+        expect(posts.find(p => 'tour' in p)?.tour).toMatchObject({ v: 1, state: 'done' });
+        expect(cards()).not.toContain('start');
+    });
+
+    it('the account says the tour is done (another device): no card, the starter set; a member with a saved Home sees no change', async () => {
+        node.answer = { ...newcomer(), me: { ...newcomer().me!, tour: { v: 1, state: 'done', at: iso(Date.now() - H) } } };
+        await render();
+        expect(cards()).not.toContain('start');
+        expect(cards()).toEqual(expect.arrayContaining(['steps', 'market']));
+        act(() => root?.unmount());
+        host?.remove();
+        const saved = localMember();
+        const { tour: _t, ...me } = saved.me!;
+        node.answer = { ...saved, me };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(node.answer.layout));
+        await render();
+        expect(cards()).not.toContain('start');
+        expect(cards()).toEqual(expect.arrayContaining(['steps', 'market', 'events', 'joined', 'pulse']));
+    });
+
+    it('a Skip made offline is kept on the phone and sent on the next Home open', async () => {
+        await render();
+        node.down = true;
+        await act(async () => { byLabel('Skip the tour')!.click(); });
+        await settle(20);
+        expect(await tourStore.pendingTourRecord(who.identity.publicKey)).toMatchObject({ state: 'skipped' });
+        act(() => root?.unmount());
+        host?.remove();
+        node.down = false;
+        const from = node.requests.length;
+        await render();
+        await settle(20);
+        expect(prefsPosts(from).map(r => JSON.parse(r.body).preferences).some(p => p.tour?.state === 'skipped')).toBe(true);
+        expect(await tourStore.pendingTourRecord(who.identity.publicKey)).toBeNull();
+    });
+
+    /** A member whose Home is saved (on the phone too) and whose tour ended. */
+    const settled = (state: 'done' | 'skipped') => {
+        const saved = localMember();
+        node.answer = { ...saved, me: { ...saved.me!, tour: { v: 1, state, at: iso(Date.now() - H) } } };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(node.answer.layout));
+    };
+
+    for (const state of ['done', 'skipped'] as const) {
+        it(`tour ${state}, Home saved: Getting started from Add a card is drawn, as the picker says (review B2)`, async () => {
+            settled(state);
+            await render();
+            expect(cards()).not.toContain('start');
+            await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+            await act(async () => { byLabel('Add Getting started to Home')!.click(); });
+            await settle(2);
+            expect(cards()).toContain('start');
+            expect(cards()).toEqual(expect.arrayContaining(['market', 'pulse']));
+        });
+    }
+
+    it('Take the tour again (the "?"): writes "open" to the account, puts the card back on top, starts at step 1 (review B4)', async () => {
+        settled('done');
+        await render();
+        expect(cards()).not.toContain('start');
+        const from = node.requests.length;
+        await act(async () => { tourStore.tourHome()!.restart!(); });
+        await settle(4);
+        expect(prefsPosts(from).map(r => JSON.parse(r.body).preferences).some(p => p.tour?.state === 'open')).toBe(true);
+        expect(cards()[0]).toBe('start');
+        expect(tourStore.currentTour()).toMatchObject({ publicKey: who.identity.publicKey, step: 0 });
+    });
+
+    // The card counts the tour's steps as the tab layout builds it: on the worldwide community with its showcase on,
+    // the Ledger tab shows, so the tour has its Commons and Ledger steps (8, not 6) (scratch/reviews/sonnet-1857-sync-check.md).
+    for (const showcase of [true, false]) {
+        it(`a tour left at step 8 on the worldwide community, showcase ${showcase ? 'on: picked up at step 8' : 'off: held at its 6 steps'}`, async () => {
+            const base = everyCard('global', 1);
+            const { tour: _t, ...me } = base.me!;
+            node.answer = { ...base, me, layout: null, features: { ...base.features, showcase } };
+            mem.store.set(`beanpool_tour_progress_${who.identity.publicKey}`, JSON.stringify({ v: 1, step: 7, startedAt: iso(Date.now() - H) }));
+            await render();
+            expect(cards()).toEqual(['needs', 'find', 'start', 'community']);
+            const step = showcase ? 7 : 5;
+            expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe(`Pick up the tour at step ${step + 1} ›`);
+            await act(async () => { (document.querySelector('[data-testid="home-start-look"]') as HTMLElement).click(); });
+            await settle();
+            expect(tourStore.currentTour()).toMatchObject({ publicKey: who.identity.publicKey, step });
+        });
+    }
+});
+
 // Where Beans are previewed (the worldwide community with its showcase on), Home's Your Beans card (scratch/global-node/
 // DESIGN-global-showcase-fable.md §1 row 1): "hideable, default-on for new members like steps" — its own card, which only
 // its own "Hide this card" puts away. It rode inside First steps before, and went whenever First steps did.
@@ -2709,6 +2866,24 @@ describe('the Your Beans card where Beans are previewed: its own card, put away 
         watch.disconnect();
         expect(seen).toBe(false);
         expect(cards()).toContain('steps');
+    });
+
+    // Both designs: a newcomer's global Home is Needs you · Find your community · Getting started · Your community, and
+    // the example waits in the tour's Ledger step (DESIGN-getting-started-fable.md §0, §1; pick 10). Skip brings it.
+    it('a newcomer on the worldwide community: none while Getting started is up; Skip brings it, under First steps', async () => {
+        const a = showcase();
+        const { tour: _t, ...me } = a.me!;
+        node.answer = { ...a, me, layout: null };
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        tourStore.closeTour();
+        await render();
+        expect(cards()).toEqual(['needs', 'find', 'start', 'community']);
+        expect(beansCard()).toBeNull();
+        await act(async () => { byLabel('Skip the tour')!.click(); });
+        await settle(20);
+        const ids = cards();
+        expect(ids).not.toContain('start');
+        expect(ids[ids.indexOf('steps') + 1]).toBe('beans-preview');
     });
 
     it('no such card on a local community, nor on the worldwide one with its showcase off', async () => {

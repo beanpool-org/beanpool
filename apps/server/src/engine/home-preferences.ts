@@ -27,10 +27,17 @@
  *   dates), never by type or id, so a card type an app invents after this node is kept byte for byte. Version 1 is taken
  *   and served as it always was (above), for today's apps; last write wins by `updatedAt` across both.
  *
+ * - **The tour** (`tour`, DESIGN-getting-started-fable.md §2): `{ v: 1, state: 'done' | 'skipped' | 'open', at }`, checked by
+ *   core's checkTourRecord (a date ahead of the node's held to now). Done or skipped, the apps never draw Getting started
+ *   again on any device; "Take the tour again" writes `open`. Own-read like the rest.
+ *
  * Privacy: a layout says what someone cares about. It is never on the members list, a profile, or any read but its owner's.
  * The rows travel to a standby inside the member's row, as every preference does (replication-manifest.ts).
  */
-import { HOME_FRAME_MESSAGES, PRICING_CATEGORIES, checkHomeLayout, readHomeLayout, type HomeLayoutV2 } from '@beanpool/core';
+import {
+    HOME_FRAME_MESSAGES, PRICING_CATEGORIES, TOUR_PREF_KEY, TOUR_RECORD_MESSAGE, checkHomeLayout, checkTourRecord, readHomeLayout,
+    readTourRecord, type HomeLayoutV2, type TourRecord,
+} from '@beanpool/core';
 import { db } from '../db/db.js';
 
 export const HOME_LAYOUT_PREF_KEY = 'home.layout';
@@ -38,7 +45,8 @@ export const INTERESTS_PREF_KEY = 'interests';
 /** When the interests last changed, stamped by the node beside them. Not a key an app may send. */
 export const INTERESTS_STAMP_PREF_KEY = 'interests.updatedAt';
 /** The preference keys this module owns, as the apps send and read them (and as they are stored). */
-export const HOME_PREFERENCE_KEYS: readonly string[] = [HOME_LAYOUT_PREF_KEY, INTERESTS_PREF_KEY];
+export const HOME_PREFERENCE_KEYS: readonly string[] = [HOME_LAYOUT_PREF_KEY, INTERESTS_PREF_KEY, TOUR_PREF_KEY];
+export { TOUR_PREF_KEY };
 
 /** Every card Home can show, in the design's default order (§3.1). A member can't make a card; the catalogue is the catalogue. */
 export const HOME_CARD_IDS = [
@@ -227,6 +235,17 @@ export function getHomeLayout(publicKey: string): HomeLayout | null {
     return readStoredHomeLayout(storedValue(publicKey, HOME_LAYOUT_PREF_KEY));
 }
 
+/** This member's tour record, or null when the tour has not ended or been opened again here. For their own reads only. */
+export function getTourRecord(publicKey: string): TourRecord | null {
+    const stored = storedValue(publicKey, TOUR_PREF_KEY);
+    if (typeof stored !== 'string') return null;
+    try {
+        return readTourRecord(JSON.parse(stored));
+    } catch {
+        return null;
+    }
+}
+
 /** This member's interests, or null when they have never saved any. For their own reads only. */
 export function getInterests(publicKey: string): string[] | null {
     return readStoredInterests(storedValue(publicKey, INTERESTS_PREF_KEY));
@@ -253,6 +272,11 @@ export function homePreferenceWrites(publicKey: string, preferences: Record<stri
         const kept = getHomeLayout(publicKey);
         if (!kept || Date.parse(layout.updatedAt) >= Date.parse(kept.updatedAt)) writes.push([HOME_LAYOUT_PREF_KEY, JSON.stringify(layout)]);
     }
+    if (Object.prototype.hasOwnProperty.call(preferences, TOUR_PREF_KEY)) {
+        const record = checkTourRecord(preferences[TOUR_PREF_KEY], now);
+        if (!record) throw new Error(TOUR_RECORD_MESSAGE);
+        writes.push([TOUR_PREF_KEY, JSON.stringify(record)]);
+    }
     if (Object.prototype.hasOwnProperty.call(preferences, INTERESTS_PREF_KEY)) {
         const list = parseInterests(preferences[INTERESTS_PREF_KEY]);
         writes.push([INTERESTS_PREF_KEY, JSON.stringify(list)]);
@@ -269,7 +293,7 @@ export function homePreferenceWrites(publicKey: string, preferences: Record<stri
 }
 
 /** A member's Home keys as served: each one saved, through the checks; the interests with the node's stamp for them. */
-export type OwnHomePreferences = { 'home.layout'?: HomeLayout; interests?: string[]; interestsUpdatedAt?: string };
+export type OwnHomePreferences = { 'home.layout'?: HomeLayout; interests?: string[]; interestsUpdatedAt?: string; tour?: TourRecord };
 
 /** The Home keys this member has, through the checks, for their own read: a key never saved (or unreadable) is absent. */
 export function ownHomePreferences(publicKey: string): OwnHomePreferences {
@@ -281,6 +305,8 @@ export function ownHomePreferences(publicKey: string): OwnHomePreferences {
         out[INTERESTS_PREF_KEY] = interests;
         out.interestsUpdatedAt = getInterestsUpdatedAt(publicKey) ?? undefined;
     }
+    const tour = getTourRecord(publicKey);
+    if (tour) out.tour = tour;
     return out;
 }
 
@@ -297,5 +323,6 @@ export function homePreferencesNamed(publicKey: string, preferences: unknown): O
         out.interests = own.interests;
         out.interestsUpdatedAt = own.interestsUpdatedAt;
     }
+    if (Object.prototype.hasOwnProperty.call(preferences, TOUR_PREF_KEY) && own.tour) out.tour = own.tour;
     return out;
 }

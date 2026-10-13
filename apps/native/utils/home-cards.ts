@@ -25,7 +25,8 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
-    type SkyToday, featureModeFor } from '@beanpool/core';
+    type SkyToday, featureModeFor, readTourRecord, starterCards, tourEnded, type TourRecord,
+} from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
@@ -51,7 +52,7 @@ const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
  * nowhere and drawn nowhere; a type in neither is a newer app's, kept and not drawn.
  */
 export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
-    'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'search', 'decide', 'groups',
+    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'search', 'decide', 'groups',
     'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'community',
 ]);
 
@@ -179,6 +180,8 @@ export interface HomeMe {
     area: { lat: number; lng: number } | null;
     firstOffer: boolean;
     standing: 'member' | 'suspended';
+    /** The account's tour record (DESIGN-getting-started-fable.md §2): Getting started is drawn only while it hasn't ended. */
+    tour?: TourRecord | null;
 }
 
 /**
@@ -234,7 +237,11 @@ export function readHomeAnswer(raw: unknown): HomeAnswer | null {
         profile: raw.profile,
         features: isObj(raw.features) ? raw.features as HomeAnswer['features'] : {},
         ...(raw.welcome === true ? { welcome: true as const } : {}),
-        me: me ? { ...me, interests: Array.isArray(me.interests) ? me.interests.filter((c): c is string => typeof c === 'string') : [] } : null,
+        me: me ? {
+            ...me,
+            interests: Array.isArray(me.interests) ? me.interests.filter((c): c is string => typeof c === 'string') : [],
+            tour: readTourRecord(me.tour),
+        } : null,
         layout: readHomeLayout(raw.layout),
         ...(v1 ? { layoutV1: v1 } : {}),
         cards: raw.cards as HomeCards,
@@ -263,7 +270,9 @@ export function pickLayout(
     account: HomeLayout | null, phone: HomeLayout | null, accountV1?: { empty: boolean }, phoneOnlyOver?: string | null,
 ): { layout: HomeLayout | null; push: boolean } {
     if (!phone) {
-        if (accountV1?.empty) return { layout: { ...defaultHomeLayout(), dismissed: account?.dismissed ?? {} }, push: false };
+        // A node from before the frame, an account never edited there: the starter set, as before Getting started (a node
+        // that old keeps no tour record either).
+        if (accountV1?.empty) return { layout: { ...STARTER_LAYOUT, dismissed: account?.dismissed ?? {} }, push: false };
         return { layout: account, push: false };
     }
     if (!account) return { layout: phone, push: true };
@@ -449,13 +458,14 @@ export function moveCard(
 }
 
 /**
- * Reset to defaults: the newcomer's list (§1.3). A schedule's dismissal (the `safety` card) is not a layout choice: kept.
+ * Reset to defaults: the starter set (§1.3; DESIGN-getting-started-fable.md §1: Getting started is a newcomer's, never a
+ * reset's — a Home reset after the tour would otherwise be empty). A schedule's dismissal (the `safety` card) is not a layout choice: kept.
  * A card of a type this build doesn't know (a newer app's) is kept too, at the end: Reset is this app's defaults, not a
  * licence to throw away what it can't see.
  */
 export function resetLayout(layout: HomeLayout | null, now: number): HomeLayout {
     const unknown = listOf(layout).filter(c => !homeCardType(c.type));
-    const cards = [...defaultHomeLayout().cards, ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
+    const cards = [...starterCards(), ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
     return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: at(now) };
 }
 
@@ -645,8 +655,11 @@ export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): bo
 export function cardsToAsk(
     layout: HomeLayout | null, pinned: readonly HomeCardId[] = [], answer?: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards } | null,
 ): string[] {
-    return frameCardsToAsk(layout ?? defaultHomeLayout(), pinned).filter(id => {
-        const type = listOf(layout).find(l => l.id === id)?.type ?? id;
+    // A Home never saved is Getting started, and the starter set at Skip or Done: their bodies are asked for already, so
+    // the five are drawn the moment the tour ends, with no second read (DESIGN-getting-started-fable.md §1).
+    const base = layout ?? { ...defaultHomeLayout(), cards: [...defaultHomeLayout().cards, ...starterCards()] };
+    return frameCardsToAsk(base, pinned).filter(id => {
+        const type = base.cards.find(l => l.id === id)?.type ?? id;
         return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));
     });
 }
@@ -693,7 +706,25 @@ export interface HomeDrawContext {
     tipsUp?: boolean;
     /** The phone's last known place, only where Home already reads it (the global node, location allowed); absent: none. */
     place?: { lat: number; lng: number } | null;
+    /** The tour ended on this phone (Done or Skip) before the account's answer says so; absent: the answer's word. */
+    tourOver?: boolean;
 }
+
+/** The starter set as a Home never saved (DESIGN-getting-started-fable.md §1). */
+export const STARTER_LAYOUT: HomeLayout = { v: 2, cards: starterCards(), dismissed: {}, updatedAt: null };
+
+/**
+ * The Home a reader sees when none is saved: Getting started alone (core's default, null here) for a member whose tour
+ * hasn't ended; the starter set once it has, and for a visitor (their public cards, never a tour).
+ */
+export function shownLayout(answer: Pick<HomeAnswer, 'me'> | null | undefined, layout: HomeLayout | null, ctx: Pick<HomeDrawContext, 'tourOver'> = {}): HomeLayout | null {
+    if (layout || !answer) return layout;
+    return !answer.me || tourOverFor(answer, ctx) ? STARTER_LAYOUT : null;
+}
+
+/** Whether the tour has ended for this reader: the account says so, or this phone just ended it. */
+export const tourOverFor = (answer: Pick<HomeAnswer, 'me'>, ctx: Pick<HomeDrawContext, 'tourOver'> = {}): boolean =>
+    !!ctx.tourOver || tourEnded(answer.me?.tour);
 
 /**
  * A link to the tabs' first screen that means the Market's deals (`/` or `/(tabs)` with `tab=deals` or `dealsTab`, as
@@ -838,6 +869,10 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             case 'find': return isFindCard(c.find);
             case 'steps': return firstSteps(answer, ctx).show;
             case 'interests': return !!answer.me && (ctx.interests.length === 0 || ctx.tuneOpen);
+            // A member's only, never a visitor's. On a saved list it is drawn whenever it is there: Done or Skip takes it
+            // off (endTourLayout), and a member who puts it back from Add a card gets it (the picker offers it to
+            // whoever wants it, design §1). A Home never saved shows it until the tour ends (shownLayout).
+            case 'start': return !!answer.me;
             // A member's only, never a visitor's; a suspended member still learns the app.
             case 'tips': return !!answer.me && !!ctx.tipsUp;
             case 'invite': return !global && canInvite && !!answer.me?.firstOffer;
@@ -852,7 +887,12 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             default: return c[id] !== undefined;
         }
     };
-    return cardOrder(layout, pinned).filter(shows);
+    // No saved layout: Getting started until the tour ends, then the starter set (a Done whose write is still out).
+    const base = shownLayout(answer, layout, ctx);
+    const out = cardOrder(base, pinned).filter(shows);
+    // A Home never saved folds its cards behind Getting started while it is up (§1): Skip or Done brings them.
+    if (!base?.updatedAt && out.some(c => c.type === 'start')) return out.filter(c => c.type === 'start' || FIXED.has(c.type) || pinned.includes(c.id));
+    return out;
 }
 
 /**

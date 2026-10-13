@@ -51,6 +51,7 @@
 import {
     PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, normalizeCategory, readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor,
     HOME_FRAME_LIMITS, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings,
+    type TourRecord,
 } from '@beanpool/core';
 import { ONE_PASS_MAX_MEASURED, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -67,7 +68,7 @@ import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '.
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
-import { getInterestsUpdatedAt } from '../engine/home-preferences.js';
+import { getInterestsUpdatedAt, getTourRecord } from '../engine/home-preferences.js';
 import { chatHiddenFrom } from '../engine/event-thread.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
@@ -171,6 +172,11 @@ export interface HomeMe {
      * own unsaved change only while this is still the stamp that change was made on.
      */
     interestsUpdatedAt: string | null;
+    /**
+     * Their tour record (engine/home-preferences.ts `tour`), null when it has not ended: the apps draw Getting started
+     * only while it is null or `open` (DESIGN-getting-started-fable.md §2).
+     */
+    tour: TourRecord | null;
     area: { lat: number; lng: number } | null;
     /**
      * Whether they have posted an Offer here, which decides the `invite` card (§3.1 "after the first Offer"), whatever
@@ -879,6 +885,7 @@ export function buildHome(reader: HomeReader): HomeAnswer {
             probation: probation?.onProbation ? probation : null,
             interests,
             interestsUpdatedAt: getInterestsUpdatedAt(me!),
+            tour: getTourRecord(me!),
             area: area ? { lat: area.lat, lng: area.lng } : null,
             firstOffer: firstOfferOf(c),
             standing: member ? 'member' : 'suspended',

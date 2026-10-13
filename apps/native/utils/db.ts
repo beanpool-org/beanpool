@@ -3963,6 +3963,9 @@ export async function syncMessages(publicKey: string) {
         const deletedAccounts = new Set<string>(
             Array.isArray(convData.deletedAccounts) ? convData.deletedAccounts.filter((k: unknown): k is string => typeof k === 'string') : []
         );
+        // The pins before any line is blanked: on the account's first meeting with pins, the update's seed keeps the lines
+        // this phone held before this pass changes one (§3.4 amendment 3, companion a).
+        if (myIdentity?.publicKey) await dmPins.read(myIdentity.publicKey).catch(() => {});
         try {
             await blankLinesOfDeletedAccounts(database, deletedAccounts, myIdentity?.publicKey);
         } catch (e) {

@@ -42,16 +42,26 @@ export function membersNearPath(point: { lat: number; lng: number } | null | und
 }
 
 /**
- * The keys requests for these people: each a member key as the node spells them (anything else, such as an escrow or a
- * project, is left out, since one bad key refuses the whole request), each asked once, 100 a request, at most 3.
+ * The keys asked for these people, in requests of 100, at most 3: each a member key as the node spells them (anything
+ * else, such as an escrow or a project, is left out, since one bad key refuses the whole request), each asked once.
  */
-export function memberKeysPaths(keys: Iterable<string>): string[] {
+export function memberKeysBatches(keys: Iterable<string>): string[][] {
     const wanted = [...new Set([...keys].filter(k => typeof k === 'string' && MEMBER_KEY.test(k)))];
-    const paths: string[] = [];
-    for (let i = 0; i < wanted.length && paths.length < MEMBERS_KEYS_BATCHES; i += MEMBERS_KEYS_MAX) {
-        paths.push(`/api/members?${new URLSearchParams({ keys: wanted.slice(i, i + MEMBERS_KEYS_MAX).join(',') })}`);
+    const batches: string[][] = [];
+    for (let i = 0; i < wanted.length && batches.length < MEMBERS_KEYS_BATCHES; i += MEMBERS_KEYS_MAX) {
+        batches.push(wanted.slice(i, i + MEMBERS_KEYS_MAX));
     }
-    return paths;
+    return batches;
+}
+
+/** One keys request's path. */
+export function memberKeysPath(batch: string[]): string {
+    return `/api/members?${new URLSearchParams({ keys: batch.join(',') })}`;
+}
+
+/** The keys requests for these people (memberKeysBatches). */
+export function memberKeysPaths(keys: Iterable<string>): string[] {
+    return memberKeysBatches(keys).map(memberKeysPath);
 }
 
 /** The members whose name starts with what was typed; none, without asking, under 2 characters. */
@@ -66,10 +76,30 @@ export async function membersNear(point: { lat: number; lng: number } | null | u
     return path ? getMemberCards(path, signal) : [];
 }
 
-/** These people's cards, as many as the node holds (memberKeysPaths says which are asked). A failed batch gives none. */
-export async function membersByKeys(keys: Iterable<string>, signal?: AbortSignal): Promise<MemberCard[]> {
-    const answers = await Promise.all(memberKeysPaths(keys).map(p => getMemberCards(p, signal).catch(() => [] as MemberCard[])));
-    return answers.flat();
+/** One batch of people's cards (memberKeysBatches): those the node holds, in the order asked. */
+export async function membersByKeys(batch: string[], signal?: AbortSignal): Promise<MemberCard[]> {
+    return batch.length ? getMemberCards(memberKeysPath(batch), signal) : [];
+}
+
+/**
+ * A search box's answer from the node while `enabled`: asked once the typing pauses (MEMBERS_SEARCH_DEBOUNCE_MS), from
+ * 2 characters; each new word stops the one asked before it. `found` is null while there is nothing to show.
+ */
+export function useMemberSearch(typed: string, enabled: boolean): { found: MemberCard[] | null; state: 'idle' | 'searching' | 'failed' } {
+    const [found, setFound] = useState<MemberCard[] | null>(null);
+    const [state, setState] = useState<'idle' | 'searching' | 'failed'>('idle');
+    useEffect(() => {
+        if (!enabled || !memberSearchPath(typed)) { setFound(null); setState('idle'); return; }
+        const stop = new AbortController();
+        setState('searching');
+        const timer = setTimeout(() => {
+            searchMembers(typed, stop.signal)
+                .then(people => { if (!stop.signal.aborted) { setFound(people); setState('idle'); } })
+                .catch(() => { if (!stop.signal.aborted) { setFound(null); setState('failed'); } });
+        }, MEMBERS_SEARCH_DEBOUNCE_MS);
+        return () => { clearTimeout(timer); stop.abort(); };
+    }, [typed, enabled]);
+    return { found, state };
 }
 
 /**
@@ -80,7 +110,9 @@ export function useMembersOnDemand(): boolean | null {
     const [on, setOn] = useState<boolean | null>(null);
     useEffect(() => {
         let cancelled = false;
-        communityInfoOnce()
+        // Asked inside the promise, so a read that throws before it starts is "couldn't say" too, never a broken page.
+        Promise.resolve()
+            .then(() => communityInfoOnce())
             .then(info => { if (!cancelled) setOn(membersOnDemandOn(info)); })
             .catch(() => { if (!cancelled) setOn(false); });
         return () => { cancelled = true; };

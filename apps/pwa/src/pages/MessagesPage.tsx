@@ -29,6 +29,7 @@ import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpda
 import { withJitter } from '../lib/jitter';
 import { imageFromTransfer, dragCarriesFile, chatImageRefusal } from '../lib/chat-image-transfer';
 import { nodeRefusal } from '../lib/node-refusal';
+import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
 import { listPhotoUrl } from '@beanpool/core';
@@ -162,7 +163,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [draft, setDraft] = useState('');
     const [sending, setSending] = useState(false);
     const [showNewDm, setShowNewDm] = useState(false);
-    const [members, setMembers] = useState<Member[]>([]);
+    // Who this page can name: the member directory, or on a community where people are asked for, not read whole
+    // (lib/members-on-demand, the worldwide one), the cards asked for by key, as the page needs them (below).
+    const [members, setMembers] = useState<Array<Pick<Member, 'publicKey' | 'callsign' | 'avatarUrl'>>>([]);
+    const membersOnDemand = useMembersOnDemand();
+    const membersOnDemandRef = useRef<boolean | null>(null);
+    membersOnDemandRef.current = membersOnDemand;
+    // The keys asked for on this visit (the node's answer, or a request still out): never asked twice. A failed request
+    // takes its keys out again, so the next change asks for them.
+    const askedKeysRef = useRef<Set<string>>(new Set());
+    const [pickerQuery, setPickerQuery] = useState('');
+    const pickerSearch = useMemberSearch(pickerQuery, membersOnDemand === true && showNewDm);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const pollRef = useRef<number | null>(null);
     const [replyToMessage, setReplyToMessage] = useState<ApiMessage | null>(null);
@@ -265,7 +276,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     useEffect(() => {
         loadConversations();
-        loadMembers();
         const unsubscribe = onSyncActivity(() => loadConversations());
         const unsubBlocklist = onBlocklistUpdated(() => {
             setBlocklistVersion(v => v + 1);
@@ -571,7 +581,43 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
     }
 
+    // The directory once the node has said it has no members on demand (or couldn't say): as before the switch.
+    useEffect(() => { if (membersOnDemand === false) loadMembers(); }, [membersOnDemand]);
+
+    // With members on demand: the names this page shows that no row carries, by key, 100 a request and 3 at most a
+    // change (lib/members-on-demand): the open chat's authors and people, then any one-to-one chat with no name on its
+    // row. A key with no card still shows its first characters, as before.
+    useEffect(() => {
+        if (membersOnDemand !== true) return;
+        const blocked = new Set(getBlockedUsers());
+        const held = new Set(members.map(m => m.publicKey));
+        const wanted: string[] = [];
+        for (const m of messages) if (m.authorPubkey) wanted.push(m.authorPubkey);
+        if (activeConv) wanted.push(...(activeConv.participants || []));
+        for (const c of conversations) if (c.type === 'dm' && !c.peerCallsign) wanted.push(...(c.participants || []));
+        const missing = wanted.filter(k => k !== identity.publicKey && !blocked.has(k) && !held.has(k) && !askedKeysRef.current.has(k));
+        for (const batch of memberKeysBatches(missing)) {
+            batch.forEach(k => askedKeysRef.current.add(k));
+            membersByKeys(batch)
+                .then(cards => {
+                    if (cards.length === 0) return;
+                    setMembers(prev => {
+                        const have = new Set(prev.map(m => m.publicKey));
+                        return [...prev, ...cards.filter(c => !have.has(c.publicKey)).map(c => ({ publicKey: c.publicKey, callsign: c.callsign, avatarUrl: c.avatarUrl ?? null }))];
+                    });
+                })
+                .catch(() => { batch.forEach(k => askedKeysRef.current.delete(k)); });
+        }
+    }, [membersOnDemand, conversations, messages, activeConv, members, identity.publicKey]);
+
     async function loadMembers() {
+        // With members on demand nothing is read whole: a block takes the person's card out of what is held.
+        if (membersOnDemandRef.current === true) {
+            const blocked = new Set(getBlockedUsers());
+            setMembers(prev => prev.filter(m => !blocked.has(m.publicKey)));
+            return;
+        }
+        if (membersOnDemandRef.current !== false) return;
         try {
             const result = await getMembers();
             const blocked = new Set(getBlockedUsers());
@@ -961,6 +1007,80 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             </button>
         </div>
     ) : null;
+
+    // New DM overlay with members on demand (lib/members-on-demand): the people this member already talks to, named
+    // from their chats' rows, then a search the node answers, never a list of everyone. Every control at least 44 px.
+    if (showNewDm && membersOnDemand === true) {
+        const blocked = new Set(getBlockedUsers());
+        const seen = new Set<string>();
+        const recents = conversations.filter(c => c.type === 'dm').flatMap(c => {
+            const peer = (c.participants || []).find(p => p && p !== identity.publicKey);
+            if (!peer || blocked.has(peer) || seen.has(peer)) return [];
+            seen.add(peer);
+            const held = membersByPublicKey.get(peer);
+            return [{ publicKey: peer, callsign: c.peerCallsign || held?.callsign || peer.slice(0, 8), avatarUrl: c.peerAvatar ?? held?.avatarUrl ?? null }];
+        });
+        const typed = pickerQuery.trim();
+        const found = (pickerSearch.found || []).filter(m => m.publicKey !== identity.publicKey && !blocked.has(m.publicKey));
+        const pick = (p: { publicKey: string; callsign: string; avatarUrl?: string | null }) => (
+            <button
+                type="button"
+                key={p.publicKey}
+                data-testid="dm-pick"
+                onClick={() => handleStartDm(p.publicKey)}
+                style={{
+                    ...cardStyle, display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', minHeight: '44px',
+                    textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit', color: 'var(--text-primary)',
+                }}
+            >
+                {renderAvatar(p.avatarUrl, p.callsign, 36)}
+                <span style={{ fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }}>{p.callsign}</span>
+            </button>
+        );
+        const note: React.CSSProperties = { color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 0.75rem' };
+        return (
+            <div className="p-4 max-w-xl mx-auto w-full" data-testid="new-message-on-demand">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                    <button
+                        type="button"
+                        onClick={() => { setShowNewDm(false); setPickerQuery(''); }}
+                        style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', minHeight: '44px', minWidth: '44px', padding: '0 0.25rem' }}
+                    >
+                        ← Back
+                    </button>
+                    <h2 style={{ fontSize: '1.2rem', margin: 0 }}>
+                        New Message
+                    </h2>
+                </div>
+                {chatRefusalNotice && <div style={{ marginBottom: '0.75rem' }}>{chatRefusalNotice}</div>}
+
+                <label htmlFor="new-message-search" style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                    Find someone by name
+                </label>
+                <input
+                    id="new-message-search"
+                    type="search"
+                    value={pickerQuery}
+                    onChange={e => setPickerQuery(e.target.value)}
+                    placeholder="Type a name…"
+                    style={{ ...inputStyle, width: '100%', height: '44px', marginBottom: '0.4rem' }}
+                />
+                <p style={note} aria-live="polite" data-testid="new-message-search-status">
+                    {typed && typed.length < MEMBERS_SEARCH_MIN_CHARS ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
+                        : pickerSearch.state === 'searching' ? 'Searching…'
+                        : pickerSearch.state === 'failed' ? "Couldn't search just now. Check your connection and try again."
+                        : pickerSearch.found && found.length === 0 ? 'Nobody here has a name starting with that.'
+                        : null}
+                </p>
+                {found.length > 0 && <div data-testid="new-message-found" style={{ marginBottom: '1rem' }}>{found.map(pick)}</div>}
+
+                <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.5rem' }}>People you've talked to</h3>
+                {recents.length === 0
+                    ? <p style={note}>No one yet. Search for someone by name above.</p>
+                    : <div data-testid="new-message-recents">{recents.map(pick)}</div>}
+            </div>
+        );
+    }
 
     // New DM overlay. (The old "👥 Group" chat was removed on 2026-09-19: a group chat is now the chat every
     // Commons group owns, and the Talk tab's Groups list and "New group" come in the next slice.)

@@ -15,8 +15,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { InvitePage } from './InvitePage';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import {
-    useMembersOnDemand, searchMembers, membersNear, memberSearchPath,
-    MEMBERS_SEARCH_DEBOUNCE_MS, MEMBERS_SEARCH_LIMIT, MEMBERS_SEARCH_MIN_CHARS,
+    useMembersOnDemand, useMemberSearch, membersNear, MEMBERS_SEARCH_LIMIT, MEMBERS_SEARCH_MIN_CHARS,
 } from '../lib/members-on-demand';
 import { readMyArea } from '../lib/member-area';
 
@@ -114,8 +113,6 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     // 'none': the member has set no area; 'failed': it couldn't be read, or the nearest couldn't be.
     const [nearState, setNearState] = useState<'loading' | 'done' | 'none' | 'failed'>('loading');
     const [nearTry, setNearTry] = useState(0);
-    const [found, setFound] = useState<MemberCard[] | null>(null);
-    const [searchState, setSearchState] = useState<'idle' | 'searching' | 'failed'>('idle');
 
     useEffect(() => { loadFriends(); }, []);
     useEffect(() => { if (view === 'community' && onDemand === false) loadMembers(); }, [view, onDemand]);
@@ -140,19 +137,8 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         return () => { cancelled = true; };
     }, [view, onDemand, nearTry]);
 
-    // The search goes to the node once the typing pauses, from 2 characters; each new word stops the last one asked.
-    useEffect(() => {
-        if (onDemand !== true) return;
-        if (!memberSearchPath(searchQuery)) { setFound(null); setSearchState('idle'); return; }
-        const stop = new AbortController();
-        setSearchState('searching');
-        const timer = setTimeout(() => {
-            searchMembers(searchQuery, stop.signal)
-                .then(people => { if (!stop.signal.aborted) { setFound(people); setSearchState('idle'); } })
-                .catch(() => { if (!stop.signal.aborted) { setFound(null); setSearchState('failed'); } });
-        }, MEMBERS_SEARCH_DEBOUNCE_MS);
-        return () => { clearTimeout(timer); stop.abort(); };
-    }, [searchQuery, onDemand]);
+    // The search goes to the node once the typing pauses, from 2 characters.
+    const { found, state: searchState } = useMemberSearch(searchQuery, onDemand === true);
 
     useEffect(() => {
         return onBlocklistUpdated(() => {

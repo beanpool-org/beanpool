@@ -92,7 +92,7 @@ async function keySignIn(k: Key): Promise<Reply> {
 
 /** Every admin route the server mounts, read from the route sources (method, path with its :params). */
 function adminRoutes(): Array<[string, string]> {
-    const files = [path.join(HERE, 'https-server.ts'), path.join(HERE, 'agent', 'mcp-route.ts'), path.join(HERE, 'agent', 'grants-route.ts'), ...fs.readdirSync(path.join(HERE, 'routes')).filter(f => f.endsWith('.ts')).map(f => path.join(HERE, 'routes', f))];
+    const files = [path.join(HERE, 'https-server.ts'), path.join(HERE, 'agent', 'mcp-route.ts'), path.join(HERE, 'agent', 'grants-route.ts'), path.join(HERE, 'agent', 'suggestions-route.ts'), ...fs.readdirSync(path.join(HERE, 'routes')).filter(f => f.endsWith('.ts')).map(f => path.join(HERE, 'routes', f))];
     const out = new Map<string, [string, string]>();
     const re = /router\.(get|post|put|delete|patch)\(\s*'([^']+)'/g;
     for (const f of files) {

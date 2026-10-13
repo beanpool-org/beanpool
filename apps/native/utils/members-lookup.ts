@@ -6,7 +6,8 @@
  * search they always had. An answer is shown, not kept: a card is kept when the member opens it (the profile by key,
  * §2.2.4), so the held cards stay the people this member has dealt with.
  */
-import { signedGet } from './db';
+import { applyDelta, signedGet } from './db';
+import { isMemberKey, membersKeysPath } from './members-on-demand';
 
 /** The node refuses a shorter search: nobody lists a membership by typing a letter. */
 export const SEARCH_MIN_CHARS = 2;
@@ -53,5 +54,36 @@ export async function lookUpMembers(path: string, options?: { signal?: AbortSign
         return body.map(asHeldRow).filter((r): r is NonNullable<ReturnType<typeof asHeldRow>> => r !== null);
     } catch {
         return null;
+    }
+}
+
+/** A card opened on a profile is fetched again by key when it is missing or older than this (§1, the public profile). */
+export const CARD_FRESH_MS = 24 * 60 * 60 * 1000;
+
+/** True when a profile should fetch this card by key: none held, never fetched by key, or fetched over a day ago. */
+export function cardNeedsFetch(row: { card_fetched_at?: string | null } | null | undefined, nowMs: number): boolean {
+    if (!row) return true;
+    const at = row.card_fetched_at ? Date.parse(row.card_fetched_at) : NaN;
+    return !Number.isFinite(at) || nowMs - at > CARD_FRESH_MS;
+}
+
+/**
+ * The card of one member, fetched by key and kept, stamped now (§2.2.4): 'fetched', 'none' when the node has no such
+ * member, or 'unreachable' (offline, busy, refused), when the profile shows the name it was given and "Connect to see
+ * more", never a spinner that never ends.
+ */
+export async function fetchCardByKey(key: string): Promise<'fetched' | 'none' | 'unreachable'> {
+    if (!isMemberKey(key)) return 'none';
+    try {
+        const res = await signedGet(membersKeysPath([key]));
+        if (!res.ok) return 'unreachable';
+        const body = await res.json();
+        if (!Array.isArray(body)) return 'unreachable';
+        const row = body.find(m => m?.publicKey === key);
+        if (!row) return 'none';
+        const wrote = await applyDelta({ members: [row], membersFetched: { keys: [key], at: new Date().toISOString() } });
+        return wrote === false ? 'unreachable' : 'fetched';
+    } catch {
+        return 'unreachable';
     }
 }

@@ -21,6 +21,7 @@ import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { beansOn } from '../utils/node-profile';
 
 
@@ -403,7 +404,13 @@ export default function PublicProfileScreen() {
 
     const pubKeyStr = Array.isArray(publicKey) ? publicKey[0] : publicKey;
     const isSelf = !!identity?.publicKey && identity.publicKey === pubKeyStr;
-    const callsignStr = (Array.isArray(callsign) ? callsign[0] : callsign) || (isSelf ? identity?.callsign : undefined);
+    // On a community that says `membersOnDemand` this phone may hold no card for the member: it is fetched by key when
+    // missing or a day old (utils/members-lookup.ts). Offline with none held, the profile says so, and the name is never
+    // a blank (DESIGN-global-members-by-area §2.4): the name the caller passed, the card's, or the key's first 8 characters.
+    const membersOnDemand = nodeProfile?.features.membersOnDemand === true;
+    const callsignStr = (Array.isArray(callsign) ? callsign[0] : callsign) || (isSelf ? identity?.callsign : undefined)
+        || (membersOnDemand ? profile?.callsign || pubKeyStr?.slice(0, 8) : undefined);
+    const [cardUnreachable, setCardUnreachable] = useState(false);
 
     useEffect(() => {
         if (identity?.publicKey) {
@@ -514,6 +521,17 @@ export default function PublicProfileScreen() {
             isSelf ? getFriendsLocal(pubKeyStr).catch(() => []) : Promise.resolve([]),
         ]).then(([prof, posts, bal, friends]) => {
             if (prof) setProfile(prof);
+            setCardUnreachable(false);
+            if (membersOnDemand && pubKeyStr && cardNeedsFetch(prof, Date.now())) {
+                fetchCardByKey(pubKeyStr).then(async got => {
+                    if (cancelled) return;
+                    if (got === 'fetched') {
+                        const fresh = await getMemberProfile(pubKeyStr).catch(() => null);
+                        if (!cancelled && fresh) setProfile(fresh);
+                    }
+                    setCardUnreachable(got === 'unreachable' && !prof);
+                });
+            }
             if (posts) setActivePosts(posts);
             if (bal) setBalanceInfo(bal);
             if (Array.isArray(friends)) {
@@ -570,7 +588,7 @@ export default function PublicProfileScreen() {
             setGiven([]);
         }
         return () => { cancelled = true; };
-    }, [pubKeyStr, isSelf, identity?.publicKey]);
+    }, [pubKeyStr, isSelf, identity?.publicKey, membersOnDemand]);
 
     const renderStars = (avg: number) => {
         const rounded = Math.round(avg || 0);
@@ -720,6 +738,7 @@ export default function PublicProfileScreen() {
                         <MaterialCommunityIcons name="check-decagram" size={22} color={colors.brand.primary} style={{ marginLeft: 6, marginTop: 2, flexShrink: 0 }} />
                     </View>
                     <Text style={styles.pubkeyText}>{pubKeyStr?.slice(0, 16)}...</Text>
+                    {cardUnreachable && <Text style={styles.joinedText} numberOfLines={2}>Connect to see more</Text>}
                     {profile?.joined_at && (
                         <Text style={styles.joinedText} numberOfLines={1}>📅 Joined {new Date(profile.joined_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
                     )}

@@ -66,7 +66,54 @@ function nodeUrlFor(ctx: any): string {
     return /^[a-z0-9.\-:[\]]{1,255}$/i.test(host) ? `https://${host}` : 'this server';
 }
 
-type GrantCheck = { ok: true; grant: AgentGrant } | { ok: false; status: number; error: string };
+// ── A refused request's line ──
+// Every request refused here (401 or 403 at the token, 429 past the limits, 415, a batch) writes a line starting
+// "Assistant refused", within a budget node-wide: the first AGENT_REFUSAL_LOG_BUDGET a minute are written one by one, the
+// rest counted into one "…and M more" line when the minute is over (claim-code.ts claimLogAdmit's pattern). logger.ts
+// pruneSystemLogs keeps those lines apart (AGENT_REFUSED_LOG_KEEP_ROWS), so no number of refusals, from anyone, takes
+// the line of a call that was let in (review of #1855: 5,000 tokenless POSTs emptied the assistant's own record).
+
+export const AGENT_REFUSAL_LOG_BUDGET = 20;
+const REFUSAL_LOG_WINDOW_MS = 60_000;
+let refusalWindowStart = 0, refusalWritten = 0, refusalUnwritten = 0;
+let refusalSummaryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function writeRefusalSummary(): void {
+    if (refusalSummaryTimer) clearTimeout(refusalSummaryTimer);
+    refusalSummaryTimer = null;
+    if (refusalUnwritten > 0) {
+        logger.warn('AGENT', `Assistant refused ${refusalUnwritten} more requests in that minute, past the ${AGENT_REFUSAL_LOG_BUDGET} logged one by one`);
+    }
+    refusalUnwritten = 0;
+}
+
+/** Write a refused request's line (`message` starts "Assistant refused") within the minute's budget, else count it. */
+function logRefusal(message: string, metadata: Record<string, unknown>, now = Date.now()): void {
+    if (now - refusalWindowStart >= REFUSAL_LOG_WINDOW_MS) {
+        writeRefusalSummary();
+        refusalWindowStart = now;
+        refusalWritten = 0;
+    }
+    if (refusalWritten < AGENT_REFUSAL_LOG_BUDGET) {
+        refusalWritten++;
+        logger.warn('AGENT', message, metadata);
+        return;
+    }
+    refusalUnwritten++;
+    if (!refusalSummaryTimer) {
+        refusalSummaryTimer = setTimeout(writeRefusalSummary, Math.max(0, refusalWindowStart + REFUSAL_LOG_WINDOW_MS - now));
+        refusalSummaryTimer.unref?.();
+    }
+}
+
+/** For tests: the minute ends now (its "…and M more" line written, if any), and the next refusal starts a new one. */
+export function endAgentRefusalLogMinute(): void {
+    writeRefusalSummary();
+    refusalWindowStart = 0;
+    refusalWritten = 0;
+}
+
+type GrantCheck = { ok: true; grant: AgentGrant } | { ok: false; status: number; error: string; grantId?: string };
 
 /** The agent grant behind a request's bearer, its maker's role read now. */
 export function agentGrantFrom(ctx: any): GrantCheck {
@@ -80,8 +127,8 @@ export function agentGrantFrom(ctx: any): GrantCheck {
     }
     const role = typeof record.createdBy === 'string' ? nodeRoleOf(record.createdBy) : null;
     if (role !== 'owner' && role !== 'admin') {
-        logger.warn('AGENT', 'Assistant refused: its member is no longer an owner or admin', { grant: record.id });
-        return { ok: false, status: 401, error: 'Invalid, revoked or expired token' };
+        // Its member is no longer an owner or admin: the route's line names the grant.
+        return { ok: false, status: 401, error: 'Invalid, revoked or expired token', grantId: record.id };
     }
     return {
         ok: true,
@@ -195,7 +242,9 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         const check = agentGrantFrom(ctx);
         if (!check.ok) {
             if (check.status === 401) ctx.set('WWW-Authenticate', 'Bearer realm="beanpool", error="invalid_token"');
-            logger.warn('AGENT', 'Assistant endpoint refused a request', { status: check.status, from: logAddressTag(clientLimiterKey(ctx)) });
+            const from = logAddressTag(clientLimiterKey(ctx));
+            if (check.grantId) logRefusal('Assistant refused: its member is no longer an owner or admin', { grant: check.grantId, from });
+            else logRefusal('Assistant refused a request', { status: check.status, from });
             jsonRpcError(ctx, check.status, check.error);
             return;
         }
@@ -204,7 +253,7 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         const admitted = admitAgentCall(grant.id);
         if (!admitted.ok) {
             ctx.set('Retry-After', String(admitted.retryAfterSeconds));
-            logger.warn('AGENT', 'Assistant over its limit', { grant: grant.id });
+            logRefusal('Assistant refused: over its limit', { grant: grant.id });
             jsonRpcError(ctx, 429, admitted.error);
             return;
         }
@@ -215,7 +264,7 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         // capitals, or none) would be read by the SDK itself, past the 64 KiB cap and the one-message rule below.
         const rawBody: unknown = (ctx as any).rawBody;
         if (typeof rawBody !== 'string') {
-            logger.warn('AGENT', 'Assistant sent a body the server did not read: refused', { grant: grant.id });
+            logRefusal('Assistant refused: a body the server did not read', { grant: grant.id });
             jsonRpcError(ctx, 415, 'Send the MCP message with Content-Type: application/json', -32600);
             return;
         }
@@ -227,7 +276,7 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         // One message per request: a JSON-RPC batch would carry hundreds of calls past the per-call limits (MCP dropped
         // batching in 2025-06-18; the SDK's client never sends one).
         if (Array.isArray(parsed)) {
-            logger.warn('AGENT', 'Assistant sent a batch: refused', { grant: grant.id, messages: parsed.length });
+            logRefusal('Assistant refused: a batch', { grant: grant.id, messages: parsed.length });
             jsonRpcError(ctx, 400, 'Send one MCP message per request: batches are not accepted', -32600);
             return;
         }

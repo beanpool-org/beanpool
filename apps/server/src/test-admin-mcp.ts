@@ -15,7 +15,8 @@
  *   6. Limits: call 61 in a minute → 429 in words; take_backup works, is logged, and a 3rd in a day is refused.
  *   7. The maker demoted to admin: the assistant is an admin's (no backups); the maker no longer an admin → 401.
  *   8. GET /mcp 405; a foreign Origin 403; the owner switch off → 404 (an admin and a token cannot flip it); revoked → 401.
- *   9. The AGENT log: every tool call, never a secret or member text; system_logs from before takes the category.
+ *   9. The AGENT log: every tool call, never a secret or member text; system_logs from before takes the category; refused
+ *      requests' lines budgeted a minute and counted apart, so no flood of refusals or of other lines takes an admitted call's.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-admin-mcp" node ../../scripts/run-server-suites.mjs
  */
@@ -41,7 +42,7 @@ import { submitKnock } from './engine/knocks.js';
 import { listSnapshots } from './services/snapshot-scheduler.js';
 import { getAlertsStatus, updateAlerts } from './services/alerts.js';
 import { db, rebuildSystemLogsCheck } from './db/db.js';
-import { resetAgentLimits, AGENT_CALLS_PER_MINUTE, AGENT_CALLS_PER_DAY } from './agent/limits.js';
+import { resetAgentLimits, admitAgentCall, AGENT_CALLS_PER_MINUTE, AGENT_CALLS_PER_DAY } from './agent/limits.js';
 import { logger, pruneSystemLogs, LOG_KEEP_ROWS, AGENT_LOG_KEEP_ROWS } from './logger.js';
 import { welcomeInstructions, PROMPT_RULE } from './agent/welcome.js';
 import { AGENT_TOOLS } from './agent/tools.js';
@@ -497,13 +498,80 @@ async function main(): Promise<void> {
         await cf.close();
         resetAgentLimits();
         pruneSystemLogs();
-        const agentRows = (db.prepare("SELECT COUNT(*) AS n FROM system_logs WHERE category = 'AGENT'").get() as { n: number }).n;
-        const newestAgent = db.prepare("SELECT metadata FROM system_logs WHERE category = 'AGENT' ORDER BY id DESC LIMIT 1").get() as { metadata: string };
+        // The lines of calls let in: the refused requests' lines ("Assistant refused …") are counted apart (below).
+        const agentRows = (db.prepare("SELECT COUNT(*) AS n FROM system_logs WHERE category = 'AGENT' AND message NOT LIKE 'Assistant refused%'").get() as { n: number }).n;
+        const newestAgent = db.prepare("SELECT metadata FROM system_logs WHERE category = 'AGENT' AND message NOT LIKE 'Assistant refused%' ORDER BY id DESC LIMIT 1").get() as { metadata: string };
         assert(marker() === 1 && othersBefore() === others0,
             `after ${LOG_KEEP_ROWS + AGENT_LOG_KEEP_ROWS + 30} assistant lines, the SECURITY line and every other non-assistant line are still there (${marker()}, ${othersBefore()}/${others0})`);
         assert(agentRows === AGENT_LOG_KEEP_ROWS && /"tool":"connection_info"/.test(newestAgent?.metadata ?? '') && !/"flood"/.test(newestAgent?.metadata ?? '')
             && AGENT_LOG_KEEP_ROWS >= AGENT_CALLS_PER_DAY,
             `assistant lines keep a ring of their own, the newest ${AGENT_LOG_KEEP_ROWS} (a day's allowance, ${AGENT_CALLS_PER_DAY}): ${agentRows}`);
+
+        // Refused requests write their lines within a budget node-wide, and those lines are counted apart (mcp-route.ts
+        // logRefusal, logger.ts AGENT_REFUSED_LOG_KEEP_ROWS): no flood of refusals, with a token or without, takes the line
+        // of a call that was let in. 5,000 tokenless POSTs used to empty the assistant's own record. Read dynamically, so
+        // the suite runs to its end on a server without them (fail-first).
+        const route: Partial<typeof import('./agent/mcp-route.js')> = await import('./agent/mcp-route.js');
+        const logMod: Partial<typeof import('./logger.js')> = await import('./logger.js');
+        const BUDGET = route.AGENT_REFUSAL_LOG_BUDGET ?? 0;
+        const REFUSED_KEEP = logMod.AGENT_REFUSED_LOG_KEEP_ROWS ?? 0;
+        const endRefusalMinute = () => route.endAgentRefusalLogMinute?.();
+        const maxId = () => (db.prepare('SELECT MAX(id) AS m FROM system_logs').get() as { m: number }).m;
+        const countWhere = (where: string, ...p: unknown[]) => (db.prepare(`SELECT COUNT(*) AS n FROM system_logs WHERE ${where}`).get(...p) as { n: number }).n;
+        resetAgentLimits();
+        endRefusalMinute();
+        const beforeHonest = maxId();
+        const ch = await connect(AGENT);
+        for (let i = 0; i < 20; i++) await ch.callTool({ name: 'connection_info', arguments: {} });
+        await ch.close();
+        const afterHonest = maxId();
+        const honest = () => countWhere("category = 'AGENT' AND message = 'Assistant read' AND id > ? AND id <= ?", beforeHonest, afterHonest);
+        const honest0 = honest();
+        // The token's minute used up, then 5,000 POSTs with no token and 300 with it, 25 at a time.
+        while (admitAgentCall(tAgent.body.record.id).ok) { /* the rest of this minute's calls */ }
+        endRefusalMinute();
+        const floodFrom = maxId();
+        const tally = new Map<number, number>();
+        const send = async (headers: Record<string, string>) => {
+            const r = await call('POST', '/mcp', { body: init, headers });
+            tally.set(r.status, (tally.get(r.status) ?? 0) + 1);
+        };
+        const t0 = Date.now();
+        for (let i = 0; i < 5000; i += 25) await Promise.all(Array.from({ length: 25 }, () => send(MCP_HEADERS)));
+        for (let i = 0; i < 300; i += 25) await Promise.all(Array.from({ length: 25 }, () => send({ ...MCP_HEADERS, ...bearer(AGENT) })));
+        const elapsed = Date.now() - t0;
+        endRefusalMinute();
+        pruneSystemLogs();
+        const refusedLines = (db.prepare("SELECT message FROM system_logs WHERE category = 'AGENT' AND id > ? AND message LIKE 'Assistant refused%'").all(floodFrom) as Array<{ message: string }>).map(l => l.message);
+        const summaries = refusedLines.map(m => /^Assistant refused (\d+) more requests in that minute/.exec(m)).filter((m): m is RegExpExecArray => !!m);
+        const more = summaries.reduce((s, m) => s + Number(m[1]), 0);
+        const oneByOne = refusedLines.length - summaries.length;
+        const otherAgent = countWhere("category = 'AGENT' AND id > ? AND message NOT LIKE 'Assistant refused%'", floodFrom);
+        assert(tally.get(401) === 5000 && tally.get(429) === 300, `the flood: 5,000 tokenless POSTs 401, 300 past the limit 429 (${JSON.stringify([...tally])})`);
+        assert(honest0 === 20 && honest() === 20, `all 20 of an assistant's reads survive 5,000 tokenless POSTs and 300 calls past its limit (${honest0} → ${honest()})`);
+        assert(BUDGET > 0 && oneByOne + more === 5300 && refusedLines.length <= (BUDGET + 1) * (2 + Math.floor(elapsed / 60_000)) && otherAgent === 0,
+            `the refusals' lines are budgeted: ${oneByOne} one by one and ${summaries.length} "…and M more" (M ${more}) for 5,300 refused in ${elapsed} ms (${BUDGET} a minute); no other AGENT line (${otherAgent})`);
+
+        // A flood that lasts writes 21 lines a minute, ~30,000 a day: 2 × AGENT_LOG_KEEP_ROWS here at once, as the route
+        // writes them. The calls let in keep every line; the refusals keep their newest REFUSED_KEEP.
+        const admittedRows = () => countWhere("category = 'AGENT' AND message NOT LIKE 'Assistant refused%'");
+        const refusedRows = () => countWhere("category = 'AGENT' AND message LIKE 'Assistant refused%'");
+        const admitted0 = admittedRows();
+        const refusalRow = db.prepare("INSERT INTO system_logs (level, category, message, metadata) VALUES ('WARN', 'AGENT', 'Assistant refused a request', ?)");
+        db.transaction(() => { for (let i = 0; i < 2 * AGENT_LOG_KEEP_ROWS; i++) refusalRow.run(JSON.stringify({ status: 401, flood: i })); })();
+        pruneSystemLogs();
+        assert(REFUSED_KEEP > 0 && admitted0 === AGENT_LOG_KEEP_ROWS && admittedRows() === admitted0 && honest() === 20 && refusedRows() === REFUSED_KEEP,
+            `${2 * AGENT_LOG_KEEP_ROWS} more refusal lines take none of the ${admitted0} lines of calls let in (${admittedRows()}, reads ${honest()}/20); the refusals keep the newest ${REFUSED_KEEP} (${refusedRows()})`);
+
+        // The other way: lines that aren't an assistant's, past their count, leave every AGENT line (the non-AGENT count
+        // deletes only its own: review of #1855 confirmation, finding 2).
+        const agentAll0 = countWhere("category = 'AGENT'");
+        const filler = db.prepare("INSERT INTO system_logs (level, category, message) VALUES ('INFO', 'SYS', ?)");
+        db.transaction(() => { for (let i = 0; i < LOG_KEEP_ROWS + 100; i++) filler.run(`MCP-SUITE filler ${i}`); })();
+        pruneSystemLogs();
+        const agentAll1 = countWhere("category = 'AGENT'");
+        assert(agentAll0 > 0 && agentAll1 === agentAll0 && honest() === 20 && countWhere("category IS NOT 'AGENT'") === LOG_KEEP_ROWS,
+            `${LOG_KEEP_ROWS + 100} lines that aren't an assistant's leave all ${agentAll0} AGENT lines (${agentAll1}); they keep their newest ${LOG_KEEP_ROWS}`);
 
         // ── 7. The maker's role, read on every call ───────────────────────────────────────────────
         console.log("── 7. The maker's live role: demoted to admin, then no role ──");

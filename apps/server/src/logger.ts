@@ -98,18 +98,24 @@ export function writeLog(
  * An AI assistant's lines (category AGENT, one per call: agent/mcp-route.ts) are counted on their own, newest
  * AGENT_LOG_KEEP_ROWS, and never against LOG_KEEP_ROWS. In one count, an assistant at its limit replaced every line in
  * about 42 minutes, and a stolen agent token could push the owners' SECURITY lines out the same day (review of #1855,
- * finding 3). Now no number of assistant calls takes a line that isn't an assistant's. AGENT_LOG_KEEP_ROWS is one
- * assistant's daily allowance (agent/limits.ts AGENT_CALLS_PER_DAY), so a full day of its calls fits.
+ * finding 3). Now no number of assistant calls takes a line that isn't an assistant's.
+ *
+ * A request /mcp refused writes an AGENT line starting "Assistant refused", the first 20 a minute node-wide and one
+ * "…and M more" line after (agent/mcp-route.ts logRefusal). Those lines are counted apart again, newest
+ * AGENT_REFUSED_LOG_KEEP_ROWS: anyone can send refusals, and 5,000 tokenless requests emptied the assistant's own record
+ * (review of #1855 confirmation, finding 1). So only calls let in fill AGENT_LOG_KEEP_ROWS, one line each, and it is one
+ * assistant's daily allowance (agent/limits.ts AGENT_CALLS_PER_DAY): a full day of its calls fits.
  */
 export const LOG_KEEP_DAYS = 30;
 export const LOG_KEEP_ROWS = 2500;
 export const AGENT_LOG_KEEP_ROWS = 2000;
+export const AGENT_REFUSED_LOG_KEEP_ROWS = 500;
 const LOG_KEEP_MS = LOG_KEEP_DAYS * 24 * 60 * 60_000;
 
 /**
- * Delete the log lines past LOG_KEEP_ROWS (AGENT lines: past AGENT_LOG_KEEP_ROWS, counted apart) or older than
- * LOG_KEEP_DAYS at `now`. A line whose time can't be read is kept until the count takes it. Never throws. Returns how
- * many went.
+ * Delete the log lines past LOG_KEEP_ROWS (AGENT lines: past AGENT_LOG_KEEP_ROWS, and their "Assistant refused" lines
+ * past AGENT_REFUSED_LOG_KEEP_ROWS, each counted apart) or older than LOG_KEEP_DAYS at `now`. A line whose time can't be
+ * read is kept until the count takes it. Never throws. Returns how many went.
  */
 export function pruneSystemLogs(now = Date.now()): number {
     try {
@@ -120,12 +126,19 @@ export function pruneSystemLogs(now = Date.now()): number {
             WHERE category IS NOT 'AGENT'
               AND id < (SELECT id FROM system_logs WHERE category IS NOT 'AGENT' ORDER BY id DESC LIMIT 1 OFFSET ${LOG_KEEP_ROWS - 1})
         `).run().changes;
+        const refused = "category = 'AGENT' AND message LIKE 'Assistant refused%'";
+        const admitted = "category = 'AGENT' AND message NOT LIKE 'Assistant refused%'";
         const agentByCount = db.prepare(`
             DELETE FROM system_logs
-            WHERE category = 'AGENT'
-              AND id < (SELECT id FROM system_logs WHERE category = 'AGENT' ORDER BY id DESC LIMIT 1 OFFSET ${AGENT_LOG_KEEP_ROWS - 1})
+            WHERE ${admitted}
+              AND id < (SELECT id FROM system_logs WHERE ${admitted} ORDER BY id DESC LIMIT 1 OFFSET ${AGENT_LOG_KEEP_ROWS - 1})
         `).run().changes;
-        return byAge + byCount + agentByCount;
+        const refusedByCount = db.prepare(`
+            DELETE FROM system_logs
+            WHERE ${refused}
+              AND id < (SELECT id FROM system_logs WHERE ${refused} ORDER BY id DESC LIMIT 1 OFFSET ${AGENT_REFUSED_LOG_KEEP_ROWS - 1})
+        `).run().changes;
+        return byAge + byCount + agentByCount + refusedByCount;
     } catch (err: any) {
         console.error('Failed to prune administrative log:', err.message);
         return 0;

@@ -535,7 +535,7 @@ export default function ChatsScreen() {
                     <View style={styles.messageRow}>
                         {needsAction ? (
                             <Text style={styles.actionNeededText} numberOfLines={1}>
-                                <MaterialCommunityIcons name={actionIcon} size={14} color={palette.amber500} /> {actionText}
+                                <MaterialCommunityIcons name={actionIcon} size={14} color={colors.feedback.warning.fg} /> {actionText}
                             </Text>
                         ) : (
                             <Text style={[styles.lastMessage, item.unread > 0 && styles.lastMessageUnread]} numberOfLines={1}>

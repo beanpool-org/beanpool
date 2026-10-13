@@ -171,14 +171,14 @@ export default function UnlockKeysScreen() {
         return (
             <View style={[styles.center, { backgroundColor: colors.surface.app, paddingTop: insets.top + 56 }]}>
                 {close}
-                {checking && <ActivityIndicator size="large" color={palette.emerald500} />}
+                {checking && <ActivityIndicator size="large" color={colors.brand.primary} />}
                 {sheet}
             </View>
         );
     }
 
     if (!permission) {
-        return <View style={[styles.center, { backgroundColor: '#000' }]}><ActivityIndicator size="large" color={palette.emerald500} /></View>;
+        return <View style={[styles.center, { backgroundColor: '#000' }]}><ActivityIndicator size="large" color={colors.brand.primary} /></View>;
     }
 
     if (!permission.granted) {

@@ -469,7 +469,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             </View>
                             {showsBeans && (
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={[styles.creditAmount, { color: isBuyer ? palette.red600 : colors.brand.dark }]} numberOfLines={1}>
+                                <Text style={[styles.creditAmount, { color: isBuyer ? colors.feedback.danger.fg : colors.brand.dark }]} numberOfLines={1}>
                                     {isBuyer ? '- ' : '+ '}{item.credits}
                                 </Text>
                                 <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />

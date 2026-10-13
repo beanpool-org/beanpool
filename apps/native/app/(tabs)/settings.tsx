@@ -1968,7 +1968,7 @@ export default function SettingsScreen() {
                             accessibilityHint="Choose to remove account from device or permanently delete from node"
                         >
                             <View style={[styles.menuIconWrap, { backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50 }]}><Text style={styles.menuIcon}>⚠️</Text></View>
-                            <Text style={[styles.menuText, { flex: 1, color: theme === 'dark' ? colors.feedback.danger.fg : palette.red600 }]}>Account Deletion & Sign Out</Text>
+                            <Text style={[styles.menuText, { flex: 1, color: theme === 'dark' ? colors.feedback.danger.fg : colors.feedback.danger.fg }]}>Account Deletion & Sign Out</Text>
                             <Text style={[styles.menuChevron, { color: palette.red300 }]}>›</Text>
                         </Pressable>
                     </View>
@@ -2527,7 +2527,7 @@ export default function SettingsScreen() {
                                     <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{dbStats?.members ?? 0}</Text>
                                     <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>Cached Members</Text>
                                     {remoteStats && (
-                                        <Text style={{ fontSize: 10, color: dbStats?.members === remoteStats.members ? colors.brand.primary : palette.amber600, fontWeight: 'bold', marginTop: 4 }}>
+                                        <Text style={{ fontSize: 10, color: dbStats?.members === remoteStats.members ? colors.brand.primary : colors.feedback.warning.fg, fontWeight: 'bold', marginTop: 4 }}>
                                             {dbStats?.members === remoteStats.members ? '🟢 Node In Sync' : `⚠️ Node has ${remoteStats.members}`}
                                         </Text>
                                     )}
@@ -2537,7 +2537,7 @@ export default function SettingsScreen() {
                                     <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{dbStats?.posts ?? 0}</Text>
                                     <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>Active Posts</Text>
                                     {remoteStats && (
-                                        <Text style={{ fontSize: 10, color: dbStats?.posts === remoteStats.posts ? colors.brand.primary : palette.amber600, fontWeight: 'bold', marginTop: 4 }}>
+                                        <Text style={{ fontSize: 10, color: dbStats?.posts === remoteStats.posts ? colors.brand.primary : colors.feedback.warning.fg, fontWeight: 'bold', marginTop: 4 }}>
                                             {dbStats?.posts === remoteStats.posts ? '🟢 Node In Sync' : `⚠️ Node has ${remoteStats.posts}`}
                                         </Text>
                                     )}

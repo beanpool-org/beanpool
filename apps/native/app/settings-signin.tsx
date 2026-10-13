@@ -166,7 +166,7 @@ export default function SettingsSigninScreen() {
     );
 
     if (!permission) {
-        return <View style={[styles.center, { backgroundColor: '#000' }]}><ActivityIndicator size="large" color={palette.emerald500} /></View>;
+        return <View style={[styles.center, { backgroundColor: '#000' }]}><ActivityIndicator size="large" color={colors.brand.primary} /></View>;
     }
 
     if (!permission.granted) {

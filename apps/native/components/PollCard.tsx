@@ -441,7 +441,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         closeBtnText: {
             fontSize: 11,
             fontWeight: '700',
-            color: '#ef4444',
+            color: colors.feedback.danger.fg,
         },
         authorRow: {
             flexDirection: 'row',

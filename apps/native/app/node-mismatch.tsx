@@ -337,7 +337,7 @@ function makeStyles(colors: AppColors, dark: boolean) {
         inputLabel: { fontSize: 14, color: dark ? colors.text.body : palette.gray700, fontWeight: '600', marginBottom: 6 },
         input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 8 },
         hint: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 16 },
-        error: { color: dark ? colors.feedback.danger.fg : palette.red600, fontSize: 14, marginBottom: 16, lineHeight: 20 },
+        error: { color: dark ? colors.feedback.danger.fg : colors.feedback.danger.fg, fontSize: 14, marginBottom: 16, lineHeight: 20 },
         primaryBtn: { backgroundColor: palette.blue600, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 12 },
         primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '600' },
         secondaryBtn: { padding: 14, alignItems: 'center' },

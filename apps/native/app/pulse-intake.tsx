@@ -808,7 +808,7 @@ export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; them
         },
         successIcon: {
             fontSize: 16,
-            color: '#16a34a',
+            color: colors.feedback.success.fg,
             fontWeight: 'bold',
         },
         successText: {

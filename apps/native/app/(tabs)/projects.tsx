@@ -529,8 +529,8 @@ export default function ProjectsScreen() {
                             </View>
                         ) : isPending ? (
                             <View style={styles.badgeRow}>
-                                <View style={[styles.badge, { backgroundColor: palette.amber500 }]}>
-                                    <Text style={styles.badgeFundedText} numberOfLines={1}>PENDING</Text>
+                                <View style={[styles.badge, { backgroundColor: colors.feedback.warning.solid }]}>
+                                    <Text style={[styles.badgeFundedText, { color: colors.text.onGold }]} numberOfLines={1}>PENDING</Text>
                                 </View>
                             </View>
                         ) : null}

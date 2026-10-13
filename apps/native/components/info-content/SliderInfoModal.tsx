@@ -231,7 +231,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
                         <Text style={styles.cardLabel}>SPECTRUM COLOR ZONES</Text>
                         
                         <View style={styles.zoneRow}>
-                            <View style={[styles.zoneIndicator, { backgroundColor: palette.red500 }]} />
+                            <View style={[styles.zoneIndicator, { backgroundColor: colors.feedback.danger.solid }]} />
                             <View style={styles.zoneTextContainer}>
                                 <Text style={styles.zoneTitle}>Red Zone (Extremes)</Text>
                                 <Text style={styles.zoneDesc}>Max overdraft reached (left) or highest recirculation tier (<Text style={styles.boldWhiteText}>2.5%</Text> at <Text style={styles.boldWhiteText}>+2000B</Text>, right).</Text>
@@ -239,7 +239,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
                         </View>
 
                         <View style={styles.zoneRow}>
-                            <View style={[styles.zoneIndicator, { backgroundColor: palette.orange500 }]} />
+                            <View style={[styles.zoneIndicator, { backgroundColor: colors.action.fab }]} />
                             <View style={styles.zoneTextContainer}>
                                 <Text style={styles.zoneTitle}>Orange & Yellow (Warning)</Text>
                                 <Text style={styles.zoneDesc}>Approaching overdraft limits, or entering higher recirculation tiers (<Text style={styles.boldWhiteText}>1.5% to 2.0%</Text>).</Text>
@@ -333,12 +333,12 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
 
                         <View style={styles.bracketRow}>
                             <Text style={styles.bracketRange}>1000 – 2000B</Text>
-                            <Text style={[styles.bracketRate, { color: palette.orange500 }]}>2.0%</Text>
+                            <Text style={[styles.bracketRate, { color: colors.market.need.fg }]}>2.0%</Text>
                         </View>
 
                         <View style={styles.bracketRow}>
                             <Text style={styles.bracketRange}>2000B+</Text>
-                            <Text style={[styles.bracketRate, { color: palette.red500 }]}>2.5%</Text>
+                            <Text style={[styles.bracketRate, { color: colors.feedback.danger.fg }]}>2.5%</Text>
                         </View>
                     </View>
 

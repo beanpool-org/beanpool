@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../app/ThemeContext';
 import { withJitter } from '../utils/jitter';
 import { signedGet } from '../utils/db';
+import { lightColors } from '../constants/colors';
 
 export interface ActivityFeedItem {
     id: number;
@@ -214,7 +215,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                                     <Text style={styles.bold}>{actorName}</Text> traded with{' '}
                                     <Text style={styles.bold}>{targetName}</Text>
                                     {item.metadata?.credits ? (
-                                        <Text style={{ fontWeight: 'bold', color: '#10b981' }}> (🫘 {item.metadata.credits})</Text>
+                                        <Text style={{ fontWeight: 'bold', color: colors.brand.primary }}> (🫘 {item.metadata.credits})</Text>
                                     ) : null}
                                 </Text>
                             );
@@ -228,7 +229,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                                     <Text style={styles.bold}>{actorName}</Text> rated{' '}
                                     <Text style={styles.bold}>{targetName}</Text>{' '}
                                     <Text
-                                        style={{ color: '#f59e0b', fontWeight: 'bold' }}
+                                        style={{ color: colors.feedback.warning.fg, fontWeight: 'bold' }}
                                         accessibilityLabel={`${starCount} out of 5 stars`}
                                     >
                                         {'★'.repeat(starCount)}
@@ -313,7 +314,7 @@ const styles = StyleSheet.create({
         width: 6,
         height: 6,
         borderRadius: 3,
-        backgroundColor: '#10b981',
+        backgroundColor: lightColors.brand.fill, // the same deep green in both themes
     },
     pulseBadgeText: {
         fontSize: 11,

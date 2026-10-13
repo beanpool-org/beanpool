@@ -232,7 +232,7 @@ function ChatScreen({ id }: { id: string }) {
         dealBtnCancel: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
         dealBtnCancelText: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 13 },
         dealBtnReview: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.amber50, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.amber200, flex: 1 },
-        dealBtnReviewText: { color: theme === 'dark' ? colors.text.body : palette.amber600, fontWeight: '800', fontSize: 13 },
+        dealBtnReviewText: { color: theme === 'dark' ? colors.text.body : colors.feedback.warning.fg, fontWeight: '800', fontSize: 13 },
         dealAwaiting: { color: colors.text.secondary, fontSize: 12, fontWeight: '600', fontStyle: 'italic' },
         // Full-screen image viewer
         imageViewerOverlay: { flex: 1, backgroundColor: colors.overlay.imageViewerBg, alignItems: 'center', justifyContent: 'center' },
@@ -1252,7 +1252,7 @@ function ChatScreen({ id }: { id: string }) {
                     ]}>
                         <Text style={[styles.statusBadgeText,
                             postContext.status === 'active' ? { color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark } :
-                            postContext.status === 'pending' ? { color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber600 } :
+                            postContext.status === 'pending' ? { color: theme === 'dark' ? colors.feedback.warning.fg : colors.feedback.warning.fg } :
                             { color: theme === 'dark' ? colors.text.secondary : palette.gray600 }
                         ]}>{postContext.status?.toUpperCase() || 'UNKNOWN'}</Text>
                     </View>
@@ -1263,7 +1263,7 @@ function ChatScreen({ id }: { id: string }) {
             {pendingTx && pendingTx.isPayer && postContext?.status === 'pending' && (
                 <View style={[styles.inlineActionBar, { flexDirection: 'column' }]}>
                     <View style={{ width: '100%', marginBottom: 10 }}>
-                        <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber600, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+                        <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
                             ⚠️ Action Required: Release Credits
                         </Text>
                         <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber900, fontSize: 11, textAlign: 'center', paddingHorizontal: 16 }}>

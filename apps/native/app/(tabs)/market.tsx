@@ -382,7 +382,7 @@ export default function MarketScreen() {
         liveBadgeText: {
             fontSize: 9,
             fontWeight: '900',
-            color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange600,
+            color: theme === 'dark' ? colors.feedback.warning.fg : colors.market.need.fg,
         },
         favPanel: {
             backgroundColor: colors.accent.tint,
@@ -1008,7 +1008,7 @@ export default function MarketScreen() {
                     accessibilityHint="Opens your active and pending deals sheet"
                 >
                     <Text style={{ fontSize: 18, marginBottom: -2 }}>🤝</Text>
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: palette.amber700 }}>My Deals</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.feedback.warning.fg }}>My Deals</Text>
                     {pendingCount > 0 && (
                         <View style={styles.dealsIconBadge}>
                             <Text style={{ color: colors.text.inverse, fontSize: 8, fontWeight: '900' }}>{pendingCount}</Text>
@@ -1220,11 +1220,11 @@ export default function MarketScreen() {
                         List one Offer — anything you can give: a skill, produce, tools, a lift. That unlocks accepting Offers and posting Needs.
                     </Text>
                     <Pressable
-                        style={{ marginTop: 10, backgroundColor: palette.amber500, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
+                        style={{ marginTop: 10, backgroundColor: colors.feedback.warning.solid, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
                         onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
                         accessibilityRole="button"
                     >
-                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>➕ Post your first Offer</Text>
+                        <Text style={{ color: colors.text.onGold, fontSize: 14, fontWeight: '800' }}>➕ Post your first Offer</Text>
                     </Pressable>
                 </View>
             )}

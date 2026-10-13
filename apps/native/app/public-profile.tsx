@@ -321,7 +321,7 @@ export default function PublicProfileScreen() {
         beanIcon: { width: 14, height: 14, marginLeft: 2, resizeMode: 'contain' },
         typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5 },
         badgeOffer: { backgroundColor: colors.brand.fill },
-        badgeNeed: { backgroundColor: palette.orange600 },
+        badgeNeed: { backgroundColor: colors.action.fab },
         typeBadgeText: { fontSize: 10, fontWeight: '800', color: colors.text.inverse, letterSpacing: 0.5 },
 
         // Review cards
@@ -1057,9 +1057,9 @@ export default function PublicProfileScreen() {
                                     accessibilityRole="button"
                                     disabled={vouching}
                                     onPress={chooseVouchLevel}
-                                    style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f59e0b', opacity: vouching ? 0.6 : 1 }}
+                                    style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.feedback.warning.solid, opacity: vouching ? 0.6 : 1 }}
                                     >
-                                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }} allowFontScaling={false}>🤝 {vouching ? 'Vouching…' : 'Vouch for Member'}</Text>
+                                    <Text style={{ color: colors.text.onGold, fontWeight: '800', fontSize: 15 }} allowFontScaling={false}>🤝 {vouching ? 'Vouching…' : 'Vouch for Member'}</Text>
                                 </Pressable>
                             )}
                         </>

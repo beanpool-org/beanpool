@@ -425,11 +425,11 @@ return StyleSheet.create({
     secondaryBtnText: { color: colors.text.body, fontSize: 15, fontWeight: '600' },
     backBtn: { padding: 12, alignItems: 'center', marginTop: 4 },
     backBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
-    error: { color: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), fontSize: 13, marginBottom: 12, textAlign: 'center' },
+    error: { color: dark ? colors.feedback.danger.fg : (colors.feedback.danger.fg), fontSize: 13, marginBottom: 12, textAlign: 'center' },
     // Name-step availability hints
     hintMuted: { color: colors.text.secondary, fontSize: 13, marginTop: -8, marginBottom: 12 },
     hintOk: { color: dark ? palette.emerald400 : (palette.green700 || '#15803d'), fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 12 },
-    hintTaken: { color: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 10 },
+    hintTaken: { color: dark ? colors.feedback.danger.fg : (colors.feedback.danger.fg), fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 10 },
     suggestRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
     suggestChip: {
         backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong,

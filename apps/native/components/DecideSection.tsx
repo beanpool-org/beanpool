@@ -428,7 +428,7 @@ export function DecideSection({
             backgroundColor: palette.green600,
         },
         voteBtnNo: {
-            backgroundColor: palette.red600,
+            backgroundColor: colors.feedback.danger.solid,
         },
         voteBtnText: {
             flexShrink: 1,
@@ -727,7 +727,7 @@ export function DecideSection({
                                                 <Text style={styles.metricLabel}>
                                                     Turnout: {turnoutLine(tally)}
                                                 </Text>
-                                                <Text style={[styles.metricValue, { color: tally.quorumMet ? palette.green600 : colors.text.secondary }]}>
+                                                <Text style={[styles.metricValue, { color: tally.quorumMet ? colors.feedback.success.fg : colors.text.secondary }]}>
                                                     {tally.quorumMet ? 'Met ✅' : 'Pending'}
                                                 </Text>
                                             </View>
@@ -766,7 +766,7 @@ export function DecideSection({
                                                 <View
                                                     style={[
                                                         styles.barFill,
-                                                        { width: `${supportPct}%`, backgroundColor: tally.passed ? palette.green500 : palette.amber500 },
+                                                        { width: `${supportPct}%`, backgroundColor: tally.passed ? palette.green500 : colors.feedback.warning.solid },
                                                     ]}
                                                 />
                                             </View>

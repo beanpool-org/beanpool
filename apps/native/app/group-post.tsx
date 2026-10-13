@@ -105,7 +105,7 @@ export default function GroupPostScreen() {
             borderColor: colors.brand.primary,
         },
         typeBtnActiveNeed: {
-            backgroundColor: colors.market.need.fg || '#ea580c',
+            backgroundColor: colors.market.need.fg || colors.action.fab,
             borderColor: colors.market.need.fg || '#ea580c',
         },
         typeBtnText: {

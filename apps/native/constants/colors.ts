@@ -107,6 +107,7 @@ export const palette = {
     orange600: '#ea580c',
     orange700: '#c2410c',
     orange800: '#9a3412',
+    orange900: '#7c2d12',
     orangeAlt500: '#d97757',
 
     // Green / lime — founding / "live" / new-members (distinct from emerald brand)
@@ -252,6 +253,7 @@ export const lightColors = {
     // Discrete actions
     action: {
         fab: brandLight.action.fill,
+        cta: brandLight.cta.fill,   // terracotta call to action (white words)
     },
 
     // Translucent overlays on imagery (price / recurring badges over photos)
@@ -352,7 +354,7 @@ export const darkColors = {
     // Marketplace listing type
     market: {
         offer: { fg: palette.emerald400, bg: palette.emerald950 },
-        need: { fg: palette.orange300, bg: palette.orange800 },
+        need: { fg: palette.orange300, bg: palette.orange900 }, // 5.56:1 (orange-800 was 4.33)
         author: palette.gray300,
     },
 
@@ -377,6 +379,7 @@ export const darkColors = {
     // Discrete actions
     action: {
         fab: brandDark.action.fill,
+        cta: brandDark.cta.fill,
     },
 
     // Translucent overlays on imagery

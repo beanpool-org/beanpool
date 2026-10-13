@@ -231,7 +231,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                 borderColor: colors.border.default,
             },
             categoryChipActive: {
-                backgroundColor: palette.emerald600,
+                backgroundColor: colors.brand.fill,
                 borderColor: palette.emerald600,
             },
             categoryChipText: {
@@ -328,7 +328,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
             },
             seasonalityText: {
                 fontSize: 11,
-                color: palette.emerald600,
+                color: colors.brand.primary,
                 marginTop: 3,
                 fontWeight: '500',
             },
@@ -368,7 +368,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                 gap: 6,
             },
             offerBtn: {
-                backgroundColor: palette.emerald600,
+                backgroundColor: colors.brand.fill,
                 paddingHorizontal: 10,
                 paddingVertical: 4,
                 borderRadius: 8,
@@ -455,7 +455,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                 marginBottom: 16,
             },
             sheetSubmitBtn: {
-                backgroundColor: palette.emerald600,
+                backgroundColor: colors.brand.fill,
                 borderRadius: 12,
                 paddingVertical: 14,
                 alignItems: 'center',
@@ -523,8 +523,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                     <View style={styles.priceBadge}>
                         <Text style={styles.priceText}>🫘 {effectivePrice}</Text>
                         {item.unit && <Text style={styles.unitText}>/{item.unit}</Text>}
-                        {item.trend === 'up' && <Text style={[styles.trendIndicator, { color: palette.emerald500 }]}>▲</Text>}
-                        {item.trend === 'down' && <Text style={[styles.trendIndicator, { color: palette.red500 }]}>▼</Text>}
+                        {item.trend === 'up' && <Text style={[styles.trendIndicator, { color: colors.brand.primary }]}>▲</Text>}
+                        {item.trend === 'down' && <Text style={[styles.trendIndicator, { color: colors.feedback.danger.fg }]}>▼</Text>}
                     </View>
 
                     <View style={styles.actionsRow}>
@@ -627,7 +627,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                 {/* Main Item List */}
                 {loading ? (
                     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                        <ActivityIndicator size="large" color={palette.emerald500} />
+                        <ActivityIndicator size="large" color={colors.brand.primary} />
                     </View>
                 ) : (
                     <FlatList

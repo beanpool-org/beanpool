@@ -90,7 +90,7 @@ vi.mock('../crypto', async (orig) => ({
 
 import {
     insertMessage, postGroupChatMessage, editThreadMessage, groupKeyringFor, groupScreenKeyringFor, isHeldGroupChat,
-    isKnownDmConversation, getConversationKind,
+    isKnownDmConversation, getConversationKind, joinGroupApi, approveGroupMemberApi, leaveGroupApi,
 } from '../db';
 import { GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
 import { forgetGroupKeys } from '../group-chat-keys';
@@ -157,6 +157,8 @@ function reply(status: number, body: any) { return { ok: status >= 200 && status
     if (g && v && method === 'GET' && lp.startsWith(`/api/messages/${lg}`)) {
         return reply(200, { conversation: { id: g, type: 'group_thread', name: 'The group', participants: [who.me.publicKey, OTHER] }, messages: [] });
     }
+    if (g && v && method === 'POST' && (lp === `/api/groups/${lg}/join` || lp === `/api/groups/${lg}/members`)) return reply(200, { success: true });
+    if (g && v && method === 'DELETE' && lp.startsWith(`/api/groups/${lg}/members/`)) return reply(200, { success: true });
     if (method === 'POST' && lp.endsWith('/chat/message')) return reply(201, { success: true, message: { id: body?.clientId } });
     if (method === 'POST' && path === '/api/messages/send') return reply(201, { success: true, message: { id: body?.id, timestamp: new Date().toISOString() } });
     if (method === 'POST' && path === '/api/messages/edit') return reply(200, { success: true, message: { editedAt: new Date().toISOString() } });
@@ -356,5 +358,38 @@ describe('a held group\'s lines are signed and routed under the group\'s own id,
         }
         expect(posted.length).toBe(postedBefore);
         expect(await groupKeyringFor(G)).toBe(await groupKeyringFor(g));
+    });
+});
+
+describe('a held group\'s membership changes are routed under the group\'s own id, however the caller spells it (#1841 confirmation 1, finding 1)', () => {
+    it('join, approve and the convenor\'s removal, each asked of a held group in capitals, go to /api/groups/<g>/…', async () => {
+        fresh();
+        const NEWCOMER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
+        /** A held group (epoch 1 to me and Bob) the node serves, answering its routes however spelled. */
+        const heldGroup = () => {
+            const g = randomUUID();
+            const e1 = epochWithKey(g, 1, [ME.publicKey, OTHER]);
+            views.set(g, { keys: { current: 1, roster: [ME.publicKey, OTHER], epochs: [e1.header], myWraps: [e1.wrap] } });
+            store.keyState.set(`${ME.publicKey}/${g}`, { highest: 1, after: 1 });
+            store.epochs.set(`${ME.publicKey}/${g}`, [e1.stored]);
+            return g;
+        };
+        /** The membership routes the phone asked since `from`, as sent. */
+        const membership = (from: number) => received.slice(from).filter((r) => r.method !== 'GET' && /\/(join|members)(\/|$)/.test(r.path)).map((r) => `${r.method} ${r.path}`);
+
+        const joined = heldGroup();
+        let from = received.length;
+        await joinGroupApi(joined.toUpperCase());
+        expect(membership(from)).toEqual([`POST /api/groups/${joined}/join`]);
+
+        const approved = heldGroup();
+        from = received.length;
+        await approveGroupMemberApi(approved.toUpperCase(), NEWCOMER);
+        expect(membership(from)).toEqual([`POST /api/groups/${approved}/members`]);
+
+        const removed = heldGroup();
+        from = received.length;
+        expect(await leaveGroupApi(removed.toUpperCase(), OTHER)).toBe(true);
+        expect(membership(from)).toEqual([`DELETE /api/groups/${removed}/members/${OTHER}`]);
     });
 });

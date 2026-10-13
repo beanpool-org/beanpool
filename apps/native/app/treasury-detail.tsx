@@ -192,7 +192,7 @@ export default function TreasuryDetailScreen() {
         // Lead Succession
         successionCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.feedback.warning.border, marginBottom: 16 },
         successionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-        successionTitle: { fontSize: 13, fontWeight: '800', color: colors.feedback.warning.solid },
+        successionTitle: { fontSize: 13, fontWeight: '800', color: colors.feedback.warning.fg },
         successionText: { fontSize: 12, color: colors.text.body, lineHeight: 18, marginBottom: 12 },
         successionVoteBox: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 8 },
         successionCandidateText: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
@@ -213,7 +213,7 @@ export default function TreasuryDetailScreen() {
         balanceLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
         balanceValue: { fontSize: 34, fontWeight: '900', letterSpacing: -1, marginTop: 4 },
         balancePos: { color: colors.brand.primary },
-        balanceNeg: { color: colors.feedback.warning.solid },
+        balanceNeg: { color: colors.feedback.warning.fg },
         balanceMetaRow: { flexDirection: 'row', marginTop: 14, gap: 12 },
         metaBox: { flex: 1, backgroundColor: colors.surface.app, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border.default },
         metaLabel: { fontSize: 10, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
@@ -1079,7 +1079,7 @@ export default function TreasuryDetailScreen() {
                         {Boolean(leadInactivity?.isEligible ?? leadInactivity?.isEligibleForSuccession) && (
                             <View style={styles.successionCard}>
                                 <View style={styles.successionHeader}>
-                                    <MaterialCommunityIcons name="alert-circle" size={18} color={colors.feedback.warning.solid} />
+                                    <MaterialCommunityIcons name="alert-circle" size={18} color={colors.feedback.warning.fg} />
                                     <Text style={styles.successionTitle}>{successionHeading(leadInactivity, kw)}</Text>
                                 </View>
                                 <Text style={styles.successionText}>{successionExplainer(leadInactivity, kw)}</Text>
@@ -1289,7 +1289,7 @@ export default function TreasuryDetailScreen() {
                                     accessibilityLabel={`Warning: Operator eats last. This ${kw.kind} is currently in deficit with ${balance} beans. Credit buys inputs and supplies, but ${kw.keepers} can only be paid from profit. ${kw.Keepers} cannot be paid while the ${kw.kind} is in deficit.`}
                                     style={{ marginTop: 12, padding: 10, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.feedback.warning.solid }}
                                 >
-                                    <Text style={{ fontSize: 11, color: colors.feedback.warning.solid, fontWeight: '700', lineHeight: 16 }}>
+                                    <Text style={{ fontSize: 11, color: colors.feedback.warning.fg, fontWeight: '700', lineHeight: 16 }}>
                                         ⚠️ OPERATOR EATS LAST: This {kw.kind} is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but {kw.keepers} can only be paid from profit. {kw.Keepers} cannot be paid while the {kw.kind} is in deficit.
                                     </Text>
                                 </View>
@@ -1300,7 +1300,7 @@ export default function TreasuryDetailScreen() {
                                         <Text style={{ fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                                             Pending Wage Claims ({pendingClaims.length})
                                         </Text>
-                                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.feedback.warning.solid }}>
+                                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.feedback.warning.fg }}>
                                             {pendingClaimsTotal} 🫘
                                         </Text>
                                     </View>
@@ -1405,9 +1405,9 @@ export default function TreasuryDetailScreen() {
                                                         accessibilityRole="button"
                                                     >
                                                         {actionState?.id === b.id && actionState?.type === 'reject' ? (
-                                                            <ActivityIndicator size="small" color={colors.feedback.warning.solid} />
+                                                            <ActivityIndicator size="small" color={colors.feedback.warning.fg} />
                                                         ) : (
-                                                            <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.solid }]}>Decline</Text>
+                                                            <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.fg }]}>Decline</Text>
                                                         )}
                                                     </Pressable>
                                                 </View>
@@ -1724,7 +1724,7 @@ export default function TreasuryDetailScreen() {
                                     <Text style={styles.flowMemo} numberOfLines={1}>{f.memo || (f.incoming ? 'Received' : 'Sent')}</Text>
                                     <Text style={styles.flowTime}>{formatTime(f.timestamp)}</Text>
                                 </View>
-                                <Text style={[styles.flowAmount, { color: f.incoming ? colors.brand.primary : colors.feedback.warning.solid }]}>
+                                <Text style={[styles.flowAmount, { color: f.incoming ? colors.brand.primary : colors.feedback.warning.fg }]}>
                                     {f.incoming ? '+' : '−'}{Math.abs(f.amount)} 🫘
                                 </Text>
                             </View>

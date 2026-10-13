@@ -962,10 +962,10 @@ function ChatScreen({ id }: { id: string }) {
                             <MaterialCommunityIcons
                                 name={hasRated ? "star" : "star-outline"}
                                 size={14}
-                                color={hasRated ? colors.brand.primary : colors.feedback.warning.solid}
+                                color={hasRated ? colors.brand.primary : colors.feedback.warning.fg}
                                 style={{ marginRight: 4 }}
                             />
-                            <Text style={[chat.systemActionText, { color: hasRated ? colors.brand.primary : colors.feedback.warning.solid }]}>
+                            <Text style={[chat.systemActionText, { color: hasRated ? colors.brand.primary : colors.feedback.warning.fg }]}>
                                 {hasRated ? '✓ Rating submitted (Tap to edit)' : 'Rate your partner'}
                             </Text>
                         </Pressable>

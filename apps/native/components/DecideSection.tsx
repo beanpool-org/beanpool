@@ -207,7 +207,7 @@ export function DecideSection({
         },
         gateWarning: {
             fontSize: 11,
-            color: colors.feedback.warning.solid,
+            color: colors.feedback.warning.fg,
             marginTop: 6,
             fontWeight: '600',
         },
@@ -275,7 +275,7 @@ export function DecideSection({
         timePillText: {
             fontSize: 11,
             fontWeight: '700',
-            color: theme === 'dark' ? colors.feedback.warning.solid : palette.amber700,
+            color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber700,
         },
         decisionTitle: {
             fontSize: 17,
@@ -354,7 +354,7 @@ export function DecideSection({
         keepHeadline: {
             fontSize: 14,
             fontWeight: '800',
-            color: theme === 'dark' ? colors.feedback.warning.solid : palette.amber800,
+            color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber800,
         },
         keepBody: {
             fontSize: 13,
@@ -364,7 +364,7 @@ export function DecideSection({
         blockerText: {
             fontSize: 13,
             fontWeight: '700',
-            color: colors.feedback.warning.solid,
+            color: colors.feedback.warning.fg,
             marginBottom: 6,
         },
         creditsText: {

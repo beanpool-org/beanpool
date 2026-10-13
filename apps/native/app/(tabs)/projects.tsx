@@ -118,7 +118,7 @@ export default function ProjectsScreen() {
         treasuryMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
         treasuryBalance: { fontSize: 14, fontWeight: '800' },
         treasuryBalancePos: { color: colors.brand.primary },
-        treasuryBalanceNeg: { color: colors.feedback.warning.solid },
+        treasuryBalanceNeg: { color: colors.feedback.warning.fg },
         operatorBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand.tint, borderRadius: 10, padding: 8, marginTop: 2 },
         operatorBadgeText: { fontSize: 12, color: colors.brand.primary, fontWeight: '600', flex: 1 },
 
@@ -184,8 +184,8 @@ export default function ProjectsScreen() {
         financeLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
         balanceText: { fontSize: 16, fontWeight: '900' },
         balancePos: { color: colors.brand.primary },
-        balanceNeg: { color: colors.feedback.warning.solid },
-        deficitWarning: { fontSize: 10, color: colors.feedback.warning.solid, fontWeight: '700', marginTop: 1 },
+        balanceNeg: { color: colors.feedback.warning.fg },
+        deficitWarning: { fontSize: 10, color: colors.feedback.warning.fg, fontWeight: '700', marginTop: 1 },
 
         progressSection: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
         progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6 },

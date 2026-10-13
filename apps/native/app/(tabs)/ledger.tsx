@@ -267,7 +267,7 @@ export default function LedgerScreen() {
         infoCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.feedback.warning.border },
         infoCardRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
         infoCardLabel: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.feedback.warning.fg },
-        infoCardValue: { fontSize: 15, fontWeight: '800', color: colors.feedback.warning.solid } as any,
+        infoCardValue: { fontSize: 15, fontWeight: '800', color: colors.feedback.warning.fg } as any,
         infoCardSub: { fontSize: 11, color: colors.text.muted, marginTop: 2 },
         forecastCard: { backgroundColor: colors.accent.tint, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default, gap: 6 },
         forecastDate: { fontSize: 13, fontWeight: '700', color: colors.accent.primary },

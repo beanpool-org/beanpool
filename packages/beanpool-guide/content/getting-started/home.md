@@ -18,7 +18,7 @@ A new member's Home starts nearly empty: one card, **Getting started**, between 
 
 - **Look around** starts a short tour. A bar at the bottom of the screen moves the app to each tab in turn and says what it is for, one or two sentences a step, with **Step 2 of 7** above. Tap **Next** to go on, or **Skip** to stop. The tab behind the bar works as usual: tap anything, or tap another tab and the tour follows you there.
 - The last step comes back to Home: **Add your first cards**. Tap a card to put it on Home, or **More cards** for the whole list. Tap **Done**. If you picked nothing, Home starts with the usual five (below).
-- **Skip**, on the card or the bar, ends the tour and gives you the usual five.
+- **Skip**, on the card or the bar, ends the tour. If you have not put a card on Home yourself, it gives you the usual five. If you have (from **Add a card**, or a pick on the tour's last step), Home keeps the cards you chose.
 - The tour never starts by itself. If you close the app part way, the card says "Pick up the tour at step 3".
 - Done or Skip is kept on your account, so the card does not come back on your other phones or browsers. To see the tour again, tap **?** at the top and **Take the tour again**.
 - If you had set up your Home before the tour existed, nothing changes for you. **Getting started** is in **Add a card**, under **Getting started**, if you want it.
@@ -38,7 +38,7 @@ On the phone and in the web app, your Home is a list of cards you choose. After 
 - **Sun and moon** asks whose place to use before it is added: **Your community** (the usual choice) or **Your area**.
 - A Home holds at most 24 cards. When it is full, the list says so, and you remove a card to add another.
 - Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Edit home** says "Your community's server needs an update before your cards follow you to other devices." They are sent again each time you open Home.
-- If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** first, then the five, and Home tells you once: "Home now starts with fewer cards. Add a card brings the rest back."
+- If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** on its own, and **Skip** or **Done** brings the five back. After a **Skip**, Home tells you once: "Home now starts with fewer cards. Add a card brings the rest back."
 
 ## The cards
 

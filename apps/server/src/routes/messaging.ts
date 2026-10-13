@@ -374,10 +374,17 @@ router.post('/api/messages/delete', async (ctx) => {
 router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
     // A2-3: this returns the subject's entire conversation graph + unread
-    // counts + read cursors. Under read-auth, only the subject may read their
-    // own — the verified signer must equal the :publicKey path param (which is
-    // otherwise an unchecked IDOR: any member could read anyone's social graph).
-    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+    // counts + read cursors. Only the subject may read their own — the verified
+    // signer must equal the :publicKey path param (which is otherwise an
+    // unchecked IDOR: any member could read anyone's social graph) — whatever
+    // ENFORCE_READ_AUTH says, as /api/community/me is: with read auth opted out
+    // anyone, unsigned too, read who a member talks with and every chat's id.
+    if (!ctx.state.actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (ctx.state.actor !== publicKey) {
         ctx.status = 403;
         ctx.body = { error: 'You may only read your own conversations' };
         return;
@@ -387,7 +394,7 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     // badge every push carries does (getListedUnreadCounts).
     // The member's own withheld conversations and lines (engine/withheld-lines.ts) are in their own list, read signed
     // by them, ordered as if nothing had been withheld; nobody else's list ever names one.
-    const viewer = ctx.state.actor === publicKey ? publicKey : undefined;
+    const viewer: string = publicKey; // the verified signer, held above
     const convs = listWithOwnWithheld(viewer, getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey)));
     const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);

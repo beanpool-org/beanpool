@@ -250,6 +250,46 @@ async function main() {
         assert(secretsIn(text).has('friends'), 'and the fresh list shows lateFriend the Friends-only contact');
     }
 
+    console.log('\n── the ETag moves only when being added shows the viewer something ──');
+    {
+        // Who added you is theirs to know: the list shows it for nobody but a Friends-only owner with a contact, whose
+        // adding shows you that contact. Every other adder used to move the ETag over an identical body, and since
+        // every input to the hash is known to the viewer, recomputing it for each member in turn named the adder.
+        // Every member here is made before the first read: a new member row moves the members version for everyone.
+        const etagHidden = 'etag-hidden-owner@example.org';
+        const etagFriends = 'etag-friends-owner@example.org';
+        const viewer = member('etagViewer');
+        const hiddenAdder = member('etagHidden', { value: etagHidden, visibility: 'hidden' });
+        const noContactAdder = member('etagNoContact');
+        const friendsAdder = member('etagFriends', { value: etagFriends, visibility: 'friends' });
+        const first = await get('/api/community/members', viewer);
+        assert(first.status === 200 && !!first.etag && !first.text.includes(etagFriends) && !first.text.includes(etagHidden),
+            `the viewer takes the list and its ETag (got ${first.status} ${first.etag})`);
+        const revalidate = async (etag: string | null) => {
+            const res = await fetch(`${BASE}/api/community/members`, {
+                headers: { ...signedHeaders('GET', '/api/community/members', '', viewer), 'If-None-Match': etag || '' },
+            });
+            return { status: res.status, text: await res.text(), etag: res.headers.get('etag') };
+        };
+        const addH = await post('/api/friends/add', { friendPubkey: viewer.pubKeyHex }, hiddenAdder);
+        assert(addH.status === 200, `a Hidden owner with a contact adds the viewer (got ${addH.status})`);
+        const afterH = await revalidate(first.etag);
+        assert(afterH.status === 304, `…and the viewer's ETag still answers 304: nothing they see changed (got ${afterH.status}, ${afterH.etag} vs ${first.etag})`);
+        const addN = await post('/api/friends/add', { friendPubkey: viewer.pubKeyHex }, noContactAdder);
+        assert(addN.status === 200, `an owner with no contact adds the viewer (got ${addN.status})`);
+        const afterN = await revalidate(first.etag);
+        assert(afterN.status === 304, `…and the viewer's ETag still answers 304 (got ${afterN.status}, ${afterN.etag} vs ${first.etag})`);
+        const addF = await post('/api/friends/add', { friendPubkey: viewer.pubKeyHex }, friendsAdder);
+        assert(addF.status === 200, `a Friends-only owner with a contact adds the viewer (got ${addF.status})`);
+        const afterF = await revalidate(first.etag);
+        assert(afterF.status === 200 && afterF.text.includes(etagFriends) && !afterF.text.includes(etagHidden),
+            `…and the old ETag no longer answers 304: the fresh list shows the viewer that owner's contact, and not the Hidden one (got ${afterF.status})`);
+        const removeH = await post('/api/friends/remove', { friendPubkey: viewer.pubKeyHex }, hiddenAdder);
+        assert(removeH.status === 200, `the Hidden owner removes the viewer (got ${removeH.status})`);
+        const afterRemove = await revalidate(afterF.etag);
+        assert(afterRemove.status === 304, `…and the viewer's ETag from after the Friends-only add still answers 304 (got ${afterRemove.status}, ${afterRemove.etag} vs ${afterF.etag})`);
+    }
+
     console.log('\n── the profile page, the rule the list now shares ──');
     for (const [k, o] of Object.entries(owners)) {
         const path = `/api/profile/${o.pubKeyHex}`;

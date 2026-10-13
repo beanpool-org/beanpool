@@ -11,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, isKnownDmConversation, isHeldGroupChat } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
@@ -81,7 +81,7 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
 }
 
 /** What the route asks the phone (utils/chat-route.ts tests these wirings). */
-const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, isKnownDmConversation, getConversationKind };
+const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getConversationKind };
 
 /**
  * `/chat/:id` serves several kinds of conversation, and utils/chat-route.ts decides which screen, in this order: a group
@@ -92,10 +92,12 @@ const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, isKnownDmConversation, getC
  *
  * Nothing draws until the phone has asked its own key memory, its DM list and the conversation's kind (a SecureStore read
  * and a few small SQLite reads; the node only when there is no row yet): every screen here can post, and which one may is
- * what is being decided. Every fact is asked of one id, lower-cased, and a group's screen gets that id, so no spelling is
- * a DM to one check and a group to the next (routeChat; #1841 review, findings 1 and 4). The Inbox row, the event detail
- * and "Your groups" say the kind on the way in (`event=1`, `group=1`, `enterprise=1`); the conversation's type is the
- * fallback for an older link or a push.
+ * what is being decided. The held check is asked of the id lower-cased, and a group's screen gets that id; the DM guard is
+ * asked of the link's own spelling, which it folds itself and answers whenever the phone knows a DM under it. So no
+ * spelling is a DM to one check and a group to the next, and a link to a DM's own id opens that DM, never a twin in other
+ * capitals (routeChat; #1841 review, findings 1 and 4; #1863 review). The Inbox row, the event detail and "Your groups"
+ * say the kind on the way in (`event=1`, `group=1`, `enterprise=1`); the conversation's type is the fallback for an older
+ * link or a push.
  */
 export default function ChatRoute() {
     const { id, event, group, enterprise, created, name, info } = useLocalSearchParams<{
@@ -117,12 +119,13 @@ export default function ChatRoute() {
     if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     if (view === 'event') return <EventChatView eventId={screenId} />;
     if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
-    return <ChatScreen />;
+    return <ChatScreen id={screenId} />;
 }
 
-function ChatScreen() {
+/** The DM screen, on routeChat's id: a known DM's own spelling, else the link's. */
+function ChatScreen({ id }: { id: string }) {
     const { theme, colors } = useTheme();
-    const { id, triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ id?: string; triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
+    const { triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
     const { identity } = useIdentity();
     const [messages, setMessages] = useState<any[]>([]);
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);

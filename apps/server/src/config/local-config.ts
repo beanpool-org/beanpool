@@ -94,6 +94,9 @@ export interface LocalConfig {
     // Owner automation tokens (automation-tokens.ts): each one's public id, name, scope, who made it and when, and a
     // SHA-256 of its secret, never the secret. This server's own: never in a backup file, the stager's copy or the bundle.
     automationTokens?: AutomationTokenRecord[];
+    // "Allow AI assistants" (agent/mcp-route.ts, admin MCP design §2): the owner switch for /mcp. Left out or true: the
+    // endpoint answers (inert until an owner makes an agent token); false: /mcp answers 404 to everyone. This server's own.
+    aiAssistantsAllowed?: boolean;
     // Backup side: the plaintext token this backup presents to its primary.
     backupReplicationToken?: string | null;
     // --- Backup pull cadence (operator-tunable, e.g. from the fleet manager) ---
@@ -200,7 +203,7 @@ const DEFAULT_CONFIG: LocalConfig = {
 export interface AutomationTokenRecord {
     id: string;
     name: string;
-    scope: 'read' | 'backups' | 'admin';
+    scope: 'read' | 'backups' | 'admin' | 'agent';
     /** The issuing owner: their key, or 'owner:password'. */
     createdBy: string;
     createdAt: number;

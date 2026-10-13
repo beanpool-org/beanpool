@@ -12,7 +12,7 @@
  * (when given) says it happened (a transaction that rolled back granted nothing).
  */
 
-export type SecurityAlertKey = 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.name';
+export type SecurityAlertKey = 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.name' | 'sec.agent';
 
 /**
  * The address alert's words (sec.name), by why a name is lost, and its end: the name watch tells a change at once, and the

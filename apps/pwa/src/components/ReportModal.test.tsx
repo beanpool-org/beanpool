@@ -8,6 +8,8 @@ vi.mock('../lib/api', () => ({
     reportAbuse: vi.fn().mockResolvedValue({ success: true }),
 }));
 
+const props = { isOpen: true, onClose: () => {}, reporterPubkey: 'pubkey_123', targetPubkey: 'target_456', targetName: 'Alice', targetPostId: 'post_9' };
+
 describe('ReportModal Component', () => {
     it('renders with modal ARIA attributes, decorative emoji hidden, and accessible buttons', () => {
         const handleClose = vi.fn();
@@ -32,9 +34,48 @@ describe('ReportModal Component', () => {
         const closeBtn = screen.getByRole('button', { name: /Close report dialog/i });
         expect(closeBtn).toBeInTheDocument();
 
-        const reasons = screen.getAllByRole('button', { pressed: true });
-        expect(reasons.length).toBeGreaterThan(0);
-        expect(reasons[0]).toHaveAttribute('aria-pressed', 'true');
+        // Every reason is a toggle, and none is picked until the member chooses (review of #1912: "Spam or scam" was).
+        expect(screen.getAllByRole('button', { pressed: false }).map((b) => b.textContent)).toEqual(['Spam or scam', 'Offensive content', 'Misleading post', 'Child safety', 'Other']);
+        expect(screen.queryAllByRole('button', { pressed: true })).toEqual([]);
+    });
+
+    it('opens with no reason picked and Submit off; choosing one turns Submit on, and nothing is sent before that', async () => {
+        vi.mocked(reportAbuse).mockClear();
+        render(<ReportModal {...props} />);
+        const submit = screen.getByRole('button', { name: /Submit Report/i });
+        expect(submit).toBeDisabled();
+        // Off looks off, from the theme's roles: no red fill until there is something to send.
+        expect(submit.className).toMatch(/(^| )bg-bg-hover( |$)/);
+        expect(submit.className).toMatch(/(^| )text-text-muted( |$)/);
+        expect(submit.className).not.toMatch(/bg-red-600/);
+        fireEvent.click(submit);
+        fireEvent.change(screen.getByLabelText(/Additional details/i), { target: { value: 'words but no reason' } });
+        expect(submit).toBeDisabled();
+        expect(reportAbuse).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: /^Spam or scam$/ }));
+        expect(submit).toBeEnabled();
+        expect(submit.className).toMatch(/(^| )bg-red-600( |$)/);
+        fireEvent.click(submit);
+        await waitFor(() => expect(reportAbuse).toHaveBeenCalledWith('pubkey_123', 'target_456', 'Spam or scam: words but no reason', 'post_9', undefined));
+    });
+
+    it('a failed send says why and keeps the choice and the words; the next try sends them (review of #1912, finding 3)', async () => {
+        vi.spyOn(window, 'alert').mockImplementation(() => {});
+        const onClose = vi.fn();
+        vi.mocked(reportAbuse).mockClear();
+        vi.mocked(reportAbuse).mockRejectedValueOnce(new Error('Could not reach the node.'));
+        render(<ReportModal {...props} onClose={onClose} />);
+        fireEvent.click(screen.getByRole('button', { name: /^Child safety$/ }));
+        fireEvent.change(screen.getByLabelText(/Additional details/i), { target: { value: 'he asked my son for photos' } });
+        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        expect(await screen.findByText('Could not reach the node.')).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: /Child safety$/ })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByLabelText(/Additional details/i)).toHaveValue('he asked my son for photos');
+        expect(screen.getByRole('button', { name: /Submit Report/i })).toBeEnabled();
+        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+        expect(vi.mocked(reportAbuse).mock.calls.map((c) => c[2])).toEqual(['Child safety: he asked my son for photos', 'Child safety: he asked my son for photos']);
     });
 
     it('toggles reason selection and updates aria-pressed states', () => {
@@ -51,9 +92,11 @@ describe('ReportModal Component', () => {
         const spamBtn = screen.getByRole('button', { name: /Spam or scam/i });
         const offensiveBtn = screen.getByRole('button', { name: /Offensive content/i });
 
-        expect(spamBtn).toHaveAttribute('aria-pressed', 'true');
+        expect(spamBtn).toHaveAttribute('aria-pressed', 'false');
         expect(offensiveBtn).toHaveAttribute('aria-pressed', 'false');
 
+        fireEvent.click(spamBtn);
+        expect(spamBtn).toHaveAttribute('aria-pressed', 'true');
         fireEvent.click(offensiveBtn);
 
         expect(spamBtn).toHaveAttribute('aria-pressed', 'false');
@@ -62,7 +105,7 @@ describe('ReportModal Component', () => {
 
     it('offers "Child safety" with its one-line hint, and sends it as picked (the server reads it from there)', async () => {
         vi.spyOn(window, 'alert').mockImplementation(() => {});
-        const props = { isOpen: true, onClose: () => {}, reporterPubkey: 'pubkey_123', targetPubkey: 'target_456', targetName: 'Alice', targetPostId: 'post_9' };
+        vi.mocked(reportAbuse).mockClear();
         const { unmount } = render(<ReportModal {...props} />);
         expect(screen.getByText(/A child at risk, or sexual content involving a minor\./)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /^Child safety$/ }));

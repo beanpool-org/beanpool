@@ -24,7 +24,9 @@ export function ReportModal({
     targetPulseItemId,
     onReported,
 }: Props) {
-    const [selectedReason, setSelectedReason] = useState(REPORT_REASONS[0]);
+    // Nothing is picked until the member chooses: a pre-picked "Spam or scam" let a hurried tap send the wrong reason
+    // (review of #1912). Submit stays off until then, as on the phone's report screens.
+    const [selectedReason, setSelectedReason] = useState('');
     const [details, setDetails] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -33,7 +35,7 @@ export function ReportModal({
     // Reset draft state and errors cleanly whenever modal opens, and establish focus
     useEffect(() => {
         if (isOpen) {
-            setSelectedReason(REPORT_REASONS[0]);
+            setSelectedReason('');
             setDetails('');
             setSubmitting(false);
             setError(null);
@@ -73,6 +75,7 @@ export function ReportModal({
             onReported?.();
             onClose();
         } catch (e: any) {
+            // The choice and the words stay, so the member can send again without retyping.
             setError(e?.message || 'Failed to submit report. Please try again.');
         } finally {
             setSubmitting(false);
@@ -173,7 +176,11 @@ export function ReportModal({
                         type="button"
                         onClick={handleSubmit}
                         disabled={submitting || !selectedReason}
-                        className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-red-600 text-white hover:bg-red-500 disabled:opacity-60 border-none cursor-pointer shadow-sm transition-all flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                        className={`flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs border-none transition-all flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
+                            selectedReason
+                                ? 'bg-red-600 text-white hover:bg-red-500 disabled:opacity-60 cursor-pointer shadow-sm'
+                                : 'bg-bg-hover text-text-muted cursor-not-allowed'
+                        }`}
                     >
                         {submitting ? 'Sending…' : 'Submit Report'}
                     </button>

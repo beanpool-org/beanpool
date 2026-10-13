@@ -425,7 +425,7 @@ export function DecideSection({
             color: colors.text.heading,
         },
         voteBtnYes: {
-            backgroundColor: palette.green600,
+            backgroundColor: colors.brand.fill,
         },
         voteBtnNo: {
             backgroundColor: colors.feedback.danger.solid,

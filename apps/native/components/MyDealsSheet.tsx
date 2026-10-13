@@ -542,7 +542,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             if (item.author_pubkey === identity?.publicKey) {
                 displayStatusText = '⚠️ Action Required';
                 highlightStyle = actionTone;
-                statusInk = isDark ? colors.feedback.warning.fg : palette.amber600;
+                statusInk = colors.feedback.warning.fg;
             } else {
                 displayStatusText = '⏳ Awaiting Approval';
                 highlightStyle = { backgroundColor: colors.surface.subtle, borderColor: colors.border.default };

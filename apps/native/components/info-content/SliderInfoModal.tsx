@@ -318,7 +318,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
                         
                         <View style={styles.bracketRow}>
                             <Text style={styles.bracketRange}>0 – 200B</Text>
-                            <Text style={[styles.bracketRate, { color: palette.green500 }]}>0.0% (Fee-Free Zone)</Text>
+                            <Text style={[styles.bracketRate, { color: colors.feedback.success.fg }]}>0.0% (Fee-Free Zone)</Text>
                         </View>
                         
                         <View style={styles.bracketRow}>

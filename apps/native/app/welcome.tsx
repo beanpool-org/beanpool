@@ -1971,6 +1971,7 @@ export default function WelcomeScreen() {
                 
                 <AvatarPickerSheet
                     visible={showAvatarPicker}
+                    colors={dark ? colors : undefined}
                     onClose={() => setShowAvatarPicker(false)}
                     onSelectImage={(uri) => setPendingAvatar(uri)}
                 />

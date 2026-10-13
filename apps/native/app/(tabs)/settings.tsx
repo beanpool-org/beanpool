@@ -2064,8 +2064,8 @@ export default function SettingsScreen() {
                             accessibilityRole="button" 
                             accessibilityHint="Choose to remove account from device or permanently delete from node"
                         >
-                            <View style={[styles.menuIconWrap, { backgroundColor: palette.red50 }]}><Text style={styles.menuIcon}>⚠️</Text></View>
-                            <Text style={[styles.menuText, { flex: 1, color: palette.red600 }]}>Account Deletion & Sign Out</Text>
+                            <View style={[styles.menuIconWrap, { backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50 }]}><Text style={styles.menuIcon}>⚠️</Text></View>
+                            <Text style={[styles.menuText, { flex: 1, color: theme === 'dark' ? colors.feedback.danger.fg : palette.red600 }]}>Account Deletion & Sign Out</Text>
                             <Text style={[styles.menuChevron, { color: palette.red300 }]}>›</Text>
                         </Pressable>
                     </View>
@@ -2099,6 +2099,7 @@ export default function SettingsScreen() {
                                 <Text style={[styles.infoText, { marginBottom: 12 }]} accessibilityLiveRegion="polite">{protectionNote}</Text>
                             )}
                             <KeeperProtectionPanel
+                                colors={colors}
                                 protection={protectionFrom(protectionResult)}
                                 communityName={protectionNodeLabel || undefined}
                                 hasWords={hasMnemonic(identity)}
@@ -2461,7 +2462,7 @@ export default function SettingsScreen() {
                                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                                     {!isActive ? (
                                         <Pressable style={{ flex: 1, backgroundColor: colors.surface.subtle, padding: 8, borderRadius: 6, alignItems: 'center' }} onPress={() => handleSwitchNode(node.url)} disabled={advancedLoading} accessibilityRole="button">
-                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: palette.gray700 }}>{advancedLoading ? 'Mounting...' : 'Switch to Town'}</Text>
+                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700 }}>{advancedLoading ? 'Mounting...' : 'Switch to Town'}</Text>
                                         </Pressable>
                                     ) : (
                                         <View style={{ flex: 1, backgroundColor: colors.accent.tint, padding: 8, borderRadius: 6, alignItems: 'center' }}>
@@ -2469,19 +2470,20 @@ export default function SettingsScreen() {
                                         </View>
                                     )}
                                     {!isActive && (
-                                        <Pressable style={{ padding: 8, backgroundColor: palette.red100, borderRadius: 6 }} onPress={() => handleForgetNode(node.url)} accessibilityRole="button" accessibilityHint="Removes this community and deletes its local data from this device">
-                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: palette.red700 }}>Forget</Text>
+                                        <Pressable style={{ padding: 8, backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red100, borderRadius: 6 }} onPress={() => handleForgetNode(node.url)} accessibilityRole="button" accessibilityHint="Removes this community and deletes its local data from this device">
+                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.feedback.danger.fg }}>Forget</Text>
                                         </Pressable>
                                     )}
                                 </View>
 
                                 {isActive && (
                                     <View style={{ marginTop: 12, padding: 12, backgroundColor: colors.surface.subtle, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
-                                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: palette.gray700, marginBottom: 8 }}>Authenticate Identity on this Node</Text>
+                                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700, marginBottom: 8 }}>Authenticate Identity on this Node</Text>
                                         <View style={{ flexDirection: 'row', gap: 8 }}>
                                             <TextInput
-                                                style={{ flex: 1, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 6, paddingHorizontal: 10, height: 36, fontSize: 13 }}
+                                                style={{ flex: 1, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 6, paddingHorizontal: 10, height: 36, fontSize: 13, color: theme === 'dark' ? colors.text.body : undefined }}
                                                 placeholder="Invite Code (e.g. INV-...)"
+                                                placeholderTextColor={theme === 'dark' ? colors.text.muted : undefined}
                                                 value={redeemInviteCode}
                                                 onChangeText={setRedeemInviteCode}
                                                 autoCapitalize="characters"
@@ -2497,8 +2499,8 @@ export default function SettingsScreen() {
                                             </Pressable>
                                         </View>
                                         <View style={{ marginTop: 16, flexDirection: 'row', justifyContent: 'flex-start', paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border.default }}>
-                                            <Pressable style={{ backgroundColor: palette.red50, padding: 8, borderRadius: 6, borderWidth: 1, borderColor: palette.red300 }} onPress={() => handleForceResync(node.url)} accessibilityRole="button" accessibilityHint="Deletes the local database for this community and redownloads everything">
-                                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: palette.red700 }}>Clear Cache & Resync</Text>
+                                            <Pressable style={{ backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50, padding: 8, borderRadius: 6, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.danger.border : palette.red300 }} onPress={() => handleForceResync(node.url)} accessibilityRole="button" accessibilityHint="Deletes the local database for this community and redownloads everything">
+                                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.feedback.danger.fg }}>Clear Cache & Resync</Text>
                                             </Pressable>
                                         </View>
                                     </View>
@@ -2574,7 +2576,7 @@ export default function SettingsScreen() {
                              {/* Database Health & Sync Status Indicator */}
                              <View style={{ backgroundColor: colors.surface.subtle, padding: 14, borderRadius: 12, marginBottom: 20 }}>
                                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                      <Text style={{ fontWeight: 'bold', color: palette.gray700 }}>Database Status:</Text>
+                                      <Text style={{ fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700 }}>Database Status:</Text>
                                       {(() => {
                                           const hasIntegrityError = dbStats && dbStats.integrity !== 'ok';
                                           const isSynced = !remoteStats || (dbStats && 
@@ -3098,8 +3100,10 @@ export default function SettingsScreen() {
                 </View>
             )}
 
+            {/* Its light look is its own (slate), so only the dark theme's colours go in. */}
             <AvatarPickerSheet
                 visible={showAvatarPicker}
+                colors={theme === 'dark' ? colors : undefined}
                 onClose={() => setShowAvatarPicker(false)}
                 onSelectImage={(uri) => {
                     const cleaned = (uri && uri !== 'null' && uri !== 'undefined' && uri.trim() !== '') ? uri : null;

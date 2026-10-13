@@ -54,13 +54,19 @@ describe('preview mode asks the node for its info and nothing else, and writes n
             const sheet = await screen.findByTestId('local-community-sheet');
             expect(sheet).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.beans);
             expect(sheet).toHaveTextContent(LOCAL_COMMUNITY_SHEET.common);
-            await waitFor(() => expect(screen.getByTestId('local-community-start')).toHaveAttribute('href', 'https://example.org/start'));
-            fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+            // Start a community opens the in-app Start screen, whose link is the node's own start link.
+            fireEvent.click(screen.getByTestId('local-community-start'));
+            await waitFor(() => expect(screen.getByTestId('start-community-run-a-node')).toHaveAttribute('href', 'https://example.org/start'));
+            fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+            expect(screen.queryByTestId('start-community-screen')).toBeNull();
         }
-        fireEvent.click(screen.getByTestId('local-community-strip-why'));
+        fireEvent.click(screen.getByTestId('local-community-strip-start'));
+        expect(await screen.findByTestId('start-community-screen')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: /Send Beans/ }));
         fireEvent.click(await screen.findByTestId('local-community-guide'));
         expect(onGuide).toHaveBeenCalledWith(LOCAL_COMMUNITY_SHEET.guide.beans);
-        fireEvent.click(screen.getByTestId('local-community-strip-why'));
+        fireEvent.click(screen.getByRole('button', { name: /Export/ }));
         fireEvent.click(await screen.findByTestId('local-community-near-you'));
         expect(onNearYou).toHaveBeenCalled();
 

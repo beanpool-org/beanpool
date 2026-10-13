@@ -281,7 +281,11 @@ export interface CommunityInfo {
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
         /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
+        /** An off feature is previewed from the sample community rather than hidden (lib/features.ts). Absent: hidden, as before. */
+        showcase?: boolean;
     };
+    /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
+    startCommunityUrl?: string;
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
     addresses?: string[];
     /**

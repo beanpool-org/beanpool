@@ -9,14 +9,15 @@
  * - **Look.** Info tone (the Join card's blue) with a dashed border, the sample family's. Never a lock, amber, red,
  *   grey, reduced opacity or a tier's colours: nothing here is locked, it lives somewhere else.
  * - **The sheet** says why, then Start a community, Communities near you and How it works. Nothing here writes to the
- *   node: Start opens the node's start link, the other two move within the app.
+ *   node: Start opens the Start a community screen (StartCommunityScreen.tsx, whose link is the node's start link),
+ *   the other two move within the app.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, type ShowcaseFeature,
 } from '@beanpool/core';
-import { startCommunityUrl, useCommunityInfo } from '../lib/features';
+import { StartCommunityScreen } from './StartCommunityScreen';
 
 /** Where the sheet's two in-app ways forward lead; a button whose way is absent is not shown. */
 export interface LocalCommunityWays {
@@ -39,8 +40,7 @@ export function LocalCommunityPill() {
     );
 }
 
-export function LocalCommunitySheet({ feature, onClose, onNearYou, onGuide }: { feature: ShowcaseFeature; onClose: () => void } & LocalCommunityWays) {
-    const info = useCommunityInfo();
+export function LocalCommunitySheet({ feature, onClose, onStart, onNearYou, onGuide }: { feature: ShowcaseFeature; onClose: () => void; onStart: () => void } & LocalCommunityWays) {
     const closeRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
         closeRef.current?.focus();
@@ -73,14 +73,12 @@ export function LocalCommunitySheet({ feature, onClose, onNearYou, onGuide }: { 
                 <p className="mb-2 text-sm text-nature-700 dark:text-nature-200">{LOCAL_COMMUNITY_SHEET.features[feature]}</p>
                 <p className="mb-4 text-sm text-nature-600 dark:text-nature-300">{LOCAL_COMMUNITY_SHEET.common}</p>
                 <div className="flex flex-col gap-2">
-                    <a
-                        href={startCommunityUrl(info)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={onClose}
+                    <button
+                        type="button"
+                        onClick={onStart}
                         data-testid="local-community-start"
                         className="w-full rounded-xl bg-terra-600 hover:bg-terra-500 px-4 py-3 text-center font-bold text-white"
-                    >{LOCAL_COMMUNITY_SHEET.start}</a>
+                    >{LOCAL_COMMUNITY_SHEET.start}</button>
                     {onNearYou && (
                         <button type="button" onClick={go(onNearYou)} data-testid="local-community-near-you"
                             className="w-full rounded-xl border border-nature-300 dark:border-nature-600 px-4 py-3 font-bold text-nature-800 dark:text-nature-100 hover:bg-nature-50 dark:hover:bg-nature-800">
@@ -99,14 +97,24 @@ export function LocalCommunitySheet({ feature, onClose, onNearYou, onGuide }: { 
     );
 }
 
-/** The sheet, opened by whatever `children` renders with the `open` it is handed. */
-function WithSheet({ feature, ways, children }: { feature: ShowcaseFeature; ways: LocalCommunityWays; children: (open: () => void) => ReactNode }) {
-    const [open, setOpen] = useState(false);
+/**
+ * The sheet and the Start a community screen, opened by whatever `children` renders with the `open` (the sheet) and
+ * `start` (the screen) it is handed.
+ */
+function WithSheet({ feature, ways, children }: { feature: ShowcaseFeature; ways: LocalCommunityWays; children: (open: () => void, start: () => void) => ReactNode }) {
+    const [shown, setShown] = useState<'sheet' | 'start' | null>(null);
+    const close = () => setShown(null);
     return (
         <>
-            {children(() => setOpen(true))}
+            {children(() => setShown('sheet'), () => setShown('start'))}
             {/* A marker inside a tappable card (a poll, a listing): its clicks and the sheet's stay here. */}
-            {open && <div onClick={(e) => e.stopPropagation()}><LocalCommunitySheet feature={feature} onClose={() => setOpen(false)} {...ways} /></div>}
+            {shown && (
+                <div onClick={(e) => e.stopPropagation()}>
+                    {shown === 'sheet'
+                        ? <LocalCommunitySheet feature={feature} onClose={close} onStart={() => setShown('start')} {...ways} />
+                        : <StartCommunityScreen onClose={close} onNearYou={ways.onNearYou} />}
+                </div>
+            )}
         </>
     );
 }
@@ -132,7 +140,7 @@ export function LocalCommunityStrip({ feature, ...ways }: { feature: ShowcaseFea
     const collapse = (c: boolean) => { setCollapsed(c); writeCollapsed(feature, c); };
     return (
         <WithSheet feature={feature} ways={ways}>
-            {(open) => collapsed ? (
+            {(open, start) => collapsed ? (
                 <div className={`${TONE} mb-4 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold`} data-testid="local-community-strip-collapsed">
                     <button type="button" onClick={open} className="min-w-0 flex-1 text-left">{LOCAL_COMMUNITY_STRIP.collapsed}</button>
                     <button type="button" onClick={() => collapse(false)} aria-label="Show the whole note" className="shrink-0 rounded px-1">▾</button>
@@ -148,7 +156,7 @@ export function LocalCommunityStrip({ feature, ...ways }: { feature: ShowcaseFea
                         <strong>{LOCAL_COMMUNITY_STRIP.lead[feature]}</strong> {LOCAL_COMMUNITY_STRIP.body}
                     </p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                        <button type="button" onClick={open} data-testid="local-community-strip-why"
+                        <button type="button" onClick={start} data-testid="local-community-strip-start"
                             className="w-full rounded-xl bg-terra-600 hover:bg-terra-500 px-4 py-2.5 font-bold text-white">{LOCAL_COMMUNITY_SHEET.start}</button>
                         {ways.onNearYou && (
                             <button type="button" onClick={ways.onNearYou}

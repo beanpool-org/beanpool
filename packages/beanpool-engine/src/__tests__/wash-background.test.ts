@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-    PER_COUNTERPARTY_VOLUME_CAP, WASH_PAIR_PAGE_BUYERS, WASH_KEEP_MS, WASH_MIN_DUE_MS, WASH_HARD_CAP_MS, runWashTradingAnalysis,
+    PER_COUNTERPARTY_VOLUME_CAP, WASH_PAIR_PAGE_BUYERS, WASH_KEEP_MS, WASH_MIN_DUE_MS, WASH_HARD_CAP_MS, WASH_BACKGROUND_STEP_MS, runWashTradingAnalysis,
     runWashAnalysisInSlices, closeWashSnapshotHandle, washAnalysisCount, getWashTradingEnforcement, qualifiedTradeValue,
     clearWashTradingCache, refreshWashTradingInBackground, washRefreshRunning, type WashAnalysis,
 } from '../trust.js';
@@ -340,23 +340,93 @@ describe('wash analysis: what floors read (S2)', () => {
         db.close();
     });
 
-    it('hard cap: a snapshot 60 s old is worked out in one go at the read; 1 ms short of it, the read waits for nothing', () => {
+    it('hard cap: with a refresh in flight that never lands, a snapshot 60 s old is worked out in one go at the read; 1 ms short of it, the read waits for nothing', async () => {
         const db = fileDb();
         seedRaceWorld(db);
         clock = fakeClocks();
         clock.perStep = 60;
         const first = getWashTradingEnforcement(db);
         const n = washAnalysisCount(db);
-        // The loop never turns here, so the refresh each due read starts never lands.
-        clock.wall += WASH_HARD_CAP_MS - 1;
+        // A due read starts a refresh; the loop never turns here, so it never lands.
+        clock.wall += WASH_KEEP_MS;
+        expect(getWashTradingEnforcement(db)).toBe(first);
+        const inFlight = washRefreshRunning(db);
+        expect(inFlight).not.toBeNull();
+        clock.wall += WASH_HARD_CAP_MS - WASH_KEEP_MS - 1;
         expect(getWashTradingEnforcement(db)).toBe(first);
         expect(washAnalysisCount(db)).toBe(n);
+        expect(washRefreshRunning(db)).toBe(inFlight);
         clock.wall += 1;
         const capped = getWashTradingEnforcement(db);
         expect(capped).not.toBe(first);
         expect(washAnalysisCount(db)).toBe(n + 1);
+        await inFlight;
         closeWashSnapshotHandle(db);
         db.close();
+    });
+
+    it('race: after a quiet spell, a read never gives more than today\'s rule (one go at any read 10 s after the last finished)', async () => {
+        // The clock today's rule is judged by: a step's time passes on the wall too, so an analysis finishes `c` after it
+        // started, as in real time.
+        const realNow = Date.now;
+        const realPerf = performance.now;
+        const t = { jump: 0, perf: 0 };
+        const base = realNow();
+        performance.now = () => (t.perf += 60);
+        Date.now = () => base + t.jump + Math.floor(t.perf);
+        try {
+            for (const quietMs of [3_000, 4_000, 5_500, 7_000, 20_000, 35_000, WASH_HARD_CAP_MS - 7_000]) {
+                const db = fileDb();
+                const ring = seedRaceWorld(db);
+                const members = [...ring, 'pa', 'pb', 'o1'];
+                // No analysis yet: the head works one out in one go; what that held the loop, today's one-go holds it too.
+                const w0 = Date.now();
+                getWashTradingEnforcement(db);
+                const oneGoMs = Date.now() - w0;
+                expect(oneGoMs).toBeGreaterThanOrEqual(WASH_BACKGROUND_STEP_MS); // background mode from here
+                // Today's rule, beside the head on the same rows at the same moments.
+                let today: { analysis: WashAnalysis; finishedAt: number } | null = null;
+                const todays = () => {
+                    if (!today || Date.now() - today.finishedAt >= WASH_KEEP_MS) {
+                        const analysis = runWashTradingAnalysis(db);
+                        t.perf += oneGoMs;
+                        today = { analysis, finishedAt: Date.now() };
+                    }
+                    return today.analysis;
+                };
+                const read = (label: string) => {
+                    const head = members.map((k) => qualifiedTradeValue(db, k));
+                    const oracle = todays();
+                    members.forEach((k, i) => {
+                        const allowed = qualifiedTradeValue(db, k, oracle);
+                        if (head[i] > allowed) throw new Error(`quiet ${quietMs} ms, ${label}: ${k} qualifies ${head[i]}, today's rule ${allowed}`);
+                    });
+                    return head.slice(0, ring.length);
+                };
+                read('t0');
+                t.jump += 1_000;
+                completeRaceTrades(db, ring); // a ring of new members completes its trades
+                t.jump += 4_000;
+                expect(read('t+5 s').every((q) => q > 0)).toBe(true); // inside today's 10 s window, both still count it
+                t.jump += quietMs; // no floor read
+                const spend = read('the spend read');
+                // Past today's window both work one out now; short of it both still read the last.
+                if (quietMs + 5_000 >= WASH_KEEP_MS + 1_000) expect(spend.every((q) => q === 0)).toBe(true);
+                // Then a read every 50 ms, up to and including the one that starts a refresh. (While a refresh runs, reads get
+                // the last analysis for its D: the design's accepted "D growing" residual, measured on real nodes by race C.)
+                for (let i = 0; !washRefreshRunning(db) && i < 600; i++) {
+                    t.jump += 50;
+                    read(`read ${i} after the spend`);
+                }
+                expect(washRefreshRunning(db)).not.toBeNull();
+                await washRefreshRunning(db);
+                closeWashSnapshotHandle(db);
+                db.close();
+            }
+        } finally {
+            Date.now = realNow;
+            performance.now = realPerf;
+        }
     });
 
     it('mode: a quick analysis (under 50 ms of steps) stays one go, every 10 s of reads, and never starts a refresh', () => {

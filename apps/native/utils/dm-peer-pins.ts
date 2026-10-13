@@ -238,7 +238,7 @@ export interface DmPinBook {
  * `seedWhenNew`: called once per account per app run, the first time the book finds storage holding nothing for it, and
  * awaited before that read returns; what it returns is run on the pins at the account's first change, whoever makes it.
  * So it sees the rows this phone held before this run asked for the pins, and a caller that reads the pins before it
- * writes rows from the node (the sync pass, a push's refresh, a key resolve) never has those rows seeded (fix-4 item 5).
+ * writes rows from the node (the sync pass, a push's refresh, a key resolve) never has those rows seeded (#1872 round 4).
  * Kept when a write is refused and the copy dropped: rows written since are not the phone's own from before.
  */
 export function createDmPinBook(storage: PinStorage, seedWhenNew?: (myPubkey: string) => Promise<(pins: DmPeerPins) => boolean>): DmPinBook {
@@ -252,7 +252,7 @@ export function createDmPinBook(storage: PinStorage, seedWhenNew?: (myPubkey: st
         if (held) return held;
         const loading = readStoredPins(storage, myPubkey).then(async (r) => {
             if (r.absent) absent.add(key); else absent.delete(key);
-            if (r.absent && seedWhenNew && !seeds.has(key)) seeds.set(key, seedWhenNew(myPubkey));
+            if (r.absent && seedWhenNew && !seeds.has(key)) seeds.set(key, seedWhenNew(myPubkey).catch(() => () => false));
             await seeds.get(key);
             return r.pins;
         });

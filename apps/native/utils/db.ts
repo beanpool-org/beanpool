@@ -4377,10 +4377,10 @@ const FIRST_SIGHT_END = 20;
  * oldest first, each with the key it opens under, judged by judgeFirstSight. Both ends: the old end is the start of the
  * thread this phone can see, so a flood of new lines can't push it out of the judgement (finding 4, P17f); a node that
  * withholds the old end is the stated residual. Only encrypted lines count toward the 20 (exact prefix, no tombstones),
- * so rows that aren't lines can't push the old end out either. A line is tried under the listed key, then the keys the listing names as its
- * former ones (`heard.tryKeys`, which only say what to try), then the keys the rows name as authors; as mine sealed to
- * that key, or as that key's own whoever the row names (the node writes the rows, and a re-key moves old lines' author to
- * the new key). One DH derivation per key tried, and only lines not yet placed are tried again.
+ * so rows that aren't lines can't push the old end out either. A line is tried under the listed key, then the keys the
+ * listing names as its former ones (`heard.tryKeys`, which only say what to try), then the keys the rows name as
+ * authors; as mine sealed to that key, or as that key's own whoever the row names (the node writes the rows, and a re-key
+ * moves old lines' author to the new key). One DH derivation per key tried, and only lines not yet placed are tried again.
  */
 async function judgeThread(conversationId: string, myPrivHex: string, me: string, listed: string | null, heard: DmHeard | undefined): Promise<SightVerdict> {
     const database = await getDb();

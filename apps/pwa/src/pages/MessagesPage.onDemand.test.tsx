@@ -136,6 +136,21 @@ describe('Messages with members on demand', () => {
         expect(getMembers).not.toHaveBeenCalled();
     });
 
+    // Review of #1861, N3 (G4): a request that failed is asked again on the page's next change, never given up for good.
+    it('a keys request that fails is asked again on the next change, and the name then shows', async () => {
+        state.conversations = [dm('conv-bob', BOB, 'Bob'), dm('conv-dov', DOV)];
+        vi.mocked(getMemberCards).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        render(<MessagesPage identity={identity} />);
+        await waitFor(() => expect(keysAsked()).toEqual([DOV]));
+        const row = await screen.findByText(`${DOV.slice(0, 12)}…`);
+        expect(screen.queryByText('Dov')).toBeNull();
+        // The next change: the member opens that chat.
+        await act(async () => { fireEvent.click(row); });
+        expect((await screen.findAllByText('Dov')).length).toBeGreaterThan(0);
+        expect(keysAsked()).toEqual([DOV, DOV]);
+        expect(getMembers).not.toHaveBeenCalled();
+    });
+
     it("an open group chat's people are asked for by key, each once, and its lines carry their names", async () => {
         state.conversations = [
             dm('conv-bob', BOB, 'Bob'),

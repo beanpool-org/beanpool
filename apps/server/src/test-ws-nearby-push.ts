@@ -23,7 +23,8 @@
  *   9. a member who re-keys: their area follows them to the new key, and their new phone hears the listings near it
  *  10. a member removed: their area leaves the map
  *  10b. a member near a listing who blocked its author (member_blocks, their own list, as their set reads it) hears
- *      nothing of it, the block made with their socket open; a tie (an open deal on it) still reaches them, as their set
+ *      nothing of it, the block made with their socket open: not its new_post, its edit, its id-only event nor its
+ *      removal; a tie (an open deal on it) still reaches them, as their set
  *      keeps it; an unblock lets the next push through; the author's own block of them changes nothing (#1812)
  *  11. the cost: 3,500 sockets, the filter on against off, interleaved, with the load printed: a member's listing and an
  *      enterprise's, whose keepers are read once an event, never once a socket
@@ -474,6 +475,7 @@ async function main(): Promise<void> {
         clear();
         const beforeBlock = await postNear('Before the block');
         assert(heard('new_post', beforeBlock).noel && noelsSet().includes(beforeBlock), 'before any block, Noel hears her new listing, and his set holds it');
+        // That push kept who blocked Ana (blockersOfKept, #1831): his block, the next moment, must hold for her next push.
         await blocksCall(noel, '/api/blocks', ana, 'Noel blocks Ana');
         clear();
         const blocked = await postNear('Blocked by Noel');
@@ -489,6 +491,13 @@ async function main(): Promise<void> {
         se.broadcast({ type: 'post_updated', id: beforeBlock });
         await until(S.ana, 'post_updated');
         reachIs('the id-only event of the listing he heard before the block', 'post_updated', beforeBlock, { ana: true, noel: false });
+        // Its removal too: his set no longer holds it, so there is nothing for his app to take away.
+        clear();
+        const takenDown = await call(ana, '/api/marketplace/posts/remove', { id: beforeBlock, authorPublicKey: ana.pk });
+        assert(takenDown.status === 200 && takenDown.body?.success === true, `Ana takes down the listing he heard before the block (got ${takenDown.status})`);
+        await until(S.ana, 'post_removed');
+        reachIs('its post_removed', 'post_removed', beforeBlock, { ana: true, nia: false, noel: false, unsigned: false });
+        assert(listingEvents(S.noel).length === 0, `Noel's socket gets nothing of the removal (${show(S.noel)})`);
         // A tie is not a nearby listing: an open deal on it reaches him wherever he is, blocked author or not, as his set
         // keeps the listings he is tied to (getNearbySet's ties hold no block).
         const tied = `nearby-deal-${crypto.randomBytes(4).toString('hex')}`;

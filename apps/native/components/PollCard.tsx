@@ -33,7 +33,8 @@ import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext'
 import { palette } from '../constants/colors';
 import { votePoll, closePoll } from '../utils/db';
 import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
-import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '@beanpool/core';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 
 export interface PollOption {
     id: string;
@@ -57,9 +58,11 @@ interface PollCardProps {
     onVoteSuccess?: () => void;
     /** The worldwide community's polls (utils/node-profile.ts pollsInformal): the card says it decides nothing. */
     informal?: boolean;
+    /** Where the node previews Decisions (the showcase): the marker's line under the note, "a Decision binds" (design §1 row 7). */
+    decisionsPreview?: boolean;
 }
 
-export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false }: PollCardProps) {
+export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false }: PollCardProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
 
@@ -295,6 +298,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false 
                     💬 {INFORMAL_POLL_NOTE}
                 </Text>
             )}
+            {informal && decisionsPreview && <LocalCommunityMark variant="line" feature="decisions" text={LOCAL_COMMUNITY_LINES.poll} />}
 
             {/* Where its votes came from, once it has closed, where the node says: all of them still count. */}
             {originsLine && (

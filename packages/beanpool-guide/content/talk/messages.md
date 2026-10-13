@@ -2,6 +2,7 @@
 slug: messages
 title: Messages
 summary: Start a chat, send photos, reply, react, edit, delete, mute, and what is private.
+help: Your chats. A chat with one person is locked end to end. Tap a chat to open it, or start one from a member's profile.
 related: people, blocking, event-chat, groups, mute, the-top-bar
 ---
 

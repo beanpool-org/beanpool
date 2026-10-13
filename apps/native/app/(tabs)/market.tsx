@@ -4,13 +4,14 @@ import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
+import { setHelpContext } from '../../utils/tour-store';
 import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
 import { refreshListingAfterPhotoError } from '../../utils/photo-refresh';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { membersOnlyHere } from '../../utils/members-only-listings';
 import { noAreaLineHere } from '../../utils/nearby-area';
 import { NoAreaLine } from '../../components/NoAreaLine';
-import { GLOBAL_NODE_URL, pollsInformal } from '../../utils/node-profile';
+import { GLOBAL_NODE_URL, pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { requestSync, isPillarSyncActive, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
@@ -43,6 +44,7 @@ import {
 } from '../../utils/market-filters';
 import { localDaysAgo } from '../../utils/feed-sections';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { useReaderFeatures } from '../../utils/use-reader-features';
 import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketFeedSections } from '../../utils/market-global';
 import { readPhoneInterests, saveInterests } from '../../utils/home-store';
 import { anchorUrl } from '../../utils/node-post';
@@ -90,8 +92,22 @@ export default function MarketScreen() {
     // for a member's first 30 days). Local communities are unchanged: a node that says nothing trades in Beans.
     const nodeProfile = useNodeProfile();
     const showsBeans = marketShowsBeans(nodeProfile?.features);
-    // Deals are escrow: off where escrow is off.
-    const showsDeals = nodeProfile?.features.escrow !== false;
+    // Each feature's mode for this reader, `undefined` until the phone's copy of the node's profile is read (a moment, no
+    // network): nothing of a feature is read until its mode is known, and a preview reads none of the reader's own.
+    const reader = useReaderFeatures();
+    const modeOf = (f: 'beans' | 'escrow' | 'decisions') => (reader.known ? showcaseMode(f, reader.node, reader.reader) : undefined);
+    // Where the node previews Decisions, a poll says what a local community's Decision does (design §1 row 7).
+    const decisionsPreview = modeOf('decisions') === 'preview';
+    // Deals are escrow: off where escrow is off, unless the node previews them; then My Deals is the member's own sheet
+    // fed Example Valley (design §1 row 3, §4).
+    const escrowMode = modeOf('escrow');
+    const dealsPreview = escrowMode === 'preview';
+    const showsDeals = escrowMode !== 'hidden';
+    const beansMode = modeOf('beans');
+    // The loads below run from listeners set up once: they read the mode as it is now, not as it was then.
+    const escrowModeNow = useRef(escrowMode);
+    escrowModeNow.current = escrowMode;
+    const readsOwnDeals = () => escrowModeNow.current !== undefined && escrowModeNow.current !== 'preview';
 
     // Contributions-First quest card: shown until the member has listed their
     // first Offer (the gate that unlocks posting Needs / accepting Offers), so
@@ -104,6 +120,10 @@ export default function MarketScreen() {
             let cancelled = false;
             (async () => {
                 if (!identity?.publicKey) return;
+                // A Beans quest: not asked until Beans' mode is known, and never where they are previewed (getBalance
+                // also asks the node for the reader's own balance).
+                if (beansMode === undefined) return;
+                if (beansMode === 'preview') { setShowFirstOfferQuest(false); return; }
                 if (await AsyncStorage.getItem('beanpool_first_offer_quest_dismissed')) return;
                 try {
                     const b: any = await getBalance(identity.publicKey);
@@ -113,13 +133,18 @@ export default function MarketScreen() {
                 }
             })();
             return () => { cancelled = true; };
-        }, [identity?.publicKey])
+        }, [identity?.publicKey, beansMode])
     );
     const dismissFirstOfferQuest = () => {
         setShowFirstOfferQuest(false);
         AsyncStorage.setItem('beanpool_first_offer_quest_dismissed', 'true').catch(() => {});
     };
     const [filter, setFilter] = useState<MarketTypeFilter>('all');
+    // The "?" names Polls' own guide page while they are what the Market shows (DESIGN-getting-started-fable.md §4).
+    useFocusEffect(useCallback(() => {
+        setHelpContext(filter === 'polls' ? 'polls' : null);
+        return () => setHelpContext(null);
+    }, [filter]));
     
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.page },
@@ -604,7 +629,8 @@ export default function MarketScreen() {
     // My Deals sheet it opens lists, as the tab badge does (_layout.tsx).
     const [dealPosts, setDealPosts] = useState<any[]>([]);
 
-    const pendingCount = usePendingDealsCount(identity, dealPosts, myTransactions);
+    // In preview the pill counts none of the reader's own deals, even one read before the switch that lands after it.
+    const pendingCount = usePendingDealsCount(dealsPreview ? null : identity, dealPosts, myTransactions);
 
     useEffect(() => {
         let cancelled = false;
@@ -639,7 +665,7 @@ export default function MarketScreen() {
     useFocusEffect(
         React.useCallback(() => {
             loadPosts();
-        }, [filter, groupFilter, identity?.publicKey, userGroupsKey])
+        }, [filter, groupFilter, identity?.publicKey, userGroupsKey, escrowMode])
     );
 
     const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string, q?: string }>();
@@ -817,10 +843,17 @@ export default function MarketScreen() {
         const runLoad = async () => {
             const data = await getPosts(queryFilter);
             setPosts(data);
-            if (identity) {
+            // The member's own deals: only where deals are live (or read-only) and known to be; an answer that lands
+            // after a switch to preview is dropped.
+            if (identity && readsOwnDeals()) {
                 const txs = await getMarketplaceTransactions(identity.publicKey);
+                const all = await getPosts({ allScopes: true });
+                if (!readsOwnDeals()) return;
                 setMyTransactions(txs);
-                setDealPosts(await getPosts({ allScopes: true }));
+                setDealPosts(all);
+            } else {
+                setMyTransactions([]);
+                setDealPosts([]);
             }
         };
         try {
@@ -1346,6 +1379,7 @@ export default function MarketScreen() {
                     currentPubkey={identity?.publicKey}
                     onVoteSuccess={() => loadPosts()}
                     informal={pollsInformal(nodeProfile)}
+                    decisionsPreview={decisionsPreview}
                 />
             );
         }
@@ -1763,11 +1797,12 @@ export default function MarketScreen() {
             />
 
             <MyDealsSheet
-                visible={showDealsSheet}
+                visible={showDealsSheet && escrowMode !== undefined}
                 identity={identity}
                 onClose={() => setShowDealsSheet(false)}
                 initialTab={dealsInitialTab}
-                showsBeans={showsBeans}
+                showsBeans={showsBeans || dealsPreview}
+                preview={dealsPreview}
             />
 
             {/* The one way to post: the same chooser the map's + opens (components/NewPostTypeSheet). */}

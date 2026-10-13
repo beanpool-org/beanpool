@@ -2,6 +2,7 @@
 slug: groups
 title: Groups
 summary: Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.
+help: Your groups and their chats. Start a group, invite people, or open one to talk and vote together.
 related: messages, mute, mentions, enterprises, event-chat, posting, decisions, keepers
 ---
 

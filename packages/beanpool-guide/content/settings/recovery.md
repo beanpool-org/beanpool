@@ -2,6 +2,7 @@
 slug: recovery
 title: Getting your account back
 summary: Restore your account on a new phone, and protect it with a sign-in account.
+help: How to get your account back on a new phone: your 12 words, or a sign-in account you linked.
 related: your-12-words, leaving-or-deleting, communities, faq
 ---
 

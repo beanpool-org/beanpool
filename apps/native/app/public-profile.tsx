@@ -21,6 +21,10 @@ import { palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
+import { useShowcaseMode } from '../utils/use-reader-features';
+import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { beansOn } from '../utils/node-profile';
 
 
@@ -88,6 +92,8 @@ export default function PublicProfileScreen() {
         },
         bioText: { marginTop: 10, fontSize: 14, color: colors.text.secondary, fontStyle: 'italic', textAlign: 'center', lineHeight: 20 },
         joinedText: { fontSize: 12, color: colors.text.muted, fontWeight: '600', marginTop: 6 },
+        // The way on when no card is held offline: read at 4.5:1 in both schemes, unlike the muted lines around it.
+        unreachableText: { fontSize: 13, color: colors.text.secondary, fontWeight: '600', marginTop: 6, textAlign: 'center' },
 
         // Quick stats strip (self)
         statStrip: { flexDirection: 'row', backgroundColor: colors.surface.card, marginHorizontal: 16, marginTop: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 14, alignItems: 'center' },
@@ -390,6 +396,8 @@ export default function PublicProfileScreen() {
     // a listing has no price: the card and the figures are not drawn.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
+    // Where the node previews Beans, the trust card's slot says where badges and Beans are earned (design §1 row 9).
+    const beansPreview = useShowcaseMode('beans') === 'preview';
     const [given, setGiven] = useState<any[]>([]);
     const [friendsCount, setFriendsCount] = useState(0);
     const [trust, setTrust] = useState<any>(null);
@@ -403,7 +411,13 @@ export default function PublicProfileScreen() {
 
     const pubKeyStr = Array.isArray(publicKey) ? publicKey[0] : publicKey;
     const isSelf = !!identity?.publicKey && identity.publicKey === pubKeyStr;
-    const callsignStr = (Array.isArray(callsign) ? callsign[0] : callsign) || (isSelf ? identity?.callsign : undefined);
+    // On a community that says `membersOnDemand` this phone may hold no card for the member: it is fetched by key when
+    // missing or a day old (utils/members-lookup.ts). Offline with none held, the profile says so, and the name is never
+    // a blank (DESIGN-global-members-by-area §2.4): the name the caller passed, the card's, or the key's first 8 characters.
+    const membersOnDemand = nodeProfile?.features.membersOnDemand === true;
+    const callsignStr = (Array.isArray(callsign) ? callsign[0] : callsign) || (isSelf ? identity?.callsign : undefined)
+        || (membersOnDemand ? profile?.callsign || pubKeyStr?.slice(0, 8) : undefined);
+    const [cardUnreachable, setCardUnreachable] = useState(false);
 
     useEffect(() => {
         if (identity?.publicKey) {
@@ -513,7 +527,8 @@ export default function PublicProfileScreen() {
             isSelf ? getBalance(pubKeyStr).catch(() => null) : Promise.resolve(null),
             isSelf ? getFriendsLocal(pubKeyStr).catch(() => []) : Promise.resolve([]),
         ]).then(([prof, posts, bal, friends]) => {
-            if (prof) setProfile(prof);
+            // Never over a card the fetch by key (below) has already brought fresher.
+            if (prof) setProfile((cur: any) => (cur?.public_key === prof.public_key && (cur?.card_fetched_at ?? '') > (prof.card_fetched_at ?? '') ? cur : prof));
             if (posts) setActivePosts(posts);
             if (bal) setBalanceInfo(bal);
             if (Array.isArray(friends)) {
@@ -571,6 +586,27 @@ export default function PublicProfileScreen() {
         }
         return () => { cancelled = true; };
     }, [pubKeyStr, isSelf, identity?.publicKey]);
+
+    // On a community that says `membersOnDemand`: the card by key when none is held or it is a day old. Its own effect:
+    // the node profile (useNodeProfile) is known a moment after the screen mounts, and as a dependency of the reads above
+    // it asked the node for the ratings and the trust profile twice on every open (review of #1859, NB5).
+    useEffect(() => {
+        setCardUnreachable(false);
+        if (!membersOnDemand || !pubKeyStr || isHiddenAuthor(pubKeyStr)) return;
+        let cancelled = false;
+        getMemberProfile(pubKeyStr).catch(() => null).then(prof => {
+            if (cancelled || !cardNeedsFetch(prof, Date.now())) return;
+            fetchCardByKey(pubKeyStr).then(async got => {
+                if (cancelled) return;
+                if (got === 'fetched') {
+                    const fresh = await getMemberProfile(pubKeyStr).catch(() => null);
+                    if (!cancelled && fresh) setProfile(fresh);
+                }
+                setCardUnreachable(got === 'unreachable' && !prof);
+            });
+        });
+        return () => { cancelled = true; };
+    }, [pubKeyStr, membersOnDemand]);
 
     const renderStars = (avg: number) => {
         const rounded = Math.round(avg || 0);
@@ -720,6 +756,7 @@ export default function PublicProfileScreen() {
                         <MaterialCommunityIcons name="check-decagram" size={22} color={colors.brand.primary} style={{ marginLeft: 6, marginTop: 2, flexShrink: 0 }} />
                     </View>
                     <Text style={styles.pubkeyText}>{pubKeyStr?.slice(0, 16)}...</Text>
+                    {cardUnreachable && <Text style={styles.unreachableText} numberOfLines={2}>Connect to see more</Text>}
                     {profile?.joined_at && (
                         <Text style={styles.joinedText} numberOfLines={1}>📅 Joined {new Date(profile.joined_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
                     )}
@@ -1027,6 +1064,12 @@ export default function PublicProfileScreen() {
                             )}
                         </>
                     ) : null
+                )}
+
+                {!showsBeans && beansPreview && (
+                    <View style={{ marginHorizontal: 16 }}>
+                        <LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.profile} />
+                    </View>
                 )}
 
                 {/* Trust summary (self only) — links to the full Ledger */}

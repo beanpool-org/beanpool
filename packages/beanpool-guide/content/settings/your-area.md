@@ -2,6 +2,7 @@
 slug: your-area
 title: Your area
 summary: The rough place the global community uses to show you the listings near you, and how to change or clear it.
+help: The rough place used to show you listings near you. Change it or clear it here; it is never your exact address.
 related: communities, privacy, near-you, joining, browsing-the-market
 ---
 

@@ -8,21 +8,13 @@ import { SECTION_SUB_TABS, isSettingsSection } from '../../lib/sections';
 import type { SidebarMode } from '../../lib/sidebar-mode';
 import { ReturnLinks, type ReturnLinksValue } from './ReturnLinks';
 
-export type TabId =
-    | 'home'
-    | 'people'
-    | 'economy'
-    | 'bulletin'
-    | 'appliance'
-    | 'overview'
-    | 'analytics'
-    | 'gateway'
-    | 'members'
-    | 'topology'
-    | 'invites'
-    | 'onboarding'
-    | 'logs'
-    | 'ai';
+/** Every section the manager draws. A tab saved by an older version that is not here (the copilot's 'ai') is ignored. */
+export const TAB_IDS = [
+    'home', 'people', 'economy', 'bulletin', 'appliance', 'overview', 'analytics', 'gateway', 'members', 'topology', 'invites',
+    'onboarding', 'logs',
+] as const;
+export type TabId = typeof TAB_IDS[number];
+export const isTabId = (v: unknown): v is TabId => typeof v === 'string' && (TAB_IDS as readonly string[]).includes(v);
 
 /**
  * `auth_required` is kept apart from `offline` because the two need different actions from
@@ -122,7 +114,6 @@ export function FleetSidebar({
         { id: 'invites', label: 'Invites & Codes', icon: '🎫' },
         { id: 'onboarding', label: 'Onboarding Funnel', icon: '🚪' },
         { id: 'logs', label: 'System Streamer', icon: '📜' },
-        { id: 'ai', label: 'Sovereign AI Copilot', icon: '🤖', badge: 'PRO' },
     ];
 
     // The drawer's open section: the current one to start with, when it has screens.

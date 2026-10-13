@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>When an admin uses an AI assistant — BeanPool members' guide</title>
+    <meta name="description" content="What an owner's or admin's AI assistant can read about you, what it never sees, and who receives it.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Members' guide</a>
+                <a href="../help.html">Help</a>
+                <a href="../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#settings">Settings and safety</a></p>
+        <h1>When an admin uses an AI assistant</h1>
+        <p class="lede">What an owner's or admin's AI assistant can read about you, what it never sees, and who receives it.</p>
+        <p>Your community's owners can connect their own AI assistant (for example Claude or ChatGPT) to your community's server, to help them look after it: to ask what needs them, or to summarise the open reports. Admins will be able to as well, approved on their phone, in a coming update. They connect it themselves, and they can disconnect it at any time. The other owners are told when one is connected.</p>
+        <h2>What it can read about you</h2>
+        <p>An assistant sees much less than an admin does in Settings. Your community's server decides what it gets, not the assistant.</p>
+        <ul>
+            <li><strong>If someone reports you or your post</strong>, and the admin asks for the report's words: the reason given, your post's title and description, and your BeanPool name. Never who made the report.</li>
+            <li><strong>If you ask to join</strong>, and the admin asks for the messages: the name and message you sent with your request, and the community you said you came from. Never your photo or your key.</li>
+            <li><strong>Totals for the whole community</strong>, such as how many members there are and how many Beans are in circulation. Never your balance.</li>
+        </ul>
+        <h2>What it never sees</h2>
+        <p>Your messages and chats, your balance and trades, your keys, your address, your photos, the names list, and who reported anyone. It can't change anything about you: it can't remove you, mute you, take down your post or answer your join request. An admin does those, in Settings.</p>
+        <h2>Who receives it</h2>
+        <p>What the assistant reads goes to the company that runs it, as when you paste something into an AI chat yourself. The server sends a report's words or a join message only when the admin's assistant asks for them, marked as words from a member and not instructions.</p>
+        <p>If you'd rather your report or your join message wasn't read by an AI, ask your admins how they use theirs.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>What the admins can see</strong><span>In a community whose admins keep a names list: what it holds about you, who can read it, what your community's server keeps, and what being confirmed means.</span></a></li>
+            <li><a href="reporting.html"><strong>Reporting a problem</strong><span>Tell your community's moderators about a post, an event, a Pulse post, a project or an enterprise.</span></a></li>
+            <li><a href="privacy.html"><strong>Your privacy</strong><span>What others can see about you, and the settings that control it.</span></a></li>
+            <li><a href="joining.html"><strong>Joining BeanPool</strong><span>Two ways in: a community, with an invite from a member, or the global community when it is open, with 12 secret words or one sign-in. Asking a community to let you in, and how to invite someone else.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 127.</p>
+    </main>
+</body>
+</html>

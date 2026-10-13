@@ -7,6 +7,9 @@
  * Only an owner's KEY session makes one (the phone's Manage, or a computer signed in by scanning a code): never the admin
  * password, by session, header or body, whatever the node's 2FA. So every token belongs to a person and stops when they
  * are no longer an owner (checkAutomationToken). Listing and revoking take any owner credential: removing one is safe.
+ *
+ * An AI assistant's token (scope agent) is not made here: Connected assistants makes it (agent/grants-route.ts), where the
+ * owners' switch and the per-member cap hold. It is still listed here and can be revoked here.
  */
 
 import Router from '@koa/router';
@@ -14,10 +17,16 @@ import type { RouteDeps } from './types.js';
 import { requireAdminRole } from '../admin-auth.js';
 import { issueAutomationToken, listAutomationTokens, revokeAutomationToken, TOKEN_SCOPES } from '../automation-tokens.js';
 import { logger } from '../logger.js';
+import { noteSecurityEvent } from '../services/security-signal.js';
+import { forgetAgentGrant } from '../agent/limits.js';
+import { agentDisconnectedWords } from '../agent/welcome.js';
+import { cleanMemberText } from '../agent/fence.js';
+import { AGENT_GRANTS_PATH } from '../agent/grants-route.js';
 
 export const TOKENS_OWNER_ONLY = 'Only an owner of this node can make, see or revoke its automation tokens';
 export const TOKEN_NEEDS_KEY_CODE = 'token_needs_key';
 export const TOKEN_NEEDS_KEY_ERROR = 'Make automation tokens from the app: sign in with your owner key (Manage, or a computer signed in by scanning a code)';
+export const TOKEN_AGENT_ELSEWHERE_CODE = 'agent_via_grants';
 
 export function createAutomationTokenRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -42,7 +51,7 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
     router.get('/api/local/admin/automation-tokens', async (ctx) => {
         ctx.set('Cache-Control', 'no-store');
         if (!(await ownerOnly(ctx))) return;
-        ctx.body = { tokens: listAutomationTokens(), scopes: TOKEN_SCOPES };
+        ctx.body = { tokens: listAutomationTokens(), scopes: TOKEN_SCOPES.filter((s) => s !== 'agent') };
     });
 
     router.post('/api/local/admin/automation-tokens', async (ctx) => {
@@ -55,6 +64,14 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
             return;
         }
         const b = body(ctx);
+        if (b.scope === 'agent') {
+            ctx.status = 400;
+            ctx.body = {
+                error: `Connect an AI assistant under Connected assistants (${AGENT_GRANTS_PATH}): the owners' switch and its limits apply there`,
+                code: TOKEN_AGENT_ELSEWHERE_CODE,
+            };
+            return;
+        }
         const createdBy: string = actor;
         const res = issueAutomationToken({ name: b.name, scope: b.scope, expiresAt: b.expiresAt, createdBy });
         if (!res.ok) {
@@ -73,6 +90,7 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
         ctx.set('Cache-Control', 'no-store');
         if (!(await ownerOnly(ctx))) return;
         const id = String(ctx.params.id || '');
+        const revoked = listAutomationTokens().find((t) => t.id === id);
         if (!revokeAutomationToken(id)) {
             ctx.status = 404;
             ctx.body = { error: 'No such token' };
@@ -80,6 +98,10 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
         }
         const by = typeof (ctx.state as any)?.actor === 'string' && (ctx.state as any).actor ? (ctx.state as any).actor : 'owner:password';
         logger.info('AUTH', 'Automation token revoked', { tokenId: id, revokedBy: String(by).slice(0, 16) });
+        if (revoked?.scope === 'agent') {
+            forgetAgentGrant(id);
+            noteSecurityEvent({ key: 'sec.agent', actor: String(by), actorRole: 'owner', detail: agentDisconnectedWords(cleanMemberText(revoked.name, 60), 'owner') });
+        }
         ctx.body = { revoked: id };
     });
 

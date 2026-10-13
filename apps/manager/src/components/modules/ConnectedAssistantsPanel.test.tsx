@@ -18,7 +18,7 @@ const grant = (over: Record<string, unknown> = {}) => ({
 type Call = { url: string; method: string; body: any };
 
 /** A fake node: the list is `state.grants`; connecting pushes one; disconnecting removes it; the preview answers its tools. */
-function fakeNode(state: { grants: any[]; allowed?: boolean; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown }) {
+function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown }) {
     const calls: Call[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any, init?: RequestInit) => {
         const url = String(input);
@@ -27,7 +27,7 @@ function fakeNode(state: { grants: any[]; allowed?: boolean; canConnect?: boolea
         calls.push({ url, method, body });
         if (url.endsWith('/api/local/admin/agent/grants') && method === 'GET') {
             return new Response(JSON.stringify({
-                allowed: state.allowed ?? true, mcpUrl: 'https://mullum.example/mcp', role: 'owner', canConnect: state.canConnect ?? true,
+                allowed: state.allowed ?? true, mcpUrl: 'https://mullum.example/mcp', role: state.role ?? 'owner', canConnect: state.canConnect ?? true,
                 seesAll: state.seesAll ?? true, defaultDays: 30, maxDays: 90, perMember: 5, grants: state.grants,
             }), { status: 200 });
         }
@@ -119,9 +119,22 @@ describe('ConnectedAssistantsPanel', () => {
         expect(screen.getByText(/Adam · admin · by token/)).toBeInTheDocument();
     });
 
+    it('an admin is told only owners connect one for now, theirs coming with the phone\'s approval: no Connect button', async () => {
+        const calls = fakeNode({ grants: [grant({ mine: true, member: 'Adam', role: 'admin' })], role: 'admin', canConnect: false, seesAll: false });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
+        expect(await screen.findByTestId('agent-admin-soon')).toHaveTextContent(/only an owner connects an AI assistant here.*phone’s\s+approval/);
+        expect(screen.queryByTestId('agent-needs-key')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull();
+        expect(screen.queryByLabelText('Assistant’s name')).toBeNull();
+        // What theirs will read, and their own (made when they were an owner) to see and disconnect.
+        expect(screen.getByRole('button', { name: 'What would my assistant see?' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Disconnect Claude on my laptop' })).toBeInTheDocument();
+        expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/api/local/admin/agent/grants'))).toBe(false);
+    });
+
     it('a stale phone session: the node says press Manage again, and no token appears', async () => {
         fakeNode({ grants: [], makeStatus: 403, makeBody: { error: 'Press Manage in the app again', code: 'step_up_required' } });
-        render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
         fireEvent.change(await screen.findByLabelText('Assistant’s name'), { target: { value: 'x' } });
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Not connected: Press Manage in the app again');
@@ -154,7 +167,9 @@ describe('ConnectedAssistantsPanel', () => {
     it('What it sees lists its tools and shows a reading tool\'s answer; a write is never tried', async () => {
         const calls = fakeNode({ grants: [grant()] });
         render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
-        fireEvent.click(await screen.findByRole('button', { name: 'What Claude on my laptop sees' }));
+        // Its accessible name holds the words on it (WCAG 2.5.3): "What it sees", then "Hide".
+        fireEvent.click(await screen.findByRole('button', { name: 'What it sees: Claude on my laptop' }));
+        expect(screen.getByRole('button', { name: 'Hide what it sees: Claude on my laptop' })).toHaveTextContent('Hide');
         const panel = await screen.findByTestId('agent-preview');
         const tools = await within(panel).findAllByTestId('agent-preview-tool');
         expect(tools).toHaveLength(3);

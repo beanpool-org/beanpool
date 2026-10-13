@@ -5,12 +5,14 @@
  * to a real node.
  *
  * For each of the four: the card is drawn and the page never scrolls sideways (the long names, the address, the token, the
- * fenced report text in "What it sees", the alerts card's line); every button on the card is at least 48px tall; and,
+ * fenced report text in "What it sees", the alerts card's line); every button on the card is at least 48px tall and
+ * shows all its words (none cut off inside it: "Copy command" was, at 1.3×); and,
  * signed in with an owner's key from the app:
  *   - Connect: the token appears ONCE in the page (its secret half nowhere else: not in an attribute, a field, the command
  *     line, web storage or the page's title), and of every answer the page received, only the connect call's carried it;
  *   - Done: it is gone from the page;
- *   - an admin sees the card and their own, and is told only an owner turns assistants off.
+ *   - an admin sees the card and their own, is told only an owner turns assistants off, and, with no Connect button, that
+ *     admins connect theirs with the phone's approval in a coming update (only owners make a token until then).
  * Screenshots of each go to $SHOTS_DIR (default: a temp folder), named connected-assistants-<scheme>-<scale>-<step>.png.
  *
  *   node e2e/connected-assistants.mjs
@@ -57,6 +59,14 @@ async function shot(page, name) {
     await card.screenshot({ path: path.join(SHOTS, `connected-assistants-${name}.png`) }).catch(() => page.screenshot({ path: path.join(SHOTS, `connected-assistants-${name}.png`), fullPage: true }));
 }
 
+/** Buttons on the card whose words do not fit inside them (cut off, or spilling past the edge). */
+async function clippedButtons(page) {
+    return page.getByTestId('connected-assistants-card').evaluate((card) => [...card.querySelectorAll('button')]
+        .filter((b) => b.getBoundingClientRect().height > 0)
+        .map((b) => ({ text: (b.textContent || '').trim().slice(0, 30), over: b.scrollWidth - b.clientWidth }))
+        .filter(({ over }) => over > 1));
+}
+
 /** Buttons on the card shorter than a thumb (48px). */
 async function smallButtons(page) {
     return page.getByTestId('connected-assistants-card').evaluate((card) => [...card.querySelectorAll('button')]
@@ -68,7 +78,7 @@ async function openAs(browser, origin, { role, textScale, colorScheme }) {
     const opened = await openSettings(browser, origin, {
         width: WIDTH, textScale, colorScheme, signedIn: false, handoffRole: role, screen: { tab: 'appliance' },
         hash: `#handoff=${'ab'.repeat(16)}`,
-        overrides: { '/api/local/admin/agent/grants': (json) => ({ ...json, canConnect: true, role, seesAll: role === 'owner' }) },
+        overrides: { '/api/local/admin/agent/grants': (json) => ({ ...json, canConnect: role === 'owner', role, seesAll: role === 'owner' }) },
     });
     const { page } = opened;
     await page.waitForSelector('main', { timeout: 20000 });
@@ -104,6 +114,8 @@ try {
             check(o.scrollWidth <= o.viewport, `${at}: no sideways scroll with the list`, o.culprits?.join('; '));
             const small = await smallButtons(page);
             check(small.length === 0, `${at}: every button on the card is 48px or more`, JSON.stringify(small));
+            let clipped = await clippedButtons(page);
+            check(clipped.length === 0, `${at}: every button shows all its words, with the list`, JSON.stringify(clipped));
             await shot(page, `${tag}-list`);
             const before = await secretCount(page);
             check(before.html + before.fields + before.storage === 0, `${at}: no token in the page before connecting`, JSON.stringify(before));
@@ -121,6 +133,8 @@ try {
                 `${at}: of ${answers.length} answers, only the connect call's carried it`, carriers.join(', '));
             o = await horizontalOverflow(page);
             check(o.scrollWidth <= o.viewport, `${at}: no sideways scroll with the token shown`, o.culprits?.join('; '));
+            clipped = await clippedButtons(page);
+            check(clipped.length === 0, `${at}: every button shows all its words, with the token shown`, JSON.stringify(clipped));
             await page.getByTestId('agent-token-shown').scrollIntoViewIfNeeded();
             await shot(page, `${tag}-token`);
             await card.getByRole('button', { name: 'Done' }).click();
@@ -129,7 +143,10 @@ try {
             check(after.html + after.fields + after.storage === 0, `${at}: Done takes it out of the page`, JSON.stringify(after));
 
             // "What it sees": a tool's answer, with fenced member text (one long unbroken word in it).
-            await card.getByRole('button', { name: 'What Claude Desktop on the community hall laptop sees' }).click();
+            // Its accessible name holds the words on it (WCAG 2.5.3), so voice control finds it by what it shows.
+            await card.getByRole('button', { name: 'What it sees: Claude Desktop on the community hall laptop' }).click();
+            check(await card.getByRole('button', { name: 'Hide what it sees: Claude Desktop on the community hall laptop' }).isVisible(),
+                `${at}: open, it is named for its "Hide"`);
             const tools = page.getByTestId('agent-preview-tool');
             await tools.first().waitFor();
             check(await tools.count() === 3, `${at}: "What it sees" lists the assistant's tools`, String(await tools.count()));
@@ -141,6 +158,8 @@ try {
             check(/MEMBER-TEXT 7f3a9c01/.test(await reports.getByTestId('agent-preview-answer').innerText()), `${at}: the answer shows the fenced text as the assistant gets it`);
             o = await horizontalOverflow(page);
             check(o.scrollWidth <= o.viewport, `${at}: no sideways scroll with a tool's answer open`, o.culprits?.join('; '));
+            clipped = await clippedButtons(page);
+            check(clipped.length === 0, `${at}: every button shows all its words, with "What it sees" open`, JSON.stringify(clipped));
             await reports.scrollIntoViewIfNeeded();
             await shot(page, `${tag}-preview`);
 
@@ -161,6 +180,11 @@ try {
             const aCard = admin.page.getByTestId('connected-assistants-card');
             check(await aCard.isVisible() && await admin.page.getByText('Only an owner turns this on or off.').isVisible()
                 && await admin.page.getByRole('switch').count() === 0, `${at}: an admin sees the card, without the switch`);
+            check(await aCard.getByTestId('agent-admin-soon').isVisible() && /phone’s\s+approval/.test(await aCard.getByTestId('agent-admin-soon').innerText())
+                && await aCard.getByRole('button', { name: 'Connect', exact: true }).count() === 0 && await aCard.getByLabel('Assistant’s name').count() === 0,
+            `${at}: an admin is told owners connect for now, theirs comes with the phone's approval, and has no Connect button`);
+            const aClipped = await clippedButtons(admin.page);
+            check(aClipped.length === 0, `${at}: every button shows all its words, for the admin`, JSON.stringify(aClipped));
             o = await horizontalOverflow(admin.page);
             check(o.scrollWidth <= o.viewport, `${at}: no sideways scroll for the admin`, o.culprits?.join('; '));
             await shot(admin.page, `${tag}-admin`);

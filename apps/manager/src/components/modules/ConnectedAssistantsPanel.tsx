@@ -5,13 +5,15 @@ import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
 
 /**
- * "Connected assistants" (admin MCP design §8, §10; slice S3; the server is apps/server agent/grants-route.ts). An owner or
- * an admin connects their OWN AI assistant (Claude, ChatGPT, Cursor) to this server's `/mcp`: it reads health, backups,
- * totals, reports and join requests, redacted by the server, and never messages, balances, keys, photos or logs. An owner
- * sees every connected assistant and can disconnect any; an admin sees and disconnects their own. "What it sees" runs the
- * very tools the assistant would, so the answer shown is the answer it gets. An owner can turn AI assistants off.
+ * "Connected assistants" (admin MCP design §8, §10; slice S3; the server is apps/server agent/grants-route.ts). An owner
+ * connects their OWN AI assistant (Claude, ChatGPT, Cursor) to this server's `/mcp`: it reads health, backups, totals,
+ * reports and join requests, redacted by the server, and never messages, balances, keys, photos or logs. An owner sees
+ * every connected assistant and can disconnect any; an admin sees and disconnects their own. "What it sees" runs the very
+ * tools the assistant would, so the answer shown is the answer it gets. An owner can turn AI assistants off.
  *
- * Only a member's KEY session connects one (an assistant acts for a member; the password is nobody's). The token is shown
+ * Only an owner's KEY session connects one (an assistant acts for a member; the password is nobody's). Admins connect
+ * theirs with the phone's approval once that lands (S2, OAuth); until then the card tells them so and offers no Connect
+ * button, and "What would my assistant see?" still shows what theirs will read. The token is shown
  * ONCE: it lives in this component's state and nowhere else (never web storage, a log or the list), appears in the page
  * in one place only, and is dropped the moment Done is pressed or the card goes away. "Copy command" builds the
  * command line with it at the moment of copying; the line on screen shows a placeholder.
@@ -396,41 +398,48 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                             <p className="text-[11px] text-amber-300 m-0 break-words">
                                 Copy the token now: it is not shown again. Keep it like a password: whoever holds it reads what your assistant reads.
                             </p>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2">
                                 <button
                                     type="button"
                                     onClick={() => void copyText(shownToken, 'token')}
-                                    className="min-h-[48px] flex-1 min-w-[8rem] py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white"
+                                    className="min-h-[48px] w-full sm:w-auto sm:flex-1 px-3 py-2.5 break-words rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white"
                                 >
                                     {copied === 'token' ? 'Token copied' : 'Copy token'}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => void copyText(commandLine(mcpUrl, shownToken), 'command')}
-                                    className="min-h-[48px] flex-1 min-w-[8rem] py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                    className="min-h-[48px] w-full sm:w-auto sm:flex-1 px-3 py-2.5 break-words rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
                                 >
                                     {copied === 'command' ? 'Command copied' : 'Copy command'}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={handleDone}
-                                    className="min-h-[48px] flex-1 min-w-[8rem] py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                    className="min-h-[48px] w-full sm:w-auto sm:flex-1 px-3 py-2.5 break-words rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
                                 >
                                     Done
                                 </button>
                             </div>
                         </div>
                     ) : !data.canConnect ? (
-                        <p className="text-xs text-nature-400 m-0 break-words" data-testid="agent-needs-key">
-                            An assistant acts for a member, so it is connected with your own key, never the password: use Manage in the app, or
-                            sign in on a computer by scanning a code.
-                        </p>
+                        data.role === 'owner' ? (
+                            <p className="text-xs text-nature-400 m-0 break-words" data-testid="agent-needs-key">
+                                An assistant acts for a member, so it is connected with your own key, never the password: use Manage in the app, or
+                                sign in on a computer by scanning a code.
+                            </p>
+                        ) : (
+                            <p className="text-xs text-nature-400 m-0 break-words" data-testid="agent-admin-soon">
+                                For now only an owner connects an AI assistant here. You will connect yours from this card with your phone&rsquo;s
+                                approval in a coming update. Until then, &ldquo;What would my assistant see?&rdquo; shows what it will read.
+                            </p>
+                        )
                     ) : data.allowed ? (
                         <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-3 min-w-0">
                             <span className="text-xs font-semibold text-nature-300">Connect an AI assistant</span>
                             <p className="text-[11px] text-nature-400 m-0 break-words">
                                 You get an address and a token, shown once. Your assistant acts as you, with your role: if you stop being an
-                                {isOwner ? ' owner or admin' : ' admin'}, it stops too. At most {data.perMember} for each member.
+                                owner or admin, it stops too. At most {data.perMember} for each member.
                             </p>
                             <div className="space-y-1">
                                 <label htmlFor="agent-name" className="block text-xs text-nature-400">Assistant&rsquo;s name</label>
@@ -507,14 +516,14 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                                 </p>
                                             )}
                                         </div>
-                                        <div className="flex flex-wrap gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2">
                                             {g.role !== null && !g.expired && (
                                                 <button
                                                     type="button"
                                                     onClick={() => void openPreview(g.id)}
                                                     aria-expanded={previewFor === g.id}
-                                                    aria-label={`What ${g.name} sees`}
-                                                    className="min-h-[48px] flex-1 min-w-[8rem] py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                                    aria-label={previewFor === g.id ? `Hide what it sees: ${g.name}` : `What it sees: ${g.name}`}
+                                                    className="min-h-[48px] w-full sm:w-auto sm:flex-1 px-3 py-2.5 break-words rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
                                                 >
                                                     {previewFor === g.id ? 'Hide' : 'What it sees'}
                                                 </button>
@@ -523,7 +532,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                                 type="button"
                                                 onClick={() => void handleRevoke(g)}
                                                 aria-label={`Disconnect ${g.name}`}
-                                                className="min-h-[48px] flex-1 min-w-[8rem] py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                                className="min-h-[48px] w-full sm:w-auto sm:flex-1 px-3 py-2.5 break-words rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
                                             >
                                                 Disconnect
                                             </button>

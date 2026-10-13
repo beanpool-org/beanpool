@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 127,
-  "hash": "2b1a37e51da77f180609ef635ef89b28f55613538923dc44960215419d7f6d65",
+  "version": 128,
+  "hash": "4eabc936184cda359e0bf826a01081fd2a82c3a549034f1a55fd209186da4950",
   "sections": [
     {
       "id": "about",
@@ -5667,6 +5667,10 @@
         {
           "type": "p",
           "text": "Your messages and chats, your balance and trades, your keys, your address, your photos, the names list, and who reported anyone. It can't change anything about you: it can't remove you, mute you, take down your post or answer your join request. An admin does those, in Settings."
+        },
+        {
+          "type": "p",
+          "text": "An assistant can suggest what to do about a report, for example to keep your post or take it down. Nothing happens unless the admin it works for reads the report and approves; anything you hear about it comes from your community's moderators, as always."
         },
         {
           "type": "h2",

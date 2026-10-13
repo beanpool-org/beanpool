@@ -1829,7 +1829,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
     /** Ben's history of `n` lines (Ana's and Ben's in turn, each sealed to the other), as the node holds it. */
     async function bensHistory(n: number) {
         await aQuestionAndAnAnswer();
-        for (let i = 2; i < n; i++) i % 2 ? sealed(ben, ana, dm, `Ben ${i}`) : sealed(ana, ben, dm, `Ana ${i}`);
+        for (let i = 2; i < n; i++) if (i % 2) sealed(ben, ana, dm, `Ben ${i}`); else sealed(ana, ben, dm, `Ana ${i}`);
     }
 
     it('P20: a restored phone, Ben\'s 30 lines served and then 20 PUPPET lines with PUPPET listed: the old end pins Ben, PUPPET offered, nothing goes', async () => {

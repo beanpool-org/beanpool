@@ -480,6 +480,10 @@ async function main(): Promise<void> {
         assert(!secrets.some(s => cfgText.includes(s.split('_')[2])) && cfgText.includes('"automationTokens"'), 'local-config.json keeps the tokens, hashes only');
         assert(!('automationTokens' in redactLocalConfig(getLocalConfig())), "a backup file's config leaves them out");
         assert(LOCAL_CONFIG_FIELDS.automationTokens?.kind === 'per-server', 'the manifest keeps them with this server');
+    } catch (e) {
+        // A throw is a failure, never a quiet end: the count would otherwise stop short and the exit say 0 (#1865 review finding 8).
+        console.error(e);
+        process.exitCode = 1;
     } finally {
         console.log(`\n${passed}/${run} passed`);
         process.exit(process.exitCode ?? 0);

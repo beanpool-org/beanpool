@@ -58,7 +58,7 @@ import { logger, onSecurityLogLine, type LogCategory } from '../logger.js';
 import { errorMessage } from '../error-message.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
-import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
+import { NODE_ROLE_ACTS, nodeRoleOf } from '../engine/node-roles.js';
 import { getDiskHealth } from '../engine/storage-health.js';
 import { getShutdownStatus } from '../engine/shutdown-recovery.js';
 import { dispatchPushNotification, readWatchdogStatus, resolvePublicNodeUrl } from '../state-engine.js';
@@ -1145,6 +1145,15 @@ export interface AlertsStatus {
     assistants: { calls: number; connected: number };
 }
 
+/** Assistants that can call /mcp now: not expired, and their maker still an owner or admin (as /mcp reads them). */
+function connectedAssistants(t: number): number {
+    return listAutomationTokens().filter((k) => {
+        if (k.scope !== 'agent' || (k.expiresAt !== null && k.expiresAt <= t)) return false;
+        const role = typeof k.createdBy === 'string' ? nodeRoleOf(k.createdBy) : null;
+        return role === 'owner' || role === 'admin';
+    }).length;
+}
+
 export function getAlertsStatus(): AlertsStatus {
     const s = readState();
     const c = readAlertChannel();
@@ -1160,6 +1169,6 @@ export function getAlertsStatus(): AlertsStatus {
         history: s.history.slice().reverse().map((e) => ({ ...e, title: ROWS[e.key].title })),
         recent: recentSecurityEvents(s, t).map((e) => ({ ...e, title: ROWS[e.key].title })),
         acknowledge: recentSecurityEvents(s, t).length > 0 || (!!s.raised['sec.replaced'] && s.raised['sec.replaced'].endedAt === undefined),
-        assistants: { calls: agentCallsTodayAll(t), connected: listAutomationTokens().filter((k) => k.scope === 'agent').length },
+        assistants: { calls: agentCallsTodayAll(t), connected: connectedAssistants(t) },
     };
 }

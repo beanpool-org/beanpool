@@ -3,9 +3,11 @@
  * Over REAL HTTPS through the real Koa middleware, with the official TypeScript MCP SDK client on /mcp; nothing here
  * contacts anything but the server it starts.
  *
- *   1. Connecting: an owner and an admin each connect their own assistant with their key session (30 days unless asked,
- *      90 at most, 5 a member); never the password session, a moderator, a stale phone session (step-up) or any token;
- *      the switch off → 409. Owners are told (sec.agent), in the admin's role.
+ *   1. Connecting: an owner connects their own assistant with their key session (30 days unless asked, 90 at most, 5 live
+ *      ones a member, an expired one not counted), in a no-store answer; until S2 (OAuth with the phone's approval) nobody
+ *      else: every role is tried (no session, a member with no role, an admin, a moderator, the password session, a stale
+ *      phone session, any token). The switch off → 409, and an admin's preview lists its tools but runs none. Owners are
+ *      told (sec.agent). An admin's assistant (an owner who became an admin keeps one; S2 makes them) is seeded in the store.
  *   2. The token appears once: in the make call's answer and nowhere else: no list, no other admin GET, no log line, no
  *      local-config read carries it, its secret half or its hash.
  *   3. The list: an owner sees every assistant (member, name, role, via, last used, calls today); an admin their own.
@@ -13,7 +15,7 @@
  *      each reading tool's answer equal to what /mcp answers (same redaction, same fences); never a write; not counted.
  *   5. Disconnect: an admin their own, an owner any; the next /mcp call is 401; an admin cannot touch another's (404).
  *   6. Today's calls on the alerts card (§8, the addendum: S3 owns it): calls let in today from every assistant, revoked
- *      ones included; how many are connected; counts only.
+ *      ones included; how many are connected (not expired, the maker still an owner or admin); counts only.
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-admin-mcp-settings" node ../../scripts/run-server-suites.mjs
  */
@@ -38,10 +40,11 @@ import { backdateAdminSessionForTests } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { submitKnock } from './engine/knocks.js';
 import { getAlertsStatus } from './services/alerts.js';
+import { issueAutomationToken } from './automation-tokens.js';
 import { db } from './db/db.js';
 import { resetAgentLimits, agentCallsToday } from './agent/limits.js';
 import { AGENT_TOOLS } from './agent/tools.js';
-import { AGENT_GRANTS_PER_MEMBER } from './agent/grants-route.js';
+import { AGENT_GRANTS_PER_MEMBER, OWNER_ONLY_CODE } from './agent/grants-route.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
@@ -56,7 +59,7 @@ const PW = 'ConnectedAssistants1!';
 const SECRET = generateTotpSecret();
 const code = () => generateTotpCode(SECRET);
 
-interface Reply { status: number; body: any; text: string; sessionId: string | null }
+interface Reply { status: number; body: any; text: string; sessionId: string | null; cacheControl: string | null }
 async function call(method: string, p: string, opts: { body?: unknown; headers?: Record<string, string> } = {}): Promise<Reply> {
     forgetUsedTotpCodesForTests();
     const res = await fetch(`${BASE}${p}`, {
@@ -69,7 +72,7 @@ async function call(method: string, p: string, opts: { body?: unknown; headers?:
     let body: any = null;
     try { body = JSON.parse(text); } catch { /* not json */ }
     const cookie = res.headers.getSetCookie().find(c => c.startsWith('admin_session=')) ?? '';
-    return { status: res.status, body, text, sessionId: cookie.match(/^admin_session=([0-9a-f]{64})/)?.[1] ?? null };
+    return { status: res.status, body, text, sessionId: cookie.match(/^admin_session=([0-9a-f]{64})/)?.[1] ?? null, cacheControl: res.headers.get('cache-control') };
 }
 const show = (r: Reply) => `${r.status} ${r.text.slice(0, 160)}`;
 const asSession = (id: string | null): Record<string, string> => ({ 'X-Admin-Session': id ?? '' });
@@ -164,7 +167,7 @@ async function main(): Promise<void> {
 
     try {
         // ── 1. Connecting ─────────────────────────────────────────────────────────────────────────
-        console.log('── 1. An owner and an admin each connect their own assistant ──');
+        console.log('── 1. An owner connects their own assistant; until S2, nobody else can ──');
         resetAdminAuthTarpit();
         const ownerS = await keySignIn(owner), adminS = await keySignIn(admin), admin2S = await keySignIn(admin2), modS = await keySignIn(mod);
         assert(!!ownerS && !!adminS && !!admin2S && !!modS, 'the owner, two admins and a moderator sign in with their keys');
@@ -172,39 +175,50 @@ async function main(): Promise<void> {
         assert(pw.status === 200 && !!pw.sessionId, `the password signs in with its 2FA code (${show(pw)})`);
         const pwS = pw.sessionId;
         const make = (s: string | null, body: unknown = { name: 'Claude' }) => call('POST', GRANTS, { headers: asSession(s), body });
+        const DAY = 86_400_000;
 
         const before = Date.now();
-        const mAdmin = await make(adminS, { name: 'Adam\'s Claude' });
-        assert(mAdmin.status === 201 && /^bp_[0-9a-f]{12}_[0-9a-f]{64}$/.test(mAdmin.body?.token ?? ''), `an admin's key session connects an assistant (${mAdmin.status})`);
-        const ADMIN_TOKEN: string = mAdmin.body.token;
-        const adminGrant = mAdmin.body.grant;
-        assert(adminGrant?.role === 'admin' && adminGrant?.mine === true && adminGrant?.member === 'Adam' && adminGrant?.via === 'token'
-            && Math.abs(adminGrant.expiresAt - (before + 30 * 86_400_000)) < 120_000,
-        `the answer names it: the admin's, Adam, by token, 30 days (${JSON.stringify(adminGrant)})`);
-        assert(!('createdBy' in adminGrant) && !('hash' in adminGrant) && !JSON.stringify(adminGrant).includes(admin.pub),
-            'the grant in the answer carries no hash and not the maker\'s key');
-        const mOwner = await make(ownerS, { name: 'Olive\'s Claude', days: 90 });
-        assert(mOwner.status === 201 && Math.abs(mOwner.body?.grant?.expiresAt - (Date.now() + 90 * 86_400_000)) < 120_000,
-            `an owner connects one for 90 days (${mOwner.status})`);
+        const mOwner = await make(ownerS, { name: 'Olive\'s Claude' });
+        assert(mOwner.status === 201 && /^bp_[0-9a-f]{12}_[0-9a-f]{64}$/.test(mOwner.body?.token ?? '') && mOwner.cacheControl === 'no-store',
+            `an owner's key session connects an assistant, in an answer never cached (${mOwner.status}, Cache-Control: ${mOwner.cacheControl})`);
         const OWNER_TOKEN: string = mOwner.body.token;
-        const mAdmin2 = await make(admin2S, { name: 'Ada\'s Cursor', days: 7 });
-        assert(mAdmin2.status === 201, `a second admin connects their own (${mAdmin2.status})`);
-        const ADMIN2_TOKEN: string = mAdmin2.body.token;
-        const tokens = [ADMIN_TOKEN, OWNER_TOKEN, ADMIN2_TOKEN];
+        const ownerGrant = mOwner.body.grant;
+        assert(ownerGrant?.role === 'owner' && ownerGrant?.mine === true && ownerGrant?.member === 'Olive' && ownerGrant?.via === 'token'
+            && Math.abs(ownerGrant.expiresAt - (before + 30 * DAY)) < 120_000,
+        `the answer names it: the owner's, Olive, by token, 30 days (${JSON.stringify(ownerGrant)})`);
+        assert(!('createdBy' in ownerGrant) && !('hash' in ownerGrant) && !JSON.stringify(ownerGrant).includes(owner.pub),
+            'the grant in the answer carries no hash and not the maker\'s key');
+        const m90 = await make(ownerS, { name: 'Olive\'s Cursor', days: 90 });
+        assert(m90.status === 201 && Math.abs(m90.body?.grant?.expiresAt - (Date.now() + 90 * DAY)) < 120_000,
+            `an owner connects one for 90 days (${m90.status})`);
+        const tokens = [OWNER_TOKEN, m90.body.token];
+        await new Promise(r => setTimeout(r, 50));
+        const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
+        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, and take a backup\./.test(d)),
+            `owners are told an owner connected one (${told.join(' | ').slice(0, 300)})`);
 
         const tooLong = await make(ownerS, { name: 'x', days: 91 });
         const zero = await make(ownerS, { name: 'x', days: 0 });
         const noName = await make(ownerS, { name: '  ' });
         assert(tooLong.status === 400 && zero.status === 400 && noName.status === 400 && /90/.test(tooLong.body?.error ?? ''),
             `91 days, 0 days and no name are refused (${show(tooLong)} | ${show(zero)} | ${show(noName)})`);
+
+        // Every role. The token is the owner's way in (design pick 2); admins connect through OAuth with the phone's
+        // approval once S2 lands, so until then an admin is refused, in words the card shows (#1865 review, the director).
+        const anon = await call('POST', GRANTS, { body: { name: 'x' } });
+        assert(anon.status === 401 && !anon.body?.token, `no session: 401 (${show(anon)})`);
+        const noRole = await keySignIn(poster);
+        assert(noRole === null, 'a member with no node role gets no session to connect one with');
+        const byAdmin = await make(adminS, { name: 'Adam\'s Claude' });
+        const byAdmin2 = await make(admin2S, { name: 'Ada\'s Cursor', days: 7 });
+        assert([byAdmin, byAdmin2].every(r => r.status === 403 && r.body?.code === OWNER_ONLY_CODE && !r.body?.token && /phone's approval/.test(r.body?.error ?? '')),
+            `an admin's key session cannot connect one until S2: 403 ${OWNER_ONLY_CODE}, told it comes with the phone's approval (${show(byAdmin)} | ${byAdmin2.status})`);
+        const byMod = await make(modS, { name: 'mod made' });
+        assert(byMod.status === 403 && byMod.body?.code !== OWNER_ONLY_CODE && !byMod.body?.token, `a moderator cannot connect one (${show(byMod)})`);
         const byPw = await make(pwS, { name: 'pw made' });
         assert(byPw.status === 403 && byPw.body?.code === 'agent_needs_key', `the password session cannot connect one: an assistant acts for a member (${show(byPw)})`);
-        const byMod = await make(modS, { name: 'mod made' });
-        assert(byMod.status === 403, `a moderator cannot connect one (${show(byMod)})`);
-        const byToken = await call('POST', GRANTS, { headers: bearer(ADMIN_TOKEN), body: { name: 'x' } });
+        const byToken = await call('POST', GRANTS, { headers: bearer(OWNER_TOKEN), body: { name: 'x' } });
         assert(byToken.status === 403, `an assistant's own token cannot connect another (${show(byToken)})`);
-        const ownerSecond = await make(ownerS, { name: 'Olive\'s Cursor' });
-        if (ownerSecond.body?.token) tokens.push(ownerSecond.body.token);
         const adminScoped = await call('POST', '/api/local/admin/automation-tokens', { headers: asSession(ownerS), body: { name: 'fleet', scope: 'admin' } });
         const ADMIN_SCOPE: string = adminScoped.body?.token ?? '';
         const byAdminToken = await call('POST', GRANTS, { headers: bearer(ADMIN_SCOPE), body: { name: 'x' } });
@@ -212,34 +226,56 @@ async function main(): Promise<void> {
         const previewByAdminToken = await call('POST', PREVIEW, { headers: bearer(ADMIN_SCOPE), body: {} });
         assert(adminScoped.status === 201 && [byAdminToken, listByAdminToken, previewByAdminToken].every(r => r.status === 403 && r.body?.code === TOKEN_REFUSED_CODE),
             `an admin-scope automation token reaches none of it: connect, list or preview (${show(byAdminToken)} | ${show(listByAdminToken)} | ${show(previewByAdminToken)})`);
-        const stale = await keySignIn(admin);
+        const viaOldRoute = await call('POST', '/api/local/admin/automation-tokens', { headers: asSession(ownerS), body: { name: 'old way', scope: 'agent' } });
+        assert(viaOldRoute.status === 400 && viaOldRoute.body?.code === 'agent_via_grants' && !viaOldRoute.body?.token,
+            `the automation-token route makes no agent token, so the switch and the cap hold for every one (${show(viaOldRoute)})`);
+        const stale = await keySignIn(owner);
         backdateAdminSessionForTests(stale!, 6 * 60_000);
         const byStale = await make(stale, { name: 'stale' });
-        assert(byStale.status === 403 && byStale.body?.code === 'step_up_required', `a stale phone session needs the step-up, for an admin too (${show(byStale)})`);
+        assert(byStale.status === 403 && byStale.body?.code === 'step_up_required', `a stale phone session needs the step-up (${show(byStale)})`);
 
-        // Five a member, then no more.
+        // An admin's assistant still exists: an owner who made one and became an admin keeps it as an admin's, and S2's
+        // OAuth makes them. Seeded as the store keeps them, so the list, the preview and disconnect are measured for one.
+        const seed = (k: Key, name: string, days = 30, at = Date.now()) => {
+            const r = issueAutomationToken({ name, scope: 'agent', expiresAt: at + days * DAY, createdBy: k.pub }, at);
+            if (!r.ok) throw new Error(r.error);
+            return r;
+        };
+        const sAdmin = seed(admin, 'Adam\'s Claude');
+        const ADMIN_TOKEN = sAdmin.token, adminGrantId = sAdmin.record.id;
+        const sAdmin2 = seed(admin2, 'Ada\'s Cursor', 7);
+        const ADMIN2_TOKEN = sAdmin2.token;
+        tokens.push(ADMIN_TOKEN, ADMIN2_TOKEN);
+
+        // Five live ones a member, then no more. An expired one answers 401 at /mcp, so it is not counted (#1865 review finding 3).
+        const expired = seed(owner, 'Olive\'s old one', 30, Date.now() - 31 * DAY);
+        tokens.push(expired.token);
         const extra: Reply[] = [];
-        for (let i = 0; i < AGENT_GRANTS_PER_MEMBER; i++) extra.push(await make(admin2S, { name: `Ada ${i}` }));
-        assert(extra.slice(0, AGENT_GRANTS_PER_MEMBER - 1).every(r => r.status === 201) && extra[AGENT_GRANTS_PER_MEMBER - 1].status === 400
-            && /disconnect one first/.test(extra[AGENT_GRANTS_PER_MEMBER - 1].body?.error ?? ''),
-        `a member connects at most ${AGENT_GRANTS_PER_MEMBER} (${extra.map(r => r.status).join(',')})`);
+        for (let i = 0; i < AGENT_GRANTS_PER_MEMBER - 1; i++) extra.push(await make(ownerS, { name: `Olive ${i}` }));
+        assert(extra.slice(0, AGENT_GRANTS_PER_MEMBER - 2).every(r => r.status === 201) && extra[AGENT_GRANTS_PER_MEMBER - 2].status === 400
+            && /disconnect one first/.test(extra[AGENT_GRANTS_PER_MEMBER - 2].body?.error ?? ''),
+        `a member connects at most ${AGENT_GRANTS_PER_MEMBER} live ones; an expired one is not counted (2 + ${extra.map(r => r.status).join(',')})`);
         for (const r of extra) if (r.body?.token) tokens.push(r.body.token);
 
-        await new Promise(r => setTimeout(r, 50));
-        const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
-        assert(told.some(d => /An AI assistant \(Adam's Claude\) was connected by an admin: it can read health, backups, totals, reports and join requests\./.test(d)),
-            `owners are told an admin connected one, without take_backup in its words (${told.join(' | ').slice(0, 300)})`);
-
-        // The switch off: nobody connects; /mcp answers 404.
+        // The switch off: nobody connects; /mcp answers 404; an admin's preview lists the tools but runs none, since the
+        // tools draw on owner-only routes (off-box copies, the standby) an admin reads only through their assistant (finding 1).
         const off = await call('POST', '/api/local/admin/agent/switch', { headers: asSession(ownerS), body: { allowed: false } });
-        const whileOff = await make(adminS, { name: 'while off' });
+        const whileOff = await make(ownerS, { name: 'while off' });
         const listOff = await call('GET', GRANTS, { headers: asSession(adminS) });
         const mcpOff = await mcpList(ADMIN_TOKEN);
+        const pvToolsOff = await call('POST', PREVIEW, { headers: asSession(adminS), body: {} });
+        const pvRunOff = await call('POST', PREVIEW, { headers: asSession(adminS), body: { tool: 'backups_status' } });
+        const pvGrantOff = await call('POST', PREVIEW, { headers: asSession(adminS), body: { grant: adminGrantId, tool: 'reports_list', args: { include_text: true } } });
+        const pvOwnerOff = await call('POST', PREVIEW, { headers: asSession(ownerS), body: { tool: 'backups_status' } });
         const byAdminSwitch = await call('POST', '/api/local/admin/agent/switch', { headers: asSession(adminS), body: { allowed: true } });
         const on = await call('POST', '/api/local/admin/agent/switch', { headers: asSession(ownerS), body: { allowed: true } });
+        const pvRunOn = await call('POST', PREVIEW, { headers: asSession(adminS), body: { tool: 'backups_status' } });
         assert(off.body?.allowed === false && whileOff.status === 409 && listOff.status === 200 && listOff.body?.allowed === false && mcpOff.status === 404
             && byAdminSwitch.status === 403 && on.body?.allowed === true,
         `the owner's switch off: no new connection (409), the list says so, /mcp 404; an admin cannot turn it on (${show(whileOff)} | ${mcpOff.status} | ${show(byAdminSwitch)})`);
+        assert(pvToolsOff.status === 200 && (pvToolsOff.body?.tools ?? []).length > 0 && [pvRunOff, pvGrantOff].every(r => r.status === 409 && !('result' in (r.body ?? {})))
+            && pvOwnerOff.status === 200 && pvOwnerOff.body?.ok === true && pvRunOn.status === 200 && pvRunOn.body?.ok === true,
+        `while off, an admin's preview lists its tools but runs none (409, 409); an owner's runs; on again, the admin's runs (${show(pvRunOff)} | ${pvOwnerOff.status} | ${pvRunOn.status})`);
 
         // ── 2. The token appears once ─────────────────────────────────────────────────────────────
         console.log('── 2. A token appears once: in the make call\'s answer, nowhere else ──');
@@ -280,10 +316,13 @@ async function main(): Promise<void> {
         const pwList = await call('GET', GRANTS, { headers: asSession(pwS) });
         const modList = await call('GET', GRANTS, { headers: asSession(modS) });
         const names = (r: Reply) => (r.body?.grants ?? []).map((g: any) => g.name).sort().join(' | ');
-        assert(ownerList.status === 200 && ownerList.body?.seesAll === true && ownerList.body?.grants?.length === tokens.length,
-            `the owner sees every assistant (${ownerList.body?.grants?.length}: ${names(ownerList)})`);
-        assert(adminList.status === 200 && adminList.body?.seesAll === false && names(adminList) === "Adam's Claude" && adminList.body.grants[0].mine === true,
-            `an admin sees only their own (${names(adminList)})`);
+        assert(ownerList.status === 200 && ownerList.body?.seesAll === true && ownerList.body?.grants?.length === tokens.length && ownerList.body?.canConnect === true,
+            `the owner sees every assistant and may connect one (${ownerList.body?.grants?.length}: ${names(ownerList)})`);
+        assert(adminList.status === 200 && adminList.body?.seesAll === false && names(adminList) === "Adam's Claude" && adminList.body.grants[0].mine === true
+            && adminList.body?.role === 'admin' && adminList.body?.canConnect === false,
+        `an admin sees only their own, and is told they cannot connect one yet (${names(adminList)}, canConnect ${adminList.body?.canConnect})`);
+        const expiredRow = (ownerList.body?.grants ?? []).find((g: any) => g.name === "Olive's old one");
+        assert(expiredRow?.expired === true, `an expired one is listed as expired (${JSON.stringify(expiredRow)})`);
         assert(pwList.status === 200 && pwList.body?.grants?.length === tokens.length && pwList.body?.canConnect === false,
             `the password session (owner level) sees every one and is told to connect from the app (${pwList.body?.grants?.length}, canConnect ${pwList.body?.canConnect})`);
         assert(modList.status === 403, `a moderator sees none (${show(modList)})`);
@@ -298,7 +337,7 @@ async function main(): Promise<void> {
         console.log('── 4. The preview answers what /mcp answers ──');
         const ownerClient = await connect(OWNER_TOKEN);
         const adminClient = await connect(ADMIN_TOKEN);
-        const ownerGrantId = mOwner.body.grant.id, adminGrantId = adminGrant.id;
+        const ownerGrantId = mOwner.body.grant.id;
         const pvList = await call('POST', PREVIEW, { headers: asSession(ownerS), body: { grant: adminGrantId } });
         const mcpAdminTools = (await adminClient.listTools()).tools.map(t => t.name).sort().join();
         const mcpOwnerTools = (await ownerClient.listTools()).tools.map(t => t.name).sort().join();
@@ -351,9 +390,9 @@ async function main(): Promise<void> {
         console.log('── 5. Disconnect: the next /mcp call is 401 ──');
         const okBefore = await mcpList(ADMIN2_TOKEN);
         assert(okBefore.status === 200, `Ada's assistant reaches /mcp before (${okBefore.status})`);
-        const crossAdmin = await call('POST', `${GRANTS}/${mAdmin2.body.grant.id}/revoke`, { headers: asSession(adminS) });
+        const crossAdmin = await call('POST', `${GRANTS}/${sAdmin2.record.id}/revoke`, { headers: asSession(adminS) });
         assert(crossAdmin.status === 404 && (await mcpList(ADMIN2_TOKEN)).status === 200, `an admin cannot disconnect another admin's (${show(crossAdmin)})`);
-        const own = await call('POST', `${GRANTS}/${mAdmin2.body.grant.id}/revoke`, { headers: asSession(admin2S) });
+        const own = await call('POST', `${GRANTS}/${sAdmin2.record.id}/revoke`, { headers: asSession(admin2S) });
         const after = await mcpList(ADMIN2_TOKEN);
         assert(own.status === 200 && after.status === 401, `an admin disconnects their own: its next /mcp call is 401 (${show(own)} → ${after.status})`);
         const callsToday = getAlertsStatus().assistants.calls;
@@ -370,10 +409,16 @@ async function main(): Promise<void> {
 
         // ── 6. Today's calls on the alerts card ───────────────────────────────────────────────────
         console.log('── 6. The alerts card: assistants today, counts only ──');
+        // "Connected" is what can call /mcp now: an expired grant and one whose maker is no longer an owner or admin (Mo, a
+        // moderator now) both answer 401, so neither is counted (#1865 review finding 3). Left: the owner's 5 live ones.
+        const demoted = seed(mod, 'Mo\'s Claude, made as an admin');
+        const deadOnes = [await mcpList(expired.token), await mcpList(demoted.token)].map(r => r.status);
         const card = await call('POST', '/api/local/admin/alerts/status', { headers: asSession(ownerS), body: {} });
-        const connected = (getLocalConfig().automationTokens ?? []).filter((t: any) => t.scope === 'agent').length;
-        assert(card.status === 200 && card.body?.assistants?.calls === callsToday && callsToday > 10 && card.body?.assistants?.connected === connected,
-            `the card counts today's calls from every assistant, the disconnected ones' kept (${JSON.stringify(card.body?.assistants)}, ${connected} connected)`);
+        const storedAgents = (getLocalConfig().automationTokens ?? []).filter((t: any) => t.scope === 'agent').length;
+        assert(card.status === 200 && card.body?.assistants?.calls === callsToday && callsToday > 10,
+            `the card counts today's calls from every assistant, the disconnected ones' kept (${JSON.stringify(card.body?.assistants)})`);
+        assert(deadOnes.join() === '401,401' && storedAgents === AGENT_GRANTS_PER_MEMBER + 2 && card.body?.assistants?.connected === AGENT_GRANTS_PER_MEMBER,
+            `connected counts only those that can call now: ${card.body?.assistants?.connected} of ${storedAgents} stored (the expired one and the demoted maker's answer ${deadOnes.join(', ')})`);
         assert(Object.keys(card.body?.assistants ?? {}).sort().join() === 'calls,connected', 'counts only: no names, no grants');
         resetAgentLimits();
         assert(getAlertsStatus().assistants.calls === 0, 'a new day (or a restart) starts from 0');

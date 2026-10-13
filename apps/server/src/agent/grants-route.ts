@@ -1,16 +1,21 @@
 /**
- * Connected assistants in Settings (admin MCP design §8, §10; slice S3): an owner or an admin connects their own AI
- * assistant, sees the connections, disconnects one, and sees exactly what an assistant would read before connecting.
+ * Connected assistants in Settings (admin MCP design §8, §10; slice S3): an owner connects their own AI assistant; an owner
+ * or an admin sees the connections, disconnects one, and sees exactly what an assistant would read before connecting.
  *
  * - No token reaches these routes (automation-tokens.ts isRefusedToEveryToken): only a person's own session.
- * - Make (`POST …/agent/grants`): an owner's or an admin's KEY session, for themselves, never the admin password (an
- *   assistant acts for a member, whose live role it carries: agent/mcp-route.ts agentGrantFrom). Making one is a new
- *   credential, so a session from the phone's Manage asks for its unlock again (requirePhoneStepUp), whatever the role.
- *   The token is in that answer and nowhere else; no list carries a secret or a hash.
+ * - Make (`POST …/agent/grants`): an OWNER's KEY session, for themselves, never the admin password (an assistant acts for
+ *   a member, whose live role it carries: agent/mcp-route.ts agentGrantFrom). The token is the owner's way in (design pick
+ *   2); admins connect through OAuth with the phone's approval once S2 lands, so until then an admin is refused with
+ *   `agent_owner_only`. Making one is a new credential, so a session from the phone's Manage asks for its unlock again
+ *   (requirePhoneStepUp). The token is in that answer and nowhere else; no list carries a secret or a hash.
+ *   This is the only place an agent token is made (routes/automation-tokens.ts refuses the scope), so the owners' switch and
+ *   the per-member cap hold for every one.
  * - List: an owner sees every assistant (member, name, role, via, last used, calls today); an admin their own.
  * - Disconnect: an owner any assistant, an admin their own. Its next call to /mcp is 401.
  * - Preview (`POST …/agent/preview`): what a tool answers, run by the same table /mcp runs (agent/tools.ts), with the
- *   same redaction and the same fences. Never a write: take_backup is not previewed. Not counted against any limit.
+ *   same redaction and the same fences. Never a write: take_backup is not previewed. Not counted against any limit. With
+ *   the switch off, an admin's preview lists the tools but runs none: an owner reads the owner-only routes the tools draw
+ *   on (off-box copies, the standby) anyway, an admin only through their assistant, which is refused then too.
  */
 import Router from '@koa/router';
 import type { RouteDeps } from '../routes/types.js';
@@ -35,7 +40,10 @@ export const AGENT_PREVIEW_PATH = '/api/local/admin/agent/preview';
 export const AGENT_GRANTS_PER_MEMBER = 5;
 const DAY_MS = 24 * 60 * 60_000;
 
-const ROLE_ERROR = 'Only an owner or an admin of this node can connect an AI assistant';
+const ROLE_ERROR = 'Only an owner or an admin of this node can see its AI assistants';
+export const OWNER_ONLY_CODE = 'agent_owner_only';
+const OWNER_ONLY_ERROR = 'For now only an owner connects an AI assistant here. Admins will connect theirs with the phone\'s approval in a coming update.';
+const SWITCH_OFF_ERROR = 'AI assistants are turned off on this server: an owner turns them on here first';
 const NEEDS_KEY_ERROR = 'Connect an assistant from the app: sign in with your own key (Manage, or a computer signed in by scanning a code). An assistant acts for a member, and the admin password is nobody\'s.';
 
 type Role = 'owner' | 'admin';
@@ -59,6 +67,9 @@ const body = (ctx: any): Record<string, unknown> => {
     return b && typeof b === 'object' && !Array.isArray(b) ? b : {};
 };
 
+/** Not expired: an expired grant answers 401 at /mcp, so it is neither connected nor counted against the cap. */
+export const liveGrant = (t: { expiresAt: number | null }, now = Date.now()): boolean => t.expiresAt === null || t.expiresAt > now;
+
 /** The agent grants this caller may see: an owner every one, an admin (or anyone else) only their own. */
 function visibleGrants(ctx: any): AutomationTokenView[] {
     const agents = listAutomationTokens().filter((t) => t.scope === 'agent');
@@ -80,7 +91,7 @@ function grantView(t: AutomationTokenView, me: string | null, now = Date.now()) 
         via: 'token' as const,
         createdAt: t.createdAt,
         expiresAt: t.expiresAt,
-        expired: t.expiresAt !== null && t.expiresAt <= now,
+        expired: !liveGrant(t, now),
         lastUsedAt: t.lastUsedAt,
         callsToday: agentCallsToday(t.id, now),
     };
@@ -114,7 +125,8 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             allowed: aiAssistantsAllowed(),
             mcpUrl: `${nodeUrlFor(ctx)}${MCP_PATH}`,
             role,
-            canConnect: !!me,
+            /** An owner's key session only, until S2: the card tells a password session to use a key, an admin to wait. */
+            canConnect: !!me && role === 'owner',
             seesAll: role === 'owner',
             defaultDays: AGENT_TOKEN_DEFAULT_DAYS,
             maxDays: AGENT_TOKEN_MAX_DAYS,
@@ -132,15 +144,21 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             ctx.body = { error: NEEDS_KEY_ERROR, code: 'agent_needs_key' };
             return;
         }
-        // A new credential: the phone's Manage asks for its unlock again, for an admin as for an owner.
+        const role = roleOf(ctx);
+        if (role !== 'owner') {
+            ctx.status = 403;
+            ctx.body = { error: OWNER_ONLY_ERROR, code: OWNER_ONLY_CODE };
+            return;
+        }
+        // A new credential: the phone's Manage asks for its unlock again.
         if (!requirePhoneStepUp(ctx)) return;
         if (!aiAssistantsAllowed()) {
             ctx.status = 409;
-            ctx.body = { error: 'AI assistants are turned off on this server: an owner turns them on here first' };
+            ctx.body = { error: SWITCH_OFF_ERROR };
             return;
         }
-        const role = roleOf(ctx);
-        if (listAutomationTokens().filter((t) => t.scope === 'agent' && t.createdBy === me).length >= AGENT_GRANTS_PER_MEMBER) {
+        const now = Date.now();
+        if (listAutomationTokens().filter((t) => t.scope === 'agent' && t.createdBy === me && liveGrant(t, now)).length >= AGENT_GRANTS_PER_MEMBER) {
             ctx.status = 400;
             ctx.body = { error: `You have ${AGENT_GRANTS_PER_MEMBER} assistants connected: disconnect one first` };
             return;
@@ -152,7 +170,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             ctx.body = { error: `Pick from 1 to ${AGENT_TOKEN_MAX_DAYS} days` };
             return;
         }
-        const res = issueAutomationToken({ name: b.name, scope: 'agent', expiresAt: Date.now() + days * DAY_MS, createdBy: me });
+        const res = issueAutomationToken({ name: b.name, scope: 'agent', expiresAt: now + days * DAY_MS, createdBy: me }, now);
         if (!res.ok) {
             ctx.status = 400;
             ctx.body = { error: res.error };
@@ -200,6 +218,11 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             ctx.body = {
                 tools: tools.map((t) => ({ name: t.name, title: t.title, description: toolDescription(t), write: !!t.write, memberText: !!t.memberText })),
             };
+            return;
+        }
+        if (!aiAssistantsAllowed() && roleOf(ctx) !== 'owner') {
+            ctx.status = 409;
+            ctx.body = { error: SWITCH_OFF_ERROR };
             return;
         }
         const tool = tools.find((t) => t.name === b.tool);

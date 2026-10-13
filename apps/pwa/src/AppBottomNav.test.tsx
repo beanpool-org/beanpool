@@ -368,6 +368,15 @@ describe('Full-page views clear the desktop sidebar', () => {
         expect(profile.contains(sidebar())).toBe(false);
     });
 
+    // Review of #1857, NB5: what rides on the offset (ADD POST, the Map's +, the tour bar's own bottom) clears the
+    // tour bar only while every rule that sets the offset adds the bar's height; without it the bar slid off the screen.
+    it('index.css adds the tour bar\'s height to every --bottom-nav-offset it sets', () => {
+        const css = readFileSync(join(import.meta.dirname, 'index.css'), 'utf8');
+        const sets = [...css.matchAll(/--bottom-nav-offset:([^;]*);/g)].map((m) => m[1]);
+        expect(sets.length).toBeGreaterThanOrEqual(3);
+        for (const value of sets) expect(value).toContain('var(--tour-bar-height');
+    });
+
     it('index.css insets .page-overlay past the sidebar on md+ and gives it the wallpaper over its own ground', () => {
         const css = readFileSync(join(import.meta.dirname, 'index.css'), 'utf8');
 

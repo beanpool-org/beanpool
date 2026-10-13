@@ -17,6 +17,8 @@ import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
+import { DealsPreviewDialog } from '../components/ShowcasePreviews';
+import { useFeatureMode } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
@@ -319,6 +321,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
     const [showDealsModal, setShowDealsModal] = useState(false);
+    // Deals off here and the node shows previews: My Deals opens Example Valley's two deals (DESIGN-global-showcase-fable.md §1 row 5).
+    const dealsMode = useFeatureMode('escrow');
     const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
 
     // Detail view
@@ -3229,8 +3233,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 onClose={() => setShowCategoryPicker(false)}
             />
 
+            {showDealsModal && dealsMode === 'preview' && (
+                <DealsPreviewDialog onClose={() => setShowDealsModal(false)} onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined} onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined} />
+            )}
             <MyDealsModal
-                visible={showDealsModal}
+                visible={showDealsModal && dealsMode !== 'preview'}
                 identity={identity}
                 onClose={() => setShowDealsModal(false)}
                 posts={posts}

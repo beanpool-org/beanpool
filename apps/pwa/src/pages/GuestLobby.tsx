@@ -26,16 +26,20 @@ import { HomePage } from './HomePage';
 import { WelcomePage } from './WelcomePage';
 import { keyProblemSentence, joinTakes } from '../components/WebJoin';
 import { FormerAddressBanner } from '../components/FormerAddressBanner';
+import { LedgerPreview } from '../components/ShowcasePreviews';
+import { modeFor } from '../lib/features';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
 
-type LobbyTab = 'home' | 'marketplace' | 'map';
+type LobbyTab = 'home' | 'marketplace' | 'map' | 'ledger';
 
 const TABS: { id: LobbyTab; label: string; emoji: string }[] = [
     { id: 'home', label: 'Home', emoji: '🏠' },
     { id: 'marketplace', label: 'Market', emoji: '🤝' },
     { id: 'map', label: 'Map', emoji: '🗺️' },
 ];
+/** The Ledger, when the node previews Beans: a visitor sees mutual exchange before any door (design §5, pick 4). */
+const LEDGER_TAB: { id: LobbyTab; label: string; emoji: string } = { id: 'ledger', label: 'Ledger', emoji: '📊' };
 
 interface Props {
     /** `/api/community/info`, as App read it to choose the lobby. */
@@ -49,6 +53,7 @@ interface Props {
 
 export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPostTaken }: Props) {
     const [tab, setTab] = useState<LobbyTab>('home');
+    const tabs = modeFor('beans', info) === 'preview' ? [...TABS, LEDGER_TAB] : TABS;
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [openPostId, setOpenPostId] = useState<string | null>(null);
     // The browser join over the lobby: where it opens ('guard' from Join, 'restore' from "Already have BeanPool?";
@@ -100,6 +105,8 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
             if (contextId) setOpenPostId(contextId);
         } else if (to === 'map') {
             setTab('map');
+        } else if (to === 'ledger' && tabs.includes(LEDGER_TAB)) {
+            setTab('ledger');
         }
         // Nothing else is open to a visitor.
     }
@@ -141,7 +148,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
     );
 
     // The tab's own name: at 320 px with 1.3x text "Marketplace" runs under the Join button.
-    const title = tab === 'home' ? 'Home' : tab === 'marketplace' ? 'Market' : 'Map';
+    const title = tab === 'home' ? 'Home' : tab === 'marketplace' ? 'Market' : tab === 'ledger' ? 'Ledger' : 'Map';
 
     return (
         <div className="flex h-screen overflow-hidden text-text-primary" data-testid="guest-lobby">
@@ -152,7 +159,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                     <span className="font-extrabold text-xl tracking-tight text-rainbow">BeanPool</span>
                 </div>
                 <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-                    {TABS.map((t) => (
+                    {tabs.map((t) => (
                         <button key={t.id} type="button" onClick={() => selectTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}
                             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer ${
                                 tab === t.id
@@ -219,6 +226,9 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                             onNavigate={navigate}
                         />
                     )}
+                    {tab === 'ledger' && (
+                        <LedgerPreview onNearYou={() => selectTab('home')} />
+                    )}
                     {tab === 'map' && (
                         <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}>
                             <MapPage identity={null} isMember={false} visitor onNavigate={navigate} covered={!!join} />
@@ -241,7 +251,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                 }}>
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" />
                     <div className="relative z-10 w-full flex gap-1">
-                        {TABS.map((t) => {
+                        {tabs.map((t) => {
                             const isActive = tab === t.id;
                             return (
                                 <button key={t.id} type="button" onClick={() => selectTab(t.id)} aria-current={isActive ? 'page' : undefined}

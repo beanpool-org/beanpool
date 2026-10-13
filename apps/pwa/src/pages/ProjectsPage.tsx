@@ -17,6 +17,8 @@ import { GroupDetailModal } from '../components/GroupDetailModal';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
+import { useFeatureMode } from '../lib/features';
+import { CommonsPreview } from '../components/ShowcasePreviews';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -58,6 +60,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [votes, setVotes] = useState(true);
     // Projects and enterprises hold Beans: where the node has Beans off, the Create form offers neither.
     const [beansOn, setBeansOn] = useState(true);
+    const enterprisesMode = useFeatureMode('enterprises');
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
@@ -336,7 +339,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     )}
                 </div>
 
+                {/* Enterprises off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
+                {enterprisesMode === 'preview' && (
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
+                        <CommonsPreview onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                    </div>
+                )}
                 {/* Commons Pool & Available Governance Credits */}
+                {enterprisesMode !== 'preview' && (<>
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
                     <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3">
                         <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
@@ -360,6 +370,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         </div>
                     </div>
                 </div>
+                </>)}
             </header>
 
             {/* Section Switcher: Decide vs Groups — the one sticky row */}

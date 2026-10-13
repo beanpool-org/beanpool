@@ -164,3 +164,19 @@ export function DealsPreview(ways: LocalCommunityWays) {
         </div>
     );
 }
+
+/** My Deals in preview, as a dialog over the Market. */
+export function DealsPreviewDialog({ onClose, ...ways }: { onClose: () => void } & LocalCommunityWays) {
+    return (
+        <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
+            <div role="dialog" aria-modal="true" aria-label="My Deals" onClick={(e) => e.stopPropagation()}
+                className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white dark:bg-nature-900 p-4 shadow-xl">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                    <h2 className="text-lg font-extrabold text-nature-900 dark:text-nature-50">🤝 My Deals</h2>
+                    <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg px-2 py-1 text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800">✕</button>
+                </div>
+                <DealsPreview {...ways} />
+            </div>
+        </div>
+    );
+}

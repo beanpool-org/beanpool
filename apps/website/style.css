@@ -1438,7 +1438,14 @@ footer {
     padding: 3.5rem;
     border-radius: var(--radius-lg);
     line-height: 1.8;
+    /* A long address or file path (the operator manual's https://yourtown.beanpool.org/settings) wraps at 320px
+       instead of pushing the page sideways. */
+    overflow-wrap: anywhere;
 }
+/* The operator manual's screenshots (First-time setup): never wider than the column. */
+.legal-content figure { margin: 1.5rem 0; }
+.legal-content figure img { display: block; max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.legal-content figcaption { color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem; }
 .legal-content h1 {
     font-family: var(--font-header);
     font-size: clamp(2rem, 4vw, 2.75rem);

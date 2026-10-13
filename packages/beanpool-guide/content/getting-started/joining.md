@@ -99,7 +99,7 @@ A community's admins can turn invites off for the whole community.
 - Invite codes you made before the community chose this still work until their 30 days are up.
 - A ticket you made without a connection doesn't: whoever has it is asked to get a fresh invite from an admin.
 
-The global community has no invites: anyone joins it with a sign-in, one account each. There, the invite icon opens **Bring someone here**, with **Share the link** to send the global community's address. There is nothing to generate, and an invite code made for it does not work.
+The global community has no invites: anyone joins it in the BeanPool app, with 12 secret words or a sign-in. There, the invite icon opens **Bring someone here**, with **Share the link** to send the global community's address. There is nothing to generate, and an invite code made for it does not work.
 
 ## Requests to join
 

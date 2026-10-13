@@ -8,7 +8,9 @@
  * - NB7: an honest re-key's completion of an epoch's wraps is found whatever the roster's order, however many other shown
  *   members hold verified former keys (smallest completions first; the 256-set cap is never reached for one re-key);
  * - NB5 (confirmation 1): the walk caches, the keyring's and the display's, are keyed by a chain's walkable entries only
- *   and capped, so junk a node serves can't grow them, and a chain that differs in any field is walked again.
+ *   and capped, so junk a node serves can't grow them, and a chain that differs in any field is walked again;
+ * - confirmation 2, finding 1: a member or signer key that isn't 64 characters is never cached, and fresh chains on
+ *   every read never keep more than 4,096 walks in either cache.
  *
  * The node is a stand-in here (signedGet mocked); the statements are core's real ones.
  */
@@ -182,6 +184,36 @@ describe('the former keys a phone accepts from the members list', () => {
             expect(counts.verify).toBe(1);
             expect(ring.formerOf.has(row.memberPubkey)).toBe(false);
         }
+    });
+
+    it('confirmation 2, finding 1: a member or signer key that isn\'t 64 characters is never cached, in the keyring or the display', async () => {
+        // At 2606fe14 without the length checks: 1,200 entries and 79 M characters in each cache (60 reads of these rows).
+        const ring = ringFor(person());
+        const display = new Map<string, boolean>();
+        const signer = person().pub;
+        const entry = (pubkey: string) => ({ pubkey, at: AT, sig: `${'A'.repeat(86)}==` });
+        const row = (memberPubkey: string, ...formerKeys: unknown[]) => ({ memberPubkey, status: 'active', callsign: 'J', formerKeys });
+        served.rows = [row(person().pub, entry(signer)), ...Array.from({ length: 20 }, () => row(person().pub + 'J'.repeat(64 * 1024), entry(signer)))];
+        await ring.readShownRoster();
+        nameSigner(signer, { authorPubkey: null, authorCallsign: null } as any, { roster: served.rows as any, successions: display });
+        expect({ keyring: ring.chainWalks.size, display: display.size }).toEqual({ keyring: 1, display: 1 }); // the 64-character row only
+        // A 64 KB signer, named after a walkable entry: the walk would reach it, but it isn't a key.
+        const junkSigner = signer + 'J'.repeat(64 * 1024);
+        nameSigner(junkSigner, { authorPubkey: null, authorCallsign: null } as any, { roster: [row(person().pub, entry(person().pub), entry(junkSigner))] as any, successions: display });
+        expect(display.size).toBe(1);
+    });
+
+    it('confirmation 2, finding 1: fresh chains on every read never keep more than 4,096 walks, in the keyring or the display', async () => {
+        const ring = ringFor(person());
+        const display = new Map<string, boolean>();
+        const signer = person().pub;
+        // The signature is the right length but not base64: each chain is walked (and cached), and refused before any curve math.
+        served.rows = Array.from({ length: 4100 }, () => ({ memberPubkey: randomBytes(32).toString('hex'), status: 'active', callsign: 'J', formerKeys: [{ pubkey: signer, at: AT, sig: '-'.repeat(88) }] }));
+        await ring.readShownRoster();
+        nameSigner(signer, { authorPubkey: null, authorCallsign: null } as any, { roster: served.rows as any, successions: display });
+        expect({ keyring: counts.verify, display: counts.walk }).toEqual({ keyring: 4100, display: 4100 }); // every row walked by each
+        expect(ring.chainWalks.size).toBeLessThanOrEqual(4096);
+        expect(display.size).toBeLessThanOrEqual(4096);
     });
 
     it('NB7: a completion whose only candidates don\'t make the signed set is refused', () => {

@@ -6,9 +6,7 @@
     <title>BeanPool — Exchange for Communities, Not Commercial Banks</title>
     <meta name="description" content="BeanPool is a free app your community uses to trade help, goods and skills with each other, in Beans instead of money. Join by invitation from someone in your community. iPhone, Android and web.">
     <link rel="icon" type="image/png" href="favicon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -475,8 +473,15 @@
             </div>
 
             <div class="cta-card run-node-card">
-                <h2>Start a node</h2>
-                <p>BeanPool is published as a Docker image for Intel/AMD and ARM64, so a node runs on a small server, a Mini PC, a NAS or a Raspberry Pi. These four commands fetch the compose file, create the network the node uses, pull the published image and start it. You name your community and set its contact details afterwards, in the node's own settings app &mdash; there is nothing to configure before it boots.</p>
+                <h2>Start a community</h2>
+                <p>About half an hour, if you can follow a recipe. Four things to know first:</p>
+                <ul class="run-node-facts">
+                    <li><strong>What it costs.</strong> The software is free. It runs on a spare computer that stays on at home (a Mini PC, a NAS or a Raspberry Pi), or on a small rented server for a few dollars a month (about US$6).</li>
+                    <li><strong>Who hosts it.</strong> You do, on your own machine or the one you rent. It never needs beanpool.org: your own web address works.</li>
+                    <li><strong>What you take on.</strong> Reports from your members come to you. The data folder is yours to back up, with a recovery code. Keep two owners. Keep the server on and updated.</li>
+                    <li><strong>What you never see.</strong> Your members' direct messages.</li>
+                </ul>
+                <p>Then, on that machine with Docker installed, paste this one block. It fetches the compose file, creates the network the node uses, pulls the published image (Intel/AMD or ARM64), starts it, waits until the server has made its one-time claim code (up to five minutes, for a slow first start on a Raspberry Pi), and claims it. There is nothing to configure before it starts.</p>
 
                 <!-- macOS Style Terminal Window -->
                 <div class="terminal-window">
@@ -486,40 +491,34 @@
                             <span class="terminal-dot yellow"></span>
                             <span class="terminal-dot green"></span>
                         </div>
-                        <div class="terminal-title">bash — setup-node</div>
+                        <div class="terminal-title">bash — start a community</div>
                     </div>
                     <div class="terminal-body">
                         <div class="cta-step">
-                            <span class="cta-step-label">Step 1: Get the compose file</span>
-                            <code>git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="Copy to clipboard">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                        <div class="cta-step">
-                            <span class="cta-step-label">Step 2: Create the shared network</span>
-                            <code>docker network create beanpool-shared</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="Copy to clipboard">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                        <div class="cta-step">
-                            <span class="cta-step-label">Step 3: Pull the published image</span>
-                            <code>docker compose pull</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="Copy to clipboard">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                        <div class="cta-step">
-                            <span class="cta-step-label">Step 4: Start the node</span>
-                            <code>docker compose -p beanpool up -d</code>
+                            <span class="cta-step-label">One block: fetch, network, pull, start, wait, claim</span>
+                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="Copy to clipboard">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                     </div>
                 </div>
-                
+
+                <h3 class="run-node-sub">The last line: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>Your address.</strong> It asks for a name ending in <strong>.beanpool.org</strong> and waits up to three minutes for it to go live. For your own domain, run it with <code>--address https://your.domain</code> instead; to choose later in Settings, <code>--no-name</code>, and add <code>--direct http://IP:PORT</code> (this server's own address) so the QR code carries it, or the phone asks for it. If the BeanPool project's address service is down, the claim still works.</li>
+                    <li><strong>The code and QR.</strong> It shows a one-time claim code and a QR code. Open BeanPool on your phone, tap <strong>Claim a community</strong> or scan the QR code. That phone becomes the owner.</li>
+                    <li><strong>Settings.</strong> Open your address (or the server's own address) followed by <strong>/settings</strong>. The setup wizard names your community, asks you to add a second owner, and makes three founding invites. Set your place on the map under Node Identity so people nearby can find you.</li>
+                </ol>
+                <p class="run-node-note">If the block says <strong>No claim code after 5 minutes</strong>, or <code>beanpool claim</code> says <strong>This community has no claim code waiting</strong>, the server has not finished starting: <code>docker compose logs beanpool-node</code> shows where it is. Once the log says the community has no owner yet and has a claim code, run the last line again. The full steps are in the operator manual's <a href="guide/operators/first-time-setup.html">first-time setup</a>.</p>
+
                 <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
                     View on GitHub →

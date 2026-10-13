@@ -4,14 +4,16 @@
 //   apps/website/guide/*.html + guide.json             — the website's member pages, and the copy the apps fetch
 //                                                        to pick up a newer guide without an app update
 //   packages/beanpool-guide/generated/operators.json  — bundled into the node's Settings (apps/manager)
-//   apps/website/guide/operators/*.html + operators.json — the website's copy of the operator manual, ONLY when
-//                                                        PUBLISH_OPERATORS_WEBSITE (below) is true. It is false.
+//   apps/website/guide/operators/<page>.html + images/ — the website's copy of the operator manual: ONLY the pages
+//                                                        in OPERATOR_PAGES_ON_WEBSITE (below), and their pictures.
 //
-// The operator manual is not on beanpool.org. Marty's decision, 2026-09-19: the manual ships in node Settings now,
-// and the public website copy waits until the security weak spots it describes (the admin password brake's limits,
-// among others) are fixed. To publish it later: set PUBLISH_OPERATORS_WEBSITE to true, run
-// `pnpm --filter @beanpool/guide generate`, and drop the "does not exist" guards in test/guide.test.mjs and
-// apps/manager/src/lib/manual.test.ts. The renderer (renderOperatorsWebsite) is kept and tested in memory.
+// Only First-time setup of the operator manual is on beanpool.org. Marty's decision, 2026-09-19: the manual ships in
+// node Settings, and the public website copy waits until the security weak spots it describes (the admin password
+// brake's limits, among others) are fixed. Reversed for First-time setup alone (Marty, pick 8 of the global showcase
+// design, 2026-10-13), so the website's "Start a community" can link the whole path. To publish another page, add its
+// slug below, run `pnpm --filter @beanpool/guide generate`, and widen the "only these pages" guards in
+// test/guide.test.mjs and apps/manager/src/lib/manual.test.ts. With every page (renderOperatorsWebsite without
+// `only`) the copy also gets an index and operators.json; that renderer is kept and tested in memory.
 //
 // Versions (Marty's decision, 2026-09-30). An app only replaces its copy of a collection with a HIGHER version, so
 // every text change must reach main under a new, higher version — and never the same version with different text.
@@ -51,8 +53,8 @@ export const OPERATORS_JSON = path.join(pkgDir, 'generated', 'operators.json');
 export const OPERATORS_IMAGES_DIR = path.join(OPERATORS_DIR, 'images');
 export const MANAGER_PUBLIC_IMAGES_DIR = path.join(repoRoot, 'apps', 'manager', 'public', 'images');
 export const OPERATORS_WEBSITE_DIR = path.join(WEBSITE_DIR, 'operators');
-/** Whether the build writes the operator manual to the website. Off: see the header (Marty's decision, 2026-09-19). */
-export const PUBLISH_OPERATORS_WEBSITE = false;
+/** The operator manual's pages the build writes to the website; the rest stay in Settings only (see the header). */
+export const OPERATOR_PAGES_ON_WEBSITE = ['first-time-setup'];
 
 /** The two collections: where each one's pages are, and its published copy. */
 const COLLECTIONS = [
@@ -98,16 +100,24 @@ export function unpublished(published, pages) {
         .map(({ key, name }) => ({ name, from: published[key]?.version ?? null, to: next[key].version }));
 }
 
-/** Every generated file (absolute path → exact contents) for these published copies. */
+/** Every generated file (absolute path → exact contents; a picture as a Buffer) for these published copies. */
 export function outputsFor(published) {
     const out = {};
     for (const c of COLLECTIONS) if (published[c.key]) out[c.json] = serializeGuide(published[c.key]);
     if (published.guide) {
-        const websiteOpts = { operatorManualOnWeb: PUBLISH_OPERATORS_WEBSITE };
-        for (const [name, text] of Object.entries(renderWebsite(published.guide, websiteOpts))) out[path.join(WEBSITE_DIR, name)] = text;
+        for (const [name, text] of Object.entries(renderWebsite(published.guide))) out[path.join(WEBSITE_DIR, name)] = text;
     }
-    if (PUBLISH_OPERATORS_WEBSITE && published.manual) {
-        for (const [name, text] of Object.entries(renderOperatorsWebsite(published.manual))) out[path.join(OPERATORS_WEBSITE_DIR, name)] = text;
+    if (OPERATOR_PAGES_ON_WEBSITE.length && published.manual) {
+        const only = OPERATOR_PAGES_ON_WEBSITE;
+        for (const [name, text] of Object.entries(renderOperatorsWebsite(published.manual, { only }))) out[path.join(OPERATORS_WEBSITE_DIR, name)] = text;
+        // The pictures those pages show, from operators/images/ as Settings gets them.
+        for (const g of published.manual.guides.filter(p => only.includes(p.slug))) {
+            for (const b of g.blocks.filter(blk => blk.type === 'img')) {
+                const src = path.join(OPERATORS_DIR, b.src);
+                if (!fs.existsSync(src)) throw new Error(`${g.slug} shows ${b.src}, which is not in ${rel(OPERATORS_DIR)}`);
+                out[path.join(OPERATORS_WEBSITE_DIR, b.src)] = fs.readFileSync(src);
+            }
+        }
     }
     return out;
 }
@@ -257,9 +267,9 @@ export function check({ base = findBase() } = {}) {
     const out = outputsFor(published);
     for (const [file, text] of Object.entries(out)) {
         let onDisk = null;
-        try { onDisk = fs.readFileSync(file, 'utf8'); } catch { /* missing */ }
+        try { onDisk = fs.readFileSync(file); } catch { /* missing */ }
         if (onDisk === null) problems.push(`${rel(file)} is missing; run pnpm --filter @beanpool/guide generate`);
-        else if (onDisk !== text) problems.push(`${rel(file)} does not match the published copy; run pnpm --filter @beanpool/guide generate`);
+        else if (!onDisk.equals(Buffer.isBuffer(text) ? text : Buffer.from(text))) problems.push(`${rel(file)} does not match the published copy; run pnpm --filter @beanpool/guide generate`);
     }
     for (const file of filesUnder(WEBSITE_DIR)) {
         if (!(file in out)) problems.push(`${rel(file)} is not generated from the published copy; remove it`);

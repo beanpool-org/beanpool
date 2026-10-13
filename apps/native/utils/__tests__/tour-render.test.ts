@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { HELP_MAP, TOUR_STEP_MAX_CHARS, helpSheetFor, phoneHelpKey, tourSteps, type TourNodeFacts } from '@beanpool/core';
-import { darkColors, lightColors } from '../../constants/colors';
+import { darkColors, lightColors, type AppColors } from '../../constants/colors';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -90,7 +90,7 @@ const lines = (text: string, widthDp: number, fontPt: number, scale: number) => 
     return n;
 };
 
-const SCHEMES = [['light', lightColors], ['dark', darkColors]] as const;
+const SCHEMES: [string, AppColors][] = [['light', lightColors], ['dark', darkColors as unknown as AppColors]];
 const NODES: [string, TourNodeFacts][] = [['local', { global: false, beans: true }], ['global', { global: true, beans: false }]];
 const home = (on: string[] = []) => ({
     chips: ['steps', 'market', 'beans'], chipName: (t: string) => ({ steps: 'First steps', market: 'New in the Market', beans: 'Your Beans' } as Record<string, string>)[t],

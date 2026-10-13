@@ -21,6 +21,11 @@ import { withJitter } from '../../utils/jitter';
 import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab } from '../../utils/node-profile';
 import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProfile } from '../../utils/node-profile-anchor';
 
+/** Each tour step's tab as a route, written out so every link into the app is checked (deep-links-resolve.test.ts). */
+const TOUR_ROUTES: Record<string, '/(tabs)' | '/(tabs)/market' | '/(tabs)/map' | '/(tabs)/chats' | '/(tabs)/projects' | '/(tabs)/ledger'> = {
+    index: '/(tabs)', market: '/(tabs)/market', map: '/(tabs)/map', chats: '/(tabs)/chats', projects: '/(tabs)/projects', ledger: '/(tabs)/ledger',
+};
+
 // A small label sits ABOVE each icon,
 // so the text is buffered from the busy page below. Height is fixed here because the library
 // would add the status-bar inset a second time (GlobalHeader already consumes it).
@@ -263,7 +268,7 @@ export default function TabLayout() {
     useEffect(() => {
         if (!tourTab) return;
         const path = tourTab === 'index' ? '/' : `/${tourTab}`;
-        if (pathname !== path) router.navigate(tourTab === 'index' ? '/(tabs)' : `/(tabs)/${tourTab}`);
+        if (pathname !== path) router.navigate(TOUR_ROUTES[tourTab] ?? '/(tabs)');
     }, [tourTab]);
     // A tab the member taps during the tour moves the tour to that tab's step: it follows, never scolds.
     useEffect(() => {

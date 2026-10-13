@@ -17,6 +17,8 @@
     "global-door-check": "node e2e/global-door-check.mjs",
     "lobby-shots": "node e2e/lobby-shots.mjs",
     "home-check": "node e2e/home-check.mjs",
+    "dark-contrast-check": "node e2e/dark-contrast-check.mjs",
+    "dark-class-check": "node e2e/dark-class-check.mjs",
     "showcase-check": "node e2e/showcase-check.mjs"
   },
   "dependencies": {

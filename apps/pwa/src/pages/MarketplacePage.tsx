@@ -964,7 +964,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             setEditMode(false);
                             setEditPhotos([]);
                         }}
-                        className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors cursor-pointer"
+                        className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors cursor-pointer"
                     >
                         <span className="text-xl leading-none">←</span> Back to Market
                     </button>
@@ -993,7 +993,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             setEditMode(false);
                             setEditPhotos([]);
                         }}
-                        className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors cursor-pointer"
+                        className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors cursor-pointer"
                     >
                         <span className="text-xl leading-none">←</span> Back to Market
                     </button>
@@ -1066,7 +1066,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         setEditMode(false);
                         setEditPhotos([]);
                     }}
-                    className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors"
+                    className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors"
                 >
                     <span className="text-xl leading-none">←</span> Back to Market
                 </button>
@@ -1087,7 +1087,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 {isPulsePost ? '🗞️ DAILY PULSE' : `${selectedPost.type === 'offer' ? '🔵 Offer' : '🟠 Need'} · ${cat?.label ?? selectedPost.category}`}
                             </span>
                         </div>
-                        <span className="text-xs font-semibold text-nature-500">{ago}</span>
+                        <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">{ago}</span>
                     </div>
 
                     {/* Content */}
@@ -1154,7 +1154,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         )}
 
                         {selectedPost.description && (
-                            <p className="text-base text-nature-600 leading-relaxed mb-5 whitespace-pre-wrap">
+                            <p className="text-base text-nature-600 dark:text-nature-300 leading-relaxed mb-5 whitespace-pre-wrap">
                                 {selectedPost.description}
                             </p>
                         )}
@@ -1220,7 +1220,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 {/* Author section */}
                 <div className="bg-white dark:bg-nature-950 rounded-2xl border border-nature-200 dark:border-nature-800 p-4 shadow-sm mb-4">
-                    <p className="text-[0.65rem] text-nature-400 dark:text-nature-500 font-bold uppercase tracking-widest mb-3">
+                    <p className="text-[0.65rem] text-nature-400 dark:text-nature-400 font-bold uppercase tracking-widest mb-3">
                         Posted by
                     </p>
                     <button 
@@ -1229,7 +1229,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         {/* Avatar */}
                         {loadingProfile ? (
-                            <div className="w-14 h-14 rounded-full bg-nature-100 animate-pulse shrink-0" />
+                            <div className="w-14 h-14 rounded-full bg-nature-100 dark:bg-nature-800 animate-pulse shrink-0" />
                         ) : resolveAvatarUrl(authorProfile?.avatar) ? (
                             <img
                                 src={resolveAvatarUrl(authorProfile?.avatar)!}
@@ -1253,7 +1253,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <>
                                             {`${authorAvgRating.average.toFixed(1)} (${authorAvgRating.count})`}
                                             {authorAvgRating.asProvider && authorAvgRating.asProvider.count > 0 && (
-                                                <span className="ml-2 text-[0.65rem] bg-amber-50 px-1.5 py-0.5 rounded text-amber-700">
+                                                <span className="ml-2 text-[0.65rem] bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded text-amber-700 dark:text-amber-300">
                                                     📤 {authorAvgRating.asProvider.average.toFixed(1)}
                                                 </span>
                                             )}
@@ -1267,12 +1267,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 </span>
                             </p>
                             {authorProfile?.bio && (
-                                <p className="text-sm text-nature-600 leading-snug mb-0">
+                                <p className="text-sm text-nature-600 dark:text-nature-400 leading-snug mb-0">
                                     {authorProfile.bio}
                                 </p>
                             )}
                             {authorProfile?.contact && authorProfile.contact.visibility !== 'hidden' && (
-                                <p className="text-xs text-nature-500 mt-2 font-medium bg-oat-50 px-2 py-1 rounded-lg inline-block border border-nature-100">
+                                <p className="text-xs text-nature-500 dark:text-nature-300 mt-2 font-medium bg-oat-50 dark:bg-nature-900 px-2 py-1 rounded-lg inline-block border border-nature-100 dark:border-nature-800">
                                     📧 {authorProfile.contact.value}
                                 </p>
                             )}
@@ -1426,7 +1426,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                              }}
                              disabled={accepting}
                              className={`w-full py-3 mt-2 rounded-xl border font-bold text-sm transition-colors ${
-                                 accepting ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50'
+                                 accepting ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300'
                              }`}
                          >
                              ❌ Cancel Hold
@@ -1446,14 +1446,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <div className="flex flex-col mb-3">
                                         <button 
                                             onClick={() => { if (onOpenProfile) onOpenProfile(req.sellerPublicKey || req.buyerPublicKey); }}
-                                            className="font-bold text-nature-900 dark:text-white text-sm text-left hover:text-emerald-600 transition-colors flex items-center gap-1"
+                                            className="font-bold text-nature-900 dark:text-white text-sm text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-1"
                                         >
-                                            <span className="text-amber-600">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign}</span>
+                                            <span className="text-amber-600 dark:text-amber-400">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign}</span>
                                         </button>
                                         <span className="text-xs text-amber-500 mt-0.5 font-semibold">
                                             {req.bidderRating?.count > 0 ? `★ ${req.bidderRating.average.toFixed(1)} (${req.bidderRating.count} reviews)` : '☆☆☆☆☆ No ratings yet'}
                                         </span>
-                                        <span className="text-xs text-nature-500 mt-1">
+                                        <span className="text-xs text-nature-500 dark:text-nature-400 mt-1">
                                             {req.hours ? `${req.hours} hours estimated` : 'Offered to fulfill'}
                                         </span>
                                     </div>
@@ -1476,7 +1476,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             }}
                                             disabled={accepting}
-                                            className="flex-1 py-1.5 rounded-md border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-400 font-bold text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/30 transition-colors"
+                                            className="flex-1 py-1.5 rounded-md border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-400 font-bold text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/30 dark:hover:text-red-300 transition-colors"
                                         >
                                             Deny
                                         </button>
@@ -1497,7 +1497,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             }}
                                             disabled={accepting}
-                                            className="flex-1 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors"
+                                            className="flex-1 py-1.5 rounded-md bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors"
                                         >
                                             Approve & Hold in Trust
                                         </button>
@@ -1561,7 +1561,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             }}
                                             disabled={accepting}
-                                            className="w-full py-2.5 rounded-lg border border-red-200 text-red-600 font-bold hover:bg-red-50 transition-colors text-sm"
+                                            className="w-full py-2.5 rounded-lg border border-red-200 text-red-600 dark:text-red-300 font-bold hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-sm"
                                         >
                                             {accepting ? 'Canceling...' : 'Cancel Offer'}
                                         </button>
@@ -1609,14 +1609,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             const net = Math.round(tot * 0.985 * 100) / 100;
                                             return (
                                                 <span>
-                                                    By proceeding, you commit {tot} B{duration} to a Trust Wallet. When finalized, the provider will receive {net.toFixed(2)} B (net of 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-500 font-bold">(100% community owned)</span> to fund the Commons Pool).
+                                                    By proceeding, you commit {tot} B{duration} to a Trust Wallet. When finalized, the provider will receive {net.toFixed(2)} B (net of 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-400 font-bold">(100% community owned)</span> to fund the Commons Pool).
                                                 </span>
                                             );
                                         } else {
                                             const net = Math.round(tot * 0.985 * 100) / 100;
                                             return (
                                                 <span>
-                                                    You will receive {net.toFixed(2)} B (after 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-500 font-bold">(100% community owned)</span> is deducted to fund the Commons Pool) when the job is completed.
+                                                    You will receive {net.toFixed(2)} B (after 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-400 font-bold">(100% community owned)</span> is deducted to fund the Commons Pool) when the job is completed.
                                                 </span>
                                             );
                                         }
@@ -1858,7 +1858,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 className={`w-full py-3.5 rounded-xl font-bold text-white text-[15px] transition-all shadow-md ${
                                     accepting
                                         ? 'bg-nature-400 cursor-not-allowed opacity-60'
-                                        : selectedPost.type === 'offer' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-terra-600 hover:bg-terra-700'
+                                        : selectedPost.type === 'offer' ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700' : 'bg-terra-600 hover:bg-terra-700'
                                 }`}
                             >
                                  {accepting ? 'Processing...' : (selectedPost.type === 'offer' ? '🤝 Accept Offer' : '✋ Offer to Fulfill')}
@@ -1882,7 +1882,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             {messaging ? 'Opening chat...' : '💬 Message'}
                         </button>
                         {isRemotePost && (
-                            <p className="mt-1.5 text-xs text-nature-600 text-center">
+                            <p className="mt-1.5 text-xs text-nature-600 dark:text-nature-400 text-center">
                                 This post is from another community — messaging across communities isn't available yet.
                             </p>
                         )}
@@ -1914,8 +1914,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-500' 
                                                     : 'bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-500') 
                                                 : (hasExistingRating 
-                                                    ? 'bg-white dark:bg-nature-900 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-nature-800 shadow-sm' 
-                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-nature-800 shadow-sm')
+                                                    ? 'bg-white dark:bg-nature-900 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-nature-800 shadow-sm' 
+                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-nature-800 shadow-sm')
                                         }`}
                                     >
                                         {hasExistingRating ? `⭐ Edit rating for ${targetName} (as ${targetRole})` : `⭐ Rate ${targetName} as ${targetRole}`}
@@ -1923,8 +1923,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                     {showRatingForm && (
                                         <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mt-2 shadow-inner">
-                                            <p className="text-sm text-nature-600 mb-3 text-center">
-                                                How was <strong className="text-nature-900">{targetName}</strong> as a <strong className="text-nature-900">{targetRole}</strong>?
+                                            <p className="text-sm text-nature-600 dark:text-nature-400 mb-3 text-center">
+                                                How was <strong className="text-nature-900 dark:text-text-primary">{targetName}</strong> as a <strong className="text-nature-900 dark:text-text-primary">{targetRole}</strong>?
                                             </p>
                                             <div className="flex justify-center gap-2 mb-3">
                                                 {[1, 2, 3, 4, 5].map(star => (
@@ -1944,7 +1944,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 onChange={(e) => setRatingComment(e.target.value)}
                                                 placeholder="Leave a comment (optional)..."
                                                 maxLength={200}
-                                                className="w-full p-2.5 rounded-lg border border-nature-200 bg-white text-nature-900 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none mb-2"
+                                                className="w-full p-2.5 rounded-lg border border-nature-200 bg-white text-nature-900 text-sm dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none mb-2"
                                                 rows={2}
                                             />
                                             <button
@@ -1983,17 +1983,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                         <button
                             onClick={() => setShowReportForm(!showReportForm)}
-                            className="w-full py-2.5 mt-3 rounded-xl border border-nature-200 bg-transparent text-nature-500 font-semibold text-sm hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                            className="w-full py-2.5 mt-3 rounded-xl border border-nature-200 bg-transparent text-nature-500 font-semibold text-sm hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-300 hover:border-red-200 transition-colors"
                         >
                             🚩 Report
                         </button>
 
                         {showReportForm && (
-                            <div className="bg-red-50 border border-red-100 rounded-xl p-4 mt-2 shadow-inner">
+                            <div className="bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900 rounded-xl p-4 mt-2 shadow-inner">
                                 <select
                                     value={reportReason}
                                     onChange={(e) => setReportReason(e.target.value)}
-                                    className="w-full p-2.5 rounded-lg bg-white border border-red-200 text-nature-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer mb-2"
+                                    className="w-full p-2.5 rounded-lg bg-white border border-red-200 text-nature-900 text-sm dark:bg-bg-input dark:text-text-primary dark:border-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer mb-2"
                                 >
                                     <option value="">Select a reason...</option>
                                     <option value="Spam or scam">Spam or scam</option>
@@ -2003,7 +2003,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <option value={CHILD_SAFETY_REASON}>{CHILD_SAFETY_REASON}</option>
                                     <option value="Other">Other</option>
                                 </select>
-                                <p className="text-xs text-nature-800 mb-2">
+                                <p className="text-xs text-nature-800 dark:text-nature-200 mb-2">
                                     <span className="font-bold">{CHILD_SAFETY_REASON}:</span> {CHILD_SAFETY_HINT}
                                 </p>
                                 <button
@@ -2061,8 +2061,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         disabled={toggling}
                                         className={`w-full py-3 rounded-xl border font-bold text-sm transition-colors ${
                                             selectedPost.status === 'paused'
-                                                ? 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'
-                                                : 'border-amber-300 text-amber-600 hover:bg-amber-50'
+                                                ? 'border-emerald-300 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-300'
+                                                : 'border-amber-300 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 dark:hover:text-amber-300'
                                         }`}
                                     >
                                         {toggling ? 'Updating…' : selectedPost.status === 'paused' ? '▶️ Activate Offer' : '⏸️ Pause Offer'}
@@ -2080,7 +2080,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPhotos(selectedPost.photos || []);
                                         setEditMode(true);
                                     }}
-                                    className="w-full py-3.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-[15px] transition-all shadow-md"
+                                    className="w-full py-3.5 rounded-xl bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 font-bold text-white text-[15px] transition-all shadow-md"
                                 >
                                     ✏️ Edit Post
                                 </button>
@@ -2102,7 +2102,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     }}
                                     disabled={deleting === selectedPost.id}
                                     className={`w-full py-3 rounded-xl border font-bold text-sm transition-colors mt-2 ${
-                                        deleting === selectedPost.id ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50'
+                                        deleting === selectedPost.id ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300'
                                     }`}
                                 >
                                     {deleting === selectedPost.id ? 'Deleting...' : '🗑️ Delete Post'}
@@ -2121,7 +2121,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             className={`flex-1 py-2.5 rounded-xl border text-sm font-bold capitalize transition-colors ${
                                                 editType === t
                                                     ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-orange-600 border-orange-600 text-white shadow-sm')
-                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800'
+                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
                                             }`}
                                         >
                                             {t === 'offer' ? '🔵 Offer' : '🟠 Need'}
@@ -2133,7 +2133,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <select
                                     value={editCategory}
                                     onChange={(e) => setEditCategory(e.target.value)}
-                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
+                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
                                     style={inputStyle}
                                 >
                                     {MARKETPLACE_CATEGORIES.map(cat => (
@@ -2146,7 +2146,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     value={editTitle}
                                     onChange={(e) => setEditTitle(e.target.value)}
                                     placeholder="Title"
-                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm"
+                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm"
                                     style={inputStyle}
                                 />
 
@@ -2155,7 +2155,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     value={editDescription}
                                     onChange={(e) => setEditDescription(e.target.value)}
                                     placeholder="Description"
-                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[100px] resize-y"
+                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[100px] resize-y"
                                     style={{ ...inputStyle, minHeight: '100px' }}
                                 />
 
@@ -2166,13 +2166,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         value={editCredits}
                                         onChange={(e) => setEditCredits(Number(e.target.value) || 0)}
                                         placeholder="Credits (B)"
-                                        className="flex-1 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-w-0"
+                                        className="flex-1 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-w-0"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     />
                                     <select
                                         value={editPriceType}
                                         onChange={(e) => setEditPriceType(e.target.value as any)}
-                                        className="w-28 shrink-0 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
+                                        className="w-28 shrink-0 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     >
                                         <option value="fixed">Total</option>
@@ -2185,7 +2185,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                 {/* Repeatable Toggle */}
                                 <div className="mb-4">
-                                    <label className="flex items-center gap-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50 dark:bg-nature-900/50 cursor-pointer hover:bg-white transition-colors cursor-pointer group">
+                                    <label className="flex items-center gap-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50 dark:bg-nature-900/50 cursor-pointer hover:bg-white dark:hover:bg-nature-900 transition-colors cursor-pointer group">
                                         <div className="relative flex items-center justify-center w-6 h-6 shrink-0">
                                             <input 
                                                 type="checkbox" 
@@ -2198,8 +2198,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             </svg>
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-[14px] font-bold text-nature-900 dark:text-white group-hover:text-terra-600 transition-colors">Recurring Need / Offer</span>
-                                            <span className="text-[11px] text-nature-500 font-medium">Post remains active after completion for repeat business.</span>
+                                            <span className="text-[14px] font-bold text-nature-900 dark:text-white group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors">Recurring Need / Offer</span>
+                                            <span className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">Post remains active after completion for repeat business.</span>
                                         </div>
                                     </label>
                                 </div>
@@ -2221,7 +2221,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             </div>
                                         ))}
                                         {editPhotos.length < 5 && (
-                                            <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer text-nature-400 text-2xl hover:bg-nature-50 hover:border-nature-400 transition-colors">
+                                            <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer text-nature-400 text-2xl hover:bg-nature-50 dark:hover:bg-nature-800 dark:hover:text-nature-200 hover:border-nature-400 transition-colors">
                                                 +
                                                 <input
                                                     type="file"
@@ -2260,7 +2260,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => setEditMode(false)}
-                                        className="flex-1 py-3 is-bold rounded-xl border border-nature-300 text-nature-600 bg-white hover:bg-nature-50 transition-colors text-[15px] font-bold shadow-sm"
+                                        className="flex-1 py-3 is-bold rounded-xl border border-nature-300 text-nature-600 bg-white hover:bg-nature-50 dark:bg-nature-900 dark:text-nature-200 dark:border-nature-600 dark:hover:bg-nature-800 transition-colors text-[15px] font-bold shadow-sm"
                                     >
                                         Cancel
                                     </button>
@@ -2333,7 +2333,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 )}
 
                 {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-4 text-red-600 text-sm text-center shadow-sm">
+                    <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mt-4 text-red-600 dark:text-red-300 text-sm text-center shadow-sm">
                         {error}
                     </div>
                 )}
@@ -2384,7 +2384,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Search marketplace..."
-                            className="w-full py-2 pl-10 pr-4 rounded-full border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all hover:shadow-md"
+                            className="w-full py-2 pl-10 pr-4 rounded-full border border-nature-200 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all hover:shadow-md"
                         />
                     </div>
 
@@ -2409,7 +2409,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             try { localStorage.setItem('marketplace_view_mode', next); } catch {}
                             return next;
                         })}
-                        className="w-9 h-9 rounded-full flex-shrink-0 border bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 transition-colors shadow-sm flex items-center justify-center text-md hover:shadow-md cursor-pointer"
+                        className="w-9 h-9 rounded-full flex-shrink-0 border bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-800 transition-colors shadow-sm flex items-center justify-center text-md hover:shadow-md cursor-pointer"
                         title={viewMode === 'grid' ? "Switch to List View" : (viewMode === 'list' ? "Switch to Compact View" : "Switch to Card View")}
                         aria-label={viewMode === 'grid' ? "Switch to List View" : (viewMode === 'list' ? "Switch to Compact View" : "Switch to Card View")}
                     >
@@ -2424,11 +2424,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     {(['all', 'for-you', 'offer', 'need', 'event', 'poll'] as const).map((t) => {
                         const isSelected = typeFilter === t;
                         let activeStyles = 'bg-nature-800 dark:bg-white text-white dark:text-nature-900 border border-nature-900/10 shadow-sm scale-[1.01]';
-                        if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-500 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-500 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-500 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-500 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
-                        if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-500 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-700 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-600 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-600 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-600 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
+                        if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-600 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
 
                         return (
                             <button
@@ -2461,7 +2461,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         aria-pressed={beansOnly}
                         className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
                             beansOnly
-                                ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
+                                ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-emerald-700/25 shadow-sm'
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 border-nature-200 dark:border-nature-800 hover:text-nature-800 dark:hover:text-nature-200'
                         }`}
                         title="Hide listings that also need cash for fuel or materials"
@@ -2485,7 +2485,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     {!priceMarked && (
                     <button
                         onClick={() => setShowPricingGuide(true)}
-                        className="px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-400 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                        className="px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-300 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
                         title="Browse benchmark community prices"
                     >
                         💡 Pricing Guide
@@ -2500,8 +2500,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 onChange={(e) => setGroupFilter(e.target.value)}
                                 className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
                                     groupFilter !== 'all'
-                                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
-                                        : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-800'
+                                        ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-emerald-700/25 shadow-sm'
+                                        : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-600'
                                 }`}
                                 aria-label="Filter feed by group"
                             >
@@ -2551,8 +2551,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClick={() => setShowCategoryPicker(true)}
                         className={`w-full py-2 rounded-2xl border text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-sm ${
                             categoryFilter !== 'all'
-                                ? 'bg-indigo-600 border-indigo-700 text-white shadow-soft dark:bg-indigo-500 dark:border-indigo-500'
-                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-850 text-nature-600 dark:text-nature-350 hover:bg-oat-50 dark:hover:bg-nature-900/60'
+                                ? 'bg-indigo-600 border-indigo-700 text-white shadow-soft dark:bg-indigo-600 dark:border-indigo-500'
+                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-900/60'
                         }`}
                     >
                         {(MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter)?.emoji) || '🏷️'}
@@ -2580,8 +2580,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClick={() => setShowRadiusPicker(true)}
                         className={`w-full py-2 rounded-2xl border text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-sm ${
                             radiusSettings
-                                ? 'bg-amber-600 border-amber-700 text-white shadow-soft dark:bg-amber-500 dark:border-amber-500'
-                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-850 text-nature-600 dark:text-nature-350 hover:bg-oat-50 dark:hover:bg-nature-900/60'
+                                ? 'bg-amber-600 border-amber-700 text-white shadow-soft dark:bg-amber-700 dark:border-amber-500'
+                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-900/60'
                         }`}
                     >
                         <span>📍</span>
@@ -2610,7 +2610,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {/* Connected Communities — multi-toggle (only if peer nodes exist) */}
                 {peerNodes.length > 0 && (
                     <div className="flex gap-2 mt-2 overflow-x-auto pb-1 scrollbar-hide">
-                        <span className="px-3 py-1.5 rounded-lg border-2 border-emerald-300 bg-emerald-50 text-emerald-700 text-xs font-black uppercase tracking-widest whitespace-nowrap inline-flex items-center shadow-sm">
+                        <span className="px-3 py-1.5 rounded-lg border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-black uppercase tracking-widest whitespace-nowrap inline-flex items-center shadow-sm">
                             🏠 Internal
                         </span>
                         {peerNodes.map(peer => {
@@ -2635,7 +2635,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
             {/* Error */}
             {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-red-600 text-sm text-center shadow-sm">
+                <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mb-4 text-red-600 dark:text-red-300 text-sm text-center shadow-sm">
                     {error}
                 </div>
             )}
@@ -2853,7 +2853,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <h4 className="text-xs font-black text-violet-800 dark:text-violet-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                                         <span>★</span> Customize Interests
                                     </h4>
-                                    <p className="text-nature-500 dark:text-nature-450 text-xs mb-3">
+                                    <p className="text-nature-500 dark:text-nature-400 text-xs mb-3">
                                         Select categories to prioritize in your personalized "★ For You" feed.
                                     </p>
                                     <div className="flex flex-wrap gap-1.5">
@@ -2865,7 +2865,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     onClick={() => toggleFavCategory(cat.id)}
                                                     className={`px-3 py-1.5 rounded-full border text-xs font-bold transition-all duration-200 flex items-center gap-1 cursor-pointer hover:scale-105 active:scale-95 shadow-sm ${
                                                         isFav
-                                                            ? 'bg-violet-600 border-violet-700 text-white dark:bg-violet-500 dark:border-violet-500'
+                                                            ? 'bg-violet-600 border-violet-700 text-white dark:bg-violet-600 dark:border-violet-500'
                                                             : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-400'
                                                     }`}
                                                 >
@@ -2880,7 +2880,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             ) : (
                                 <div 
                                     onClick={() => setIsCustomizerExpanded(true)}
-                                    className="mb-4 p-3 rounded-2xl border border-violet-200/60 dark:border-violet-850 bg-violet-50/20 dark:bg-violet-950/10 backdrop-blur-sm flex items-center justify-between text-xs font-medium text-violet-850 dark:text-violet-300 hover:bg-violet-50/50 dark:hover:bg-violet-950/25 transition-all cursor-pointer shadow-sm"
+                                    className="mb-4 p-3 rounded-2xl border border-violet-200/60 dark:border-violet-900 bg-violet-50/20 dark:bg-violet-950/10 backdrop-blur-sm flex items-center justify-between text-xs font-medium text-violet-850 dark:text-violet-300 hover:bg-violet-50/50 dark:hover:bg-violet-950/25 transition-all cursor-pointer shadow-sm"
                                 >
                                     <div className="flex items-center gap-2 overflow-hidden">
                                         <span className="text-violet-600 dark:text-violet-400 font-bold">★</span>
@@ -2906,7 +2906,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <span className="text-xs font-bold text-orange-950 dark:text-orange-400">
                                             {freshTodayCount} fresh listing{freshTodayCount > 1 ? 's' : ''} posted today!
                                         </span>
-                                        <span className="text-[10px] text-orange-600/80 dark:text-orange-450/60 font-medium">
+                                        <span className="text-[10px] text-orange-600/80 dark:text-orange-300 font-medium">
                                             Scroll down to explore what is new in the community.
                                         </span>
                                     </div>
@@ -3081,7 +3081,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 return (
                                     <div key={title} className="flex flex-col gap-1.5 mb-2">
                                         <div className="flex items-center gap-3 mt-2 mb-1">
-                                            <span className="text-xs font-black uppercase tracking-widest text-nature-450 dark:text-nature-500 whitespace-nowrap">
+                                            <span className="text-xs font-black uppercase tracking-widest text-nature-450 dark:text-nature-400 whitespace-nowrap">
                                                 {title}
                                             </span>
                                             <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
@@ -3195,7 +3195,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}
                                         className="text-4xl hover:scale-110 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg"
                                     >
-                                        <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-700"}>★</span>
+                                        <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-500"}>★</span>
                                     </button>
                                 ))}
                             </div>
@@ -3212,7 +3212,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <button
                                     type="button"
                                     onClick={() => setPromptReviewForTx(null)}
-                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                                    className="flex-1 py-3 text-nature-600 dark:text-nature-300 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                 >
                                     Skip for now
                                 </button>
@@ -3261,7 +3261,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {!selectedPost && !isVisitor && (
                 <button
                     onClick={() => onNavigate?.('map-post')}
-                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.25rem)] md:bottom-6 right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
+                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.25rem)] md:bottom-6 right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 dark:from-terra-700 dark:to-terra-800 dark:hover:from-terra-800 dark:hover:to-terra-900 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
                     style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.25rem)' }}
                 >
                     <span className="text-lg leading-none block group-hover:rotate-90 transition-transform duration-300">+</span> ADD POST
@@ -3330,7 +3330,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </p>
                         <button
                             onClick={() => { setShowContributionRequired(false); onNavigate?.('map-post'); }}
-                            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-colors mb-2"
+                            className="w-full py-3 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold transition-colors mb-2"
                         >
                             ➕ Create an Offer
                         </button>

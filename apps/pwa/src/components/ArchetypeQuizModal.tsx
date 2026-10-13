@@ -410,7 +410,7 @@ export function ArchetypeQuizModal({
                                     aria-label={saving ? "Saving archetype to profile" : "Done · Save to Profile"}
                                     onClick={handleSave}
                                     disabled={saving}
-                                    className="w-full py-3.5 px-4 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white shadow-md transition-all cursor-pointer text-sm sm:text-base border-none flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                                    className="w-full py-3.5 px-4 rounded-xl font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 disabled:opacity-60 text-white shadow-md transition-all cursor-pointer text-sm sm:text-base border-none flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                                 >
                                     {saving ? (
                                         <>

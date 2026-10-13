@@ -66,7 +66,7 @@ export function LocalCommunitySheet({ feature, onClose, onStart, onNearYou, onGu
                         type="button"
                         onClick={onClose}
                         aria-label="Close"
-                        className="-mr-2 -mt-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800"
+                        className="-mr-2 -mt-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800 dark:hover:text-nature-200"
                     >✕</button>
                 </div>
                 <h2 id="local-community-sheet-title" className="mb-2 text-lg font-extrabold text-nature-900 dark:text-nature-50">{LOCAL_COMMUNITY_SHEET.title}</h2>

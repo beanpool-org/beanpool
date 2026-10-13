@@ -2661,7 +2661,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: loading ? '#555' : '#10b981',
+                                    background: loading ? '#555' : 'var(--cta-go, #10b981)',
                                     color: '#fff', fontSize: '1rem',
                                     fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
@@ -2762,7 +2762,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         borderRadius: '10px',
                                         border: '1px solid #2563eb',
                                         background: 'transparent',
-                                        color: '#2563eb',
+                                        color: 'var(--link, #2563eb)',
                                         fontSize: '0.9rem',
                                         fontWeight: 700,
                                         cursor: 'pointer',
@@ -2858,7 +2858,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-50/90 hover:bg-emerald-100/90 active:scale-[0.98] dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                                     >
                                         <span aria-hidden="true">📲</span> Link with Mobile App (Scan QR)
-                                        <span className="text-[10px] font-extrabold bg-emerald-600 text-white px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
+                                        <span className="text-[10px] font-extrabold bg-emerald-600 dark:bg-emerald-700 text-white px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
                                             FASTEST
                                         </span>
                                     </button>
@@ -2896,7 +2896,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     )}
                 </div>
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '1.25rem', lineHeight: 1.4, opacity: 0.8 }}>
-                    BeanPool is a decentralized, peer-to-peer network. You are responsible for your own local tax compliance. By continuing, you agree to our <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }}>Terms of Service</a> and <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }}>Privacy Policy</a>.
+                    BeanPool is a decentralized, peer-to-peer network. You are responsible for your own local tax compliance. By continuing, you agree to our <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>Terms of Service</a> and <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>Privacy Policy</a>.
                 </p>
             </div>
         </div>

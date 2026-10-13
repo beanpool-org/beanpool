@@ -182,3 +182,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-12-12 - Add dynamic accessibilityLabel and hint to propose vote submit buttons in EnterpriseDecisions
 **Learning:** Decision proposal submit buttons whose child text is replaced by an `ActivityIndicator` during creation leave screen reader users without accessible text feedback when submitting unless explicit dynamic `accessibilityLabel` and `accessibilityHint` attributes are supplied.
 **Action:** Provide dynamic `accessibilityLabel` (`busy ? "Opening the vote..." : "Open the vote"`) and `accessibilityHint="Opens a new decision vote"` on decision submit buttons rendering `ActivityIndicator` when busy.
+
+## 2026-12-19 - Add dynamic accessibilityLabel, hint, and busy state to re-key code submit button
+**Learning:** Primary submit buttons in re-key and re-enrollment flows whose child text is replaced by an `ActivityIndicator` during request verification leave screen reader users without accessible text feedback when submitting unless explicit dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` attributes are supplied.
+**Action:** Always supply dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled: busy, busy }}` on re-enrollment submit buttons rendering `ActivityIndicator` when submitting.

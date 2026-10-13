@@ -28,6 +28,8 @@ vi.mock('react-native-svg', () => ({ default: 'Svg', Path: 'Path' }));
 
 import { AppleButton, FacebookButton, GoogleButton } from '../../components/SsoButton';
 import { MAX_FONT_SCALE } from '../../constants/responsive';
+import { palette } from '../../constants/colors';
+import { onboardingColors } from '../onboarding-colors';
 
 type Style = Record<string, unknown>;
 const flatten = (s: unknown): Style =>
@@ -124,11 +126,21 @@ describe('the social sign-in screen: Apple, Google and Facebook buttons', () => 
 
 describe('Restore your account: the Recover with Social button', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
-    /** A one-line entry in welcome.tsx's StyleSheet, literals only. */
+    /**
+     * A one-line entry in welcome.tsx's StyleSheet (inside makeStyles(colors, dark)), in light and in dark: only the
+     * colours may differ between the two, so the layout below holds in both.
+     */
     function style(name: string): Style {
         const m = src.match(new RegExp(`^ {4}${name}: (\\{[^\\n]*\\}),$`, 'm'));
         expect(m, `styles.${name}`).not.toBeNull();
-        return new Function(`return (${m![1]});`)() as Style;
+        const inScheme = (theme: 'light' | 'dark') => {
+            const { colors, dark } = onboardingColors(theme);
+            return new Function('colors', 'dark', 'palette', `return (${m![1]});`)(colors, dark, palette) as Style;
+        };
+        const [light, dark] = [inScheme('light'), inScheme('dark')];
+        const layout = (s: Style) => Object.fromEntries(Object.entries(s).filter(([k]) => !/color/i.test(k)));
+        expect(layout(dark), `styles.${name}: dark changes colours only`).toEqual(layout(light));
+        return light;
     }
     const member = (() => {
         const from = src.indexOf("if (mode === 'member') {");

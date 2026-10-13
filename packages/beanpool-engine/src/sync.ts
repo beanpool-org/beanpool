@@ -489,6 +489,8 @@ export interface SyncCommunitySettings {
         credit_cap?: string | null;
         health_debt_line_pct?: string | null;
         health_quiet_days?: string | null;
+        /** Where Start a community leads, or null for beanpool.org's page (apps/server config/start-community.ts). */
+        startCommunityUrl?: string | null;
     };
     /** Fields of the `node_config` row's object: the service area and the directory's switches. */
     directory: {

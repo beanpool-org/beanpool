@@ -45,7 +45,7 @@ import {
 } from '../../utils/home-store';
 import { readGlobalHome } from '../../utils/community-directory';
 import { rememberedKnocks, type RememberedKnock } from '../../utils/knock';
-import { getCachedNodeProfile } from '../../utils/node-profile';
+import { getCachedNodeProfile, hiddenTabsFor } from '../../utils/node-profile';
 import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-account';
 import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
@@ -810,7 +810,8 @@ export default function HomeScreen() {
                 return frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
             }
             case 'start': {
-                const total = tourSteps('phone', { global: answer.profile === 'global', beans: answer.features.beans !== false }).length;
+                // The same rule the tab layout builds the running tour from: the Ledger step is in whenever its tab shows (the showcase included).
+                const total = tourSteps('phone', { global: answer.profile === 'global', beans: !hiddenTabsFor(answer.features).includes('ledger') }).length;
                 return frame(
                     <StartBody
                         words={START_CARD_WORDS}

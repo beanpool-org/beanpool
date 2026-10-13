@@ -2798,6 +2798,24 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         expect(cards()[0]).toBe('start');
         expect(tourStore.currentTour()).toMatchObject({ publicKey: who.identity.publicKey, step: 0 });
     });
+
+    // The card counts the tour's steps as the tab layout builds it: on the worldwide community with its showcase on,
+    // the Ledger tab shows, so the tour has its Commons and Ledger steps (8, not 6) (scratch/reviews/sonnet-1857-sync-check.md).
+    for (const showcase of [true, false]) {
+        it(`a tour left at step 8 on the worldwide community, showcase ${showcase ? 'on: picked up at step 8' : 'off: held at its 6 steps'}`, async () => {
+            const base = everyCard('global', 1);
+            const { tour: _t, ...me } = base.me!;
+            node.answer = { ...base, me, layout: null, features: { ...base.features, showcase } };
+            mem.store.set(`beanpool_tour_progress_${who.identity.publicKey}`, JSON.stringify({ v: 1, step: 7, startedAt: iso(Date.now() - H) }));
+            await render();
+            expect(cards()).toEqual(['needs', 'find', 'start', 'community']);
+            const step = showcase ? 7 : 5;
+            expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe(`Pick up the tour at step ${step + 1} ›`);
+            await act(async () => { (document.querySelector('[data-testid="home-start-look"]') as HTMLElement).click(); });
+            await settle();
+            expect(tourStore.currentTour()).toMatchObject({ publicKey: who.identity.publicKey, step });
+        });
+    }
 });
 
 // Where Beans are previewed (the worldwide community with its showcase on), Home's Your Beans card (scratch/global-node/

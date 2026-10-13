@@ -9,11 +9,21 @@
  *     the channel, "new reports waiting", saying its kind and how many wait. A repeat of a pending report tells nothing.
  *  2. 50 reports in a minute: the first told at once, the other 49 folded; when the hour is over, one line (pushed)
  *     with their count by kind. So one instant line and one folded line, not 50.
- *  3. A child-safety report always pushes: inside an open window, each one is told at once, urgent, and pushed, while
- *     the ordinary ones beside it still fold.
+ *  3. A child-safety report pushes at once: inside an open window, each member's is told at once, urgent, and pushed,
+ *     while the ordinary ones beside it still fold. The history counts them as one line (×3).
  *  4. The operator's fold window (ALERTS_REPORT_FOLD_MINUTES): 5 minutes folds into "the 5 minutes"; a bad value is
  *     the hour.
- *  5. Nothing in any alert line names a member or quotes what they wrote: no callsign, no key (nor its first 12
+ *  5. One member's 10 child-safety reports (their hour's limit): the first pushed at once, the other 9 in one urgent
+ *     line 10 minutes on, not 10 pushes (the deciding review of #1850, finding 2).
+ *  6. A flood, 12 members × 8 child-safety reports: 10 pushed at once (each a member's first, the server's hourly cap),
+ *     the other 86 in one urgent line 10 minutes on. The channel is not filled: an owner made by the admin password
+ *     just after reaches it at once (it went at +61 minutes before). The history counts the lines told at once as one.
+ *  7. 250 urgent report lines, each its own (as the unbounded flood told them), with the channel down: the owner made
+ *     before them stays in the history (finding 1: it was pushed out), and when the channel is back the held queue
+ *     goes as one message of at most 4096 bytes (26 KB before), the owners made first, the rest as a count.
+ *  8. A report window closing on the tick that raises disk 95 %: the owner is pushed both, the admin the reports alone
+ *     (finding 3: the admin was pushed the owner-only disk alert).
+ *  9. Nothing in any alert line names a member or quotes what they wrote: no callsign, no key (nor its first 12
  *     characters) and no reason's words in any channel message (headers and body), any push, any push notice kept for
  *     the phone, the Alerts routes' answers or the book.
  *
@@ -52,13 +62,19 @@ const settle = (ms = 300) => new Promise((r) => setTimeout(r, ms));
 
 interface NtfyHit { path: string; headers: http.IncomingHttpHeaders; body: string }
 
-/** The stand-in ntfy: every POST kept, a 200 for each. */
+/** The stand-in ntfy: every POST kept, a 200 for each; while it is down, a 503 and nothing kept. */
 async function startFakeNtfy() {
     const hits: NtfyHit[] = [];
+    let down = false;
     const server = http.createServer((req, res) => {
         const chunks: Buffer[] = [];
         req.on('data', (c) => chunks.push(c));
         req.on('end', () => {
+            if (down) {
+                res.writeHead(503);
+                res.end();
+                return;
+            }
             hits.push({ path: req.url ?? '', headers: req.headers, body: Buffer.concat(chunks).toString('utf8') });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end('{"id":"x"}');
@@ -66,7 +82,10 @@ async function startFakeNtfy() {
     });
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     const port = (server.address() as AddressInfo).port;
-    return { hits, url: (p: string) => `http://127.0.0.1:${port}${p}`, close: () => new Promise<void>((r) => server.close(() => r())) };
+    return {
+        hits, url: (p: string) => `http://127.0.0.1:${port}${p}`, setDown: (v: boolean) => { down = v; },
+        close: () => new Promise<void>((r) => server.close(() => r())),
+    };
 }
 
 type Id = { pk: string; privateKey: crypto.KeyObject; callsign: string };
@@ -148,7 +167,11 @@ async function main(): Promise<void> {
     grantNodeRole(moderator.pk, 'moderator', owner.pk);
     // Reporters (10 reports an hour each at most) and the members they report.
     const reporters = Array.from({ length: 9 }, (_, i) => join(`ReporterRuth${i}R`));
-    const targets = Array.from({ length: 9 }, (_, i) => join(`TargetTom${i}R`));
+    const targets = Array.from({ length: 10 }, (_, i) => join(`TargetTom${i}R`));
+    // Members who file child-safety reports (each in an hour of their own), one who files steps 8's, and owners to make.
+    const childReporters = Array.from({ length: 16 }, (_, i) => join(`ChildRepCara${i}R`));
+    const mixReporter = join('MixReporterMaxR');
+    const newOwners = Array.from({ length: 3 }, (_, i) => join(`NewOwnerNia${i}R`));
     for (const [id, token] of [[owner, 'ExponentPushToken[olive-owner]'], [admin, 'ExponentPushToken[adam-admin]'],
         [moderator, 'ExponentPushToken[mo-moderator]'], [reporters[0], 'ExponentPushToken[ruth-reporter]'], [targets[0], 'ExponentPushToken[tom-target]']] as const) {
         putPushTokenRow(id.pk, token, 'android');
@@ -251,7 +274,7 @@ async function main(): Promise<void> {
     await settle();
     assert(ownerPushes().length === p3 + 1 && topicHits().length === h3 + 1, '3. the next ordinary report opens a new window, told at once');
     for (let i = 0; i < 3; i++) {
-        await nextReport(i === 2 ? 'Other: sexual abuse of a minor' : 'Child safety');
+        await report(childReporters[i], targets[0], i === 2 ? 'Other: sexual abuse of a minor' : 'Child safety');
         await nextReport('Spam or scam');
         await settle();
         assert(ownerPushes().length === p3 + 2 + i, `3. child-safety report ${i + 1} pushed at once (${ownerPushes().length - p3 - 1})`);
@@ -261,7 +284,8 @@ async function main(): Promise<void> {
             `3. urgent (${hit.headers.title} p${hit.headers.priority})`);
         assert(JSON.stringify((ownerPushes().at(-1)?.to ?? []).slice().sort()) === JSON.stringify(pushTo), '3. to the owner and the admin');
     }
-    assert(alerts.getAlertsStatus().history.filter((e) => e.key === 'reports.child').length === 3, '3. three in the history, none folded');
+    const childLines = () => alerts.getAlertsStatus().history.filter((e) => e.key === 'reports.child');
+    assert(childLines().length === 1 && childLines()[0].count === 3, `3. three in the history, none folded: one line, counted (${childLines().length} lines, ×${childLines()[0]?.count})`);
     advance(HOUR + MIN);
     await tick();
     await settle();
@@ -293,13 +317,128 @@ async function main(): Promise<void> {
         && alerts.reportKind('Spam or scam') === 'spam or scam' && alerts.reportKind('offensive content: rude') === 'offensive content'
         && alerts.reportKind('He was rude') === 'other' && alerts.reportKind(42) === 'other', '4. a report\'s kind is read from its reason');
 
-    // ── 5. Nothing names a member or quotes them ────────────────────────────────────────────────────────────────────
+    // ── 5. One member's child-safety reports: the first at once, the rest one urgent line 10 minutes on ─────────────
+    advance(HOUR + MIN);
+    await tick();
+    await settle();
+    const p5 = ownerPushes().length;
+    const h5 = topicHits().length;
+    for (let j = 0; j < 10; j++) {
+        const r = await report(childReporters[3], targets[j], 'Child safety');
+        if (r.status !== 200 || r.json?.duplicate) throw new Error(`setup: child-safety report ${j} not taken (${r.status} ${JSON.stringify(r.json)})`);
+    }
+    await settle();
+    assert(ownerPushes().length === p5 + 1 && topicHits().length === h5 + 1,
+        `5. one member's 10 child-safety reports: their first pushed and told at once, not the other 9 (${ownerPushes().length - p5} pushes, ${topicHits().length - h5} lines)`);
+    advance(9 * MIN);
+    await tick();
+    await settle();
+    assert(ownerPushes().length === p5 + 1 && topicHits().length === h5 + 1, '5. nine minutes on, still counted');
+    advance(MIN + 1000);
+    await tick();
+    await settle();
+    assert(ownerPushes().length === p5 + 2 && topicHits().length === h5 + 2, `5. ten minutes on, one push and one line (${ownerPushes().length - p5}, ${topicHits().length - h5})`);
+    const sum5 = topicHits().at(-1)!;
+    assert(/more child-safety reports waiting/.test(String(sum5.headers.title)) && sum5.headers.priority === '5', `5. urgent (${sum5.headers.title} p${sum5.headers.priority})`);
+    assert(/9 more child-safety reports came in, from one member, past those pushed one by one/.test(sum5.body), `5. it counts them: ${JSON.stringify(sum5.body.split('\n')[2])}`);
+    assert(JSON.stringify((ownerPushes().at(-1)?.to ?? []).slice().sort()) === JSON.stringify(pushTo), '5. pushed to the owner and the admin');
+
+    // ── 6. A flood from 12 members: 10 at once, the rest one line; the channel stays open ───────────────────────────
+    advance(HOUR + MIN);
+    await tick();
+    await settle();
+    const p6 = ownerPushes().length;
+    const h6 = topicHits().length;
+    for (const m of childReporters.slice(4, 16)) {
+        for (let j = 0; j < 8; j++) {
+            const r = await report(m, targets[j], 'Child safety');
+            if (r.status !== 200 || r.json?.duplicate) throw new Error(`setup: flood report not taken (${r.status} ${JSON.stringify(r.json)})`);
+        }
+    }
+    await settle(1000);
+    const st6 = alerts.getAlertsStatus();
+    assert(ownerPushes().length - p6 === alerts.REPORT_CHILD_AT_ONCE_PER_HOUR,
+        `6. 96 child-safety reports from 12 members: 10 pushed at once, each a member's first (${ownerPushes().length - p6})`);
+    assert(topicHits().length - h6 <= alerts.REPORT_CHILD_AT_ONCE_PER_HOUR && st6.waiting === 0,
+        `6. the channel took ${topicHits().length - h6} messages (${st6.sentLastHour} this hour), none held (${st6.waiting})`);
+    const ownerLine = (b: string) => /Someone was made an owner, by the admin password\./.test(b);
+    const hS = topicHits().length;
+    grantNodeRole(newOwners[0].pk, 'owner', 'owner:password');
+    await settle(1000);
+    assert(topicHits().slice(hS).some((h) => ownerLine(h.body)), '6. an owner made by the admin password just after reaches the channel at once');
+    advance(10 * MIN + 1000);
+    await tick();
+    await settle();
+    const sum6 = topicHits().slice(h6).filter((h) => /more child-safety reports waiting/.test(String(h.headers.title)));
+    assert(sum6.length === 1 && /86 more child-safety reports came in, from 12 members/.test(sum6[0].body) && sum6[0].headers.priority === '5',
+        `6. ten minutes on, the other 86 in one urgent line: ${JSON.stringify(sum6.map((h) => h.body.split('\n')[2]))}`);
+    assert(childLines().length === 1 && childLines()[0].count === 3 + 1 + 10,
+        `6. the history counts every child-safety line told at once as one (${childLines().length} lines, ×${childLines()[0]?.count})`);
+
+    // ── 7. Report lines never push a security line out; a held queue goes as one message of at most 4 KB ────────────
+    advance(HOUR + MIN);
+    await tick();
+    await settle();
+    ntfy.setDown(true);
+    grantNodeRole(newOwners[1].pk, 'owner', 'owner:password');
+    await settle(1000);
+    const h7 = topicHits().length;
+    for (let i = 0; i < 250; i++) {
+        await alerts.updateAlerts([{
+            key: 'reports.child', active: true, oneShot: true, high: true, priority: 5, push: false,
+            detail: `A report in the child-safety category came in: look at it first. ${i + 1} reports wait in the Manager's Reports queue.`,
+        }]);
+    }
+    const hist7 = alerts.getAlertsStatus().history;
+    assert(hist7.some((e) => e.key === 'sec.role' && ownerLine(e.detail)),
+        `7. 250 urgent report lines, each its own: the owner made before them is still in the history (${hist7.length} lines)`);
+    grantNodeRole(newOwners[2].pk, 'owner', 'owner:password');
+    await settle(1000);
+    assert(alerts.getAlertsStatus().waiting === 50, `7. the channel down: 50 lines wait (${alerts.getAlertsStatus().waiting})`);
+    ntfy.setDown(false);
+    advance(5 * MIN + 1000);
+    await tick();
+    await settle();
+    const held = topicHits().slice(h7);
+    assert(held.length === 1, `7. the channel back: what waited goes as one message (${held.length})`);
+    const bytes7 = Buffer.byteLength(held[0]?.body ?? '');
+    assert(bytes7 > 3000 && bytes7 <= alerts.ALERT_MESSAGE_MAX_BYTES, `7. of at most ${alerts.ALERT_MESSAGE_MAX_BYTES} bytes (${bytes7})`);
+    assert(ownerLine(held[0].body), '7. the owners made are in it, though they waited behind 49 report lines');
+    assert(/- And \d+ more, too many for one message: Settings → Alerts lists them\./.test(held[0].body) && alerts.getAlertsStatus().waiting === 0,
+        `7. the rest as a count, nothing left waiting (${held[0].body.split('\n').filter((l) => l.startsWith('- And')).join('')})`);
+    const largest = Math.max(...topicHits().map((h) => Buffer.byteLength(h.body)));
+    assert(largest <= alerts.ALERT_MESSAGE_MAX_BYTES, `7. no message in this suite was longer (${largest} bytes at most)`);
+
+    // ── 8. The admin is pushed the report line alone, never the owners' others ──────────────────────────────────────
+    advance(HOUR + MIN);
+    await tick();
+    await settle();
+    await report(mixReporter, targets[0], 'Spam or scam');
+    await report(mixReporter, targets[1], 'Spam or scam');
+    await settle();
+    setSimulatedDiskUsageForTesting(96);
+    await tick();
+    await tick();
+    advance(HOUR);
+    const lastNotice = (db.prepare(`SELECT MAX(rowid) AS r FROM push_notices`).get() as { r: number | null }).r ?? 0;
+    await tick();
+    await settle();
+    const noticesOf = (pk: string) => db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'owner.alert' AND recipient = ? AND rowid > ? ORDER BY rowid`)
+        .all(pk, lastNotice) as Array<{ title: string; body: string }>;
+    const ownerGot = noticesOf(owner.pk);
+    const adminGot = noticesOf(admin.pk);
+    assert(ownerGot.length === 1 && /disk 95% full \(\+1 more\)$/.test(ownerGot[0].title), `8. the tick that raises disk 95 % and closes a report window: the owner is pushed both (${JSON.stringify(ownerGot.map((x) => x.title))})`);
+    assert(adminGot.length === 1 && /new reports waiting$/.test(adminGot[0].title) && /1 more report came in/.test(adminGot[0].body) && !/disk/i.test(adminGot[0].title + adminGot[0].body),
+        `8. the admin, the reports alone: ${JSON.stringify(adminGot)}`);
+    setSimulatedDiskUsageForTesting(10);
+
+    // ── 9. Nothing names a member or quotes them ────────────────────────────────────────────────────────────────────
     await settle();
     const st = await adminCall('POST', '/api/local/admin/alerts/status', {});
-    assert(st.status === 200 && st.json?.history?.some((e: any) => e.key === 'reports.new'), `5. the Alerts card lists them (${st.status})`);
+    assert(st.status === 200 && st.json?.history?.some((e: any) => e.key === 'reports.new'), `9. the Alerts card lists them (${st.status})`);
     const notices = db.prepare(`SELECT recipient, title, body, data FROM push_notices WHERE kind = 'owner.alert'`).all() as any[];
     assert(notices.some((x) => x.recipient === admin.pk) && notices.every((x) => x.recipient === owner.pk || x.recipient === admin.pk),
-        `5. ${notices.length} owner.alert notices kept, every one for the owner or the admin`);
+        `9. ${notices.length} owner.alert notices kept, every one for the owner or the admin`);
     const payloads = [
         ...ntfy.hits.map((h) => JSON.stringify(h.headers) + h.body),
         ...ownerPushes().map((p) => p.title + p.body),
@@ -311,8 +450,8 @@ async function main(): Promise<void> {
     const leaks = payloads.filter((p) => ids.some((i) => p.includes(i.callsign) || p.includes(i.pk.slice(0, 12)))
         || REASON_WORDS.some((w) => p.includes(w)) || /sexual abuse of a minor|Other:/.test(p));
     assert(n > 55 && payloads.length > 20 && leaks.length === 0,
-        `5. ${payloads.length} payloads (${topicHits().length} channel messages, ${n} reports), none names a member or quotes a reason (${leaks.length})`);
-    assert(blocked.length === 0, `5. nothing off this machine was asked (${blocked.join(', ')})`);
+        `9. ${payloads.length} payloads (${topicHits().length} channel messages, ${n} reports), none names a member or quotes a reason (${leaks.length})`);
+    assert(blocked.length === 0, `9. nothing off this machine was asked (${blocked.join(', ')})`);
 
     await ntfy.close();
     console.log(`\n${testsPassed}/${testsRun} passed`);

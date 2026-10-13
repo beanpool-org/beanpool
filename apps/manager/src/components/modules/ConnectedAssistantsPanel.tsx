@@ -433,7 +433,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 {isOwner ? ' owner or admin' : ' admin'}, it stops too. At most {data.perMember} for each member.
                             </p>
                             <div className="space-y-1">
-                                <label htmlFor="agent-name" className="block text-xs text-nature-400">Name</label>
+                                <label htmlFor="agent-name" className="block text-xs text-nature-400">Assistant&rsquo;s name</label>
                                 <input
                                     id="agent-name"
                                     type="text"

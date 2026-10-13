@@ -90,7 +90,7 @@ describe('ConnectedAssistantsPanel', () => {
         Object.assign(navigator, { clipboard: { writeText } });
         const calls = fakeNode({ grants: [] });
         const { container } = render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
-        fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Claude on my laptop' } });
+        fireEvent.change(await screen.findByLabelText('Assistant’s name'), { target: { value: 'Claude on my laptop' } });
         fireEvent.change(screen.getByLabelText('For how long'), { target: { value: '7' } });
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
         expect(await screen.findByTestId('agent-token-value')).toHaveTextContent(NEW_TOKEN);
@@ -122,7 +122,7 @@ describe('ConnectedAssistantsPanel', () => {
     it('a stale phone session: the node says press Manage again, and no token appears', async () => {
         fakeNode({ grants: [], makeStatus: 403, makeBody: { error: 'Press Manage in the app again', code: 'step_up_required' } });
         render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
-        fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'x' } });
+        fireEvent.change(await screen.findByLabelText('Assistant’s name'), { target: { value: 'x' } });
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Not connected: Press Manage in the app again');
         expect(screen.queryByTestId('agent-token-value')).toBeNull();

@@ -819,11 +819,11 @@ export async function joinGroupWithEpoch(
     nodeUrl: string, identity: BeanPoolIdentity, store: GroupKeyStore,
     group: { id: string; joinPolicy?: string | null; viewerStatus?: string | null; activeMembers?: string[] }, progress?: GroupEpochProgress,
 ): Promise<any> {
-    const path = `/api/groups/${encodeURIComponent(group.id)}/join`;
+    const ring = groupKeyring(nodeUrl, identity, group.id, store);
+    const path = `/api/groups/${encodeURIComponent(ring.groupId)}/join`;
     const send: MembershipSend = (epoch) => signedPost(nodeUrl, path, epoch ? { epoch } : {}, identity);
     const invited = group.viewerStatus === 'invited';
     if (!invited && group.joinPolicy && group.joinPolicy !== 'open') return answerOf(await send(undefined));
-    const ring = groupKeyring(nodeUrl, identity, group.id, store);
     const me = identity.publicKey;
     // The joiner can't read the keys yet: the first try guesses past the highest it holds (a member coming back), and the
     // node's 409 says the rest.
@@ -838,7 +838,7 @@ export async function approveWithEpoch(
 ): Promise<any> {
     const ring = groupKeyring(nodeUrl, identity, groupId, store);
     const state = await ring.sync().catch(() => null);
-    const send: MembershipSend = (epoch) => signedPost(nodeUrl, `/api/groups/${encodeURIComponent(groupId)}/members`, epoch ? { ...body, epoch } : body, identity);
+    const send: MembershipSend = (epoch) => signedPost(nodeUrl, `/api/groups/${encodeURIComponent(ring.groupId)}/members`, epoch ? { ...body, epoch } : body, identity);
     if (!state) return answerOf(await send(undefined));
     return withEpoch(ring, send, (_c, roster) => ({ reason: 'approve', subject, recipients: [...roster.filter((k) => k !== subject), subject] }),
         { current: state.current, roster: state.roster }, progress);

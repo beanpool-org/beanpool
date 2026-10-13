@@ -2591,17 +2591,26 @@ async function rememberDmConversations(ids: string[]): Promise<void> {
     if (seen.size !== before) await AsyncStorage.setItem(DM_SEEN_KEY, JSON.stringify([...seen])).catch(() => {});
 }
 
-/** True for a conversation this phone has seen as a DM, or that holds an encrypted line. */
+/**
+ * True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. The
+ * held check, the keyring and the group screens fold an id's case (a link or a push can carry it in capitals), so this
+ * folds it too: otherwise one id in capitals reaches a group's keys on a known DM's own id, and makes it a held group
+ * whose lines go to the roster the node shows (#1841 review, finding 1). The encrypted-line lookup asks every spelling
+ * this phone holds a row under, the id as given, and lower- and upper-case, so it keeps its index.
+ */
 export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
     if (!conversationId) return false;
-    if ((await dmConversationsSeen()).has(conversationId)) return true;
+    const folded = conversationId.toLowerCase();
+    for (const seen of await dmConversationsSeen()) if (seen.toLowerCase() === folded) return true;
     try {
         const database = await getDb();
+        const conv = await database.getFirstAsync<any>("SELECT type FROM conversations WHERE id = ? COLLATE NOCASE AND type = 'dm' LIMIT 1", [conversationId]);
+        if (conv?.type === 'dm') return true;
+        const spelt = await database.getAllAsync<any>('SELECT id FROM conversations WHERE id = ? COLLATE NOCASE', [conversationId]);
+        const ids = [...new Set([conversationId, folded, conversationId.toUpperCase(), ...(spelt ?? []).map((r: any) => r?.id).filter((s: unknown): s is string => typeof s === 'string')])];
         const row = await database.getFirstAsync<any>(
-            "SELECT 1 AS y FROM messages WHERE conversation_id = ? AND nonce LIKE ? LIMIT 1", [conversationId, `${V2_NONCE_PREFIX}%`]);
-        if (row) return true;
-        const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
-        return conv?.type === 'dm';
+            `SELECT 1 AS y FROM messages WHERE conversation_id IN (${ids.map(() => '?').join(', ')}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]);
+        return !!row;
     } catch {
         return false;
     }
@@ -4450,7 +4459,7 @@ async function sealForGroupConversation(conversationId: string, text: string, li
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
     const sealed = sealLine(text, {
-        myEdPrivHex: identity.privateKey, groupKey: sealedUnder.key, groupId: conversationId, epoch: sealedUnder.epoch,
+        myEdPrivHex: identity.privateKey, groupKey: sealedUnder.key, groupId: ring.groupId, epoch: sealedUnder.epoch,
         messageId: line.messageId, after: line.after ?? null, replyToId: line.replyToId ?? null,
     });
     return { ...sealed, metadata: { epoch: sealedUnder.epoch } };
@@ -6532,9 +6541,11 @@ export async function voteGroupSuccessionApi(groupId: string, proposalId: string
  * the node marks the key stale and the next member to write makes a new one.
  */
 export async function leaveGroupApi(groupId: string, memberPubkey: string, onProgress?: (done: number, total: number) => void): Promise<boolean> {
-    const path = `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`;
     const { nodeUrl, identity } = await groupKeyContext();
-    if (memberPubkey !== identity.publicKey) await refuseGroupKeysForDm(groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl)));
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+    // Under the group's own id (lower-case), as its epochs are: a removal carries one (#1841 review, finding 3).
+    const path = `/api/groups/${encodeURIComponent(ring.groupId)}/members/${encodeURIComponent(memberPubkey)}`;
+    if (memberPubkey !== identity.publicKey) await refuseGroupKeysForDm(ring);
     const res = memberPubkey === identity.publicKey
         ? await signedRequestWithMethod('DELETE', path)
         : await removeWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), groupId, memberPubkey, async (body) => {
@@ -6669,6 +6680,17 @@ async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolI
 export async function groupKeyringFor(groupId: string): Promise<GroupKeyring> {
     const { nodeUrl, identity } = await groupKeyContext();
     return groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+}
+
+/**
+ * The keyring a group's screen opens, syncs and serves missing keys from (components/GroupChatView.tsx): refused with
+ * GROUP_KEYS_FOR_DM_TEXT for a conversation this phone knows as a DM and never held a group's keys for, so no key is
+ * synced onto a known DM's id whichever route drew the screen (#1815 review E3b, made structural; #1841 review, finding 1).
+ */
+export async function groupScreenKeyringFor(groupId: string): Promise<GroupKeyring> {
+    const ring = await groupKeyringFor(groupId);
+    await refuseGroupKeysForDm(ring);
+    return ring;
 }
 
 /** An enterprise's discussion thread — public to every member of the community, not only its keepers. */

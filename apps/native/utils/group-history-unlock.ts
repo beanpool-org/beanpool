@@ -35,21 +35,29 @@ export function lockedHistoryRowText(n: number): string {
     return `🔒 ${n} ${n === 1 ? 'message' : 'messages'} from before you changed phones. Unlock →`;
 }
 export const LOCKED_HISTORY_SHEET_TITLE = 'Messages from before you changed phones';
-export const LOCKED_HISTORY_SHEET_BODY = "They were locked to your old phone's key. They come back only with your old 12 words, or when a member of the group confirms this phone in person.";
+export const LOCKED_HISTORY_SHEET_BODY = "They were locked to your old phone's key. They come back only with your old 12 words, or when a member of the group confirms this phone in person. Your own messages from then show under your name, without their words, until they do.";
+/** One of the member's own lines in the locked span (§7): drawn under their name, with no words. */
+export const LOCKED_OWN_LINE_TEXT = 'Your message from before you changed phones. Its words come back when you unlock them.';
 export const LOCKED_HISTORY_WORDS = 'I have my old phone or old 12 words';
 export const LOCKED_HISTORY_ASK = 'Ask a member of the group to confirm this phone';
 export const LOCKED_HISTORY_KEEP = 'Keep them locked';
+const PUBKEY_HEX = /^[0-9a-f]{64}$/;
 /** The row's id in a chat's lines: the screen draws it as the one tappable row (GroupChatView). */
 export const LOCKED_HISTORY_ROW_ID = 'locked-history-before-phone-change';
 
 /**
  * §7: in a group where this member changed phones (their roster row carries a verified former key), the lines waiting for
- * a key from before the first epoch this phone reads collapse into one row, where the first of them was. Every other
- * waiting line (a lost wrap, an epoch after the change) keeps its own sentence. Pure; `epochOf` is the line's epoch as
- * the display rule read it, `waiting` whether it waits for a key.
+ * a key from before the first epoch this phone reads collapse into one row, where the first of them was. The member's
+ * own lines of that span (`mine`: written by a key of their own verified chain) stay where they were, drawn by `asMine`
+ * under their name with no words, and are counted in the row too. Every other waiting line (a lost wrap, an epoch after
+ * the change) keeps its own sentence. Pure; `epochOf` is the line's epoch as the display rule read it, `waiting` whether
+ * it waits for a key.
  */
 export function collapseLockedHistory<T extends { id: string }>(
-    lines: readonly T[], opts: { changedPhones: boolean; epochOf: (id: string) => number | null; waiting: (id: string) => boolean; row: (n: number) => T },
+    lines: readonly T[], opts: {
+        changedPhones: boolean; epochOf: (id: string) => number | null; waiting: (id: string) => boolean; row: (n: number) => T;
+        mine?: (id: string) => boolean; asMine?: (line: T) => T;
+    },
 ): T[] {
     if (!opts.changedPhones) return [...lines];
     const readable = lines.filter((l) => !opts.waiting(l.id)).map((l) => opts.epochOf(l.id)).filter((e): e is number => e !== null);
@@ -62,8 +70,19 @@ export function collapseLockedHistory<T extends { id: string }>(
     for (const l of lines) {
         if (!before(l)) { out.push(l); continue; }
         if (!placed) { out.push(opts.row(n)); placed = true; }
+        if (opts.asMine && opts.mine?.(l.id)) out.push(opts.asMine(l));
     }
     return out;
+}
+
+/**
+ * The keys the node says wrote a served line (its author column and the sealed line's `sender`): what tells this member's
+ * own locked lines apart before their words can be opened (§7). Only ever matched against the member's own verified chain.
+ */
+export function servedAuthorKeys(m: { authorPubkey?: unknown; metadata?: unknown }): string[] {
+    let meta: any = m.metadata;
+    if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch { meta = null; } }
+    return [m.authorPubkey, meta?.sender].filter((k): k is string => typeof k === 'string' && PUBKEY_HEX.test(k));
 }
 
 export const OLD_WORDS_NOT_THE_KEY = "These aren't the words of the key this account moved from.";
@@ -240,7 +259,6 @@ export async function unlockWithOldWords(input: {
 // ─── Path B: a fellow member confirms the new phone in person (§4) ──────────────────────────────────────────────────
 
 export const NEW_PHONE_QR_TAG = 'beanpool-new-phone/1';
-const PUBKEY_HEX = /^[0-9a-f]{64}$/;
 
 /** The code the new phone shows: its key, the old key from its own chain, and its name. */
 export function newPhoneQrPayload(identity: Pick<BeanPoolIdentity, 'publicKey' | 'callsign'>, oldKey: string): string {

@@ -30,7 +30,7 @@ import { markKeyChanged, rememberRosterNames } from '../utils/name-key-memory';
 import { verifiedFormerKeys } from '../utils/group-chat-crypto';
 import {
     collapseLockedHistory, lockedHistoryRowText, LOCKED_HISTORY_ROW_ID, LOCKED_HISTORY_SHEET_TITLE, LOCKED_HISTORY_SHEET_BODY, LOCKED_HISTORY_WORDS,
-    LOCKED_HISTORY_ASK, LOCKED_HISTORY_KEEP, NEW_PHONE_CONFIRM_MENU,
+    LOCKED_HISTORY_ASK, LOCKED_HISTORY_KEEP, LOCKED_OWN_LINE_TEXT, NEW_PHONE_CONFIRM_MENU, servedAuthorKeys,
 } from '../utils/group-history-unlock';
 import { anchorUrl } from '../utils/node-post';
 import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView, Modal } from 'react-native';
@@ -311,10 +311,13 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const locked = kind === 'group' && (chatIsLocked(view) || seenLocked);
 
     // This member changed phones: their own row carries a verified former key (the line-display design's chain).
-    const changedPhones = useMemo(() => {
+    const myFormer = useMemo(() => {
         const mine = rosterRows.find(r => r.memberPubkey === me);
-        return !!mine && verifiedFormerKeys({ memberPubkey: mine.memberPubkey, formerKeys: mine.formerKeys }).length > 0;
+        return { keys: new Set(mine ? verifiedFormerKeys({ memberPubkey: mine.memberPubkey, formerKeys: mine.formerKeys }) : []), name: mine?.callsign ?? null };
     }, [rosterRows, me]);
+    const changedPhones = myFormer.keys.size > 0;
+
+    const rawById = useMemo(() => new Map<string, any>(rawMessages.map(m => [String(m.id), m])), [rawMessages]);
 
     /** The node's messages in the one shape every chat's components speak, plus what this phone still owes. */
     const messages: ChatMessage[] = useMemo(() => {
@@ -326,6 +329,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             epochOf: (lineId) => thread?.views.get(lineId)?.epoch ?? null,
             waiting: (lineId) => !!thread?.views.get(lineId)?.waitingKey,
             row: (n) => ({ id: LOCKED_HISTORY_ROW_ID, senderId: '', text: lockedHistoryRowText(n), type: 'text', outgoing: false, timestamp: '' }),
+            // Her own lines from then, by a key of her own verified chain: under her name, with no words (§7).
+            mine: (lineId) => servedAuthorKeys(rawById.get(lineId) ?? {}).some(k => myFormer.keys.has(k)),
+            asMine: (l) => ({ ...l, text: LOCKED_OWN_LINE_TEXT, authorName: myFormer.name, unattributed: true }),
         });
         const mine: ChatMessage[] = pending.map(p => ({
             id: p.clientId,
@@ -339,7 +345,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             timestamp: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }));
         return [...fromNode, ...mine];
-    }, [rawMessages, pending, me, kind, locked, thread, keyChanged, changedPhones]);
+    }, [rawMessages, rawById, pending, me, kind, locked, thread, keyChanged, changedPhones, myFormer]);
 
     const spokenCount = useMemo(
         () => rawMessages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM').length,

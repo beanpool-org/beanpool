@@ -15,7 +15,7 @@ vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(async () => null), set
 
 import {
     collapseLockedHistory, lockedHistoryRowText, LOCKED_HISTORY_ASK, LOCKED_HISTORY_KEEP, LOCKED_HISTORY_ROW_ID, LOCKED_HISTORY_SHEET_TITLE,
-    LOCKED_HISTORY_WORDS, NEW_PHONE_CONFIRM_MENU,
+    LOCKED_HISTORY_WORDS, NEW_PHONE_CONFIRM_MENU, LOCKED_OWN_LINE_TEXT, servedAuthorKeys,
 } from '../group-history-unlock';
 
 type L = { id: string; text: string };
@@ -45,6 +45,28 @@ describe('which lines collapse into the row', () => {
 
     it('a member who never changed phones: nothing changes', () => {
         expect(collapseLockedHistory(lines, { ...opts, changedPhones: false })).toEqual(lines);
+    });
+
+    it("her own lines of the span stay where they were, under her name with no words, and are counted in the row", () => {
+        // b and d were written by a key of her own verified chain.
+        const mineIds = new Set(['b', 'd']);
+        const out = collapseLockedHistory(lines, {
+            ...opts, changedPhones: true, mine: (id) => mineIds.has(id), asMine: (l) => ({ ...l, text: `Cata: ${LOCKED_OWN_LINE_TEXT}` }),
+        });
+        expect(out.map((l) => l.id)).toEqual([LOCKED_HISTORY_ROW_ID, 'b', 'c', 'd', 'e']);
+        expect(out[0].text).toBe('🔒 3 messages from before you changed phones. Unlock →');
+        expect(out.filter((l) => mineIds.has(l.id)).map((l) => l.text)).toEqual([`Cata: ${LOCKED_OWN_LINE_TEXT}`, `Cata: ${LOCKED_OWN_LINE_TEXT}`]);
+        // Her first line was the span's first: the row still comes first, her line right under it.
+        const first = collapseLockedHistory(lines, { ...opts, changedPhones: true, mine: (id) => id === 'a', asMine: (l) => ({ ...l, text: 'mine' }) });
+        expect(first.map((l) => l.id)).toEqual([LOCKED_HISTORY_ROW_ID, 'a', 'c', 'e']);
+    });
+
+    it("the keys the node says wrote a line: its author column and the sealed sender, hex keys only", () => {
+        const a = 'a'.repeat(64);
+        const b = 'b'.repeat(64);
+        expect(servedAuthorKeys({ authorPubkey: a, metadata: JSON.stringify({ sender: b, epoch: 1 }) })).toEqual([a, b]);
+        expect(servedAuthorKeys({ authorPubkey: a, metadata: { sender: 'SYSTEM' } })).toEqual([a]);
+        expect(servedAuthorKeys({ authorPubkey: 'SYSTEM', metadata: 'not json' })).toEqual([]);
     });
 
     it('nothing read yet: every waiting line with an epoch is in the row; one message says "message"', () => {

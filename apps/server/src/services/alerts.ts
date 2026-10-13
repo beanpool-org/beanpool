@@ -1016,12 +1016,27 @@ export const REPORT_FOLD_DEFAULT_MINUTES = 60;
 const REPORT_FOLD_MIN_MINUTES = 1;
 const REPORT_FOLD_MAX_MINUTES = 24 * 60;
 
+function foldMinutes(raw: string | undefined): number | null {
+    const v = raw?.trim();
+    const n = v && /^\d+$/.test(v) ? Number(v) : NaN;
+    return n >= REPORT_FOLD_MIN_MINUTES && n <= REPORT_FOLD_MAX_MINUTES ? n : null;
+}
+
 /** ALERTS_REPORT_FOLD_MINUTES in .env (1 to 1440, whole minutes), else an hour; a value out of range is the default. */
 export function reportFoldMs(env: NodeJS.ProcessEnv = process.env): number {
+    return (foldMinutes(env.ALERTS_REPORT_FOLD_MINUTES) ?? REPORT_FOLD_DEFAULT_MINUTES) * 60_000;
+}
+
+/**
+ * The log's one line at start for an ALERTS_REPORT_FOLD_MINUTES that is set but not used (the confirmation review of
+ * #1850, finding 4: it fell back to the hour without a word): the variable, at most 40 characters of what it says
+ * (quoted, so it can't break the line), and the hour used instead. Null when it is empty or good.
+ */
+export function reportFoldWarning(env: NodeJS.ProcessEnv = process.env): string | null {
     const raw = env.ALERTS_REPORT_FOLD_MINUTES?.trim();
-    const n = raw && /^\d+$/.test(raw) ? Number(raw) : NaN;
-    const minutes = n >= REPORT_FOLD_MIN_MINUTES && n <= REPORT_FOLD_MAX_MINUTES ? n : REPORT_FOLD_DEFAULT_MINUTES;
-    return minutes * 60_000;
+    if (!raw || foldMinutes(raw) !== null) return null;
+    return `[Alerts] ALERTS_REPORT_FOLD_MINUTES=${JSON.stringify(raw.slice(0, 40))}${raw.length > 40 ? '…' : ''} is not a whole number of minutes `
+        + `from ${REPORT_FOLD_MIN_MINUTES} to ${REPORT_FOLD_MAX_MINUTES}: reports are folded over the hour (${REPORT_FOLD_DEFAULT_MINUTES} minutes) instead.`;
 }
 
 /** The child-safety category, whether picked from a list or written in: read to sort the report, never repeated. */
@@ -1377,6 +1392,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 /** Every minute on every server, from the start: a crash loop's third start is told before it can crash again. */
 export function startServerAlerts(): void {
     if (timer) return;
+    const foldWarning = reportFoldWarning();
+    if (foldWarning) logger.warn('SYS', foldWarning);
     void checkServerAlerts();
     timer = setInterval(() => { void checkServerAlerts(); }, ALERT_TICK_MS);
     timer.unref?.();

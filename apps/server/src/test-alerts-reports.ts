@@ -12,7 +12,8 @@
  *  3. A child-safety report pushes at once: inside an open window, each member's is told at once, urgent, and pushed,
  *     while the ordinary ones beside it still fold. The history counts them as one line (×3).
  *  4. The operator's fold window (ALERTS_REPORT_FOLD_MINUTES): 5 minutes folds into "the 5 minutes"; a bad value is
- *     the hour.
+ *     the hour, told in one warning line at start that names the variable, at most 40 of its characters and the hour
+ *     (the confirmation review's finding 4: it fell back without a word).
  *  5. One member's 10 child-safety reports (their hour's limit), one every 6 minutes, a tick a minute: the first pushed
  *     at once, the other 9 in one urgent line when their hour ends, so 2 pushes that hour, not 10 (the deciding review
  *     of #1850, finding 2) and not 6 (its confirmation review, finding 2: they went on the 10-minute summary).
@@ -136,6 +137,7 @@ async function main(): Promise<void> {
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
+    const { logger } = await import('./logger.js');
     const { setSimulatedDiskUsageForTesting } = await import('./engine/storage-health.js');
     const alerts = await import('./services/alerts.js');
     const { initTls } = await import('./services/tls.js');
@@ -317,6 +319,25 @@ async function main(): Promise<void> {
     assert(topicHits().length === h4 + 2 && /1 more report came in in the 5 minutes after the first was told \(misleading post 1\)/.test(topicHits().at(-1)!.body),
         `4. five minutes on, one folded line: ${JSON.stringify(topicHits().at(-1)!.body.split('\n')[2])}`);
     delete process.env.ALERTS_REPORT_FOLD_MINUTES;
+
+    assert(alerts.reportFoldWarning({}) === null && alerts.reportFoldWarning({ ALERTS_REPORT_FOLD_MINUTES: ' ' }) === null
+        && alerts.reportFoldWarning({ ALERTS_REPORT_FOLD_MINUTES: '15' }) === null && alerts.reportFoldWarning({ ALERTS_REPORT_FOLD_MINUTES: '1441' }) !== null,
+        '4. no warning when it is empty or good');
+    const warned: string[] = [];
+    const realWarn = logger.warn;
+    logger.warn = ((_category: string, message: string) => { warned.push(message); }) as typeof logger.warn;
+    process.env.ALERTS_REPORT_FOLD_MINUTES = `soon\n${'x'.repeat(100)}`;
+    alerts.startServerAlerts();
+    alerts.stopServerAlerts();
+    await settle(500);
+    logger.warn = realWarn;
+    delete process.env.ALERTS_REPORT_FOLD_MINUTES;
+    const w4 = warned.filter((m) => m.includes('ALERTS_REPORT_FOLD_MINUTES'));
+    assert(w4.length === 1 && w4[0].startsWith('[Alerts] ALERTS_REPORT_FOLD_MINUTES="soon\\n') && /reports are folded over the hour \(60 minutes\) instead\.$/.test(w4[0]),
+        `4. a bad value is one warning line at start, naming the variable and the hour: ${JSON.stringify(w4)}`);
+    assert(!w4[0].includes('\n') && w4[0].includes('x'.repeat(35)) && !w4[0].includes('x'.repeat(36)), '4. one line, at most 40 characters of the value');
+    await tick();
+    await settle();
 
     assert(alerts.reportKind('Child safety') === 'child safety' && alerts.reportKind('Other: CSAM link') === 'child safety'
         && alerts.reportKind('Spam or scam') === 'spam or scam' && alerts.reportKind('offensive content: rude') === 'offensive content'

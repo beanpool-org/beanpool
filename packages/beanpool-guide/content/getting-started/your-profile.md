@@ -42,7 +42,7 @@ Tap the round picture at the top right of the screen to see your own profile. Ot
 
 - your name, when you joined and your bio;
 - your trust badge, how many trades you have done, with how many people, and how many you finished;
-- star ratings and reviews from people you traded with;
+- star ratings and reviews from people you traded with (a review names its writer only to you);
 - your posts.
 
 ## Your working style

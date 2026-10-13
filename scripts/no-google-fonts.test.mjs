@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(process.env.NO_GOOGLE_FONTS_ROOT ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..'));

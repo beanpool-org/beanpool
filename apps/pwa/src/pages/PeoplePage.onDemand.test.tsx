@@ -104,6 +104,38 @@ describe('People on a community with members on demand', () => {
         expect(cards.mock.calls[0][0]).toBe('/api/members?lat=51.5&lng=-0.1&limit=50');
     });
 
+    // Never a false nobody (review of #1861, N3): a lookup that failed says so, never "nobody here".
+    it("a near read that fails says it couldn't check, with Try again, never that nobody is here", async () => {
+        cards.mockImplementation(async (path: string) => {
+            if (path.includes('lat=')) throw new TypeError('Failed to fetch');
+            return [];
+        });
+        openCommunity();
+        await screen.findByTestId('people-near-failed');
+        expect(screen.getByText("Couldn't check who's near you just now.")).toBeInTheDocument();
+        expect(screen.queryByText(/Nobody else is here yet/)).toBeNull();
+        expect(screen.queryByTestId('people-near')).toBeNull();
+        expect(whole).not.toHaveBeenCalled();
+        cards.mockImplementation(async () => [card('c', 'Cleo', 0)]);
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByTestId('people-near')).toHaveTextContent('Cleo');
+    });
+
+    it("a search that fails says it couldn't search, never that nobody has that name", async () => {
+        cards.mockImplementation(async (path: string) => {
+            if (path.includes('q=')) throw new TypeError('Failed to fetch');
+            return [card('c', 'Cleo', 0)];
+        });
+        openCommunity();
+        await screen.findByTestId('people-near');
+        fireEvent.change(screen.getByLabelText('Search members by name'), { target: { value: 'al' } });
+        await waitFor(() => expect(screen.getByTestId('people-search-status')).toHaveTextContent("Couldn't search just now."));
+        expect(screen.queryByText(/Nobody here has a name/)).toBeNull();
+        expect(screen.queryByTestId('people-found')).toBeNull();
+        expect(cards.mock.calls.map(c => c[0])).toContain('/api/members?q=al&limit=20');
+        expect(whole).not.toHaveBeenCalled();
+    });
+
     it('a community without the switch reads the directory as before, and asks none of the small forms', async () => {
         info.value = { profile: 'local', features: {} };
         whole.mockResolvedValue([{ publicKey: 'c'.repeat(64), callsign: 'Cleo', joinedAt: '2026-01-01', invitedBy: '', inviteCode: '' }]);

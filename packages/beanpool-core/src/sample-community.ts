@@ -81,6 +81,7 @@ export interface SampleCommunity {
     levels: number;
     /** "About 40 Beans an hour", the rough guide a Pricing Guide would give. */
     beansPerHour: number;
+    /** The latest rows only, not the whole history: they don't sum to the balance, so a screen shows them as recent. */
     transactions: readonly SampleTransaction[];
     deals: readonly SampleDeal[];
     enterprises: readonly SampleEnterprise[];

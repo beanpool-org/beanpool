@@ -30,12 +30,13 @@ type FeatureSet = { [k: string]: unknown } | null | undefined;
 
 /**
  * One feature's mode for one reader. `node` is the node's `features`; `reader` the reader's own (absent: signed out,
- * so the node's).
+ * so the node's). The reader's set alone decides `live` (§4, pick 6): a verified member on a node with Beans off is
+ * live while the rest stay in preview, with no new screens. Writes stay gated on the server whatever this says.
  */
 export function featureModeFor(feature: ShowcaseFeature, node: FeatureSet, reader?: FeatureSet): FeatureMode {
     const nodeOn = node?.[feature] !== false;
     const readerOn = (reader ?? node)?.[feature] !== false;
-    return featureMode({ showcase: node?.showcase === true, node: nodeOn, effective: nodeOn && readerOn });
+    return featureMode({ showcase: node?.showcase === true, node: nodeOn, effective: readerOn });
 }
 
 /** The marker itself: the pill, and the emoji every line starts with. */

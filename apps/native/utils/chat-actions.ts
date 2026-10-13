@@ -74,6 +74,11 @@ export interface ChatMessage {
     timestamp?: string;
     /** Who said it, when the chat shows names (group, enterprise, event). */
     authorName?: string | null;
+    /**
+     * A short mark on its own line under the name ("(key changed)", name-key-memory.ts): never in the name's one line,
+     * where 320dp with 1.3× text would cut it (review of #1826, NB9).
+     */
+    authorHint?: string | null;
     /** A DM line the node moved or reordered, or an old-format line: the one line shown under it. */
     integrityNote?: string | null;
     /** A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed). */

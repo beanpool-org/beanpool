@@ -329,7 +329,7 @@ router.get('/api/local/admin/community-health', async (ctx) => {
 });
 
 // Where the 🏘️ Local community sheet's Start a community leads (config/start-community.ts). Owner only: it is the
-// community's own word to strangers. `{ url }`: an http(s) address; null, empty or the default goes back to beanpool.org's.
+// community's own word to strangers. `{ url }`: an https address; null, empty or the default goes back to beanpool.org's.
 router.post('/api/local/admin/start-community-url', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change where Start a community leads.')) return;

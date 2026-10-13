@@ -330,7 +330,8 @@ async function main(): Promise<void> {
             return id;
         },
         () => {
-            const id = pick(posts), author = placeOf(id).author_pubkey, parties = partiesOf(id);
+            // A listing with a place, where a block of its near members applies and a party's must not.
+            const id = pick(posts.filter(id => placeOf(id).lat != null)), author = placeOf(id).author_pubkey, parties = partiesOf(id);
             if (blockParty(id, pick(liveMembers().filter(k => !parties.has(k) && !blocks(k, author)))) > 0) did("a listing's party blocks its author");
             return id;
         },

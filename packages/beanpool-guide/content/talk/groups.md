@@ -43,7 +43,7 @@ Later, a convenor can invite people from the chat's **⋮** menu, **Invite peopl
 ## The group's chat
 
 - Tap the group's name at the top of the chat to see the group: its members, **Leave Group**, and for convenors, **Convenor Tools**.
-- The **⋮** menu has **Invite people** (convenors), **Mute notifications**, **Search this chat** and **Group info**. The search runs on your phone, because only your phone can read the chat.
+- The **⋮** menu has **Invite people** (convenors), **Mute notifications**, **Search this chat** and **Group info**. The search runs on your phone, not on your community's server.
 - Joins, leaves and role changes show in the chat as small grey lines.
 - Write **@** and someone's name to alert them. See "Mentions".
 - The newest message sits just above the message box, and stays there when the keyboard opens. Scroll up to read back; a new message arriving then waits for you rather than dragging you down.
@@ -121,7 +121,7 @@ Under **Convenor Tools**, any convenor can:
 
 Only the **lead convenor** can remove a convenor, or take the convenor role off someone. Beside a row you cannot act on, no **Role** or **✕** is shown at all — that is the app telling you it is not yours to do.
 
-**Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin. Only a vote of the group can choose a new lead. See "Votes in a group".
+**Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin. Apart from the lead handing it over, only a vote of the group can choose a new lead. See "Votes in a group".
 
 **Handing the lead over.** The lead can pass it on: **Hand over** in **Convenor Tools**, or the shield button beside someone's name. Choose another convenor, or a member — a member becomes a convenor at the same time. An observer cannot be the lead; make them a member or a convenor first. Once it is done, you cannot take the lead back.
 

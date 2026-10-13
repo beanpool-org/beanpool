@@ -18,7 +18,8 @@
  */
 
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
-import { cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
+import { readTourRecord, tourEnded } from '@beanpool/core';
+import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 
 /** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
 export const HOME_CARD_IDS = [
@@ -89,6 +90,8 @@ export interface HomeMe {
     area: { lat: number; lng: number } | null;
     firstOffer: boolean;
     standing: 'member' | 'suspended';
+    /** The account's tour record (DESIGN-getting-started-fable.md §2): Getting started is drawn only while it hasn't ended. */
+    tour?: unknown;
 }
 
 export interface HomeCommunity { key: string; name: string | null; url: string | null; memberCount: number | null; distanceKm: number | null }
@@ -154,6 +157,21 @@ export interface ShownOptions {
     interests?: string[];
     /** The Tips card has a tip to show (@beanpool/core home-tips.ts, from the browser's record); absent: none. */
     tipsUp?: boolean;
+    /** The tour ended in this browser (Done or Skip) before the account's answer says so; absent: the answer's word. */
+    tourOver?: boolean;
+}
+
+/** Whether the tour has ended for this reader: the account says so, or this browser just ended it. */
+export const tourOverFor = (answer: Pick<HomeAnswer, 'me'>, opts: Pick<ShownOptions, 'tourOver'> = {}): boolean =>
+    !!opts.tourOver || tourEnded(readTourRecord(answer.me?.tour));
+
+/**
+ * The Home a reader sees when none is saved: Getting started alone (core's default, null here) for a member whose tour
+ * hasn't ended; the starter set once it has (DESIGN-getting-started-fable.md §1).
+ */
+export function shownLayout(answer: Pick<HomeAnswer, 'me'> | null | undefined, layout: HomeLayoutV2 | null, opts: Pick<ShownOptions, 'tourOver'> = {}): HomeLayoutV2 | null {
+    if (layout || !answer) return layout;
+    return !answer.me || tourOverFor(answer, opts) ? STARTER_LAYOUT : null;
 }
 
 /**
@@ -188,6 +206,9 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
                 return !!answer.cards.steps && stepsSaySomething(answer, opts.interests ?? me.interests, now);
             case 'tips':
                 return !!opts.tipsUp;
+            // A member's only, and only until the tour ends (Done or Skip, on any device).
+            case 'start':
+                return me.standing === 'member' && !tourOverFor(answer, opts);
             case 'search':
                 return true;
             // Worked out in this browser; drawn only where a place is known (CARD-FRAME §4).
@@ -197,7 +218,13 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
                 return !!answer.cards[type as keyof HomeCards];
         }
     };
-    const shown = cardOrder(layout, pinnedCards(answer, now)).filter(c => cardOnNode(c.type, frameOf(answer)) && has(c));
+    const base = shownLayout(answer, layout, opts);
+    const pins = pinnedCards(answer, now);
+    let shown = cardOrder(base, pins).filter(c => cardOnNode(c.type, frameOf(answer)) && has(c));
+    // A Home never saved folds its cards behind Getting started while it is up (§1): Skip or Done brings them.
+    if (!base?.updatedAt && shown.some(c => c.type === 'start')) {
+        shown = shown.filter(c => c.type === 'start' || c.type === 'needs' || c.type === 'community' || pins.includes(c.id));
+    }
     if (opts.interestsOpen && me.standing === 'member' && !shown.some(c => c.type === 'interests')) {
         const market = shown.findIndex(c => c.type === 'market');
         shown.splice(market >= 0 ? market + 1 : shown.length - 1, 0, { id: 'interests', type: 'interests' });

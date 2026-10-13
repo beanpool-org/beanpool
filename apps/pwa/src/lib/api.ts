@@ -4,7 +4,7 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
-import type { ScopedDecisionList, ScopedEffect, GroupEffect } from '@beanpool/core';
+import type { ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -2558,7 +2558,7 @@ export interface SavedHomePreferences { success: boolean; 'home.layout'?: unknow
  * card frame refuses a version-2 layout with a 400 (the error carries `status`): pages/HomePage.tsx keeps the cards in
  * this browser then, and sends them again at the next landing.
  */
-export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[] }): Promise<SavedHomePreferences> {
+export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[]; tour?: TourRecord }): Promise<SavedHomePreferences> {
     return request<SavedHomePreferences>('POST', '/api/members/preferences', { publicKey, preferences });
 }
 

@@ -221,7 +221,7 @@ describe('every way a member moves the phone to another community tells the upda
         ['utils/join-another-community.ts', /communitySwitched\(\);\s*await deps\.clearGuestNode\(targetUrl\)/],
         ['utils/delete-here.ts', /await leaveThisCommunity\(plan\.here, plan\.next\.url\);\s*const \{ initDB \} = await import\('\.\/db'\);\s*await initDB\(\);\s*communitySwitched\(\);/],
         ['utils/account-leaves-phone.ts', /await releaseAccountFromPhone\(account\);\s*await wipeIdentity\(\);\s*communitySwitched\(\);/],
-        ['utils/account-leaves-phone.ts', /await stopPushAlerts\(account\);\s*await wipeIdentity\(\);\s*communitySwitched\(\);/],
+        ['utils/account-leaves-phone.ts', /await removeEveryCommunityCopy\(await communitiesOnThisPhone\(\)\);\s*await wipeIdentity\(\);\s*communitySwitched\(\);/],
         ['utils/update-block-escape.ts', /await deps\.initDB\(\);\s*communitySwitched\(\);/],
     ];
     for (const [file, pin] of sites) {

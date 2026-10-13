@@ -26,8 +26,9 @@
  * {@link releaseAccountFromPhone}. A self-delete at a community while another saved one keeps the key takes neither:
  * only that community leaves the phone, and the key stays (delete-here.ts). The node-mismatch delete
  * ({@link deleteAccountFromThisPhone}, node-mismatch.tsx), offered only when no saved community keeps the key, stops
- * the push alerts only: there the communities stay, as before, so the member can pick theirs to recover on
- * (welcome.tsx). Restoring the same account, or onto an empty phone, takes nothing (#1183's rule).
+ * the push alerts and takes every cached copy (the identity leaves, so its group key memory goes, as at Sign Out:
+ * director, #1815 review finding 2); the saved list stays, so the member can pick theirs to recover on (welcome.tsx).
+ * Restoring the same account, or onto an empty phone, takes nothing (#1183's rule).
  *
  * Every caller runs this BEFORE the key, the push record, the community address or the guest markers are wiped: the
  * unregister and the statements need the key and the record, and the cached copies need the addresses. The statements
@@ -219,13 +220,18 @@ export async function stopPushAlerts(account: LeavingAccount | null, storage: St
  * cached copy that can't be removed is logged.
  */
 export async function forgetCommunities(communities: readonly string[], storage: Storage = AsyncStorage): Promise<void> {
+    await removeEveryCommunityCopy(communities);
+    await storage.removeItem(SAVED_NODES_STORE_KEY);
+}
+
+/** Every community copy on this phone goes, listed or not (community-cache.ts `everyCopy`); one that can't is logged. */
+async function removeEveryCommunityCopy(communities: readonly string[]): Promise<void> {
     try {
         const { removeCommunityCaches } = await import('./community-cache');
         await removeCommunityCaches(communities, { everyCopy: true });
     } catch (e) {
         console.warn('[Account] The cached community copies could not all be removed', e);
     }
-    await storage.removeItem(SAVED_NODES_STORE_KEY);
 }
 
 /**
@@ -279,11 +285,16 @@ export async function signOutOfThisPhone(account: LeavingAccount | null, opts: {
 
 /**
  * "Delete this account from this phone" (node-mismatch.tsx), once no saved community keeps the key (delete-here.ts
- * `otherCommunitiesKeeping`): its push alerts stop, then its key and app storage go. The saved communities stay, so
+ * `otherCommunitiesKeeping`): its push alerts stop; the identity leaves this phone, so, as at Sign Out, the open
+ * community's tables are dropped and every cached copy goes, and with them what it knew of its groups' keys in every
+ * community file (director, #1815 review finding 2); then its key and app storage go. The saved communities stay, so
  * the member can pick theirs to recover on.
  */
 export async function deleteAccountFromThisPhone(account: LeavingAccount | null): Promise<void> {
     await stopPushAlerts(account);
+    const { clearDB } = await import('./db');
+    await clearDB({ identityLeaves: true });
+    await removeEveryCommunityCopy(await communitiesOnThisPhone());
     await wipeIdentity();
     communitySwitched();
 }

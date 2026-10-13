@@ -18,6 +18,7 @@
  *   { op: 'resetLimits' }               the gateway and auth limiters start again
  *   { op: 'cors', origins }             the web addresses this node lets call it (Settings' CORS allowed origins), as for
  *                                       a web app on another community's address pointed here (Sovereign Node Connection)
+ *   { op: 'joinGroup', groupId, member } a member joins a group as the node's own join does (e2e/group-chat-check.mjs)
  *
  * Run by the check as: node --import tsx ../pwa/e2e/home-node-harness.ts (cwd apps/server).
  */
@@ -159,6 +160,9 @@ async function main(): Promise<void> {
                     break;
                 case 'cors':
                     updateGatewayConfig({ corsAllowedOrigins: (req.origins as unknown[]).map(String) });
+                    break;
+                case 'joinGroup':
+                    result = se.joinGroup(String(req.groupId), String(req.member));
                     break;
                 default:
                     throw new Error(`no op ${String(req.op)}`);

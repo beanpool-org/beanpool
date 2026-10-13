@@ -37,6 +37,7 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
     /** A deleted or removed message: italic, quieter, and nothing to tap. */
     messageRemoved: { fontStyle: 'italic', opacity: 0.75 },
     messageAuthor: { fontSize: 12, fontWeight: '800', color: colors.brand.primary, marginBottom: 2 },
+    messageAuthorHint: { fontSize: 11, fontWeight: '600', color: colors.text.muted, marginTop: -1, marginBottom: 2 },
     linkMe: { color: colors.chat.messageTextMe, textDecorationLine: 'underline', fontWeight: '600' },
     linkOther: { color: colors.text.link, textDecorationLine: 'underline' },
     messageTime: { fontSize: 10, marginTop: 4, alignSelf: 'flex-end' },

@@ -461,6 +461,7 @@ export const SUITES = [
     'test-group-keys-http',
     'test-group-keys-over-time',
     'test-key-succession',
+    'test-dm-former-keys-readers',
     'test-group-history-after-rekey',
     'test-dm-line-relay',
     'test-dm-standby-order',
@@ -521,6 +522,9 @@ export const VARIANTS = [
     // default, so the plain run is the pass that matters (the public-read allowlist under enforcement); this covers a
     // node whose operator set ENFORCE_READ_AUTH=false.
     { name: 'test-keeper-http', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // On an open node anyone may read anyone's DM list or DM: only the routes' own choice of reader keeps a DM's former keys
+    // to its people (#1871 review NB1).
+    { name: 'test-dm-former-keys-readers', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // A member's own balance answer carries tierCredit (the apps' trust figure) with read auth opted out too (#1644 r4183873149).
     { name: 'test-balance-tier-credit-http', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 

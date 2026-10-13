@@ -21,7 +21,8 @@
  *       the DM read by id serve formerKeys for Ana₃, each with the date it signed, walking to Ana₁; to someone in the DM
  *       only (Cat₂ is refused both, and her own list names nothing of Ana's); nothing for an unattested re-key or a
  *       member never re-keyed, nor on a group's chat; every other field and a DM nobody re-keyed served as before; a
- *       statement that does not verify is dropped with every older one
+ *       statement that does not verify is dropped with every older one, and so is one whose date was cut at a colon onto
+ *       its signature (#1871 review NB2)
  *   DS. a standby's copy serves the same, and drops a statement its copy took that does not verify
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-key-succession node scripts/run-server-suites.mjs
@@ -303,6 +304,19 @@ async function main(): Promise<void> {
         db.prepare('UPDATE invalidated_keys SET succession_at = ? WHERE public_key = ?').run(AT1, ana1.pk);
         const putBack = (await listed(ben, dmAna))?.formerKeys;
         assert(anasChain(putBack) && JSON.stringify(putBack) === JSON.stringify(servedToBen), 'put back: the whole chain again');
+
+        // Ana₂'s date cut at a colon and the rest moved onto the signature (#1871 review NB2). Joined with ':', that row's
+        // verdict key was the real statement's, verified just above, so it was served unchecked. A standby's merge takes
+        // such a row (key-move.ts: the date parses, the signature is short enough).
+        const cutAt = AT2.slice(0, 16), movedSig = `${AT2.slice(17)}:${sig2}`;
+        assert(`${cutAt}:${movedSig}` === `${AT2}:${sig2}`, `the fixture: "${cutAt}" + "${movedSig.slice(0, 10)}…" joins as the real date and signature`);
+        db.prepare('UPDATE invalidated_keys SET succession_at = ?, succession_sig = ? WHERE public_key = ?').run(cutAt, movedSig, ana2.pk);
+        const cut = await listed(ben, dmAna);
+        assert(cut && !('formerKeys' in cut), `that row is checked, does not verify, and nothing is served (got ${JSON.stringify(cut?.formerKeys?.[ana3.pk]?.map((f: any) => f.at))})`);
+        const cutById = (await call('GET', ben, `/api/messages/${dmAna}?limit=1`)).body?.conversation;
+        assert(cutById && !('formerKeys' in cutById), 'and none on the DM read by id');
+        db.prepare('UPDATE invalidated_keys SET succession_at = ?, succession_sig = ? WHERE public_key = ?').run(AT2, sig2, ana2.pk);
+        assert(anasChain((await listed(ben, dmAna))?.formerKeys), 'put back: the whole chain again');
     }
 
     // ── C. replication ────────────────────────────────────────────────────────────────────────────────

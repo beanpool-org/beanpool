@@ -96,7 +96,7 @@ const STUBS = {
     'words-behind-lock': `export const readWordsBehindLock = async (id) => id?.mnemonic ?? null;`,
     '@react-native-async-storage/async-storage': `export default { getItem: async () => '1', setItem: async () => {}, removeItem: async () => {} };`,
     'group-chat-keys': `export const groupKeyring = () => { throw new Error('no keyring here'); };`,
-    'name-key-memory': `export const keysThisPhoneKnewFor = async () => [];`,
+    'name-key-memory': `export const keysThisPhoneKnewFor = async () => []; export const namesThisPhoneSawFor = async () => [];`,
 };
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec) => {

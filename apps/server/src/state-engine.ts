@@ -6836,8 +6836,10 @@ export function getReportablePulseItemOwner(itemId: string): string | null {
 const childSafetyFnOn = new WeakSet<object>();
 
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
-    // Child safety first, read as the alerts read it, in SQL so a page of the queue holds the right ones (the alert says
-    // "look at it first, in the Manager's Reports queue": the follow-up to #1895).
+    // Open child-safety reports first, read as the alerts read them, in SQL so a page of the queue holds the right ones
+    // (the alert says "look at it first, in the Manager's Reports queue": the follow-up to #1895). Once handled, one takes
+    // its date's place, so "All" never keeps a dismissed one (a false positive among them) above open ordinary reports
+    // (director, 14 Oct, on the review of #1912). It stays marked (childSafety) wherever it is listed.
     if (!childSafetyFnOn.has(db)) {
         db.function('report_is_child_safety', { deterministic: true }, (reason: unknown) => (reportKind(reason) === 'child safety' ? 1 : 0));
         childSafetyFnOn.add(db);
@@ -6878,7 +6880,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         LEFT JOIN pulse_items pi ON ar.target_pulse_item_id = pi.id
         LEFT JOIN members mpi ON pi.owner_pubkey = mpi.public_key
         ${whereClause}
-        ORDER BY report_is_child_safety(ar.reason) DESC, ar.created_at DESC
+        ORDER BY CASE WHEN (ar.status = 'pending' OR ar.status IS NULL) AND report_is_child_safety(ar.reason) = 1 THEN 1 ELSE 0 END DESC,
+                 ar.created_at DESC
     `;
 
     const queryParams = [...params];

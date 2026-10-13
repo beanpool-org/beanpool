@@ -331,7 +331,9 @@ async function main(): Promise<void> {
         const dovTop = await call('POST', dov, `${kp}/wrap`, makeGroupTopUp(dovKey2, { myEdPrivHex: dov.seedHex, groupId: g, epoch: 2, recipientPubHex: ben.pk }));
         assert(dovTop.status === 409 && dovTop.body.code === 'wrap_exists', `Dov's is 409 wrap_exists: the slot is filled (got ${dovTop.status} ${dovTop.body?.code})`);
         const self = await call('POST', ben, `${kp}/wrap`, makeGroupTopUp(real.groupKey, { myEdPrivHex: ben.seedHex, groupId: g, epoch: 2, recipientPubHex: ben.pk }));
-        assert(self.status === 400, `a self top-up is 400 (got ${self.status} ${self.body?.code})`);
+        // Self-wraps are allowed since #1844 (Marty's pick 3: the words path wraps a key to its own new key), under the same
+        // one-live-wrap rule: Cat's top-up fills this slot, so Ben's own is 409 wrap_exists and nothing is stored.
+        assert(self.status === 409 && self.body?.code === 'wrap_exists', `a self top-up for a filled slot is 409 wrap_exists (got ${self.status} ${self.body?.code})`);
 
         const all2 = (await call('GET', cat, `${kp}/2/wraps`)).body;
         const flagged = (all2.wraps as any[]).filter((w) => w.recipient === ben.pk);

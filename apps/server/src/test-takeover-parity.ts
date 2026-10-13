@@ -47,7 +47,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, copyDir, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
-import { makeGroupEpochRecord, makeGroupTopUp, sealGroupLine } from '@beanpool/core';
+import { makeGroupEpochRecord, makeGroupTopUp, makeKeySuccession, sealGroupLine } from '@beanpool/core';
 import {
     diffDatabases, diffSettings, normaliseAnswer, idsIn, firstDifferences, checkKnownGaps,
     type DbDump, type SettingsDump, type Differences, type KnownGap,
@@ -229,6 +229,12 @@ async function child(): Promise<void> {
             return promotionSanityCheck();
         },
         /** A peer's listing in the cache, as the federation pull writes it (no route: the libp2p pull loop). */
+        /** A re-key, as the admin's wizard completes one (engine/member-wizards.ts): the old key's group wraps stay. */
+        rekey: async (a: { old: string; next: string; admin: string }) => {
+            const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+            completeRekey(a.old, a.next, issueRekeyCode(a.old, a.admin).code, a.admin);
+            return true;
+        },
         'cache-peer-listing': async (a: { peerId: string; listing: Record<string, unknown> }) => {
             const { cacheRemoteListings } = await import('./federation-listings.js');
             return cacheRemoteListings(a.peerId, NEIGHBOUR_URL, [a.listing]);
@@ -330,6 +336,7 @@ async function main(): Promise<void> {
     const [ann, bo, cy, dee, kip, rex] = ['Ann', 'Bo', 'Cy', 'Dee', 'Kip', 'Rex'].map(newId);
     const [eve, fay] = ['Eve', 'Fay'].map(newId);
     const [hal, lou] = ['Hal', 'Lou'].map(newId);
+    const [ida, ida2] = ['Ida', 'Ida₂'].map(newId);
     const pulls: { phase: string; ok: boolean; whole: boolean; error?: string }[] = [];
     // Every difference found, by key (takeover-parity-compare.ts), with a few examples of each.
     const differences: Differences = new Map();
@@ -539,6 +546,17 @@ async function main(): Promise<void> {
         built('Cy rates Kip for the tune-up, with no comment', await S_(cy, '/api/ratings', { targetPubkey: kip.pk, stars: 5, transactionId: tuneUpDeal }));
         built('Eve saves an empty bio and archetype', await S_(eve, '/api/profile/update', { bio: '', archetype: '' }));
         built('Ann renames Gardeners, which the whole copy copied', await api(m, 'PATCH', `/api/groups/${groupId}`, { as: ann, body: { name: 'Growers' } }));
+        // A re-keyed member's group wraps stay, served to her new key at …/keys/former (DESIGN-group-history-after-rekey §3):
+        // Ida's wrap of the Menders' first epoch, kept under her old key after the admin re-keys her to a new phone.
+        await join(ida);
+        const menders = built('Fay starts a group, Menders', await S_(fay, '/api/groups', { name: 'Menders', description: 'Fix it, do not bin it' }));
+        const mendersId = menders.group?.id ?? menders.id;
+        built('Ida joins it', await S_(ida, `/api/groups/${mendersId}/join`));
+        const mendEpoch = makeGroupEpochRecord({ myEdPrivHex: pkcs8(fay), groupId: mendersId, epoch: 1, reason: 'start', createdAt: new Date().toISOString(), recipients: [fay.pk, ida.pk] });
+        built("Fay makes the Menders chat's first epoch, wrapped to her and Ida", await S_(fay, `/api/groups/${mendersId}/keys/epoch`, { epoch: mendEpoch.record }));
+        require_(await main.send('rekey', { old: ida.pk, next: ida2.pk, admin: gwen.pk }) === true, 'M: the admin re-keys Ida to a new phone');
+        const idaSaid = makeKeySuccession({ newEdPrivHex: pkcs8(ida2), oldPubHex: ida.pk, at: new Date().toISOString() });
+        built("Ida's new phone signs that her old key was hers", await S_(ida2, '/api/community/me/key-succession', { oldPubkey: idaSaid.pubkey, at: idaSaid.at, sig: idaSaid.sig }));
         // A main server that has been up an hour has priced its guide from its community's listings. Before the last
         // delta, as every write here is: the twin is M as it was at S's last copy, and the guide is copied (G4).
         const priced = await main.send('pricing-cycle');
@@ -597,6 +615,13 @@ async function main(): Promise<void> {
         assert(cyT?.fromEpoch === 2 && cyS?.fromEpoch === 2 && JSON.stringify(cyT.myWraps) === JSON.stringify(cyS.myWraps)
             && cyS.myWraps.length === 1 && cyS.myWraps[0].wrapper === bo.pk,
             `Cy's fromEpoch (2) and his one live wrap, Bo's, are the same on the promoted standby (${cyT?.fromEpoch}/${cyS?.fromEpoch}, ${cyS?.myWraps?.length} wraps)`);
+        // And a re-keyed member's kept wraps came across: the promoted standby serves Ida's new key her old key's wrap of the
+        // Menders' first epoch at …/keys/former, as the twin does (DESIGN-group-history-after-rekey §8 S1).
+        const idaFormerOn = async (base: string) => (await api(base, 'GET', `/api/groups/${mendersId}/keys/former`, { as: ida2 })).body;
+        const [idaT, idaS] = [await idaFormerOn(t), await idaFormerOn(s)];
+        assert(JSON.stringify(idaT) === JSON.stringify(idaS) && idaS?.wraps?.length === 1 && idaS.wraps[0].recipient === ida.pk && idaS.wraps[0].epoch === 1
+            && JSON.stringify(idaS.formerKeys) === JSON.stringify([ida.pk]),
+            `Ida's new key is served her old key's kept wrap the same on the promoted standby (${idaT?.wraps?.length} on the twin, ${idaS?.wraps?.length} on the standby)`);
         const manifest = await import('./engine/replication-manifest.js');
         diffSettings(await twin.send('settings'), await standby.send('settings'), {
             localConfig: (f) => manifest.LOCAL_CONFIG_FIELDS[f],

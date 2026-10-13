@@ -24,7 +24,9 @@
  *   7. a non-member, a removed member, someone who left and a member of another group: every key route refused; an
  *      invite-only group answers an outsider 404; another group's record is refused here
  *   8. day zero: a readable group line from before becomes a tombstone with one system line per group; idempotent
- *   9. a re-key drops the old key's wraps (engine/key-move.ts), and the member shows as missing under the new key
+ *   9. a member whose wraps are lost shows in …/keys/missing from their first epoch
+ *  11. a re-key keeps the old key's wraps (DESIGN-group-history-after-rekey-fable.md §3, Marty's pick 3 of 13 Oct; the
+ *      route that serves them: test-group-history-after-rekey), and the member shows as missing under the new key
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-group-keys-http node scripts/run-server-suites.mjs
  */
@@ -448,10 +450,10 @@ async function main(): Promise<void> {
         'no readable group line is left on the node');
 
     // ── 9. re-key ───────────────────────────────────────────────────────────────────────────────────
-    console.log('\n── 9. a re-key drops the old key\'s wraps ──');
+    console.log('\n── 9. a member whose wraps are lost shows as missing ──');
     const anaWraps = count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ana.pk);
-    groupKeys?.dropGroupWrapsOf(ana.pk);
-    assert(anaWraps > 0 && count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ana.pk) === 0, `the old key's ${anaWraps} wraps are gone`);
+    db.prepare('DELETE FROM group_key_wraps WHERE recipient_pubkey = ?').run(ana.pk); // lost to a bug (a re-key keeps them since 13 Oct: 11)
+    assert(anaWraps > 0 && count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ana.pk) === 0, `Ana's ${anaWraps} wraps are gone`);
     const missingAna = (await call('GET', ana, `${keysPath}/missing`)).body.missing.find((m: any) => m.pubkey === ana.pk);
     assert(missingAna?.fromEpoch === 1 && missingAna.epochs.includes(4), 'and the member shows in …/keys/missing from their first epoch');
 
@@ -502,12 +504,12 @@ async function main(): Promise<void> {
     assert(editedText === 'the gate code is 5528', `so Ben opens the edit under the epoch the row names (got "${editedText}")`);
 
     // ── 11. a real re-key ───────────────────────────────────────────────────────────────────────────
-    console.log('\n── 11. a real re-key (issueRekeyCode + completeRekey) drops the old key\'s wraps ──');
+    console.log('\n── 11. a real re-key (issueRekeyCode + completeRekey) keeps the old key\'s wraps ──');
     const benWrapsBefore = count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ben.pk);
     const newBen = newId('Ben2');
     completeRekey(ben.pk, newBen.pk, issueRekeyCode(ben.pk, owner.pk).code, owner.pk);
-    assert(benWrapsBefore > 0 && count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ben.pk) === 0,
-        `the old key's ${benWrapsBefore} wraps are gone after completeRekey (${count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ben.pk)} left)`);
+    assert(benWrapsBefore > 0 && count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ben.pk) === benWrapsBefore,
+        `the old key's ${benWrapsBefore} wraps are kept after completeRekey (${count('SELECT COUNT(*) AS n FROM group_key_wraps WHERE recipient_pubkey = ?', ben.pk)} there)`);
     assert(isActive(clock.id, newBen.pk) && !isActive(clock.id, ben.pk), 'and the group row moved to the new key');
     const missingBen = (await call('GET', ana, `${clockKeys}/missing`)).body.missing?.find((m: any) => m.pubkey === newBen.pk);
     assert(missingBen?.fromEpoch === 3 && missingBen.epochs.includes(4), `the new key shows in …/keys/missing from Ben's unchanged joined_at (got ${JSON.stringify(missingBen)})`);

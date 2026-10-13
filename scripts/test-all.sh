@@ -221,6 +221,16 @@ run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwri
 # keyboard focus. Canaries of each known shape must fail first, so a check gone blind fails too. No node; about 30 s.
 run_check "pwa_dark_classes" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/pwa dark-class-check'
 
+# The group-history screens on a phone (the group-history-after-rekey design, section 7): apps/native/e2e/locked-history-320.mjs
+# renders the real components through react-native-web in Chromium at 320 wide with 1.3x text, light and dark, and fails on
+# a sideways scroll, cut text, a button under 48dp or text under 4.5:1. Same browser as above, from the PWA's Playwright.
+# It bundles @beanpool/core from its dist, so like the server suites it starts once build has finished.
+run_native_phone_width() {
+  while [ ! -f "$LOGDIR/build.rc" ]; do sleep 1; done
+  pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && node apps/native/e2e/locked-history-320.mjs
+}
+run_check "native_phone_width" run_native_phone_width
+
 run_check "lint"          pnpm turbo run lint $TURBO_AUX_ARGS
 
 # Typecheck. `build` is what typechecks most of this repo — server, pwa, core and engine all run

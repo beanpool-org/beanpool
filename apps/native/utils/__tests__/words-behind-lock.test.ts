@@ -390,6 +390,9 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
             // Leave this community, after authenticateUser or after those words (force-update-escape.test.ts).
             'components/ForceUpdateBlock.tsx:readWordsBehindLock(': 2,
             'components/ForceUpdateBlock.tsx:leaveFromUpdateBlock(': 1,
+            // A found old phone's "Show my old 12 words, so the new phone can unlock earlier messages" (components/KeyMovedCard.tsx;
+            // DESIGN-group-history-after-rekey-fable.md §3): readWordsBehindLock asks the lock first (its own tests, above).
+            'components/KeyMovedCard.tsx:readWordsBehindLock(': 1,
         };
         const found: Record<string, number> = {};
         for (const { rel, src } of screens()) {

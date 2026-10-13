@@ -13,7 +13,7 @@
  * host but this machine.
  */
 
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, onTestFinished } from 'vitest';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -442,6 +442,17 @@ describe('the phone syncs the listings near its member (a real global node)', ()
             const batch = touched.slice(i, i + 100);
             await control('sql', { sql: `UPDATE posts SET updated_at = ? WHERE id IN (${batch.map(() => '?').join(',')})`, params: [stamp, ...batch] });
         }
+        // The 250 back to a day ago when this test ends (passed or not), so a delta of the tests after it (from the cursor
+        // less 5 minutes) fits on a page.
+        onTestFinished(async () => {
+            tamper = null;
+            const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
+            for (let i = 0; i < touched.length; i += 100) {
+                const batch = touched.slice(i, i + 100);
+                await control('sql', { sql: `UPDATE posts SET updated_at = ? WHERE id IN (${batch.map(() => '?').join(',')})`, params: [dayAgo, ...batch] });
+            }
+            await control('limiters');
+        });
         const gone = inSet[60];
         await control('edit', { post: gone.id, status: 'cancelled' });
         const left = near.filter(p => p.id !== gone.id);
@@ -476,13 +487,6 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(sorted(JSON.parse(held.set))).toEqual(sorted(after));
         expect(JSON.parse(held.tied)).toEqual(['mine-ldn']);
         expect(held.hash).toBe(nearbySetHash([...after], ['mine-ldn']));
-        // The 250 back to a day ago, so a delta of the tests after this one (from the cursor less 5 minutes) fits on a page.
-        const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
-        for (let i = 0; i < touched.length; i += 100) {
-            const batch = touched.slice(i, i + 100);
-            await control('sql', { sql: `UPDATE posts SET updated_at = ? WHERE id IN (${batch.map(() => '?').join(',')})`, params: [dayAgo, ...batch] });
-        }
-        await control('limiters');
     }, START_MS);
 
     it('a phone upgraded from #1805 (its set and hash held, no `tied`): the next changed read sends no hash and is named the set whole; the one after is a diff', async () => {

@@ -11,6 +11,8 @@
     <style>
         /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
         .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The doors land on these headings (#global, #invite…): below the fixed bar, 74 px tall on a phone, 88 px wide */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
         .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
         .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
         .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
@@ -72,7 +74,6 @@
         <h1>Getting started</h1>
         <p class="lede">There are three ways in. Pick the one that fits where you are today; your account is the same whichever you choose, and it can belong to more than one community.</p>
 
-        <!-- When the showcase ships: part 1 goes live with the global redeploy (global answers 403 until then) -->
         <!-- OPEN-GLOBAL: when global's private preview is off, the heading becomes "Try it now on the global community" and the
              two paragraphs below become this one:
              The global community is people from everywhere. You need no invite: open <strong>global.beanpool.org</strong> in a browser and tap <strong>Join</strong>, or install the app and tap <strong>Explore BeanPool worldwide</strong> on the first screen. Create an account with <strong>12 secret words</strong> (no Google, Apple or Facebook account needed), or sign in once with Google, Apple or Facebook; that sign-in also becomes a way back if you lose your phone. Tell it roughly where you are, to about 10 km, or skip that. Then you can see what people near you offer, post something free or for swap, message people, and ask a community near you to let you in. Beans, trades, the Commons and its Decisions are switched off there: they belong to a local community. The app shows you each of them with an example community, so you know what a local community offers before you join or start one. -->

@@ -1817,7 +1817,7 @@ footer {
 .what-it-is-not strong { color: var(--text-primary); }
 .what-it-is-history { font-style: italic; margin-bottom: 0; }
 /* The hero's "Find or start a community" door lands on the map, below the fixed bar */
-#find-or-start { display: block; scroll-margin-top: 80px; }
+#find-or-start { display: block; scroll-margin-top: 100px; }
 /* The hero's three doors: one column on every width, door 1 first; each a full-width button with its sentence beneath */
 .hero-doors { display: flex; flex-direction: column; gap: 0.85rem; width: 100%; }
 .hero-door { display: flex; flex-direction: column; gap: 0.35rem; }

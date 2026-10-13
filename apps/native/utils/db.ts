@@ -13,9 +13,10 @@ import {
 import { DmNotLockedError, DmKeyChangedError, isNodeReadableChatType } from './dm-lock';
 import {
     createDmPinBook, dmPinFor, dmSightFor, dmPinId, pinKeyOf, pinAtFirstSight, applyDmListings, applySightVerdict, judgeFirstSight,
-    settleFirstSight, isUnplacedSight, isDmPinStoreError, acceptOffer, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict,
-    type DmPeerOffer,
+    settleFirstSight, isUnplacedSight, isHeldLostSight, markHeldLost, isDmPinStoreError, acceptOffer, type DmPeerPins, type DmPinEntry,
+    type DmHeard, type SightVerdict, type DmPeerOffer,
 } from './dm-peer-pins';
+import { dmLinesAtUpdateStoreKey } from './storage-keys';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCachedNodeProfile } from './node-profile';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -36,6 +37,12 @@ import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDe
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
 import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import {
+    unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, handOversHeld, noteConfirmations, confirmedNotes,
+    lockedHistoryCounts, noteLockedHistoryCount, type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
+} from './group-history-unlock';
+import { oldKeySignedHere, rekeysToMe } from './key-succession';
+import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
@@ -3961,6 +3968,9 @@ export async function syncMessages(publicKey: string) {
         const deletedAccounts = new Set<string>(
             Array.isArray(convData.deletedAccounts) ? convData.deletedAccounts.filter((k: unknown): k is string => typeof k === 'string') : []
         );
+        // The pins before any line is blanked: on the account's first meeting with pins, the update's seed keeps the lines
+        // this phone held before this pass changes one (§3.4 amendment 3, companion a).
+        if (myIdentity?.publicKey) await dmPins.read(myIdentity.publicKey).catch(() => {});
         try {
             await blankLinesOfDeletedAccounts(database, deletedAccounts, myIdentity?.publicKey);
         } catch (e) {
@@ -4356,30 +4366,128 @@ export async function getConversation(id: string, myPubkey?: string) {
 }
 
 /**
- * The lines the update's seed held for each DM it couldn't pin from its rows, per account (lower-cased), by the DM's
- * folded id: first sight judges those DMs on these for the rest of the run, whatever the node rewrites meanwhile.
+ * The lines the update's seed held for each DM it couldn't pin from its rows (§3.4 amendments 3 and 4), per account
+ * (lower-cased): by the DM's folded id, each line as the open needs it ({@link HeldLine}), in the order this phone stored
+ * them. First sight judges those DMs on these, whatever the node rewrites, tombstones or prunes meanwhile. Kept in
+ * storage too (dmLinesAtUpdateStoreKey), so a DM the update's run didn't judge (listed with several keys, or not listed)
+ * is judged on them in a later run (#1872/#1873 confirmation 2, finding 1). This is the run's copy; `stored`: it is
+ * what the store holds, so removing a DM's lines may be written there (the store is written from the database once).
  */
-const dmLinesHeldAtUpdate = new Map<string, Map<string, any[]>>();
+const dmLinesHeldAtUpdate = new Map<string, { lines: Map<string, HeldLine[]>; stored: boolean }>();
+
+/** One line as the update held it: the open's inputs only, never a date, a type or a decrypted word. */
+interface HeldLine { id: string; conversation_id: string; author_pubkey: string; ciphertext: string; nonce: string; metadata: unknown }
+
+function heldLineOf(r: any): HeldLine {
+    return { id: r.id, conversation_id: r.conversation_id, author_pubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, metadata: r.metadata ?? null };
+}
+
+/** The stored held lines, or null when they aren't an object of arrays. */
+function parseLinesHeldAtUpdate(raw: string): Map<string, HeldLine[]> | null {
+    try {
+        const v = JSON.parse(raw);
+        if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+        return new Map(Object.entries(v as Record<string, unknown>).filter((e): e is [string, HeldLine[]] => Array.isArray(e[1])));
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The update's held lines for this account: the run's copy, or the stored one, read once a run (none stored, or not an
+ * object: none). Null when the store can't be read: tried again on the next call, and until then nothing that needs
+ * judging is judged (a send refuses), since what the update held can't be told apart from what the node wrote since.
+ */
+async function linesHeldAtUpdate(me: string): Promise<Map<string, HeldLine[]> | null> {
+    const key = me.toLowerCase();
+    const copy = dmLinesHeldAtUpdate.get(key);
+    if (copy) return copy.lines;
+    let raw: string | null;
+    try { raw = await AsyncStorage.getItem(dmLinesAtUpdateStoreKey(me)); } catch { return null; }
+    const parsed = raw == null ? null : parseLinesHeldAtUpdate(raw);
+    dmLinesHeldAtUpdate.set(key, { lines: parsed ?? new Map(), stored: parsed != null });
+    return dmLinesHeldAtUpdate.get(key)!.lines;
+}
+
+/**
+ * The seed's held lines, kept for every later run (§3.4 amendment 4): written only when none are stored (`{}` when the
+ * rows pin every DM), so a later run that finds the pins absent again can't replace the update's memory with what the node
+ * has written since. True when the store holds them. False when it can't (the write failed: the store is full, or
+ * storage that can't be read, which is never written over, or holds something that isn't held lines): this run judges on
+ * `lines`, and the seed marks those DMs heldLost.
+ */
+async function keepLinesHeldAtUpdate(me: string, lines: Map<string, HeldLine[]>): Promise<boolean> {
+    const key = me.toLowerCase();
+    let stored: string | null;
+    try {
+        stored = await AsyncStorage.getItem(dmLinesAtUpdateStoreKey(me));
+    } catch {
+        dmLinesHeldAtUpdate.set(key, { lines, stored: false });
+        return false;
+    }
+    const parsed = stored == null ? null : parseLinesHeldAtUpdate(stored);
+    if (parsed) {
+        dmLinesHeldAtUpdate.set(key, { lines: parsed, stored: true });
+        return true;
+    }
+    if (stored != null) {
+        dmLinesHeldAtUpdate.set(key, { lines, stored: false });
+        return false;
+    }
+    try {
+        await AsyncStorage.setItem(dmLinesAtUpdateStoreKey(me), JSON.stringify(Object.fromEntries(lines)));
+    } catch {
+        dmLinesHeldAtUpdate.set(key, { lines, stored: false });
+        return false;
+    }
+    dmLinesHeldAtUpdate.set(key, { lines, stored: true });
+    return true;
+}
+
+/**
+ * After each pin write (§3.4 amendment 4): the held lines of each DM now pinned are dropped from the store, since first
+ * sight never reads them again. An unchecked first-seen pin keeps them (its send or check judges it on them), as do
+ * rule 5 and a DM never listed again. The key stays, `{}` once every DM is pinned. A store this run couldn't keep, or
+ * read, is left alone.
+ */
+async function dropHeldLinesOfPinned(me: string, pins: DmPeerPins): Promise<void> {
+    if (!(await linesHeldAtUpdate(me))) return;
+    const copy = dmLinesHeldAtUpdate.get(me.toLowerCase());
+    if (!copy?.stored) return;
+    const left = new Map(copy.lines);
+    for (const id of copy.lines.keys()) {
+        const e = dmSightFor(pins, id);
+        if (e && !isUnplacedSight(e) && (e.checked || e.by !== 'first-seen')) left.delete(id);
+    }
+    if (left.size === copy.lines.size) return;
+    await AsyncStorage.setItem(dmLinesAtUpdateStoreKey(me), JSON.stringify(Object.fromEntries(left)));
+    copy.lines = left;
+}
 
 /**
  * This phone's DM pins, one copy per account in memory, changed through one queue (utils/dm-peer-pins.ts). The rows a
  * build with pins first meets an account with are read when the pins are first found absent, before any row or line
  * from the node is written in this run (every writer of a DM's participant rows or lines reads the pins first): the
  * update's seed. A DM its rows pin is pinned from them; one whose rows name more than one other key keeps the encrypted
- * lines first sight reads (judgeThread), as held now, and the first sync pass judges it on them before it writes a line
- * (§3.4 amendment 3, companion a). The pin's memory starts at the update (§3.7): a rewrite or a tombstone the node
- * serves after it moves nothing; one written before it is the phone's history as it stands.
+ * lines first sight reads (judgeThread), as held now and kept for every later run, and the first sync pass judges it
+ * on them before it writes a line (§3.4 amendment 3, companion a). The lines are kept first, then the rows' pins, in one
+ * seed: where the lines couldn't be kept, the same first pin write marks those DMs heldLost (amendment 4). The pin's
+ * memory starts at the update (§3.7): a rewrite, a tombstone or a prune the node serves after it moves nothing; one
+ * before it is the phone's history as it stands.
  */
 const dmPins = createDmPinBook(AsyncStorage, async (me) => {
     const held = await dmPeersHeld();
-    const lines = new Map<string, any[]>();
+    const lines = new Map<string, HeldLine[]>();
     for (const id of dmsTheRowsDontPin(held, me)) {
         const window = await sightWindow(id);
-        if (window.length) lines.set(id, window);
+        if (window.length) lines.set(id, window.map(heldLineOf));
     }
-    dmLinesHeldAtUpdate.set(me.toLowerCase(), lines);
-    return (pins) => seedPinsFromRows(pins, me, held, true);
-});
+    const kept = await keepLinesHeldAtUpdate(me, lines);
+    return (pins) => {
+        const seeded = seedPinsFromRows(pins, me, held, true);
+        return (!kept && markHeldLost(pins, lines.keys(), new Date().toISOString())) || seeded;
+    };
+}, dropHeldLinesOfPinned);
 
 /** For tests: a fresh app session (an update, a restore): the DM pins are read from storage again. */
 export function _resetDmPeerPinsForTests(): void {
@@ -4439,8 +4547,8 @@ async function sightWindow(conversationId: string): Promise<any[]> {
  * (the node writes the rows, and a re-key moves old lines' author to the new key). One DH derivation per key tried, and
  * only lines not yet placed are tried again.
  */
-async function judgeThread(conversationId: string, myPrivHex: string, me: string, listed: string | null, heard: DmHeard | undefined): Promise<SightVerdict> {
-    const rows = dmLinesHeldAtUpdate.get(me.toLowerCase())?.get(dmPinId(conversationId)) ?? await sightWindow(conversationId);
+async function judgeThread(conversationId: string, myPrivHex: string, me: string, listed: string | null, heard: DmHeard | undefined, held: ReadonlyMap<string, HeldLine[]>): Promise<SightVerdict> {
+    const rows: Array<HeldLine & { type?: string | null }> = held.get(dmPinId(conversationId)) ?? await sightWindow(conversationId);
     if (!rows.length) return judgeFirstSight([], listed);
     const mine = me.toLowerCase();
     const tries = [listed, ...(heard?.tryKeys ?? []), ...rows.map(r => pinKeyOf(r.author_pubkey))];
@@ -4466,6 +4574,21 @@ function sightToJudge(entry: DmPinEntry | null): boolean {
     if (!entry) return true;
     if (isUnplacedSight(entry)) return !!entry.stale;
     return entry.by === 'first-seen' && !entry.checked;
+}
+
+/**
+ * Whether a send or the screen's check judges this DM now, with the update's held lines to judge it on (§3.4 amendment
+ * 4). A heldLost mark is judged only on held lines of its own, and stays refused with none. Anything else
+ * {@link sightToJudge} names is judged; with the held lines unreadable, it is refused this time ('refuse').
+ */
+async function sightToJudgeNow(me: string, conversationId: string, entry: DmPinEntry | null): Promise<{ held: ReadonlyMap<string, HeldLine[]> } | 'refuse' | null> {
+    if (isHeldLostSight(entry)) {
+        const held = await linesHeldAtUpdate(me);
+        return held?.get(dmPinId(conversationId))?.length ? { held } : null;
+    }
+    if (!sightToJudge(entry)) return null;
+    const held = await linesHeldAtUpdate(me);
+    return held ? { held } : 'refuse';
 }
 
 /**
@@ -4500,7 +4623,9 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
     let entry = dmSightFor(await dmPins.read(me), conversationId);
     const parts = await database.getAllAsync<any>('SELECT public_key FROM conversation_participants WHERE conversation_id = ?', [conversationId]);
     let peers = parts.map(p => p.public_key).filter((pk: string) => pk && pk !== identity.publicKey);
-    if (use !== 'open' && sightToJudge(entry)) {
+    const judging = use === 'open' ? null : await sightToJudgeNow(me, conversationId, entry);
+    if (judging === 'refuse') return null;
+    if (judging) {
         let listed: string | null;
         let heard: DmHeard | undefined;
         if (!entry) {
@@ -4514,11 +4639,16 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
             listed = entry.offered ? entry.offered.peer : entry.peer;
             heard = entry.heard;
         }
-        const verdict = await judgeThread(conversationId, identity.privateKey, me, listed, heard);
+        const verdict = await judgeThread(conversationId, identity.privateKey, me, listed, heard, judging.held);
         const judged = entry;
         const now = new Date().toISOString();
-        // Through the pins' queue, and only over what was kept when the lines were read: another writer's change stands.
-        await dmPins.update(me, (pins) => dmSightFor(pins, conversationId) === judged && applySightVerdict(pins, conversationId, verdict, listed, heard, now));
+        // Through the pins' queue, and only over what was kept when the lines were read: another writer's change stands,
+        // but for the update's heldLost mark (the seed's, in this same write), which a verdict on its held lines replaces.
+        const onHeld = judging.held.has(dmPinId(conversationId));
+        await dmPins.update(me, (pins) => {
+            const kept = dmSightFor(pins, conversationId);
+            return (kept === judged || (onHeld && isHeldLostSight(kept))) && applySightVerdict(pins, conversationId, verdict, listed, heard, now);
+        });
         entry = dmSightFor(await dmPins.read(me), conversationId);
     }
     if (!entry || isUnplacedSight(entry)) {
@@ -4612,17 +4742,18 @@ function dmsTheRowsDontPin(rows: ReadonlyArray<any>, myPubkey: string): string[]
  * that `conversations` lists cleanly with one other key, judged on the lines held at the update with that key as the
  * listed one. Run by a sync pass or a push's refresh before it writes a row or line from the node, and applied in the
  * same change of the pins as the listing ({@link applyHeldSights}). A DM listed otherwise (several keys, or not at all)
- * waits for the send or the screen's check, which judge it on the same held lines.
+ * waits for the send or the screen's check, in this run or a later one, which judge it on the same held lines.
  */
 async function judgeHeldAtUpdate(me: string, myPrivHex: string, pins: DmPeerPins, conversations: ReadonlyArray<any>): Promise<HeldSight[]> {
-    const held = dmLinesHeldAtUpdate.get(me.toLowerCase());
+    const held = await linesHeldAtUpdate(me);
     if (!held?.size) return [];
     const mine = me.toLowerCase();
     const listings = new Map<string, any[]>();
     for (const c of conversations) {
         if (typeof c?.id !== 'string' || !Array.isArray(c.participants)) continue;
         const id = dmPinId(c.id);
-        if (held.has(id) && !dmSightFor(pins, id)) listings.set(id, [...(listings.get(id) ?? []), c]);
+        const entry = dmSightFor(pins, id);
+        if (held.has(id) && (!entry || isHeldLostSight(entry))) listings.set(id, [...(listings.get(id) ?? []), c]);
     }
     const sights: HeldSight[] = [];
     for (const [id, listed] of listings) {
@@ -4630,7 +4761,7 @@ async function judgeHeldAtUpdate(me: string, myPrivHex: string, pins: DmPeerPins
         if (!others.every((o) => o.length === 1 && o[0] === others[0][0])) continue;
         const key = others[0][0] as string;
         const heard = listed.length === 1 ? heardFromListing(listed[0], listed[0].participants.filter((p: unknown) => typeof p === 'string' && !!p && p.toLowerCase() !== mine)) : undefined;
-        sights.push({ id, listed: key, heard, verdict: await judgeThread(id, myPrivHex, me, key, heard) });
+        sights.push({ id, listed: key, heard, verdict: await judgeThread(id, myPrivHex, me, key, heard, held) });
     }
     return sights;
 }
@@ -4641,7 +4772,10 @@ interface HeldSight { id: string; listed: string; heard: DmHeard | undefined; ve
 function applyHeldSights(pins: DmPeerPins, sights: ReadonlyArray<HeldSight>): boolean {
     const now = new Date().toISOString();
     let changed = false;
-    for (const s of sights) if (!dmSightFor(pins, s.id) && applySightVerdict(pins, s.id, s.verdict, s.listed, s.heard, now)) changed = true;
+    for (const s of sights) {
+        const entry = dmSightFor(pins, s.id);
+        if ((!entry || isHeldLostSight(entry)) && applySightVerdict(pins, s.id, s.verdict, s.listed, s.heard, now)) changed = true;
+    }
     return changed;
 }
 
@@ -5990,6 +6124,8 @@ async function _signedRequest(endpoint: string, payload: any) {
         let nodeMessage: string | undefined;
         try {
             const errJson = await res.json();
+            // This key was replaced by a re-key: the old phone's offer of its old words (utils/key-replaced.ts).
+            if (isKeyReplacedAnswer(res.status, errJson)) void noteKeyReplaced(anchorUrl, identity.publicKey);
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
             if (typeof errJson.message === 'string' && errJson.message.trim()) nodeMessage = errJson.message.trim();
         } catch {
@@ -6026,6 +6162,8 @@ async function _signedRequest(endpoint: string, payload: any) {
         throw err;
     }
 
+    // The node took a write this key signed: the key is current here, so a replaced-key note goes (finding 5 of #1844).
+    void noteKeyAnswered(anchorUrl, identity.publicKey);
     return await res.json();
 }
 
@@ -6047,21 +6185,25 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
 
     let headers: Record<string, string> = { 'Accept': 'application/json', ...(options?.customHeaders || {}) };
     const identity = await loadIdentity();
+    let signed = false;
     if (identity?.privateKey && identity?.publicKey) {
         try {
             // The URL fetched below: its host is what is signed for, its path (no query) what the node checks.
             const signedHeaders = await buildSignedHeaders('GET', `${anchorUrl}${path}`, '', identity.privateKey, identity.publicKey);
             headers = { ...headers, ...signedHeaders };
+            signed = true;
         } catch (e) {
             console.warn('[signedGet] Could not sign GET request:', e);
         }
     }
 
-    return fetch(`${anchorUrl}${path}`, {
+    const res = await fetch(`${anchorUrl}${path}`, {
         method: 'GET',
         headers,
         signal: options?.signal,
     });
+    if (identity?.publicKey) watchForReplacedKey(anchorUrl, identity.publicKey, res, signed);
+    return res;
 }
 
 /**
@@ -7293,6 +7435,84 @@ export async function postGroupChatMessage(
         }
     }
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
+}
+
+/**
+ * The groups a history path may touch (sync, post a self-wrap or a top-up): never a conversation this phone knows as a DM
+ * and never held a group's keys for (refuseGroupKeysForDm, confirmation 2 of #1788, finding 2). Each comes back under
+ * ring.groupId, the group's id lower-cased, so the routes, records and top-ups agree with its one keyring (#1841).
+ */
+async function historyGroups(nodeUrl: string, identity: BeanPoolIdentity, groups: readonly HistoryGroup[]): Promise<HistoryGroup[]> {
+    const out: HistoryGroup[] = [];
+    for (const g of groups) {
+        try {
+            const ring = groupKeyring(nodeUrl, identity, g.id, groupKeyStore(nodeUrl));
+            await refuseGroupKeysForDm(ring);
+            out.push({ ...g, id: ring.groupId });
+        } catch { /* a known DM: no group keys under its id */ }
+    }
+    return out;
+}
+
+/**
+ * A group history from before this member changed phones (utils/group-history-unlock.ts; DESIGN-group-history-after-
+ * rekey-fable.md §3, §4): the old 12 words, typed here, over every group of this account.
+ */
+export async function unlockGroupHistoryWithWords(typed: string | readonly string[], groups: HistoryGroup[], onProgress?: (done: number, total: number) => void): Promise<OldWordsResult> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const r = await unlockWithOldWords({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), typed, signedHere: await oldKeySignedHere(nodeUrl, identity), onProgress });
+    // A group whose keys landed and wasn't withheld shows no locked row once its chat reloads; forget its count now, so a
+    // later run doesn't name it as withheld.
+    for (const id of Object.keys(r.unlocked)) if (!r.withheld.some((g) => g.id === id)) await noteLockedHistoryCount(nodeUrl, identity.publicKey, id, 0);
+    return r;
+}
+
+/** Per group (id lower-cased), the lines its chat last showed in the "from before you changed phones" row (§7). */
+export async function lockedHistoryRows(): Promise<Record<string, number>> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return lockedHistoryCounts(nodeUrl, identity.publicKey);
+}
+
+/** The chat view's row count for one group as it shows it now (0 when there is no row). */
+export async function noteLockedHistoryRow(groupId: string, n: number): Promise<void> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    await noteLockedHistoryCount(nodeUrl, identity.publicKey, groupId, n);
+}
+
+/** The code this new phone shows a member to confirm it (§4), or null when this phone knows no old key of its own. */
+export async function newPhoneCode(): Promise<string | null> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    let old = await oldKeySignedHere(nodeUrl, identity);
+    if (!old) {
+        const listed = (await rekeysToMe(nodeUrl, identity)).filter((r) => r.attested);
+        old = listed.length === 1 ? listed[0].pubkey : null;
+    }
+    return old ? newPhoneQrPayload(identity, old) : null;
+}
+
+/** A member's phone checks a scanned new-phone code (§4), over every group of this account. */
+export async function checkScannedNewPhone(scanned: string, groups: HistoryGroup[]): Promise<NewPhoneCheck> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return checkNewPhone({ nodeUrl, identity, groups: await historyGroups(nodeUrl, identity, groups), scanned });
+}
+
+/** "Confirm" (§4): hand the confirmed phone the epochs whose record names the old key this phone remembers. */
+export async function confirmScannedNewPhone(check: Extract<NewPhoneCheck, { ok: true }>, onProgress?: (handed: number, planned: number) => void) {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return confirmNewPhone({ nodeUrl, identity, store: groupKeyStore(nodeUrl), check: { ...check, groups: await historyGroups(nodeUrl, identity, check.groups) }, onProgress });
+}
+
+/** While this new phone's code is on screen (§4): the keys other members had already handed it, to compare with later. */
+export async function newPhoneHandOvers(groups: HistoryGroup[]): Promise<Set<string>> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return handOversHeld(nodeUrl, identity, groupKeyStore(nodeUrl), await historyGroups(nodeUrl, identity, groups));
+}
+
+/** The members who confirmed this phone since `before`, kept as local notes; every note, newest first. */
+export async function newPhoneConfirmedNotes(before: Set<string> | null, groups: HistoryGroup[]): Promise<ConfirmedNote[]> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    if (!before) return confirmedNotes(nodeUrl, identity.publicKey);
+    return noteConfirmations({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), before });
 }
 
 const _groupKeyStores = new Map<string, GroupKeyStore>();

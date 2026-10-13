@@ -638,6 +638,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     replicationTokenCreatedAt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     replicationTokenOnly: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     aiAssistantsAllowed: { kind: 'per-server', reason: "the owner switch for this server's AI assistant endpoint (/mcp), beside its agent tokens" },
+    agentOAuthGrants: { kind: 'per-server', reason: "AI assistants connected to this server through OAuth (refresh-token hashes); a standby's copy holds none" },
     automationTokens: { kind: 'per-server', reason: "owners' automation tokens (hashes) for this server; never in a backup file, the stager's copy or the bundle" },
     backupReplicationToken: { kind: 'per-server', reason: "a standby's token for its main server" },
     backupPullSeconds: { kind: 'per-server', reason: "a standby's pull interval" },

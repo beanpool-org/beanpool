@@ -52,7 +52,7 @@ export interface AgentGrant {
     member: string;
     /** Their role now (owner or admin), read on every call: lose the role, lose the assistant. */
     role: 'owner' | 'admin';
-    via: 'token';
+    via: 'token' | 'oauth';
     createdAt: number;
     expiresAt: number | null;
 }

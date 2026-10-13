@@ -201,6 +201,7 @@ describe('dark mode: themed screens draw with the theme', () => {
         'components/PhotoCarousel.tsx', // the page dots over the photo
         'components/RecoveryAlertBanner.tsx', // unthemed: a light card with its own red700/red800 text, reads in both
         'components/SsoButton.tsx',    // the providers' own white button
+        'app/new-phone-code.tsx',      // the QR's white quiet zone: a scanner needs dark modules on a light ground, in both themes
     ]);
     // Hard-coded (a palette step or a literal), not a theme token: tokens follow the scheme by design.
     const hardCoded = (value: string) => /^(palette\.|['"])/.test(value);
@@ -224,6 +225,7 @@ describe('dark mode: themed screens draw with the theme', () => {
         'app/(tabs)/market.tsx': ["'#dbeafe'"],                             // "YOU" pill, #1e40af text
         // Base styles whose dark look is laid over at render: `theme === 'dark' && { backgroundColor: … }` (lines 237, 296, 398)
         'components/ArchetypeQuizModal.tsx': ['palette.green50', 'palette.grayAlt100', 'palette.gray200'],
+        'app/new-phone-code.tsx': ["'#ffffff'"],                         // the QR's quiet zone (white in both themes, for scanning)
     };
     it('no themed screen hard-codes a pale ground without a dark branch', () => {
         const offenders = ALL

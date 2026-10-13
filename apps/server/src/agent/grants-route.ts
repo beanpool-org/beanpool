@@ -34,6 +34,7 @@ import { dropSuggestionsOf } from './suggestions.js';
 import { aiAssistantsAllowed, MCP_PATH, nodeUrlFor } from './mcp-route.js';
 import { offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
 import { agentConnectedWords, agentDisconnectedWords } from './welcome.js';
+import { listOAuthGrants, redirectHost, revokeOAuthGrant, type OAuthGrantView } from './oauth.js';
 
 export const AGENT_GRANTS_PATH = '/api/local/admin/agent/grants';
 export const AGENT_PREVIEW_PATH = '/api/local/admin/agent/preview';
@@ -43,7 +44,7 @@ const DAY_MS = 24 * 60 * 60_000;
 
 const ROLE_ERROR = 'Only an owner or an admin of this node can see its AI assistants';
 export const OWNER_ONLY_CODE = 'agent_owner_only';
-const OWNER_ONLY_ERROR = 'For now only an owner connects an AI assistant here. Admins will connect theirs with the phone\'s approval in a coming update.';
+const OWNER_ONLY_ERROR = 'Only an owner makes an assistant token. Connect yours by adding this server\'s address as a connector in your assistant and approving on your phone.';
 const SWITCH_OFF_ERROR = 'AI assistants are turned off on this server: an owner turns them on here first';
 const NEEDS_KEY_ERROR = 'Connect an assistant from the app: sign in with your own key (Manage, or a computer signed in by scanning a code). An assistant acts for a member, and the admin password is nobody\'s.';
 
@@ -79,6 +80,33 @@ function visibleGrants(ctx: any): AutomationTokenView[] {
     return me ? agents.filter((t) => t.createdBy === me) : [];
 }
 
+/** The OAuth grants this caller may see: an owner every one, an admin their own. */
+function visibleOAuthGrants(ctx: any): OAuthGrantView[] {
+    const all = listOAuthGrants();
+    if (roleOf(ctx) === 'owner') return all;
+    const me = actorOf(ctx);
+    return me ? all.filter((g) => g.member === me) : [];
+}
+
+/** What Settings shows of an OAuth grant: its name always beside the host its answers go to (the name is the client's own). */
+function oauthGrantView(g: OAuthGrantView, me: string | null, now = Date.now()) {
+    const role = nodeRoleOf(g.member);
+    return {
+        id: g.id,
+        name: cleanMemberText(g.clientName, 60) || 'AI assistant',
+        sendsTo: redirectHost(g.redirectUri),
+        member: cleanMemberText(getMember(g.member)?.callsign ?? '', 60) || null,
+        mine: !!me && g.member === me,
+        role: role === 'owner' || role === 'admin' ? role : null,
+        via: 'oauth' as const,
+        createdAt: g.createdAt,
+        expiresAt: null,
+        expired: false,
+        lastUsedAt: g.lastUsedAt,
+        callsToday: agentCallsToday(g.id, now),
+    };
+}
+
 /** What Settings shows of one grant: never the secret, the hash or the maker's whole key. */
 function grantView(t: AutomationTokenView, me: string | null, now = Date.now()) {
     const role = typeof t.createdBy === 'string' ? nodeRoleOf(t.createdBy) : null;
@@ -101,6 +129,12 @@ function grantView(t: AutomationTokenView, me: string | null, now = Date.now()) 
 /** The grant a preview runs as: one the caller may see, else the caller themselves with their own role. */
 function previewGrant(ctx: any, grantId: unknown): AgentGrant | { error: string } {
     if (typeof grantId === 'string' && grantId) {
+        const o = visibleOAuthGrants(ctx).find((g) => g.id === grantId);
+        if (o) {
+            const r = nodeRoleOf(o.member);
+            if (r !== 'owner' && r !== 'admin') return { error: 'Its member is no longer an owner or admin: it reads nothing now' };
+            return { id: o.id, name: o.clientName || 'AI assistant', member: o.member, role: r, via: 'oauth', createdAt: o.createdAt, expiresAt: null };
+        }
         const t = visibleGrants(ctx).find((g) => g.id === grantId);
         if (!t) return { error: 'No such assistant' };
         const role = nodeRoleOf(t.createdBy);
@@ -126,13 +160,14 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             allowed: aiAssistantsAllowed(),
             mcpUrl: `${nodeUrlFor(ctx)}${MCP_PATH}`,
             role,
-            /** An owner's key session only, until S2: the card tells a password session to use a key, an admin to wait. */
+            /** An owner's key session makes a token; anyone with a role connects through OAuth from their assistant (S2). */
             canConnect: !!me && role === 'owner',
+            canConnectOAuth: true,
             seesAll: role === 'owner',
             defaultDays: AGENT_TOKEN_DEFAULT_DAYS,
             maxDays: AGENT_TOKEN_MAX_DAYS,
             perMember: AGENT_GRANTS_PER_MEMBER,
-            grants: visibleGrants(ctx).map((t) => grantView(t, me)),
+            grants: [...visibleGrants(ctx).map((t) => grantView(t, me)), ...visibleOAuthGrants(ctx).map((g) => oauthGrantView(g, me))],
         };
     });
 
@@ -190,6 +225,18 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         ctx.set('Cache-Control', 'no-store');
         if (!(await personOnly(ctx, deps))) return;
         const id = String(ctx.params.id || '');
+        const oauth = visibleOAuthGrants(ctx).find((g) => g.id === id);
+        if (oauth && revokeOAuthGrant(id)) {
+            forgetAgentGrant(id);
+            dropSuggestionsOf(id);
+            const by = actorOf(ctx) ?? 'owner:password';
+            const role = roleOf(ctx);
+            const name = `${cleanMemberText(oauth.clientName, 60) || 'unnamed'}, sending to ${redirectHost(oauth.redirectUri)}`;
+            logger.info('AUTH', 'AI assistant disconnected', { grant: id, via: 'oauth', role, by: by.slice(0, 16) });
+            noteSecurityEvent({ key: 'sec.agent', actor: by, actorRole: role, detail: agentDisconnectedWords(name, role) });
+            ctx.body = { revoked: id };
+            return;
+        }
         const target = visibleGrants(ctx).find((t) => t.id === id);
         if (!target || !revokeAutomationToken(id)) {
             ctx.status = 404;

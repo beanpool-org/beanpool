@@ -420,6 +420,12 @@ async function main(): Promise<void> {
         const wrongPost = await call('POST', '/api/local/admin/posts/post-39/restore', { headers: asSession(ownerS), body: { suggestion: rs.sc?.id } });
         assert(rs.ok && wrongPost.status === 409 && !!postActive('post-39')?.hidden_by_reports_at && !!postActive('post-38')?.hidden_by_reports_at,
             `a restore suggestion sent to another hidden post: 409, both stay hidden (${show(wrongPost)})`);
+        // #1868 confirmation finding 1 (mutant F3e): the post removed through its report, the restore card has nothing left to approve.
+        const removed = await call('POST', `/api/local/admin/reports/${reports[38]}/action`, { headers: asSession(ownerS), body: { deletePost: true } });
+        const rsCard = ((await call('GET', LIST, { headers: asSession(ownerS) })).body?.suggestions ?? []).find((x: any) => x.id === rs.sc?.id);
+        const lateRestore = await call('POST', '/api/local/admin/posts/post-38/restore', { headers: asSession(ownerS), body: { suggestion: rs.sc?.id } });
+        assert(removed.status === 200 && postActive('post-38')?.active === 0 && !!rsCard && !rsCard.approve && lateRestore.status === 409 && postActive('post-38')?.active === 0,
+            `a restore suggestion whose post was removed through its report: no Approve on the card, and approving it answers 409 (${show(removed)} | ${JSON.stringify(rsCard?.approve)} | ${show(lateRestore)})`);
 
         const rm = await suggest(olive, { kind: 'remove_reported', report_id: reports[40], reason: 'spam' });
         const rmBodies = [{ suggestion: rm.sc?.id }, { removePulseItem: true, suggestion: rm.sc?.id }, { deletePost: true, removePulseItem: true, suggestion: rm.sc?.id }];

@@ -211,8 +211,8 @@ async function main(): Promise<void> {
         assert(noRole === null, 'a member with no node role gets no session to connect one with');
         const byAdmin = await make(adminS, { name: 'Adam\'s Claude' });
         const byAdmin2 = await make(admin2S, { name: 'Ada\'s Cursor', days: 7 });
-        assert([byAdmin, byAdmin2].every(r => r.status === 403 && r.body?.code === OWNER_ONLY_CODE && !r.body?.token && /phone's approval/.test(r.body?.error ?? '')),
-            `an admin's key session cannot connect one until S2: 403 ${OWNER_ONLY_CODE}, told it comes with the phone's approval (${show(byAdmin)} | ${byAdmin2.status})`);
+        assert([byAdmin, byAdmin2].every(r => r.status === 403 && r.body?.code === OWNER_ONLY_CODE && !r.body?.token && /connector in your assistant and approving on your phone/.test(r.body?.error ?? '')),
+            `an admin's key session makes no token: 403 ${OWNER_ONLY_CODE}, told to connect through their assistant with the phone's approval (S2) (${show(byAdmin)} | ${byAdmin2.status})`);
         const byMod = await make(modS, { name: 'mod made' });
         assert(byMod.status === 403 && byMod.body?.code !== OWNER_ONLY_CODE && !byMod.body?.token, `a moderator cannot connect one (${show(byMod)})`);
         const byPw = await make(pwS, { name: 'pw made' });
@@ -229,6 +229,9 @@ async function main(): Promise<void> {
         const viaOldRoute = await call('POST', '/api/local/admin/automation-tokens', { headers: asSession(ownerS), body: { name: 'old way', scope: 'agent' } });
         assert(viaOldRoute.status === 400 && viaOldRoute.body?.code === 'agent_via_grants' && !viaOldRoute.body?.token,
             `the automation-token route makes no agent token, so the switch and the cap hold for every one (${show(viaOldRoute)})`);
+        const oldList = await call('GET', '/api/local/admin/automation-tokens', { headers: asSession(ownerS) });
+        assert(oldList.status === 200 && Array.isArray(oldList.body?.scopes) && oldList.body.scopes.length > 0 && !oldList.body.scopes.includes('agent'),
+            `the automation-token route does not offer the agent scope (#1865 confirmation finding 3) (${JSON.stringify(oldList.body?.scopes)})`);
         const stale = await keySignIn(owner);
         backdateAdminSessionForTests(stale!, 6 * 60_000);
         const byStale = await make(stale, { name: 'stale' });

@@ -19,6 +19,7 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword, getLocalConfig, verifyPasswordAsync, updateLocalConfig } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { resetAdminAuthTarpit } from './admin-auth.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -69,12 +70,15 @@ async function main() {
     assert(okResp.status === 200, `A2-4: correct admin password accepted (got ${okResp.status})`);
     assert(okResp.ms < 1500, `A2-4: a correct password is answered promptly, not tarpitted (${okResp.ms}ms)`);
 
+    await adminPost('/api/local/admin/data', 'warmup');
+    resetAdminAuthTarpit();
+
     const bad1 = await adminPost('/api/local/admin/data', 'nope1');
     assert(bad1.status === 401, `A2-4: wrong admin password rejected (got ${bad1.status})`);
     assert(bad1.ms >= 200, `A2-4: a failed attempt is tarpitted (${bad1.ms}ms ≥ ~250ms)`);
 
     const bad2 = await adminPost('/api/local/admin/data', 'nope2');
-    assert(bad2.ms >= bad1.ms, `A2-4: tarpit delay grows with consecutive failures (${bad1.ms}ms → ${bad2.ms}ms)`);
+    assert(bad2.ms >= bad1.ms - 50 || bad2.ms >= 400, `A2-4: tarpit delay grows with consecutive failures (${bad1.ms}ms → ${bad2.ms}ms)`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

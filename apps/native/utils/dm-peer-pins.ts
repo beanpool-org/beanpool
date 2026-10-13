@@ -84,6 +84,13 @@ export interface DmUnplacedSight {
     listed: string | null;
     heard?: DmHeard;
     stale?: boolean;
+    /**
+     * The update kept lines of this DM to judge it on, and couldn't keep them for later runs (their write failed, or the
+     * store couldn't be read: §3.4 amendment 4). Refused like rule 5; judged only on the lines the update held (that run's
+     * copy, or a stored one), and any such judgement replaces the mark. With none, it is final: never judged on the
+     * database, which the node has written since.
+     */
+    heldLost?: true;
 }
 
 export type DmPinEntry = DmPeerPin | DmUnplacedSight;
@@ -93,6 +100,11 @@ export type DmPeerPins = Record<string, DmPinEntry>;
 
 export function isUnplacedSight(e: DmPinEntry | null | undefined): e is DmUnplacedSight {
     return !!e && (e as DmUnplacedSight).unplaced === true;
+}
+
+/** A DM the update kept lines of that later runs can't read: {@link DmUnplacedSight.heldLost}. */
+export function isHeldLostSight(e: DmPinEntry | null | undefined): e is DmUnplacedSight {
+    return isUnplacedSight(e) && e.heldLost === true;
 }
 
 const KEY_HEX = /^[0-9a-f]{64}$/;
@@ -145,6 +157,7 @@ function pinOf(raw: unknown): DmPinEntry | null {
         const heard = heardOf(r.heard);
         if (heard) sight.heard = heard;
         if (r.stale === true) sight.stale = true;
+        if (r.heldLost === true) sight.heldLost = true;
         return sight;
     }
     const peer = pinKeyOf(r.peer);
@@ -241,7 +254,11 @@ export interface DmPinBook {
  * writes rows from the node (the sync pass, a push's refresh, a key resolve) never has those rows seeded (#1872 round 4).
  * Kept when a write is refused and the copy dropped: rows written since are not the phone's own from before.
  */
-export function createDmPinBook(storage: PinStorage, seedWhenNew?: (myPubkey: string) => Promise<(pins: DmPeerPins) => boolean>): DmPinBook {
+export function createDmPinBook(
+    storage: PinStorage,
+    seedWhenNew?: (myPubkey: string) => Promise<(pins: DmPeerPins) => boolean>,
+    afterWrite?: (myPubkey: string, pins: DmPeerPins) => Promise<void>,
+): DmPinBook {
     const copies = new Map<string, Promise<DmPeerPins>>();
     const queues = new Map<string, Promise<unknown>>();
     const absent = new Set<string>();
@@ -277,6 +294,8 @@ export function createDmPinBook(storage: PinStorage, seedWhenNew?: (myPubkey: st
                 if (copies.get(key) === copy) copies.delete(key);
                 throw e;
             }
+            // In the same turn, once the write stands (db.ts drops the update's held lines of each DM now pinned).
+            await afterWrite?.(myPubkey, pins).catch(() => {});
             return true;
         });
         queues.set(key, turn);
@@ -359,10 +378,12 @@ export function judgeFirstSight(lines: ReadonlyArray<string | null>, listed: str
  */
 export function applySightVerdict(pins: DmPeerPins, conversationId: string, verdict: SightVerdict, listed: string | null, heard: DmHeard | undefined, now: string): boolean {
     const id = dmPinId(conversationId);
-    const held = ownPin(pins, id);
+    // A heldLost mark is judged only on the update's held lines (db.ts), and that judgement replaces it as if none were kept.
+    const lost = isHeldLostSight(ownPin(pins, id));
+    const held = lost ? undefined : ownPin(pins, id);
     if (held && !isUnplacedSight(held) && (held.checked || held.by !== 'first-seen')) return false;
     if (verdict.rule === 1) {
-        if (held || !listed) return false;
+        if (held || lost || !listed) return false;
         return pinAtFirstSight(pins, id, listed, now, heard);
     }
     if (verdict.rule === 5) {
@@ -384,6 +405,21 @@ export function applySightVerdict(pins: DmPeerPins, conversationId: string, verd
     }
     setPin(pins, id, pin);
     return true;
+}
+
+/**
+ * The update's marks (§3.4 amendment 4): each DM in `ids` with nothing kept is refused, as rule 5, until a judgement on
+ * the lines the update held replaces the mark ({@link DmUnplacedSight.heldLost}). True when the pins changed.
+ */
+export function markHeldLost(pins: DmPeerPins, ids: Iterable<string>, now: string): boolean {
+    let changed = false;
+    for (const conversationId of ids) {
+        const id = dmPinId(conversationId);
+        if (ownPin(pins, id)) continue;
+        setPin(pins, id, { unplaced: true, since: now, listed: null, heldLost: true });
+        changed = true;
+    }
+    return changed;
 }
 
 /** A send seals to an unchecked first-seen pin: it is this phone's from now on (§3.6, "the first key this phone sealed to"). */

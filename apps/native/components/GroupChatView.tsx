@@ -27,6 +27,11 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { markKeyChanged, rememberRosterNames } from '../utils/name-key-memory';
+import { verifiedFormerKeys } from '../utils/group-chat-crypto';
+import {
+    collapseLockedHistory, lockedHistoryRowText, LOCKED_HISTORY_ROW_ID, LOCKED_OWN_LINE_TEXT, NEW_PHONE_CONFIRM_MENU, servedAuthorKeys,
+} from '../utils/group-history-unlock';
+import { LockedHistoryRow, LockedHistorySheet, SealedNoticeLine } from './LockedHistory';
 import { anchorUrl } from '../utils/node-post';
 import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView } from 'react-native';
 import { router } from 'expo-router';
@@ -42,7 +47,7 @@ import * as Crypto from 'expo-crypto';
 import {
     getGroupChat, postGroupChatMessage, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi, fetchGroupDetails,
     markThreadReadOnNode, toggleMessageReactionApi, editThreadMessage, deleteMessageApi, removeGroupChatMessage,
-    groupScreenKeyringFor,
+    groupScreenKeyringFor, noteLockedHistoryRow,
     type GroupItem, type GroupMemberItem,
 } from '../utils/db';
 import { chatIsLocked, groupChatNotice, groupChatShownLines, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
@@ -116,6 +121,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [rosterRows, setRosterRows] = useState<GroupMemberItem[]>([]);
     // Members whose name this phone saw on another key, with no statement from the new key reaching it (pick 3).
     const [keyChanged, setKeyChanged] = useState<Set<string>>(() => new Set());
+    // The sheet behind the one "from before you changed phones" row (DESIGN-group-history-after-rekey-fable.md §7).
+    const [historyOpen, setHistoryOpen] = useState(false);
     // Each sealed line's view (utils/group-line-display.ts), opened on this phone after each read.
     const [thread, setThread] = useState<OpenedGroupThread | null>(null);
     // "Securing the chat for N people…" while this phone makes a new key for a big group.
@@ -304,11 +311,29 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     // Locked by what this phone has verified, not by the node's word alone: once it held a key, always (finding 4).
     const locked = kind === 'group' && (chatIsLocked(view) || seenLocked);
 
+    // This member changed phones: their own row carries a verified former key (the line-display design's chain).
+    const myFormer = useMemo(() => {
+        const mine = rosterRows.find(r => r.memberPubkey === me);
+        return { keys: new Set(mine ? verifiedFormerKeys({ memberPubkey: mine.memberPubkey, formerKeys: mine.formerKeys }) : []), name: mine?.callsign ?? null };
+    }, [rosterRows, me]);
+    const changedPhones = myFormer.keys.size > 0;
+
+    const rawById = useMemo(() => new Map<string, any>(rawMessages.map(m => [String(m.id), m])), [rawMessages]);
+
     /** The node's messages in the one shape every chat's components speak, plus what this phone still owes. */
     const messages: ChatMessage[] = useMemo(() => {
         // A locked chat's lines by the display rule; anything there unsealed is nobody's (utils/group-chat-lines.ts).
         // A name this phone saw on another key, with no statement from the new one: "(key changed)" (name-key-memory.ts).
-        const fromNode = markKeyChanged(groupChatShownLines(rawMessages, { locked, thread, me, kind }), keyChanged);
+        // The lines from before this member changed phones that wait for a key: one quiet row (group-history-unlock.ts).
+        const fromNode = collapseLockedHistory(markKeyChanged(groupChatShownLines(rawMessages, { locked, thread, me, kind }), keyChanged), {
+            changedPhones: kind === 'group' && locked && !!thread && changedPhones,
+            epochOf: (lineId) => thread?.views.get(lineId)?.epoch ?? null,
+            waiting: (lineId) => !!thread?.views.get(lineId)?.waitingKey,
+            row: (n) => ({ id: LOCKED_HISTORY_ROW_ID, senderId: '', text: lockedHistoryRowText(n), type: 'text', outgoing: false, timestamp: '', metadata: { lockedCount: n } }),
+            // Her own lines from then, by a key of her own verified chain: under her name, with no words (§7).
+            mine: (lineId) => servedAuthorKeys(rawById.get(lineId) ?? {}).some(k => myFormer.keys.has(k)),
+            asMine: (l) => ({ ...l, text: LOCKED_OWN_LINE_TEXT, authorName: myFormer.name, unattributed: true }),
+        });
         const mine: ChatMessage[] = pending.map(p => ({
             id: p.clientId,
             senderId: me || '',
@@ -321,7 +346,15 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             timestamp: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }));
         return [...fromNode, ...mine];
-    }, [rawMessages, pending, me, kind, locked, thread, keyChanged]);
+    }, [rawMessages, rawById, pending, me, kind, locked, thread, keyChanged, changedPhones, myFormer]);
+
+    // The row's count, kept for the old-words screen: a group the node then answers empty is named there as withheld,
+    // never counted as done (review of #1844, finding 4). Only once the keys are read: before that nothing is known.
+    const lockedRowCount: number = messages.find(m => m.id === LOCKED_HISTORY_ROW_ID)?.metadata?.lockedCount ?? 0;
+    useEffect(() => {
+        if (kind !== 'group' || !thread) return;
+        noteLockedHistoryRow(id, lockedRowCount).catch(() => {});
+    }, [kind, id, thread, lockedRowCount]);
 
     const spokenCount = useMemo(
         () => rawMessages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM').length,
@@ -609,13 +642,15 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         { icon: 'account-plus', label: 'Invite people', hidden: kind !== 'group' || !isConvenor, onPress: () => { setMenuOpen(false); setInviteOpen(true); } },
         { icon: muted ? 'bell-ring-outline' : 'bell-off-outline', label: muteMenuLabel(mute), onPress: () => { setMenuOpen(false); if (muted) setMuteTo('off'); else setMuteOpen(true); } },
         { icon: 'magnify', label: 'Search this chat', hidden: kind !== 'group', onPress: () => { setMenuOpen(false); setSearchOpen(true); } },
+        { icon: 'cellphone-check', label: NEW_PHONE_CONFIRM_MENU, hidden: kind !== 'group', onPress: () => { setMenuOpen(false); router.push('/confirm-new-phone'); } },
         { icon: 'information-outline', label: kind === 'group' ? 'Group info' : 'Enterprise page', onPress: () => { setMenuOpen(false); openOwner(); } },
     ];
 
     const renderMessage = (item: ChatMessage) => {
+        if (item.id === LOCKED_HISTORY_ROW_ID) return <LockedHistoryRow text={item.text} onPress={() => setHistoryOpen(true)} />;
         if (item.type === 'system' || item.senderId === 'SYSTEM') return <SystemLine text={item.text} styles={styles} />;
         // A sealed line that names nobody: one that couldn't be verified ("Unverified"), or one whose key isn't here yet.
-        if (item.unattributed) return <SealedNoticeLine name={item.authorName ?? null} text={item.text} details={item.integrityNote ?? null} styles={styles} />;
+        if (item.unattributed) return <SealedNoticeLine name={item.authorName ?? null} text={item.text} details={item.integrityNote ?? null} />;
 
         const isMe = !!me && item.senderId === me;
         const actions = messageActions(item, viewer);
@@ -818,6 +853,13 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 onPickMute={setMuteTo}
                 bottomInset={insets.bottom}
             />
+            <LockedHistorySheet
+                open={historyOpen}
+                bottomInset={insets.bottom}
+                onClose={() => setHistoryOpen(false)}
+                onWords={() => { setHistoryOpen(false); router.push('/old-words-unlock'); }}
+                onAsk={() => { setHistoryOpen(false); router.push('/new-phone-code'); }}
+            />
 
             {kind === 'group' && (
                 <InvitePeopleSheet
@@ -841,16 +883,6 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 />
             )}
         </KeyboardAvoidingView>
-    );
-}
-
-/** A sealed line drawn as nobody's: "Unverified" (it opened under neither key the node names) or still waiting for its key. */
-function SealedNoticeLine({ name, text, details, styles }: { name: string | null; text: string; details: string | null; styles: ReturnType<typeof makeStyles> }) {
-    return (
-        <View style={styles.systemWrap} accessibilityRole="text">
-            <Text style={styles.sealedText}>{name ? `${name}: ${text}` : text}</Text>
-            {!!details && <Text style={styles.sealedDetails}>{details}</Text>}
-        </View>
     );
 }
 
@@ -885,10 +917,6 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         skipText: { fontSize: 15, fontWeight: '700', color: colors.text.secondary },
         inviteHint: { fontSize: 12, color: colors.text.muted, textAlign: 'center' },
         systemWrap: { alignItems: 'center', marginVertical: 6, paddingHorizontal: 16 },
-        sealedText: {
-            fontSize: 13, color: colors.text.secondary, textAlign: 'center', fontStyle: 'italic', overflow: 'hidden',
-            backgroundColor: colors.surface.subtle, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
-        },
         sealedDetails: { fontSize: 12, color: colors.text.muted, textAlign: 'center', marginTop: 2 },
         securing: { marginHorizontal: 12, marginBottom: 6, fontSize: 13, color: colors.text.secondary, textAlign: 'center' },
         keyNotice: {

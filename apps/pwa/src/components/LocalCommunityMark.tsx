@@ -154,7 +154,7 @@ export function LocalCommunityStrip({ feature, ...ways }: { feature: ShowcaseFea
                             className="-mr-3 -mt-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 rounded-lg">✕</button>
                     </div>
                     <p className="text-sm text-nature-800 dark:text-nature-100">
-                        <strong>{LOCAL_COMMUNITY_STRIP.lead[feature]}</strong> {LOCAL_COMMUNITY_STRIP.body}
+                        <strong>{LOCAL_COMMUNITY_STRIP.lead[feature]}</strong> {LOCAL_COMMUNITY_STRIP.body[feature]}
                     </p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <button type="button" onClick={start} data-testid="local-community-strip-start"

@@ -16,10 +16,10 @@ Then:
 
 - **A Market post:** choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**), add a few words if they help, and tap **Submit Report**.
 - **A Pulse post:** choose a reason and tap **Submit report**.
-
-**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. They are told only that a report came in, never who sent it or what you wrote. If a child is in danger right now, call your local emergency number first.
 - **An event:** tap **Report** to confirm.
 - **A project or an enterprise:** type why, and tap **Submit Report**.
+
+**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. Their alert says only that a report came in. In the Reports queue, your community's moderators see it as they see any report: the reason you chose, any words you added, and that it came from you. Nobody else is told who reported. If you already reported it with another reason, report it again and choose **Child safety**. If a child is in danger right now, call your local emergency number first.
 
 ## A person or a message
 
@@ -33,7 +33,7 @@ Your report goes to your community's moderators: the owners and admins who run i
 
 - **A Market post or an event:** if they remove it, you get an alert: "The post you reported was removed". If they look at it and keep it, you are told that too. If its author took it down before they looked, you are told it is no longer up.
 - **A Pulse post, a project, an enterprise or a person:** you are not told the outcome in the app.
-- Nobody is told who reported. Not the person you reported, and not anyone else who reported the same thing.
+- The moderators see who sent each report. Nobody else is told who reported: not the person you reported, and not anyone else who reported the same thing.
 
 These alerts come under **Marketplace Activity** in your notification settings. On your phone's lock screen each one says only "Your community has a notice for you."; open BeanPool to read it. See "Notifications". The web app has no notifications: it shows each alert while it is open, or the next time you open it.
 

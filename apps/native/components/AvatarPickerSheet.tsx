@@ -11,7 +11,7 @@ interface AvatarPickerSheetProps {
     visible: boolean;
     onClose: () => void;
     onSelectImage: (uri: string) => void;
-    /** The dark theme's colours. Settings passes them in dark; welcome and profile setup, light throughout, pass none. */
+    /** The dark theme's colours. Settings, welcome and profile setup pass them in dark; light passes none. */
     colors?: AppColors;
 }
 

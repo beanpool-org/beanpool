@@ -169,12 +169,17 @@ describe('dark mode: themed screens draw with the theme', () => {
         expect(offenders).toEqual([]);
     });
 
-    // The avatar sheet is shared with welcome and profile setup, which stay light; Settings hands it the dark colours.
-    it('the avatar sheet follows the dark theme from Settings and keeps its own light look', () => {
+    // The avatar sheet is shared by Settings, welcome and profile setup; each hands it the dark colours in dark (onboarding went dark
+    // in #1842, and the emulator showed the sheet white over the dark profile step).
+    it('the avatar sheet follows the dark theme from every caller and keeps its own light look', () => {
         const sheet = ALL.find(s => s.file === 'components/AvatarPickerSheet.tsx')!.src;
         expect(sheet).toMatch(/colors \? makeStyles\(tonesFor\(colors\)\) : LIGHT_STYLES/);
         const settings = ALL.find(s => s.file === 'app/(tabs)/settings.tsx')!.src;
         expect(settings).toMatch(/<AvatarPickerSheet[^>]*colors=\{theme === 'dark' \? colors : undefined\}/);
+        for (const file of ['app/welcome.tsx', 'app/profile-setup.tsx']) {
+            const src = ALL.find(s => s.file === file)!.src;
+            expect(src, file).toMatch(/<AvatarPickerSheet[^>]*colors=\{dark \? colors : undefined\}/);
+        }
     });
 
     it('the Settings protection cards follow the theme', () => {

@@ -38,7 +38,12 @@
  * 11. A history of 50 lines none of them a report's (a long-running node's daily reminders): a new report line makes room
  *     with the oldest reminder, never a security line, and stays in "Last 50 alerts" (the confirmation review 2's finding
  *     1: it dropped itself).
- * 12. Nothing in any alert line names a member or quotes what they wrote: no callsign, no key (nor its first 12
+ * 12. The apps' "Child safety" choice: read from where the apps put it, never from the words after it, and told at once
+ *     as a child-safety report, urgent and pushed to the owner and the admin; keyword guessing stays for every other
+ *     reason, so an app from before the choice behaves as today. Picking it bypasses nothing: a repeat of the pending
+ *     report tells nothing, the member's others in their hour are one line when it ends, the 11th in their hour is
+ *     refused (429) like any report, and the reports wait in the queue as pending like any other.
+ * 13. Nothing in any alert line names a member or quotes what they wrote: no callsign, no key (nor its first 12
  *     characters) and no reason's words in any channel message (headers and body), any push, any push notice kept for
  *     the phone, the Alerts routes' answers or the book.
  *
@@ -189,6 +194,8 @@ async function main(): Promise<void> {
     const mixReporter = join('MixReporterMaxR');
     const newOwners = Array.from({ length: 3 }, (_, i) => join(`NewOwnerNia${i}R`));
     const newAdmin = join('NewAdminAdaR');
+    const picker = join('PickerPiaR');
+    const plain = join('PlainPatR');
     for (const [id, token] of [[owner, 'ExponentPushToken[olive-owner]'], [admin, 'ExponentPushToken[adam-admin]'],
         [moderator, 'ExponentPushToken[mo-moderator]'], [reporters[0], 'ExponentPushToken[ruth-reporter]'], [targets[0], 'ExponentPushToken[tom-target]']] as const) {
         putPushTokenRow(id.pk, token, 'android');
@@ -606,13 +613,66 @@ async function main(): Promise<void> {
     assert(h11c.some(isAdmin11), '11. the security line is still there: a report line made room with a reminder');
     assert(h11c.length === 50, `11. and the history still holds 50 lines (${h11c.length})`);
 
-    // ── 12. Nothing names a member or quotes them ───────────────────────────────────────────────────────────────────
+    // ── 12. The apps' "Child safety" choice ─────────────────────────────────────────────────────────────────────────
+    advance(HOUR + MIN);
+    await tick();
+    await settle();
+    assert(alerts.CHILD_SAFETY_REASON === 'Child safety' && alerts.pickedChildSafety('Child safety')
+        && alerts.pickedChildSafety(' child safety: he keeps messaging my daughter ') && !alerts.pickedChildSafety('Other: child safety')
+        && !alerts.pickedChildSafety('Child safety gates for sale') && !alerts.pickedChildSafety('CSAM') && !alerts.pickedChildSafety(42),
+        '12. the choice is read from where the apps put it (alone, or before ": " and the member\'s words), never from words elsewhere');
+    assert(alerts.reportKind('Child safety: he keeps messaging my daughter') === 'child safety', '12. picked, a report is child safety whatever words follow');
+    assert(alerts.reportKind('Other: child sexual abuse') === 'child safety' && alerts.reportKind('Spam or scam: fake child safety gates for sale') === 'child safety'
+        && alerts.reportKind('Offensive content') === 'offensive content' && alerts.reportKind('Misleading post: wrong price') === 'misleading post'
+        && alerts.reportKind('Other') === 'other', '12. keyword guessing stays for every other reason: an app from before the choice behaves as today');
+    const p12 = ownerPushes().length;
+    const h12 = topicHits().length;
+    const childHits12 = () => topicHits().slice(h12).filter((h) => /child-safety report/.test(String(h.headers.title)));
+    const c12 = await report(picker, targets[0], alerts.CHILD_SAFETY_REASON);
+    await settle();
+    assert(c12.status === 200 && !c12.json?.duplicate && ownerPushes().length === p12 + 1 && topicHits().length === h12 + 1,
+        `12. a member picks "Child safety": pushed and told at once (${c12.status}, ${ownerPushes().length - p12} pushes, ${topicHits().length - h12} lines)`);
+    const hit12 = topicHits().at(-1)!;
+    assert(/a child-safety report waiting/.test(String(hit12.headers.title)) && hit12.headers.priority === '5' && /look at it first/.test(hit12.body),
+        `12. as a child-safety report, urgent (${hit12.headers.title}, priority ${hit12.headers.priority})`);
+    const to12 = (ownerPushes().at(-1)?.to ?? []).slice().sort();
+    assert(JSON.stringify(to12) === JSON.stringify(pushTo), `12. pushed to the owner and the admin (${JSON.stringify(to12)})`);
+    const again12 = await report(picker, targets[0], alerts.CHILD_SAFETY_REASON);
+    await settle();
+    assert(again12.json?.duplicate === true && ownerPushes().length === p12 + 1 && topicHits().length === h12 + 1, '12. a repeat of the pending report tells nothing more');
+    for (let j = 1; j < 10; j++) {
+        const r = await report(picker, targets[j], alerts.CHILD_SAFETY_REASON);
+        if (r.status !== 200 || r.json?.duplicate) throw new Error(`setup: picked child-safety report ${j} not taken (${r.status} ${JSON.stringify(r.json)})`);
+    }
+    await settle();
+    assert(ownerPushes().length === p12 + 1 && childHits12().length === 1,
+        `12. their 9 more in the hour: none told on its own (${ownerPushes().length - p12} pushes, ${childHits12().length} child-safety lines)`);
+    const over12 = await report(picker, moderator, alerts.CHILD_SAFETY_REASON);
+    await settle();
+    assert(over12.status === 429 && ownerPushes().length === p12 + 1 && childHits12().length === 1,
+        `12. the 11th in their hour is refused like any report, and nothing is told (${over12.status})`);
+    const rows12 = db.prepare(`SELECT status FROM abuse_reports WHERE reporter_pubkey = ?`).all(picker.pk) as Array<{ status: string }>;
+    assert(rows12.length === 10 && rows12.every((x) => x.status === 'pending'), `12. they wait in the queue as 10 pending reports, like any other (${rows12.length})`);
+    advance(HOUR + MIN);
+    await tick();
+    await settle();
+    const more12 = childHits12().filter((h) => /more child-safety reports waiting/.test(String(h.headers.title)));
+    assert(more12.length === 1 && /9 more child-safety reports came in from the same member in the hour after their first was told/.test(more12[0].body)
+        && more12[0].headers.priority === '5' && ownerPushes().length === p12 + 2,
+        `12. their hour over: the 9 in one urgent line, pushed (${more12.length} lines, ${ownerPushes().length - p12} pushes)`);
+    const plain12 = await report(plain, targets[0], 'Spam or scam');
+    await settle();
+    const last12 = topicHits().at(-1)!;
+    assert(plain12.status === 200 && /new reports waiting/.test(String(last12.headers.title)) && /A new report came in \(spam or scam\)/.test(last12.body),
+        `12. an ordinary report after them is still told as one (${last12.headers.title})`);
+
+    // ── 13. Nothing names a member or quotes them ───────────────────────────────────────────────────────────────────
     await settle();
     const st = await adminCall('POST', '/api/local/admin/alerts/status', {});
-    assert(st.status === 200 && st.json?.history?.some((e: any) => e.key === 'reports.new'), `12. the Alerts card lists them (${st.status})`);
+    assert(st.status === 200 && st.json?.history?.some((e: any) => e.key === 'reports.new'), `13. the Alerts card lists them (${st.status})`);
     const notices = db.prepare(`SELECT recipient, title, body, data FROM push_notices WHERE kind = 'owner.alert'`).all() as any[];
     assert(notices.some((x) => x.recipient === admin.pk) && notices.every((x) => x.recipient === owner.pk || x.recipient === admin.pk),
-        `12. ${notices.length} owner.alert notices kept, every one for the owner or the admin`);
+        `13. ${notices.length} owner.alert notices kept, every one for the owner or the admin`);
     const payloads = [
         ...ntfy.hits.map((h) => JSON.stringify(h.headers) + h.body),
         ...ownerPushes().map((p) => p.title + p.body),
@@ -624,8 +684,8 @@ async function main(): Promise<void> {
     const leaks = payloads.filter((p) => ids.some((i) => p.includes(i.callsign) || p.includes(i.pk.slice(0, 12)))
         || REASON_WORDS.some((w) => p.includes(w)) || /sexual abuse of a minor|Other:/.test(p));
     assert(n > 55 && payloads.length > 20 && leaks.length === 0,
-        `12. ${payloads.length} payloads (${topicHits().length} channel messages, ${n} reports), none names a member or quotes a reason (${leaks.length})`);
-    assert(blocked.length === 0, `12. nothing off this machine was asked (${blocked.join(', ')})`);
+        `13. ${payloads.length} payloads (${topicHits().length} channel messages, ${n} reports), none names a member or quotes a reason (${leaks.length})`);
+    assert(blocked.length === 0, `13. nothing off this machine was asked (${blocked.join(', ')})`);
 
     await ntfy.close();
     console.log(`\n${testsPassed}/${testsRun} passed`);

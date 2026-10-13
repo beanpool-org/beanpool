@@ -11,8 +11,8 @@ import {
     getConversations, getConversationMessages, createConversationApi,
     sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi, getMembers,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
-    getEventChat, getGroupChat, getGroupMembers, groupKeysNet,
-    type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer,
+    getEventChat, getGroupChat, getGroupMembers, groupKeysNet, getFriends,
+    type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry,
 } from '../lib/api';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
@@ -209,6 +209,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const askedKeysRef = useRef<Set<string>>(new Set());
     const [pickerQuery, setPickerQuery] = useState('');
     const pickerSearch = useMemberSearch(pickerQuery, membersOnDemand === true && showNewDm);
+    // The New DM picker's friends with members on demand (design §2.3, review of #1861 N5): the member's own friends
+    // list, which carries each friend's name and face, so a friend is offered without being in any card held here.
+    // null while it hasn't answered; 'failed' when it couldn't be read.
+    const [pickerFriends, setPickerFriends] = useState<FriendEntry[] | null | 'failed'>(null);
+    useEffect(() => {
+        if (!showNewDm || membersOnDemand !== true) return;
+        let cancelled = false;
+        setPickerFriends(null);
+        // Asked inside the promise, so a read that throws before it starts is "couldn't read" too.
+        Promise.resolve()
+            .then(() => getFriends(identity.publicKey))
+            .then(list => { if (!cancelled) setPickerFriends(Array.isArray(list) ? list : []); })
+            .catch(() => { if (!cancelled) setPickerFriends('failed'); });
+        return () => { cancelled = true; };
+    }, [showNewDm, membersOnDemand, identity.publicKey]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const pollRef = useRef<number | null>(null);
     const [replyToMessage, setReplyToMessage] = useState<ApiMessage | null>(null);
@@ -1271,6 +1286,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const held = membersByPublicKey.get(peer);
             return [{ publicKey: peer, callsign: c.peerCallsign || held?.callsign || peer.slice(0, 8), avatarUrl: c.peerAvatar ?? held?.avatarUrl ?? null }];
         });
+        // Friends not already offered above, so each person shows once.
+        const friendsToPick = pickerFriends === null || pickerFriends === 'failed' ? []
+            : pickerFriends.filter(f => f.publicKey && f.publicKey !== identity.publicKey && !blocked.has(f.publicKey) && !seen.has(f.publicKey))
+                .map(f => ({ publicKey: f.publicKey, callsign: f.callsign || f.publicKey.slice(0, 8), avatarUrl: f.avatarUrl ?? null }));
         const typed = pickerQuery.trim();
         const found = (pickerSearch.found || []).filter(m => m.publicKey !== identity.publicKey && !blocked.has(m.publicKey));
         const pick = (p: { publicKey: string; callsign: string; avatarUrl?: string | null }) => (
@@ -1329,6 +1348,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 {recents.length === 0
                     ? <p style={note}>No one yet. Search for someone by name above.</p>
                     : <div data-testid="new-message-recents">{recents.map(pick)}</div>}
+
+                {pickerFriends === 'failed' ? (
+                    <p style={note} data-testid="new-message-friends-failed">Couldn't load your friends just now. Search for them by name above.</p>
+                ) : friendsToPick.length > 0 && (
+                    <>
+                        <h3 style={{ fontSize: '0.95rem', margin: '1rem 0 0.5rem' }}>Friends</h3>
+                        <div data-testid="new-message-friends">{friendsToPick.map(pick)}</div>
+                    </>
+                )}
             </div>
         );
     }

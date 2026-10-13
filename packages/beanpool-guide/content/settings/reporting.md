@@ -14,8 +14,10 @@ related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
 
 Then:
 
-- **A Market post:** choose a reason (**Spam or scam**, **Offensive content**, **Misleading post** or **Other**), add a few words if they help, and tap **Submit Report**.
+- **A Market post:** choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**), add a few words if they help, and tap **Submit Report**.
 - **A Pulse post:** choose a reason and tap **Submit report**.
+
+**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. They are told only that a report came in, never who sent it or what you wrote. If a child is in danger right now, call your local emergency number first.
 - **An event:** tap **Report** to confirm.
 - **A project or an enterprise:** type why, and tap **Submit Report**.
 

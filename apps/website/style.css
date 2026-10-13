@@ -1801,10 +1801,10 @@ footer {
 }
 
 /* Start a community: the honest four lines, the one-block installer and the claim steps */
-.run-node-facts, .run-node-steps { text-align: left; margin: 0 auto 1.25rem; padding-left: 1.25rem; max-width: 46rem; color: var(--text-muted); line-height: 1.6; }
+.run-node-facts, .run-node-steps { text-align: left; margin: 0 auto 1.25rem; padding-left: 1.25rem; max-width: 46rem; color: var(--text-secondary); line-height: 1.6; }
 .run-node-facts li, .run-node-steps li { margin-bottom: 0.5rem; }
 .run-node-facts strong, .run-node-steps strong { color: inherit; }
-.run-node-steps code { font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 0.85em; word-break: break-all; }
+.run-node-steps code { font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 0.85em; overflow-wrap: anywhere; }
 .run-node-sub { margin: 1.75rem 0 0.75rem; }
 .run-node-note { font-size: 0.9rem; }
 .cta-step code.cta-block { white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; line-height: 1.7; }

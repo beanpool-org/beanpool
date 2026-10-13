@@ -163,7 +163,9 @@ export class GroupKeyring {
      * Each shown member's former keys this phone has verified (core walkKeySuccession over the row's `formerKeys`): a
      * chain their current key signed, never the node's `rekeyed_to` (line-display design §4 2b, §5). Read with the list.
      * A claim is only the claimant's word, so a key that is this phone's, a shown member's current key, or one two shown
-     * members claim is nobody's former key here (review of #1826, finding 1 and NB3).
+     * members claim is nobody's former key here (review of #1826, finding 1 and NB3). Used only to complete an old
+     * epoch's recipients to its signed set (recipientsOf), so other members' slots can be repaired after a re-key: no key
+     * is ever handed to a member through it.
      */
     private formerOf = new Map<string, string[]>();
     /** Each row's verified chain, by (member, the chain as served): one walk per chain while the keyring lives (NB8). */
@@ -666,13 +668,11 @@ export class GroupKeyring {
      *
      * `missing` is the node's word, so a key goes only to someone the screen shows as a member AND whom that epoch's maker
      * wrapped it to, by the record's signature (review of #1788, finding 1; director's decision a): a junk wrap's repair.
-     * A newcomer is never handed an epoch from before them. A re-keyed member's new key is in no old record: they are
-     * handed an old epoch only when a former key their current key signed for (a verified succession chain, served with
-     * the members list; line-display design §5) is one that epoch's record names (review of #1788, NB2), AND that key
-     * has left the key set by this phone's own records: the newest epoch this phone made is after it and doesn't name
-     * the key (review of #1826, finding 1; the director's own-record rule). A chain proves the new key's claim, not the
-     * old key's owner; the node's members answer can leave anyone out, and a puppet can make records, so only a record
-     * this phone signed says a key has gone. Until this phone makes one, the re-keyed member waits for a member who has.
+     * A newcomer is never handed an epoch from before them, and a re-keyed member's new key is in no old record: they
+     * read from their next epoch. Never through a former key: a succession chain proves the new key's claim, not the old
+     * key's owner, and the node's members answer can leave the honest claimant out, so no epoch goes to a key on the
+     * strength of a statement (review of #1826, finding 1; the director's option 2). A member who changes phones keeps
+     * their name on their old lines; the group's history from before the change stays on the old phone.
      */
     async serveMissing(max = 10): Promise<number> {
         await this.ensureLoaded();
@@ -688,13 +688,6 @@ export class GroupKeyring {
         if (!(answer.missing ?? []).some((m) => m?.pubkey !== this.identity.publicKey)) return 0;
         const shown = await this.readShownRoster();
         if (!shown) return 0;
-        // Read once, the first time a former key is asked about: the newest epoch this phone made, and who it names.
-        let own: { epoch: number; names: Set<string> | null } | null | undefined;
-        const left = async (k: string, epoch: number): Promise<boolean> => {
-            if (k === this.identity.publicKey) return false;
-            if (own === undefined) own = await this.ownNewestRecord();
-            return !!own && own.epoch > epoch && !!own.names && !own.names.has(k);
-        };
         let sent = 0;
         for (const m of answer.missing ?? []) {
             if (m.pubkey === this.identity.publicKey || !shown.has(m.pubkey)) continue;
@@ -702,13 +695,7 @@ export class GroupKeyring {
                 if (sent >= max) return sent;
                 const key = await this.keyFor(epoch);
                 if (!key) continue;
-                const recipients = await this.recipientsOf(epoch);
-                if (!recipients) continue;
-                let named = recipients.has(m.pubkey);
-                for (const k of named ? [] : this.formerOf.get(m.pubkey) ?? []) {
-                    if (recipients.has(k) && await left(k, epoch)) { named = true; break; }
-                }
-                if (!named) continue;
+                if (!(await this.recipientsOf(epoch))?.has(m.pubkey)) continue;
                 const t = makeTopUp(key, { myEdPrivHex: this.identity.privateKey, groupId: this.groupId, epoch, recipientPubHex: m.pubkey });
                 const res = await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/wrap`,
                     { epoch, recipient: t.recipient, ephPub: t.ephPub, nonce: t.nonce, wrapped: t.wrapped, sig: t.sig }, this.identity as BeanPoolIdentity).catch(() => null);
@@ -718,20 +705,6 @@ export class GroupKeyring {
             }
         }
         return sent;
-    }
-
-    /**
-     * The newest epoch this phone's identity made, by the records this phone holds (brought up to the node first), and
-     * the recipients its signature names (recipientsOf: verified, the wraps re-derived to its membersDigest). Null when
-     * this phone has made none; `names` null when the record can't be read or doesn't verify.
-     */
-    private async ownNewestRecord(): Promise<{ epoch: number; names: Set<string> | null } | null> {
-        await this.sync().catch(() => null);
-        let newest = 0;
-        for (const e of this.epochs.values()) {
-            if (e.record?.createdBy === this.identity.publicKey && !this.badRecords.has(e.epoch) && e.epoch > newest) newest = e.epoch;
-        }
-        return newest > 0 ? { epoch: newest, names: await this.recipientsOf(newest) } : null;
     }
 }
 

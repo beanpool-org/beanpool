@@ -8,13 +8,13 @@
  *   a re-keyed member's old lines read "A former member" until their new key's statement is served, then their name, with
  *   the earlier-key details; a chain signed by anyone but the member's current key (the old key, the node, another member)
  *   is refused, and so is a node serving a member's row with someone else's old key; the two-hop chain; and NB2: once a
- *   member of an epoch re-keys, another member tops up a spoiled slot again, and the re-keyed member's new key is handed
- *   the epochs their old key held, only once their chain is served.
+ *   member of an epoch re-keys, another member tops up a spoiled slot again.
  *
- *   Review of #1826 (finding 1, the director's own-record rule): a chain proves the new key's claim, not the old key's
- *   owner, so an old epoch goes through a former key only when the serving phone's own newest record is later and lacks
- *   that key; never for the phone's own key, a shown member's current key, or a key two rows claim. The reviewer's cases
- *   A, A2, A3, B, C, E and F are ported here, with one that kills an unverified chain's top-up and an unchecked completion.
+ *   Review of #1826 (finding 1; the director's option 2): a chain proves the new key's claim, not the old key's owner,
+ *   and the node's members answer can leave the honest claimant out, so NO epoch is ever handed through a former key.
+ *   A member who changes phones keeps their name on their old lines; the group's history from before the change does
+ *   not follow them to the new phone. The reviewers' cases A, A2, A3, B, C, E, F, R1, R2, J, V and A3w are ported here:
+ *   in each, nobody is handed anything.
  *
  * Nothing else is contacted: the phones' fetch is held to this node's address, and the node's own fetch refuses every
  * host but this machine.
@@ -62,7 +62,7 @@ vi.mock('expo-secure-store', () => ({
     deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
 }));
 
-import { signedGet, signedPost } from '../node-post';
+import { signedGet, signedPost, signedDelete } from '../node-post';
 import { groupKeyring, memoryGroupKeyStore, forgetGroupKeys, joinGroupWithEpoch, type GroupKeyStore } from '../group-chat-keys';
 import { sendSealedGroupLine, openGroupThread, chatIsLocked } from '../group-chat-lines';
 import { GROUP_LINE_FORMER_MEMBER, earlierKeyDetails, type DisplayRosterRow } from '../group-line-display';
@@ -239,7 +239,7 @@ describe('a member who changes phones keeps their name on their old lines', () =
         await control('members', { members: [ana, ben, cat, mal].map((p) => ({ key: p.identity.publicKey, callsign: p.name })) });
     });
 
-    it('NB2 + §7 4: before the statement, a re-keyed member\'s old line is "A former member" and nobody tops up their slot; after it, their name and their keys', async () => {
+    it('NB2 + §7 4: before the statement, a re-keyed member\'s old line is "A former member" and nobody tops up their slot; after it, their name, and others\' slots repaired; her new key gets no old epoch', async () => {
         await control('limiters');
         forgetGroupKeys();
         const g = await newGroup(ana, 'Changed phones');
@@ -270,23 +270,21 @@ describe('a member who changes phones keeps their name on their old lines', () =
         expect(line?.name).toBe('Cat');
         const [inv] = await control<any[]>('sql', { sql: 'SELECT succession_at FROM invalidated_keys WHERE public_key = ?', params: [cat.identity.publicKey], all: true });
         expect(line?.details).toBe(earlierKeyDetails('Cat', inv.succession_at));
-        // NB2: Ana now tops up Ben's spoiled slot. Cat₂'s epoch 3 waits: Ana's own newest record (epoch 1) is older, so by
-        // Ana's own records Cat₁ hasn't left the key set yet (review of #1826, finding 1: the own-record rule).
+        // NB2: Ana now tops up Ben's spoiled slot (epoch 3's wraps lack Cat₁; her verified chain completes them to the
+        // signed set). Cat₂ is handed nothing: no epoch goes through a former key (review of #1826, finding 1; option 2).
         expect(await ring(ana, g).serveMissing()).toBe(1);
         expect(await wrapsTo(g, cat2)).toEqual([]);
-        // Ana writes: the roster has Cat₂ and the current record Cat₁, so her phone rotates first; her new record, after
-        // epoch 3, lacks Cat₁, so she hands Cat₂ epoch 3, which Cat₁ held by the record's signature.
+        // Ana writes: the roster has Cat₂ and the current record Cat₁, so her phone rotates first. Still nothing old to Cat₂.
         await writes(ana, g, 'Ana after the re-key');
         forgetGroupKeys();
-        expect(await ring(ana, g).serveMissing()).toBe(1);
-        const cat2Wraps = (await wrapsTo(g, cat2)).map((epoch) => ({ epoch }));
-        expect(cat2Wraps.map((w) => w.epoch)).toEqual([3, 4]);
+        expect(await ring(ana, g).serveMissing()).toBe(0);
+        expect(await wrapsTo(g, cat2)).toEqual([4]);
         forgetGroupKeys();
         expect(nameOf(await shown(benFresh, g), 'Cat on her old phone')).toBe('Cat');
+        // On Cat₂'s new phone: what is said from her next epoch, and her old line waits for a key it won't be handed.
         const cat2Sees = await shown(cat2, g);
-        expect(nameOf(cat2Sees, 'Cat on her old phone')).toBe('Cat');
-        // Never an epoch from before Cat₁: epochs 1 and 2 were not hers.
-        expect(cat2Wraps.some((w) => w.epoch < 3)).toBe(false);
+        expect(cat2Sees.visible.filter((l) => !l.waitingKey).map((l) => `${l.name}: ${l.text}`)).toEqual(['Ana: Ana after the re-key']);
+        expect(cat2Sees.visible.filter((l) => l.waitingKey).length).toBeGreaterThanOrEqual(1);
     });
 
     it('§7 5: the pin attack — a node serving someone else\'s old key on a member\'s row is refused, however it is signed', async () => {
@@ -397,7 +395,7 @@ describe('a member who changes phones keeps their name on their old lines', () =
     });
 });
 
-describe('review of #1826: who is handed an old epoch through a former key, and whose name goes on an old line', () => {
+describe('review of #1826: nobody is handed an old epoch through a former key, and whose name goes on an old line', () => {
     it('A: a puppet whose served chain claims a CURRENT member\'s key is handed nothing, and reads nothing', async () => {
         await control('limiters');
         forgetGroupKeys();
@@ -492,7 +490,7 @@ describe('review of #1826: who is handed an old epoch through a former key, and 
         expect(await wrapsTo(g, pup)).toEqual([]);
     });
 
-    it('a re-keyed member\'s old epoch goes only by a verified chain, and only when the record\'s own wraps complete to its signed set', async () => {
+    it('G: a re-keyed member\'s new key is handed no old epoch: not by a forged chain, not by a verified one, whatever the record\'s wraps', async () => {
         await control('limiters');
         forgetGroupKeys();
         const ana = phone('AnaG'); const ben = phone('BenG'); const cat = phone('CatG');
@@ -503,7 +501,7 @@ describe('review of #1826: who is handed an old epoch through a former key, and 
         await join_(cat, g);
         await say(cat, g, 'G2 cat on her old phone');
         const cat2 = await rekeyed(cat, 'CatG'); // the admin's re-key: no statement yet
-        // Ana writes: her phone rotates, and her new record (epoch 4) lacks Cat₁: by Ana's own records, Cat₁ has left.
+        // Ana writes: her phone rotates, and her new record (epoch 4) lacks Cat₁ (what the own-record rule went by).
         await writes(ana, g, 'G3 ana after the re-key');
         const [made] = await control<any[]>('sql', { sql: 'SELECT MAX(epoch) AS epoch FROM group_key_epochs WHERE group_id = ? AND created_by = ?', params: [g, pk(ana)], all: true });
         expect(made.epoch).toBe(4);
@@ -515,20 +513,22 @@ describe('review of #1826: who is handed an old epoch through a former key, and 
         hooks.pop();
         expect(forged).toBe(0);
         expect(await wrapsTo(g, cat2)).toEqual([4]);
-        // Cat₂ confirms. The node also hides Ben's wrap of epoch 3 from the record's own set: the wraps with Cat₁ added no
-        // longer make the signed set, so the completion is refused and nothing goes.
+        // Cat₂ confirms. The node also hides Ben's wrap of epoch 3 from the record's own set: nothing goes.
         expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
         await control('sql', { sql: "UPDATE group_key_wraps SET sig = 'hidden' WHERE group_id = ? AND epoch = 3 AND recipient_pubkey = ? AND sig IS NULL", params: [g, pk(ben)] });
         forgetGroupKeys();
         expect(await ring(ana, g).serveMissing()).toBe(0);
         expect(await wrapsTo(g, cat2)).toEqual([4]);
-        // The wraps as the record made them: Ana hands Cat₂ epoch 3, and Cat₂ reads her old line under her name.
+        // The wraps as the record made them and her verified chain served: still nothing to Cat₂. Her old line is hers on
+        // Ana's screen, and her new phone reads from epoch 4.
         await control('sql', { sql: "UPDATE group_key_wraps SET sig = NULL WHERE group_id = ? AND epoch = 3 AND sig = 'hidden'", params: [g] });
         forgetGroupKeys();
-        expect(await ring(ana, g).serveMissing()).toBe(1);
-        expect(await wrapsTo(g, cat2)).toEqual([3, 4]);
+        expect(await ring(ana, g).serveMissing()).toBe(0);
+        expect(await wrapsTo(g, cat2)).toEqual([4]);
         forgetGroupKeys();
-        expect(await reads({ ...cat2, store: memoryGroupKeyStore() }, g)).toContain('CatG: G2 cat on her old phone');
+        expect(nameOf(await shown(ana, g), 'G2 cat on her old phone')).toBe('CatG');
+        forgetGroupKeys();
+        expect(await reads({ ...cat2, store: memoryGroupKeyStore() }, g)).toEqual(['AnaG: G3 ana after the re-key']);
     });
 
     it('B: two shown members both carry a verified chain to one old key: neither is named, and neither is handed its epochs', async () => {
@@ -542,7 +542,7 @@ describe('review of #1826: who is handed an old epoch through a former key, and 
         const [{ epoch: catsEpoch }] = await control<any[]>('sql', { sql: 'SELECT MAX(epoch) AS epoch FROM group_key_epochs WHERE group_id = ?', params: [g], all: true });
         const cat2 = await rekeyed(cat, 'CatB');
         expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
-        // Ben writes after the re-key, so by his own records Cat₁ has left: only the double claim stands in the way.
+        // Ben writes after the re-key, so his newest record lacks Cat₁ (what the own-record rule went by).
         await writes(ben, g, 'B2 ben after the re-key');
         await puppetIn(g, pup);
         const pupClaim = claim(pup, pk(cat));
@@ -559,7 +559,7 @@ describe('review of #1826: who is handed an old epoch through a former key, and 
         expect(await wrapsTo(g, pup)).toEqual([]);
         expect(await wrapsTo(g, cat2)).not.toContain(catsEpoch);
         // §8's accepted limit, for comparison: a node that drops Cat₂'s chain and serves only the puppet's names the line
-        // after the puppet (and, Cat₁ having left Ben's key set, would get it Cat₁'s epochs: the limit the PR body states).
+        // after the puppet. A name only: the puppet is handed nothing (R1).
         hooks.push(async (r) => {
             if (r.method !== 'GET' || r.path !== `/api/groups/${g}/members`) return undefined;
             const rows = await (await realFetch(r.input, r.init)).json();
@@ -567,11 +567,16 @@ describe('review of #1826: who is handed an old epoch through a former key, and 
         });
         forgetGroupKeys();
         expect(nameOf(await shown(ben, g), 'B1 cat on her old phone')).toBe('PupB');
-        hooks.pop();
-        // The node honest again (only Cat₂'s chain): Ben hands Cat₂ her old epoch, and nothing to the puppet.
         forgetGroupKeys();
-        expect(await ring(ben, g).serveMissing()).toBe(1);
-        expect(await wrapsTo(g, cat2)).toContain(catsEpoch);
+        expect(await ring(ben, g).serveMissing()).toBe(0);
+        hooks.pop();
+        expect(await wrapsTo(g, pup)).toEqual([]);
+        // The node honest again (only Cat₂'s chain): her name is back on her line, and Cat₂ is handed nothing old either.
+        forgetGroupKeys();
+        expect(nameOf(await shown(ben, g), 'B1 cat on her old phone')).toBe('CatB');
+        forgetGroupKeys();
+        expect(await ring(ben, g).serveMissing()).toBe(0);
+        expect(await wrapsTo(g, cat2)).not.toContain(catsEpoch);
         expect(await wrapsTo(g, pup)).toEqual([]);
     });
 
@@ -603,7 +608,7 @@ describe('review of #1826: who is handed an old epoch through a former key, and 
         expect(eveReads.some((t) => t.includes('C1 zed'))).toBe(false);
     });
 
-    it('E: the honest re-key: nothing before the serving phone has a later record of its own; Cat₂ her old epoch after one line', async () => {
+    it('E: the honest re-key: Cat₂ is handed none of her old epochs, by anyone, before or after a rotation; her name stays on her old line', async () => {
         await control('limiters');
         forgetGroupKeys();
         const ana = phone('AnaE'); const ben = phone('BenE'); const cat = phone('CatE');
@@ -620,11 +625,162 @@ describe('review of #1826: who is handed an old epoch through a former key, and 
         expect(await wrapsTo(g, cat2)).toEqual([]);
         await writes(ben, g, 'E3 after the re-key');
         forgetGroupKeys();
-        expect(await ring(ana, g).serveMissing()).toBe(0); // Ana still has made nothing since
+        expect(await ring(ana, g).serveMissing()).toBe(0);
         forgetGroupKeys();
-        expect(await ring(ben, g).serveMissing()).toBe(1);
-        expect(await wrapsTo(g, cat2)).toEqual([3, 4]);
+        expect(await ring(ben, g).serveMissing()).toBe(0); // Ben's newest record lacks Cat₁: still nothing (option 2)
+        expect(await wrapsTo(g, cat2)).toEqual([4]);
         forgetGroupKeys();
-        expect(await reads({ ...cat2, store: memoryGroupKeyStore() }, g)).toContain('CatE: E2 Cat on her old phone');
+        expect(await reads({ ...cat2, store: memoryGroupKeyStore() }, g)).toEqual(['BenE: E3 after the re-key']);
+        forgetGroupKeys();
+        expect(nameOf(await shown(ana, g), 'E2 Cat on her old phone')).toBe('CatE');
+    });
+});
+
+describe('review of #1826, confirmation 1: what the own-record rule left open is closed (option 2: no hand-off through a former key)', () => {
+    /** A members-answer hook that applies `edit` to the rows. */
+    const doctor = (g: string, edit: (rows: any[]) => any[]): Hook => async (r) => {
+        if (r.method !== 'GET' || r.path !== `/api/groups/${g}/members`) return undefined;
+        return jsonResponse(200, edit(await (await realFetch(r.input, r.init)).json()));
+    };
+    const rosterLabels = async (p: Phone, g: string) => (await roster(p, g)).map((r) => `${r.callsign}${r.formerKeys?.length ? `(+${r.formerKeys.length} former)` : ''}`);
+
+    it('R1: after a re-key and one honest rotation, a puppet claiming the re-keyed member\'s OLD key is handed nothing', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const ben = phone('BenR1'); const cat = phone('CatR1'); const pup = phone('PupR1');
+        await control('members', { members: [ben, cat, pup].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ben, 'R1 group');
+        await join_(cat, g);
+        await say(cat, g, 'R1-a cat on her old phone');
+        await say(ben, g, 'R1-b ben, before the re-key');
+        const cat2 = await rekeyed(cat, 'CatR1');
+        expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
+        await writes(ben, g, 'R1-c ben, after the re-key'); // the honest rotation: Ben's newest record names Cat₂, not Cat₁
+        await puppetIn(g, pup);
+        // The node drops Cat₂'s chain and serves the puppet's claim over Cat₁.
+        hooks.push(doctor(g, (rows) => rows.map((m: any) => (m.memberPubkey === pk(pup) ? { ...m, formerKeys: [claim(pup, pk(cat))] } : m.memberPubkey === pk(cat2) ? { ...m, formerKeys: [] } : m))));
+        forgetGroupKeys();
+        const handed = await ring(ben, g).serveMissing();
+        hooks.pop();
+        expect(handed).toBe(0);
+        expect(await wrapsTo(g, pup)).toEqual([]);
+        forgetGroupKeys();
+        expect(await reads(pup, g)).toEqual([]);
+    });
+
+    it('R2: as R1, with Cat₂ left out of the one members read inside serveMissing: nothing, and Ben\'s screen is the same before and after', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const ben = phone('BenR2'); const cat = phone('CatR2'); const pup = phone('PupR2');
+        await control('members', { members: [ben, cat, pup].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ben, 'R2 group');
+        await join_(cat, g);
+        await say(cat, g, 'R2-a cat on her old phone');
+        const cat2 = await rekeyed(cat, 'CatR2');
+        expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
+        await writes(ben, g, 'R2-b ben, after the re-key');
+        await puppetIn(g, pup);
+        forgetGroupKeys();
+        const before = { catsOldLine: nameOf(await shown(ben, g), 'R2-a cat on her old phone'), roster: await rosterLabels(ben, g) };
+        expect(before).toEqual({ catsOldLine: 'CatR2', roster: ['BenR2', 'CatR2(+1 former)', 'PupR2'] });
+        hooks.push(doctor(g, (rows) => rows.filter((m: any) => m.memberPubkey !== pk(cat2)).map((m: any) => (m.memberPubkey === pk(pup) ? { ...m, formerKeys: [claim(pup, pk(cat))] } : m))));
+        const handed = await ring(ben, g).serveMissing();
+        hooks.pop();
+        expect(handed).toBe(0);
+        expect({ catsOldLine: nameOf(await shown(ben, g), 'R2-a cat on her old phone'), roster: await rosterLabels(ben, g) }).toEqual(before);
+        expect(await wrapsTo(g, pup)).toEqual([]);
+        forgetGroupKeys();
+        expect(await reads(pup, g)).toEqual([]);
+    });
+
+    it('J: a member who left and rejoined, left out of one members answer while a puppet claims his key: nothing', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const ana = phone('AnaJ'); const ben = phone('BenJ'); const pup = phone('PupJ');
+        await control('members', { members: [ana, ben, pup].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ana, 'J group');
+        await join_(ben, g);
+        await say(ben, g, 'J1 ben, before he left');
+        await say(ana, g, 'J2 ana, while ben was in');
+        expect((await signedDelete(URL_BASE, `/api/groups/${g}/members/${pk(ben)}`, ben.identity)).status).toBe(200);
+        await writes(ana, g, 'J3 ana, after ben left'); // Ana's phone rotates without Ben
+        forgetGroupKeys();
+        await join_(ben, g); // Ben rejoins: his own join epoch
+        await say(ben, g, 'J4 ben, back in the group');
+        const status = await control<any[]>('sql', { sql: 'SELECT status FROM group_members WHERE group_id = ? AND member_pubkey = ?', params: [g, pk(ben)], all: true });
+        expect(status.map((s) => s.status)).toEqual(['active']);
+        await puppetIn(g, pup);
+        // Control: Ben shown, the puppet claiming his current key.
+        hooks.push(membersHook(g, { [pk(pup)]: [claim(pup, pk(ben))] }));
+        forgetGroupKeys();
+        expect(await ring(ana, g).serveMissing()).toBe(0);
+        hooks.pop();
+        // The node leaves Ben out of the one answer.
+        hooks.push(doctor(g, (rows) => rows.filter((m: any) => m.memberPubkey !== pk(ben)).map((m: any) => (m.memberPubkey === pk(pup) ? { ...m, formerKeys: [claim(pup, pk(ben))] } : m))));
+        forgetGroupKeys();
+        const handed = await ring(ana, g).serveMissing();
+        hooks.pop();
+        expect(handed).toBe(0);
+        expect(await wrapsTo(g, pup)).toEqual([]);
+        forgetGroupKeys();
+        expect(await reads(pup, g)).toEqual([]);
+    });
+
+    it('V: a member the node cut from the KEYS roster only while another wrote, then restored, claimed by a puppet: nothing', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const ana = phone('AnaV'); const ben = phone('BenV'); const pup = phone('PupV');
+        await control('members', { members: [ana, ben, pup].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ana, 'V group');
+        await join_(ben, g);
+        await say(ben, g, 'V1 ben');
+        await say(ana, g, 'V2 ana');
+        // The cut: Ben 'removed' in the node's tables (its keys roster drops him) while Ana's members screen shows him active.
+        await control('sql', { sql: "UPDATE group_members SET status = 'removed' WHERE group_id = ? AND member_pubkey = ?", params: [g, pk(ben)] });
+        await control('groupRows', { groupId: g, keys: [] }).catch(() => null);
+        hooks.push(async (r) => {
+            if (r.method !== 'GET' || r.path !== `/api/groups/${g}/members`) return undefined;
+            const rows = await (await realFetch(r.input, r.init)).json();
+            const has = rows.some((m: any) => m.memberPubkey === pk(ben));
+            return jsonResponse(200, has ? rows.map((m: any) => (m.memberPubkey === pk(ben) ? { ...m, status: 'active' } : m)) : [...rows, { memberPubkey: pk(ben), callsign: 'BenV', status: 'active', role: 'member', formerKeys: [] }]);
+        });
+        await writes(ana, g, 'V3 ana, while the node cut ben from the keys roster');
+        expect((await roster(ana, g)).map((r) => r.callsign)).toContain('BenV');
+        hooks.pop();
+        await control('sql', { sql: "UPDATE group_members SET status = 'active' WHERE group_id = ? AND member_pubkey = ?", params: [g, pk(ben)] });
+        await control('groupRows', { groupId: g, keys: [] }).catch(() => null);
+        await puppetIn(g, pup);
+        hooks.push(doctor(g, (rows) => rows.filter((m: any) => m.memberPubkey !== pk(ben)).map((m: any) => (m.memberPubkey === pk(pup) ? { ...m, formerKeys: [claim(pup, pk(ben))] } : m))));
+        forgetGroupKeys();
+        const handed = await ring(ana, g).serveMissing();
+        hooks.pop();
+        expect(handed).toBe(0);
+        expect(await wrapsTo(g, pup)).toEqual([]);
+        forgetGroupKeys();
+        expect(await reads(pup, g)).toEqual([]);
+    });
+
+    it('A3w: as A3, but the serving phone has written since Ben joined (its newest record names Ben): nothing', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const ana = phone('AnaW'); const ben = phone('BenW'); const cat = phone('CatW'); const pup = phone('PupW');
+        await control('members', { members: [ana, ben, cat, pup].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ana, 'A3w group');
+        await say(ana, g, 'W1 ana, epoch 1');
+        await join_(ben, g);
+        await say(ben, g, 'W2 ben, before the puppet');
+        await control('groupRows', { groupId: g, keys: [pk(cat)] }); // a member let in without a rotation (an old app's join)
+        await writes(ana, g, 'W3 ana: her phone rotates, and her new record names Ben');
+        const epochs = await control<any[]>('sql', { sql: 'SELECT epoch, created_by FROM group_key_epochs WHERE group_id = ? ORDER BY epoch', params: [g], all: true });
+        expect(epochs.map((e) => `${e.epoch}:${e.created_by === pk(ana) ? 'Ana' : e.created_by === pk(ben) ? 'Ben' : '?'}`)).toEqual(['1:Ana', '2:Ben', '3:Ana']);
+        await puppetIn(g, pup);
+        hooks.push(doctor(g, (rows) => rows.filter((m: any) => m.memberPubkey !== pk(ben)).map((m: any) => (m.memberPubkey === pk(pup) ? { ...m, formerKeys: [claim(pup, pk(ben))] } : m))));
+        forgetGroupKeys();
+        const handed = await ring(ana, g).serveMissing();
+        hooks.pop();
+        expect(handed).toBe(0);
+        expect(await wrapsTo(g, pup)).toEqual([]);
+        forgetGroupKeys();
+        expect(await reads(pup, g)).toEqual([]);
     });
 });

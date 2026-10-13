@@ -18,8 +18,10 @@ import {
     resolvePulseThumbnailUrl,
     PULSE_FIXTURE_ITEMS,
     type PulseFeedItem,
+    PULSE_REPORT_REASONS,
 } from '../pulse';
 import { anchorUrl, signedPost } from '../node-post';
+import { CHILD_SAFETY_REASON, REPORT_REASONS } from '../reportReasons';
 
 describe('pulse utility (native)', () => {
     beforeEach(() => {
@@ -276,6 +278,20 @@ describe('reporting a Pulse item (native)', () => {
             'https://test.beanpool.org',
             '/api/reports',
             { reporterPubkey: 'viewer-pub', targetPubkey: 'owner-pub', targetPulseItemId: 'item_abc', reason: 'Offensive content' },
+            identity,
+        );
+    });
+
+    it('offers "Child safety" and sends it as picked (the server reads it from there)', async () => {
+        expect(CHILD_SAFETY_REASON).toBe('Child safety');
+        expect(PULSE_REPORT_REASONS).toContain(CHILD_SAFETY_REASON);
+        expect(PULSE_REPORT_REASONS).toEqual(REPORT_REASONS);
+        vi.mocked(signedPost).mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) } as any);
+        await reportPulseItem(item, CHILD_SAFETY_REASON, identity);
+        expect(signedPost).toHaveBeenCalledWith(
+            'https://test.beanpool.org',
+            '/api/reports',
+            { reporterPubkey: 'viewer-pub', targetPubkey: 'owner-pub', targetPulseItemId: 'item_abc', reason: 'Child safety' },
             identity,
         );
     });

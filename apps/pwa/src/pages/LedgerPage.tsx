@@ -191,7 +191,9 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     // The node has just said it reads whole: the list the refresh at open couldn't read yet, read once.
     useEffect(() => {
         if (membersOnDemand !== false || !viewerIsMember) return;
-        getMembers()
+        // Asked inside the promise, so a read that throws before it starts waits for the next refresh too.
+        Promise.resolve()
+            .then(() => getMembers())
             .then(mem => { if (isMountedRef.current) setMembers(mem.filter(m => m.publicKey !== identity.publicKey)); })
             .catch(() => { /* the next refresh reads them again */ });
     }, [membersOnDemand]);

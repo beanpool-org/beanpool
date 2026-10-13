@@ -165,8 +165,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
     // The node has just said it reads whole: the list the fetch at open couldn't read yet, read once.
     useEffect(() => {
-        if (membersOnDemand !== false || !getAllMembers) return;
-        getAllMembers().then((membersData) => {
+        if (membersOnDemand !== false) return;
+        // Asked inside the promise, so a read that throws before it starts waits for the next fetch too.
+        Promise.resolve().then(() => getAllMembers()).then((membersData) => {
             if (Array.isArray(membersData)) setAllMembersList(membersData.map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
         }).catch(() => { /* the next fetch reads them again */ });
     }, [membersOnDemand]);

@@ -18,7 +18,7 @@
  * Run: node e2e/group-chat-check.mjs (from apps/pwa). GC_TMP sets where the build and the node's data go (os.tmpdir()).
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global URL, console, process, setTimeout, document, indexedDB -- Node, and the page's side of evaluate() */
+/* global URL, Buffer, fetch, console, process, setTimeout, document, indexedDB, localStorage -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -280,17 +280,51 @@ async function main() {
             body.stale = true;
             await route.fulfill({ response: res, json: body });
         };
-        const malMissing = (route) => route.fulfill({ json: { missing: [{ pubkey: mal.publicKey, epochs: [1] }] } });
+        // Every write Ana's browser makes from here, as it leaves the page (before the node can refuse it).
+        const anaPosts = [];
+        a.context.on('request', (req) => {
+            if (req.method() !== 'GET') anaPosts.push({ path: new URL(req.url()).pathname, body: req.postData() ?? '' });
+        });
+        const naming = (pk) => anaPosts.filter((p) => p.body.includes(pk));
+        let missingReads = 0;
+        const malMissing = (route) => {
+            missingReads++;
+            return route.fulfill({ json: { missing: [{ pubkey: mal.publicKey, epochs: [1] }] } });
+        };
         await a.context.route(isKeysRoot, addMal);
         await a.context.route(isMissing, malMissing);
         await openGroupChat(a.page, node, 'Garden group');
+        const beforeShed = (await rows()).length;
         await send(a.page, 'Who has the shed key');
         const rosterTold = await a.page.getByTestId('chat-refusal').textContent({ timeout: 20_000 }).catch(() => '');
         check(/isn't in its members list/.test(rosterTold), `a roster naming someone the members list doesn't is refused (${JSON.stringify(rosterTold)})`);
-        check((await wrapsTo(mal.publicKey)).length === 0, 'no key is wrapped or topped up to a recipient only the node names');
-        const afterRoster = await rows();
-        check(!afterRoster.some((r) => String(r.ciphertext).includes('shed')), 'and no readable words went');
+        check(naming(mal.publicKey).length === 0 && (await wrapsTo(mal.publicKey)).length === 0,
+            `nothing Ana's browser sent names the recipient only the node's keys roster names (${JSON.stringify(naming(mal.publicKey).map((p) => p.path))})`);
+        check((await rows()).length === beforeShed, 'and no line went, sealed or readable');
         await a.context.unroute(isKeysRoot, addMal);
+        await a.context.unroute(isMissing, malMissing);
+
+        // Decision (a): a top-up goes only to a member the epoch's signed record wrapped it to. The node now shows Mal in
+        // the members list as well and says he lacks epoch 1's key; its record (signed by Ana) never named him.
+        const malShown = async (route) => {
+            const res = await route.fetch();
+            const body = await res.json();
+            const list = Array.isArray(body) ? [...body, { groupId: G, memberPubkey: mal.publicKey, callsign: 'Mal', role: 'member', status: 'active', joinedAt: new Date().toISOString() }] : body;
+            await route.fulfill({ response: res, json: list });
+        };
+        const isMembers = (url) => url.pathname === `/api/groups/${G}/members`;
+        missingReads = 0;
+        await a.context.route(isMembers, malShown);
+        await a.context.route(isMissing, malMissing);
+        await openGroupChat(a.page, node, 'Garden group');
+        for (let i = 0; i < 40 && missingReads === 0; i++) await new Promise((r) => setTimeout(r, 250));
+        await a.page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
+        await new Promise((r) => setTimeout(r, 1_500));
+        const topUps = anaPosts.filter((p) => p.path.endsWith('/keys/wrap'));
+        check(missingReads > 0, `Ana's browser read the node's missing list (${missingReads})`);
+        check(topUps.length === 0 && naming(mal.publicKey).length === 0,
+            `no top-up to a member the epoch's signed record didn't wrap to, though the node lists him as a member missing it (${topUps.length} sent)`);
+        await a.context.unroute(isMembers, malShown);
         await a.context.unroute(isMissing, malMissing);
 
         console.log('3. Across clients: the web and the phone module');

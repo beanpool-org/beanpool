@@ -14,7 +14,7 @@ One switch, **showcase**, says what the apps do with a feature that is off:
 - **On:** the apps show it, filled from **Example Valley**, a made-up community built into the apps, under one marker: **🏘️ Local community**. The Ledger shows an example member, Commons an example enterprise and Decision, and the Market's My Deals two example deals.
 - **Off:** a feature that is off is hidden, as before. On the phone, with Beans off, the Commons and Ledger tabs go.
 
-With showcase on, every button that would move Beans, make a deal, vote, pledge or invite opens one sheet, **Why this lives in a local community**. It says why in a line, then offers **Start a community**, **Communities near you** and **How it works**.
+With showcase on, every button that would move Beans, make a deal, vote, pledge or invite opens one sheet, **Why this lives in a local community**. It says why in a line, then offers **Start a community** and, where it can, **Communities near you** and **How it works**.
 
 The explainers on those screens are the real ones. Nobody in Example Valley has a name: rows read "a neighbour", "the Commons" or "the Example Valley Bakery". In the web app, visitors who haven't joined also get an example Ledger tab beside Home, Market and Map.
 

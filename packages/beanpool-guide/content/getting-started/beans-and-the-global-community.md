@@ -44,7 +44,7 @@ You meet it in a few shapes:
 - a button that keeps its place, such as **Request · Beans held safely 🏘️** on a listing;
 - one line where a local community is different, such as "🏘️ In a local community this is a price in Beans ›".
 
-Tap any of them to open **Why this lives in a local community**. It says why in a sentence or two, then offers **Start a community**, **Communities near you** and **How it works**.
+Tap any of them to open **Why this lives in a local community**. It says why in a sentence or two, then offers **Start a community** and, where it can, **Communities near you** and **How it works**.
 
 ## Example Valley
 

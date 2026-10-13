@@ -152,10 +152,13 @@ export const DM_KEY_BANNER_FLOOR = 120;
  * the screen is edge-to-edge), never from a share of the window: the box is never cut, the thread keeps dmThreadFloor
  * when there is room for it and the banner's floor, and the banner never takes more than 55% of the column. The banner
  * scrolls inside whatever it gets. Before the column is measured (the first frame), 55% of the window minus the box.
+ * A keyboard already up when the pause starts (#1872/#1873 confirmation 2, finding 5) is padding the KeyboardAvoidingView
+ * adds inside the measured column, at most the keyboard's height, so it comes off the room like the box.
  */
-export function dmKeyBannerMaxHeight(m: { column: number; composer: number; deals: number; fontScale: number; windowHeight: number }): number {
-    if (!(m.column > 0) || !(m.composer > 0)) return Math.max(0, Math.round(m.windowHeight * 0.55) - Math.max(0, m.composer));
-    const room = Math.max(0, m.column - m.composer - Math.max(0, m.deals));
+export function dmKeyBannerMaxHeight(m: { column: number; composer: number; deals: number; fontScale: number; windowHeight: number; keyboard?: number }): number {
+    const keyboard = Math.max(0, m.keyboard ?? 0);
+    if (!(m.column > 0) || !(m.composer > 0)) return Math.max(0, Math.round(m.windowHeight * 0.55) - Math.max(0, m.composer) - keyboard);
+    const room = Math.max(0, m.column - m.composer - Math.max(0, m.deals) - keyboard);
     const wanted = Math.min(room - dmThreadFloor(m.fontScale), Math.round(m.column * 0.55));
     return Math.max(0, Math.min(room, Math.round(Math.max(wanted, DM_KEY_BANNER_FLOOR))));
 }

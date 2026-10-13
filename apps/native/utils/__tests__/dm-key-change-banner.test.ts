@@ -223,7 +223,9 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         expect(src).toMatch(/peerName=\{keyChange\.name\}/);
         // The banner's cap is worked out from the measured column, the deals strip and the box (finding 7), never a share
         // of the window alone; the column wraps the banner, the strip and the keyboard view, and the box is measured whole.
-        expect(src).toMatch(/maxHeight: dmKeyBannerMaxHeight\(\{ \.\.\.column, deals: visibleDeals\.length \? column\.deals : 0, fontScale, windowHeight \}\)/);
+        expect(src).toMatch(/maxHeight: dmKeyBannerMaxHeight\(\{ \.\.\.column, deals: visibleDeals\.length \? column\.deals : 0, fontScale, windowHeight, keyboard: keyboardHeight \}\)/);
+        // A keyboard already up when the pause starts comes off the banner's room (confirmation 2, finding 5).
+        expect(src).toMatch(/const keyboardHeight = useKeyboardState\(s => \(s\.isVisible \? s\.height : 0\)\);/);
         expect(src).not.toMatch(/windowHeight \* 0\.55/);
         expect(src).toMatch(/<View style=\{styles\.keyboardView\} onLayout=\{measured\('column'\)\}>\s*\{keyChange && \(/);
         expect(src).toMatch(/<View style=\{styles\.dealStrip\} onLayout=\{measured\('deals'\)\}>/);
@@ -296,5 +298,29 @@ describe('the banner\'s height on a 320 × 533 phone and up (finding 7)', () => 
     it('before the column is measured (the first frame), 55% of the window less the box, never more', () => {
         expect(dmKeyBannerMaxHeight({ column: 0, composer: 0, deals: 0, fontScale: 1.3, windowHeight: 485 })).toBe(267);
         expect(dmKeyBannerMaxHeight({ column: 0, composer: 109, deals: 0, fontScale: 1.3, windowHeight: 485 })).toBe(158);
+        expect(dmKeyBannerMaxHeight({ column: 0, composer: 109, deals: 0, fontScale: 1.3, windowHeight: 485, keyboard: 300 })).toBe(0);
     });
+    // #1872/#1873 confirmation 2, finding 5: Ana is typing when a sync makes the offer, so a 300-dp keyboard is already up.
+    // The KeyboardAvoidingView pads the column by up to the keyboard's height; the cap measured the column without it, so
+    // the paused box sat under the keyboard (RN-web replica, keyboard-controller 1.20.7's padding: cut in 74 of 108
+    // renders, the whole 97-dp box at 320 × 640). The columns and boxes here are the replica's, with the keyboard up.
+    const withKeyboard = [
+        { name: '320 × 640, 48-dp nav bar', column: { 1: 503, 1.2: 496, 1.3: 493 }, box: { 1: 76, 1.2: 95, 1.3: 97 } },
+        { name: '320 × 640, edge-to-edge', column: { 1: 551, 1.2: 544, 1.3: 541 }, box: { 1: 76, 1.2: 95, 1.3: 97 } },
+        { name: '480 × 854, 48-dp nav bar', column: { 1: 717, 1.2: 710, 1.3: 707 }, box: { 1: 76, 1.2: 79, 1.3: 80 } },
+        { name: '480 × 854, edge-to-edge', column: { 1: 765, 1.2: 758, 1.3: 755 }, box: { 1: 76, 1.2: 79, 1.3: 80 } },
+    ] as const;
+    for (const p of withKeyboard) for (const fontScale of [1, 1.2, 1.3] as const) {
+        it(`${p.name} at ${fontScale}×, a 300-dp keyboard already up: the box sits above the keyboard, and the banner keeps what is left up to its floor`, () => {
+            const column = p.column[fontScale], composer = p.box[fontScale], keyboard = 300;
+            for (const deals of [0, 72]) {
+                const banner = dmKeyBannerMaxHeight({ column, composer, deals, fontScale, windowHeight: column + 88, keyboard });
+                expect(banner + deals + composer + keyboard, `deals ${deals}`).toBeLessThanOrEqual(column);
+                expect(banner).toBeGreaterThanOrEqual(Math.min(DM_KEY_BANNER_FLOOR, column - composer - deals - keyboard));
+            }
+            // With the keyboard down the cap is as before (finding 7's numbers).
+            expect(dmKeyBannerMaxHeight({ column, composer, deals: 0, fontScale, windowHeight: column + 88, keyboard: 0 }))
+                .toBe(dmKeyBannerMaxHeight({ column, composer, deals: 0, fontScale, windowHeight: column + 88 }));
+        });
+    }
 });

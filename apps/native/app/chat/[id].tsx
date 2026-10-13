@@ -200,6 +200,9 @@ function ChatScreen({ id }: { id: string }) {
     // While the keyboard is up, KeyboardAvoidingView already lifts the input bar to sit
     // on the keyboard — adding the nav-bar inset on top of that shows as a dead gap.
     const keyboardVisible = useKeyboardState(s => s.isVisible);
+    // A keyboard already up when a pause starts pads the column's KeyboardAvoidingView by up to its height: the banner's
+    // cap takes it off the room, so the paused box is never under it (#1872/#1873 confirmation 2, finding 5).
+    const keyboardHeight = useKeyboardState(s => (s.isVisible ? s.height : 0));
     // Modals get their own native window, and keyboard-controller only hears keyboard
     // events on the main window. If a modal opens while the keyboard is up, the hide
     // happens under the modal's window and the chat stays padded by a phantom keyboard
@@ -1244,7 +1247,7 @@ function ChatScreen({ id }: { id: string }) {
             <View style={styles.keyboardView} onLayout={measured('column')}>
             {keyChange && (
                 <ScrollView
-                    style={{ flexGrow: 0, flexShrink: 1, maxHeight: dmKeyBannerMaxHeight({ ...column, deals: visibleDeals.length ? column.deals : 0, fontScale, windowHeight }) }}
+                    style={{ flexGrow: 0, flexShrink: 1, maxHeight: dmKeyBannerMaxHeight({ ...column, deals: visibleDeals.length ? column.deals : 0, fontScale, windowHeight, keyboard: keyboardHeight }) }}
                     keyboardShouldPersistTaps="handled"
                 >
                     <DmKeyChangedBanner

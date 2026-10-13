@@ -14,12 +14,9 @@ related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
 
 Then:
 
-- **A Market post:** choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**), add a few words if they help, and tap **Submit Report**.
-- **A Pulse post:** choose a reason and tap **Submit report**.
-- **An event:** tap **Report** to confirm.
-- **A project or an enterprise:** type why, and tap **Submit Report**.
+Choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**), add a few words if they help, and tap **Submit report**. Every report screen offers the same reasons, in the phone app and the web app.
 
-**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. Their alert says only that a report came in. In the Reports queue, your community's moderators see it as they see any report: the reason you chose, any words you added, and that it came from you. Nobody else is told who reported. If you already reported a Market or Pulse post with another reason, report it again and choose **Child safety**. If a child is in danger right now, call your local emergency number first.
+**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. Their alert says only that a report came in. In the Reports queue, your community's moderators see it as they see any report: the reason you chose, any words you added, and that it came from you. Nobody else is told who reported. If you already reported it with another reason, report it again and choose **Child safety**. If a child is in danger right now, call your local emergency number first.
 
 ## A person or a message
 

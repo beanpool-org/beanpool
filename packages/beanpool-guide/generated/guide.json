@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 125,
-  "hash": "3a7064e39a8bc4f6813ca0b694d889ed11f51f0445002cc4ebdb83532506971f",
+  "version": 126,
+  "hash": "c1549846eeda948d588dc087a0828661ec753aa981cdc4f91c1d07c07880d5e9",
   "sections": [
     {
       "id": "about",
@@ -111,6 +111,7 @@
         "privacy",
         "your-area",
         "what-the-admins-can-see",
+        "admins-ai-assistants",
         "blocking",
         "reporting",
         "notifications",
@@ -979,7 +980,7 @@
             "**Who joined:** people who joined this week. On a local community it shows names and faces. On the global community it shows only a count, by area, and no names.",
             "**The Pulse:** posts shared by neighbours from external channels like YouTube and blogs, with starred categories first. Tap **See all** to open the Pulse.",
             "**Sun and moon:** tonight's moon and today's sunrise and sunset, in one line, such as \"🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48\". Your phone or browser works it out by itself: the card asks nothing of your community's server. It uses your community's place, rounded to about a kilometre, or your area where your community has no place (on the global community it is always your area). On the global community, the phone can also use where it last was, but only if you have already let the app use your location: it never asks. To use your area even where your community has a place, tap **…** then **Settings…** and choose **Your area**. The times are on your own phone's or computer's clock, so when you travel you see them in your own time. The moon is drawn as it looks from that side of the equator. Where the sun doesn't rise or set today, it says so, such as \"Sun up all day\" or \"No sunset today\". If no place is known, the card doesn't show, and **Edit home** says \"Nothing to show now: no place is known.\" A screen reader reads it in words, such as \"Moon waxing gibbous, 72 percent lit. Sunrise 6:12 am. Sunset 5:48 pm.\"",
-            "**Your Beans:** your balance and credit line (room to spend). Not on the global community.",
+            "**Your Beans:** your balance and credit line (room to spend). Not on the global community. There the phone shows an example card instead: what Beans do in a local community, and **See an example ledger**. It stays until you tap **Hide this card**, even after **First steps** has gone.",
             "**From your community:** announcements and notices from your community's admins.",
             "**Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin.",
             "**Your community:** member count and trades this month. It has **Add a card** and **Edit home**. This card stays at the bottom and cannot be moved or removed."
@@ -4022,6 +4023,20 @@
         },
         {
           "type": "h2",
+          "text": "Verified accounts"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "When you tap **Connect**, your community's server asks Instagram or TikTok which account you signed in to. The channel is marked verified only when that is the account on the channel.",
+            "Signed in to a different account? The screen says so. Sign in to the right account and tap **Connect** again.",
+            "Add the channel as your **@handle** so it can be checked. A short link cannot be.",
+            "Facebook channels are never marked verified.",
+            "If a channel says **Reconnect to restore your verified badge**, tap **Reconnect**."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "On each channel"
         },
         {
@@ -5417,7 +5432,8 @@
       "related": [
         "privacy",
         "joining",
-        "leaving-or-deleting"
+        "leaving-or-deleting",
+        "admins-ai-assistants"
       ],
       "blocks": [
         {
@@ -5562,11 +5578,73 @@
         },
         {
           "type": "h2",
+          "text": "An admin's AI assistant"
+        },
+        {
+          "type": "p",
+          "text": "An owner (and, in a coming update, an admin) may connect their own AI assistant to the server to help them. It sees less than they do: never your messages, balance, trades, keys, photos or the names list, and never who reported anyone. See \"When an admin uses an AI assistant\"."
+        },
+        {
+          "type": "h2",
           "text": "Asking about your entry"
         },
         {
           "type": "p",
           "text": "You can ask your admins what your entry says, to correct it, or to delete it when you no longer belong to the community. They keep the list, not BeanPool."
+        }
+      ]
+    },
+    {
+      "slug": "admins-ai-assistants",
+      "title": "When an admin uses an AI assistant",
+      "summary": "What an owner's or admin's AI assistant can read about you, what it never sees, and who receives it.",
+      "section": "settings",
+      "related": [
+        "what-the-admins-can-see",
+        "reporting",
+        "privacy",
+        "joining"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "Your community's owners can connect their own AI assistant (for example Claude or ChatGPT) to your community's server, to help them look after it: to ask what needs them, or to summarise the open reports. Admins will be able to as well, approved on their phone, in a coming update. They connect it themselves, and they can disconnect it at any time. The other owners are told when one is connected."
+        },
+        {
+          "type": "h2",
+          "text": "What it can read about you"
+        },
+        {
+          "type": "p",
+          "text": "An assistant sees much less than an admin does in Settings. Your community's server decides what it gets, not the assistant."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**If someone reports you or your post**, and the admin asks for the report's words: the reason given, your post's title and description, and your BeanPool name. Never who made the report.",
+            "**If you ask to join**, and the admin asks for the messages: the name and message you sent with your request, and the community you said you came from. Never your photo or your key.",
+            "**Totals for the whole community**, such as how many members there are and how many Beans are in circulation. Never your balance."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What it never sees"
+        },
+        {
+          "type": "p",
+          "text": "Your messages and chats, your balance and trades, your keys, your address, your photos, the names list, and who reported anyone. It can't change anything about you: it can't remove you, mute you, take down your post or answer your join request. An admin does those, in Settings."
+        },
+        {
+          "type": "h2",
+          "text": "Who receives it"
+        },
+        {
+          "type": "p",
+          "text": "What the assistant reads goes to the company that runs it, as when you paste something into an AI chat yourself. The server sends a report's words or a join message only when the admin's assistant asks for them, marked as words from a member and not instructions."
+        },
+        {
+          "type": "p",
+          "text": "If you'd rather your report or your join message wasn't read by an AI, ask your admins how they use theirs."
         }
       ]
     },

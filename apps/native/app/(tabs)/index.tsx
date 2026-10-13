@@ -20,6 +20,7 @@ import { NewEventModal } from '../../components/NewEventModal';
 import { goToNeedsTarget } from '../../components/NeedsYouIcons';
 import { useManageNode } from '../../components/useManageNode';
 import { FabBandContext, HomeCard, HomeButton, homeStyles, type FabBand } from '../../components/home/HomeParts';
+import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
 import { EditHomeSheet } from '../../components/home/EditHomeSheet';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
@@ -32,7 +33,7 @@ import {
 import {
     FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
-    effectiveInterests, fewerCardsNews, firstSteps, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
+    effectiveInterests, fewerCardsNews, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, skyOf, starredFirst,
     type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
@@ -799,6 +800,11 @@ export default function HomeScreen() {
     // Each card in the member's order: the drawn ones, and the "one way back" card while it may be up (it decides).
     const list = ordered.filter(c => drawn.some(d => d.id === c.id) || (c.type === 'safety' && !!answer));
     const firstDrawn = list.find(c => c.type !== 'safety' || safetyUp);
+    // Where Beans are previewed, the Your Beans card (design §1 row 1): no API, the Ledger's example behind its link. It
+    // sits under First steps while that is up, else under the first card, and only its own "Hide this card" puts it away:
+    // First steps done, removed or out of its days leaves it.
+    const beansPreviewCard = !!answer && homeBeansPreview(answer);
+    const beansCardUnder = beansPreviewCard ? (list.find(c => c.type === 'steps') ?? firstDrawn)?.id ?? null : null;
 
     let empty: React.ReactNode = null;
     if (!answer) {
@@ -897,8 +903,10 @@ export default function HomeScreen() {
                                         </Pressable>
                                     </View>
                                 )}
+                                {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} />}
                             </View>
                         ))}
+                        {beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} />}
                     </Animated.View>
                 </ScrollView>
 

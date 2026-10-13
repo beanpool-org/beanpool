@@ -7,7 +7,7 @@ import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
 import { logger } from './logger.js';
 import { logAddressTag } from './log-address.js';
-import { isNodeOwner } from './engine/node-roles.js';
+import { isNodeOwner, nodeRoleOf } from './engine/node-roles.js';
 import { looksLikeAutomationToken, verifyAutomationToken, noteAutomationTokenUse, isRefusedToEveryToken, isBackupsScopeRoute } from './automation-tokens.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
@@ -217,10 +217,16 @@ function checkAutomationToken(ctx: any, presented: string): boolean {
     }
     // A token lives only as long as its maker is an owner: an owner removed or demoted takes their tokens with them. A
     // record whose maker is not a member's key ('owner:password', from before only a key could make one) is refused alike.
-    if (typeof record.createdBy !== 'string' || !isNodeOwner(record.createdBy)) {
+    // An AI assistant's (agent) token is an owner's or an admin's own (agent/grants-route.ts), so it lives while its maker
+    // is either, as /mcp reads it; here it is refused 403 below whatever its maker.
+    const makerRole = typeof record.createdBy === 'string' ? nodeRoleOf(record.createdBy) : null;
+    const makerLive = record.scope === 'agent' ? makerRole === 'owner' || makerRole === 'admin'
+        : typeof record.createdBy === 'string' && isNodeOwner(record.createdBy);
+    if (!makerLive) {
         ctx.status = 401;
         ctx.body = { error: 'Invalid, revoked or expired automation token' };
-        logger.warn('AUTH', 'Automation token refused: its maker is no longer an owner', { tokenId: record.id, route: `${method} ${reqPath}` });
+        logger.warn('AUTH', record.scope === 'agent' ? 'Automation token refused: its maker is no longer an owner or admin'
+            : 'Automation token refused: its maker is no longer an owner', { tokenId: record.id, route: `${method} ${reqPath}` });
         return false;
     }
     const refuse = (error: string): false => {

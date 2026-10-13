@@ -77,7 +77,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests } from '../db';
+import { getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice } from '../dm-lock';
 import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
@@ -2046,6 +2046,34 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         const now = place();
         expect((sql.prepare('SELECT type FROM messages WHERE id = ?').get(second.id) as any).type).toBe('removed');
         expect(now).toEqual(held);
+    });
+
+    // Every writer of a DM's rows or lines reads the pins first (#1872/#1873 confirmation 2, finding 3): the open chat's poll
+    // and a new chat's answer, each the run's first writer.
+    it('the update, a push opens Ben\'s chat before any sync (the open chat\'s poll first), the node serving PUPPET\'s copies of his held lines; then a clean listing: judged on the lines held, Ben pinned, PUPPET offered, nothing goes', async () => {
+        await bensHistoryHeld(30);
+        theUpdate();
+        for (const l of node.lines.filter((x) => x.conversationId === dm.id)) rewrittenByPuppet(l);
+        await syncSingleConversation(dm.id);
+        await syncMessages(ana.publicKey);
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
+        expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+    });
+
+    it('the update, Ana\'s first act a new chat with Ben, the node answering with their held DM (no line in it yet) and [Ana, PUPPET]: Ben pinned checked from the rows held, PUPPET offered, nothing goes', async () => {
+        node.lines = [];
+        await phoneOf(ana);
+        h.store.delete(PINS(ana));
+        restarted();
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        (globalThis as any).fetch = async (url: string, init: any = {}) => (init.method === 'POST' && new URL(url).pathname === '/api/messages/conversation'
+            ? answer(200, { conversation: { id: dm.id, type: 'dm', participants: dm.participants, createdBy: ana.publicKey } })
+            : fetchMock(url, init));
+        expect((await createConversationApi('dm', [ana.publicKey, ben.publicKey], ana.publicKey)).id).toBe(dm.id);
+        await syncMessages(ana.publicKey);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
+        expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
     });
 
     // §3.4 amendment 2, option H: a first-sight pause ends only on the member's tap. A listing is the node's word, and the

@@ -2696,7 +2696,7 @@ describe('the Your Beans card where Beans are previewed: its own card, put away 
     it('its own Hide puts it away and First steps stays; on the next visit it never shows, not for a frame', async () => {
         node.answer = showcase();
         await render();
-        await act(async () => { byLabel('Hide the Your Beans card')!.click(); });
+        await act(async () => { byLabel('Hide this card: Your Beans')!.click(); });
         await settle();
         expect(beansCard()).toBeNull();
         expect(cards()).toContain('steps');

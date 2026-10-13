@@ -38,7 +38,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI } from '@beanpool/core';
-import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE } from '../../utils/market-global';
+import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
@@ -993,11 +993,15 @@ export default function PostDetailModal() {
                 )}
 
                 {/* Price Card: where there are no Beans, what the poster would like in return is in the description. */}
+                {/* The words are one element to a screen reader; the marker's line sits beside them, in the card but outside
+                    that group, so VoiceOver reads it and reaches it as a button (review of #1852, finding 8). */}
                 {!isPulsePost && !showsBeans && (
-                    <View style={styles.priceCard} accessible accessibilityLabel={`${NO_BEANS_TERMS.value}. ${NO_BEANS_TERMS.note}`}>
-                        <Text style={styles.priceLabel}>{NO_BEANS_TERMS.label}</Text>
-                        <Text style={[styles.priceValue, { fontSize: 22, textAlign: 'center', paddingHorizontal: 12 }]}>{NO_BEANS_TERMS.value}</Text>
-                        <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6, paddingHorizontal: 16 }}>{NO_BEANS_TERMS.note}</Text>
+                    <View style={styles.priceCard} testID="no-beans-terms">
+                        <View style={{ alignSelf: 'stretch', alignItems: 'center' }} accessible accessibilityLabel={`${NO_BEANS_TERMS.value}. ${noBeansTermsNote(beansPreview)}`}>
+                            <Text style={styles.priceLabel}>{NO_BEANS_TERMS.label}</Text>
+                            <Text style={[styles.priceValue, { fontSize: 22, textAlign: 'center', paddingHorizontal: 12 }]}>{NO_BEANS_TERMS.value}</Text>
+                            <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6, paddingHorizontal: 16 }}>{noBeansTermsNote(beansPreview)}</Text>
+                        </View>
                         {beansPreview && <View style={{ paddingHorizontal: 16 }}><LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.price} /></View>}
                     </View>
                 )}

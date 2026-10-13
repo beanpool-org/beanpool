@@ -10,7 +10,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
 }));
 import { readNodeProfile, hiddenTabsFor, effectiveFeatures, showcaseMode } from '../node-profile';
-import { NO_BEANS_TERMS } from '../market-global';
+import { NO_BEANS_TERMS, noBeansTermsNote } from '../market-global';
 
 const OFF = { beans: false, escrow: false, enterprises: false, decisions: false, invites: false };
 const GLOBAL = readNodeProfile({ profile: 'global', features: { ...OFF, showcase: true } })!;
@@ -64,8 +64,14 @@ describe('modes per feature and per reader', () => {
 
 describe('the Market\'s no-Beans words (design §1 row 2)', () => {
     it('say where Beans are, not that they are missing for good', () => {
-        expect(NO_BEANS_TERMS.note).toMatch(/^No Beans here yet\. In a local community the price is in Beans, and the ledger remembers who helped whom\./);
-        expect(NO_BEANS_TERMS.note).not.toMatch(/There are no Beans here|Ʀ|🔒|locked/i);
+        expect(noBeansTermsNote(true)).toMatch(/^No Beans here yet\. In a local community the price is in Beans, and the ledger remembers who helped whom\./);
+        expect(noBeansTermsNote(true)).not.toMatch(/There are no Beans here|Ʀ|🔒|locked/i);
+    });
+
+    it("a local community whose operator turned Beans off keeps its own words: nothing there says 'in a local community' (review of #1852, finding 7)", () => {
+        expect(noBeansTermsNote(false)).toBe(NO_BEANS_TERMS.note);
+        expect(noBeansTermsNote(false)).toMatch(/^There are no Beans here\./);
+        expect(noBeansTermsNote(false)).not.toMatch(/local community/i);
     });
 });
 

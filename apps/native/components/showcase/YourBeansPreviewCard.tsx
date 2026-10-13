@@ -50,7 +50,7 @@ export function YourBeansPreviewCard({ colors }: { colors: AppColors }) {
             <Text style={s.note}>{LOCAL_COMMUNITY_LINES.yourBeansCard}</Text>
             <HomeRow colors={colors} text={LOCAL_COMMUNITY_LINES.yourBeansLink} a11y="See an example ledger"
                 onPress={() => router.navigate('/(tabs)/ledger')} testID="home-beans-preview-ledger" />
-            <HomeButton colors={colors} text="Hide this card" a11y="Hide the Your Beans card" onPress={hide} testID="home-beans-preview-hide" />
+            <HomeButton colors={colors} text="Hide this card" a11y="Hide this card: Your Beans" onPress={hide} testID="home-beans-preview-hide" />
         </HomeCard>
     );
 }

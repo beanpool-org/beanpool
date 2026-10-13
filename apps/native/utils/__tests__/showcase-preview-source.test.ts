@@ -38,14 +38,20 @@ describe('the preview sources', () => {
         expect(ledger).not.toMatch(/LedgerPreview/);
         // Nothing until the mode is known (the phone's copy of the profile read), then the sample in preview; a live
         // answer lands only while its load is the latest, so one begun before the switch never draws over the sample.
-        expect(ledger).toMatch(/const loadData = \(\) => \{\s*const gen = \+\+loadGen\.current;\s*if \(beansMode === undefined\) return;\s*if \(preview\) \{ setBalanceState\(sampleBalance\(\)\); setTxns\(sampleTransactions\(\)\); setEscrowTotal\(0\); setPledgeHistory\(\[\]\); return; \}/);
+        expect(ledger).toMatch(/const loadData = \(\) => \{\s*const gen = \+\+loadGen\.current;\s*if \(beansMode === undefined\) return;\s*if \(preview\) \{ setBalanceState\(sampleBalance\(\)\); setTxns\(sampleTransactions\(\)\); setEscrowTotal\(0\); setPledgeHistory\(\[\]\); setHeldSample\(true\); return; \}\s*if \(heldSample\) \{ setBalanceState\(NO_BALANCE\); setTxns\(NO_TXNS\); setHeldSample\(false\); \}/);
+        // What is held is drawn only in the mode it was loaded for (review of #1852, finding 2).
+        expect(ledger).toContain('const balanceState = heldSample === preview ? heldBalance : NO_BALANCE;');
+        expect(ledger).toContain('const txns = heldSample === preview ? heldTxns : NO_TXNS;');
         expect(ledger).toMatch(/const beansMode = useShowcaseModeOnceKnown\('beans'\);/);
         for (const read of ['getBalance', 'getTransactions', 'getMemberProfile', 'getEscrowTotal', 'getPledgeHistory']) {
             expect(ledger, read).toMatch(new RegExp(`${read}\\(identity\\.publicKey\\)\\.then\\(latest\\(`));
         }
         expect(ledger).not.toMatch(/SAMPLE_COMMUNITY/);
         const commons = read('app/(tabs)/projects.tsx');
-        expect(commons).toMatch(/enterprisesPreview \? <View style=\{\{ marginHorizontal: -16 \}\}><CommonsPreview \/><\/View> : null/);
+        // In preview, first under the title, so the strip greets the newcomer (review of #1852, finding 5); never the footer.
+        expect(commons).toMatch(/\{heading\.description\}<\/Text>\s*<\/View>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?\{enterprisesPreview && <View style=\{\{ marginHorizontal: -16 \}\}><CommonsPreview \/><\/View>\}/);
+        expect(commons).not.toMatch(/ListFooterComponent=\{enterprisesPreview/);
+        expect(commons.split('<CommonsPreview').length - 1).toBe(1);
         expect(commons).not.toMatch(/SAMPLE_COMMUNITY/);
     });
 
@@ -68,7 +74,9 @@ describe('the preview sources', () => {
         const deals = read('components/MyDealsSheet.tsx');
         expect(deals).not.toMatch(/DealsPreview|SAMPLE_COMMUNITY/);
         const load = deals.slice(deals.indexOf('const loadData = async () => {'));
-        expect(load).toMatch(/^const loadData = async \(\) => \{\s*const gen = \+\+loadGen\.current;\s*if \(preview\) \{\s*const sample = sampleDeals\(\);\s*setPosts\(sample\.posts\);\s*setTransactions\(sample\.transactions\);\s*return;\s*\}/);
+        expect(load).toMatch(/^const loadData = async \(\) => \{\s*const gen = \+\+loadGen\.current;\s*if \(preview\) \{\s*const sample = sampleDeals\(\);\s*setPosts\(sample\.posts\);\s*setTransactions\(sample\.transactions\);\s*setHeldSample\(true\);\s*return;\s*\}\s*if \(heldSample\) \{ setPosts\(NONE\); setTransactions\(NONE\); setHeldSample\(false\); \}/);
+        expect(deals).toContain('const posts = heldSample === preview ? heldPosts : NONE;');
+        expect(deals).toContain('const transactions = heldSample === preview ? heldTransactions : NONE;');
         // A live load begun before a switch to preview never lands over the sample (showcase-market-render.test.ts).
         expect(load.slice(0, load.indexOf('\n    };')).match(/if \(gen !== loadGen\.current\) return;/g)).toHaveLength(2);
         // Every press that would open the review form or a listing opens the marker's sheet in preview.
@@ -85,11 +93,17 @@ describe('the preview sources', () => {
         const post = read('app/post/[id].tsx');
         expect(post).toMatch(/\{beansPreview && <View style=\{\{ paddingHorizontal: 16 \}\}><LocalCommunityMark variant="line" feature="beans" text=\{LOCAL_COMMUNITY_LINES\.price\} \/><\/View>\}/);
         expect(post).toMatch(/\{beansPreview && <LocalCommunityMark variant="line" feature="beans" text=\{LOCAL_COMMUNITY_LINES\.price\} \/>\}/);
+        // The price card's words are one element to a screen reader, and the line is outside that group, so VoiceOver
+        // reads it and reaches it as a button (review of #1852, finding 8); the note says "in a local community" only in
+        // preview (finding 7).
+        expect(post).toMatch(/<View style=\{styles\.priceCard\} testID="no-beans-terms">\s*<View [^>]*accessible accessibilityLabel=\{`\$\{NO_BEANS_TERMS\.value\}\. \$\{noBeansTermsNote\(beansPreview\)\}`\}>(?:(?!<View)[\s\S])*?<\/View>\s*\{beansPreview && <View style=\{\{ paddingHorizontal: 16 \}\}><LocalCommunityMark variant="line"/);
+        expect(post).not.toMatch(/\{NO_BEANS_TERMS\.note\}/);
         expect(post).toMatch(/escrowPreview && \(\s*<View style=\{styles\.otherPostActions\}>\s*<LocalCommunityMark variant="action" feature="escrow" label=\{LOCAL_COMMUNITY_LINES\.dealAction/);
         expect(read('components/PollCard.tsx')).toMatch(/\{informal && decisionsPreview && <LocalCommunityMark variant="line" feature="decisions" text=\{LOCAL_COMMUNITY_LINES\.poll\} \/>\}/);
         expect(read('app/(tabs)/market.tsx')).toMatch(/decisionsPreview=\{decisionsPreview\}/);
         const people = read('app/(tabs)/people.tsx');
-        expect(people).toMatch(/with 12 words or a sign-in in the BeanPool app/);
+        // Its words say 12 words only where the door offers them (invite-entries.ts bringSomeoneHereText: finding 7).
+        expect(people).toContain('{bringSomeoneHereText(nodeProfile?.features)}');
         expect(people).toMatch(/\{invitesPreview && <LocalCommunityMark variant="line" feature="invites" text=\{LOCAL_COMMUNITY_LINES\.invites\} \/>\}/);
         expect(read('app/public-profile.tsx')).toMatch(/\{!showsBeans && beansPreview && \(\s*<View style=\{\{ marginHorizontal: 16 \}\}>\s*<LocalCommunityMark variant="line" feature="beans" text=\{LOCAL_COMMUNITY_LINES\.profile\} \/>/);
     });

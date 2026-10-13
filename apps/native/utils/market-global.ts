@@ -32,8 +32,19 @@ export function marketExtras(extras: readonly MarketExtraFilter[], features: Nod
 export const NO_BEANS_TERMS = {
     label: 'IN RETURN',
     value: 'Free, a swap, or ask',
-    note: `${LOCAL_COMMUNITY_LINES.noBeansTerms} The description says what they would like in return, or that it is free. Message them to ask.`,
+    note: 'There are no Beans here. The description says what they would like in return, or that it is free. Message them to ask.',
 } as const;
+
+/**
+ * The note under it. Where Beans are previewed (the worldwide community's showcase, design §1 row 2), where Beans are:
+ * "No Beans here yet. In a local community the price is in Beans…". On a local community whose operator turned Beans
+ * off, that would be false, so it says what it always said (review of #1852, finding 7).
+ */
+export function noBeansTermsNote(beansPreview: boolean): string {
+    return beansPreview
+        ? `${LOCAL_COMMUNITY_LINES.noBeansTerms} The description says what they would like in return, or that it is free. Message them to ask.`
+        : NO_BEANS_TERMS.note;
+}
 
 /** What a post's edit form, and the map's Offer/Need form, say in place of the price field, on a node with Beans off. */
 export const NO_BEANS_EDIT_NOTE = 'No price here: say in the description what you would like in return, or that it is free.';

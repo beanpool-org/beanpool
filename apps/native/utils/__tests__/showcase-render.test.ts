@@ -329,7 +329,9 @@ for (const scheme of ['light', 'dark'] as const) {
             await render(createElement('div', null,
                 createElement('div', { 'data-testid': 'steps-stand-in' }, 'First steps'), createElement(YourBeansPreviewCard, { colors })));
             const hide = host.querySelector('[data-testid="home-beans-preview-hide"]')!;
-            expect(hide.getAttribute('aria-label')).toBe('Hide the Your Beans card');
+            // The name holds the words on the button (WCAG 2.5.3, label in name: review of #1852, finding 8).
+            expect(hide.getAttribute('aria-label')).toBe('Hide this card: Your Beans');
+            expect(hide.getAttribute('aria-label')).toContain(hide.textContent);
             await press(hide);
             expect(host.querySelector('[data-testid="home-card-beans-preview"]')).toBeNull();
             expect(text()).toContain('First steps');

@@ -26,7 +26,7 @@ import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { invitesOn } from '../../utils/node-profile';
 import {
-    GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, onlyAdminsInvite, mayInviteHere,
+    GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
     mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
 } from '../../utils/invite-entries';
 import { doorOfferedToAccount, isGlobalCommunity } from '../../utils/global-join-existing';
@@ -460,7 +460,7 @@ export default function PeopleScreen() {
                     // The node takes no invites (this phone's copy of its profile was older than the switch): say so, and
                     // make no offline ticket, which it would refuse just the same.
                     const body = await res.json().catch(() => null);
-                    const refusal = invitesOffRefusal(res.status, body);
+                    const refusal = invitesOffRefusal(res.status, body, nodeProfile?.features);
                     if (refusal) {
                         Alert.alert('No invites here', refusal);
                         return;
@@ -1006,7 +1006,7 @@ export default function PeopleScreen() {
                                 // No invites here: anyone joins with a sign-in, so the community's link is all there is to share.
                                 <>
                                     <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
-                                    <Text style={styles.sectionDesc}>This community doesn’t use invites. Anyone can join it with 12 words or a sign-in in the BeanPool app, so just share its link.</Text>
+                                    <Text style={styles.sectionDesc}>{bringSomeoneHereText(nodeProfile?.features)}</Text>
                                     {invitesPreview && <LocalCommunityMark variant="line" feature="invites" text={LOCAL_COMMUNITY_LINES.invites} />}
                                     <Pressable
                                         accessibilityRole="button"

@@ -18,7 +18,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 import { invitesOn, readNodeProfile } from '../node-profile';
 import {
-    communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, GUEST_NO_INVITES_TEXT, GUEST_AT_GLOBAL_WAITING_TEXT, guestNoInvitesText,
+    communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, joinWays, bringSomeoneHereText, invitesOffFallback, GUEST_NO_INVITES_TEXT, GUEST_AT_GLOBAL_WAITING_TEXT, guestNoInvitesText,
     GUEST_DOOR_TEXT, GUEST_DOOR_BUTTON, onlyAdminsInvite, mayInviteHere, mayMakeOfflineTicket, offlineTicketRefusal, adminsOnlyText,
     adminsOnlyRefusal, ADMINS_ONLY_FALLBACK, MEMBER_TICKET_REFUSED_TEXT,
 } from '../invite-entries';
@@ -71,6 +71,22 @@ describe('what the screen shares and says', () => {
         expect(invitesOffRefusal(404, { code: 'feature_off', error: '  ' })).toBe(INVITES_OFF_FALLBACK);
     });
 
+    it('says 12 words only where the door offers them (wordsDoor), as the node\'s own words do (review of #1852, finding 7)', () => {
+        const words = { invites: false, openJoin: true, wordsDoor: true };
+        expect(joinWays(words)).toBe('12 words or a sign-in');
+        expect(bringSomeoneHereText(words)).toBe('This community doesn’t use invites. Anyone can join it with 12 words or a sign-in in the BeanPool app, so just share its link.');
+        expect(invitesOffRefusal(404, { code: 'feature_off' }, words)).toMatch(/with 12 words or a sign-in in/);
+        // A join that needs a sign-in, a private preview, or a node from before the 12-words door: the sign-in alone.
+        for (const f of [{ invites: false, wordsDoor: false }, { invites: false }, null, undefined]) {
+            expect(joinWays(f)).toBe('a sign-in');
+            expect(bringSomeoneHereText(f)).toMatch(/join it with a sign-in in the BeanPool app/);
+            expect(bringSomeoneHereText(f)).not.toMatch(/12 words/);
+            expect(invitesOffRefusal(404, { code: 'feature_off' }, f)).toBe(invitesOffFallback(f));
+            expect(invitesOffFallback(f)).not.toMatch(/12 words/);
+        }
+        expect(INVITES_OFF_FALLBACK).not.toMatch(/12 words/);
+    });
+
     it('any other answer is not that refusal: the screen does what it always did', () => {
         expect(invitesOffRefusal(200, { success: true })).toBeNull();
         expect(invitesOffRefusal(403, { error: 'Only registered members can generate invites' })).toBeNull();
@@ -113,12 +129,14 @@ describe('People → Invites goes through the helpers (source check)', () => {
     it("where it makes none: the community's link, shared as communityLinkMessage says", () => {
         branchesFound();
         expect(noInvites).toContain('onPress={shareCommunityLink}');
+        expect(noInvites).toContain('{bringSomeoneHereText(nodeProfile?.features)}');
+        expect(noInvites).not.toMatch(/12 words/);
         expect(src).toMatch(/Share\.share\(\{ message: communityLinkMessage\(anchorUrl\) \}\)/);
     });
 
     it("a generate the node refuses for that makes no offline ticket", () => {
         const handler = src.slice(src.indexOf('const handleGenerate'), src.indexOf('const shareInvite'));
-        expect(handler).toContain('invitesOffRefusal(res.status');
+        expect(handler).toContain('invitesOffRefusal(res.status, body, nodeProfile?.features)');
         expect(handler.indexOf('invitesOffRefusal(')).toBeLessThan(handler.indexOf('makeOfflineTicket('));
     });
 

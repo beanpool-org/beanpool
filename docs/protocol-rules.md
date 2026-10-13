@@ -247,7 +247,7 @@ The node admin has access to **tiered invite codes** from the `/settings` panel.
 
 ### Invitation Tree
 
-Every invitation creates a parent→child relationship. The full tree is visible to node admins and provides accountability: you can trace any member back to who invited them, and who invited *that* person, all the way to the node genesis.
+Every invitation creates a parent→child relationship. The full tree is visible to every member of the node (the Invite page draws it; a node whose operator sets ENFORCE_READ_AUTH=false shows it to anyone) and provides accountability: you can trace any member back to who invited them, and who invited *that* person, all the way to the node genesis.
 
 ### Invitation Health
 

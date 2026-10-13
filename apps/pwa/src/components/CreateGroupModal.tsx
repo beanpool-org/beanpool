@@ -119,7 +119,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                             placeholder="e.g. Bindarrabi Garden Crew, Solar Guild"
                             maxLength={60}
                             required
-                            className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-800 rounded-xl text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-600 rounded-xl text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                     </div>
 
@@ -133,7 +133,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                             placeholder="What does this group discuss or coordinate?"
                             rows={3}
                             maxLength={300}
-                            className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-800 rounded-xl text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                            className="w-full px-3 py-2 bg-white dark:bg-nature-950 border border-nature-300 dark:border-nature-600 rounded-xl text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                         />
                     </div>
 
@@ -211,7 +211,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                     <button
                         type="submit"
                         disabled={submitting || !name.trim()}
-                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
                     >
                         {submitting ? 'Creating...' : 'Create Group (You become Convenor)'}
                     </button>

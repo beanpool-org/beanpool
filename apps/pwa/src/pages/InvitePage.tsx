@@ -296,7 +296,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                     </button>
                     <button
                         onClick={handleShareLink}
-                        className="py-3 px-6 rounded-xl border-none bg-emerald-600 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
+                        className="py-3 px-6 rounded-xl border-none bg-emerald-600 dark:bg-emerald-700 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
                         aria-label="Share this community's link"
                         title="Share this community's link"
                     >
@@ -336,8 +336,8 @@ export function InvitePage({ identity, onNavigate }: Props) {
                     onClick={() => setActiveSection('invites')} 
                     className={`flex-1 py-3 rounded-xl border-none text-[14px] font-bold cursor-pointer transition-all shadow-sm ${
                         activeSection === 'invites' 
-                            ? 'bg-emerald-600 text-white shadow-md' 
-                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-200 dark:hover:bg-nature-700'
+                            ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' 
+                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
                     🎟️ Invites
@@ -346,8 +346,8 @@ export function InvitePage({ identity, onNavigate }: Props) {
                     onClick={() => setActiveSection('tree')} 
                     className={`flex-1 py-3 rounded-xl border-none text-[14px] font-bold cursor-pointer transition-all shadow-sm ${
                         activeSection === 'tree' 
-                            ? 'bg-emerald-600 text-white shadow-md' 
-                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-200 dark:hover:bg-nature-700'
+                            ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' 
+                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
                     🌳 Tree
@@ -383,7 +383,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                         placeholder="Who is this invite for? (For your records)"
                         value={intendedFor}
                         onChange={e => setIntendedFor(e.target.value)}
-                        className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
+                        className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
                     />
 
                     <button
@@ -392,7 +392,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                         className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer mb-6 transition-all shadow-md ${
                             generating 
                                 ? 'bg-nature-400 text-white cursor-not-allowed' 
-                                : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-lg'
+                                : 'bg-emerald-600 dark:bg-emerald-700 text-white hover:bg-emerald-700 hover:shadow-lg'
                         }`}
                     >
                         {generating ? 'Generating...' : '✨ Generate New Invite'}
@@ -425,7 +425,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                                 </button>
                                 <button 
                                     onClick={() => handleShare(newCode)} 
-                                    className="py-3 px-6 rounded-xl border-none bg-emerald-600 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
+                                    className="py-3 px-6 rounded-xl border-none bg-emerald-600 dark:bg-emerald-700 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
                                     aria-label="Share invite link"
                                     title="Share invite link"
                                 >
@@ -461,7 +461,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                                         <div className="flex gap-2">
                                             <button 
                                                 onClick={() => handleCopyProxy(inv.code)} 
-                                                className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-400 hover:bg-oat-100 dark:hover:bg-nature-700 cursor-pointer transition-colors shadow-sm"
+                                                className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
                                                 aria-label="Copy invite link"
                                                 title="Copy invite link"
                                             >
@@ -469,7 +469,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                                             </button>
                                             <button 
                                                 onClick={() => handleShare(inv.code)} 
-                                                className="p-2 rounded-lg bg-emerald-600 border-none text-white hover:bg-emerald-700 cursor-pointer shadow-sm transition-colors"
+                                                className="p-2 rounded-lg bg-emerald-600 dark:bg-emerald-700 border-none text-white hover:bg-emerald-700 cursor-pointer shadow-sm transition-colors"
                                                 aria-label="Share invite link"
                                                 title="Share invite link"
                                             >
@@ -477,7 +477,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                                             </button>
                                         </div>
                                     </div>
-                                    <p className="text-nature-400 dark:text-nature-500 text-[11px] font-semibold mt-2 uppercase tracking-wide">
+                                    <p className="text-nature-400 dark:text-nature-400 text-[11px] font-semibold mt-2 uppercase tracking-wide">
                                         Created {new Date(inv.createdAt).toLocaleDateString()}
                                     </p>
                                 </div>
@@ -492,15 +492,15 @@ export function InvitePage({ identity, onNavigate }: Props) {
                                 <div key={inv.code} className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 opacity-70">
                                     <div className="flex flex-col gap-1">
                                         {inv.intendedFor && (
-                                            <span className="text-[13px] text-nature-500 dark:text-nature-400 font-medium">
+                                            <span className="text-[13px] text-nature-500 dark:text-nature-300 font-medium">
                                                 For: {inv.intendedFor}
                                             </span>
                                         )}
-                                        <span className="font-mono text-[13px] text-nature-500 dark:text-nature-500 line-through break-all" title={inv.code}>
+                                        <span className="font-mono text-[13px] text-nature-500 dark:text-nature-300 line-through break-all" title={inv.code}>
                                             {inv.code.length > 20 ? `${inv.code.substring(0, 16)}...` : inv.code.toUpperCase()}
                                         </span>
                                     </div>
-                                    <p className="text-nature-400 dark:text-nature-600 text-[11px] font-semibold mt-2 uppercase tracking-wide">
+                                    <p className="text-nature-400 dark:text-nature-300 text-[11px] font-semibold mt-2 uppercase tracking-wide">
                                         Used {inv.usedAt ? new Date(inv.usedAt).toLocaleDateString() : ''}
                                     </p>
                                 </div>
@@ -562,14 +562,14 @@ function TreeNodeView({ node, depth, identity }: { node: TreeNode; depth: number
                 } ${depth > 0 ? 'border-l-2 border-nature-200 dark:border-nature-700 pl-4' : ''}`}
             >
                 {/* Expand/collapse */}
-                <span className="text-[12px] text-nature-400 dark:text-nature-500 w-4 text-center">
+                <span className="text-[12px] text-nature-400 dark:text-nature-400 w-4 text-center">
                     {hasChildren ? (expanded ? '▼' : '▶') : '·'}
                 </span>
 
                 {/* Avatar dot */}
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 shadow-sm ${
                     isMe 
-                        ? 'bg-emerald-600 text-white border-2 border-emerald-300 dark:border-emerald-800' 
+                        ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-2 border-emerald-300 dark:border-emerald-800' 
                         : 'bg-oat-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300'
                 }`}>
                     {node.callsign.charAt(0).toUpperCase()}

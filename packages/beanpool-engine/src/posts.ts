@@ -256,6 +256,13 @@ export interface PostFilter {
      * for their listings' authors (apps/server routes/marketplace.ts, `nearby=1`). Every other read is as without it.
      */
     authorCardsChanged?: boolean;
+    /**
+     * The same for a delta not kept to a set: the plain sync read on a node with members on demand and no by-area
+     * listings, whose phones hold no card for their listings' authors either (apps/server routes/marketplace.ts). Local
+     * authors only, as the author-standing half, so both are an index search (idx_members_profile_updated_at, then
+     * idx_posts_author_created_local) rather than a pass over every post.
+     */
+    localAuthorCardsChanged?: boolean;
 }
 
 /**
@@ -929,6 +936,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     measureAtMost: () => true,
     upcomingUntil: null,
     authorCardsChanged: null,
+    localAuthorCardsChanged: null,
     id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
     includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
@@ -1567,6 +1575,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // LEFT JOINs (m), so the cost follows the set, not the members whose card changed since the cursor (#1847 review NB1).
         if (filter.authorCardsChanged) {
             where += " OR m.profile_updated_at >= ?";
+            params.push(filter.updatedAfter);
+        } else if (filter.localAuthorCardsChanged) {
+            where += " OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE profile_updated_at >= ?))";
             params.push(filter.updatedAfter);
         }
         resend = new Set(viewer ? offBoardPostsToResend(db, viewer, viewerKeeps(), filter.updatedAfter, new Date().toISOString()) : []);

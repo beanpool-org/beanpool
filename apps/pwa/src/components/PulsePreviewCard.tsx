@@ -89,7 +89,7 @@ export function PulsePreviewCard({
                     )}
                 </div>
 
-                <div className="inline-flex items-center gap-1 text-xs font-medium text-nature-500 dark:text-nature-400 px-2 py-0.5 rounded-md bg-nature-50 dark:bg-nature-800/50">
+                <div className="inline-flex items-center gap-1 text-xs font-medium text-nature-500 dark:text-nature-300 px-2 py-0.5 rounded-md bg-nature-50 dark:bg-nature-800/50">
                     <span aria-hidden="true">{category.icon}</span>
                     <span>{category.label}</span>
                 </div>
@@ -113,7 +113,7 @@ export function PulsePreviewCard({
                 <div className="flex-1 min-w-0">
                     <h4
                         className={`font-semibold text-sm sm:text-base text-nature-950 dark:text-white line-clamp-3 leading-snug mb-1.5 ${
-                            !isOptedIn ? 'line-through text-nature-400 dark:text-nature-500' : ''
+                            !isOptedIn ? 'line-through text-nature-400 dark:text-nature-400' : ''
                         }`}
                     >
                         {preview.title || 'Untitled Post'}

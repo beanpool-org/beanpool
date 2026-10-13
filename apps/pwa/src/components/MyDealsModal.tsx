@@ -220,7 +220,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                             ref={closeBtnRef}
                             onClick={onClose}
                             aria-label="Close My Deals"
-                            className="w-8 h-8 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500"
+                            className="w-8 h-8 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500"
                         >
                             ✕
                         </button>
@@ -240,7 +240,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                 className={`flex-1 flex gap-2 justify-center items-center py-2 text-sm font-bold rounded-lg transition-all ${
                                     dealsTab === tab.id
                                         ? 'bg-white dark:bg-nature-900 text-nature-900 dark:text-white shadow-sm'
-                                        : 'text-nature-500 hover:text-nature-700 dark:text-nature-400 dark:hover:text-nature-300'
+                                        : 'text-nature-500 hover:text-nature-700 dark:text-nature-300 dark:hover:text-nature-300'
                                 }`}
                             >
                                 <span>{tab.label}</span>
@@ -263,7 +263,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                     className={`px-3 py-1 text-xs font-bold rounded-full border transition-colors ${
                                         historyFilter === f.id
                                             ? 'bg-nature-800 dark:bg-nature-200 text-white dark:text-nature-900 border-nature-900 dark:border-nature-100'
-                                            : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700 hover:bg-oat-50'
+                                            : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
                                     }`}
                                 >
                                     {f.label}
@@ -360,7 +360,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                             <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                                                 isCompleted ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
                                                                 : isPending ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400'
-                                                                : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-400'
+                                                                : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
                                                             }`}>
                                                                 {item.status}
                                                             </span>
@@ -369,7 +369,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center">
-                                                            <span className={`font-black text-sm ${isBuyer ? 'text-red-500' : 'text-emerald-500'}`}>
+                                                            <span className={`font-black text-sm ${isBuyer ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'}`}>
                                                                 {isBuyer ? '- ' : '+ '}{item.credits}
                                                             </span>
                                                             <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
@@ -381,7 +381,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                 </div>
                                             </div>
                                             <div className="flex justify-between items-end">
-                                                <p className="text-[11px] text-nature-500 font-medium">
+                                                <p className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">
                                                     {isBuyer ? 'Bought from ' : 'Sold to '}
                                                     <span className="text-nature-800 dark:text-nature-300 font-bold">{partnerCallsign}</span>
                                                 </p>
@@ -396,7 +396,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                                 targetRole: isBuyer ? 'provider' : 'receiver',
                                                             });
                                                         }}
-                                                        className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 text-amber-800 dark:text-amber-500 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-800 transition-colors shadow-sm"
+                                                        className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-500 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-800 transition-colors shadow-sm"
                                                     >
                                                         Leave Review
                                                     </button>
@@ -456,12 +456,12 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                 <div className="flex justify-between items-start mb-1">
                                                     <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                                         item.type === 'offer' ? 'bg-terra-100 text-terra-800 dark:bg-terra-900/40 dark:text-terra-400'
-                                                        : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-400'
+                                                        : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
                                                     }`}>
                                                         {item.type}
                                                     </span>
                                                     <div className="flex items-center">
-                                                        <span className="font-black text-sm text-indigo-500">
+                                                        <span className="font-black text-sm text-indigo-500 dark:text-indigo-300">
                                                             {item.credits ?? '?'}
                                                         </span>
                                                         <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
@@ -470,7 +470,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                 <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate mb-1">
                                                     {item.title}
                                                 </h4>
-                                                <p className="text-[11px] text-nature-500 font-bold uppercase tracking-wide">
+                                                <p className="text-[11px] text-nature-500 dark:text-nature-400 font-bold uppercase tracking-wide">
                                                     {item.status === 'pending' ? '🤝 Held in Trust' : '🟢 Active'}
                                                 </p>
                                             </div>

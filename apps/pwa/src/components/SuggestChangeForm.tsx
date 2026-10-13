@@ -56,7 +56,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 <button
                     type="button"
                     onClick={onDone}
-                    className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
                     ← Back to Settings
                 </button>
@@ -104,7 +104,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 placeholder="What would make BeanPool better for your community? Any language is fine."
                 className="w-full p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-base resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             />
-            <div className={`text-xs text-right mt-1 mb-5 ${over ? 'text-red-600 font-bold' : 'text-nature-500 dark:text-nature-400'}`}>
+            <div className={`text-xs text-right mt-1 mb-5 ${over ? 'text-red-600 dark:text-red-300 font-bold' : 'text-nature-500 dark:text-nature-400'}`}>
                 {count} / {FEEDBACK_TEXT_MAX}
             </div>
 
@@ -130,14 +130,14 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
             <button
                 type="submit"
                 disabled={sending || over}
-                className="w-full min-h-[48px] py-3 rounded-xl font-bold bg-emerald-600 text-white border-none cursor-pointer hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm mb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                className="w-full min-h-[48px] py-3 rounded-xl font-bold bg-emerald-600 dark:bg-emerald-700 text-white border-none cursor-pointer hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm mb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
                 {sending ? 'Sending…' : 'Send'}
             </button>
             <button
                 type="button"
                 onClick={onDone}
-                className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
                 ← Back to Settings
             </button>

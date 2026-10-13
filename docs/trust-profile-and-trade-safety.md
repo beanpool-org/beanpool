@@ -38,7 +38,8 @@ Good news: most "track record" signals are **already computed** server-side in
 
 ### Small new queries
 - **Completion rate** — completed vs cancelled `marketplace_transactions` (high cancel rate = yellow flag)
-- **Mutual connections** — intersection of viewer's friends and the target's (needs viewer context)
+- **Mutual connections** ("connections in common") — members who are friends **both ways** with the viewer and
+  friends **both ways** with the target: F counts only when V→F, F→V, F→T and T→F all exist (needs viewer context)
 - **Last active** (`last_active_at`)
 - **Invited by / invited N** — from `members.invited_by` (the invite tree is tier-gated → some sybil-resistance)
 
@@ -46,7 +47,7 @@ Good news: most "track record" signals are **already computed** server-side in
 | Element | Rule | Why |
 |---|---|---|
 | Their own friends | **count only**, never names | Publishing a friend graph to strangers = stalking/harvesting risk; not actionable |
-| **Mutual connections** | **names, tappable → "Ask about X"** | Only ever surfaces people the *viewer already knows*; the reachable reference is the whole point |
+| **Mutual connections** | **names, tappable → "Ask about X"**, at most 12 | Only friendships chosen by both ends: F is named only when F and the viewer added each other AND F and the target added each other. A friend row is one-way and unconsented, so a one-way rule let a viewer who added everyone read the target's list (a probe) and a target who added everyone look "in your circle" to all (a forgery). The reachable reference is the whole point |
 | **Invited by** | graduated: always show the *fact* + inviter's *tier*; show the **name** only when the inviter is the viewer / their friend / a mutual; else "an established member" | Name is only useful when you can actually ask them; otherwise it's pure exposure of the inviter |
 | Reports / flags | never raw counts; moderation **outcomes** only | Defamation + brigading risk |
 

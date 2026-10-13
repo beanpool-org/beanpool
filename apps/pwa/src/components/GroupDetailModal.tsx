@@ -372,7 +372,7 @@ export function GroupDetailModal({
                                                             onClick={() => handleApprove(p.memberPubkey)}
                                                             disabled={actionLoading}
                                                             aria-label={`Approve join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
-                                                            className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
+                                                            className="px-2 py-1 rounded bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
                                                         >
                                                             Approve
                                                         </button>
@@ -380,7 +380,7 @@ export function GroupDetailModal({
                                                             onClick={() => handleRemoveMember(p.memberPubkey, p.callsign)}
                                                             disabled={actionLoading}
                                                             aria-label={`Decline join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
-                                                            className="px-2 py-1 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 text-[11px] font-bold hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                            className="px-2 py-1 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 text-[11px] font-bold hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                         >
                                                             Decline
                                                         </button>
@@ -450,7 +450,7 @@ export function GroupDetailModal({
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
                                                     highlight
                                                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/40'
-                                                        : 'bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400'
+                                                        : 'bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300'
                                                 }`}>
                                                     {row.isLead ? 'Lead' : m.role}
                                                 </span>
@@ -491,7 +491,7 @@ export function GroupDetailModal({
                                                                 onClick={() => handleRemoveMember(m.memberPubkey, m.callsign)}
                                                                 disabled={actionLoading}
                                                                 aria-label={`Remove ${m.callsign || m.memberPubkey.slice(0, 10)} from group`}
-                                                                className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                                className="p-1 rounded text-red-500 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                                 title="Remove member"
                                                             >
                                                                 ✕
@@ -516,7 +516,7 @@ export function GroupDetailModal({
                                     onClose();
                                     onPostToGroup(groupData);
                                 }}
-                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 <span aria-hidden="true">✏️ </span>Post to {groupData.name}
                             </button>
@@ -536,11 +536,11 @@ export function GroupDetailModal({
                                 Closed
                             </div>
                         ) : isPending ? (
-                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-400 font-bold text-sm text-center">
+                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 Request Pending Approval
                             </div>
                         ) : groupData.joinPolicy === 'invite_only' ? (
-                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-400 font-bold text-sm text-center">
+                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 Invite Only
                             </div>
                         ) : (
@@ -548,7 +548,7 @@ export function GroupDetailModal({
                                 type="button"
                                 onClick={handleJoin}
                                 disabled={actionLoading}
-                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 {groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
                             </button>

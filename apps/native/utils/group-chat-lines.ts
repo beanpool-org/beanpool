@@ -46,7 +46,7 @@ export function chatIsLocked(answer: any): answer is { encryption: GroupChatEncr
 /** The notice an old node's chat keeps (the phone never calls such a chat locked). */
 export const GROUP_CHAT_OLD_NODE_NOTICE = "This community's node is older and can read this group's chat. It will be locked once the node is updated.";
 /** A locked chat's notice (design §8), in the phone's own words. */
-export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, and who was mentioned.";
+export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.";
 /**
  * A chat this phone has held a key of, which the node now says isn't locked: what the phone does, not what it waits for
  * (confirmation of #1788, finding 4). Every line still goes sealed when the keys come; nothing goes readable.

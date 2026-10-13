@@ -4,7 +4,7 @@ import type { TourHome } from '../lib/tour-store';
 
 const primary = 'min-w-[96px] min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
 const quiet = 'min-w-[44px] min-h-[44px] px-3 rounded-xl border-0 bg-transparent text-sm font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
-const chip = 'min-h-[44px] px-3 rounded-full border text-sm font-bold break-words text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
+const chip = 'min-h-[44px] px-3 rounded-full border text-[0.8125rem] font-bold break-words text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
 
 /**
  * The tour's bar in the web app (scratch/global-node/DESIGN-getting-started-fable.md §2): a card-coloured strip above the
@@ -47,18 +47,21 @@ export function TourBar({ steps, index, home, onNext, onSkip, onDone }: {
                         const on = home.onHome(type);
                         const name = home.chipName(type);
                         return (
-                            <button key={type} type="button" disabled={on} onClick={() => home.addChip(type)} data-testid={`tour-chip-${type}`}
+                            <button key={type} type="button" disabled={on} onClick={() => home.addChip(type)} data-testid={`tour-chip-${type}`} title={on ? `${name} is on Home` : undefined}
                                 aria-label={on ? `${name} is on Home` : `Put ${name} on Home`}
                                 className={`${chip} ${on ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-200 cursor-default' : 'border-emerald-700 dark:border-emerald-400 bg-transparent text-emerald-800 dark:text-emerald-300 cursor-pointer'}`}>
-                                {on ? `${name} · On Home ✓` : name}
+                                {on ? <>{name} ✓<span className="sr-only"> on Home</span></> : name}
                             </button>
                         );
                     })}
-                    <button type="button" onClick={home.moreCards} className={quiet} data-testid="tour-more-cards" aria-label="More cards: open Add a card">More cards ›</button>
                 </div>
             )}
             <div className="flex items-center justify-between gap-2 mt-2">
                 <button type="button" onClick={onSkip} className={quiet} data-testid="tour-skip" aria-label="Skip the tour">Skip</button>
+                {/* On the last step, in the button row: at 320 px with 130% text a row of its own made the bar 421 px tall. */}
+                {chips.length > 0 && home && (
+                    <button type="button" onClick={home.moreCards} className={`${quiet} ml-auto whitespace-nowrap`} data-testid="tour-more-cards" aria-label="More cards: open Add a card">More cards ›</button>
+                )}
                 <button type="button" onClick={last ? onDone : onNext} className={primary} data-testid={last ? 'tour-done' : 'tour-next'}
                     aria-label={last ? 'Done: end the tour' : `Next: step ${index + 2} of ${steps.length}`}>
                     {last ? 'Done' : 'Next ›'}

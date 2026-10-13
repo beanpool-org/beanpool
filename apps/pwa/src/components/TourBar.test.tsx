@@ -52,7 +52,8 @@ describe('the tour bar', () => {
         const steps = tourSteps('web', { global: false, beans: true });
         const h = home(['market']);
         render(<TourBar steps={steps} index={steps.length - 1} home={h} onNext={vi.fn()} onSkip={vi.fn()} onDone={vi.fn()} />);
-        expect(screen.getByTestId('tour-chip-market')).toHaveTextContent('New in the Market · On Home ✓');
+        expect(screen.getByTestId('tour-chip-market')).toHaveTextContent('New in the Market ✓ on Home');
+        expect(screen.getByTestId('tour-chip-market')).toHaveAttribute('aria-label', 'New in the Market is on Home');
         expect(screen.getByTestId('tour-chip-market')).toBeDisabled();
         fireEvent.click(screen.getByRole('button', { name: 'Put Your Beans on Home' }));
         expect(h.addChip).toHaveBeenCalledWith('beans');

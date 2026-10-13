@@ -70,6 +70,8 @@ import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
 import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, type SecurityNote } from './security-signal.js';
 import { registrarNames } from '../engine/registrar-names.js';
+import { listAutomationTokens } from '../automation-tokens.js';
+import { agentCallsTodayAll } from '../agent/limits.js';
 
 function dataDir(): string {
     return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -1139,6 +1141,8 @@ export interface AlertsStatus {
     recent: Array<AlertEvent & { title: string }>;
     /** Whether an owner has something to acknowledge: those, or this server replaced. */
     acknowledge: boolean;
+    /** AI assistants today (admin MCP design §8), counts only: calls let in since midnight UTC, and how many are connected. */
+    assistants: { calls: number; connected: number };
 }
 
 export function getAlertsStatus(): AlertsStatus {
@@ -1156,5 +1160,6 @@ export function getAlertsStatus(): AlertsStatus {
         history: s.history.slice().reverse().map((e) => ({ ...e, title: ROWS[e.key].title })),
         recent: recentSecurityEvents(s, t).map((e) => ({ ...e, title: ROWS[e.key].title })),
         acknowledge: recentSecurityEvents(s, t).length > 0 || (!!s.raised['sec.replaced'] && s.raised['sec.replaced'].endedAt === undefined),
+        assistants: { calls: agentCallsTodayAll(t), connected: listAutomationTokens().filter((k) => k.scope === 'agent').length },
     };
 }

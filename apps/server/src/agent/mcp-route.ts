@@ -43,7 +43,7 @@ export function aiAssistantsAllowed(): boolean {
     return getLocalConfig().aiAssistantsAllowed !== false;
 }
 
-const UNAUTHORISED = "Send an AI assistant's token as `Authorization: Bearer bp_…`: an owner makes one in Settings";
+const UNAUTHORISED = "Send an AI assistant's token as `Authorization: Bearer bp_…`: an owner or an admin makes one in Settings → Connected assistants";
 
 function jsonRpcError(ctx: any, status: number, message: string, code = -32000): void {
     ctx.status = status;
@@ -59,7 +59,7 @@ function ownOrigin(): string | null {
 }
 
 /** The address the welcome names: the public one, else the host the assistant reached (a LAN node). */
-function nodeUrlFor(ctx: any): string {
+export function nodeUrlFor(ctx: any): string {
     const pub = resolvePublicNodeUrl();
     if (pub) return pub.replace(/\/+$/, '');
     const host = String(ctx.host || '');

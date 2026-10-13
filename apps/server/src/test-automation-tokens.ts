@@ -92,7 +92,7 @@ async function keySignIn(k: Key): Promise<Reply> {
 
 /** Every admin route the server mounts, read from the route sources (method, path with its :params). */
 function adminRoutes(): Array<[string, string]> {
-    const files = [path.join(HERE, 'https-server.ts'), ...fs.readdirSync(path.join(HERE, 'routes')).filter(f => f.endsWith('.ts')).map(f => path.join(HERE, 'routes', f))];
+    const files = [path.join(HERE, 'https-server.ts'), path.join(HERE, 'agent', 'mcp-route.ts'), path.join(HERE, 'agent', 'grants-route.ts'), ...fs.readdirSync(path.join(HERE, 'routes')).filter(f => f.endsWith('.ts')).map(f => path.join(HERE, 'routes', f))];
     const out = new Map<string, [string, string]>();
     const re = /router\.(get|post|put|delete|patch)\(\s*'([^']+)'/g;
     for (const f of files) {
@@ -281,6 +281,7 @@ async function main(): Promise<void> {
                 continue;
             }
             const everyTokenRefused = lowered.startsWith('/api/local/admin/auth/') || lowered.startsWith('/api/local/admin/automation-tokens')
+                || lowered.startsWith('/api/local/admin/agent/')
                 || lowered.startsWith('/api/local/admin/2fa/') || lowered === '/api/local/admin/ws-ticket' || lowered === '/api/local/admin/csrf-token';
 
             if (!isRead(m) || everyTokenRefused) {

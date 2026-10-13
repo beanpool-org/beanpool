@@ -53,11 +53,12 @@ export const BACKUPS_SCOPE_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path:
     { method: 'GET', path: '/api/local/admin/offbox-backups/download' },
 ];
 
-/** Routes no token reaches whatever its scope: signing in, sessions and the tokens themselves. */
+/** Routes no token reaches whatever its scope: signing in, sessions, the tokens themselves and AI assistants' settings. */
 export function isRefusedToEveryToken(method: string, reqPath: string): boolean {
     const p = reqPath.toLowerCase().replace(/\/+$/, '');
     return p.startsWith('/api/local/admin/auth/') || p === '/api/local/admin/auth'
         || p.startsWith('/api/local/admin/automation-tokens')
+        || p.startsWith('/api/local/admin/agent/') || p === '/api/local/admin/agent'
         || p.startsWith('/api/local/admin/2fa/')
         || p === '/api/local/admin/ws-ticket'
         || p === '/api/local/admin/csrf-token';

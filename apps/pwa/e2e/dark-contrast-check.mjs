@@ -122,20 +122,24 @@ async function land(page, origin, pathname = '/app') {
     await wait(1_500);
 }
 
+/** A click, or (when something drawn over it takes the pointer, as a toast or the install banner can) the same click sent to it. */
+async function press(locator) {
+    await locator.click({ timeout: 5_000 }).catch(() => locator.dispatchEvent('click', undefined, { timeout: 5_000 }));
+}
 const tab = (label) => async (page) => {
-    await page.getByTestId('mobile-bottom-nav').getByRole('button', { name: label }).click();
+    await press(page.getByTestId('mobile-bottom-nav').getByRole('button', { name: label }).first());
     await wait(1_200);
 };
 const clickText = (text) => async (page) => {
-    await page.getByText(text).first().click({ timeout: 5_000 });
+    await press(page.getByText(text).first());
     await wait(900);
 };
 const clickRole = (role, name) => async (page) => {
-    await page.getByRole(role, { name }).first().click({ timeout: 5_000 });
+    await press(page.getByRole(role, { name }).first());
     await wait(900);
 };
 const clickTestId = (id) => async (page) => {
-    await page.getByTestId(id).first().click({ timeout: 5_000 });
+    await press(page.getByTestId(id).first());
     await wait(900);
 };
 const steps = (...fns) => async (page) => { for (const f of fns) await f(page); };

@@ -57,8 +57,11 @@ const AMBER_400 = '#fbbf24';
 const AMBER_500 = '#f59e0b';
 const AMBER_800 = '#92400e';
 const AMBER_950 = '#451a03';
+const ORANGE_100 = '#ffedd5';
+const ORANGE_300 = '#fdba74';
 const ORANGE_700 = '#c2410c';
 const ORANGE_800 = '#9a3412';
+const ORANGE_900 = '#7c2d12';
 const RED_100 = '#fee2e2';
 const RED_300 = '#fca5a5';
 const RED_700 = '#b91c1c';
@@ -98,9 +101,10 @@ export const BRAND_COLOURS = {
     gold: { fill: same(AMBER_500), hover: same(AMBER_400), on: same(CHARCOAL) },
     /** The indigo accent as a fill: chat's unread badge and send button, progress bars, selected toggles. */
     accent: { fill: same(INDIGO_600), hover: same(INDIGO_700), on: same(WHITE) },
-    /** Small badges and chips. */
+    /** Small badges and chips. `ok` is also the Offer chip, `need` the Need chip. */
     chip: {
         ok: { tint: themed(EMERALD_100, EMERALD_950), ink: themed(EMERALD_800, EMERALD_300) },
+        need: { tint: themed(ORANGE_100, ORANGE_900), ink: themed(ORANGE_800, ORANGE_300) },
         warn: { tint: themed(AMBER_100, AMBER_950), ink: themed(AMBER_800, AMBER_300) },
         danger: { tint: themed(RED_100, RED_950), ink: themed(RED_700, RED_300) },
     },
@@ -112,6 +116,8 @@ export const BRAND_COLOURS = {
         success: themed(EMERALD_700, EMERALD_400),
         /** Errors and destructive links. */
         danger: themed(RED_700, RED_300),
+        /** Gold as words and icons (Action Required, a tip, a nudge): never the gold fill as words. */
+        warning: themed(AMBER_800, AMBER_400),
         /** The indigo accent as text and icons. */
         accent: themed(INDIGO_600, INDIGO_300),
     },

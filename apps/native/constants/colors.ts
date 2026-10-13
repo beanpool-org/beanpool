@@ -221,10 +221,10 @@ export const lightColors = {
         border: palette.indigo100,
     },
 
-    // Marketplace listing type — the one loud signal per card
+    // Marketplace listing type — the one loud signal per card (core chip.ok / chip.need)
     market: {
-        offer: { fg: palette.emerald700, bg: palette.emerald100 },
-        need: { fg: palette.orange700, bg: palette.orange100 },
+        offer: { fg: brandLight.chip.ok.ink, bg: brandLight.chip.ok.tint },
+        need: { fg: brandLight.chip.need.ink, bg: brandLight.chip.need.tint },
         author: palette.gray600, // seller name on listing cards
     },
 
@@ -245,7 +245,7 @@ export const lightColors = {
     // Status / feedback
     feedback: {
         danger: { fg: brandLight.ink.danger, bg: palette.red50, border: palette.red200, solid: brandLight.danger.fill, disabled: 'rgba(239, 68, 68, 0.4)' },
-        warning: { fg: palette.amber700, bg: palette.amber50, border: palette.amber200, solid: brandLight.gold.fill },
+        warning: { fg: brandLight.ink.warning, bg: palette.amber50, border: palette.amber200, solid: brandLight.gold.fill },
         success: { fg: brandLight.ink.success, bg: palette.emerald50, border: palette.emerald200, solid: brandLight.commit.fill },
         info: { fg: palette.blue600, bg: palette.blue50, border: palette.blue500, solid: palette.blue500 },
     },
@@ -353,8 +353,8 @@ export const darkColors = {
 
     // Marketplace listing type
     market: {
-        offer: { fg: palette.emerald400, bg: palette.emerald950 },
-        need: { fg: palette.orange300, bg: palette.orange900 }, // 5.56:1 (orange-800 was 4.33)
+        offer: { fg: brandDark.chip.ok.ink, bg: brandDark.chip.ok.tint },
+        need: { fg: brandDark.chip.need.ink, bg: brandDark.chip.need.tint }, // 5.56:1 (orange-800 was 4.33)
         author: palette.gray300,
     },
 
@@ -371,7 +371,7 @@ export const darkColors = {
     // Status / feedback
     feedback: {
         danger: { fg: brandDark.ink.danger, bg: palette.red950, border: palette.red800, solid: brandDark.danger.fill, disabled: 'rgba(239, 68, 68, 0.3)' },
-        warning: { fg: palette.amber400, bg: palette.amber950, border: palette.amber900, solid: brandDark.gold.fill },
+        warning: { fg: brandDark.ink.warning, bg: palette.amber950, border: palette.amber900, solid: brandDark.gold.fill },
         success: { fg: brandDark.ink.success, bg: palette.emerald950, border: palette.emerald800, solid: brandDark.commit.fill },
         info: { fg: palette.blue400, bg: palette.indigo950, border: palette.blue600, solid: palette.blue500 },
     },

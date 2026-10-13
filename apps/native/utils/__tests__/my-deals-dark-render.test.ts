@@ -152,9 +152,10 @@ describe("My Deals' held and pending cards", () => {
         expect(styleOf(card('action'))).toMatchObject({ backgroundColor: palette.amber50, borderColor: palette.yellow300 });
         const action = Array.from(card('action')!.querySelectorAll('span')).find(s => s.textContent?.includes('Action Required'))!;
         const { lightColors } = await import('../../constants/colors');
-        // The brand pass (docs/brand-colours.md): amber-700, 5.02:1 on white; amber-600 was 3.19.
+        // The brand pass (docs/brand-colours.md, core ink.warning): amber-800, 6.84:1 on the card's amber-50; amber-600
+        // was 3.07 there.
         expect(styleOf(action).color).toBe(lightColors.feedback.warning.fg);
-        expect(styleOf(action).color).toBe(palette.amber700);
+        expect(styleOf(action).color).toBe(palette.amber800);
         const held = Array.from(card('held')!.querySelectorAll('span')).find(s => s.textContent?.includes('Held in Trust'))!;
         expect(styleOf(held).color).toBe(lightColors.text.muted);
     });

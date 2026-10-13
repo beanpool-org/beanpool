@@ -52,6 +52,8 @@ matches the file.
 | `accent.on` | `#ffffff` | `#ffffff` |
 | `chip.ok.tint` | `#d1fae5` | `#022c22` |
 | `chip.ok.ink` | `#065f46` | `#6ee7b7` |
+| `chip.need.tint` | `#ffedd5` | `#7c2d12` |
+| `chip.need.ink` | `#9a3412` | `#fdba74` |
 | `chip.warn.tint` | `#fef3c7` | `#451a03` |
 | `chip.warn.ink` | `#92400e` | `#fcd34d` |
 | `chip.danger.tint` | `#fee2e2` | `#450a0a` |
@@ -59,6 +61,7 @@ matches the file.
 | `ink.brand` | `#047857` | `#34d399` |
 | `ink.success` | `#047857` | `#34d399` |
 | `ink.danger` | `#b91c1c` | `#fca5a5` |
+| `ink.warning` | `#92400e` | `#fbbf24` |
 | `ink.accent` | `#4f46e5` | `#a5b4fc` |
 
 What each is for, and its ratios (the same in both themes for fills; lowest page or card for inks):
@@ -71,10 +74,11 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `danger` | Submit report, Remove, Delete, alert badges | 6.47 / 8.31 | same |
 | `gold` | Vouch, Approve, rating (charcoal words) | 7.46 / 9.60 | same |
 | `accent` | chat's send and unread badge, progress, selected toggles | 6.29 / 7.90 | same |
-| `chip.ok` / `warn` / `danger` | verified tick, Offer/Need, counts | 6.78 / 6.37 / 5.30 | 9.94 / 10.39 / 8.51 |
+| `chip.ok` / `need` / `warn` / `danger` | verified tick and Offer (`ok`), Need, counts | 6.78 / 6.38 / 6.37 / 5.30 | 9.94 / 5.56 / 10.39 / 8.51 |
 | `ink.brand` | the brand green as words and icons | 4.77 | 5.58 |
 | `ink.success` | success messages, ticks | 4.77 | 5.58 |
 | `ink.danger` | errors, destructive links | 5.63 | 5.65 |
+| `ink.warning` | gold as words: Action Required, tips, nudges | 6.17 | 6.42 |
 | `ink.accent` | the indigo accent as words and icons | 5.47 | 5.38 |
 
 ## Not covered (they keep their own hex)
@@ -87,7 +91,8 @@ map's pin colours in `MapPage.tsx`. Do not point them at these roles.
 - **Phone** (`apps/native`): `constants/colors.ts` imports `brandColours('light')` and `brandColours('dark')` from
   `@beanpool/core` and builds its tokens from them. A fill under words uses `brand.fill` / `text.onBrand`,
   `accent.fill` / `text.onAccent`, `feedback.danger.solid`, `action.fab`; words and icons use `brand.primary`,
-  `accent.primary`, `feedback.*.fg`. One token can no longer serve as both, because no single dark value reads as
+  `accent.primary`, `feedback.*.fg` (`feedback.warning.fg` is `ink.warning`). The Offer and Need chips
+  (`market.offer`, `market.need`) are `chip.ok` and `chip.need`. One token can no longer serve as both, because no single dark value reads as
   words on the page and under white words.
 - **Web app and manager** (next): generate a stylesheet from the same file and use the variables.
 

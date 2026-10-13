@@ -28,7 +28,17 @@
  *     4096 bytes (26 KB before): the owners made first, then the admin made, the report lines after, the rest as a count.
  *  8. A report window closing on the tick that raises disk 95 %: the owner is pushed both, the admin the reports alone
  *     (finding 3: the admin was pushed the owner-only disk alert).
- *  9. Nothing in any alert line names a member or quotes what they wrote: no callsign, no key (nor its first 12
+ *  9. Every one of the hour's 10 slots taken (the confirmation review 2's finding 2): a member's first past them, and
+ *     another's 4 minutes on, are one summary 10 minutes after the first (a later count does not push it back); while
+ *     their hours are open the book keeps each member by a hash, never the key; hours with no repeats end with no line;
+ *     a member's hour that ends with every slot taken is not told on its own (so no hour holds more than 10) and its
+ *     count goes on the next summary, none dropped, which says "one member" and names nobody, not even by a hash.
+ * 10. A held message too long for 4 KB shows the high lines, then a security line that is not high, before the report
+ *     lines (the confirmation review 2's finding 2: nothing guarded the ranking).
+ * 11. A history of 50 lines none of them a report's (a long-running node's daily reminders): a new report line makes room
+ *     with the oldest reminder, never a security line, and stays in "Last 50 alerts" (the confirmation review 2's finding
+ *     1: it dropped itself).
+ * 12. Nothing in any alert line names a member or quotes what they wrote: no callsign, no key (nor its first 12
  *     characters) and no reason's words in any channel message (headers and body), any push, any push notice kept for
  *     the phone, the Alerts routes' answers or the book.
  *
@@ -484,13 +494,124 @@ async function main(): Promise<void> {
         `8. the admin, the reports alone: ${JSON.stringify(adminGot)}`);
     setSimulatedDiskUsageForTesting(10);
 
-    // ── 9. Nothing names a member or quotes them ────────────────────────────────────────────────────────────────────
+    // ── 9. Every slot of the hour taken: a member's hour-end counts go on the summary, none told on its own, none lost ──
+    advance(HOUR + MIN);
+    await tick();
+    await settle();
+    const firstsA = Array.from({ length: 10 }, (_, i) => join(`SlotFayA${i}R`));
+    const firstsB = Array.from({ length: 10 }, (_, i) => join(`SlotGusB${i}R`));
+    const late = join('LateMiraR');
+    const later = join('LaterNedR');
+    const child = async (by: Id, j: number) => {
+        const r = await report(by, targets[j], 'Child safety');
+        if (r.status !== 200 || r.json?.duplicate) throw new Error(`setup: child-safety report not taken (${r.status} ${JSON.stringify(r.json)})`);
+    };
+    const p9 = ownerPushes().length;
+    const h9 = topicHits().length;
+    /** The summaries and members' hour-end lines on the channel since step 9 began (a push says only that the server needs you). */
+    const more9 = () => topicHits().slice(h9).filter((h) => /more child-safety reports waiting/.test(String(h.headers.title))).map((h) => h.body.split('\n')[2] ?? '');
+    for (const m of firstsA) await child(m, 0);
+    await settle();
+    assert(ownerPushes().length === p9 + 10, `9. 10 members' firsts take the server's 10 slots for the hour (${ownerPushes().length - p9} pushes)`);
+    advance(MIN);
+    for (let j = 0; j < 3; j++) await child(late, j);
+    advance(4 * MIN);
+    await child(later, 0);
+    await settle();
+    assert(ownerPushes().length === p9 + 10, `9. a member's first and 2 repeats past the slots, and another's first 4 minutes on: nothing told yet (${ownerPushes().length - p9 - 10})`);
+    await tick();
+    const book9 = fs.readFileSync(path.join(dataDir!, alerts.ALERTS_STATE_FILE), 'utf8');
+    const open9 = Object.entries((JSON.parse(book9) as { child: { reporters: Record<string, { folded: number }> } }).child.reporters);
+    assert(open9.length === 12 && open9.every(([id]) => /^[0-9a-f]{24}$/.test(id)) && open9.filter(([, w]) => w.folded === 2).length === 1
+        && ![...firstsA, late, later].some((m) => book9.includes(m.pk) || book9.includes(m.pk.slice(0, 12))),
+        `9. while their hours are open the book keeps each by a hash, never the key (${open9.length} hours: ${JSON.stringify(open9.map(([id]) => id.length))})`);
+    advance(6 * MIN + 30_000);
+    await tick();
+    await settle();
+    assert(ownerPushes().length === p9 + 11 && more9().length === 1
+        && /2 more child-safety reports came in, from 2 members, past the 10 lines an hour this server tells on their own/.test(more9()[0]),
+        `9. 10 minutes after the first past the slots, one summary (pushed) counts both: a later count does not push it back (${ownerPushes().length - p9 - 10}: ${JSON.stringify(more9())})`);
+    advance(49 * MIN);
+    const p9b = ownerPushes().length;
+    await tick();
+    await settle();
+    assert(ownerPushes().length === p9b, `9. the 10 members' hours over with no repeats: nothing told, no "0 more" line (${ownerPushes().length - p9b})`);
+    for (const m of firstsB) await child(m, 1);
+    await settle();
+    assert(ownerPushes().length === p9b + 10, `9. their slots free again, 10 more members' firsts take all 10 (${ownerPushes().length - p9b})`);
+    advance(MIN);
+    await tick();
+    await settle();
+    assert(ownerPushes().length === p9b + 10 && more9().length === 1,
+        `9. the member's hour over with no slot left: not told on its own, so at most 10 lines in the hour (${ownerPushes().length - p9b} pushes)`);
+    advance(10 * MIN + 10_000);
+    await tick();
+    await settle();
+    const sum9b = more9().slice(1);
+    assert(ownerPushes().length === p9b + 11 && sum9b.length === 1
+        && /2 more child-safety reports came in, from one member, past the 10 lines an hour this server tells on their own/.test(sum9b[0]),
+        `9. ten minutes on, the summary (pushed) counts the member's 2 repeats, none dropped (${ownerPushes().length - p9b - 10}: ${JSON.stringify(sum9b)})`);
+    assert(!/[0-9a-f]{16}/.test(sum9b[0]), '9. a one-member summary says "one member" and names nobody, not even by a hash');
+    advance(HOUR);
+    await tick();
+    await settle();
+    assert(ownerPushes().length === p9b + 11, `9. and nothing more is pending (${ownerPushes().length - p9b - 11})`);
+
+    // ── 10. A held message too long for 4 KB: a security line that is not high goes before the report lines ─────────
+    type Ev = Parameters<typeof alerts.composeAlert>[1][number];
+    const at10 = Date.now();
+    const ev = (key: Ev['key'], detail: string, priority: Ev['priority'], high?: boolean): Ev =>
+        ({ key, kind: 'raised', at: at10, since: at10, priority, detail, ...(high ? { high } : {}) });
+    const reports10 = Array.from({ length: 60 }, (_, i) => ev('reports.child', `A report in the child-safety category came in: look at it first. ${i + 1} reports wait.`, 5, true));
+    const ownerMade10 = ev('sec.role', 'Someone was made an owner, by the admin password.', 5, true);
+    const adminMade10 = ev('sec.role', `Someone was made an admin, by an owner. ${'An admin is told of reports and can change what members see. '.repeat(3)}`, 4);
+    const lineBytes = (e: Ev) => Buffer.byteLength(alerts.composeAlert('Report Test Commons', [e], null).text);
+    if (lineBytes(adminMade10) <= lineBytes(reports10[59]) + 40) throw new Error('setup: the admin-made line must be longer than a report line');
+    const m10 = alerts.composeAlert('Report Test Commons', [ownerMade10, ...reports10, adminMade10], null);
+    const bytes10 = Buffer.byteLength(m10.text);
+    assert(bytes10 <= alerts.ALERT_MESSAGE_MAX_BYTES && /- And \d+ more, too many for one message/.test(m10.text),
+        `10. 60 urgent report lines and two security lines: one message of at most 4 KB, the rest a count (${bytes10} bytes, ${m10.events.length} lines shown)`);
+    assert(m10.events.includes(ownerMade10) && m10.events.includes(adminMade10),
+        '10. the owner made (high) and the admin made (not high, last and longer than a report line) are both shown: report lines fill what is left');
+    assert(m10.events.filter((e) => e.key === 'reports.child').length >= 20, `10. as many report lines as fit (${m10.events.filter((e) => e.key === 'reports.child').length})`);
+
+    // ── 11. A history full of other lines keeps a new report line (the confirmation review 2's finding 1) ───────────
+    advance(HOUR + MIN);
+    await tick();
+    await settle();
+    const reminder = (i: number) => alerts.updateAlerts([{ key: 'backups.none', active: true, oneShot: true, push: false, detail: `Day ${i}: no backup leaves this server. Open Settings → Backups.` }]);
+    let day = 0;
+    for (; day < 60; day++) await reminder(day);
+    const histAdmin = join('HistAdminHalR');
+    grantNodeRole(histAdmin.pk, 'admin', owner.pk);
+    await settle(1000);
+    const isAdmin11 = (e: { key: string; detail: string }) => e.key === 'sec.role' && /Someone was made an admin, by an owner\./.test(e.detail);
+    const high11 = (e: { high?: boolean; priority: number }) => !!e.high || e.priority >= 5;
+    const h11 = alerts.getAlertsStatus().history;
+    const at11 = h11.findIndex(isAdmin11);
+    assert(at11 >= 0 && !high11(h11[at11]) && !h11.some((e) => e.key.startsWith('reports.')), `11. 60 reminders push every report line out; someone made an admin after them (${h11.length} lines)`);
+    // More reminders, until the admin made is the oldest line that is not high.
+    const older = h11.slice(0, at11).filter((e) => !high11(e)).length;
+    for (let i = 0; i < older; i++) await reminder(day++);
+    const h11b = alerts.getAlertsStatus().history;
+    assert(h11b.length === 50 && h11b.find((e) => !high11(e)) === h11b.find(isAdmin11) && h11b.every((e) => !e.key.startsWith('reports.')),
+        `11. 50 lines, none a report's, the admin made the oldest not high (${h11b.length}, ${older} more reminders)`);
+    const p11 = ownerPushes().length;
+    const r11 = await nextReport('Spam or scam');
+    await settle();
+    assert(r11.status === 200 && ownerPushes().length === p11 + 1, `11. a report comes in and is pushed (${r11.status}, ${ownerPushes().length - p11})`);
+    const h11c = alerts.getAlertsStatus().history;
+    assert(h11c.some((e) => e.key === 'reports.new'), `11. its line is in the history, the Alerts card's "Last 50 alerts" (it dropped itself: ${h11c.filter((e) => e.key.startsWith('reports.')).length} report lines)`);
+    assert(h11c.some(isAdmin11), '11. the security line is still there: a report line made room with a reminder');
+    assert(h11c.length === 50, `11. and the history still holds 50 lines (${h11c.length})`);
+
+    // ── 12. Nothing names a member or quotes them ───────────────────────────────────────────────────────────────────
     await settle();
     const st = await adminCall('POST', '/api/local/admin/alerts/status', {});
-    assert(st.status === 200 && st.json?.history?.some((e: any) => e.key === 'reports.new'), `9. the Alerts card lists them (${st.status})`);
+    assert(st.status === 200 && st.json?.history?.some((e: any) => e.key === 'reports.new'), `12. the Alerts card lists them (${st.status})`);
     const notices = db.prepare(`SELECT recipient, title, body, data FROM push_notices WHERE kind = 'owner.alert'`).all() as any[];
     assert(notices.some((x) => x.recipient === admin.pk) && notices.every((x) => x.recipient === owner.pk || x.recipient === admin.pk),
-        `9. ${notices.length} owner.alert notices kept, every one for the owner or the admin`);
+        `12. ${notices.length} owner.alert notices kept, every one for the owner or the admin`);
     const payloads = [
         ...ntfy.hits.map((h) => JSON.stringify(h.headers) + h.body),
         ...ownerPushes().map((p) => p.title + p.body),
@@ -502,8 +623,8 @@ async function main(): Promise<void> {
     const leaks = payloads.filter((p) => ids.some((i) => p.includes(i.callsign) || p.includes(i.pk.slice(0, 12)))
         || REASON_WORDS.some((w) => p.includes(w)) || /sexual abuse of a minor|Other:/.test(p));
     assert(n > 55 && payloads.length > 20 && leaks.length === 0,
-        `9. ${payloads.length} payloads (${topicHits().length} channel messages, ${n} reports), none names a member or quotes a reason (${leaks.length})`);
-    assert(blocked.length === 0, `9. nothing off this machine was asked (${blocked.join(', ')})`);
+        `12. ${payloads.length} payloads (${topicHits().length} channel messages, ${n} reports), none names a member or quotes a reason (${leaks.length})`);
+    assert(blocked.length === 0, `12. nothing off this machine was asked (${blocked.join(', ')})`);
 
     await ntfy.close();
     console.log(`\n${testsPassed}/${testsRun} passed`);

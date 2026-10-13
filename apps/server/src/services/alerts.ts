@@ -812,7 +812,10 @@ const isHigh = (e: AlertEvent) => !REPORT_KEYS.has(e.key) && (!!e.high || e.prio
  * Adds `e` to a bounded list: the same line already there (same row, kind and words, and not on its way to the channel)
  * is counted (×n) and moved last instead, when `coalesce`. Past `max`, the oldest report line makes room first, then the
  * oldest line that is not high; a high one never does (four times `max` is the last stop for a list of nothing but high
- * lines, which the coalescing keeps to a handful). Returns how many lines were dropped.
+ * lines, which the coalescing keeps to a handful). A new report line with no older one to drop makes room with the oldest
+ * disk, backup or other condition line that is not high, never a security line, and only then drops itself: so a
+ * history full of daily reminders still shows the reports (the deciding review of #1850, confirmation 2, finding 1).
+ * Returns how many lines were dropped.
  */
 function keepIn(list: AlertEvent[], e: AlertEvent, max: number, coalesce: boolean): number {
     const same = coalesce ? list.findIndex((x) => x.key === e.key && x.kind === e.kind && x.detail === e.detail && !inFlight.includes(x)) : -1;
@@ -824,7 +827,9 @@ function keepIn(list: AlertEvent[], e: AlertEvent, max: number, coalesce: boolea
     list.push(e);
     let dropped = 0;
     while (list.length > max) {
-        let i = list.findIndex((x) => REPORT_KEYS.has(x.key) && !inFlight.includes(x));
+        let i = list.findIndex((x) => REPORT_KEYS.has(x.key) && x !== e && !inFlight.includes(x));
+        if (i < 0 && REPORT_KEYS.has(e.key)) i = list.findIndex((x) => !isHigh(x) && !REPORT_KEYS.has(x.key) && !x.key.startsWith('sec.') && !inFlight.includes(x));
+        if (i < 0 && REPORT_KEYS.has(e.key)) i = list.indexOf(e);
         if (i < 0) i = list.findIndex((x) => !isHigh(x) && !inFlight.includes(x));
         if (i < 0 && list.length <= 4 * max) break;
         list.splice(Math.max(i, 0), 1);

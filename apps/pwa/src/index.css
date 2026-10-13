@@ -109,14 +109,17 @@
   --shadow-card: 0 4px 6px -1px rgba(100, 118, 100, 0.1), 0 2px 4px -2px rgba(100, 118, 100, 0.05);
   --nav-height: 4rem;
   --bottom-nav-height: 4rem;
-  --bottom-nav-offset: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+  /* The tour's bar while it runs (components/TourBar.tsx sets it): what rides on the offset (the Market's + ADD POST,
+     the Map's +, the pages' bottom padding) rides above the bar too. */
+  --tour-bar-height: 0px;
+  --bottom-nav-offset: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px));
 }
 
 :root[data-bottom-nav="hidden"],
 [data-bottom-nav="hidden"],
 .bottom-nav-hidden {
   --bottom-nav-height: 0px;
-  --bottom-nav-offset: env(safe-area-inset-bottom, 0px);
+  --bottom-nav-offset: calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px));
 }
 
 @media (min-width: 768px) {
@@ -126,7 +129,7 @@
   .bottom-nav-hidden {
     --nav-height: 0px;
     --bottom-nav-height: 0px;
-    --bottom-nav-offset: 0px !important;
+    --bottom-nav-offset: var(--tour-bar-height, 0px) !important;
   }
 }
 

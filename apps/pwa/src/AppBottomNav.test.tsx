@@ -159,7 +159,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         expect(document.documentElement.getAttribute('data-bottom-nav')).toBe('hidden');
         expect(document.documentElement.classList.contains('bottom-nav-hidden')).toBe(true);
         expect(document.documentElement.style.getPropertyValue('--bottom-nav-height')).toBe('0px');
-        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('env(safe-area-inset-bottom, 0px)');
+        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px))');
 
         // Closing the profile restores bottom nav visibility
         const backButton = screen.getByRole('button', { name: /back/i });
@@ -201,7 +201,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         expect(document.documentElement.getAttribute('data-bottom-nav')).toBe('hidden');
         expect(document.documentElement.classList.contains('bottom-nav-hidden')).toBe(true);
         expect(document.documentElement.style.getPropertyValue('--bottom-nav-height')).toBe('0px');
-        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('env(safe-area-inset-bottom, 0px)');
+        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px))');
 
         // Close treasury
         const backButton = screen.getByRole('button', { name: /back/i });
@@ -399,5 +399,36 @@ describe('Full-page views clear the desktop sidebar', () => {
         expect(css).toMatch(/:root\s*\{\s*--page-ground:\s*var\(--pattern-bg\)/);
         expect(css).toMatch(/:root\.plain-background\s*\{\s*--page-ground:\s*#fbfaf8/);
         expect(css).toMatch(/:root\.dark-theme\.plain-background\s*\{\s*--page-ground:\s*#1d231d/);
+    });
+});
+
+describe('the "?" opens the guide\'s words for the tab you are on (review of #1857, B4)', () => {
+    const sheetFor = async (tab: string) => {
+        const { helpSheetFor, webHelpKey } = await import('@beanpool/core');
+        const { getBundledGuide } = await import('./lib/guide');
+        return helpSheetFor(getBundledGuide() as never, webHelpKey({ tab, settings: false }));
+    };
+    const openWith = async (id: 'header-help' | 'sidebar-help') => {
+        fireEvent.click(screen.getByTestId(id));
+        return within(await screen.findByTestId('help-dialog'));
+    };
+
+    it('the pill\'s ? on the Market opens the Market\'s page, and on Commons the Commons\'; the sidebar\'s ? the same', async () => {
+        render(<App />);
+        await openMarket();
+        const market = await sheetFor('marketplace');
+        const commons = await sheetFor('projects');
+        expect(market.title).toBeTruthy();
+        expect(commons.title).toBeTruthy();
+        expect(market.title).not.toBe(commons.title);
+        expect((await openWith('header-help')).getByTestId('help-title')).toHaveTextContent(market.title!);
+        fireEvent.click(screen.getByTestId('help-close'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        fireEvent.click(within(screen.getByTestId('mobile-bottom-nav')).getByText(/Commons/i));
+        await screen.findByTestId('projects-page');
+        expect((await openWith('header-help')).getByTestId('help-title')).toHaveTextContent(commons.title!);
+        fireEvent.click(screen.getByTestId('help-close'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        expect((await openWith('sidebar-help')).getByTestId('help-title')).toHaveTextContent(commons.title!);
     });
 });

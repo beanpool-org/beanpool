@@ -2,6 +2,7 @@
 slug: privacy
 title: Your privacy
 summary: What others can see about you, and the settings that control it.
+help: What other members can see about you, and the switches that control it.
 related: your-profile, your-area, pin-locations, blocking, messages
 ---
 

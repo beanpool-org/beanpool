@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
+import { setHelpContext } from '../../utils/tour-store';
 import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
 import { refreshListingAfterPhotoError } from '../../utils/photo-refresh';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -139,6 +140,11 @@ export default function MarketScreen() {
         AsyncStorage.setItem('beanpool_first_offer_quest_dismissed', 'true').catch(() => {});
     };
     const [filter, setFilter] = useState<MarketTypeFilter>('all');
+    // The "?" names Polls' own guide page while they are what the Market shows (DESIGN-getting-started-fable.md §4).
+    useFocusEffect(useCallback(() => {
+        setHelpContext(filter === 'polls' ? 'polls' : null);
+        return () => setHelpContext(null);
+    }, [filter]));
     
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.page },

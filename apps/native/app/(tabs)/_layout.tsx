@@ -5,7 +5,13 @@ import { GlobalHeader, HEADER_ROW_HEIGHT } from '../../components/GlobalHeader';
 import { View, Text, Platform, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
-import { usePathname } from 'expo-router';
+import { usePathname, router } from 'expo-router';
+import { useMemo } from 'react';
+import { helpSheetFor, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps } from '@beanpool/core';
+import { TourBar, tourSceneInset } from '../../components/TourBar';
+import { HelpSheet } from '../../components/HelpSheet';
+import { OPEN_HELP_EVENT, closeTour, helpContext, moveTour, startTour, useTour } from '../../utils/tour-store';
+import { useGuide } from '../../utils/use-guide';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getGlobalUnreadCount, syncMessages, getPosts, getMarketplaceTransactions } from '../../utils/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +20,11 @@ import { useNodeStatus } from '../NodeStatusContext';
 import { withJitter } from '../../utils/jitter';
 import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab } from '../../utils/node-profile';
 import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProfile } from '../../utils/node-profile-anchor';
+
+/** Each tour step's tab as a route, written out so every link into the app is checked (deep-links-resolve.test.ts). */
+const TOUR_ROUTES: Record<string, '/(tabs)' | '/(tabs)/market' | '/(tabs)/map' | '/(tabs)/chats' | '/(tabs)/projects' | '/(tabs)/ledger'> = {
+    index: '/(tabs)', market: '/(tabs)/market', map: '/(tabs)/map', chats: '/(tabs)/chats', projects: '/(tabs)/projects', ledger: '/(tabs)/ledger',
+};
 
 // A small label sits ABOVE each icon,
 // so the text is buffered from the busy page below. Height is fixed here because the library
@@ -241,6 +252,47 @@ export default function TabLayout() {
         };
     }, [identity]);
 
+    // ── The tour (scratch/global-node/DESIGN-getting-started-fable.md §2) and the "?" (§4) ──
+    // The bar lives here, over the real tabs; Home starts it and owns what it writes (utils/tour-store.ts).
+    const { run: tour, home: tourHomeNow } = useTour();
+    const guide = useGuide();
+    const isGlobal = strip.profile?.profile === 'global';
+    const moneyShown = !hiddenTabs.includes('ledger');
+    const steps = useMemo(() => coreTourSteps('phone', { global: isGlobal, beans: moneyShown }), [isGlobal, moneyShown]);
+    const tourRunning = !!tour && !!identity && tour.publicKey === identity.publicKey;
+    const tourIndex = tour ? Math.min(tour.step, steps.length - 1) : 0;
+    const tourTab = tourRunning ? steps[tourIndex]?.tab ?? null : null;
+    // The bar's height, so the tabs end at its top and their bottom buttons ride above it (tourSceneInset).
+    const [tourBarHeight, setTourBarHeight] = useState(0);
+    // The account left the phone: its tour goes with it.
+    useEffect(() => { if (tour && (!identity || tour.publicKey !== identity.publicKey)) closeTour(); }, [identity?.publicKey, tour?.publicKey]);
+    // Each step shows its own tab.
+    useEffect(() => {
+        if (!tourTab) return;
+        const path = tourTab === 'index' ? '/' : `/${tourTab}`;
+        if (pathname !== path) router.navigate(TOUR_ROUTES[tourTab] ?? '/(tabs)');
+    }, [tourTab]);
+    // A tab the member taps during the tour moves the tour to that tab's step: it follows, never scolds.
+    useEffect(() => {
+        if (!tourRunning) return;
+        const tab = pathname === '/' ? 'index' : pathname.replace(/^\//, '').split('/')[0];
+        if (tab === tourTab) return;
+        const at = tourStepForTab(steps, tab);
+        if (at >= 0) moveTour(at);
+    }, [pathname]);
+    const endTour = useCallback((kind: 'done' | 'skipped') => {
+        tourHomeNow?.end(kind);
+        closeTour();
+        if (pathname !== '/') router.navigate('/(tabs)');
+    }, [tourHomeNow, pathname]);
+
+    const [helpOpen, setHelpOpen] = useState(false);
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener(OPEN_HELP_EVENT, () => setHelpOpen(true));
+        return () => sub.remove();
+    }, []);
+    const helpWords = helpSheetFor(guide.guide, phoneHelpKey(pathname, helpContext()));
+
     return (
         <View style={{ flex: 1 }}>
             {/* Tab screens always sit under the dark-green vine header, so the status-bar
@@ -260,6 +312,7 @@ export default function TabLayout() {
             <View style={isMapScreen ? { height: measuredHeaderHeight } : undefined}>
                 <GlobalHeader onMeasure={onHeaderMeasure} />
             </View>
+            <View style={{ flex: 1, marginBottom: tourSceneInset(tourRunning, tourBarHeight) }} testID="tab-scenes">
             <Tabs backBehavior="none" screenOptions={{
                 tabBarPosition: 'top',
                 headerShown: false,
@@ -389,6 +442,42 @@ export default function TabLayout() {
                     }} 
                 />
             </Tabs>
+            </View>
+            {tourRunning && (
+                <TourBar
+                    steps={steps}
+                    index={tourIndex}
+                    home={tourHomeNow}
+                    colors={colors}
+                    bottomInset={insets.bottom}
+                    onHeight={setTourBarHeight}
+                    onNext={() => moveTour(tourIndex + 1)}
+                    onSkip={() => endTour('skipped')}
+                    onDone={() => endTour('done')}
+                />
+            )}
+            <HelpSheet
+                visible={helpOpen}
+                sheet={helpWords}
+                tourOpen={tourRunning}
+                canTour={!!identity && !!tourHomeNow}
+                colors={colors}
+                onClose={() => setHelpOpen(false)}
+                onReadPage={() => {
+                    setHelpOpen(false);
+                    if (helpWords.slug) router.push({ pathname: '/guide/[slug]', params: { slug: helpWords.slug } });
+                    else if (helpWords.section) router.push({ pathname: '/guide/section/[id]', params: { id: helpWords.section } });
+                }}
+                onSearch={() => { setHelpOpen(false); router.push('/beanpool'); }}
+                onTour={() => {
+                    setHelpOpen(false);
+                    if (!identity) return;
+                    // Pick up where it is, or (Take the tour again) open it on the account from step 1.
+                    if (tourRunning) return;
+                    if (tourHomeNow?.restart) tourHomeNow.restart();
+                    else startTour(identity.publicKey, 0);
+                }}
+            />
         </View>
     );
 }

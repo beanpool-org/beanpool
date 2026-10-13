@@ -69,6 +69,12 @@ export interface NodeFeatures {
      * A node that doesn't say gives every listing, as before.
      */
     nearbyListings?: { radiusKm: number; max: number };
+    /**
+     * The phone holds only the members it has a reason to show and fetches the rest by key (the worldwide one, design
+     * DESIGN-global-members-by-area §2.2; utils/members-on-demand.ts): no whole directory read, no everyone-delta. A node
+     * that doesn't say is read as before.
+     */
+    membersOnDemand?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -77,7 +83,7 @@ const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview', 'showcase',
+    'privatePreview', 'showcase', 'membersOnDemand',
 ];
 
 export interface NodeProfile {

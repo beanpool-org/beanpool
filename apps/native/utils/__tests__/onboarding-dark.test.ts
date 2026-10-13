@@ -7,7 +7,9 @@ import { onboardingColors } from '../onboarding-colors';
 // Marty, 13 Oct 2026: the welcome and onboarding screens follow dark mode too (they were light-only on purpose).
 // A screen that goes back to the static light `colors`, or to dark status-bar icons, fails here.
 
-const ONBOARDING_SCREENS = ['app/welcome.tsx', 'app/recover-identity.tsx', 'app/profile-setup.tsx'];
+const ONBOARDING_SCREENS = ['app/welcome.tsx', 'app/recover-identity.tsx', 'app/profile-setup.tsx', 'app/node-mismatch.tsx'];
+// Everything onboarding draws: the screens, the area step (profile setup, and Settings → Your area) and the parts welcome shows.
+const ONBOARDING_FILES = [...ONBOARDING_SCREENS, 'app/your-area.tsx', 'components/AreaPicker.tsx'];
 const read = (rel: string) => readFileSync(join(__dirname, '..', '..', rel), 'utf8');
 
 function luminance(hex: string): number {
@@ -23,7 +25,7 @@ function contrast(a: string, b: string): number {
 }
 
 describe('onboarding screens follow dark mode', () => {
-    it.each(ONBOARDING_SCREENS)('%s draws from the light or dark tokens, not the static light colours', (rel) => {
+    it.each(ONBOARDING_FILES)('%s draws from the light or dark tokens, not the static light colours', (rel) => {
         const src = read(rel);
         expect(src).toMatch(/useOnboardingColors\(\)/);
         expect(src).not.toMatch(/import\s*\{[^}]*\bcolors\b[^}]*\}\s*from\s*'\.\.\/constants\/colors'/);
@@ -84,7 +86,7 @@ describe('onboarding screens follow dark mode', () => {
             expect(contrast(palette.blue400, colors.feedback.info.bg)).toBeGreaterThanOrEqual(3);
         });
         it('no onboarding screen hands a literal hex colour to a JSX prop without a dark branch', () => {
-            for (const rel of ONBOARDING_SCREENS) {
+            for (const rel of ONBOARDING_FILES) {
                 const bare = read(rel).split('\n').filter((l) => /=\s*"#[0-9a-fA-F]{3,8}"/.test(l));
                 expect(bare, rel).toEqual([]);
             }

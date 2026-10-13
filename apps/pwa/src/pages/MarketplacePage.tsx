@@ -24,6 +24,7 @@ import { ExampleListings } from '../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../lib/example-listings';
 import { pollsInformal } from '../lib/informal-polls';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { useMembersOnDemand } from '../lib/members-on-demand';
 import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { lazy, Suspense } from 'react';
@@ -737,9 +738,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         });
     }, [posts]);
 
+    // On a community where people are asked for, not read whole (lib/members-on-demand, the worldwide one), each listing
+    // carries its author's face (authorAvatarUrl) and nothing is read for it. Elsewhere, and while the node hasn't said,
+    // the faces come from the member directory, as before.
+    const membersOnDemand = useMembersOnDemand();
+    const authorFaceOf = (post: MarketplacePost): string | null => membersOnDemand
+        ? (post.authorAvatarUrl ?? null)
+        : (authorAvatarCache[post.authorPublicKey] || null);
+
     // Fetch avatar cache from members list (members only: a visitor's list names nobody)
     useEffect(() => {
-        if (isVisitor) return;
+        if (isVisitor || membersOnDemand !== false) return;
         getMembers()
             .then(members => {
                 const cache: Record<string, string | null> = {};
@@ -749,7 +758,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 setAuthorAvatarCache(cache);
             })
             .catch(() => {});
-    }, []);
+    }, [membersOnDemand]);
 
     // The ids of the open Need's outstanding bids, as a plain string so it compares by VALUE in the
     // dependency array below. This page no longer polls transactions itself — App.tsx owns that —
@@ -2983,7 +2992,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     post={post as any}
                                                     authorRating={authorRatingsCache[post.authorPublicKey]}
                                                     authorEnergy={(post as any).authorEnergyCycled || 0}
-                                                    authorAvatarUrl={authorAvatarCache[post.authorPublicKey] || null}
+                                                    authorAvatarUrl={authorFaceOf(post)}
                                                     // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
                                                     // the SERVER pulled and cached (#143 step 4). Same badge either way:
                                                     // a member wants the community it came from, not the mechanism.
@@ -3084,7 +3093,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         post={post as any}
                                                         authorRating={authorRatingsCache[post.authorPublicKey]}
                                                         authorEnergy={(post as any).authorEnergyCycled || 0}
-                                                        authorAvatarUrl={authorAvatarCache[post.authorPublicKey] || null}
+                                                        authorAvatarUrl={authorFaceOf(post)}
                                                         // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
                                                     // the SERVER pulled and cached (#143 step 4). Same badge either way:
                                                     // a member wants the community it came from, not the mechanism.

@@ -16,6 +16,7 @@ import { CreateGroupModal } from '../components/CreateGroupModal';
 import { GroupDetailModal } from '../components/GroupDetailModal';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
+import { useMembersOnDemand } from '../lib/members-on-demand';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
 
 interface Props {
@@ -75,6 +76,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [commonsBalance, setCommonsBalance] = useState<number>(0);
     const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
     const [allMembersList, setAllMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
+    // The directory (only the Decision form's name preview uses it) is read whole only where the node has said it reads
+    // whole: never with members on demand, the worldwide community (lib/members-on-demand; review of #1861, N1).
+    const membersOnDemand = useMembersOnDemand();
+    const membersOnDemandRef = useRef<boolean | null>(null);
+    membersOnDemandRef.current = membersOnDemand;
 
     // Groups State
     const [groups, setGroups] = useState<Group[]>([]);
@@ -125,7 +131,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
                 // null, not [], when the directory couldn't be read (the node busy with heavy lists answers 503): the
                 // members list below keeps who it had, and the next fetch reads them again.
-                getAllMembers ? getAllMembers().catch(() => null) : [],
+                // Read only once the node has said it reads whole (the effect below reads them when it says so).
+                membersOnDemandRef.current !== false ? null : getAllMembers ? getAllMembers().catch(() => null) : null,
             ]);
             setTreasuries(tresData.treasuries || []);
             setDecisions(decData.decisions || []);
@@ -155,6 +162,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     useEffect(() => {
         fetchEnterprises();
     }, [identity?.publicKey]);
+
+    // The node has just said it reads whole: the list the fetch at open couldn't read yet, read once.
+    useEffect(() => {
+        if (membersOnDemand !== false) return;
+        // Asked inside the promise, so a read that throws before it starts waits for the next fetch too.
+        Promise.resolve().then(() => getAllMembers()).then((membersData) => {
+            if (Array.isArray(membersData)) setAllMembersList(membersData.map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
+        }).catch(() => { /* the next fetch reads them again */ });
+    }, [membersOnDemand]);
 
     // The viewer's balance (only earnedCredit, for proposing a Decision) is a member's alone. App learns
     // membership after mount, so this waits for it and a guest never asks the node.

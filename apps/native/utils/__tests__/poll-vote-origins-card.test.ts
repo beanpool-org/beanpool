@@ -38,6 +38,7 @@ vi.mock('../../app/ThemeContext', () => ({
     useStyles: (make: (t: unknown) => unknown) => make({ colors: colours, theme: 'light' }),
 }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => null }));
+vi.mock('../../components/showcase/LocalCommunityMark', () => ({ LocalCommunityMark: () => null }));
 vi.mock('../db', () => ({ votePoll: vi.fn(), closePoll: vi.fn() }));
 vi.mock('../node-profile', () => ({ INFORMAL_POLL_NOTE: 'An informal poll; it decides nothing' }));
 

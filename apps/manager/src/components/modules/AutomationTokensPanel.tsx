@@ -86,7 +86,8 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok) {
-                setTokens(Array.isArray(data.tokens) ? (data.tokens as AutomationTokenRecord[]) : []);
+                // An AI assistant's token (scope agent) is listed and disconnected under Connected assistants.
+                setTokens(Array.isArray(data.tokens) ? (data.tokens as Array<{ scope: string }>).filter((t) => t.scope !== 'agent') as AutomationTokenRecord[] : []);
                 setListMessage('');
             } else {
                 setListMessage(`The tokens could not be listed: ${data.error || `HTTP ${res.status}`}`);

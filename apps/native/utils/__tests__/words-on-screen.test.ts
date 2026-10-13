@@ -222,16 +222,23 @@ describe('every screen that draws the words blocks capture with them', () => {
     const screens: [string, string, string][] = [
         ['Safety Backup', 'app/welcome.tsx', 'pendingWords ? pendingWords.map('],
         ["Replace this phone's account?", 'app/welcome.tsx', 'outgoingWords?.map('],
-        ['Recover with 12 Words (typed)', 'app/welcome.tsx', 'recoveryWords.map((word, i) => ('],
+        // Recover with 12 Words and the old-words unlock type them in the one shared entry (welcome.tsx, old-words-unlock.tsx).
+        ['Recover with 12 Words (typed)', 'components/RecoveryWordsEntry.tsx', 'words.map((word, i) => ('],
         ['Account Protection', 'app/(tabs)/settings.tsx', "mnemonicWords?.split(' ').map("],
         ['View Recovery Phrase', 'app/(tabs)/settings.tsx', 'seedWords?.map('],
         ["node-mismatch's delete", 'app/node-mismatch.tsx', 'words.map((w, i) => ('],
         ['Add your 12 words (typed)', 'components/AddWordsForm.tsx', 'boxes.map('],
         ['Check your 12 words (typed)', 'app/owner-words-check.tsx', '<TextInput'],
         ['"Update required": the 12 words', 'components/ForceUpdateBlock.tsx', 'words.map((w, i) => ('],
+        ["A found old phone's card: its old 12 words", 'components/KeyMovedCard.tsx', 'words.map((w, i) => ('],
     ];
     it.each(screens)('%s: drawn inside the block', (_name, file, anchor) => {
         expect(drawnInsideBlock(read(file), anchor)).toBe(true);
+    });
+
+    it('Recover with 12 Words and the old-words unlock take the typed words only through that entry', () => {
+        for (const file of ['app/welcome.tsx', 'app/old-words-unlock.tsx']) expect(read(file)).toContain('<RecoveryWordsEntry');
+        expect(read('app/old-words-unlock.tsx')).not.toMatch(/<TextInput/);
     });
 
     it('no screen draws the block beside the words instead of around them', () => {

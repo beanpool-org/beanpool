@@ -12,6 +12,7 @@ import {
 } from './e2e-crypto';
 import { DmNotLockedError, isNodeReadableChatType } from './dm-lock';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
+import { getCachedNodeProfile } from './node-profile';
 import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress } from './node-url';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
@@ -30,6 +31,12 @@ import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDe
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
 import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import {
+    unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, handOversHeld, noteConfirmations, confirmedNotes,
+    lockedHistoryCounts, noteLockedHistoryCount, type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
+} from './group-history-unlock';
+import { oldKeySignedHere, rekeysToMe } from './key-succession';
+import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
@@ -331,7 +338,8 @@ async function _doInitDB() {
             event_state TEXT,
             event_going_count INTEGER DEFAULT 0,
             event_interested_count INTEGER DEFAULT 0,
-            carried_callsign TEXT
+            carried_callsign TEXT,
+            carried_avatar TEXT
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -594,6 +602,12 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
         // lacks (a community that syncs by area: utils/posts-nearby.ts). The directory's name wins where it has one; read
         // as author_callsign, a name the column doesn't take, so `p.*` never repeats it (the review of #1778, finding 8).
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_callsign TEXT;`); } catch (e) {}
+        // Its face the same way (the node's `authorAvatarUrl`, DESIGN-global-members-by-area §2.2.6): a by-area listing
+        // shows its author's face with no card for them. The card's face wins where the phone holds one.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_avatar TEXT;`); } catch (e) {}
+        // When this phone last fetched the card by key (utils/members-on-demand.ts): the oldest are re-checked first, and
+        // past 1,000 cards the oldest that nothing references are dropped. Null for a card from the whole directory.
+        try { await database.execAsync(`ALTER TABLE members ADD COLUMN card_fetched_at TEXT;`); } catch (e) {}
         // The ids a by-area community's last set read named `tied` (keepPostsNearby), for a phone whose schema ran before it.
         try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);`); } catch (e) {}
         // The set a by-area community's last set read named, and its hash (keepPostsNearby, readNearbyHeld).
@@ -730,6 +744,16 @@ let copyGeneration = 0;
 export function copyGenerationNow(): number {
     return copyGeneration;
 }
+/**
+ * The copy a read outside the sync is made for, taken when the read starts: the anchor's file and the copy generation.
+ * Handed back to applyDelta (`expectedDbName`, `generation`), the answer lands only in that copy: a community switch, or
+ * a copy cleared, while the read was out writes nothing (review of #1859, NB3: a card fetched on global landed in mullum's).
+ */
+export async function copyForRead(): Promise<{ dbName: string | undefined; generation: number }> {
+    const generation = copyGeneration;
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    return { dbName: anchorUrl ? getDatabaseFilenameForNode(anchorUrl) : undefined, generation };
+}
 /** A new copy generation: every sync cycle in flight writes and stores nothing more (copyGeneration). */
 export function newCopyGeneration(): void {
     copyGeneration++;
@@ -795,7 +819,7 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
 export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean; includeGroupsOf?: string; allScopes?: boolean }) {
     let database = await waitForInit();
     let query = `
-        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, COALESCE(m.avatar_url, p.carried_avatar) as author_avatar, m.joined_at, g.name as target_group_name
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN groups g ON p.target_group_id = g.id
@@ -939,7 +963,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
 export async function getMyPosts(pubkey: string) {
     const database = await waitForInit();
     const rows = await database.getAllAsync(`
-        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, m.avatar_url as author_avatar, m.joined_at
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, COALESCE(m.avatar_url, p.carried_avatar) as author_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE p.author_pubkey = ? AND p.status IN ('active', 'pending', 'completed', 'paused') AND p.type != 'event'
@@ -1041,7 +1065,7 @@ export async function getPost(id: string) {
     if (anchorUrl) void refreshCachedPost(database, anchorUrl, id).catch(() => false);
 
     const row = await database.getFirstAsync<any>(`
-        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, COALESCE(m.avatar_url, p.carried_avatar) as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key
@@ -1254,7 +1278,9 @@ export async function getConversations(myPubkey: string) {
             postCredits: row.postCredits,
             postPhoto,
             type: row.convType || 'dm',
-            peer: row.name || row.otherCallsign || row.id.slice(0, 8),
+            // No card held for the other member (a community that says `membersOnDemand`, before the cycle that fetches
+            // it by key): the key's first 8 characters, never the conversation's (DESIGN-global-members-by-area §2.4).
+            peer: row.name || row.otherCallsign || (row.otherPubkey ? String(row.otherPubkey).slice(0, 8) : row.id.slice(0, 8)),
             peerAvatar: row.otherAvatar || null,
             peerUpdatedAt: row.otherProfileUpdatedAt || null,
             peerPubkey: row.otherPubkey || null,
@@ -2592,28 +2618,72 @@ async function rememberDmConversations(ids: string[]): Promise<void> {
 }
 
 /**
- * True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. The
- * held check, the keyring and the group screens fold an id's case (a link or a push can carry it in capitals), so this
- * folds it too: otherwise one id in capitals reaches a group's keys on a known DM's own id, and makes it a held group
- * whose lines go to the roster the node shows (#1841 review, finding 1). The encrypted-line lookup asks every spelling
- * this phone holds a row under, the id as given, and lower- and upper-case, so it keeps its index.
+ * The spelling of the id this phone knows a DM by, or null when it knows no DM by any spelling of `conversationId`: the
+ * DM list's, the dm row's, or the id an encrypted line was kept under. The held check, the keyring and the group screens
+ * fold an id's case (a link or a push can carry it in capitals), so this folds it too: otherwise one id in capitals
+ * reaches a group's keys on a known DM's own id, and makes it a held group whose lines go to the roster the node shows
+ * (#1841 review, finding 1). The two SQLite lookups ask the id as given, lower- and upper-case, so both keep their index:
+ * a COLLATE NOCASE compare scanned the whole table for every row holdDmTypes asks about (#1841 confirmation 1, finding
+ * 2); refuseGroupKeysForDm keeps the complete check (isKnownDmInAnySpelling). `seenByFold` is the DM list folded once,
+ * for a pass over many rows (dmConversationsByFold).
  */
-export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
-    if (!conversationId) return false;
+export async function knownDmConversationId(conversationId: string, seenByFold?: Map<string, string[]>): Promise<string | null> {
+    if (!conversationId) return null;
     const folded = conversationId.toLowerCase();
-    for (const seen of await dmConversationsSeen()) if (seen.toLowerCase() === folded) return true;
+    const listed = seenByFold ? (seenByFold.get(folded) ?? []) : [...await dmConversationsSeen()].filter((s) => s.toLowerCase() === folded);
+    // The spelling asked for wins wherever this phone knows a DM under it, so a link to a conversation the phone holds
+    // opens that conversation, never a twin under another spelling: a node can list one first, and SQLite visits an IN
+    // list in BINARY order, upper case first (#1863 review). Another spelling answers only when this one is known nowhere.
+    if (listed.includes(conversationId)) return conversationId;
+    let row: string | null = null;
+    let line: string | null = null;
     try {
         const database = await getDb();
-        const conv = await database.getFirstAsync<any>("SELECT type FROM conversations WHERE id = ? COLLATE NOCASE AND type = 'dm' LIMIT 1", [conversationId]);
-        if (conv?.type === 'dm') return true;
+        const ids = [...new Set([conversationId, folded, conversationId.toUpperCase()])];
+        const marks = ids.map(() => '?').join(', ');
+        const conv = await database.getFirstAsync<any>(`SELECT id FROM conversations WHERE id IN (${marks}) AND type = 'dm' ORDER BY id = ? DESC LIMIT 1`, [...ids, conversationId]);
+        row = typeof conv?.id === 'string' ? conv.id : null;
+        if (row === conversationId) return row;
+        const msg = await database.getFirstAsync<any>(
+            `SELECT conversation_id FROM messages WHERE conversation_id IN (${marks}) AND nonce LIKE ? ORDER BY conversation_id = ? DESC LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`, conversationId]);
+        line = typeof msg?.conversation_id === 'string' ? msg.conversation_id : null;
+        if (line === conversationId) return line;
+    } catch {}
+    return listed[0] ?? row ?? line;
+}
+
+/** The DM list folded once (each id lower-cased, to its spellings in the order seen), for a pass over many rows. */
+async function dmConversationsByFold(): Promise<Map<string, string[]>> {
+    const byFold = new Map<string, string[]>();
+    for (const s of await dmConversationsSeen()) { const f = s.toLowerCase(); const a = byFold.get(f); if (a) a.push(s); else byFold.set(f, [s]); }
+    return byFold;
+}
+
+/**
+ * A known DM in ANY spelling, the slow way (two COLLATE NOCASE scans): the key-making guard's own check, which runs when a
+ * group's keys are about to be synced or made, never per row of a sync. A dm row or a sealed line kept under a mixed-case
+ * spelling the DM list never got (written while the key memory couldn't be read) is caught here (#1863 review).
+ */
+async function isKnownDmInAnySpelling(conversationId: string): Promise<boolean> {
+    if (await isKnownDmConversation(conversationId)) return true;
+    try {
+        const database = await getDb();
+        const dm = await database.getFirstAsync<any>("SELECT 1 AS y FROM conversations WHERE id = ? COLLATE NOCASE AND type = 'dm' LIMIT 1", [conversationId]);
+        if (dm) return true;
         const spelt = await database.getAllAsync<any>('SELECT id FROM conversations WHERE id = ? COLLATE NOCASE', [conversationId]);
-        const ids = [...new Set([conversationId, folded, conversationId.toUpperCase(), ...(spelt ?? []).map((r: any) => r?.id).filter((s: unknown): s is string => typeof s === 'string')])];
-        const row = await database.getFirstAsync<any>(
+        const ids = (spelt ?? []).map((r: any) => r?.id).filter((s: unknown): s is string => typeof s === 'string');
+        if (!ids.length) return false;
+        const line = await database.getFirstAsync<any>(
             `SELECT 1 AS y FROM messages WHERE conversation_id IN (${ids.map(() => '?').join(', ')}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]);
-        return !!row;
+        return !!line;
     } catch {
         return false;
     }
+}
+
+/** True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. */
+export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
+    return (await knownDmConversationId(conversationId)) !== null;
 }
 
 /**
@@ -2662,8 +2732,9 @@ async function holdDmTypes(): Promise<void> {
     try {
         const database = await getDb();
         const rows = await database.getAllAsync<any>("SELECT id, type FROM conversations WHERE IFNULL(type, 'dm') != 'dm'");
+        const byFold = await dmConversationsByFold();
         for (const r of rows || []) {
-            if (r?.id && await isKnownDmConversation(r.id)) {
+            if (r?.id && (await knownDmConversationId(r.id, byFold)) !== null) {
                 console.warn(`[DM guard] DM ${String(r.id).slice(0, 8)} was held as a ${r.type}: back to a DM`);
                 await database.runAsync("UPDATE conversations SET type = 'dm' WHERE id = ?", [r.id]);
                 await rememberDmConversations([r.id]);
@@ -3061,7 +3132,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, carried_callsign) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)))',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -3104,8 +3175,24 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             // A copy without the name (an older node) keeps the one the row has.
             syncedAuthorCallsign(p),
             p.id ?? null,
+            // Its face: a copy that names it (a node that has members on demand) is the node's word, and its null says the
+            // author has no photo now, so it clears; a copy without the field (an older node) keeps the one the row has.
+            carriesAuthorAvatar(p) ? 1 : 0,
+            syncedAuthorAvatar(p),
+            p.id ?? null,
         ]
     );
+}
+
+/** The author's face URL a listing carries (the node's `authorAvatarUrl` on a by-area read), or null for a copy without one. */
+function syncedAuthorAvatar(p: any): string | null {
+    const url = p.authorAvatarUrl ?? p.author_avatar_url;
+    return typeof url === 'string' && url.trim() !== '' ? url : null;
+}
+
+/** Whether a listing names its author's face at all (`authorAvatarUrl`, null included), as a by-area read does. */
+function carriesAuthorAvatar(p: any): boolean {
+    return p != null && (Object.prototype.hasOwnProperty.call(p, 'authorAvatarUrl') || Object.prototype.hasOwnProperty.call(p, 'author_avatar_url'));
 }
 
 /** The author's name a listing carries (the node's `authorCallsign`), or null for a copy without one. */
@@ -3251,6 +3338,34 @@ export async function readNearbyHeld(): Promise<{ set: string[]; tied: string[];
     }
 }
 
+/**
+ * What a phone on a community that says `membersOnDemand` must hold, and what it holds (DESIGN-global-members-by-area
+ * §2.2.1; the plan is utils/members-on-demand.ts): `referenced` = everyone in its conversations, both sides of its deals,
+ * raters and rated, its friends and whoever vouched it in; `held` = every card with when it was last fetched by key.
+ * Listing authors are not referenced: the by-area row carries their name and face. Null when the copy can't be read.
+ */
+export async function readMembersOnDemandWorld(ownKey: string): Promise<{ referenced: string[]; held: { key: string; fetchedAt: string | null }[] } | null> {
+    try {
+        const database = await getDb();
+        const referenced = await database.getAllAsync<{ k: string }>(
+            `SELECT public_key AS k FROM conversation_participants
+             UNION SELECT buyer_pubkey FROM marketplace_transactions
+             UNION SELECT seller_pubkey FROM marketplace_transactions
+             UNION SELECT rater_pubkey FROM ratings WHERE target_pubkey = ?
+             UNION SELECT target_pubkey FROM ratings WHERE rater_pubkey = ?
+             UNION SELECT friend_pubkey FROM friends WHERE owner_pubkey = ?
+             UNION SELECT elder_vouched_by FROM members WHERE public_key = ? AND elder_vouched_by IS NOT NULL`,
+            [ownKey, ownKey, ownKey, ownKey]
+        );
+        const held = await database.getAllAsync<{ key: string; fetchedAt: string | null }>(
+            'SELECT public_key AS key, card_fetched_at AS fetchedAt FROM members'
+        );
+        return { referenced: referenced.map(r => r.k).filter((k): k is string => typeof k === 'string'), held };
+    } catch {
+        return null;
+    }
+}
+
 /** The ETag of this phone's last read by area that landed whole (keepPostsNearby `tag`), or null. */
 export async function readNearbyTag(): Promise<string | null> {
     try {
@@ -3360,7 +3475,12 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         // A PARTIAL list (the incremental `?updatedAfter=` delta) is not evidence of absence —
         // it only carries members who changed — so it keeps COALESCE, exactly as the GC below
         // only runs for a complete list.
-        const avatarNullClears = delta.membersComplete === true;
+        //
+        // A `keys=` answer (`membersByKey`, members on demand) is complete for every key it names:
+        // its null is the node saying that member has no photo now, so it clears too. On a
+        // community that says `membersOnDemand` no complete list ever comes, so without this a
+        // removed photo stayed on every phone that had shown it (review of #1859, B2).
+        const avatarNullClears = delta.membersComplete === true || delta.membersByKey === true;
         const serverMemberSet = new Set();
         for (const m of delta.members) {
             const pk = m.publicKey || m.public_key || '';
@@ -3408,6 +3528,27 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                     await txn.runAsync('DELETE FROM members WHERE public_key = ?', [lm.public_key]);
                 }
             }
+        }
+    }
+
+    // Members on demand (utils/members-on-demand.ts): the cards this cycle fetched or re-checked by key, stamped with when,
+    // and the cards past the 1,000 bound that nothing references. Only a phone on a community that says
+    // `membersOnDemand` sends either.
+    if (delta.membersFetched && Array.isArray(delta.membersFetched.keys) && delta.membersFetched.keys.length > 0) {
+        const keys: string[] = delta.membersFetched.keys;
+        for (let i = 0; i < keys.length; i += 500) {
+            const chunk = keys.slice(i, i + 500);
+            await txn.runAsync(
+                `UPDATE members SET card_fetched_at = ? WHERE public_key IN (${chunk.map(() => '?').join(',')})`,
+                [delta.membersFetched.at, ...chunk]
+            );
+        }
+    }
+    if (Array.isArray(delta.membersDrop) && delta.membersDrop.length > 0) {
+        const keys: string[] = delta.membersDrop.filter((k: unknown) => typeof k === 'string' && k !== selfPubkey);
+        for (let i = 0; i < keys.length; i += 500) {
+            const chunk = keys.slice(i, i + 500);
+            await txn.runAsync(`DELETE FROM members WHERE public_key IN (${chunk.map(() => '?').join(',')})`, chunk);
         }
     }
     
@@ -3743,9 +3884,13 @@ export async function syncMessages(publicKey: string) {
             localMembersCount = membersRow?.count || 0;
         } catch (e) {}
 
-        const shouldFetchMembers = !lastMembersSync || 
+        // A community that says `membersOnDemand` (the worldwide one): never the whole directory, nor its `membersComplete`
+        // garbage collection over the cards held (DESIGN-global-members-by-area §1, §2.4 (d)). pillar-sync fetches the cards
+        // this phone has a reason to show by key. Anywhere else, as it always was.
+        const membersOnDemand = (await getCachedNodeProfile(anchorUrl).catch(() => null))?.features.membersOnDemand === true;
+        const shouldFetchMembers = !membersOnDemand && (!lastMembersSync ||
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
-                                   localMembersCount === 0;
+                                   localMembersCount === 0);
 
         // Separate 10s budgets: one shared controller let a slow conversations response use up the
         // directory fetch's time too, so it was aborted by us rather than by the network.
@@ -5332,6 +5477,8 @@ async function _signedRequest(endpoint: string, payload: any) {
         let nodeMessage: string | undefined;
         try {
             const errJson = await res.json();
+            // This key was replaced by a re-key: the old phone's offer of its old words (utils/key-replaced.ts).
+            if (isKeyReplacedAnswer(res.status, errJson)) void noteKeyReplaced(anchorUrl, identity.publicKey);
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
             if (typeof errJson.message === 'string' && errJson.message.trim()) nodeMessage = errJson.message.trim();
         } catch {
@@ -5368,6 +5515,8 @@ async function _signedRequest(endpoint: string, payload: any) {
         throw err;
     }
 
+    // The node took a write this key signed: the key is current here, so a replaced-key note goes (finding 5 of #1844).
+    void noteKeyAnswered(anchorUrl, identity.publicKey);
     return await res.json();
 }
 
@@ -5389,21 +5538,25 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
 
     let headers: Record<string, string> = { 'Accept': 'application/json', ...(options?.customHeaders || {}) };
     const identity = await loadIdentity();
+    let signed = false;
     if (identity?.privateKey && identity?.publicKey) {
         try {
             // The URL fetched below: its host is what is signed for, its path (no query) what the node checks.
             const signedHeaders = await buildSignedHeaders('GET', `${anchorUrl}${path}`, '', identity.privateKey, identity.publicKey);
             headers = { ...headers, ...signedHeaders };
+            signed = true;
         } catch (e) {
             console.warn('[signedGet] Could not sign GET request:', e);
         }
     }
 
-    return fetch(`${anchorUrl}${path}`, {
+    const res = await fetch(`${anchorUrl}${path}`, {
         method: 'GET',
         headers,
         signal: options?.signal,
     });
+    if (identity?.publicKey) watchForReplacedKey(anchorUrl, identity.publicKey, res, signed);
+    return res;
 }
 
 /**
@@ -6637,6 +6790,84 @@ export async function postGroupChatMessage(
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
 }
 
+/**
+ * The groups a history path may touch (sync, post a self-wrap or a top-up): never a conversation this phone knows as a DM
+ * and never held a group's keys for (refuseGroupKeysForDm, confirmation 2 of #1788, finding 2). Each comes back under
+ * ring.groupId, the group's id lower-cased, so the routes, records and top-ups agree with its one keyring (#1841).
+ */
+async function historyGroups(nodeUrl: string, identity: BeanPoolIdentity, groups: readonly HistoryGroup[]): Promise<HistoryGroup[]> {
+    const out: HistoryGroup[] = [];
+    for (const g of groups) {
+        try {
+            const ring = groupKeyring(nodeUrl, identity, g.id, groupKeyStore(nodeUrl));
+            await refuseGroupKeysForDm(ring);
+            out.push({ ...g, id: ring.groupId });
+        } catch { /* a known DM: no group keys under its id */ }
+    }
+    return out;
+}
+
+/**
+ * A group history from before this member changed phones (utils/group-history-unlock.ts; DESIGN-group-history-after-
+ * rekey-fable.md §3, §4): the old 12 words, typed here, over every group of this account.
+ */
+export async function unlockGroupHistoryWithWords(typed: string | readonly string[], groups: HistoryGroup[], onProgress?: (done: number, total: number) => void): Promise<OldWordsResult> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const r = await unlockWithOldWords({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), typed, signedHere: await oldKeySignedHere(nodeUrl, identity), onProgress });
+    // A group whose keys landed and wasn't withheld shows no locked row once its chat reloads; forget its count now, so a
+    // later run doesn't name it as withheld.
+    for (const id of Object.keys(r.unlocked)) if (!r.withheld.some((g) => g.id === id)) await noteLockedHistoryCount(nodeUrl, identity.publicKey, id, 0);
+    return r;
+}
+
+/** Per group (id lower-cased), the lines its chat last showed in the "from before you changed phones" row (§7). */
+export async function lockedHistoryRows(): Promise<Record<string, number>> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return lockedHistoryCounts(nodeUrl, identity.publicKey);
+}
+
+/** The chat view's row count for one group as it shows it now (0 when there is no row). */
+export async function noteLockedHistoryRow(groupId: string, n: number): Promise<void> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    await noteLockedHistoryCount(nodeUrl, identity.publicKey, groupId, n);
+}
+
+/** The code this new phone shows a member to confirm it (§4), or null when this phone knows no old key of its own. */
+export async function newPhoneCode(): Promise<string | null> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    let old = await oldKeySignedHere(nodeUrl, identity);
+    if (!old) {
+        const listed = (await rekeysToMe(nodeUrl, identity)).filter((r) => r.attested);
+        old = listed.length === 1 ? listed[0].pubkey : null;
+    }
+    return old ? newPhoneQrPayload(identity, old) : null;
+}
+
+/** A member's phone checks a scanned new-phone code (§4), over every group of this account. */
+export async function checkScannedNewPhone(scanned: string, groups: HistoryGroup[]): Promise<NewPhoneCheck> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return checkNewPhone({ nodeUrl, identity, groups: await historyGroups(nodeUrl, identity, groups), scanned });
+}
+
+/** "Confirm" (§4): hand the confirmed phone the epochs whose record names the old key this phone remembers. */
+export async function confirmScannedNewPhone(check: Extract<NewPhoneCheck, { ok: true }>, onProgress?: (handed: number, planned: number) => void) {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return confirmNewPhone({ nodeUrl, identity, store: groupKeyStore(nodeUrl), check: { ...check, groups: await historyGroups(nodeUrl, identity, check.groups) }, onProgress });
+}
+
+/** While this new phone's code is on screen (§4): the keys other members had already handed it, to compare with later. */
+export async function newPhoneHandOvers(groups: HistoryGroup[]): Promise<Set<string>> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return handOversHeld(nodeUrl, identity, groupKeyStore(nodeUrl), await historyGroups(nodeUrl, identity, groups));
+}
+
+/** The members who confirmed this phone since `before`, kept as local notes; every note, newest first. */
+export async function newPhoneConfirmedNotes(before: Set<string> | null, groups: HistoryGroup[]): Promise<ConfirmedNote[]> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    if (!before) return confirmedNotes(nodeUrl, identity.publicKey);
+    return noteConfirmations({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), before });
+}
+
 const _groupKeyStores = new Map<string, GroupKeyStore>();
 /**
  * This phone's group key store for one community (SQLite, that community's own file: utils/group-chat-store.ts). It reads
@@ -6665,7 +6896,7 @@ export function groupKeyStore(nodeUrl: string): GroupKeyStore {
  */
 async function refuseGroupKeysForDm(ring: GroupKeyring): Promise<void> {
     if (await ring.seenLocked()) return;
-    if (await isKnownDmConversation(ring.groupId)) throw new GroupChatKeyError(GROUP_KEYS_FOR_DM_TEXT, 'refused');
+    if (await isKnownDmInAnySpelling(ring.groupId)) throw new GroupChatKeyError(GROUP_KEYS_FOR_DM_TEXT, 'refused');
 }
 
 async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolIdentity }> {
@@ -6709,8 +6940,14 @@ export async function postEnterpriseChatMessage(treasury: string, text: string, 
  * People who can be invited to a group: the node's own directory (it already leaves out enterprises and other
  * treasury accounts), without the system account. Falls back to the phone's copy when offline.
  */
-export async function getInvitablePeople(): Promise<{ publicKey: string; callsign: string; avatarUrl: string | null }[]> {
+export async function getInvitablePeople(options?: { membersOnDemand?: boolean }): Promise<{ publicKey: string; callsign: string; avatarUrl: string | null }[]> {
     const notPeople = (pk: string) => pk === 'SYSTEM' || pk.startsWith('escrow_');
+    // On a community that says `membersOnDemand` the whole list is never read (15 MB at 30k members): the cards held,
+    // and the sheet's search asks the node (DESIGN-global-members-by-area §2.3).
+    if (options?.membersOnDemand) {
+        const held = await getAllCommunityMembers();
+        return held.filter(m => !notPeople(m.publicKey)).map(m => ({ ...m, avatarUrl: null }));
+    }
     try {
         const res = await signedGet('/api/community/members');
         if (res.ok) {

@@ -2,6 +2,7 @@
 slug: blocking
 title: Blocking someone
 summary: Hide someone's posts and messages from you, and undo it later.
+help: People you have blocked. Their posts and messages are hidden from you; unblock someone here.
 related: reporting, messages, privacy, getting-help
 ---
 

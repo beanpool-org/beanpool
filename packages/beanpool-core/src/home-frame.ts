@@ -168,6 +168,8 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
         onNode: (a) => a.features.wordsDoor !== false || !!a.cards?.safety,
     },
     { id: 'find', name: 'Find your community', line: 'Communities near you, to join.', group: 'start', asks: 'node', onNode: (a) => a.profile === 'global' },
+    // A newcomer's Home until the tour ends (tour.ts): drawn by the apps while the account's `tour` says neither done nor skipped.
+    { id: 'start', name: 'Getting started', line: 'A one-minute look at the other tabs.', group: 'start', asks: 'none', onNode: everywhere },
     { id: 'steps', name: 'First steps', line: 'Things to do in your first weeks.', group: 'start', asks: 'node', onNode: everywhere },
     { id: 'tips', name: 'Tips', line: 'One tip at a time on how things work.', group: 'start', asks: 'none', onNode: everywhere },
     { id: 'interests', name: 'What are you into?', line: 'Star what you like to see it first.', group: 'start', asks: 'none', onNode: everywhere },
@@ -215,18 +217,29 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
     'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
 ];
 
-/** The newcomer's five (§3): the same on a local community and on the worldwide one. */
+/** The usual five (§3): the same on a local community and on the worldwide one. */
 export const HOME_NEWCOMER_FIVE: readonly string[] = ['steps', 'tips', 'market', 'events', 'notices'];
-/** Cards that ride along in the default list without counting: each shows only while its own rule says. */
+/** Cards that ride along in the starter set without counting: each shows only while its own rule says. */
 const NEWCOMER_RIDERS: readonly string[] = ['safety', 'interests'];
 
 /**
- * A newcomer's Home: the five, with "Your way back in" (shown only on its schedule) first and "What are you into?" (shown
- * while nothing is starred) after Tips. The same on both profiles: Find your community is pinned on global anyway.
+ * The starter set (DESIGN-getting-started-fable.md §1): the usual five, with "Your way back in" (shown only on its
+ * schedule) first and "What are you into?" (shown while nothing is starred) after Tips. What Home holds after the tour is
+ * skipped, or done with no card picked: Home is never left empty.
+ */
+export const HOME_STARTER_SET: readonly string[] = [
+    NEWCOMER_RIDERS[0], HOME_NEWCOMER_FIVE[0], HOME_NEWCOMER_FIVE[1], NEWCOMER_RIDERS[1], ...HOME_NEWCOMER_FIVE.slice(2),
+];
+
+/** The starter set as card instances. */
+export const starterCards = (): HomeCardInstance[] => HOME_STARTER_SET.map((id) => ({ id, type: id }));
+
+/**
+ * A newcomer's Home (§1): Getting started alone, between the fixed Needs you and Your community (and under a pinned Find
+ * your community on global). The starter set arrives when the tour ends ({@link endTourLayout}).
  */
 export function defaultCards(_profile: 'local' | 'global' | string = 'local'): HomeCardInstance[] {
-    const ids = [NEWCOMER_RIDERS[0], HOME_NEWCOMER_FIVE[0], HOME_NEWCOMER_FIVE[1], NEWCOMER_RIDERS[1], ...HOME_NEWCOMER_FIVE.slice(2)];
-    return ids.map((id) => ({ id, type: id }));
+    return [{ id: 'start', type: 'start' }];
 }
 
 /** A newcomer's whole layout, never edited (`updatedAt` null). */
@@ -444,6 +457,23 @@ export function moveCard(layout: HomeLayoutV2 | null, id: string, delta: -1 | 1,
     const cards = [...base.cards];
     [cards[from], cards[to]] = [cards[to], cards[from]];
     return { ...base, cards, updatedAt: new Date(now).toISOString() };
+}
+
+/**
+ * Home as the tour leaves it (§3), in one layout write: Getting started goes; when nothing else is left on Home but a
+ * pinned card (the member skipped, or tapped Done with no card picked), the starter set is added after the pinned ones.
+ * A member who put Getting started on a Home they had already set up keeps that Home as it was, less the card.
+ */
+export function endTourLayout(layout: HomeLayoutV2 | null, opts: { pinned?: readonly string[]; now?: number } = {}): HomeLayoutV2 {
+    const base = layout ?? defaultHomeLayout();
+    const now = new Date(opts.now ?? Date.now()).toISOString();
+    const { start: _gone, ...dismissed } = base.dismissed;
+    const kept = base.cards.filter((c) => c.type !== 'start');
+    const pinned = new Set(opts.pinned ?? []);
+    if (kept.some((c) => !pinned.has(c.id))) return { ...base, cards: kept, dismissed, updatedAt: now };
+    const have = new Set(kept.map((c) => c.id));
+    const cards = [...kept, ...starterCards().filter((c) => !have.has(c.id))].slice(0, HOME_FRAME_LIMITS.cards);
+    return { ...base, cards, dismissed, updatedAt: now };
 }
 
 /** The card's settings through its type's reader, or undefined for a type with none (or one this build doesn't know). */

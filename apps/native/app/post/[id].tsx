@@ -28,13 +28,17 @@ import { PhotoCarousel } from '../../components/PhotoCarousel';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
 import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
 import { blockUser } from '../../utils/blocklist';
-import { colors, palette } from '../../constants/colors';
+import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EventDetail } from '../../components/EventDetail';
 import { isHiddenAuthor } from '../../utils/posts-view';
 import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
-import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE } from '../../utils/market-global';
+import { useReaderFeatures } from '../../utils/use-reader-features';
+import { showcaseMode } from '../../utils/node-profile';
+import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI } from '@beanpool/core';
+import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
@@ -383,9 +387,14 @@ export default function PostDetailModal() {
 
     // On a community with Beans off (the worldwide one) a post has no price and nothing to accept through escrow:
     // its terms are in the description, and the member messages the poster (utils/market-global.ts).
+    // The reader's own features (design §4); where the node previews what it has off, the price slot carries the
+    // marker's line and the deal action keeps its place as the marker's action (DESIGN-global-showcase-fable §1 rows 2, 4).
     const nodeProfile = useNodeProfile();
-    const showsBeans = marketShowsBeans(nodeProfile?.features);
-    const escrowOn = nodeProfile?.features.escrow !== false;
+    const reader = useReaderFeatures();
+    const showsBeans = marketShowsBeans(reader.effective ?? nodeProfile?.features);
+    const escrowOn = (reader.effective ?? nodeProfile?.features)?.escrow !== false;
+    const beansPreview = showcaseMode('beans', reader.node, reader.reader) === 'preview';
+    const escrowPreview = showcaseMode('escrow', reader.node, reader.reader) === 'preview';
 
     // Transactions / Reporting state
     const [accepting, setAccepting] = useState(false);
@@ -984,11 +993,16 @@ export default function PostDetailModal() {
                 )}
 
                 {/* Price Card: where there are no Beans, what the poster would like in return is in the description. */}
+                {/* The words are one element to a screen reader; the marker's line sits beside them, in the card but outside
+                    that group, so VoiceOver reads it and reaches it as a button (review of #1852, finding 8). */}
                 {!isPulsePost && !showsBeans && (
-                    <View style={styles.priceCard} accessible accessibilityLabel={`${NO_BEANS_TERMS.value}. ${NO_BEANS_TERMS.note}`}>
-                        <Text style={styles.priceLabel}>{NO_BEANS_TERMS.label}</Text>
-                        <Text style={[styles.priceValue, { fontSize: 22, textAlign: 'center', paddingHorizontal: 12 }]}>{NO_BEANS_TERMS.value}</Text>
-                        <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6, paddingHorizontal: 16 }}>{NO_BEANS_TERMS.note}</Text>
+                    <View style={styles.priceCard} testID="no-beans-terms">
+                        <View style={{ alignSelf: 'stretch', alignItems: 'center' }} accessible accessibilityLabel={`${NO_BEANS_TERMS.value}. ${noBeansTermsNote(beansPreview)}`}>
+                            <Text style={styles.priceLabel}>{NO_BEANS_TERMS.label}</Text>
+                            <Text style={[styles.priceValue, { fontSize: 22, textAlign: 'center', paddingHorizontal: 12 }]}>{NO_BEANS_TERMS.value}</Text>
+                            <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6, paddingHorizontal: 16 }}>{noBeansTermsNote(beansPreview)}</Text>
+                        </View>
+                        {beansPreview && <View style={{ paddingHorizontal: 16 }}><LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.price} /></View>}
                     </View>
                 )}
                 {!isPulsePost && showsBeans && (
@@ -1133,7 +1147,7 @@ export default function PostDetailModal() {
                                         You are the Payee. Fulfill the terms exactly as agreed, then ask the Payer to release your credits. You will receive the net amount minus 1.5% transaction fee<Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> (100% community owned)</Text> (retained to balance the pool).
                                     </Text>
                                     <View style={{ backgroundColor: colors.feedback.danger.bg, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}>
-                                        <Text style={{ color: palette.red700, fontSize: 13, textAlign: 'center', fontWeight: '700' }}>
+                                        <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, textAlign: 'center', fontWeight: '700' }}>
                                             Note: If this post is still visible here, you have not yet received your credits.
                                         </Text>
                                     </View>
@@ -1201,7 +1215,7 @@ export default function PostDetailModal() {
                 {isOwnPost && (post.status === 'completed' || activeTx?.status === 'completed') && (
                     <View style={styles.confirmBox}>
                         <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>✅ Deal Completed</Text>
-                        <Text style={{ color: palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
+                        <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
                             This deal has concluded successfully and credits have been processed on the Ledger.
                         </Text>
                     </View>
@@ -1238,7 +1252,10 @@ export default function PostDetailModal() {
 
                             {/* Credits + Price Type; where there are no Beans, a note instead */}
                             {!showsBeans ? (
-                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 10 }}>{NO_BEANS_EDIT_NOTE}</Text>
+                                <View style={{ marginBottom: 10 }}>
+                                    <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{NO_BEANS_EDIT_NOTE}</Text>
+                                    {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.price} />}
+                                </View>
                             ) : (
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
                                 <TextInput accessibilityLabel="Credits" style={[styles.editInput, { flex: 1, marginBottom: 0 }]} value={editCredits} onChangeText={setEditCredits} placeholder="Credits (B)" placeholderTextColor={colors.text.muted} keyboardType="numeric" />
@@ -1321,7 +1338,7 @@ export default function PostDetailModal() {
                     <View style={styles.ownPostActions}>
                         <View style={styles.confirmBox}>
                             <Text style={[styles.confirmBoxTitle, { color: '#d97706' }]}>⏸️ Offer paused</Text>
-                            <Text style={{ color: palette.gray600, fontSize: 13, textAlign: 'center' }}>
+                            <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center' }}>
                                 This offer is hidden from the marketplace and isn't counting toward your credit line. Re-activate it to make it live again.
                             </Text>
                         </View>
@@ -1331,6 +1348,13 @@ export default function PostDetailModal() {
                         <Pressable accessibilityRole="button" accessibilityHint="Permanently deletes this post" style={styles.deletePostBtn} onPress={handleDelete} disabled={deleting}>
                             <Text style={styles.deletePostBtnText}>{deleting ? 'Deleting...' : '🗑️ Delete Post'}</Text>
                         </Pressable>
+                    </View>
+                )}
+
+                {/* Where deals are previewed, the deal action keeps its place as the marker's action: it opens the sheet. */}
+                {!isPulsePost && !isOwnPost && post.status === 'active' && escrowPreview && (
+                    <View style={styles.otherPostActions}>
+                        <LocalCommunityMark variant="action" feature="escrow" label={LOCAL_COMMUNITY_LINES.dealAction.replace(LOCAL_COMMUNITY_EMOJI, '').trim()} />
                     </View>
                 )}
 
@@ -1363,7 +1387,7 @@ export default function PostDetailModal() {
                         {myRequest ? (
                             <View style={styles.confirmBox}>
                                 <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>Deal Established</Text>
-                                <Text style={{ color: palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
+                                <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
                                     {isOffer ? (
                                         `You have committed ${myRequest.credits} credits ${myRequest.hours ? `(${myRequest.hours} hours)` : ''} to a Trust Wallet for this offer.`
                                     ) : (
@@ -1383,8 +1407,8 @@ export default function PostDetailModal() {
                                 <Text style={styles.confirmBoxTitle}>{isOffer ? 'Accept this Offer?' : 'Offer to Fulfill?'}</Text>
                                 
                                 <View style={{ backgroundColor: colors.feedback.warning.bg, padding: 12, borderRadius: 8, borderColor: colors.feedback.warning.border, borderWidth: 1, marginBottom: 16 }}>
-                                    <Text style={{ color: palette.orange700, fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>🔒 Trust Wallet Protocol</Text>
-                                    <Text style={{ color: palette.gray600, fontSize: 12, lineHeight: 18 }}>
+                                    <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange700, fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>🔒 Trust Wallet Protocol</Text>
+                                    <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 12, lineHeight: 18 }}>
                                         {isOffer ? (
                                             <>
                                                 {`By proceeding, you commit ${post.price_type === 'fixed' ? post.credits : `your authorized`} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee`}

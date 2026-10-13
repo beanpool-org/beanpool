@@ -5,8 +5,9 @@
  * group keys and stays DM-sealed; the group screen opens its keys only through the DM guard; and a held group's lines
  * are signed and routed under the group's own id, however the caller spelled it. Ported from the review's driver (K1,
  * K2, K3, K6; scratch/reviews/opus-1841-scripts/zz-review-1841-db.test.ts), its measurements flipped to assertions.
- * Mock style from group-chat-held-guard.test.ts: device modules stubbed, a stand-in for SQLite (its NOCASE lookups
- * folded as SQLite folds ASCII), and a fake node that keeps a posted epoch and matches ids however spelled.
+ * Mock style from group-chat-held-guard.test.ts: device modules stubbed, a stand-in for SQLite (its `id IN (…)` lookups
+ * match each spelling exactly, as SQLite's index does), and a fake node that keeps a posted epoch and matches ids however
+ * spelled.
  */
 import { describe, it, expect, vi, afterAll } from 'vitest';
 import Module from 'node:module';
@@ -24,6 +25,12 @@ const store = vi.hoisted(() => ({
     asyncStore: new Map<string, string>([['beanpool_anchor_url', 'https://node.example']]),
 }));
 const partsOf = (id: string) => { if (!store.participants.has(id)) store.participants.set(id, new Set()); return store.participants.get(id)!; };
+/**
+ * Rows an `id IN (…)` lookup matches, in the order SQLite answers them: BINARY order, so upper case first (its index visits
+ * the IN list sorted), with the id an `ORDER BY id = ? DESC` asks for first (#1863 review, finding 4).
+ */
+const inSqliteOrder = <T>(rows: T[], idOf: (r: T) => string, first?: unknown) =>
+    [...rows].sort((a, b) => Number(idOf(b) === first) - Number(idOf(a) === first) || (idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0));
 /** The rows whose id matches `id` with ASCII case folded, as SQLite's NOCASE compares. */
 const convsNoCase = (id: string) => [...store.conversations.values()].filter((c) => c.id.toLowerCase() === String(id).toLowerCase());
 const mockDb = {
@@ -33,8 +40,21 @@ const mockDb = {
     getFirstAsync: vi.fn(async (sql: string, params: any[] = []) => {
         if (/FROM group_chat_key_state/.test(sql)) return store.keyState.get(params[0]) ?? null;
         if (/FROM group_chat_epochs WHERE group_id = \? AND wrap IS NOT NULL/.test(sql)) return (store.epochs.get(params[0]) ?? []).some((e) => e.wrap) ? { y: 1 } : null;
+        if (/SELECT id FROM conversations WHERE id IN \(/.test(sql)) {
+            const first = /ORDER BY id = \? DESC/.test(sql) ? params[params.length - 1] : undefined;
+            const ids = first === undefined ? params : params.slice(0, -1);
+            return inSqliteOrder(ids.map((p) => store.conversations.get(p)).filter((c) => c?.type === 'dm'), (c) => c!.id, first)[0] ?? null;
+        }
         if (/FROM conversations WHERE id = \? COLLATE NOCASE AND type = 'dm'/.test(sql)) return convsNoCase(params[0]).find((c) => c.type === 'dm') ?? null;
         if (/FROM conversations WHERE id = \?/.test(sql)) return store.conversations.get(params[0]) ?? null;
+        if (/SELECT conversation_id FROM messages WHERE conversation_id IN \(/.test(sql)) {
+            const first = /ORDER BY conversation_id = \? DESC/.test(sql) ? params[params.length - 1] : undefined;
+            const ps = first === undefined ? params : params.slice(0, -1);
+            const ids = ps.slice(0, -1);
+            const prefix = String(ps[ps.length - 1]).replace(/%$/, '');
+            const m = inSqliteOrder([...store.messages.values()].filter((x) => ids.includes(x.conversation_id) && String(x.nonce).startsWith(prefix)), (x) => x.conversation_id, first)[0];
+            return m ? { conversation_id: m.conversation_id } : null;
+        }
         if (/SELECT 1 AS y FROM messages WHERE conversation_id IN \(/.test(sql)) {
             const ids = params.slice(0, -1);
             const prefix = String(params[params.length - 1]).replace(/%$/, '');
@@ -91,7 +111,7 @@ vi.mock('../crypto', async (orig) => ({
 
 import {
     insertMessage, postGroupChatMessage, editThreadMessage, groupKeyringFor, groupScreenKeyringFor, isHeldGroupChat,
-    isKnownDmConversation, getConversationKind,
+    isKnownDmConversation, knownDmConversationId, getConversationKind, joinGroupApi, approveGroupMemberApi, leaveGroupApi,
 } from '../db';
 import { GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
 import { forgetGroupKeys } from '../group-chat-keys';
@@ -116,7 +136,7 @@ const OTHER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
 const PUPPET = mkId();
 const DM_SEEN = 'beanpool_dm_conversations_seen';
 /** ChatRoute's asks, wired to the real utils/db.ts as app/chat/[id].tsx wires them. */
-const ASKS: ChatRouteAsks = { isHeldGroupChat, isKnownDmConversation, getConversationKind };
+const ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getConversationKind };
 
 /** How the fake node answers each group (matched by id in any spelling, as a dishonest node would). */
 interface NodeView {
@@ -158,6 +178,8 @@ function reply(status: number, body: any) { return { ok: status >= 200 && status
     if (g && v && method === 'GET' && lp.startsWith(`/api/messages/${lg}`)) {
         return reply(200, { conversation: { id: g, type: 'group_thread', name: 'The group', participants: [who.me.publicKey, OTHER] }, messages: [] });
     }
+    if (g && v && method === 'POST' && (lp === `/api/groups/${lg}/join` || lp === `/api/groups/${lg}/members`)) return reply(200, { success: true });
+    if (g && v && method === 'DELETE' && lp.startsWith(`/api/groups/${lg}/members/`)) return reply(200, { success: true });
     if (method === 'POST' && lp.endsWith('/chat/message')) return reply(201, { success: true, message: { id: body?.clientId } });
     if (method === 'POST' && path === '/api/messages/send') return reply(201, { success: true, message: { id: body?.id, timestamp: new Date().toISOString() } });
     if (method === 'POST' && path === '/api/messages/edit') return reply(200, { success: true, message: { editedAt: new Date().toISOString() } });
@@ -321,6 +343,69 @@ describe('a known DM in any spelling gets no group keys, and stays DM-sealed (#1
     });
 });
 
+describe('a known DM is one conversation whatever a link\'s case (#1841 confirmation 1, C3 and C4)', () => {
+    it('C4 a DM the node minted in capitals, opened from the Inbox: routing asks the node nothing and writes no second row under the lower-case spelling', async () => {
+        fresh();
+        const d = randomUUID();
+        const D = d.toUpperCase();
+        store.conversations.set(D, { id: D, type: 'dm', created_by: null });
+        partsOf(D).add(ME.publicKey); partsOf(D).add(OTHER);
+        store.asyncStore.set(DM_SEEN, JSON.stringify([D]));
+        // A node that would answer the lower-case spelling as a group of its own.
+        views.set(d, { keys: { current: null, roster: [ME.publicKey, PUPPET.publicKey], epochs: [], myWraps: [] } });
+        const from = received.length;
+
+        expect(await routeChat(ASKS, D, {})).toEqual({ view: 'dm', screenId: D });
+        expect(received.slice(from)).toEqual([]);
+        expect(store.conversations.has(d)).toBe(false);
+        expect(store.participants.get(d)?.size ?? 0).toBe(0);
+    });
+
+    it('C3 an honest DM (lower-case): a push for its id in capitals opens the DM screen on the conversation the phone has, with or without group=1', async () => {
+        fresh();
+        const d0 = randomUUID();
+        const D0 = d0.toUpperCase();
+        store.conversations.set(d0, { id: d0, type: 'dm', created_by: null });
+        partsOf(d0).add(ME.publicKey); partsOf(d0).add(OTHER);
+        store.asyncStore.set(DM_SEEN, JSON.stringify([d0]));
+        const from = received.length;
+
+        expect(await routeChat(ASKS, D0, {})).toEqual({ view: 'dm', screenId: d0 });
+        expect(await routeChat(ASKS, D0, { thread: 'group' })).toEqual({ view: 'dm', screenId: d0 });
+        expect(received.slice(from)).toEqual([]);
+        expect(store.conversations.has(D0)).toBe(false);
+        // Known by its dm row alone (not listed) or by an encrypted line alone: the same spelling comes back.
+        store.asyncStore.delete(DM_SEEN);
+        expect(await knownDmConversationId(D0)).toBe(d0);
+        const lineOnly = randomUUID();
+        store.messages.set(randomUUID(), { id: randomUUID(), conversation_id: lineOnly, nonce: `${V2_NONCE_PREFIX}abc`, metadata: null });
+        expect(await knownDmConversationId(lineOnly.toUpperCase())).toBe(lineOnly);
+        expect(await knownDmConversationId(randomUUID().toUpperCase())).toBe(null);
+    });
+
+    it('a DM and a twin the node wrote under its id in capitals: each spelling asked answers itself, whatever order the DM list or SQLite gives (#1863 review, finding 1)', async () => {
+        fresh();
+        const d = randomUUID();
+        const D = d.toUpperCase();
+        for (const id of [d, D]) { store.conversations.set(id, { id, type: 'dm', created_by: null }); partsOf(id).add(ME.publicKey); }
+        partsOf(d).add(OTHER); partsOf(D).add(PUPPET.publicKey);
+        // No list: SQLite answers the IN lookup upper case first.
+        expect(await knownDmConversationId(d)).toBe(d);
+        expect(await knownDmConversationId(D)).toBe(D);
+        // A fresh list fills in the node's listing order, the twin first.
+        store.asyncStore.set(DM_SEEN, JSON.stringify([D, d]));
+        expect(await knownDmConversationId(d)).toBe(d);
+        expect(await routeChat(ASKS, d, {})).toEqual({ view: 'dm', screenId: d });
+        // Known only by sealed lines, kept under both spellings.
+        store.asyncStore.delete(DM_SEEN);
+        const e = randomUUID();
+        const E = e.toUpperCase();
+        for (const id of [E, e]) store.messages.set(randomUUID(), { id: randomUUID(), conversation_id: id, nonce: `${V2_NONCE_PREFIX}abc`, metadata: null });
+        expect(await knownDmConversationId(e)).toBe(e);
+        expect(await knownDmConversationId(E)).toBe(E);
+    });
+});
+
 describe('a held group\'s lines are signed and routed under the group\'s own id, however the caller spells it (#1841 review, finding 3)', () => {
     it('K1 a held group (epoch 1 held, the node serving its keys) written to under its id in capitals: the DM-screen send, the group-screen send and the edit open under the group\'s id; no new epoch', async () => {
         fresh();
@@ -357,5 +442,38 @@ describe('a held group\'s lines are signed and routed under the group\'s own id,
         }
         expect(posted.length).toBe(postedBefore);
         expect(await groupKeyringFor(G)).toBe(await groupKeyringFor(g));
+    });
+});
+
+describe('a held group\'s membership changes are routed under the group\'s own id, however the caller spells it (#1841 confirmation 1, finding 1)', () => {
+    it('join, approve and the convenor\'s removal, each asked of a held group in capitals, go to /api/groups/<g>/…', async () => {
+        fresh();
+        const NEWCOMER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
+        /** A held group (epoch 1 to me and Bob) the node serves, answering its routes however spelled. */
+        const heldGroup = () => {
+            const g = randomUUID();
+            const e1 = epochWithKey(g, 1, [ME.publicKey, OTHER]);
+            views.set(g, { keys: { current: 1, roster: [ME.publicKey, OTHER], epochs: [e1.header], myWraps: [e1.wrap] } });
+            store.keyState.set(`${ME.publicKey}/${g}`, { highest: 1, after: 1 });
+            store.epochs.set(`${ME.publicKey}/${g}`, [e1.stored]);
+            return g;
+        };
+        /** The membership routes the phone asked since `from`, as sent. */
+        const membership = (from: number) => received.slice(from).filter((r) => r.method !== 'GET' && /\/(join|members)(\/|$)/.test(r.path)).map((r) => `${r.method} ${r.path}`);
+
+        const joined = heldGroup();
+        let from = received.length;
+        await joinGroupApi(joined.toUpperCase());
+        expect(membership(from)).toEqual([`POST /api/groups/${joined}/join`]);
+
+        const approved = heldGroup();
+        from = received.length;
+        await approveGroupMemberApi(approved.toUpperCase(), NEWCOMER);
+        expect(membership(from)).toEqual([`POST /api/groups/${approved}/members`]);
+
+        const removed = heldGroup();
+        from = received.length;
+        expect(await leaveGroupApi(removed.toUpperCase(), OTHER)).toBe(true);
+        expect(membership(from)).toEqual([`DELETE /api/groups/${removed}/members/${OTHER}`]);
     });
 });

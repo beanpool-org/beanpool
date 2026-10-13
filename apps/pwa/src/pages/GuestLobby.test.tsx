@@ -137,7 +137,8 @@ function homeBody(member: boolean, profile: 'global' | 'local' = 'global') {
         generatedAt: NOW, profile,
         features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true, exampleListings: true, openJoin: true },
         ...(member ? {} : { welcome: true }),
-        me: member ? { joinedAt: NOW, isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member' } : null,
+        // A member past the tour (Skip): their Home is the starter set, so the listings are on it (DESIGN-getting-started-fable.md §1).
+        me: member ? { joinedAt: NOW, isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member', tour: { v: 1, state: 'skipped', at: NOW } } : null,
         layout: null,
         cards: {
             find: { point: null, communities: [], communityCount: 3, nearbyPosts: null, watches: member ? [] : null, knock: null, directoryFetchedAt: null },
@@ -239,6 +240,42 @@ describe('a visitor with no key on the global node', () => {
         expect(await loadIdentity()).toBeNull();
         // The doorbell socket, opened with no key.
         expect(sync.connectToAnchor).toHaveBeenCalled();
+    });
+
+    it('the header\'s ? opens the lobby\'s own guide words for the tab on screen: the Market\'s, then Home\'s (review of #1857, B4)', async () => {
+        stubNode(GLOBAL);
+        await openLobby();
+        const { helpSheetFor, webHelpKey } = await import('@beanpool/core');
+        const { getBundledGuide } = await import('../lib/guide');
+        const words = (tab: string) => helpSheetFor(getBundledGuide() as never, webHelpKey({ tab, lobby: true }));
+        expect(webHelpKey({ tab: 'marketplace', lobby: true })).toMatch(/^lobby\//);
+        const market = words('marketplace'), home = words('home');
+        expect(market.title).toBeTruthy();
+        expect(market.title).not.toBe(home.title);
+        const ask = async () => {
+            fireEvent.click(within(screen.getByTestId('lobby-header')).getByTestId('lobby-help'));
+            return within(await screen.findByTestId('help-dialog')).getByTestId('help-title');
+        };
+        expect(await ask()).toHaveTextContent(market.title!);
+        fireEvent.click(screen.getByTestId('help-close'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        fireEvent.click(within(screen.getByTestId('lobby-bottom-nav')).getByRole('button', { name: /Home/ }));
+        expect(await ask()).toHaveTextContent(home.title!);
+    });
+
+    it("on a node that previews Beans, the lobby's Ledger tab: its ? opens the Ledger's guide words, not Home's", async () => {
+        stubNode({ ...GLOBAL, features: { ...GLOBAL.features, showcase: true } });
+        await openLobby();
+        const { helpSheetFor, webHelpKey } = await import('@beanpool/core');
+        const { getBundledGuide } = await import('../lib/guide');
+        const words = (tab: string) => helpSheetFor(getBundledGuide() as never, webHelpKey({ tab, lobby: true }));
+        const ledger = words('ledger'), home = words('home');
+        expect(ledger.slug).toBe('your-balance');
+        expect(ledger.title).not.toBe(home.title);
+        fireEvent.click(within(screen.getByTestId('lobby-bottom-nav')).getByRole('button', { name: /Ledger/ }));
+        expect(within(screen.getByTestId('lobby-header')).getByTestId('lobby-title')).toHaveTextContent('Ledger');
+        fireEvent.click(within(screen.getByTestId('lobby-header')).getByTestId('lobby-help'));
+        expect(within(await screen.findByTestId('help-dialog')).getByTestId('help-title')).toHaveTextContent(ledger.title!);
     });
 
     it('shows each listing without the person: no author, face or tier, the terms with no Beans, and the one line once, under the first card', async () => {

@@ -5,7 +5,9 @@
  * (apps/native utils/__tests__/home-cards.test.ts), held to the same rules here.
  */
 import { describe, expect, it } from 'vitest';
-import { HOME_FRAME_LIMITS, defaultCards, defaultHomeLayout, translateV1 } from '@beanpool/core';
+import { HOME_FRAME_LIMITS, starterCards, translateV1 } from '@beanpool/core';
+/** The starter set as a saved Home (DESIGN-getting-started-fable.md §1): the list a newcomer's Home was before Getting started, and what Skip or Done leaves. */
+const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: {}, updatedAt: null as string | null });
 import {
     MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings, fewerCardsNews, layoutPrint, layoutV1Of,
     moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
@@ -22,7 +24,7 @@ const NEWER = { id: 'sky-aaaa', type: 'skyline', settings: { place: { lat: -28.5
 
 describe('the picker (§1.2)', () => {
     it('three groups in order, only this node\'s types, "On Home" for a one-of-a-kind there, "2 of 5 on Home" for an instance type', () => {
-        const layout: HomeLayoutV2 = { ...defaultHomeLayout(), cards: [...defaultCards(), { id: 'search-aaaa', type: 'search', settings: { q: 'eggs' } }, { id: 'search-bbbb', type: 'search', settings: { q: 'jam' } }] };
+        const layout: HomeLayoutV2 = { ...starterLayout(), cards: [...starterCards(), { id: 'search-aaaa', type: 'search', settings: { q: 'eggs' } }, { id: 'search-bbbb', type: 'search', settings: { q: 'jam' } }] };
         const { groups, full } = pickerGroups(LOCAL, layout, 'admin');
         expect(full).toBe(false);
         expect(groups.map(g => g.name)).toEqual(['For you', 'Around you', 'Getting started']);
@@ -48,11 +50,11 @@ describe('the picker (§1.2)', () => {
 
     it('a full Home (24 cards): every Add goes; five saved searches: that row is full', () => {
         const cards = Array.from({ length: HOME_FRAME_LIMITS.cards }, (_, i) => ({ id: `x-${i}`, type: `x${i}` }));
-        const full = pickerGroups(LOCAL, { ...defaultHomeLayout(), cards }, 'admin');
+        const full = pickerGroups(LOCAL, { ...starterLayout(), cards }, 'admin');
         expect(full.full).toBe(true);
         expect(full.groups.flatMap(g => g.rows).every(r => r.state !== 'add')).toBe(true);
         const five = Array.from({ length: 5 }, (_, i) => ({ id: `search-${i}aaa`, type: 'search', settings: { q: `w${i}` } }));
-        const row = pickerGroups(LOCAL, { ...defaultHomeLayout(), cards: five }, 'admin').groups.flatMap(g => g.rows).find(r => r.type === 'search')!;
+        const row = pickerGroups(LOCAL, { ...starterLayout(), cards: five }, 'admin').groups.flatMap(g => g.rows).find(r => r.type === 'search')!;
         expect(row).toMatchObject({ state: 'full', count: '5 of 5 on Home' });
     });
 });
@@ -62,7 +64,7 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
         const added = addCard(null, 'beans', NOW);
         expect(added.ok && added.layout.cards[0]).toEqual({ id: 'beans', type: 'beans' });
         expect(added.ok && added.layout.updatedAt).toBe(iso(NOW));
-        const pinnedFirst: HomeLayoutV2 = { ...defaultHomeLayout(), cards: [{ id: 'find', type: 'find' }, ...defaultCards()] };
+        const pinnedFirst: HomeLayoutV2 = { ...starterLayout(), cards: [{ id: 'find', type: 'find' }, ...starterCards()] };
         const under = addCard(pinnedFirst, 'pulse', NOW, { pinned: ['find'] });
         expect(under.ok && ids(under.layout)!.slice(0, 2)).toEqual(['find', 'pulse']);
         const search = addCard(null, 'search', NOW, { settings: { q: '  eggs  ', km: 5 }, random: () => 0 });
@@ -76,14 +78,14 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
     });
 
     it('an edit\'s date is after its base, even on a browser whose clock runs slow', () => {
-        const base: HomeLayoutV2 = { ...defaultHomeLayout(), updatedAt: iso(NOW + H) };
+        const base: HomeLayoutV2 = { ...starterLayout(), updatedAt: iso(NOW + H) };
         const r = addCard(base, 'beans', NOW);
         expect(r.ok && Date.parse(r.layout.updatedAt!)).toBe(NOW + H + 1);
         expect(removeCard(base, 'tips', NOW)!.updatedAt).toBe(iso(NOW + H + 1));
     });
 
     it('remove: the instance goes with its dismissal; never `needs`, `community` or a pinned `find`', () => {
-        const l: HomeLayoutV2 = { ...defaultHomeLayout(), dismissed: { safety: iso(NOW - H) } };
+        const l: HomeLayoutV2 = { ...starterLayout(), dismissed: { safety: iso(NOW - H) } };
         const gone = removeCard(l, 'safety', NOW)!;
         expect(ids(gone)).not.toContain('safety');
         expect(gone.dismissed).toEqual({});
@@ -94,7 +96,7 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
     });
 
     it('move up and down past the card next to it on screen, keeping every other card\'s place', () => {
-        const l: HomeLayoutV2 = { ...defaultHomeLayout(), cards: ['steps', 'tips', 'market', 'events', 'notices'].map(id => ({ id, type: id })) };
+        const l: HomeLayoutV2 = { ...starterLayout(), cards: ['steps', 'tips', 'market', 'events', 'notices'].map(id => ({ id, type: id })) };
         // On screen: tips isn't drawn (no tip to show), so market moves up past steps.
         const shown = cardOrder(l).filter(c => c.id !== 'tips');
         expect(ids(moveCard(l, 'market', 'up', shown, NOW))).toEqual(['market', 'tips', 'steps', 'events', 'notices']);
@@ -106,9 +108,9 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
     it('reset: the newcomer\'s list; a schedule\'s dismissal and a newer app\'s card are kept', () => {
         const l: HomeLayoutV2 = { v: 2, cards: [{ id: 'beans', type: 'beans' }, NEWER], dismissed: { safety: iso(NOW - H) }, updatedAt: iso(NOW - H) };
         const r = resetLayout(l, NOW);
-        expect(r.cards).toEqual([...defaultCards(), NEWER]);
+        expect(r.cards).toEqual([...starterCards(), NEWER]);
         expect(r.dismissed).toEqual({ safety: iso(NOW - H) });
-        expect(ids(resetLayout(null, NOW))).toEqual(defaultCards().map(c => c.id));
+        expect(ids(resetLayout(null, NOW))).toEqual(starterCards().map(c => c.id));
     });
 
     it('a card of a type this build doesn\'t know is kept through every edit, byte for byte, never drawn, never asked', () => {
@@ -151,8 +153,8 @@ describe('which copy wins, and the members who were here before (§2.6)', () => 
     });
 
     it('the newer copy wins by updatedAt; this browser\'s newer copy is sent', () => {
-        const a: HomeLayoutV2 = { ...defaultHomeLayout(), updatedAt: iso(NOW) };
-        const b: HomeLayoutV2 = { ...defaultHomeLayout(), cards: [], updatedAt: iso(NOW + H) };
+        const a: HomeLayoutV2 = { ...starterLayout(), updatedAt: iso(NOW) };
+        const b: HomeLayoutV2 = { ...starterLayout(), cards: [], updatedAt: iso(NOW + H) };
         expect(pickLayout(a, b)).toEqual({ layout: b, push: true });
         expect(pickLayout(b, a)).toEqual({ layout: b, push: false });
         expect(pickLayout(null, a)).toEqual({ layout: a, push: true });
@@ -160,7 +162,7 @@ describe('which copy wins, and the members who were here before (§2.6)', () => 
     });
 
     it('a not-yet-updated standby answers a v2 row as an empty v1 layout dated like it: this browser\'s v2 copy wins, on a tie and after (review of #1697, note b)', () => {
-        const local: HomeLayoutV2 = { v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, ...defaultCards()], dismissed: {}, updatedAt: iso(NOW) };
+        const local: HomeLayoutV2 = { v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, ...starterCards()], dismissed: {}, updatedAt: iso(NOW) };
         const emptyV1 = { v: 1, order: [], hidden: [], updatedAt: iso(NOW) };
         expect(pickLayout(readLayout(emptyV1), local, layoutV1Of(emptyV1))).toEqual({ layout: local, push: false });
         const later = { ...emptyV1, updatedAt: iso(NOW + H) };
@@ -174,8 +176,8 @@ describe('which copy wins, and the members who were here before (§2.6)', () => 
     it('no copy here and an empty v1 account list: unknown, so the newcomer\'s list; an edit made then loses to the account\'s real list dated at or after it (review of #1699, finding 2)', () => {
         const at = iso(NOW - 2 * H);
         const standby = { v: 1, order: [], hidden: [], dismissed: { safety: at }, updatedAt: at };
-        expect(pickLayout(readLayout(standby), null, layoutV1Of(standby))).toEqual({ layout: { ...defaultHomeLayout(), dismissed: { safety: at } }, push: false });
-        const edit: HomeLayoutV2 = { v: 2, cards: defaultCards().filter(c => c.type !== 'events'), dismissed: {}, updatedAt: iso(NOW) };
+        expect(pickLayout(readLayout(standby), null, layoutV1Of(standby))).toEqual({ layout: { ...starterLayout(), dismissed: { safety: at } }, push: false });
+        const edit: HomeLayoutV2 = { v: 2, cards: starterCards().filter(c => c.type !== 'events'), dismissed: {}, updatedAt: iso(NOW) };
         expect(pickLayout(readLayout(standby), edit, layoutV1Of(standby), at)).toEqual({ layout: edit, push: true });
         const real: HomeLayoutV2 = { v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: at };
         // The real list returns: it wins and the placeholder edit is never sent.
@@ -189,8 +191,8 @@ describe('which copy wins, and the members who were here before (§2.6)', () => 
         const old = { joinedAt: iso(NOW - 30 * 24 * H) };
         expect(fewerCardsNews(null, null, old, NOW)).toBe(true);
         expect(fewerCardsNews(null, null, { joinedAt: iso(NOW - 2 * 24 * H) }, NOW)).toBe(false);
-        expect(fewerCardsNews(defaultHomeLayout(), null, old, NOW)).toBe(false);
-        expect(fewerCardsNews(null, defaultHomeLayout(), old, NOW)).toBe(false);
+        expect(fewerCardsNews(starterLayout(), null, old, NOW)).toBe(false);
+        expect(fewerCardsNews(null, starterLayout(), old, NOW)).toBe(false);
         expect(fewerCardsNews(null, null, null, NOW)).toBe(false);
     });
 });
@@ -198,22 +200,24 @@ describe('which copy wins, and the members who were here before (§2.6)', () => 
 describe('what is drawn and asked', () => {
     it('a stored list with 24 `market` or 7 `search` instances draws one Market and five searches (review of #1697, note c)', () => {
         const markets = Array.from({ length: 24 }, (_, i) => ({ id: i === 0 ? 'market' : `market-${i}`, type: 'market' }));
-        expect(cardOrder({ ...defaultHomeLayout(), cards: markets }).map(c => c.id)).toEqual(['needs', 'market', 'community']);
+        expect(cardOrder({ ...starterLayout(), cards: markets }).map(c => c.id)).toEqual(['needs', 'market', 'community']);
         const searches = Array.from({ length: 7 }, (_, i) => ({ id: `search-${i}aaa`, type: 'search', settings: { q: `w${i}` } }));
-        expect(cardOrder({ ...defaultHomeLayout(), cards: searches }).filter(c => c.type === 'search')).toHaveLength(5);
+        expect(cardOrder({ ...starterLayout(), cards: searches }).filter(c => c.type === 'search')).toHaveLength(5);
         const fixed = [{ id: 'community', type: 'community' }, { id: 'needs', type: 'needs' }, { id: 'market', type: 'market' }];
-        expect(cardOrder({ ...defaultHomeLayout(), cards: fixed }).map(c => c.id)).toEqual(['needs', 'market', 'community']);
+        expect(cardOrder({ ...starterLayout(), cards: fixed }).map(c => c.id)).toEqual(['needs', 'market', 'community']);
     });
 
     it('a pinned Find your community stands under Needs you, and under "Your way back in" while that one leads', () => {
         const answer = { profile: 'global', me: { joinedAt: iso(NOW - 2 * 24 * H) } };
         expect(pinnedCards(answer, NOW)).toEqual(['find']);
-        expect(cardOrder(null, ['find']).map(c => c.id).slice(0, 3)).toEqual(['needs', 'safety', 'find']);
+        expect(cardOrder(starterLayout(), ['find']).map(c => c.id).slice(0, 3)).toEqual(['needs', 'safety', 'find']);
+        // A newcomer's Home (Getting started alone): the pin under Needs you, then the card.
+        expect(cardOrder(null, ['find']).map(c => c.id)).toEqual(['needs', 'find', 'start', 'community']);
         expect(pinnedCards({ profile: 'local', me: null }, NOW)).toEqual([]);
     });
 
     it('cards= is catalogue order then id, the same after a move; with an answer in hand the global node is asked no Beans, deals, enterprise or Decide (review of #1699, finding 5)', () => {
-        const l: HomeLayoutV2 = { ...defaultHomeLayout(), cards: ['beans', 'deals', 'decide', 'enterprise', 'market', 'tips'].map(id => ({ id, type: id })) };
+        const l: HomeLayoutV2 = { ...starterLayout(), cards: ['beans', 'deals', 'decide', 'enterprise', 'market', 'tips'].map(id => ({ id, type: id })) };
         const asked = cardsToAsk(l);
         expect(asked).toEqual(['needs', 'deals', 'enterprise', 'market', 'decide', 'beans', 'community']);
         expect(cardsToAsk(moveCard(l, 'market', 'up', cardOrder(l), NOW))).toEqual(asked);

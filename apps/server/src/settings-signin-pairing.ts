@@ -85,7 +85,15 @@ interface Pairing {
     confirmCode?: string;
     confirmExpiresAt?: number;
     confirmTries?: number;
+    /** An AI assistant asking to connect (agent/oauth-route.ts): the phone shows this, and the approval is no session. */
+    agent?: PairingAgent;
 }
+
+/**
+ * The assistant a consent pairing is for. The name is the client's own (anyone registers any name), so it is never shown
+ * alone: `sendsTo` is the host its answers go to, from the redirect address it registered (design appendix point 4).
+ */
+export interface PairingAgent { name: string; sendsTo: string }
 
 const pairings = new Map<string, Pairing>();
 const waiters = new Map<string, Set<() => void>>();
@@ -163,7 +171,7 @@ export type CreateResult =
     | { ok: true; pairingId: string; shortCode: string; expiresAt: number; secret: string }
     | { ok: false; status: 429 | 503; error: string };
 
-export function createPairing(opts: { clientKey: string; userAgent?: string; requesterAddress?: string; now?: number }): CreateResult {
+export function createPairing(opts: { clientKey: string; userAgent?: string; requesterAddress?: string; agent?: PairingAgent; now?: number }): CreateResult {
     const now = opts.now ?? Date.now();
     const bucket = createBuckets.get(opts.clientKey);
     if (bucket && now < bucket.resetAt) {
@@ -194,6 +202,7 @@ export function createPairing(opts: { clientKey: string; userAgent?: string; req
         expiresAt: now + PAIRING_TTL_MS,
         status: 'waiting',
         refusals: 0,
+        ...(opts.agent ? { agent: { name: opts.agent.name, sendsTo: opts.agent.sendsTo } } : {}),
     };
     pairings.set(id, pairing);
     return { ok: true, pairingId: id, shortCode: pairing.shortCode, expiresAt: pairing.expiresAt, secret };
@@ -215,6 +224,8 @@ export interface PairingDescription {
      * that stands for many people (standsForMany: a proxy the node can't see past, loopback, a private address).
      */
     sameNetwork: boolean;
+    /** An AI assistant asking to connect for the member who approves: its name and where its answers go. */
+    agent?: PairingAgent;
 }
 
 /**
@@ -238,12 +249,16 @@ export function describePairing(pairingId: string, now = Date.now(), viewerAddre
         fromAddress: p.requesterAddress,
         sameNetwork: !!viewerAddress && !standsForMany(viewerAddress) && !standsForMany(p.requesterAddress)
             && limiterKeyForIp(viewerAddress) === limiterKeyForIp(p.requesterAddress),
+        ...(p.agent ? { agent: { ...p.agent } } : {}),
     };
 }
 
 export type ApproveResult =
     | { ok: true; role: MemberNodeRole; confirmCode?: string; confirmExpiresAt?: number }
-    | { ok: false; status: number; error: string; code?: string; reason: 'unknown' | 'expired' | 'used' | 'bad-signature' | 'not-admin' | 'inactive' | 'refused' | 'wrong-community' | 'app-too-old' };
+    | { ok: false; status: number; error: string; code?: string; reason: 'unknown' | 'expired' | 'used' | 'bad-signature' | 'not-admin' | 'inactive' | 'refused' | 'wrong-community' | 'app-too-old' | 'not-owner-or-admin' };
+
+/** An app that can show which assistant asks sends this with its approval; an older one cannot approve an assistant. */
+export const AGENT_APP_TOO_OLD = 'Update the BeanPool app to connect an AI assistant: this version cannot show you which assistant is asking.';
 
 function refuse(p: Pairing): void {
     p.refusals++;
@@ -283,6 +298,8 @@ export function approvePairing(params: {
     signedFor?: unknown;
     /** The app can show two digits for the page to type (number matching). Absent from an older app. */
     confirm?: boolean;
+    /** The app showed the assistant's name and where its answers go (describePairing's `agent`). */
+    agentShown?: boolean;
     now?: number;
 }): ApproveResult {
     const now = params.now ?? Date.now();
@@ -292,6 +309,11 @@ export function approvePairing(params: {
     if (p.status === 'refused') return { ok: false, status: 410, error: 'Too many refused attempts on that code. Get a new code on the computer.', reason: 'refused' };
     if (p.status !== 'waiting') return { ok: false, status: 409, error: 'That code was already used. Get a new code on the computer.', reason: 'used' };
 
+    // An assistant's consent needs an app that showed it AND the two digits: an app that shows only "a computer wants to
+    // sign in" must not hand an assistant the member's role (a phishing link would look like a Settings sign-in).
+    if (p.agent && (params.confirm !== true || params.agentShown !== true)) {
+        return { ok: false, status: 426, error: AGENT_APP_TOO_OLD, code: 'agent_app_too_old', reason: 'app-too-old' };
+    }
     const memberPubkey = String(params.memberPubkey || '').trim();
     // The signature is checked FIRST here (authorizeKeySigner checks it after the role): only a real key holder
     // may cause a "holds no role here" notice on the waiting page.
@@ -317,9 +339,16 @@ export function approvePairing(params: {
         return { ok: false, status: 403, error: signer.error, reason: 'inactive' };
     }
 
-    const { handshakeToken, expiresAt } = mintHandshakeToken(memberPubkey, signer.role, now);
-    p.handshakeToken = handshakeToken;
-    p.handshakeExpiresAt = expiresAt;
+    if (p.agent && signer.role !== 'owner' && signer.role !== 'admin') {
+        refuse(p);
+        return { ok: false, status: 403, error: 'Only an owner or an admin of this community can connect an AI assistant.', reason: 'not-owner-or-admin' };
+    }
+    // An assistant's consent signs no browser in: no session token is minted for it (the page gets a code, agent/oauth.ts).
+    if (!p.agent) {
+        const { handshakeToken, expiresAt } = mintHandshakeToken(memberPubkey, signer.role, now);
+        p.handshakeToken = handshakeToken;
+        p.handshakeExpiresAt = expiresAt;
+    }
     p.approvedBy = memberPubkey;
     p.role = signer.role;
     p.notice = undefined;
@@ -373,6 +402,7 @@ export function declinePairing(params: { pairingId: string; memberPubkey: string
 export type RedeemResult =
     | { kind: 'waiting'; expiresAt: number; notice?: PairingNotice }
     | { kind: 'confirm'; confirmExpiresAt: number }
+    | { kind: 'agent-approved'; memberPubkey: string; role: MemberNodeRole }
     | { kind: 'signed-in'; sessionId: string; csrfToken?: string; memberPubkey: string; role: MemberNodeRole; hardExpiresAt?: number; idleExpiresAt?: number }
     | { kind: 'expired' | 'declined' | 'refused' | 'used' | 'unknown' }
     | { kind: 'wrong-browser' }
@@ -446,6 +476,11 @@ export function confirmPairing(pairingId: string, secret: string | undefined, di
 
 /** Redeem the held handshake token, once, into an admin session. */
 function issue(p: Pairing, now: number): RedeemResult {
+    if (p.agent) {
+        p.status = 'used';
+        logger.security('AUTH', `AI assistant approved by phone: ${who(p.approvedBy || '')} (${p.role}) for an assistant sending to ${p.agent.sendsTo} (pairing ${p.id.slice(0, 8)})`);
+        return { kind: 'agent-approved', memberPubkey: p.approvedBy!, role: p.role! };
+    }
     const token = p.handshakeToken!;
     p.status = 'used';
     p.handshakeToken = undefined;

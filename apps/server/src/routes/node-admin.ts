@@ -85,7 +85,7 @@ export function createNodeAdminRoutes(_deps: RouteDeps): Router {
         }
         // A moderator sees only the reports waiting: the rest is work their session cannot open. Only an owner is told
         // the standby needs them (services/standby-health.ts).
-        ctx.body = getAdminQueue({ forModerator: role === 'moderator', forOwner: role === 'owner' });
+        ctx.body = getAdminQueue({ forModerator: role === 'moderator', forOwner: role === 'owner', forMember: actor });
     });
 
     return router;

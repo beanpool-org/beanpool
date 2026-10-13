@@ -7,7 +7,7 @@ import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
 import { logger } from './logger.js';
 import { logAddressTag } from './log-address.js';
-import { isNodeOwner } from './engine/node-roles.js';
+import { isNodeOwner, nodeRoleOf } from './engine/node-roles.js';
 import { looksLikeAutomationToken, verifyAutomationToken, noteAutomationTokenUse, isRefusedToEveryToken, isBackupsScopeRoute } from './automation-tokens.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
@@ -181,6 +181,7 @@ export interface PasswordAuthOptions {
 }
 
 export const TOKEN_REFUSED_CODE = 'token_not_allowed';
+export const AGENT_TOKEN_ELSEWHERE_ERROR = "An AI assistant's token reaches this server's assistant endpoint (/mcp) and nothing else";
 export const TOKEN_OWNER_ONLY_ERROR = 'An automation token never makes owner-only changes: sign in to Settings as an owner';
 
 /**
@@ -190,6 +191,7 @@ export const TOKEN_OWNER_ONLY_ERROR = 'An automation token never makes owner-onl
  *   read     GET/HEAD, and the POSTs that only read (READ_ONLY_POSTS); admin level.
  *   backups  BACKUPS_SCOPE_ROUTES and nothing else; owner level on those routes alone.
  *   admin    every route an admin may use; admin level, so every owner-only route refuses it.
+ *   agent    no route here at all: an AI assistant's token reaches `/mcp` alone, which reads it itself (agent/mcp-route.ts).
  * No scope reaches signing in, sessions or the tokens themselves (isRefusedToEveryToken), nor an owner-only change
  * (requireAdminRole, requirePhoneStepUp). What it does is the issuing owner's (ctx.state.actor), marked with the
  * token's id (ctx.state.viaToken), and every use is logged with the route, never the secret.
@@ -215,10 +217,16 @@ function checkAutomationToken(ctx: any, presented: string): boolean {
     }
     // A token lives only as long as its maker is an owner: an owner removed or demoted takes their tokens with them. A
     // record whose maker is not a member's key ('owner:password', from before only a key could make one) is refused alike.
-    if (typeof record.createdBy !== 'string' || !isNodeOwner(record.createdBy)) {
+    // An AI assistant's (agent) token is an owner's or an admin's own (agent/grants-route.ts), so it lives while its maker
+    // is either, as /mcp reads it; here it is refused 403 below whatever its maker.
+    const makerRole = typeof record.createdBy === 'string' ? nodeRoleOf(record.createdBy) : null;
+    const makerLive = record.scope === 'agent' ? makerRole === 'owner' || makerRole === 'admin'
+        : typeof record.createdBy === 'string' && isNodeOwner(record.createdBy);
+    if (!makerLive) {
         ctx.status = 401;
         ctx.body = { error: 'Invalid, revoked or expired automation token' };
-        logger.warn('AUTH', 'Automation token refused: its maker is no longer an owner', { tokenId: record.id, route: `${method} ${reqPath}` });
+        logger.warn('AUTH', record.scope === 'agent' ? 'Automation token refused: its maker is no longer an owner or admin'
+            : 'Automation token refused: its maker is no longer an owner', { tokenId: record.id, route: `${method} ${reqPath}` });
         return false;
     }
     const refuse = (error: string): false => {
@@ -227,6 +235,7 @@ function checkAutomationToken(ctx: any, presented: string): boolean {
         logger.warn('AUTH', 'Automation token outside its scope', { tokenId: record.id, scope: record.scope, route: `${method} ${reqPath}` });
         return false;
     };
+    if (record.scope === 'agent') return refuse(AGENT_TOKEN_ELSEWHERE_ERROR);
     if (isRefusedToEveryToken(method, reqPath)) return refuse('An automation token cannot sign in, open a session or manage tokens');
     if (record.scope === 'read' && !isReadRequest(ctx)) return refuse('This token can only read');
     if (record.scope === 'backups' && !isBackupsScopeRoute(method, reqPath)) return refuse('This token can only take and read backups');

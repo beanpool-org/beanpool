@@ -18,7 +18,7 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
 import {
     readSigninScan, scanProblemMessage, lookupPairing, approveComputerSignin, declineComputerSignin, formatShortCode,
-    SIGNIN_QUESTION, SIGNIN_WARNING, computerLines, formatTimeLeft, confirmDigitsLine,
+    SIGNIN_QUESTION, SIGNIN_WARNING, computerLines, formatTimeLeft, confirmDigitsLine, AGENT_QUESTION, AGENT_WARNING, agentLines,
     DIGITS_PRIVATE, DIGITS_SHOWN_MS, digitsDone,
     type ApproveOutcome, type PairingLookup,
 } from '../utils/settings-signin';
@@ -123,7 +123,7 @@ export default function SettingsSigninScreen() {
         if (!found || !identity || busy) return;
         setBusy(true);
         try {
-            handle(await approveComputerSignin({ qr: found.qr, identity, communityName }));
+            handle(await approveComputerSignin({ qr: found.qr, identity, communityName, agentShown: !!found.look.agent }));
         } finally {
             setBusy(false);
         }
@@ -242,9 +242,11 @@ export default function SettingsSigninScreen() {
                         ) : done ? (
                             <View style={{ alignItems: 'center' }} accessibilityLiveRegion="polite">
                                 <Text style={{ fontSize: 40, marginBottom: 8 }} accessibilityElementsHidden>✅</Text>
-                                <Text style={[styles.title, { color: colors.text.heading }]}>Signed in</Text>
+                                <Text style={[styles.title, { color: colors.text.heading }]}>{found?.look.agent ? 'Connected' : 'Signed in'}</Text>
                                 <Text style={[styles.body, { color: colors.text.secondary }]}>
-                                    The computer is now in {communityName}'s Settings, signed in as you. Sign out there when you're done.
+                                    {found?.look.agent
+                                        ? `The assistant now reads ${communityName} as you. Disconnect it any time in Settings → Connected assistants.`
+                                        : `The computer is now in ${communityName}'s Settings, signed in as you. Sign out there when you're done.`}
                                 </Text>
                                 <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]} onPress={() => router.back()} accessibilityRole="button">
                                     <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Done</Text>
@@ -253,19 +255,22 @@ export default function SettingsSigninScreen() {
                         ) : found ? (
                             <>
                                 <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
-                                    {SIGNIN_QUESTION}
+                                    {found.look.agent ? AGENT_QUESTION : SIGNIN_QUESTION}
                                 </Text>
                                 <Text style={[styles.body, { color: colors.feedback.danger.solid, fontWeight: '700' }]}>
-                                    {SIGNIN_WARNING}
+                                    {found.look.agent ? AGENT_WARNING : SIGNIN_WARNING}
                                 </Text>
                                 <Text style={[styles.body, { color: colors.text.secondary }]}>
-                                    Tap Sign in only if the computer in front of you shows this code:
+                                    Tap {found.look.agent ? 'Connect' : 'Sign in'} only if the computer in front of you shows this code:
                                 </Text>
                                 <Text style={[styles.code, { color: colors.text.heading }]} accessibilityLabel={`Code ${found.qr.shortCode.split('').join(' ')}`}>
                                     {formatShortCode(found.qr.shortCode)}
                                 </Text>
                                 <View style={[styles.infoBox, { borderColor: colors.border.default }]}>
                                     <Text style={[styles.infoLine, { color: colors.text.body }]}>Community: {found.host}</Text>
+                                    {found.look.agent && agentLines(found.look.agent).map(line => (
+                                        <Text key={line.slice(0, 12)} style={[styles.infoLine, { color: colors.text.body, fontWeight: '600' }]}>{line}</Text>
+                                    ))}
                                     {computerLines(found.look, openSeconds).map(line => (
                                         <Text key={line.slice(0, 6)} style={[styles.infoLine, { color: colors.text.body }]}>{line}</Text>
                                     ))}
@@ -279,14 +284,14 @@ export default function SettingsSigninScreen() {
                                     onPress={approve}
                                     disabled={busy}
                                     accessibilityRole="button"
-                                    accessibilityLabel={busy ? "Signing computer in..." : "Sign in"}
-                                    accessibilityHint="Asks for your phone's unlock, then signs the computer in"
+                                    accessibilityLabel={busy ? (found.look.agent ? 'Connecting the assistant...' : 'Signing computer in...') : (found.look.agent ? 'Connect' : 'Sign in')}
+                                    accessibilityHint={found.look.agent ? "Asks for your phone's unlock, then connects the assistant as you" : "Asks for your phone's unlock, then signs the computer in"}
                                     accessibilityState={{ busy, disabled: busy }}
                                 >
-                                    {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Sign in</Text>}
+                                    {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{found.look.agent ? 'Connect' : 'Sign in'}</Text>}
                                 </Pressable>
                                 <Pressable style={styles.secondaryBtn} onPress={decline} disabled={busy} accessibilityRole="button">
-                                    <Text style={[styles.secondaryText, { color: colors.feedback.danger.solid }]}>No, that's not my computer</Text>
+                                    <Text style={[styles.secondaryText, { color: colors.feedback.danger.solid }]}>{found.look.agent ? 'No, I did not add an assistant' : "No, that's not my computer"}</Text>
                                 </Pressable>
                                 <Pressable style={styles.secondaryBtn} onPress={resumeScanning} disabled={busy} accessibilityRole="button">
                                     <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>Scan again</Text>

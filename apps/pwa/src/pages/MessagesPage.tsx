@@ -20,7 +20,7 @@ import {
 } from '../lib/e2e-crypto';
 import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
 import { heldConversation } from '../lib/dm-guard';
-import { holdConversation, lockedGroupsOrNull, sendRouteOf, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
+import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
 import { GROUP_CHAT_NO_PHOTOS_TEXT } from '../lib/group-chat-lines';
 import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
@@ -514,6 +514,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const refusal = nodeRefusal(e);
                         if (refusal) setChatRefusal(refusal.message);
                     }
+                } else if (!conv && locked?.has(groupIdKey(openConversationId))) {
+                    // A group held locked here, left out of the node's list: its own chat, never an event's, which
+                    // sends readable (review of #1816, finding 2; the phone's chatRouteView asks "held" first).
+                    console.warn(`[group hold] locked group ${openConversationId.slice(0, 8)} is missing from the node's list: opened as a group chat`);
+                    conv = {
+                        id: openConversationId,
+                        type: 'group_thread',
+                        name: null,
+                        participants: [],
+                        createdBy: '',
+                        createdAt: new Date().toISOString(),
+                    } as Conversation;
+                } else if (!conv && locked === null) {
+                    // The lock store can't say whether this id is a held group: nothing opens on a guess.
+                    setChatRefusal(GROUP_HOLD_UNREAD_OPEN_TEXT);
                 } else if (!conv) {
                     try {
                         const chat = await getEventChat(openConversationId);
@@ -542,7 +557,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     /** The group chat keyring for one group, as this browser's member (lib/group-chat-keys.ts). */
     function groupRing(groupId: string) {
-        return groupKeyring(groupKeysNet, identity, groupId, indexedDbGroupLockStore);
+        return groupKeyring(groupKeysNet, identity, groupIdKey(groupId), indexedDbGroupLockStore);
     }
 
     /**
@@ -550,7 +565,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * epoch on), its sealed lines opened and named here, and the roster the screen shows handed to the keyring (only
      * members in it are ever wrapped to). Keys missing for other members are handed over once per page.
      */
-    async function loadGroupChat(convId: string, requestId: number) {
+    async function loadGroupChat(convId: string, requestId: number): Promise<'dm' | void> {
         let answer: GroupChatAnswer | null = null;
         let error: unknown = null;
         try {
@@ -559,6 +574,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             error = e;
         }
         if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+        // The DM guard's line check runs over these lines before the group route takes them: a DM this browser knows, or
+        // one whose lines are encrypted, stays a DM whatever the node calls it; a group held locked here still wins
+        // (review of #1816, finding 1; lib/group-hold.ts).
+        const kept = holdConversation({ id: convId, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), answer?.messages);
+        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+        if (kept.type === 'dm') {
+            setGroupChat(null);
+            setActiveConv(prev => (prev && prev.id === convId ? { ...prev, type: 'dm' } : prev));
+            return 'dm';
+        }
         const ring = groupRing(convId);
         const nodeSaysLocked = chatIsLocked(answer);
         if (nodeSaysLocked) await ring.noteLocked();
@@ -604,7 +629,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     async function loadMessages(convId: string) {
         const requestId = ++messageRequestIdRef.current;
-        if (activeConvRef.current?.id === convId && activeConvRef.current.type === 'group_thread') return loadGroupChat(convId, requestId);
+        if (activeConvRef.current?.id === convId && activeConvRef.current.type === 'group_thread') {
+            // A DM the node calls a group's chat goes on by the DM path below.
+            if (await loadGroupChat(convId, requestId) !== 'dm') return;
+        }
         try {
             const result = await getConversationMessages(convId);
             if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
@@ -786,6 +814,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         } catch (e) {
             chatErr = e;
         }
+        // A DM the node calls a group's chat (finding 1): nothing leaves by the group route; the page reopens it as the DM.
+        if (holdConversation({ id: conv.id, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), chat?.messages).type === 'dm') {
+            setChatRefusal(GROUP_CHAT_IS_DM_TEXT);
+            await loadMessages(conv.id);
+            return;
+        }
         const plan = await groupChatSendPlan(ring, chat, chatErr);
         if (plan.kind === 'refuse') { setChatRefusal(plan.sentence); return; }
         if (chat && chat.canPost === false) { setChatRefusal(chat.readOnly ? GROUP_CHAT_CLOSED_TEXT : GROUP_CHAT_READ_ONLY_TEXT); return; }
@@ -799,11 +833,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         } else {
             try {
                 if (wasEditing) {
-                    await editSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, { groupId: conv.id, messageId: wasEditing.id, metadata: wasEditing.metadata, text });
+                    await editSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, { groupId: groupIdKey(conv.id), messageId: wasEditing.id, metadata: wasEditing.metadata, text });
                 } else {
                     const newest = [...shownMessages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
                     await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
-                        groupId: conv.id, text, clientId: newDmMessageId(), replyToId: replyToMessage?.id ?? null, after: newest?.id ?? null,
+                        groupId: groupIdKey(conv.id), text, clientId: newDmMessageId(), replyToId: replyToMessage?.id ?? null, after: newest?.id ?? null,
                         mentionCandidates: (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
                     });
                 }
@@ -2080,7 +2114,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         padding: '0.4rem 1rem', borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
                         fontSize: '0.75rem', color: 'var(--text-muted)', wordBreak: 'break-word',
                     }}>
-                        {groupLocked ? '🔒 ' : ''}{groupChatNotice({ nodeSaysLocked: openGroup.nodeSaysLocked, seenLocked: openGroup.seenLocked })}
+                        {groupLocked ? '🔒 ' : ''}{groupChatNotice({ nodeSaysLocked: openGroup.nodeSaysLocked, seenLocked: openGroup.seenLocked, chatError: openGroup.answer ? null : openGroup.error })}
                         {openGroup.thread?.waitingForNextKey ? ` ${GROUP_KEY_WAITING_TEXT}` : ''}
                     </div>
                 )}

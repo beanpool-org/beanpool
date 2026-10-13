@@ -11,6 +11,9 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import type { Conversation, ApiMessage } from '../lib/api';
 import { lockForDm } from '../lib/dm-lock';
 import { sendMessageApi } from '../lib/api';
+import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
+import { forgetGroupKeys } from '../lib/group-chat-keys';
 
 // What the node operator can do to a direct message, as the web app's chat shows it (crypto review M F2, 2026-10-02).
 // Real encryption, no crypto mocks: every line here is sealed by this app's own lib/dm-lock.ts, as MessagesPage sends
@@ -35,6 +38,13 @@ const thread = vi.hoisted(() => ({ conversation: null as any, messages: [] as an
 vi.mock('../lib/api', () => ({
     getConversations: vi.fn(async () => ({ conversations: [thread.conversation], totalUnread: 0 })),
     getConversationMessages: vi.fn(async () => ({ conversation: thread.conversation, messages: thread.messages })),
+    // A group's own chat route (group chats slice 4), as a node from before locked chats answers it: the same rows.
+    getGroupChat: vi.fn(async () => ({ conversation: thread.conversation, messages: thread.messages, canPost: true })),
+    getGroupMembers: vi.fn(async () => []),
+    groupKeysNet: {
+        get: async () => new Response(JSON.stringify({ error: 'Not found' }), { status: 404 }),
+        post: async () => new Response(JSON.stringify({ error: 'Not found' }), { status: 404 }),
+    },
     getMembers: vi.fn(async () => []),
     getMyMarketplaceTransactions: vi.fn(async () => []),
     markConversationReadApi: vi.fn(async () => ({ success: true })),
@@ -104,12 +114,17 @@ async function openChat(): Promise<void> {
 
 beforeEach(() => {
     minute = 0;
+    // A browser's own storage: the record of locked group chats reads, and holds nothing (lib/group-hold.ts). Without
+    // it the page fails closed, as it must when that record can't be read.
+    vi.stubGlobal('indexedDB', memoryIndexedDB());
+    resetGroupChatLockStoreForTest();
+    forgetGroupKeys();
     thread.conversation = {
         id: CONV, type: 'dm', name: null, participants: [ana.publicKey, ben.publicKey], createdBy: ana.publicKey,
         peerCallsign: 'Ben', unreadCount: 0, createdAt: '2026-09-01T00:00:00Z',
     } as Conversation;
 });
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('the web app\'s chat, after the node has been at the thread', () => {
     it('a line shown as someone else\'s, or stored again under a new id, never shows its words', async () => {

@@ -114,6 +114,14 @@ const mockIdentity: BeanPoolIdentity = {
     createdAt: '2026-09-14T00:00:00Z',
 };
 
+// A browser's own storage: the record of group chats held locked here reads, and holds nothing (lib/group-hold.ts).
+// Without it the page fails closed (nothing new opens or leaves on a guess), as it must when that record can't be read.
+beforeEach(() => {
+    vi.stubGlobal('indexedDB', memoryIndexedDB());
+    resetGroupChatLockStoreForTest();
+});
+afterEach(() => { vi.unstubAllGlobals(); });
+
 describe('MessagesPage Stage 5: Chat Over Push & Backstop Polling', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -924,7 +932,8 @@ describe("MessagesPage: the node's refusal in the composer (G11-e, design G11 §
         vi.mocked(sendMessageApi).mockRejectedValueOnce(new Error('Network down'));
         fireEvent.change(composer, { target: { value: 'second' } });
         await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); });
-        expect(window.alert).toHaveBeenCalledWith('Network down');
+        // A send asks the record of locked group chats first (lib/group-hold.ts): the failure comes a few ticks later.
+        await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Network down'));
         expect(screen.queryByTestId('chat-refusal')).toBeNull();
     });
 

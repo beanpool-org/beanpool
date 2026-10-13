@@ -207,6 +207,11 @@ export class GroupKeyring {
         } catch {
             return true;
         }
+        return this.seenLockedInMemory();
+    }
+
+    /** What this page has seen of the lock itself, whatever the store wrote (review of #1816, finding 4). */
+    seenLockedInMemory(): boolean {
         return this.locked || this.highest > 0 || this.keys.size > 0 || [...this.epochs.values()].some((e) => !!e.wrap);
     }
 
@@ -606,6 +611,16 @@ export function groupKeyring(net: GroupKeysTransport, identity: { publicKey: str
     let k = keyrings.get(id);
     if (!k) { k = new GroupKeyring(groupId, net, identity, store); keyrings.set(id, k); }
     return k;
+}
+
+/** The groups this page's keyrings have seen locked for this identity (lib/group-hold.ts asks them with the store). */
+export function groupsSeenLockedInMemory(identityPub: string): string[] {
+    const out: string[] = [];
+    for (const [id, ring] of keyrings) {
+        const bar = id.indexOf('|');
+        if (id.slice(0, bar) === identityPub && ring.seenLockedInMemory()) out.push(id.slice(bar + 1));
+    }
+    return out;
 }
 
 /** Sign-out, another identity: every opened key leaves memory, and this load's wrap tally. */

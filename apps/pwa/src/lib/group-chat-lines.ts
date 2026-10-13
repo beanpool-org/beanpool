@@ -62,9 +62,19 @@ export const GROUP_CHAT_NO_PHOTOS_TEXT = 'Photos can only be sent in direct mess
 /** Beside "Unverified" for a line a locked chat holds unsealed (review of #1788, finding 3). */
 export const GROUP_LINE_UNSEALED_DETAILS = "It isn't sealed, so nothing shows who wrote it.";
 
-/** The group chat's notice: the app's own words for what it decided, never the node's text. */
-export function groupChatNotice(state: { nodeSaysLocked: boolean; seenLocked: boolean }): string {
+/** The sentence for a chat answer that didn't come: a 403 or 404 is "only members"; anything else, "couldn't check". */
+function unansweredText(chatError: unknown): string {
+    const status = (chatError as { status?: number })?.status;
+    return status === 403 || status === 404 ? GROUP_CHAT_NOT_MEMBER_TEXT : GROUP_CHAT_UNREAD_TEXT;
+}
+
+/**
+ * The group chat's notice: the app's own words for what it decided, never the node's text. A chat answer that didn't
+ * come (`chatError`) says so, never that the node is older or says unlocked (review of #1816, finding 7).
+ */
+export function groupChatNotice(state: { nodeSaysLocked: boolean; seenLocked: boolean; chatError?: unknown }): string {
     if (state.nodeSaysLocked) return GROUP_CHAT_LOCKED_NOTICE;
+    if (state.chatError !== undefined && state.chatError !== null) return unansweredText(state.chatError);
     return state.seenLocked ? GROUP_CHAT_LOCK_LOST_TEXT : GROUP_CHAT_OLD_NODE_NOTICE;
 }
 
@@ -77,11 +87,7 @@ export type GroupSendPlan = { kind: 'seal' } | { kind: 'readable' } | { kind: 'r
  * has never seen the group locked, by a store that read.
  */
 export async function groupChatSendPlan(ring: GroupKeyring, chat: unknown, chatError?: unknown): Promise<GroupSendPlan> {
-    if (chatError !== undefined && chatError !== null) {
-        const status = (chatError as { status?: number })?.status;
-        if (status === 403 || status === 404) return { kind: 'refuse', sentence: GROUP_CHAT_NOT_MEMBER_TEXT };
-        return { kind: 'refuse', sentence: GROUP_CHAT_UNREAD_TEXT };
-    }
+    if (chatError !== undefined && chatError !== null) return { kind: 'refuse', sentence: unansweredText(chatError) };
     if (chatIsLocked(chat)) {
         await ring.noteLocked();
         return { kind: 'seal' };

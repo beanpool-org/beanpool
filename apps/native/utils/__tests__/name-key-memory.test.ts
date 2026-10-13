@@ -40,12 +40,12 @@ describe('name ↔ key memory', () => {
         const s = makeKeySuccession({ newEdPrivHex: ana2.seedHex, oldPubHex: ana1.pub, at: '2026-10-03T04:00:00.000Z' });
         const confirmed = noteRosterNames(first, [{ memberPubkey: ana2.pub, callsign: 'Ana', formerKeys: [{ pubkey: s.pubkey, at: s.at, sig: s.sig }] }]);
         expect(confirmed.changed.size).toBe(0);
-        expect(confirmed.memory.ana).toEqual({ key: ana2.pub });
+        expect(confirmed.memory.ana).toEqual({ key: ana2.pub, was: [ana1.pub] });
         const unconfirmed = noteRosterNames(first, [{ memberPubkey: ana2.pub, callsign: 'Ana' }]);
         expect([...unconfirmed.changed]).toEqual([ana2.pub]);
         const later = noteRosterNames(unconfirmed.memory, [{ memberPubkey: ana2.pub, callsign: 'Ana', formerKeys: [{ pubkey: s.pubkey, at: s.at, sig: s.sig }] }]);
         expect(later.changed.size).toBe(0);
-        expect(later.memory.ana).toEqual({ key: ana2.pub });
+        expect(later.memory.ana).toEqual({ key: ana2.pub, was: [ana1.pub] });
     });
 
     it('a statement signed by anyone but the new key does not clear it', () => {

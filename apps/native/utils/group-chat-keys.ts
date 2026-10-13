@@ -711,6 +711,66 @@ export class GroupKeyring {
         }
         return sent;
     }
+
+    /**
+     * A wrap to this phone's own key landed outside a sync (its own self-wrap from the old words, or a member's top-ups
+     * after an in-person confirmation; DESIGN-group-history-after-rekey-fable.md §7): the next sync asks at once for the
+     * epochs it holds no wrap for, instead of waiting out the minute.
+     */
+    noteWrapsLanded(): void {
+        this.lastHoleFetch = 0;
+    }
+
+    /**
+     * Who an epoch's maker wrapped it to, by the signed membersDigest alone (DESIGN-group-history-after-rekey-fable.md §4):
+     * the record's own wraps' recipients when they are exactly the signed set, else those plus `candidate` when that is.
+     * Never a roster, a chain or `missing`: the node can withhold a wrap from the list (then null), never add a name.
+     */
+    private async signedRecipientsWith(epoch: number, candidate: string): Promise<Set<string> | null> {
+        const stored = this.epochs.get(epoch);
+        if (!stored) return null;
+        try {
+            verifyGroupEpochRecord(stored.record, { groupId: this.groupId, epoch });
+            const a = await answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/${epoch}/wraps`, this.identity as BeanPoolIdentity));
+            const set = new Set<string>((Array.isArray(a?.wraps) ? a.wraps : [])
+                .filter((w: any) => w && (w.sig === null || w.sig === undefined) && w.wrapper === stored.record.createdBy && typeof w.recipient === 'string')
+                .map((w: any) => w.recipient as string));
+            if (groupEpochCoversExactly(stored.record, [...set])) return set;
+            set.add(candidate);
+            return groupEpochCoversExactly(stored.record, [...set]) ? set : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * A member's new phone, confirmed in person (DESIGN-group-history-after-rekey-fable.md §4, Marty's picks 1, 2 and 4 of
+     * 13 Oct): hand `newKey` every epoch of this group this phone holds whose SIGNED record names `oldKey` and not
+     * `newKey`, and nothing else. The caller has checked on this phone that `oldKey` is the key this phone itself
+     * remembers under the member's name (name-key-memory.ts) and that `newKey` is the code scanned from the phone in front
+     * of the member (group-history-unlock.ts checkNewPhone). The node is in none of the three: a roster, a chain,
+     * `missing` or a members answer it doctors changes nothing here. At most one open and one wrap per epoch. Stops at
+     * the node's speed limit (`stopped`): the screen tries again.
+     */
+    async handToConfirmedPhone(oldKey: string, newKey: string, onEach?: (handed: number) => void): Promise<{ handed: number[]; stopped: boolean }> {
+        await this.ensureLoaded();
+        const handed: number[] = [];
+        if (oldKey === newKey || newKey === this.identity.publicKey || oldKey === this.identity.publicKey) return { handed, stopped: false };
+        for (const epoch of [...this.epochs.keys()].sort((x, y) => x - y)) {
+            if (!this.holdsWrap(epoch)) continue;
+            const set = await this.signedRecipientsWith(epoch, oldKey);
+            if (!set || !set.has(oldKey) || set.has(newKey)) continue;
+            const key = await this.keyFor(epoch);
+            if (!key) continue;
+            const t = makeTopUp(key, { myEdPrivHex: this.identity.privateKey, groupId: this.groupId, epoch, recipientPubHex: newKey });
+            const res = await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/wrap`,
+                { epoch, recipient: t.recipient, ephPub: t.ephPub, nonce: t.nonce, wrapped: t.wrapped, sig: t.sig }, this.identity as BeanPoolIdentity).catch(() => null);
+            if (res?.status === 201) { handed.push(epoch); onEach?.(handed.length); }
+            else if (res?.status === 429) return { handed, stopped: true };
+            // 409 wrap_exists (her phone or another member got there first), 403, 404: nothing more to do for this epoch.
+        }
+        return { handed, stopped: false };
+    }
 }
 
 /** Two copies of an epoch record's signed header are the same record. */

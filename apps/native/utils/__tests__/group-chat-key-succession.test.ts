@@ -256,10 +256,12 @@ describe('a member who changes phones keeps their name on their old lines', () =
 
         const cat2 = await rekeyed(cat, 'Cat');
         forgetGroupKeys();
-        // Before Cat₂ signs: her old line names nobody, and decision (a) holds: no top-up to Ben (the record's wraps lack
-        // Cat₁ now) or to Cat₂ (in no record).
+        // Before Cat₂ signs: her old line names nobody. Since the node keeps a re-keyed key's wraps (DESIGN-group-history-
+        // after-rekey-fable.md §3, Marty's pick 3 of 13 Oct), epoch 3's own wraps are exactly its signed recipients again,
+        // Cat₁ among them, so Ana repairs Ben's spoiled slot at once (NB2, no chain needed); decision (a) holds: Cat₂, in
+        // no record, is handed nothing.
         expect(nameOf(await shown(ana, g), 'Cat on her old phone')).toBe(GROUP_LINE_FORMER_MEMBER);
-        expect(await ring(ana, g).serveMissing()).toBe(0);
+        expect(await ring(ana, g).serveMissing()).toBe(1);
         expect(await control<any[]>('sql', { sql: 'SELECT epoch FROM group_key_wraps WHERE group_id = ? AND recipient_pubkey = ?', params: [g, cat2.identity.publicKey], all: true })).toEqual([]);
 
         // Cat₂ confirms, as her new phone does right after its own re-key.
@@ -270,9 +272,9 @@ describe('a member who changes phones keeps their name on their old lines', () =
         expect(line?.name).toBe('Cat');
         const [inv] = await control<any[]>('sql', { sql: 'SELECT succession_at FROM invalidated_keys WHERE public_key = ?', params: [cat.identity.publicKey], all: true });
         expect(line?.details).toBe(earlierKeyDetails('Cat', inv.succession_at));
-        // NB2: Ana now tops up Ben's spoiled slot (epoch 3's wraps lack Cat₁; her verified chain completes them to the
-        // signed set). Cat₂ is handed nothing: no epoch goes through a former key (review of #1826, finding 1; option 2).
-        expect(await ring(ana, g).serveMissing()).toBe(1);
+        // Ben's slot was repaired above. Cat₂ is still handed nothing: no epoch goes through a former key (review of #1826,
+        // finding 1; option 2).
+        expect(await ring(ana, g).serveMissing()).toBe(0);
         expect(await wrapsTo(g, cat2)).toEqual([]);
         // Ana writes: the roster has Cat₂ and the current record Cat₁, so her phone rotates first. Still nothing old to Cat₂.
         await writes(ana, g, 'Ana after the re-key');

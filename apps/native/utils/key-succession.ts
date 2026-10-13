@@ -127,6 +127,16 @@ async function theOneToSign(nodeUrl: string, identity: BeanPoolIdentity, opts: {
     return listed[0];
 }
 
+/**
+ * The old key this phone itself signed the statement for on this node (at its re-key, or after §6's prompt), or null:
+ * the old-words path checks typed words against it before anything is fetched (DESIGN-group-history-after-rekey-fable.md
+ * §3), and the new-phone code carries it (§4).
+ */
+export async function oldKeySignedHere(nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey'>): Promise<string | null> {
+    const m = await readMemory(nodeUrl, identity);
+    return m && typeof m.signed === 'string' && PUBKEY_HEX.test(m.signed) ? m.signed : null;
+}
+
 /** The re-keys to this key nobody has confirmed yet, as the node lists them. */
 export async function unattestedRekeys(nodeUrl: string, identity: BeanPoolIdentity): Promise<RekeyedFrom[]> {
     return (await rekeysToMe(nodeUrl, identity)).filter((r) => !r.attested);

@@ -22,7 +22,17 @@ export interface RememberedKey {
     key: string;
     /** The key this name had before, when it moved with no statement: the mark shows until one reaches it. */
     changedFrom?: string;
+    /**
+     * The keys this phone saw this name on before a move a statement confirmed, newest first (at most 8): what an in-person
+     * confirmation of the member's new phone checks against (DESIGN-group-history-after-rekey-fable.md §4), so a phone the
+     * node tells "her old key was Zed's" never hands Zed's epochs.
+     */
+    was?: string[];
 }
+
+const WAS_MAX = 8;
+/** `was` with `k` put first. */
+const withWas = (was: readonly string[] | undefined, k: string): string[] => [k, ...(was ?? []).filter((x) => x !== k)].slice(0, WAS_MAX);
 export type NameKeyMemory = Record<string, RememberedKey>;
 
 export interface MemoryRosterRow {
@@ -58,12 +68,12 @@ export function noteRosterNames(memory: NameKeyMemory, roster: readonly MemoryRo
         if (!seen) {
             next[n] = { key: r.memberPubkey };
         } else if (seen.key === r.memberPubkey) {
-            if (seen.changedFrom && reaches(seen.changedFrom)) next[n] = { key: r.memberPubkey };
+            if (seen.changedFrom && reaches(seen.changedFrom)) next[n] = { key: r.memberPubkey, was: withWas(seen.was, seen.changedFrom) };
             else if (seen.changedFrom) changed.add(r.memberPubkey);
         } else if (reaches(seen.key)) {
-            next[n] = { key: r.memberPubkey };
+            next[n] = { key: r.memberPubkey, was: withWas(seen.was, seen.key) };
         } else {
-            next[n] = { key: r.memberPubkey, changedFrom: seen.changedFrom ?? seen.key };
+            next[n] = { key: r.memberPubkey, changedFrom: seen.changedFrom ?? seen.key, ...(seen.was ? { was: seen.was } : {}) };
             changed.add(r.memberPubkey);
         }
     }
@@ -82,6 +92,24 @@ export async function rememberRosterNames(nodeUrl: string, roster: readonly Memo
         return changed;
     } catch {
         return new Set();
+    }
+}
+
+/**
+ * The keys this phone itself saw `callsign` on before, other than `current`: its `was` list and an unconfirmed
+ * `changedFrom`, and the remembered key when the phone hasn't seen the move yet. [] when it never knew the name, or the
+ * memory can't be read. Read only: nothing the node says now goes in.
+ */
+export async function keysThisPhoneKnewFor(nodeUrl: string, callsign: string, current: string): Promise<string[]> {
+    try {
+        const raw = await AsyncStorage.getItem(storageKey(nodeUrl));
+        const memory = raw ? (JSON.parse(raw) as NameKeyMemory) : {};
+        const seen = memory && typeof memory === 'object' ? memory[nameKey(callsign)] : undefined;
+        if (!seen || typeof seen.key !== 'string') return [];
+        const keys = [seen.key, ...(Array.isArray(seen.was) ? seen.was : []), seen.changedFrom].filter((k): k is string => typeof k === 'string' && k !== current);
+        return [...new Set(keys)];
+    } catch {
+        return [];
     }
 }
 

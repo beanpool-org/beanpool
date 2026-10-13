@@ -52,7 +52,7 @@ import { memberErrorText } from './member-error-text.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
+    const { clampLimit, clampOffset } = deps;
 
     const isTreasury = (pk: string): boolean =>
         !!(db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(pk) as any)?.is_treasury;
@@ -1313,23 +1313,23 @@ router.get('/api/marketplace/transactions', async (ctx) => {
         ctx.body = { error: 'publicKey query parameter is required' };
         return;
     }
-    if (ENFORCE_READ_AUTH) {
-        const actor = ctx.state?.actor as string | undefined;
-        if (!actor) {
-            ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
-            return;
-        }
-        const isSelf = actor === publicKey;
-        const isAuthorizedKeeper = Boolean(isTreasury(publicKey) && canOperateTreasury(actor, publicKey));
-        if (!isSelf && !isAuthorizedKeeper) {
-            ctx.status = 403;
-            ctx.body = { error: isTreasury(publicKey)
-                ? 'You are not authorized to view transactions for this enterprise'
-                : 'You may only view your own marketplace transactions'
-            };
-            return;
-        }
+    // A member's trades are theirs, an enterprise's its keepers', whatever ENFORCE_READ_AUTH says, as the ledger's are
+    // (routes/community.ts OWN_LEDGER_ERROR): with read auth opted out anyone, unsigned too, read who traded with whom.
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required' };
+        return;
+    }
+    const isSelf = actor === publicKey;
+    const isAuthorizedKeeper = Boolean(isTreasury(publicKey) && canOperateTreasury(actor, publicKey));
+    if (!isSelf && !isAuthorizedKeeper) {
+        ctx.status = 403;
+        ctx.body = { error: isTreasury(publicKey)
+            ? 'You are not authorized to view transactions for this enterprise'
+            : 'You may only view your own marketplace transactions'
+        };
+        return;
     }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);

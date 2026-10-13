@@ -283,6 +283,7 @@ export const SUITES = [
     'test-public-url-callers',
     'test-read-auth-default',
     'test-privacy-defaults',
+    'test-own-reads-any-read-auth',
     'test-activity-feed-members-only',
     'test-members-contact-visibility',
     'test-heavy-read-cap',
@@ -542,6 +543,9 @@ export const VARIANTS = [
     // An invite bound to a names-list entry (community modes slice 3) reaches nobody but its maker under the opt-out too:
     // /api/invite/mine/:publicKey, open to anyone then, leaves bound invites out for anyone but the maker.
     { name: 'test-invite-bound-name', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // A member's own invites, conversation list and trades go to them alone with read auth opted out too: anyone, unsigned
+    // included, read every one of them for any key before.
+    { name: 'test-own-reads-any-read-auth', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM, preserves
     // metadata.originalConversationId (the E2EE AAD fallback), and survives a malformed-metadata row. Always run

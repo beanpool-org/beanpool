@@ -141,8 +141,9 @@ async function main(): Promise<void> {
     const otherMemberInvites = await signedFetch('GET', `/api/invite/mine/${victimPubHex}`);
     if (process.env.ENFORCE_READ_AUTH !== 'false') { // same rule as https-server.ts: unset means ON
         assert(otherMemberPref.status === 403, 'GET /api/members/preferences for another user returns 403 under ENFORCE_READ_AUTH');
-        assert(otherMemberInvites.status === 403, 'GET /api/invite/mine/:publicKey for another user returns 403 under ENFORCE_READ_AUTH');
     }
+    // A member's invites are theirs alone whatever ENFORCE_READ_AUTH says: an unused code is a key to join.
+    assert(otherMemberInvites.status === 403, 'GET /api/invite/mine/:publicKey for another user returns 403, read auth on or opted out');
 
     // Test signed fetch for own preferences / invites:
     const ownPref = await signedFetch('GET', `/api/members/preferences?publicKey=${pubKeyHex}`);

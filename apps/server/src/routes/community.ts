@@ -37,7 +37,6 @@ import {
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { pushKeyHex } from '../engine/push-notices.js';
-import { boundInviteCodesOf } from '../engine/names-list.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
 import { cleanRekeyCode, proposeRekey, rekeyRedeemStatus, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
 import { recordKeySuccession, rekeyedFromOf } from '../engine/key-succession.js';
@@ -1024,10 +1023,17 @@ router.get('/api/community/members', async (ctx) => {
     // they are a member, who has added them as a friend and who they have a trade with: being added, joining or
     // requesting a trade changes what they may see without changing any member row, so the members version
     // alone would confirm a stale copy with a 304.
+    // Of the people who added them, only those whose adding shows them something: a stored contact for Friends only.
+    // Who added you is theirs to know, not yours (the list shows nothing for anyone else), and every one of them in
+    // the hash moved the ETag over an identical body, which named the one who did, recomputed for each member in turn.
     const viewer = contactViewer(ctx.state.actor as string | undefined);
+    const friendsShowing = viewer.addedBy.size === 0 ? [] : (db.prepare(
+        `SELECT f.owner_pubkey AS pk FROM friends f JOIN members m ON m.public_key = f.owner_pubkey
+         WHERE f.friend_pubkey = ? AND m.contact_visibility = 'friends' AND m.contact_value IS NOT NULL AND m.contact_value != ''`,
+    ).all(viewer.pubkey) as { pk: string }[]).map(r => r.pk).filter(pk => viewer.addedBy.has(pk));
     const viewerSig = crypto.createHash('sha256')
         .update(`${ctx.querystring || ''}:${viewer.pubkey || ''}:${viewer.isMember ? 'member' : 'reader'}`
-            + `:${[...viewer.addedBy].sort().join(',')}:${[...viewer.tradePartners].sort().join(',')}`)
+            + `:${friendsShowing.sort().join(',')}:${[...viewer.tradePartners].sort().join(',')}`)
         .digest('hex').slice(0, 8);
     const etag = `W/"community-members-${getMembersVersion()}-${viewerSig}"`;
 
@@ -1300,18 +1306,26 @@ router.get('/api/invite/tree', async (ctx) => {
     ctx.body = getInviteTree(root);
 });
 
+// A member's own invites, to that member alone, whatever ENFORCE_READ_AUTH says, as /api/community/me is: an unused code is
+// a key to join the node, and a used one says who joined through whom and when. With read auth opted out this list went to
+// anyone, unsigned too, unused codes and all. Every reader but the maker gets the same refusal, before any lookup, so it
+// says nothing about the key asked about. An invite bound to a names-list entry is among them, so it too reaches its maker
+// alone (engine/names-list.ts readBoundInvites).
 router.get('/api/invite/mine/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
-    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (actor !== publicKey) {
         ctx.status = 403;
         ctx.body = { error: 'You may only read your own invites' };
         return;
     }
-    // An invite bound to a names-list entry goes to its maker alone, whatever ENFORCE_READ_AUTH says: redeemed by anyone
-    // else's key, it would confirm that key against the entry, by the maker (engine/names-list.ts readBoundInvites).
-    const bound = ctx.state.actor === publicKey ? null : boundInviteCodesOf(publicKey);
-    const invites = getInvitesByMember(publicKey).filter((i) => !bound?.has(i.code));
-    ctx.body = { invites };
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = { invites: getInvitesByMember(publicKey) };
 });
 
 // ===================== PROFILE API (PUBLIC) =====================

@@ -9,11 +9,12 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { helpSheetFor, phoneHelpKey } from '@beanpool/core';
 
 import { getBundledGuide } from '../guide';
 
-const src = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+const src = (rel: string) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), rel), 'utf8');
 /** What the layout's sheet shows on a path while a screen names a view (setHelpContext → helpContext()). */
 const sheetOn = (path: string, view: string | null = null) => helpSheetFor(getBundledGuide(), phoneHelpKey(path, view));
 

@@ -51,6 +51,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem
 const { TourBar, TOUR_TARGET_DP, tourSceneInset } = await import('../../components/TourBar');
 const { readFileSync } = await import('node:fs');
 const { fileURLToPath } = await import('node:url');
+const { dirname, join } = await import('node:path');
 const { HelpSheet } = await import('../../components/HelpSheet');
 const { getBundledGuide } = await import('../guide');
 
@@ -171,7 +172,7 @@ describe('the tour bar at 320 dp × 1.3, light and dark, on every step', () => {
 });
 
 describe('the tabs\' own bottom buttons ride above the bar (review B1: + ADD POST, which step 2 names, was under it)', () => {
-    const src = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+    const src = (rel: string) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), rel), 'utf8');
     /** Each tab's bottom button, read from the screen's own style (map.tsx is read, never changed). */
     const FABS: [string, string][] = [['Market', '../../app/(tabs)/market.tsx'], ['Map', '../../app/(tabs)/map.tsx'], ['Commons', '../../app/(tabs)/projects.tsx']];
     const fabBottom = (rel: string) => {

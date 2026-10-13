@@ -52,7 +52,7 @@ let root: Root;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
-const render = (node: ReturnType<typeof createElement>) => act(() => { root.render(node); });
+const render = (node: unknown) => act(() => { root.render(node as Parameters<Root["render"]>[0]); });
 const button = (name: string) => host.querySelector(`[role="button"][aria-label="${name}"]`) as HTMLElement | null;
 const click = async (el: Element | null) => { await act(async () => { (el as HTMLElement)?.click(); }); };
 

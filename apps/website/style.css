@@ -8,7 +8,8 @@
     
     --text-primary: #f8fafc;
     --text-secondary: #cbd5e1;
-    --text-muted: #8190a6;   /* 4.5:1 or better wherever it sits at 320px, 130% text (was #64748b: 3.5:1 on the doodle ground) */
+    --text-muted: #8190a6;   /* 4.5:1 or better on a panel and on the doodle's ground (was #64748b: 3.5:1 on the doodle ground) */
+    --text-muted-on-doodle: #b4bfcc;   /* muted text with no panel under it: 4.7:1 on the doodle's brightest stroke (#454c49) */
     
     --accent: #f59e0b;      /* Ambient Amber */
     --accent-glow: rgba(245, 158, 11, 0.15);
@@ -1008,7 +1009,7 @@ a.logo { min-height: 44px; }
 }
 .map-stat-label {
     font-size: 0.85rem;
-    color: var(--text-muted);
+    color: var(--text-muted-on-doodle);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -1761,7 +1762,7 @@ footer {
 .nav-links a[aria-current="page"]::after { width: 100%; }
 .help-centre { max-width: 1000px; }
 .help-centre .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
-.help-centre h2 { font-size: 1.15rem; line-height: 1.3; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 2.25rem 0 0.85rem; }
+.help-centre h2 { font-size: 1.15rem; line-height: 1.3; color: var(--text-muted-on-doodle); text-transform: uppercase; letter-spacing: 0.08em; margin: 2.25rem 0 0.85rem; }
 .help-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));

@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="style.css?v=2.5">
+    <link rel="stylesheet" href="style.css?v=2.6">
 </head>
 <body>
     <!-- Navigation Bar -->
@@ -100,7 +100,7 @@
                             <div class="not-item-icon">✕</div>
                             <div class="not-item-content">
                                 <strong>Not Corporate Debt or Extraction</strong>
-                                <p>No interest, no banks, and no middlemen. 100% of circulation funds your Commons.</p>
+                                <p>No interest, no banks, no middlemen. The only fees are small and go to your community's own Commons pool, never to us.</p>
                             </div>
                         </div>
                         <div class="not-card-item">
@@ -225,6 +225,23 @@
         </div>
     </section>
 
+    <!-- What BeanPool is: one paragraph and three "not" lines, one column -->
+    <section id="what-it-is">
+        <div class="container what-it-is">
+            <div class="section-header">
+                <h2>What BeanPool is</h2>
+            </div>
+            <p class="what-it-is-lead">A community runs BeanPool on its own small server. Members post what they can offer and what they need, and trade in Beans. A Bean is not money you buy: it is a record that someone helped someone. Everyone starts at zero. When you help, your balance goes up; when you are helped, it goes down; across the community the balances always add up to zero. Nobody issues Beans, nobody lends them at interest, and nobody cashes them out. A small fee on each trade goes to the community's own pool, which its members spend by vote. The app is free and open source; a community picks its own server, and the data on it is theirs.</p>
+            <ul class="what-it-is-not">
+                <li><strong>Not a cryptocurrency.</strong> No blockchain, no token, nothing to buy or sell. Your 12 words only unlock your own account.</li>
+                <li><strong>Not a bank.</strong> Credit comes from your own trading, with no interest: your line opens after your first completed trade.</li>
+                <li><strong>Not a company in the middle.</strong> BeanPool takes nothing from a trade, and shows no ads.</li>
+            </ul>
+            <!-- Needs Marty's OK (copy §2): the closing history line -->
+            <p class="what-it-is-history">Mutual credit is old: LETS groups ran it on paper for decades, and Switzerland's WIR has run one since 1934. Paperwork is what wore most of them out. BeanPool is the paperwork, done by the app.</p>
+        </div>
+    </section>
+
     <!-- How It Works Section -->
     <section id="how-it-works">
         <div class="container">
@@ -275,7 +292,7 @@
         <div class="container">
             <div class="section-header">
                 <h2>What You Can Do</h2>
-                <p>The phone app has six tabs: Market, Map, Talk, Pulse, Commons and Ledger, where you see your balance and your trades.</p>
+                <p>The app opens on Home, a set of cards you choose. Behind it: the Market, the Map, Talk (Chat in the web app), People, the Pulse, the Commons and the Ledger, where you see your balance and your trades.</p>
             </div>
             <div class="features-grid">
                 <div class="feature-card glass-panel">
@@ -287,7 +304,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Map</h3>
-                    <p>See what is on offer near you. You place every pin yourself: use your location once, at the moment you post, or drop the pin by hand. BeanPool never tracks where you are. Enterprise and event pins can be set to Approximate, which rounds the spot to about 100&nbsp;m. Pins are public: anyone who opens your community's map can see them.</p>
+                    <p>See what is on offer near you. You place every pin yourself: use your location once, at the moment you post, or drop the pin by hand. BeanPool never tracks where you are. Enterprise and event pins can be set to Approximate, which rounds the spot to about 100&nbsp;m. Pins are seen by the members of your community. On the global community a visitor sees listings and roughly where they are, but no names, no faces and no exact spots.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -298,7 +315,7 @@
 
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">💬</div>
-                    <h3>Talk</h3>
+                    <h3>Talk (Chat in the web app)</h3>
                     <p>Message anyone in your community. Direct messages between two members are end-to-end encrypted: your community's node carries them but cannot read them. Enterprise discussions and event chats can be read by the people who run your community's node, so they can be moderated &mdash; the app says so on each of those chats.</p>
                 </div>
 
@@ -420,6 +437,7 @@
 
     <!-- Live Nodes Map Section -->
     <section id="live-nodes">
+        <span id="find-or-start"></span>
         <div class="container">
             <div class="section-header">
                 <h2>Find Your Local Exchange</h2>
@@ -464,8 +482,8 @@
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
-                    <h3>Private from the first boot <span class="new-pill">New</span></h3>
-                    <p>Since v1.2.21 a node keeps its members' messages and balances to signed-in members from the moment it starts &mdash; there is nothing to switch on. The Market, the map, enterprises and Decisions stay open, so a neighbour can see what is happening before they join. The community's activity feed, which names the members in a completed trade and the Beans involved, is for members only.</p>
+                    <h3>Private from the first boot</h3>
+                    <p>A community's listings, map, messages and balances are for its members from the moment its node starts; there is nothing to switch on. Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>

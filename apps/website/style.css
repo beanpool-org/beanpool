@@ -1808,3 +1808,13 @@ footer {
 .run-node-sub { margin: 1.75rem 0 0.75rem; }
 .run-node-note { font-size: 0.9rem; }
 .cta-step code.cta-block { white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; line-height: 1.7; }
+
+/* What BeanPool is: one column of plain text; the three "not" lines are a list, so nothing goes sideways */
+.what-it-is { max-width: 760px; }
+.what-it-is-lead, .what-it-is-history { color: var(--text-secondary); font-size: 1rem; line-height: 1.65; margin: 0 0 1rem; }
+.what-it-is-not { list-style: none; padding: 0; margin: 0 0 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.what-it-is-not li { color: var(--text-secondary); line-height: 1.55; padding-left: 0.9rem; border-left: 3px solid rgba(239, 68, 68, 0.45); overflow-wrap: anywhere; }
+.what-it-is-not strong { color: var(--text-primary); }
+.what-it-is-history { font-style: italic; margin-bottom: 0; }
+/* The hero's "Find or start a community" door lands on the map, below the fixed bar */
+#find-or-start { display: block; scroll-margin-top: 80px; }

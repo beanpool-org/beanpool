@@ -541,6 +541,8 @@ export const VARIANTS = [
     // An invite bound to a names-list entry (community modes slice 3) reaches nobody but its maker under the opt-out too:
     // /api/invite/mine/:publicKey, open to anyone then, leaves bound invites out for anyone but the maker.
     { name: 'test-invite-bound-name', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // A member's friends list is read by its owner alone under the opt-out too: unsigned 401, anyone else's key 403.
+    { name: 'test-friends-routes', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM, preserves
     // metadata.originalConversationId (the E2EE AAD fallback), and survives a malformed-metadata row. Always run

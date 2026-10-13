@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { ReportModal } from './ReportModal';
@@ -76,5 +76,21 @@ describe('ReportModal Component', () => {
         fireEvent.change(screen.getByLabelText(/Additional details/i), { target: { value: 'messages to my daughter' } });
         fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
         await waitFor(() => expect(reportAbuse).toHaveBeenCalledWith('pubkey_123', 'target_456', 'Child safety: messages to my daughter', 'post_9', undefined));
+    });
+
+    it('keeps Cancel and Submit at the foot of the card while it scrolls, in light and dark (review of #1895, finding 6)', () => {
+        render(<ReportModal isOpen onClose={() => {}} reporterPubkey="a" targetPubkey="b" targetName="Bob" />);
+        const row = screen.getByTestId('report-actions');
+        expect(within(row).getByRole('button', { name: 'Submit Report' })).toBeInTheDocument();
+        expect(within(row).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+        // Sticky to the bottom of the scrolling card, with a solid background in each theme so the fields slide under it.
+        expect(row.className).toMatch(/(^| )sticky( |$)/);
+        expect(row.className).toMatch(/(^| )bottom-0( |$)/);
+        expect(row.className).toMatch(/(^| )bg-white( |$)/);
+        expect(row.className).toMatch(/(^| )dark:bg-nature-900( |$)/);
+        // It is the last thing in the card that scrolls.
+        const card = row.parentElement!;
+        expect(card.className).toMatch(/overflow-y-auto/);
+        expect(card.lastElementChild).toBe(row);
     });
 });

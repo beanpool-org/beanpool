@@ -156,7 +156,11 @@ export function ReportModal({
                     />
                 </div>
 
-                <div className="flex gap-2 pt-2">
+                {/*
+                  * Cancel and Submit stay at the card's foot while it scrolls (the review of #1895, finding 6: at 320 px
+                  * with 130% text the card ended at the hint, with no sign that Submit was below it).
+                  */}
+                <div data-testid="report-actions" className="sticky bottom-0 -mx-5 sm:-mx-6 -mb-5 sm:-mb-6 px-5 sm:px-6 pb-5 sm:pb-6 pt-3 flex gap-2 bg-white dark:bg-nature-900 border-t border-nature-100 dark:border-nature-800 rounded-b-2xl">
                     <button
                         type="button"
                         onClick={onClose}

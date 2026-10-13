@@ -12,6 +12,9 @@ const OTHER = 'dd'.repeat(32);
 const D0 = '0f8fad5b-d9cb-469f-a165-70867728950e';
 const NOW = '2026-10-14T00:00:00.000Z';
 
+/** The stored value: one account's pins and the community files seeded (§3.4 amendment 5). */
+const record = (pins: Record<string, unknown>, seeded: string[] = []) => JSON.stringify({ pins, seeded });
+
 function memory(seed: Record<string, string> = {}) {
     const data = new Map(Object.entries(seed));
     return {
@@ -24,8 +27,8 @@ function memory(seed: Record<string, string> = {}) {
 describe('readDmPeerPins', () => {
     it('reads only this account\'s pins, under its key lower-cased, with ids folded', async () => {
         const s = memory({
-            [dmPeerPinsStoreKey(ME)]: JSON.stringify({ [D0.toUpperCase()]: { peer: BEN.toUpperCase(), since: NOW, by: 'first-seen' } }),
-            [dmPeerPinsStoreKey(OTHER)]: JSON.stringify({ [D0]: { peer: PUPPET, since: NOW, by: 'first-seen' } }),
+            [dmPeerPinsStoreKey(ME)]: record({ [D0.toUpperCase()]: { peer: BEN.toUpperCase(), since: NOW, by: 'first-seen' } }),
+            [dmPeerPinsStoreKey(OTHER)]: record({ [D0]: { peer: PUPPET, since: NOW, by: 'first-seen' } }),
         });
         expect(dmPeerPinsStoreKey(ME.toUpperCase())).toBe(dmPeerPinsStoreKey(ME));
         expect(await readDmPeerPins(s, ME.toUpperCase())).toEqual({ [D0]: { peer: BEN, since: NOW, by: 'first-seen' } });
@@ -35,13 +38,14 @@ describe('readDmPeerPins', () => {
         expect(await readDmPeerPins(memory(), ME)).toEqual({});
         const throwing = { getItem: async () => { throw new Error('io'); } };
         await expect(readDmPeerPins(throwing, ME)).rejects.toThrow(DM_PIN_STORE_UNREAD_TEXT);
-        for (const raw of ['{not json', '[]', '"x"', 'null']) {
+        // Not the record (§3.4 amendment 5): no pins object, or no list of the files seeded.
+        for (const raw of ['{not json', '[]', '"x"', 'null', '{}', JSON.stringify({ [D0]: { peer: BEN, since: NOW, by: 'first-seen' } }), '{"pins":{}}', '{"pins":[],"seeded":[]}', '{"pins":{},"seeded":"a.db"}']) {
             await expect(readDmPeerPins(memory({ [dmPeerPinsStoreKey(ME)]: raw }), ME)).rejects.toBeInstanceOf(DmPinStoreError);
         }
     });
 
     it('passes over an entry that isn\'t a pin, and drops former keys that aren\'t keys', async () => {
-        const s = memory({ [dmPeerPinsStoreKey(ME)]: JSON.stringify({
+        const s = memory({ [dmPeerPinsStoreKey(ME)]: record({
             a: { peer: 'not-a-key' },
             b: 'x',
             [D0]: { peer: BEN, since: NOW, by: 'member', former: [PUPPET, 'zz', BEN, PUPPET], offered: { peer: 'nope', at: NOW } },
@@ -131,8 +135,12 @@ describe('pinAtFirstSight and dmOpenPeers', () => {
     });
 });
 
-describe('createDmPinBook: one copy per account, one queue (#1872 review, findings 6 and 7)', () => {
+describe('createDmPinBook: one copy per account, one queue (#1872 review, findings 6 and 7), one seed per community file (§3.4 amendment 5)', () => {
     const D1 = '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed';
+    const FA = 'community_a.db';
+    const FB = 'community_b.db';
+    /** A book over `s` whose handles are the file names themselves. */
+    const bookOf = (s: Parameters<typeof createDmPinBook>[0], seedFile?: (me: string, at: string, file: string) => Promise<(pins: DmPeerPins) => boolean>) => createDmPinBook<string>(s, (f) => f, seedFile);
     /** Storage that counts its reads and lets a test hold each write until it says. */
     function slow(seed: Record<string, string> = {}) {
         const s = memory(seed);
@@ -146,81 +154,108 @@ describe('createDmPinBook: one copy per account, one queue (#1872 review, findin
             setItem: async (k: string, v: string) => { await new Promise<void>((r) => held.push(r)); await s.setItem(k, v); },
         };
     }
-    const stored = (s: { data: Map<string, string> }, who = ME) => JSON.parse(s.data.get(dmPeerPinsStoreKey(who)) ?? '{}');
+    const stored = (s: { data: Map<string, string> }, who = ME) => JSON.parse(s.data.get(dmPeerPinsStoreKey(who)) ?? '{"pins":{},"seeded":[]}');
 
     it('two first sights at once, each write held: both pins are kept, in storage and in memory', async () => {
-        const s = slow();
-        const book = createDmPinBook(s);
-        const a = book.update(ME, (p) => pinAtFirstSight(p, D0, BEN, NOW));
-        const b = book.update(ME, (p) => pinAtFirstSight(p, D1, PUPPET, NOW));
+        const s = slow({ [dmPeerPinsStoreKey(ME)]: record({}, [FA]) });
+        const book = bookOf(s);
+        const a = book.update(ME, FA, (p) => pinAtFirstSight(p, D0, BEN, NOW));
+        const b = book.update(ME, FA, (p) => pinAtFirstSight(p, D1, PUPPET, NOW));
         await vi.waitFor(() => expect(s.held.length).toBe(1));
         s.held.shift()!();   // the first write lands only now; the second waits its turn behind it
         await vi.waitFor(() => expect(s.held.length).toBe(1));
         s.held.shift()!();
         expect(await Promise.all([a, b])).toEqual([true, true]);
-        expect(Object.keys(stored(s)).sort()).toEqual([D0, D1].sort());
-        expect(Object.keys(await book.read(ME)).sort()).toEqual([D0, D1].sort());
+        expect(Object.keys(stored(s).pins).sort()).toEqual([D0, D1].sort());
+        expect(Object.keys(await book.read(ME, FA)).sort()).toEqual([D0, D1].sort());
     });
 
     it('reads storage once for the app\'s run, however many ask at once, and a change that changes nothing writes nothing', async () => {
-        const s = slow({ [dmPeerPinsStoreKey(ME)]: JSON.stringify({ [D0]: { peer: BEN, since: NOW, by: 'first-seen' } }) });
-        const book = createDmPinBook(s);
-        const copies = await Promise.all([book.read(ME), book.read(ME), book.read(ME.toUpperCase())]);
+        const s = slow({ [dmPeerPinsStoreKey(ME)]: record({ [D0]: { peer: BEN, since: NOW, by: 'first-seen' } }, [FA]) });
+        const book = bookOf(s);
+        const copies = await Promise.all([book.read(ME, FA), book.read(ME, FA), book.read(ME.toUpperCase(), FA)]);
         expect(new Set(copies).size).toBe(1);
-        expect(await book.update(ME, (p) => pinAtFirstSight(p, D0, PUPPET, NOW))).toBe(false);
-        expect(dmPinFor(await book.read(ME), D0)?.peer).toBe(BEN);
+        expect(await book.update(ME, FA, (p) => pinAtFirstSight(p, D0, PUPPET, NOW))).toBe(false);
+        expect(dmPinFor(await book.read(ME, FA), D0)?.peer).toBe(BEN);
         expect({ reads: s.reads(), writes: s.held.length }).toEqual({ reads: 1, writes: 0 });
-        await book.read(OTHER);   // another account: its own copy, read from its own key
+        const other = book.read(OTHER, FA);   // another account: its own copy, read from its own key (and its own seed write)
+        await vi.waitFor(() => expect(s.held.length).toBe(1));
+        s.held.shift()!();
+        await other;
         expect(s.reads()).toBe(2);
     });
 
-    it('an unreadable store keeps nothing in memory: every ask refuses until it reads, and a change is never written over it', async () => {
+    it('an unreadable store keeps nothing in memory: every ask refuses until it reads, and neither a seed nor a change is written over it', async () => {
         const s = memory({ [dmPeerPinsStoreKey(ME)]: '{not json' });
-        const book = createDmPinBook(s);
-        await expect(book.read(ME)).rejects.toBeInstanceOf(DmPinStoreError);
-        await expect(book.update(ME, (p) => pinAtFirstSight(p, D0, PUPPET, NOW))).rejects.toBeInstanceOf(DmPinStoreError);
+        let seeds = 0;
+        const book = bookOf(s, async () => { seeds++; return () => false; });
+        await expect(book.read(ME, FA)).rejects.toBeInstanceOf(DmPinStoreError);
+        await expect(book.update(ME, FA, (p) => pinAtFirstSight(p, D0, PUPPET, NOW))).rejects.toBeInstanceOf(DmPinStoreError);
         expect(s.data.get(dmPeerPinsStoreKey(ME))).toBe('{not json');
-        s.data.set(dmPeerPinsStoreKey(ME), JSON.stringify({ [D0]: { peer: BEN, since: NOW, by: 'first-seen' } }));
-        expect(dmPinFor(await book.read(ME), D0)?.peer).toBe(BEN);
+        expect(seeds).toBe(0);
+        s.data.set(dmPeerPinsStoreKey(ME), record({ [D0]: { peer: BEN, since: NOW, by: 'first-seen' } }, [FA]));
+        expect(dmPinFor(await book.read(ME, FA), D0)?.peer).toBe(BEN);
+        expect(seeds).toBe(0);
     });
 
     it('a write the storage refuses throws, drops the copy, and the next ask holds what storage holds; the queue goes on', async () => {
-        const s = memory({ [dmPeerPinsStoreKey(ME)]: JSON.stringify({ [D0]: { peer: BEN, since: NOW, by: 'first-seen' } }) });
+        const s = memory({ [dmPeerPinsStoreKey(ME)]: record({ [D0]: { peer: BEN, since: NOW, by: 'first-seen' } }, [FA]) });
         let refuse = true;
-        const book = createDmPinBook({ getItem: s.getItem, setItem: async (k, v) => { if (refuse) throw new Error('disk full'); await s.setItem(k, v); } });
-        await expect(book.update(ME, (p) => pinAtFirstSight(p, D1, PUPPET, NOW))).rejects.toBeInstanceOf(DmPinStoreError);
-        expect(dmPinFor(await book.read(ME), D1)).toBeNull();
+        const book = bookOf({ getItem: s.getItem, setItem: async (k, v) => { if (refuse) throw new Error('disk full'); await s.setItem(k, v); } });
+        await expect(book.update(ME, FA, (p) => pinAtFirstSight(p, D1, PUPPET, NOW))).rejects.toBeInstanceOf(DmPinStoreError);
+        expect(dmPinFor(await book.read(ME, FA), D1)).toBeNull();
         refuse = false;
-        expect(await book.update(ME, (p) => pinAtFirstSight(p, D1, PUPPET, NOW))).toBe(true);
-        expect(Object.keys(stored(s)).sort()).toEqual([D0, D1].sort());
+        expect(await book.update(ME, FA, (p) => pinAtFirstSight(p, D1, PUPPET, NOW))).toBe(true);
+        expect(Object.keys(stored(s).pins).sort()).toEqual([D0, D1].sort());
+        expect(stored(s).seeded).toEqual([FA]);
     });
 
-    it('the update\'s seed sees the rows held when the pins were first found absent, not rows written after that read, even across a refused write; a new run reads again', async () => {
+    it('each file is seeded once, at the first ask with its handle and before it answers: the rows held then, the pins and the file\'s name in one write', async () => {
         const s = memory();
-        let refuse = true;
-        const rows: Array<[string, string]> = [[D0, BEN]];
-        const seen: string[][] = [];
-        const seedWhenNew = async () => {
-            const held = rows.map(([id, pk]) => `${id}:${pk}`);
-            seen.push(held);
-            return (pins: DmPeerPins) => { let c = false; for (const h of held) { const [id, pk] = h.split(':'); if (pinAtFirstSight(pins, id, pk, NOW, undefined, true)) c = true; } return c; };
-        };
-        const book = createDmPinBook({ getItem: s.getItem, setItem: async (k, v) => { if (refuse) throw new Error('disk full'); await s.setItem(k, v); } }, seedWhenNew);
-        await book.read(ME);
-        expect(seen).toEqual([[`${D0}:${BEN}`]]);
-        rows.push([D1, PUPPET]);   // the node's answer, written after the read
-        await expect(book.update(ME, (p) => applyDmListings(p, D1, [[PUPPET]], NOW))).rejects.toBeInstanceOf(DmPinStoreError);
-        refuse = false;
-        expect(await book.update(ME, (p) => applyDmListings(p, D1, [[PUPPET]], NOW))).toBe(true);
-        expect(seen).toHaveLength(1);
-        expect(stored(s)).toEqual({ [D0]: { peer: BEN, since: NOW, by: 'first-seen', checked: true }, [D1]: { peer: PUPPET, since: NOW, by: 'first-seen' } });
-        // A store that holds pins is never seeded; a new run with nothing stored reads the rows again.
+        const writes: string[] = [];
+        const rows: Record<string, Array<[string, string]>> = { [FA]: [[D0, BEN]], [FB]: [[D1, BEN]] };
+        const seen: string[] = [];
+        const book = createDmPinBook<string>({ getItem: s.getItem, setItem: async (k, v) => { writes.push(v); await s.setItem(k, v); } }, (f) => f, async (_me, at, file) => {
+            expect(at).toBe(file);
+            seen.push(file);
+            const held = [...rows[file]];
+            return (pins) => { let c = false; for (const [id, pk] of held) if (pinAtFirstSight(pins, id, pk, NOW, undefined, true)) c = true; return c; };
+        });
+        await Promise.all([book.read(ME, FA), book.read(ME, FA), book.update(ME, FA, () => false)]);   // two readers share one seed
+        expect(seen).toEqual([FA]);
+        expect(writes.map((w) => JSON.parse(w))).toEqual([{ pins: { [D0]: { peer: BEN, since: NOW, by: 'first-seen', checked: true } }, seeded: [FA] }]);
+        rows[FA].push([D1, PUPPET]);   // the node's rows, written in A after the seed: never seeded
+        await book.read(ME, FA);
+        await book.read(ME, FB);       // the other community's file: its own seed, on its own rows
+        expect(seen).toEqual([FA, FB]);
+        expect(stored(s)).toEqual({ pins: { [D0]: { peer: BEN, since: NOW, by: 'first-seen', checked: true }, [D1]: { peer: BEN, since: NOW, by: 'first-seen', checked: true } }, seeded: [FA, FB] });
+        // A new run: both files are in the record, so neither is seeded again; nothing is written by asking.
         book.forget();
-        await book.read(ME);
-        expect(seen).toHaveLength(1);
-        const other = 'ee'.repeat(32);
-        await book.read(other);
-        expect(seen).toHaveLength(2);
+        writes.length = 0;
+        await book.read(ME, FA);
+        await book.read(ME, FB);
+        expect({ seen, writes }).toEqual({ seen: [FA, FB], writes: [] });
+    });
+
+    it('a seed whose write is refused records nothing: the ask throws, the next ask seeds the file again from its rows; a seed that throws writes nothing; a handle with no file is refused', async () => {
+        const s = memory();
+        let refuse = 1;
+        let fail = false;
+        const seen: string[] = [];
+        const book = createDmPinBook<string>({ getItem: s.getItem, setItem: async (k, v) => { if (refuse-- > 0) throw new Error('disk full'); await s.setItem(k, v); } }, (f) => (f === 'none' ? undefined : f), async (_me, _at, file) => {
+            seen.push(file);
+            if (fail) throw new Error('rows unreadable');
+            return (pins) => pinAtFirstSight(pins, D0, BEN, NOW, undefined, true);
+        });
+        await expect(book.read(ME, FA)).rejects.toBeInstanceOf(DmPinStoreError);
+        expect(s.data.has(dmPeerPinsStoreKey(ME))).toBe(false);
+        expect(dmPinFor(await book.read(ME, FA), D0)).toMatchObject({ peer: BEN, checked: true });
+        expect(seen).toEqual([FA, FA]);
+        expect(stored(s).seeded).toEqual([FA]);
+        fail = true;
+        await expect(book.update(ME, FB, (p) => pinAtFirstSight(p, D1, PUPPET, NOW))).rejects.toBeInstanceOf(DmPinStoreError);
+        expect(stored(s)).toEqual({ pins: { [D0]: { peer: BEN, since: NOW, by: 'first-seen', checked: true } }, seeded: [FA] });
+        await expect(book.read(ME, 'none')).rejects.toBeInstanceOf(DmPinStoreError);
     });
 });
 
@@ -286,17 +321,5 @@ describe('first sight judged on the thread (§3.4 amendment): judgeFirstSight, a
         const back = await readDmPeerPins(s, ME);
         expect(dmSightFor(back, D0)).toEqual({ peer: BEN, since: NOW, by: 'first-seen', checked: true, heard: { tryKeys: [OTHER], rekeyedAt: NOW } });
         expect(dmSightFor(back, D1)).toEqual({ unplaced: true, since: NOW, listed: L, heard: { tryKeys: [BEN] } });
-    });
-
-    it('the book says "fresh" only until its first write for the account', async () => {
-        const s = memory();
-        const book = createDmPinBook(s);
-        const seen: boolean[] = [];
-        await book.update(ME, (_p, { fresh }) => { seen.push(fresh); return false; });
-        await book.update(ME, (_p, { fresh }) => { seen.push(fresh); return true; });
-        await book.update(ME, (_p, { fresh }) => { seen.push(fresh); return false; });
-        book.forget();
-        await book.update(ME, (_p, { fresh }) => { seen.push(fresh); return false; });
-        expect(seen).toEqual([true, true, false, false]);
     });
 });

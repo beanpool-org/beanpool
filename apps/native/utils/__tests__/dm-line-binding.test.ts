@@ -24,23 +24,37 @@ const h = vi.hoisted(() => ({
     me: { publicKey: '', privateKey: '' },
 }));
 
+// One database per community file, kept for the file's life, as a phone keeps one file per community (utils/nodes.ts
+// getDatabaseFilenameForNode, chosen by beanpool_anchor_url; db.ts getDb reopens on a switch and runs the schema init).
+// `sql` below is whichever community is active. `onQuery`: a test's hook on a handle's reads (#1872/#1873 confirmation 3).
 vi.mock('expo-sqlite', async () => {
     const { DatabaseSync } = await import('node:sqlite');
-    const sql = new DatabaseSync(':memory:');
-    (globalThis as any).__phoneSql = sql;
+    const dbs = new Map<string, any>();
+    const dbFor = (name: string) => { let d = dbs.get(name); if (!d) dbs.set(name, (d = new DatabaseSync(':memory:'))); return d; };
+    const nameOfUrl = (url: string | null | undefined) => (url && url.includes('castlemaine') ? 'community_castlemaine.db' : 'beanpool_mullum.beanpool.org.db');
+    const phoneDbs = { dbFor, nameOfUrl, dbs, onQuery: null as null | ((file: string, q: string) => void | Promise<void>) };
+    (globalThis as any).__phoneDbs = phoneDbs;
+    (globalThis as any).__phoneSql = new Proxy({}, { get: (_t, p) => { const d = dbFor(nameOfUrl(h.store.get('beanpool_anchor_url'))); const v = (d as any)[p]; return typeof v === 'function' ? v.bind(d) : v; } });
     const params = (p: unknown) => (p === undefined ? [] : Array.isArray(p) ? p : [p]) as any[];
-    const adapter = {
-        runAsync: vi.fn(async (q: string, p?: unknown) => {
-            const r = sql.prepare(q).run(...params(p));
-            return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) };
-        }),
-        execAsync: vi.fn(async (q: string) => { sql.exec(q); }),
-        getAllAsync: vi.fn(async (q: string, p?: unknown) => sql.prepare(q).all(...params(p))),
-        getFirstAsync: vi.fn(async (q: string, p?: unknown) => sql.prepare(q).get(...params(p)) ?? null),
-        closeAsync: vi.fn(async () => {}),
-        withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { await cb(); }),
+    const adapterFor = (name: string) => {
+        const sql = dbFor(name);
+        return {
+            runAsync: vi.fn(async (q: string, p?: unknown) => {
+                const r = sql.prepare(q).run(...params(p));
+                return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) };
+            }),
+            execAsync: vi.fn(async (q: string) => { sql.exec(q); }),
+            getAllAsync: vi.fn(async (q: string, p?: unknown) => {
+                const rows = sql.prepare(q).all(...params(p));
+                if (phoneDbs.onQuery) await phoneDbs.onQuery(name, q);
+                return rows;
+            }),
+            getFirstAsync: vi.fn(async (q: string, p?: unknown) => sql.prepare(q).get(...params(p)) ?? null),
+            closeAsync: vi.fn(async () => {}),
+            withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { await cb(); }),
+        };
     };
-    return { openDatabaseAsync: vi.fn(async () => adapter) };
+    return { openDatabaseAsync: vi.fn(async (name: string) => adapterFor(name)) };
 });
 vi.mock('expo-file-system/legacy', async () => {
     const nodeFs = await import('node:fs');
@@ -70,7 +84,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID, getRandomBytes: (n: number) => new Uint8Array(n) }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
-vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn().mockReturnValue('beanpool_mullum.beanpool.org.db'), addSavedNode: vi.fn(async () => {}) }));
+vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn((url: string | null) => (url && url.includes('castlemaine') ? 'community_castlemaine.db' : 'beanpool_mullum.beanpool.org.db')), addSavedNode: vi.fn(async () => {}) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
@@ -210,14 +224,27 @@ async function phoneOf(who: Person, opts: { keepPhotos?: boolean } = {}): Promis
  */
 const restarted = () => _resetDmPeerPinsForTests();
 
+/** The community file the tests' anchor (mullum) opens: the held lines' key names it (§3.4 amendment 5). */
+const FILE_A = 'beanpool_mullum.beanpool.org.db';
+
 /**
- * The phone as a build without pins left it, or a restored one: no pin store, and none of the lines the update held
- * (db.ts keeps them beside the pins, written only by a build with pins).
+ * The phone as a build without pins left it, or a restored one: no pin store (nor its record of the files seeded), and
+ * none of the lines the update held in any community file (db.ts keeps them beside the pins, written only by a build
+ * with pins).
  */
 const noPinStore = (who: Person) => {
     h.store.delete(dmPeerPinsStoreKey(who.publicKey));
-    h.store.delete(dmLinesAtUpdateStoreKey(who.publicKey));
+    for (const k of [...h.store.keys()]) if (k.startsWith(`${dmLinesAtUpdateStoreKey(who.publicKey, '')}`)) h.store.delete(k);
 };
+
+/** One account's stored pins, { conversation id → pin } (the stored value is { pins, seeded }: §3.4 amendment 5). */
+const storedPins = (who: Person): Record<string, any> => JSON.parse(h.store.get(dmPeerPinsStoreKey(who.publicKey)) ?? '{"pins":{}}').pins;
+/** Change one account's stored pins behind the app's back (what slice 2's Continue writes, a pin lost), the record kept. */
+function editStoredPins(who: Person, change: (pins: Record<string, any>) => void): void {
+    const value = JSON.parse(h.store.get(dmPeerPinsStoreKey(who.publicKey))!);
+    change(value.pins);
+    h.store.set(dmPeerPinsStoreKey(who.publicKey), JSON.stringify(value));
+}
 
 /** Send a line from the phone in hand, through the real send path, and wait for the node to have it. */
 async function says(who: Person, conv: Conv, text: string): Promise<Line> {
@@ -1058,7 +1085,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
     let puppet: Person;
     beforeEach(() => { puppet = person('Puppet'); });
     const PINS = (who: Person) => dmPeerPinsStoreKey(who.publicKey);
-    const pinOf = (who: Person, id: string) => (JSON.parse(h.store.get(PINS(who)) ?? '{}') as Record<string, any>)[id.toLowerCase()] ?? null;
+    const pinOf = (who: Person, id: string) => storedPins(who)[id.toLowerCase()] ?? null;
     const rowsOf = (id: string) => (sql.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(id) as any).n as number;
     const participantsOf = (id: string) => (sql.prepare('SELECT public_key FROM conversation_participants WHERE conversation_id = ?').all(id) as any[]).map((r) => r.public_key).sort();
 
@@ -1252,9 +1279,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         dm.participants = [ana.publicKey, benNew.publicKey];
         for (const l of node.lines) if (l.authorPubkey === ben.publicKey) l.authorPubkey = benNew.publicKey;
         // What slice 2's "Continue with the new key" writes: the new key pinned, the old one kept as former.
-        const pins = JSON.parse(h.store.get(PINS(ana))!);
-        pins[dm.id.toLowerCase()] = { peer: benNew.publicKey, since: new Date().toISOString(), by: 'member', former: [ben.publicKey] };
-        h.store.set(PINS(ana), JSON.stringify(pins));
+        editStoredPins(ana, (pins) => { pins[dm.id.toLowerCase()] = { peer: benNew.publicKey, since: new Date().toISOString(), by: 'member', former: [ben.publicKey] }; });
         restarted();
         for (const t of ['messages', 'conversation_participants', 'conversations']) sql.exec(`DELETE FROM ${t}`);
         expect((await shows(dm)).map((l) => l.text)).toEqual(['Shall I cancel the order?', 'No']);
@@ -1286,7 +1311,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         getItem.mockClear(); setItem.mockClear();
         await syncMessages(ana.publicKey);
         expect(counts()).toEqual({ gets: 1, sets: 1 });   // 700 DMs pinned at first sight, in one write
-        expect(Object.keys(JSON.parse(h.store.get(PINS(ana))!)).length).toBe(701);   // and Ana and Ben's DM from beforeEach
+        expect(Object.keys(storedPins(ana)).length).toBe(701);   // and Ana and Ben's DM from beforeEach
         getItem.mockClear(); setItem.mockClear();
         await syncMessages(ana.publicKey);
         expect(counts()).toEqual({ gets: 0, sets: 0 });   // nothing changed: held in memory, not read again, not written
@@ -1297,7 +1322,7 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
     let puppet: Person;
     beforeEach(() => { puppet = person('Puppet'); });
     const PINS = (who: Person) => dmPeerPinsStoreKey(who.publicKey);
-    const pinOf = (who: Person, id: string) => (JSON.parse(h.store.get(PINS(who)) ?? '{}') as Record<string, any>)[id.toLowerCase()] ?? null;
+    const pinOf = (who: Person, id: string) => storedPins(who)[id.toLowerCase()] ?? null;
     /** Ana's line as PUPPET opens it, or null. */
     const puppetReads = (l: Line) => {
         try {
@@ -1422,9 +1447,7 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
     it('a pin lost from storage while the app runs (a write from an older copy) is taken again from the phone\'s rows at the next start, not from the listing', async () => {
         await aQuestionAndAnAnswer();
         await phoneOf(ana);
-        const pins = JSON.parse(h.store.get(PINS(ana))!);
-        delete pins[dm.id.toLowerCase()];
-        h.store.set(PINS(ana), JSON.stringify(pins));
+        editStoredPins(ana, (pins) => { delete pins[dm.id.toLowerCase()]; });
         restarted();
         dm.participants = [ana.publicKey, puppet.publicKey];
         puppetSays(dm, 'New phone. What is the code?');
@@ -1514,7 +1537,7 @@ describe('the update seed holds whoever writes the pins first (#1872/#1873 confi
     let dan: Person;
     beforeEach(() => { puppet = person('Puppet'); dan = person('Dan'); });
     const PINS = (who: Person) => dmPeerPinsStoreKey(who.publicKey);
-    const pinOf = (who: Person, id: string) => (JSON.parse(h.store.get(PINS(who)) ?? '{}') as Record<string, any>)[id.toLowerCase()] ?? null;
+    const pinOf = (who: Person, id: string) => storedPins(who)[id.toLowerCase()] ?? null;
     const puppetReads = (l: Line) => {
         try {
             return phoneCrypto.openDmLine({ ciphertext: l.ciphertext, nonce: l.nonce }, { myEdPrivHex: puppet.privateKey, peerEdPubHex: ana.publicKey },
@@ -1591,7 +1614,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
     let k2: Person;
     beforeEach(() => { puppet = person('Puppet'); k2 = person('Ben on a new phone'); });
     const PINS = (who: Person) => dmPeerPinsStoreKey(who.publicKey);
-    const pinOf = (who: Person, id: string) => (JSON.parse(h.store.get(PINS(who)) ?? '{}') as Record<string, any>)[id.toLowerCase()] ?? null;
+    const pinOf = (who: Person, id: string) => storedPins(who)[id.toLowerCase()] ?? null;
     const rowsIn = (id: string) => (sql.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(id) as any).n as number;
     /** Ana's line as `who` opens it, or null. */
     const opensFor = (who: Person, l: Line) => {
@@ -1688,9 +1711,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(shape(pinOf(ana, dm.id))).toEqual(puppetCase);   // the two differ only in the member's tap
         expect(await sendTo(dm.id, 'Hello?', [k2, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
         // "Continue with the new key" (slice 2's acceptOfferedPeer), as it writes the pin:
-        const pins = JSON.parse(h.store.get(PINS(ana))!);
-        pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] };
-        h.store.set(PINS(ana), JSON.stringify(pins));
+        editStoredPins(ana, (pins) => { pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] }; });
         restarted();
         expect(await texts(dm.id)).toEqual(['Shall I cancel the order?', 'No', 'New phone. Still on for Saturday?']);
         expect(await sendTo(dm.id, 'Yes, Saturday', [k2, ben])).toEqual({ err: null, posts: 1, rowsAdded: 1, readBy: ['Ben on a new phone'] });
@@ -1808,9 +1829,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         await p14();
         expect(await isDmKeyChangePending(dm.id)).toBe(true);
         expect((await lineMarks(dm.id))[2]).toEqual({ text: NOT_VERIFIED, offered: true });
-        const pins = JSON.parse(h.store.get(PINS(ana))!);
-        pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] };
-        h.store.set(PINS(ana), JSON.stringify(pins));
+        editStoredPins(ana, (pins) => { pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] }; });
         restarted();
         expect(await lineMarks(dm.id)).toEqual([
             { text: 'Shall I cancel the order?', offered: false },
@@ -2014,9 +2033,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(await isDmKeyChangePending(dm.id)).toBe(true);
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: k2.publicKey, firstSight: true, nodeSays: { rekeyedAt: '2026-10-03T00:00:00.000Z' } } });
         expect(await sendTo(dm.id, 'See you Saturday', [k2, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
-        const pins = JSON.parse(h.store.get(PINS(ana))!);
-        pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] };
-        h.store.set(PINS(ana), JSON.stringify(pins));
+        editStoredPins(ana, (pins) => { pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] }; });
         restarted();
         expect(await texts(dm.id)).toEqual(['Shall I cancel the order?', 'No', 'K2 line 0', 'K2 line 1', 'K2 line 2']);
         expect(await sendTo(dm.id, 'See you Saturday', [k2, ben])).toEqual({ err: null, posts: 1, rowsAdded: 1, readBy: ['Ben on a new phone'] });
@@ -2296,7 +2313,7 @@ describe('the update\'s memory holds past the first pass and the first run (#187
             return answer(r.status, { ...(await r.json()), deletedAccounts: deleted });
         };
     });
-    const pinOf = (id: string) => (JSON.parse(h.store.get(dmPeerPinsStoreKey(ana.publicKey)) ?? '{}') as Record<string, any>)[id.toLowerCase()] ?? null;
+    const pinOf = (id: string) => storedPins(ana)[id.toLowerCase()] ?? null;
     const opensFor = (who: Person, l: Line) => {
         try {
             return phoneCrypto.openDmLine({ ciphertext: l.ciphertext, nonce: l.nonce }, { myEdPrivHex: who.privateKey, peerEdPubHex: ana.publicKey },
@@ -2390,7 +2407,7 @@ describe('the update\'s memory holds past the first pass and the first run (#187
     it('the pins lost after the update (a write that failed), the node\'s copies synced over the held lines in between: the next seed keeps the update\'s held lines, never re-taken from the node\'s, nothing goes', async () => {
         await heldThenUpdate(true, [ana, ben, puppet]);
         await syncMessages(ana.publicKey);   // the update's run: listed with several keys, not judged; the held lines kept
-        const kept = h.store.get(dmLinesAtUpdateStoreKey(ana.publicKey));
+        const kept = h.store.get(dmLinesAtUpdateStoreKey(ana.publicKey, FILE_A));
         expect(kept).toBeTruthy();
         restarted();
         for (const l of node.lines.filter((x) => x.conversationId === dm.id)) {
@@ -2403,7 +2420,7 @@ describe('the update\'s memory holds past the first pass and the first run (#187
         restarted();
         dm.participants = [ana.publicKey, puppet.publicKey];
         await syncMessages(ana.publicKey);
-        expect(h.store.get(dmLinesAtUpdateStoreKey(ana.publicKey))).toBe('{}');   // judged on them and pinned: dropped in that write
+        expect(h.store.get(dmLinesAtUpdateStoreKey(ana.publicKey, FILE_A))).toBe('{}');   // judged on them and pinned: dropped in that write
         expect(await isDmKeyChangePending(dm.id)).toBe(true);
         expect(pinOf(dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
         expect(await sendTo(dm.id, 'The code is 4821')).toEqual(paused);
@@ -2412,7 +2429,7 @@ describe('the update\'s memory holds past the first pass and the first run (#187
     it('the update\'s run can\'t read the held-lines store: nothing is written over what it holds, and this run judges on the lines the phone holds now', async () => {
         await heldThenUpdate(false, [ana, puppet]);
         sealed(puppet, ana, dm, 'New phone, same Ben. What is the door code?');
-        const LINES = dmLinesAtUpdateStoreKey(ana.publicKey);
+        const LINES = dmLinesAtUpdateStoreKey(ana.publicKey, FILE_A);
         h.store.set(LINES, '{}');   // what an earlier run kept, unreadable now
         const getItem = vi.mocked(AsyncStorage.getItem);
         const real = getItem.getMockImplementation()!;
@@ -2431,7 +2448,7 @@ describe('the update\'s memory holds past the first pass and the first run (#187
     });
 
     // §3.4 amendment 4: the record, its removal, a write that fails, and a key that arrives later.
-    const LINES = () => dmLinesAtUpdateStoreKey(ana.publicKey);
+    const LINES = () => dmLinesAtUpdateStoreKey(ana.publicKey, FILE_A);
     const stored = () => JSON.parse(h.store.get(LINES()) ?? 'null') as Record<string, any[]> | null;
     const failingSet = (key: () => string, times = Infinity) => {
         const setItem = vi.mocked(AsyncStorage.setItem);
@@ -2568,7 +2585,7 @@ describe('the update\'s memory holds past the first pass and the first run (#187
         expect(await sendTo(dm.id, 'The code is 4821')).toEqual(paused);
     });
 
-    it('P29 1,000 DMs the rows don\'t pin, 40 lines each, at the update: the write is too big for the store (6 MB), so each is marked heldLost; none is read, and the one listed cleanly is still judged in that run', async () => {
+    it('P29 1,000 DMs the rows don\'t pin, 40 lines each, at the update: over the 1 MB cap (amendment 5; the 6 MB store would also refuse), so no write is tried and each is marked heldLost; none is read, and the one listed cleanly is still judged in that run', async () => {
         const tpl = Array.from({ length: 40 }, (_, i) => phoneCrypto.sealDmLine(`Can you pick up the bread on your way home? I'll pay you back tomorrow, ${i}.`,
             { myEdPrivHex: ben.privateKey, peerEdPubHex: ana.publicKey, conversationId: dm.id } as any,
             { senderPubHex: ben.publicKey, messageId: randomUUID(), part: 'body', after: null, replyToId: null } as any));
@@ -2593,11 +2610,8 @@ describe('the update\'s memory holds past the first pass and the first run (#187
             return real(k, v);
         });
         try { await syncMessages(ana.publicKey); } finally { setItem.mockImplementation(real); }
-        expect(tried.length).toBe(1);
-        expect(tried[0]).toBeGreaterThan(6 * 1024 * 1024);
-        console.log(`[P29 size] 1,000 DMs: ${tried[0]} bytes, ${Math.round(tried[0] / 1000)} a DM, ${Math.round(tried[0] / (999 * 40 + 5))} a line`);
-        const pins = JSON.parse(h.store.get(dmPeerPinsStoreKey(ana.publicKey))!);
-        expect(Object.values(pins).filter((p: any) => p.heldLost === true).length).toBe(999);
+        expect(tried).toEqual([]);   // over the cap: never written (round 6 measured this write at ~16 KB a DM, over 6 MB in all)
+        expect(Object.values(storedPins(ana)).filter((p: any) => p.heldLost === true).length).toBe(999);
         expect(h.store.has(LINES())).toBe(false);
         expect(pinOf(dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
         expect(await sendTo(dm.id, 'The code is 4821')).toEqual(paused);
@@ -2627,9 +2641,7 @@ describe('the update\'s memory holds past the first pass and the first run (#187
             expect(await isDmKeyChangePending(dm.id)).toBe(true);
             expect(pinOf(dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: k2.publicKey, firstSight: true, nodeSays: { rekeyedAt: '2026-10-03T00:00:00.000Z' } } });
             expect(h.store.get(LINES())).toBe('{}');
-            const pins = JSON.parse(h.store.get(dmPeerPinsStoreKey(ana.publicKey))!);
-            pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] };
-            h.store.set(dmPeerPinsStoreKey(ana.publicKey), JSON.stringify(pins));
+            editStoredPins(ana, (pins) => { pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] }; });
             restarted();
             expect((await getMessages(dm.id)).map((m: any) => m.text)).toEqual([anaToo ? 'This message was deleted' : 'Shall I cancel the order?', 'K2 wrote over it']);
         });

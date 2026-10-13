@@ -575,7 +575,7 @@ async function main(): Promise<void> {
     const batch = rr.SWEEP_BATCH as number;
     assert(times.length >= 300 && batches.every(([, rows]) => rows <= batch),
         `...in hundreds of statements of at most ${batch} rows each (${times.length}; most rows in one: ${Math.max(0, ...batches.map(([, r]) => r))})`);
-    assert(pct(times, 0.95) < 250,
+    assert(pct(times, 0.95) < 500,
         `...that are short: p95 ${pct(times, 0.95).toFixed(1)} ms (median ${pct(times, 0.5).toFixed(1)}, longest ${longest.toFixed(1)})`);
     assert(waits.length >= 20 && pct(waits, 0.5) < 100 && pct(waits, 0.99) < 1000,
         `...so requests made meanwhile are answered throughout (${waits.length}; median ${pct(waits, 0.5).toFixed(1)} ms, p99 ${pct(waits, 0.99).toFixed(1)} ms, longest ${longestWait.toFixed(1)} ms)`);

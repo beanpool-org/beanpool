@@ -27,8 +27,10 @@ export const OAUTH_SCOPE = 'agent';
 /**
  * Registrations not yet used for a grant: at most this many at once, and this many from one address (its limiter key:
  * an IPv6 /64 is one), each gone after an hour. Full, the oldest unopened one makes room; none unopened → 429.
+ * 1,000 is 100 addresses' 10 each (under 1 MB): opening a page is something a client does to its own registration, so
+ * at 100 a mere 10 addresses could hold the door shut for an hour (#1881 confirmation, finding 1).
  */
-export const OAUTH_PENDING_MAX = 100;
+export const OAUTH_PENDING_MAX = 1000;
 export const OAUTH_PENDING_PER_ADDRESS = 10;
 export const OAUTH_PENDING_TTL_MS = 60 * 60_000;
 /** New registrations per client address per minute (as a pairing's creation is braked). */

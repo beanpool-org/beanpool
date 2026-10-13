@@ -14,7 +14,7 @@ related: privacy, notifications, the-bean, web-app
 - **Light:** always light. This is how the app starts.
 - **Dark:** always dark.
 
-There is one set of colours for light and one for dark. The buttons, badges and words are chosen so they stay easy to read in bright sun and on a small screen.
+There is one set of colours for light and one for dark.
 
 The map has its own light and dark button, on the left of the map.
 

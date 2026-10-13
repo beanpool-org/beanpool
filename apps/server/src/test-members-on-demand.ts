@@ -86,7 +86,7 @@ function note(line: string): void {
     if (process.env.MEMBERS_ON_DEMAND_REPORT) fs.appendFileSync(process.env.MEMBERS_ON_DEMAND_REPORT, line + '\n');
 }
 
-const p95 = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(xs.length * 0.95))];
+const p95 = (xs: number[]) => xs.length === 0 ? Infinity : [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(xs.length * 0.95))];
 
 let seedState = 0x5eed;
 function rand(): number {
@@ -263,9 +263,10 @@ async function main() {
     const prepare = db.prepare.bind(db);
     let searchSql = '';
     (db as any).prepare = (sql: string) => { if (sql.includes('lower(callsign) >=')) searchSql = sql; return prepare(sql); };
-    se.searchMemberDirectoryRows('ab', 20);
+    // Absent on a server from before the search (origin/main, fail-first): the plan check then fails, and the suite goes on.
+    (se as any).searchMemberDirectoryRows?.('ab', 20);
     (db as any).prepare = prepare;
-    const plan = (prepare(`EXPLAIN QUERY PLAN ${searchSql}`).all({ p: 'ab', like: 'ab%', limit: 20 }) as Array<{ detail: string }>).map(r => r.detail).join(' | ');
+    const plan = !searchSql ? '(no search statement)' : (prepare(`EXPLAIN QUERY PLAN ${searchSql}`).all({ p: 'ab', like: 'ab%', limit: 20 }) as Array<{ detail: string }>).map(r => r.detail).join(' | ');
     assert(!!searchSql && plan.includes('idx_members_callsign_unique') && !/SCAN members\b(?! USING)/.test(plan), `the search's plan searches idx_members_callsign_unique (${plan})`);
 
     // ── 4. lat&lng&limit= ──
@@ -440,7 +441,8 @@ async function main() {
         // ×3 where the machine is busier than half its cores (the design's allowance for the droplet).
         if (t.load > os.cpus().length / 2) slack = 3;
         note(`   round ${r}: load ${t.load.toFixed(1)} on ${os.cpus().length} cores; p95 q ${t.q.toFixed(2)} ms, keys ${t.keys.toFixed(2)} ms, near ${t.near.toFixed(2)} ms`);
-        if (best.q <= 5 && best.keys <= 5 && best.near <= 20) break;
+        // A round whose forms did not answer as asked (a server from before them) is not taken again.
+        if (!t.all || (best.q <= 5 && best.keys <= 5 && best.near <= 20)) break;
     }
     const load = os.loadavg().map(x => x.toFixed(1)).join(' ');
     assert(best.all && best.q <= 5 * slack, `q at ${W.size + 30_000} members: p95 ${best.q.toFixed(2)} ms ≤ ${5 * slack} ms (load ${load})`);

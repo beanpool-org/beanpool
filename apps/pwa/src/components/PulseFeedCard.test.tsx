@@ -81,6 +81,9 @@ describe('PulseFeedCard Report', () => {
         expect(screen.getByRole('dialog')).toBeInTheDocument();
         expect(screen.getByText(/Report GreenThumb's post/)).toBeInTheDocument();
 
+        // No reason is picked until the member chooses one (review of #1912), so Submit is off until then.
+        expect(screen.getByRole('button', { name: 'Submit Report' })).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Spam or scam' }));
         fireEvent.click(screen.getByRole('button', { name: 'Submit Report' }));
         await waitFor(() => expect(reportAbuse).toHaveBeenCalledTimes(1));
         expect(reportAbuse).toHaveBeenCalledWith('pubkey-viewer', 'pubkey-owner', 'Spam or scam', undefined, 'pulse-123');

@@ -174,6 +174,7 @@ export const SUITES = [
     'test-automation-tokens',
     'test-admin-mcp',
     'test-admin-mcp-settings',
+    'test-admin-mcp-suggestions',
     'test-settings-qr-signin',
     'test-challenge-token-leak',
     'test-moderator-routes',

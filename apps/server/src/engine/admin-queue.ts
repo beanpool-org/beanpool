@@ -13,6 +13,7 @@ import { getShutdownStatus } from './shutdown-recovery.js';
 import { decisionsOn } from '../decisions-engine.js';
 import { standbyIncidentOpen } from '../services/standby-health.js';
 import { serverAlertCount } from '../services/alerts.js';
+import { suggestionCountFor } from '../agent/suggestions.js';
 
 /**
  * Where an item is handled in /settings. The manager maps each id to a tab (and sub-tab); the id is
@@ -21,7 +22,8 @@ import { serverAlertCount } from '../services/alerts.js';
 export const ADMIN_SETTINGS_SECTIONS = ['home', 'moderation', 'disputes', 'decisions'] as const;
 export type AdminSettingsSection = typeof ADMIN_SETTINGS_SECTIONS[number];
 
-export type AdminQueueKind = 'reports' | 'disputes' | 'suspensions' | 'removals' | 'unclean_shutdown' | 'standby' | 'server_alert';
+export type AdminQueueKind = 'reports' | 'disputes' | 'suspensions' | 'removals' | 'unclean_shutdown' | 'standby' | 'server_alert'
+    | 'agent_suggestions';
 
 export interface AdminQueueItem {
     kind: AdminQueueKind;
@@ -55,9 +57,10 @@ const OWNER_QUEUE_KINDS: ReadonlySet<AdminQueueKind> = new Set(['standby', 'serv
 
 /**
  * `forModerator`: only what a moderator can act on, so their badge never counts work they cannot open. `forOwner`: the
- * asker is an owner, who alone is told when the standby needs them (services/standby-health.ts).
+ * asker is an owner, who alone is told when the standby needs them (services/standby-health.ts). `forMember`: the
+ * asker's key, whose own AI assistant's suggestions wait for them alone to approve (agent/suggestions.ts); none without it.
  */
-export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean } = {}): AdminQueue {
+export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean; forMember?: string | null } = {}): AdminQueue {
     const shutdown = getShutdownStatus();
     const raw: Array<Omit<AdminQueueItem, 'settingsPath'>> = [
         {
@@ -109,6 +112,13 @@ export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean
             count: opts.forOwner ? serverAlertCount() : 0,
             label: 'This server has alerts',
             section: 'home',
+        },
+        {
+            kind: 'agent_suggestions',
+            // The asker's own assistant's suggestions: a count, never the report or the assistant's words (admin MCP design §5).
+            count: opts.forMember ? suggestionCountFor(opts.forMember) : 0,
+            label: 'Suggestions from your AI assistant to approve',
+            section: 'moderation',
         },
     ];
     const items = raw

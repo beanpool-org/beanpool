@@ -35,6 +35,11 @@ export interface DmPeerOffer {
     at: string;
     /** What the node says happened (slice 3: a verified re-key date). Only ever wording for the banner. */
     nodeSays?: { rekeyedAt: string };
+    /**
+     * Offered by first sight on this thread's own lines (§3.4 amendment, rules 3-4: a restored phone, or a DM the update
+     * met with two keys in its rows), not by a sync against a pin: the banner opens with the restored-phone sentence.
+     */
+    firstSight?: true;
 }
 
 export interface DmPeerPin {
@@ -155,6 +160,7 @@ function pinOf(raw: unknown): DmPinEntry | null {
         const offered: DmPeerOffer = { peer: pinKeyOf(o.peer), at: typeof o.at === 'string' ? o.at : '' };
         const says = o.nodeSays as Record<string, unknown> | undefined;
         if (says && typeof says.rekeyedAt === 'string') offered.nodeSays = { rekeyedAt: says.rekeyedAt };
+        if (o.firstSight === true) offered.firstSight = true;
         pin.offered = offered;
     }
     if (r.checked === true) pin.checked = true;
@@ -358,7 +364,7 @@ export function applySightVerdict(pins: DmPeerPins, conversationId: string, verd
     }
     const pin: DmPeerPin = { peer: verdict.pin, since: now, by: 'first-seen', checked: true };
     if (verdict.offer && listed !== verdict.pin) {
-        pin.offered = { peer: listed, at: now };
+        pin.offered = { peer: listed, at: now, firstSight: true };
         if (heard?.rekeyedAt) pin.offered.nodeSays = { rekeyedAt: heard.rekeyedAt };
     }
     setPin(pins, id, pin);
@@ -421,8 +427,10 @@ function applyDmListingsTo(pin: DmPeerPin, named: string[][], now: string, heard
     const peer = without.length === 1 ? without[0] : null;
     const rekeyedAt = peer && named.length === 1 ? heard?.rekeyedAt : undefined;
     if (pin.offered && pin.offered.peer === peer && pin.offered.nodeSays?.rekeyedAt === rekeyedAt) return false;
-    pin.offered = { peer, at: pin.offered?.peer === peer ? pin.offered.at : now };
+    const same = pin.offered?.peer === peer ? pin.offered : undefined;
+    pin.offered = { peer, at: same ? same.at : now };
     if (rekeyedAt) pin.offered.nodeSays = { rekeyedAt };
+    if (same?.firstSight) pin.offered.firstSight = true;
     return true;
 }
 

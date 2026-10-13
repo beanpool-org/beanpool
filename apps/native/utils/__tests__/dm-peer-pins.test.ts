@@ -207,7 +207,7 @@ describe('first sight judged on the thread (§3.4 amendment): judgeFirstSight, a
         expect(dmSightFor(p, D0)).not.toHaveProperty('stale');
         applyDmListings(p, D0, [[L]], NOW, { tryKeys: [BEN], rekeyedAt: NOW });
         expect(applySightVerdict(p, D0, { rule: 4, pin: BEN, offer: true }, L, { tryKeys: [BEN], rekeyedAt: NOW }, NOW)).toBe(true);
-        expect(dmPinFor(p, D0)).toEqual({ peer: BEN, since: NOW, by: 'first-seen', checked: true, offered: { peer: L, at: NOW, nodeSays: { rekeyedAt: NOW } } });
+        expect(dmPinFor(p, D0)).toEqual({ peer: BEN, since: NOW, by: 'first-seen', checked: true, offered: { peer: L, at: NOW, firstSight: true, nodeSays: { rekeyedAt: NOW } } });
     });
 
     it('a checked pin or one the member chose is never judged again; an unchecked one is, and a send settles it', () => {

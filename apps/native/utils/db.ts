@@ -4544,6 +4544,20 @@ export async function isDmKeyChangePending(conversationId: string): Promise<bool
 }
 
 /**
+ * True when first sight found lines in this DM it couldn't place (§3.4 amendment, rule 5): no key is pinned and every send
+ * is refused as not locked, so the DM screen shows rule 5's line in the composer. Read after isDmKeyChangePending (whose
+ * check judges first sight); false when the pins can't be read (a send then says that itself).
+ */
+export async function isDmUnplaced(conversationId: string): Promise<boolean> {
+    try {
+        const me = (await loadIdentity())?.publicKey;
+        return !!me && isUnplacedSight(dmSightFor(await dmPins.read(me), conversationId));
+    } catch {
+        return false;
+    }
+}
+
+/**
  * What a DM line is sealed to besides its conversation (e2e-crypto, format 3): who sends it, under which message id the
  * node will store it, which part of the message it is, and the line it is written after.
  */

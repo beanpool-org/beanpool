@@ -77,7 +77,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, _resetDmPeerPinsForTests } from '../db';
+import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice } from '../dm-lock';
 import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
@@ -1542,12 +1542,14 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
     it('P13: R2 exactly (restored phone, [Ana, PUPPET], Ben\'s lines, then one PUPPET line): Ben is the pin, PUPPET only offered; nothing goes', async () => {
         await p13();
         expect(await isDmKeyChangePending(dm.id)).toBe(true);
-        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, by: 'first-seen', checked: true, offered: { peer: puppet.publicKey } });
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, by: 'first-seen', checked: true, offered: { peer: puppet.publicKey, firstSight: true } });
+        expect(await isDmUnplaced(dm.id)).toBe(false);
         expect(await sendTo(dm.id, 'The code is 4821', [puppet])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
         const shown = await texts(dm.id);
         expect(shown.slice(0, 2)).toEqual(['Shall I cancel the order?', 'No']);
         expect(shown[2]).toBe(NOT_VERIFIED);
         for (let pass = 0; pass < 3; pass++) await syncMessages(ana.publicKey);
+        expect(pinOf(ana, dm.id).offered).toMatchObject({ peer: puppet.publicKey, firstSight: true });   // the sync keeps the banner's wording
         expect(await sendTo(dm.id, 'Is that you, Ben?', [puppet])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
     });
 
@@ -1589,10 +1591,12 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(await sendTo(dm.id, 'Hello?', [k2, ben, puppet])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
         expect(pinOf(ana, dm.id)).toMatchObject({ unplaced: true, listed: k2.publicKey });
         expect(pinOf(ana, dm.id).peer).toBeUndefined();
+        expect(await isDmUnplaced(dm.id)).toBe(true);
         dm.formerKeys = { [k2.publicKey]: [makeKeySuccession({ newEdPrivHex: k2.privateKey, oldPubHex: ben.publicKey, at: '2026-10-03T00:00:00.000Z' })] };
         await syncMessages(ana.publicKey);
         expect(await isDmKeyChangePending(dm.id)).toBe(true);
-        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: k2.publicKey, nodeSays: { rekeyedAt: '2026-10-03T00:00:00.000Z' } } });
+        expect(await isDmUnplaced(dm.id)).toBe(false);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: k2.publicKey, firstSight: true, nodeSays: { rekeyedAt: '2026-10-03T00:00:00.000Z' } } });
         expect(await sendTo(dm.id, 'Hello?', [k2, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
     });
 

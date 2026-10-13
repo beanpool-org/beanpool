@@ -1,0 +1,439 @@
+/**
+ * Admin MCP, slice S2 (scratch/global-node/DESIGN-admin-mcp-fable.md §2, §11 S2, appendix point 4): an owner or an admin
+ * connects an AI assistant through OAuth, approving on their PHONE. End to end with the official TypeScript MCP SDK's
+ * OAuth client over REAL HTTPS through the real Koa middleware; nothing here contacts anything but the server it starts.
+ *
+ *   1. Metadata: the protected resource names /mcp and this node as its authorization server; the server's metadata has
+ *      issuer = the node's URL, S256 only, scope agent, public clients only. /mcp's 401 names the resource metadata.
+ *   2. The SDK client end to end, as an ADMIN: register → the consent page (the assistant's name never alone: the host its
+ *      answers go to beside it) → the phone looks (it is told the name AND the host) → an app that cannot show it is
+ *      refused (426) → the phone signs → number match on the page → code → token → tools/list. No Settings session is made.
+ *      The owners are told (sec.agent). Settings lists the grant (with the host) for that admin; another admin sees none.
+ *   3. Refused: no PKCE, `plain` PKCE, a redirect it did not register (no redirect at all, a page), a wrong resource (at
+ *      authorize and at token), a wrong verifier, a moderator's approval; a reused code → refused AND the grant it made is
+ *      revoked (its access token 401), the owners told (high).
+ *   4. Refresh rotates: the new access token works, the old one is dead; the spent refresh token presented again → refused,
+ *      the grant revoked, the owners told (high).
+ *   5. Revoke (RFC 7009) → 401; Disconnect in Settings → 401; the member demoted → 401 and no refresh.
+ *   6. An OAuth access token reaches /mcp and nothing else.
+ *   7. Registration bounds: the 101st pending → 429; an unused registration is gone after an hour; only https or localhost.
+ *   8. A standby's copy holds no grants (per-server field, left out of every backup file).
+ *   9. The owners' switch off → 404 on every OAuth endpoint and /mcp.
+ *
+ * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-admin-mcp-oauth" node ../../scripts/run-server-suites.mjs
+ */
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+delete process.env.CF_RECORD_NAME;
+delete process.env.NODE_PROFILE;
+for (const k of Object.keys(process.env)) if (k.startsWith('BACKUP_OFFBOX_')) delete process.env[k];
+
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
+import { audienceOf, signSettingsSignin } from '@beanpool/core';
+import { initTls } from './services/tls.js';
+import { initStateEngine, seedGenesisMember } from './state-engine.js';
+import { updateLocalConfig, getLocalConfig, redactLocalConfig } from './config/local-config.js';
+import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
+import { pruneAuthAttempts } from './auth-rate-limit.js';
+import { resetPairingsForTests } from './settings-signin-pairing.js';
+import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
+import { db } from './db/db.js';
+import { setSecurityAlertHandler } from './services/security-signal.js';
+import { OAUTH_PENDING_MAX, OAUTH_PENDING_TTL_MS, registerClient, resetOAuthForTests } from './agent/oauth.js';
+
+let BASE = '';
+let HOST = '';
+let run = 0, passed = 0;
+function assert(cond: boolean, msg: string): void {
+    run++;
+    if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); process.exitCode = 1; }
+}
+
+interface Reply { status: number; body: any; text: string; headers: Headers }
+async function call(method: string, p: string, opts: { body?: unknown; form?: Record<string, string>; headers?: Record<string, string> } = {}): Promise<Reply> {
+    const headers: Record<string, string> = { ...(opts.headers || {}) };
+    let body: string | undefined;
+    if (opts.form) { headers['Content-Type'] = 'application/x-www-form-urlencoded'; body = new URLSearchParams(opts.form).toString(); }
+    else if (opts.body !== undefined) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(opts.body); }
+    const res = await fetch(p.startsWith('http') ? p : `${BASE}${p}`, { method, headers, body, redirect: 'manual' });
+    const text = await res.text();
+    let parsed: any = null;
+    try { parsed = JSON.parse(text); } catch { /* not json */ }
+    return { status: res.status, body: parsed, text, headers: res.headers };
+}
+const show = (r: Reply) => `${r.status} ${r.text.slice(0, 200)}`;
+const bearer = (t: string): Record<string, string> => ({ Authorization: `Bearer ${t}` });
+const MCP_HEADERS = { Accept: 'application/json, text/event-stream' };
+const rpc = (method: string, id = 1, params: unknown = {}) => ({ jsonrpc: '2.0', id, method, params });
+
+interface Key { pub: string; priv: crypto.KeyObject }
+function keypair(): Key {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    return { pub: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), priv: privateKey };
+}
+const signer = (k: Key) => (bytes: Uint8Array) => new Uint8Array(crypto.sign(null, Buffer.from(bytes), k.priv));
+async function keySignIn(k: Key): Promise<string | null> {
+    const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
+    const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+    });
+    const res = await fetch(`${BASE}/api/local/admin/auth/exchange`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: solved.body?.handshakeToken }),
+    });
+    const cookie = res.headers.getSetCookie().find(c => c.startsWith('admin_session=')) ?? '';
+    return cookie.match(/^admin_session=([0-9a-f]{64})/)?.[1] ?? null;
+}
+
+const REDIRECT = 'https://assistant.example/oauth/callback';
+
+/** The assistant's side, as claude.ai keeps it: client registration, tokens and the PKCE verifier, in memory. */
+class Assistant implements OAuthClientProvider {
+    authUrl: URL | null = null;
+    private client: any;
+    private saved: any;
+    private verifier = '';
+    constructor(private name: string, private redirect = REDIRECT) {}
+    get redirectUrl() { return this.redirect; }
+    get clientMetadata() {
+        return { client_name: this.name, redirect_uris: [this.redirect], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' };
+    }
+    clientInformation() { return this.client; }
+    saveClientInformation(c: any) { this.client = c; }
+    tokens() { return this.saved; }
+    saveTokens(t: any) { this.saved = t; }
+    redirectToAuthorization(u: URL) { this.authUrl = u; }
+    saveCodeVerifier(v: string) { this.verifier = v; }
+    codeVerifier() { return this.verifier; }
+}
+
+/** The consent page as a browser gets it: its pairing id and short code, and the cookie that binds it. */
+async function openConsent(url: string): Promise<{ status: number; html: string; id: string; shortCode: string; cookie: string; location: string | null }> {
+    const res = await fetch(url, { redirect: 'manual' });
+    const html = await res.text();
+    const id = /var id="([0-9a-f]{64})"/.exec(html)?.[1] ?? '';
+    const shortCode = /class="code">([A-Z0-9]{6})</.exec(html)?.[1] ?? '';
+    const cookie = res.headers.getSetCookie().map(c => c.split(';')[0]).find(c => c.startsWith('bp_signin_')) ?? '';
+    return { status: res.status, html, id, shortCode, cookie, location: res.headers.get('location') };
+}
+
+/** The phone: look at the pairing, then approve it signed for this host (agentShown and confirm unless told otherwise). */
+async function phoneApproves(k: Key, id: string, shortCode: string, extra: Record<string, unknown> = { confirm: true, agentShown: true }): Promise<Reply> {
+    return call('POST', `/api/local/admin/auth/pairing/${id}/approve`, {
+        body: { memberPubkey: k.pub, signature: await signSettingsSignin(BASE, 'approve', id, shortCode, signer(k)), signedFor: HOST, ...extra },
+    });
+}
+
+/** The whole consent: page → phone → digits → the redirect back with a code. */
+async function consent(url: string, k: Key): Promise<{ redirect: URL | null; page: Awaited<ReturnType<typeof openConsent>>; approve: Reply }> {
+    const page = await openConsent(url);
+    const approve = await phoneApproves(k, page.id, page.shortCode);
+    const cookie = { Cookie: page.cookie };
+    await call('POST', `/oauth/authorize/${page.id}/wait`, { body: { wait: false }, headers: cookie });
+    const done = await call('POST', `/oauth/authorize/${page.id}/confirm`, { body: { code: approve.body?.confirmCode }, headers: cookie });
+    return { redirect: done.body?.redirect ? new URL(done.body.redirect) : null, page, approve };
+}
+
+/** The SDK's own client, through 401 → discovery → registration → authorize; the rest is `consent` then finishAuth. */
+async function sdkConnect(a: Assistant, k: Key): Promise<{ client: Client | null; redirect: URL | null; page: any; approve: Reply }> {
+    const t1 = new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`), { authProvider: a });
+    const c1 = new Client({ name: 'beanpool-oauth-test', version: '1.0.0' });
+    let unauthorised = false;
+    try { await c1.connect(t1); } catch (e) { unauthorised = /unauthori[sz]ed/i.test(String((e as Error)?.name) + String((e as Error)?.message)); }
+    if (!unauthorised || !a.authUrl) return { client: null, redirect: null, page: null, approve: { status: 0, body: null, text: 'no redirect', headers: new Headers() } };
+    const { redirect, page, approve } = await consent(a.authUrl.toString(), k);
+    const code = redirect?.searchParams.get('code');
+    if (!code) return { client: null, redirect, page, approve };
+    await t1.finishAuth(code);
+    const c2 = new Client({ name: 'beanpool-oauth-test', version: '1.0.0' });
+    await c2.connect(new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`), { authProvider: a }));
+    return { client: c2, redirect, page, approve };
+}
+
+/** A manual authorize URL for a registered client (for the refusals the SDK would never send). */
+function authorizeUrl(clientId: string, over: Record<string, string | null> = {}): string {
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const p: Record<string, string | null> = {
+        response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, state: 'st-1',
+        code_challenge: crypto.createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
+        resource: `${BASE}/mcp`, scope: 'agent', ...over,
+    };
+    const u = new URL(`${BASE}/oauth/authorize`);
+    for (const [k, v] of Object.entries(p)) if (v !== null) u.searchParams.set(k, v);
+    return u.toString();
+}
+
+/** Register, consent and exchange by hand: the access and refresh tokens, and what was sent. */
+async function manualConnect(k: Key, name = 'Manual Assistant'): Promise<{ clientId: string; access: string; refresh: string; code: string; verifier: string; token: Reply }> {
+    const reg = await call('POST', '/oauth/register', { body: { client_name: name, redirect_uris: [REDIRECT] } });
+    const clientId = reg.body?.client_id ?? '';
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const url = authorizeUrl(clientId, { code_challenge: crypto.createHash('sha256').update(verifier).digest('base64url') });
+    const { redirect } = await consent(url, k);
+    assert(redirect?.searchParams.get('state') === 'st-1', `the assistant's state comes back with its code (${redirect?.searchParams.get('state')})`);
+    const code = redirect?.searchParams.get('code') ?? '';
+    const token = await call('POST', '/oauth/token', { form: { grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: REDIRECT, code_verifier: verifier, resource: `${BASE}/mcp` } });
+    return { clientId, access: token.body?.access_token ?? '', refresh: token.body?.refresh_token ?? '', code, verifier, token };
+}
+
+async function mcpStatus(access: string): Promise<number> {
+    return (await call('POST', '/mcp', { body: rpc('tools/list'), headers: { ...MCP_HEADERS, ...bearer(access) } })).status;
+}
+
+async function main(): Promise<void> {
+    console.log('\n=== Admin MCP, slice S2: an assistant connects through OAuth, approved on the phone ===\n');
+    const tmp = path.resolve(os.tmpdir());
+    const webRoot = fs.mkdtempSync(path.join(tmp, 'bp-mcp-oauth-'));
+    fs.mkdirSync(path.join(webRoot, 'public', 'settings'), { recursive: true });
+    fs.writeFileSync(path.join(webRoot, 'public', 'index.html'), '<!doctype html><title>BeanPool</title>');
+    fs.writeFileSync(path.join(webRoot, 'public', 'settings', 'index.html'), '<!doctype html><title>Settings</title>');
+    process.chdir(webRoot);
+
+    await initTls();
+    initStateEngine();
+    const owner = keypair(), admin = keypair(), admin2 = keypair(), moderator = keypair(), member = keypair();
+    seedGenesisMember(owner.pub, 'Olive');
+    const addMember = (k: Key, callsign: string) => {
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'inv-test')`).run(k.pub, callsign, owner.pub);
+        db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+    };
+    addMember(admin, 'Adam');
+    addMember(admin2, 'Ada');
+    addMember(moderator, 'Mo');
+    addMember(member, 'Mel');
+    grantNodeRole(admin.pub, 'admin', 'SYSTEM');
+    grantNodeRole(admin2.pub, 'admin', 'SYSTEM');
+    grantNodeRole(moderator.pub, 'moderator', 'SYSTEM');
+    updateLocalConfig({ gateway: { ...(getLocalConfig().gateway ?? {}), rateLimiting: { enabled: true, maxRequestsPerMinute: 100000 } } as any });
+
+    const { startHttpsServer, resetAdminRateLimit } = await import('./https-server.js');
+    const port = await startHttpsServer(0);
+    BASE = `https://localhost:${port}`;
+    HOST = audienceOf(BASE) ?? 'localhost';
+    // The auth limiter (15 a minute per address) is not what is tested here, and every request comes from one address.
+    const resetLimits = () => { resetAdminRateLimit(); pruneAuthAttempts(Date.now() + 120_000); resetPairingsForTests(); };
+    const notes: Array<{ key: string; detail: string; high?: boolean }> = [];
+    setSecurityAlertHandler((n) => { notes.push({ key: n.key, detail: n.detail ?? '', high: n.high }); });
+
+    try {
+        // ── 1. Metadata ──
+        const prm = await call('GET', '/.well-known/oauth-protected-resource/mcp');
+        const prmRoot = await call('GET', '/.well-known/oauth-protected-resource');
+        assert(prm.status === 200 && prm.body?.resource === `${BASE}/mcp` && JSON.stringify(prm.body?.authorization_servers) === JSON.stringify([BASE])
+            && prmRoot.body?.resource === `${BASE}/mcp`, `protected resource: /mcp, this node its authorization server (${show(prm)})`);
+        const as = await call('GET', '/.well-known/oauth-authorization-server');
+        assert(as.status === 200 && as.body?.issuer === BASE && JSON.stringify(as.body?.code_challenge_methods_supported) === '["S256"]'
+            && JSON.stringify(as.body?.scopes_supported) === '["agent"]' && JSON.stringify(as.body?.token_endpoint_auth_methods_supported) === '["none"]'
+            && as.body?.registration_endpoint === `${BASE}/oauth/register` && as.body?.revocation_endpoint === `${BASE}/oauth/revoke`,
+        `authorization server: issuer = the node's URL, S256 only, scope agent, public clients (${show(as)})`);
+        const bare = await call('POST', '/mcp', { body: rpc('tools/list'), headers: MCP_HEADERS });
+        assert(bare.status === 401 && (bare.headers.get('www-authenticate') ?? '').includes(`resource_metadata="${BASE}/.well-known/oauth-protected-resource/mcp"`),
+            `/mcp's 401 names its resource metadata (${bare.headers.get('www-authenticate')})`);
+        assert(!/an owner or an admin makes one/.test(bare.text) && /owner makes one/.test(bare.text) && /approving on your phone/.test(bare.text),
+            `/mcp's 401 no longer says an admin makes a token; it names the phone's approval (#1865 finding 1) (${bare.body?.error?.message})`);
+
+        // ── 2. The SDK client end to end, as an admin ──
+        const claude = new Assistant('Claude');
+        const e2e = await sdkConnect(claude, admin);
+        const page = e2e.page;
+        assert(!!page && page.status === 200 && page.id.length === 64 && page.html.includes('assistant.example')
+            && /calling itself “Claude”, at assistant\.example/.test(page.html) && /Everything it reads goes to assistant\.example/.test(page.html),
+        'the consent page names the assistant only beside the host its answers go to, and says everything it reads goes there');
+        assert(!!page && /script-src 'nonce-/.test(String((await fetch(claude.authUrl!.toString(), { redirect: 'manual' })).headers.get('content-security-policy'))),
+            'the consent page carries its own nonce CSP');
+        assert(e2e.approve.status === 200 && /^\d{2}$/.test(String(e2e.approve.body?.confirmCode)) && e2e.approve.body?.role === 'admin',
+            `the admin's phone approves and is shown two digits (${show(e2e.approve)})`);
+        assert(!!e2e.redirect && e2e.redirect.origin + e2e.redirect.pathname === REDIRECT && !!e2e.redirect.searchParams.get('code')
+            && e2e.redirect.searchParams.get('iss') === BASE, `the page sends the browser back with a code, the state and iss (${e2e.redirect?.toString().slice(0, 120)})`);
+        let toolNames: string[] = [];
+        try { toolNames = ((await e2e.client?.listTools())?.tools ?? []).map(t => t.name); } catch (e) { console.error(e); }
+        assert(toolNames.includes('node_overview') && toolNames.includes('suggest_action') && !toolNames.includes('take_backup'),
+            `register → authorize → phone signs → number match → code → token → tools/list: an admin's tools (${toolNames.join(',')})`);
+        const welcome = e2e.client?.getInstructions() ?? '';
+        assert(/acting for Adam, who is an admin there/.test(welcome), `the welcome names the admin it acts for (${welcome.slice(0, 120)})`);
+        const tokens = claude.tokens();
+        assert(typeof tokens?.access_token === 'string' && tokens.access_token.startsWith('bpo_') && tokens.expires_in === 3600 && tokens.refresh_token?.startsWith('bpr_'),
+            'an opaque access token for an hour and a refresh token');
+        assert(notes.some(n => n.key === 'sec.agent' && /connected by an admin/.test(n.detail) && /Claude, sending to assistant\.example/.test(n.detail) && !n.high),
+            `the owners are told an admin connected it, with the host (${JSON.stringify(notes.slice(-1))})`);
+
+        // No Settings session came of it: the pairing's wait answers no session and sets no admin cookie.
+        const after = await fetch(`${BASE}/oauth/authorize/${page.id}/wait`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: page.cookie }, body: '{"wait":false}' });
+        assert(!after.headers.getSetCookie().some(c => c.startsWith('admin_session=')) && after.status !== 200,
+            `the phone's approval of an assistant signs no browser in to Settings (${after.status})`);
+        const viaSettingsRoute = await call('POST', `/api/local/admin/auth/pairing/${page.id}/wait`, { body: { wait: false }, headers: { Cookie: page.cookie } });
+        assert(viaSettingsRoute.body?.status !== 'signed-in', `the Settings sign-in route cannot redeem an assistant's pairing (${show(viaSettingsRoute)})`);
+
+        // Settings lists it for that admin, with the host; another admin sees none of it; the owner sees it.
+        const adminSession = await keySignIn(admin);
+        const admin2Session = await keySignIn(admin2);
+        const ownerSession = await keySignIn(owner);
+        const mine = await call('GET', '/api/local/admin/agent/grants', { headers: { 'X-Admin-Session': adminSession ?? '' } });
+        const g = (mine.body?.grants ?? []).find((x: any) => x.via === 'oauth');
+        assert(!!g && g.name === 'Claude' && g.sendsTo === 'assistant.example' && g.mine === true && g.role === 'admin' && mine.body?.canConnectOAuth === true,
+            `Settings lists the admin's OAuth assistant with the host it sends to (${JSON.stringify(g)})`);
+        const theirs = await call('GET', '/api/local/admin/agent/grants', { headers: { 'X-Admin-Session': admin2Session ?? '' } });
+        const ownerView = await call('GET', '/api/local/admin/agent/grants', { headers: { 'X-Admin-Session': ownerSession ?? '' } });
+        assert((theirs.body?.grants ?? []).length === 0 && (ownerView.body?.grants ?? []).some((x: any) => x.id === g?.id),
+            'another admin sees none of it; an owner sees it');
+        assert(!JSON.stringify(mine.body).includes(tokens?.refresh_token ?? 'x') && !/refreshHash|spentRefresh/.test(JSON.stringify(ownerView.body)),
+            'no list carries a token or a hash');
+
+        // ── 6. The access token reaches /mcp and nothing else ──
+        const elsewhere = await call('GET', '/api/local/admin/agent/grants', { headers: bearer(tokens!.access_token) });
+        const data = await call('POST', '/api/local/admin/data', { body: {}, headers: bearer(tokens!.access_token) });
+        assert(elsewhere.status === 401 && data.status === 401, `an OAuth access token opens no other admin route (${elsewhere.status}, ${data.status})`);
+
+        // An app that cannot show the assistant is refused; a moderator and a plain member cannot connect one.
+        resetLimits();
+        const reg = await call('POST', '/oauth/register', { body: { client_name: 'Old App Check', redirect_uris: [REDIRECT] } });
+        assert(reg.status === 201 && /^bpc_[0-9a-f]{32}$/.test(reg.body?.client_id) && reg.body?.token_endpoint_auth_method === 'none',
+            `registration: a public client (${show(reg)})`);
+        const oldApp = await openConsent(authorizeUrl(reg.body.client_id));
+        const describe = await call('GET', `/api/local/admin/auth/pairing/${oldApp.id}`);
+        assert(describe.status === 200 && describe.body?.agent?.name === 'Old App Check' && describe.body?.agent?.sendsTo === 'assistant.example',
+            `the phone is told the assistant's name AND where its answers go (${JSON.stringify(describe.body?.agent)})`);
+        const noShown = await phoneApproves(admin, oldApp.id, oldApp.shortCode, { confirm: true });
+        const noConfirm = await phoneApproves(admin, oldApp.id, oldApp.shortCode, { agentShown: true });
+        assert(noShown.status === 426 && noShown.body?.code === 'agent_app_too_old' && noConfirm.status === 426,
+            `an app that cannot show the assistant, or the digits, cannot approve one (${show(noShown)})`);
+        const mod = await phoneApproves(moderator, oldApp.id, oldApp.shortCode);
+        const plain = await phoneApproves(member, oldApp.id, oldApp.shortCode);
+        assert(mod.status === 403 && mod.body?.reason === 'not-owner-or-admin' && plain.status === 403,
+            `a moderator and a plain member cannot connect an assistant (${show(mod)}; ${show(plain)})`);
+
+        // ── 3. Refusals at authorize ──
+        const cid = reg.body.client_id;
+        const noPkce = await call('GET', authorizeUrl(cid, { code_challenge: null, code_challenge_method: null }));
+        const loc = (r: Reply) => { try { return new URL(r.headers.get('location') ?? ''); } catch { return null; } };
+        assert(noPkce.status === 302 && loc(noPkce)?.searchParams.get('error') === 'invalid_request' && loc(noPkce)?.origin === 'https://assistant.example',
+            `no PKCE → refused, back to the assistant with invalid_request (${noPkce.status} ${noPkce.headers.get('location')?.slice(0, 100)})`);
+        const plainPkce = await call('GET', authorizeUrl(cid, { code_challenge_method: 'plain' }));
+        assert(plainPkce.status === 302 && loc(plainPkce)?.searchParams.get('error') === 'invalid_request', 'plain PKCE → refused (S256 only)');
+        const wrongRedirect = await call('GET', authorizeUrl(cid, { redirect_uri: 'https://evil.example/cb' }));
+        assert(wrongRedirect.status === 400 && !wrongRedirect.headers.get('location') && !/var id=/.test(wrongRedirect.text),
+            `a redirect it did not register → a page, nothing sent anywhere, no QR (${wrongRedirect.status})`);
+        const wrongResource = await call('GET', authorizeUrl(cid, { resource: 'https://evil.example/mcp' }));
+        assert(wrongResource.status === 302 && loc(wrongResource)?.searchParams.get('error') === 'invalid_target', 'a wrong resource at authorize → invalid_target');
+        const unknownClient = await call('GET', authorizeUrl('bpc_' + '0'.repeat(32)));
+        assert(unknownClient.status === 400 && !unknownClient.headers.get('location'), 'an unknown client → a page, no redirect');
+
+        // ── 3b. Refusals at token, and a reused code revokes ──
+        resetLimits();
+        const m1 = await manualConnect(owner, 'Reuse Check');
+        assert(m1.token.status === 200 && m1.access.startsWith('bpo_') && (await mcpStatus(m1.access)) === 200,
+            `a hand-made consent by the owner gives a working token (${show(m1.token)})`);
+        const reuse = await call('POST', '/oauth/token', { form: { grant_type: 'authorization_code', code: m1.code, client_id: m1.clientId, redirect_uri: REDIRECT, code_verifier: m1.verifier } });
+        assert(reuse.status === 400 && reuse.body?.error === 'invalid_grant', `a reused code → invalid_grant (${show(reuse)})`);
+        assert((await mcpStatus(m1.access)) === 401, "…and the grant it made is revoked: its access token answers 401");
+        const refreshAfterReuse = await call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: m1.refresh, client_id: m1.clientId } });
+        assert(refreshAfterReuse.status === 400, '…and its refresh token is dead');
+        assert(notes.some(n => n.key === 'sec.agent' && n.high === true && /Reuse Check/.test(n.detail) && /presented again/.test(n.detail)),
+            'the owners are told, high');
+
+        resetLimits();
+        const regB = await call('POST', '/oauth/register', { body: { client_name: 'Token Checks', redirect_uris: [REDIRECT] } });
+        const verifier = crypto.randomBytes(32).toString('base64url');
+        const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+        const getCode = async () => (await consent(authorizeUrl(regB.body.client_id, { code_challenge: challenge }), owner)).redirect?.searchParams.get('code') ?? '';
+        const exchange = (over: Record<string, string>) => call('POST', '/oauth/token', {
+            form: { grant_type: 'authorization_code', client_id: regB.body.client_id, redirect_uri: REDIRECT, code_verifier: verifier, ...over },
+        });
+        const c1 = await getCode();
+        const badVerifier = await exchange({ code: c1, code_verifier: crypto.randomBytes(32).toString('base64url') });
+        assert(badVerifier.status === 400 && badVerifier.body?.error === 'invalid_grant', `a wrong verifier → invalid_grant (${show(badVerifier)})`);
+        const noVerifier = await call('POST', '/oauth/token', { form: { grant_type: 'authorization_code', client_id: regB.body.client_id, redirect_uri: REDIRECT, code: await getCode() } });
+        assert(noVerifier.status === 400 && noVerifier.body?.error === 'invalid_grant', 'no verifier → invalid_grant');
+        resetLimits();
+        const badRedirect = await exchange({ code: await getCode(), redirect_uri: 'https://assistant.example/other' });
+        assert(badRedirect.status === 400 && badRedirect.body?.error === 'invalid_grant', 'a different redirect at token → invalid_grant');
+        const badResource = await exchange({ code: await getCode(), resource: 'https://evil.example/mcp' });
+        assert(badResource.status === 400 && badResource.body?.error === 'invalid_target', 'a wrong resource at token → invalid_target');
+        const badClient = await exchange({ code: await getCode(), client_id: 'bpc_' + '1'.repeat(32) });
+        assert(badClient.status === 400 && badClient.body?.error === 'invalid_grant', 'another client at token → invalid_grant');
+
+        // ── 4. Refresh rotates; a spent refresh token revokes ──
+        resetLimits();
+        const m2 = await manualConnect(admin, 'Refresh Check');
+        const r1 = await call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: m2.refresh, client_id: m2.clientId } });
+        assert(r1.status === 200 && r1.body?.refresh_token !== m2.refresh && r1.body?.access_token !== m2.access, `refresh rotates both tokens (${show(r1)})`);
+        assert((await mcpStatus(r1.body.access_token)) === 200 && (await mcpStatus(m2.access)) === 401, 'the new access token works; the old one is dead');
+        const spent = await call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: m2.refresh, client_id: m2.clientId } });
+        assert(spent.status === 400 && spent.body?.error === 'invalid_grant', `the spent refresh token again → invalid_grant (${show(spent)})`);
+        assert((await mcpStatus(r1.body.access_token)) === 401, '…and the grant is revoked: the newest access token answers 401 too');
+        const r2 = await call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: r1.body.refresh_token, client_id: m2.clientId } });
+        assert(r2.status === 400, '…and the newest refresh token is dead');
+        assert(notes.some(n => n.key === 'sec.agent' && n.high === true && /Refresh Check/.test(n.detail)), 'the owners are told, high');
+
+        // ── 5. Revoke, Disconnect, demotion ──
+        resetLimits();
+        const m3 = await manualConnect(admin, 'Revoke Check');
+        const rv = await call('POST', '/oauth/revoke', { form: { token: m3.refresh, client_id: m3.clientId } });
+        assert(rv.status === 200 && (await mcpStatus(m3.access)) === 401, `revoke (RFC 7009) → 401 (${show(rv)})`);
+        resetLimits();
+        const m4 = await manualConnect(admin, 'Disconnect Check');
+        const list4 = await call('GET', '/api/local/admin/agent/grants', { headers: { 'X-Admin-Session': adminSession ?? '' } });
+        const g4 = (list4.body?.grants ?? []).find((x: any) => x.name === 'Disconnect Check');
+        const other = await call('POST', `/api/local/admin/agent/grants/${g4?.id}/revoke`, { body: {}, headers: { 'X-Admin-Session': admin2Session ?? '' } });
+        const dc = await call('POST', `/api/local/admin/agent/grants/${g4?.id}/revoke`, { body: {}, headers: { 'X-Admin-Session': adminSession ?? '' } });
+        assert(other.status === 404 && dc.status === 200 && (await mcpStatus(m4.access)) === 401,
+            `another admin cannot disconnect it; its admin can, in Settings → 401 (${other.status}, ${dc.status})`);
+        resetLimits();
+        const m5 = await manualConnect(admin2, 'Demote Check');
+        assert((await mcpStatus(m5.access)) === 200, "admin2's assistant works");
+        revokeNodeRole(admin2.pub, 'admin', owner.pub);
+        const demotedRefresh = await call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: m5.refresh, client_id: m5.clientId } });
+        assert((await mcpStatus(m5.access)) === 401 && demotedRefresh.status === 400, 'the member no longer an admin → 401, and no refresh');
+
+        // ── 7. Registration bounds ──
+        resetOAuthForTests();
+        const insecure = await call('POST', '/oauth/register', { body: { client_name: 'x', redirect_uris: ['http://evil.example/cb'] } });
+        const loopback = await call('POST', '/oauth/register', { body: { client_name: 'Desktop', redirect_uris: ['http://127.0.0.1:33418/callback'] } });
+        assert(insecure.status === 400 && loopback.status === 201, `only https or localhost redirects (${insecure.status}, ${loopback.status})`);
+        resetOAuthForTests();
+        for (let i = 0; i < OAUTH_PENDING_MAX; i++) registerClient({ client_name: `p${i}`, redirect_uris: [REDIRECT] }, `test-${i}`);
+        const over = await call('POST', '/oauth/register', { body: { client_name: 'One Too Many', redirect_uris: [REDIRECT] } });
+        assert(over.status === 429, `the 101st pending registration → 429 (${show(over)})`);
+        resetOAuthForTests();
+        const old = registerClient({ client_name: 'Stale', redirect_uris: [REDIRECT] }, 'test-old', Date.now() - OAUTH_PENDING_TTL_MS - 1);
+        const stale = old.ok ? await call('GET', authorizeUrl(old.client.clientId)) : null;
+        assert(!!stale && stale.status === 400 && /not registered/.test(stale.text), 'an unused registration is gone after an hour');
+        resetOAuthForTests();
+        let braked = 0;
+        for (let i = 0; i < 11; i++) if ((await call('POST', '/oauth/register', { body: { redirect_uris: [REDIRECT] } })).status === 429) braked++;
+        assert(braked === 1, `registration is braked per address: the 11th in a minute → 429 (${braked})`);
+
+        // ── 8. A standby's copy holds no grants ──
+        resetOAuthForTests();
+        resetLimits();
+        const m6 = await manualConnect(owner, 'Standby Check');
+        assert((getLocalConfig().agentOAuthGrants ?? []).length >= 1 && m6.access.length > 0, 'a grant is held on this server');
+        assert(LOCAL_CONFIG_FIELDS.agentOAuthGrants?.kind === 'per-server' && !('agentOAuthGrants' in redactLocalConfig(getLocalConfig())),
+            "grants are this server's own: per-server in the manifest and left out of every backup file, so a standby's copy holds none");
+
+        // ── 9. The switch off → 404 everywhere ──
+        updateLocalConfig({ aiAssistantsAllowed: false });
+        const offs = await Promise.all([
+            call('GET', '/.well-known/oauth-protected-resource'), call('GET', '/.well-known/oauth-protected-resource/mcp'),
+            call('GET', '/.well-known/oauth-authorization-server'),
+            call('POST', '/oauth/register', { body: { redirect_uris: [REDIRECT] } }), call('GET', authorizeUrl(m6.clientId)),
+            call('POST', '/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: m6.refresh, client_id: m6.clientId } }),
+            call('POST', '/oauth/revoke', { form: { token: m6.refresh } }),
+            call('POST', `/oauth/authorize/${'a'.repeat(64)}/wait`, { body: {} }),
+            call('POST', '/mcp', { body: rpc('tools/list'), headers: { ...MCP_HEADERS, ...bearer(m6.access) } }),
+        ]);
+        assert(offs.every(r => r.status === 404), `the owners' switch off → 404 on every OAuth endpoint and /mcp (${offs.map(r => r.status).join(',')})`);
+        updateLocalConfig({ aiAssistantsAllowed: true });
+        assert((await mcpStatus(m6.access)) === 200, 'switched back on, the grant answers again');
+    } finally {
+        console.log(`\n${passed}/${run} passed`);
+        setTimeout(() => process.exit(process.exitCode ?? 0), 50);
+    }
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });

@@ -7,6 +7,7 @@ related: the-bean, reporting, faq, blocking, the-top-bar
 
 ## Look it up
 
+- **The ? at the top:** on every tab, tap **?** for a short note on the screen you are on. From there, **Read the guide page** opens the page about it, **Search the guide** opens this guide's search, and **Take the tour again** shows you round the tabs once more.
 - **This guide:** search it for a word, like "gift" or "photo".
 - **The ⓘ buttons:** many screens have a small ⓘ. Tap it for a short explanation of that screen. The Ledger has several.
 - **The pricing guide:** in **Settings**, under **Community Pricing Guide**, tap **Browse 500+ Item Estimates** to see what things usually cost in beans.
@@ -17,7 +18,7 @@ related: the-bean, reporting, faq, blocking, the-top-bar
 - **About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.
 - **About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**.
 - **Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual** in the side bar.
-- **Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**.
+- **Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Manage this community from a computer** (older apps: **Sign in on a computer**) and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**. If the phone then shows two digits, type them on the computer within 30 seconds.
 
 ## When something is not right
 

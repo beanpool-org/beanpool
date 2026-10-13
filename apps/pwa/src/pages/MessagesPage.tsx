@@ -11,15 +11,24 @@ import {
     getConversations, getConversationMessages, createConversationApi,
     sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi, getMembers,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
-    getEventChat,
-    type Conversation, type ApiMessage, type Member, type MarketplaceTransaction,
+    getEventChat, getGroupChat, getGroupMembers, groupKeysNet,
+    type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer,
 } from '../lib/api';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
 import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
-import { heldConversation } from '../lib/dm-guard';
+import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
+import { encodePlaintext } from '../lib/e2e-crypto';
+import { GROUP_CHAT_NO_PHOTOS_TEXT } from '../lib/group-chat-lines';
+import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
+import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
+import {
+    chatIsLocked, groupChatNotice, groupChatSendPlan, heldGroupRefusal, sendSealedGroupLine, editSealedGroupLine, openGroupThread,
+    groupLineShown, type GroupLineShown, type OpenedGroupThread,
+} from '../lib/group-chat-lines';
+import { searchShownLines, GROUP_LINE_UNVERIFIED_NAME, type DisplayRosterRow } from '../lib/group-line-display';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
@@ -29,12 +38,32 @@ import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpda
 import { withJitter } from '../lib/jitter';
 import { imageFromTransfer, dragCarriesFile, chatImageRefusal } from '../lib/chat-image-transfer';
 import { nodeRefusal } from '../lib/node-refusal';
+import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
 import { listPhotoUrl } from '@beanpool/core';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * A group chat as this page holds it (lib/group-chat-lines.ts): the node's chat answer, whether it is locked (by the node's
+ * word, or by this browser having seen it locked: the sticky lock), its sealed lines opened and named, and the roster
+ * the screen shows. Nothing of it is kept beyond the page but the lock store's two facts.
+ */
+interface GroupChatView {
+    id: string;
+    answer: GroupChatAnswer | null;
+    error: unknown;
+    nodeSaysLocked: boolean;
+    seenLocked: boolean;
+    thread: OpenedGroupThread | null;
+    roster: DisplayRosterRow[];
+}
+
+/** Words for a group chat this member can read but not write in (the node's own, GROUP_CHAT_OBSERVER). */
+const GROUP_CHAT_READ_ONLY_TEXT = 'Observers can read this chat but not post in it';
+const GROUP_CHAT_CLOSED_TEXT = 'This group was closed by its members: its chat stays to read and takes no new messages.';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -159,10 +188,27 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [activeTab, setActiveTab] = useState<'all' | 'transactions' | 'direct'>('all');
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<ApiMessage[]>([]);
+    const [groupChat, setGroupChat] = useState<GroupChatView | null>(null);
+    // In-thread search (design §10): over the loaded thread only, in this browser.
+    const [chatSearch, setChatSearch] = useState<string | null>(null);
+    const activeConvRef = useRef<Conversation | null>(null);
+    useLayoutEffect(() => { activeConvRef.current = activeConv; }, [activeConv]);
+    // Keys handed to members who lack them, once per group per page (GroupKeyring.serveMissing).
+    const servedMissingRef = useRef<Set<string>>(new Set());
     const [draft, setDraft] = useState('');
     const [sending, setSending] = useState(false);
     const [showNewDm, setShowNewDm] = useState(false);
-    const [members, setMembers] = useState<Member[]>([]);
+    // Who this page can name: the member directory, or on a community where people are asked for, not read whole
+    // (lib/members-on-demand, the worldwide one), the cards asked for by key, as the page needs them (below).
+    const [members, setMembers] = useState<Array<Pick<Member, 'publicKey' | 'callsign' | 'avatarUrl'>>>([]);
+    const membersOnDemand = useMembersOnDemand();
+    const membersOnDemandRef = useRef<boolean | null>(null);
+    membersOnDemandRef.current = membersOnDemand;
+    // The keys asked for on this visit (the node's answer, or a request still out): never asked twice. A failed request
+    // takes its keys out again, so the next change asks for them.
+    const askedKeysRef = useRef<Set<string>>(new Set());
+    const [pickerQuery, setPickerQuery] = useState('');
+    const pickerSearch = useMemberSearch(pickerQuery, membersOnDemand === true && showNewDm);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const pollRef = useRef<number | null>(null);
     const [replyToMessage, setReplyToMessage] = useState<ApiMessage | null>(null);
@@ -194,10 +240,41 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // ⚡ Bolt: O(1) Map lookups for member details and completed transactions in conversation list and chat views
     const membersByPublicKey = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
+    const membersByPublicKeyRef = useRef(membersByPublicKey);
+    membersByPublicKeyRef.current = membersByPublicKey;
     // The open DM in the order it is shown and judged: by the node's timestamps, as the phone shows it, never by the
     // node's row order alone (after a standby takes over, its delta copy has written rows in last-changed order).
     const isDmThread = !!activeConv && !isNodeReadableChat(activeConv);
-    const shownMessages = useMemo(() => (isDmThread ? dmThreadInShownOrder(messages) : messages), [messages, isDmThread]);
+    const isGroupChat = activeConv?.type === 'group_thread';
+    // This group's chat as opened here, once its answer has come (never the last conversation's).
+    const openGroup = isGroupChat && groupChat?.id === activeConv?.id ? groupChat : null;
+    const groupLocked = !!openGroup && (openGroup.nodeSaysLocked || openGroup.seenLocked);
+    const shownMessages = useMemo(() => {
+        if (isDmThread) return dmThreadInShownOrder(messages);
+        // A group chat draws nothing until its own answer is in: never another chat's lines under its name.
+        if (isGroupChat && !openGroup) return [];
+        return messages;
+    }, [messages, isDmThread, isGroupChat, openGroup]);
+    // Each line of a locked group chat as drawn (lib/group-chat-lines.ts groupLineShown): a sealed line under the name of
+    // the key that signed it, a node line in the app's words, anything else nobody's. Null for every other chat.
+    const groupShown = useMemo(() => {
+        if (!openGroup || !groupLocked) return null;
+        const m = new Map<string, GroupLineShown>();
+        for (const msg of shownMessages) {
+            const v = groupLineShown({ ...msg, type: msg.type ?? 'text' } as never, { locked: true, thread: openGroup.thread, me: identity.publicKey });
+            if (v) m.set(msg.id, v);
+        }
+        return m;
+    }, [shownMessages, openGroup, groupLocked, identity.publicKey]);
+    // What the search box finds: the loaded thread's lines by their shown words (design §10).
+    const searchedMessages = useMemo(() => {
+        const q = chatSearch?.trim();
+        if (!q) return shownMessages;
+        const texts = shownMessages
+            .filter((m) => !(groupShown?.get(m.id)?.hidden))
+            .map((m) => ({ m, text: groupShown?.get(m.id)?.text ?? (groupLocked ? '' : decryptMessage(m)) }));
+        return searchShownLines(texts, q).map((x) => x.m);
+    }, [shownMessages, chatSearch, groupShown, groupLocked]);
     // Every line of the open DM judged in that order (e2e-crypto checkDmThread): an encrypted line opened bound to the
     // author and id the node shows it under, and one that doesn't open never shown as anyone's words; a row in a member's
     // name that isn't an encrypted line never either; one the node moved or reordered, and every old-format line, marked;
@@ -265,7 +342,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     useEffect(() => {
         loadConversations();
-        loadMembers();
         const unsubscribe = onSyncActivity(() => loadConversations());
         const unsubBlocklist = onBlocklistUpdated(() => {
             setBlocklistVersion(v => v + 1);
@@ -283,6 +359,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         activeConvIdRef.current = activeConv?.id ?? null;
         if (activeConv) {
             messageRequestIdRef.current++;
+            setGroupChat(null);
+            setChatSearch(null);
             setReplyToMessage(null);
             setEditingMessage(null);
             setActiveEmojiPickerId(null);
@@ -391,8 +469,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     async function loadConversations() {
         try {
             const result = await getConversations(identity.publicKey);
-            // A DM stays a DM, whatever type the node gives it now (lib/dm-guard.ts).
-            const held = (result.conversations || []).map((c: Conversation) => heldConversation(c));
+            // A DM stays a DM, and a group seen locked here stays a group, whatever type the node gives it now
+            // (lib/dm-guard.ts, lib/group-hold.ts).
+            const locked = await lockedGroupsOrNull(identity.publicKey);
+            const held = (result.conversations || []).map((c: Conversation) => holdConversation(c, locked));
             const blocked = new Set(getBlockedUsers());
             const filtered = held.filter((c: Conversation) => {
                 if (c.type === 'dm') {
@@ -423,7 +503,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         loadConversations().then(() => {
             // Find the conversation and open it
             getConversations(identity.publicKey).then(async result => {
-                const held = (result.conversations || []).map((c: Conversation) => heldConversation(c));
+                const locked = await lockedGroupsOrNull(identity.publicKey);
+                const held = (result.conversations || []).map((c: Conversation) => holdConversation(c, locked));
                 let conv = held.find((c: Conversation) => c.id === openConversationId);
                 if (!conv) {
                     conv = held.find((c: Conversation) => c.type === 'dm' && c.participants.includes(openConversationId));
@@ -435,13 +516,29 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     try {
                         const created = await createConversationApi('dm', [identity.publicKey, openConversationId], identity.publicKey);
                         // Asked for a DM: it is one, whatever type the answer names.
-                        conv = created.conversation && heldConversation({ ...created.conversation, type: 'dm' as const });
+                        conv = created.conversation ? (startedDm(created.conversation, await lockedGroupsOrNull(identity.publicKey)) ?? undefined) : undefined;
+                        if (created.conversation && !conv) setChatRefusal(GROUP_HOLD_STARTED_DM_TEXT);
                         await loadConversations();
                     } catch (e) {
                         // Offline stays quiet; the node refusing to open it (a new account's limit) says why.
                         const refusal = nodeRefusal(e);
                         if (refusal) setChatRefusal(refusal.message);
                     }
+                } else if (!conv && locked?.has(groupIdKey(openConversationId))) {
+                    // A group held locked here, left out of the node's list: its own chat, never an event's, which
+                    // sends readable (review of #1816, finding 2; the phone's chatRouteView asks "held" first).
+                    console.warn(`[group hold] locked group ${openConversationId.slice(0, 8)} is missing from the node's list: opened as a group chat`);
+                    conv = {
+                        id: openConversationId,
+                        type: 'group_thread',
+                        name: null,
+                        participants: [],
+                        createdBy: '',
+                        createdAt: new Date().toISOString(),
+                    } as Conversation;
+                } else if (!conv && locked === null) {
+                    // The lock store can't say whether this id is a held group: nothing opens on a guess.
+                    setChatRefusal(GROUP_HOLD_UNREAD_OPEN_TEXT);
                 } else if (!conv) {
                     try {
                         const chat = await getEventChat(openConversationId);
@@ -468,8 +565,84 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         });
     }, [openConversationId]);
 
+    /** The group chat keyring for one group, as this browser's member (lib/group-chat-keys.ts). */
+    function groupRing(groupId: string) {
+        return groupKeyring(groupKeysNet, identity, groupIdKey(groupId), indexedDbGroupLockStore);
+    }
+
+    /**
+     * A group's chat, read through its own route (GET /api/groups/:id/chat: its lock, the lines from this member's first
+     * epoch on), its sealed lines opened and named here, and the roster the screen shows handed to the keyring (only
+     * members in it are ever wrapped to). Keys missing for other members are handed over once per page.
+     */
+    async function loadGroupChat(convId: string, requestId: number): Promise<'dm' | void> {
+        let answer: GroupChatAnswer | null = null;
+        let error: unknown = null;
+        try {
+            answer = await getGroupChat(convId);
+        } catch (e) {
+            error = e;
+        }
+        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+        // The DM guard's line check runs over these lines before the group route takes them: a DM this browser knows, or
+        // one whose lines are encrypted, stays a DM whatever the node calls it; a group held locked here still wins
+        // (review of #1816, finding 1; lib/group-hold.ts).
+        const kept = holdConversation({ id: convId, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), answer?.messages);
+        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+        if (kept.type === 'dm') {
+            setGroupChat(null);
+            setActiveConv(prev => (prev && prev.id === convId ? { ...prev, type: 'dm' } : prev));
+            return 'dm';
+        }
+        const ring = groupRing(convId);
+        const nodeSaysLocked = chatIsLocked(answer);
+        if (nodeSaysLocked) await ring.noteLocked();
+        const seenLocked = await ring.seenLocked();
+        let roster: DisplayRosterRow[] = [];
+        if (answer) {
+            try {
+                const active = (await getGroupMembers(convId)).filter((r) => r.status === 'active');
+                roster = active.map((r) => ({ memberPubkey: r.memberPubkey, callsign: r.callsign ?? null, formerKeys: (r as { formerKeys?: DisplayRosterRow['formerKeys'] }).formerKeys ?? null }));
+                ring.noteShownRoster(active.map((r) => r.memberPubkey));
+            } catch { /* names fall back to the node's; nothing is wrapped until the list reads */ }
+        }
+        let thread: OpenedGroupThread | null = null;
+        if (answer && (nodeSaysLocked || seenLocked)) {
+            // Held here though the node now says unlocked: the keys route still says which epochs are this member's.
+            let enc = answer.encryption ?? null;
+            if (!enc) {
+                const st = await ring.sync().catch(() => null);
+                enc = st ? { current: st.current, stale: st.stale, fromEpoch: st.fromEpoch } : null;
+            }
+            if (enc) {
+                thread = await openGroupThread(ring, { messages: answer.messages as never, encryption: enc }, roster,
+                    (pk) => membersByPublicKeyRef.current.get(pk)?.callsign ?? null).catch(() => null);
+            }
+        }
+        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+        const seen = new Set<string>();
+        setMessages((answer?.messages ?? []).filter((m) => {
+            if (!m.id || seen.has(m.id)) return false;
+            seen.add(m.id);
+            return true;
+        }));
+        setGroupChat({ id: convId, answer, error, nodeSaysLocked, seenLocked, thread, roster });
+        if (answer) {
+            markConversationReadApi(identity.publicKey, convId).catch(() => {});
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
+        }
+        if (nodeSaysLocked && !servedMissingRef.current.has(convId)) {
+            servedMissingRef.current.add(convId);
+            ring.serveMissing().catch(() => 0);
+        }
+    }
+
     async function loadMessages(convId: string) {
         const requestId = ++messageRequestIdRef.current;
+        if (activeConvRef.current?.id === convId && activeConvRef.current.type === 'group_thread') {
+            // A DM the node calls a group's chat goes on by the DM path below.
+            if (await loadGroupChat(convId, requestId) !== 'dm') return;
+        }
         try {
             const result = await getConversationMessages(convId);
             if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
@@ -486,7 +659,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
             }
             // A DM stays a DM: one seen as one here, or whose lines are encrypted (lib/dm-guard.ts).
-            const heldConv = result.conversation ? heldConversation(result.conversation, uniqueMessages) : null;
+            const locked = result.conversation ? await lockedGroupsOrNull(identity.publicKey) : null;
+            if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+            const heldConv = result.conversation ? holdConversation(result.conversation, locked, uniqueMessages) : null;
             if (heldConv) {
                 const isDm = heldConv.type === 'dm';
                 const peerCursor = isDm ? (heldConv as any).readCursors?.find(
@@ -571,7 +746,43 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
     }
 
+    // The directory once the node has said it has no members on demand (or couldn't say): as before the switch.
+    useEffect(() => { if (membersOnDemand === false) loadMembers(); }, [membersOnDemand]);
+
+    // With members on demand: the names this page shows that no row carries, by key, 100 a request and 3 at most a
+    // change (lib/members-on-demand): the open chat's authors and people, then any one-to-one chat with no name on its
+    // row. A key with no card still shows its first characters, as before.
+    useEffect(() => {
+        if (membersOnDemand !== true) return;
+        const blocked = new Set(getBlockedUsers());
+        const held = new Set(members.map(m => m.publicKey));
+        const wanted: string[] = [];
+        for (const m of messages) if (m.authorPubkey) wanted.push(m.authorPubkey);
+        if (activeConv) wanted.push(...(activeConv.participants || []));
+        for (const c of conversations) if (c.type === 'dm' && !c.peerCallsign) wanted.push(...(c.participants || []));
+        const missing = wanted.filter(k => k !== identity.publicKey && !blocked.has(k) && !held.has(k) && !askedKeysRef.current.has(k));
+        for (const batch of memberKeysBatches(missing)) {
+            batch.forEach(k => askedKeysRef.current.add(k));
+            membersByKeys(batch)
+                .then(cards => {
+                    if (cards.length === 0) return;
+                    setMembers(prev => {
+                        const have = new Set(prev.map(m => m.publicKey));
+                        return [...prev, ...cards.filter(c => !have.has(c.publicKey)).map(c => ({ publicKey: c.publicKey, callsign: c.callsign, avatarUrl: c.avatarUrl ?? null }))];
+                    });
+                })
+                .catch(() => { batch.forEach(k => askedKeysRef.current.delete(k)); });
+        }
+    }, [membersOnDemand, conversations, messages, activeConv, members, identity.publicKey]);
+
     async function loadMembers() {
+        // With members on demand nothing is read whole: a block takes the person's card out of what is held.
+        if (membersOnDemandRef.current === true) {
+            const blocked = new Set(getBlockedUsers());
+            setMembers(prev => prev.filter(m => !blocked.has(m.publicKey)));
+            return;
+        }
+        if (membersOnDemandRef.current !== false) return;
         try {
             const result = await getMembers();
             const blocked = new Set(getBlockedUsers());
@@ -587,7 +798,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 identity.publicKey,
             );
             // Asked for a DM: it is one, whatever type the answer names.
-            setActiveConv(heldConversation({ ...result.conversation, type: 'dm' as const }));
+            const started = startedDm(result.conversation, await lockedGroupsOrNull(identity.publicKey));
+            if (!started) { setChatRefusal(GROUP_HOLD_STARTED_DM_TEXT); return; }
+            setActiveConv(started);
             setShowNewDm(false);
             setChatRefusal(null);
             await loadConversations();
@@ -614,7 +827,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         try {
             const result = await getConversationMessages(conv.id);
             if (!result.conversation) return conv;
-            const held = heldConversation(result.conversation, result.messages);
+            const held = holdConversation(result.conversation, await lockedGroupsOrNull(identity.publicKey), result.messages);
             setActiveConv(prev => (prev && prev.id === conv.id ? { ...prev, ...held } : prev));
             return { ...conv, ...held };
         } catch {
@@ -635,12 +848,83 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
     }
 
+    /**
+     * A line (or an edit) in a group's chat (lib/group-chat-lines.ts): the chat answer is read again first. Sealed when it
+     * is locked or this browser has seen it locked (the sticky lock); readable only to a node from before locked chats,
+     * from a browser that never saw this group locked; otherwise refused with a sentence, the words kept in the composer.
+     */
+    async function sendInGroup(conv: Conversation, wasEditing: ApiMessage | null): Promise<void> {
+        const ring = groupRing(conv.id);
+        let chat: GroupChatAnswer | null = null;
+        let chatErr: unknown = null;
+        try {
+            chat = await getGroupChat(conv.id, 1);
+        } catch (e) {
+            chatErr = e;
+        }
+        // A DM the node calls a group's chat (finding 1): nothing leaves by the group route; the page reopens it as the DM.
+        if (holdConversation({ id: conv.id, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), chat?.messages).type === 'dm') {
+            setChatRefusal(GROUP_CHAT_IS_DM_TEXT);
+            await loadMessages(conv.id);
+            return;
+        }
+        const plan = await groupChatSendPlan(ring, chat, chatErr);
+        if (plan.kind === 'refuse') { setChatRefusal(plan.sentence); return; }
+        if (chat && chat.canPost === false) { setChatRefusal(chat.readOnly ? GROUP_CHAT_CLOSED_TEXT : GROUP_CHAT_READ_ONLY_TEXT); return; }
+        const text = draft.trim();
+        if (plan.kind === 'readable') {
+            // A node from before locked chats, and a browser that never saw this group locked (§14.3): as it always was.
+            const { ciphertext, nonce } = encodePlaintext(text);
+            if (wasEditing) await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
+            else await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined,
+                replyToMessage ? JSON.stringify({ replyToId: replyToMessage.id }) : undefined, newDmMessageId());
+        } else {
+            try {
+                if (wasEditing) {
+                    await editSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, { groupId: groupIdKey(conv.id), messageId: wasEditing.id, metadata: wasEditing.metadata, text });
+                } else {
+                    const newest = [...shownMessages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
+                    await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
+                        groupId: groupIdKey(conv.id), text, clientId: newDmMessageId(), replyToId: replyToMessage?.id ?? null, after: newest?.id ?? null,
+                        mentionCandidates: (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
+                    });
+                }
+            } catch (e) {
+                if (e instanceof GroupChatKeyError) { setChatRefusal(e.message); return; }
+                // The node refuses this member the keys (a removal, or a node that won't say): nothing readable went.
+                if (e instanceof GroupKeysRequestError && (e.status === 403 || e.status === 404)) { setChatRefusal(heldGroupRefusal(chat, chatErr)); return; }
+                if (e instanceof GroupKeysRequestError) { setChatRefusal(e.message); return; }
+                throw e;
+            }
+        }
+        setDraft('');
+        setReplyToMessage(null);
+        setEditingMessage(null);
+        setChatRefusal(null);
+        await loadMessages(conv.id);
+    }
+
     async function handleSend() {
         if (!draft.trim() || !activeConv) return;
         setSending(true);
 
         const wasEditing = editingMessage;
         try {
+            if (activeConv.type === 'group_thread') {
+                await sendInGroup(activeConv, wasEditing);
+                return;
+            }
+            // A group seen locked here, whatever the node now calls it, is sealed as a group's line or refused; with the
+            // lock store unreadable, only a DM this browser knows goes on (lib/group-hold.ts).
+            const route = await sendRouteOf(identity.publicKey, activeConv.id);
+            if (route === 'group') {
+                await sendInGroup({ ...activeConv, type: 'group_thread' }, wasEditing);
+                return;
+            }
+            if (route === 'refuse') {
+                setChatRefusal(GROUP_HOLD_UNREAD_TEXT);
+                return;
+            }
             // Nothing is sent, and the draft stays, when a DM can't be locked (caught below). A DM line is sealed to its
             // message id (a new one, sent with it; an edit's own) and to the line it was written after: the newest the
             // node has given us, or for an edit the one its line was written after.
@@ -699,6 +983,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     async function handleSendImage(file: File, caption = ''): Promise<boolean> {
         if (!activeConv) return false;
         if (activeConv.type !== 'dm') { alert('Photos can only be sent in direct messages.'); return false; }
+        // A group seen locked here takes no photo whatever the node calls it; an unreadable lock store sends none to a
+        // conversation this browser doesn't know as a DM (lib/group-hold.ts).
+        const route = await sendRouteOf(identity.publicKey, activeConv.id);
+        if (route !== 'as-typed') { setChatRefusal(route === 'group' ? GROUP_CHAT_NO_PHOTOS_TEXT : GROUP_HOLD_UNREAD_TEXT); return false; }
         setSending(true);
         try {
             const dataUri = await resizeImageToDataUri(file, 1000, 0.7);
@@ -826,6 +1114,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const UNREADABLE_BODIES = ['[Encrypted — update your app to read]', '[Unable to decrypt this message]', DM_LINE_NOT_VERIFIED_TEXT];
 
     function decryptMessage(msg: ApiMessage): string {
+        // A locked group chat's line, as drawn (groupLineShown): never a row's own words unless they opened.
+        const g = groupShown?.get(msg.id);
+        if (g) return g.text ?? formatSystemMessage(msg, identity.publicKey, userTransactionsByPostId);
         try {
             // A DM's line, as the thread check judged it: never a row's words unless they opened.
             const view = lineViews?.get(msg.id);
@@ -859,6 +1150,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      */
     function quoteOf(parent: ApiMessage | undefined): { author: string; text: string; note: string | null; named: boolean } {
         if (!parent) return { author: 'Someone', text: 'Message not found', note: null, named: false };
+        // In a locked group chat, the answered line as drawn: under its signer's name, or nobody's.
+        const g = groupShown?.get(parent.id);
+        if (g) {
+            const author = g.mine ? 'You' : g.nodeLine ? 'BeanPool' : (g.name ?? GROUP_LINE_UNVERIFIED_NAME);
+            return { author, text: g.text ?? formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId), note: null, named: false };
+        }
         const view = lineViews?.get(parent.id);
         if (lineViews) {
             const from = dmQuoteFrom({ authorPubkey: parent.authorPubkey, nonce: parent.nonce, type: parent.type, metadata: parent.metadata }, view);
@@ -961,6 +1258,80 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             </button>
         </div>
     ) : null;
+
+    // New DM overlay with members on demand (lib/members-on-demand): the people this member already talks to, named
+    // from their chats' rows, then a search the node answers, never a list of everyone. Every control at least 44 px.
+    if (showNewDm && membersOnDemand === true) {
+        const blocked = new Set(getBlockedUsers());
+        const seen = new Set<string>();
+        const recents = conversations.filter(c => c.type === 'dm').flatMap(c => {
+            const peer = (c.participants || []).find(p => p && p !== identity.publicKey);
+            if (!peer || blocked.has(peer) || seen.has(peer)) return [];
+            seen.add(peer);
+            const held = membersByPublicKey.get(peer);
+            return [{ publicKey: peer, callsign: c.peerCallsign || held?.callsign || peer.slice(0, 8), avatarUrl: c.peerAvatar ?? held?.avatarUrl ?? null }];
+        });
+        const typed = pickerQuery.trim();
+        const found = (pickerSearch.found || []).filter(m => m.publicKey !== identity.publicKey && !blocked.has(m.publicKey));
+        const pick = (p: { publicKey: string; callsign: string; avatarUrl?: string | null }) => (
+            <button
+                type="button"
+                key={p.publicKey}
+                data-testid="dm-pick"
+                onClick={() => handleStartDm(p.publicKey)}
+                style={{
+                    ...cardStyle, display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', minHeight: '44px',
+                    textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit', color: 'var(--text-primary)',
+                }}
+            >
+                {renderAvatar(p.avatarUrl, p.callsign, 36)}
+                <span style={{ fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }}>{p.callsign}</span>
+            </button>
+        );
+        const note: React.CSSProperties = { color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 0.75rem' };
+        return (
+            <div className="p-4 max-w-xl mx-auto w-full" data-testid="new-message-on-demand">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                    <button
+                        type="button"
+                        onClick={() => { setShowNewDm(false); setPickerQuery(''); }}
+                        style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', minHeight: '44px', minWidth: '44px', padding: '0 0.25rem' }}
+                    >
+                        ← Back
+                    </button>
+                    <h2 style={{ fontSize: '1.2rem', margin: 0 }}>
+                        New Message
+                    </h2>
+                </div>
+                {chatRefusalNotice && <div style={{ marginBottom: '0.75rem' }}>{chatRefusalNotice}</div>}
+
+                <label htmlFor="new-message-search" style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                    Find someone by name
+                </label>
+                <input
+                    id="new-message-search"
+                    type="search"
+                    value={pickerQuery}
+                    onChange={e => setPickerQuery(e.target.value)}
+                    placeholder="Type a name…"
+                    style={{ ...inputStyle, width: '100%', height: '44px', marginBottom: '0.4rem' }}
+                />
+                <p style={note} aria-live="polite" data-testid="new-message-search-status">
+                    {typed && typed.length < MEMBERS_SEARCH_MIN_CHARS ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
+                        : pickerSearch.state === 'searching' ? 'Searching…'
+                        : pickerSearch.state === 'failed' ? "Couldn't search just now. Check your connection and try again."
+                        : pickerSearch.found && found.length === 0 ? 'Nobody here has a name starting with that.'
+                        : null}
+                </p>
+                {found.length > 0 && <div data-testid="new-message-found" style={{ marginBottom: '1rem' }}>{found.map(pick)}</div>}
+
+                <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.5rem' }}>People you've talked to</h3>
+                {recents.length === 0
+                    ? <p style={note}>No one yet. Search for someone by name above.</p>
+                    : <div data-testid="new-message-recents">{recents.map(pick)}</div>}
+            </div>
+        );
+    }
 
     // New DM overlay. (The old "👥 Group" chat was removed on 2026-09-19: a group chat is now the chat every
     // Commons group owns, and the Talk tab's Groups list and "New group" come in the next slice.)
@@ -1115,6 +1486,18 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             )}
                         </div>
                     </div>
+                    {activeConv.type === 'group_thread' && (
+                        <button
+                            type="button"
+                            data-testid="group-chat-search-toggle"
+                            onClick={() => setChatSearch((q) => (q === null ? '' : null))}
+                            aria-label={chatSearch === null ? 'Search this chat' : 'Close search'}
+                            aria-expanded={chatSearch !== null}
+                            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '1rem', minWidth: '44px', minHeight: '44px' }}
+                        >
+                            {chatSearch === null ? '🔍' : '✕'}
+                        </button>
+                    )}
 
                     {activeConv.type === 'dm' && peerPubkey && (
                         <div className="flex items-center gap-1.5 ml-auto">
@@ -1161,6 +1544,22 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         </div>
                     )}
                 </div>
+
+                {activeConv.type === 'group_thread' && chatSearch !== null && (
+                    // Search this chat (design §10): the loaded lines only, as opened in this browser; nothing is asked of the node.
+                    <div style={{ padding: '0.5rem 1rem', borderBottom: '1px solid var(--border-primary)' }}>
+                        <input
+                            type="search"
+                            data-testid="group-chat-search"
+                            value={chatSearch}
+                            onChange={(e) => setChatSearch(e.target.value)}
+                            placeholder="Search this chat"
+                            aria-label="Search this chat"
+                            autoFocus
+                            style={{ ...inputStyle, width: '100%', minHeight: '44px' }}
+                        />
+                    </div>
+                )}
 
                 {/* Sticky Marketplace Header */}
                 {activeConv.postId && (
@@ -1255,9 +1654,51 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             No messages yet. Say hello! 👋
                         </p>
                     )}
-                    {shownMessages.map((msg, index) => {
+                    {chatSearch?.trim() && searchedMessages.length === 0 && (
+                        <p data-testid="group-chat-search-none" style={{ textAlign: 'center', color: 'var(--text-faint)', marginTop: '1rem' }}>
+                            No messages in this chat match.
+                        </p>
+                    )}
+                    {searchedMessages.map((msg, index) => {
                         const isSystem = msg.type === 'system' || msg.authorPubkey === 'SYSTEM';
                         const lineView = lineViews?.get(msg.id);
+                        const groupLine = groupShown?.get(msg.id) ?? null;
+                        // From before this member's membership (design §3): never drawn.
+                        if (groupLine?.hidden) return null;
+                        if (groupLine?.nodeLine && groupLine.text !== null) {
+                            // A tombstone, in the app's own words: no name, no actions.
+                            return (
+                                <div key={msg.id} id={`msg-${msg.id}`} data-testid="group-line-tombstone" style={{ alignSelf: 'center', margin: '0.5rem 0', maxWidth: '90%' }}>
+                                    <div style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)', borderRadius: '16px', padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
+                                        {groupLine.text}
+                                    </div>
+                                </div>
+                            );
+                        }
+                        if (groupLine?.unattributed) {
+                            // Nobody's (lib/group-chat-lines.ts): a line that opened under no key, an unsealed row in a locked
+                            // chat, or one whose key hasn't reached this browser. In the middle, never in a member's bubble.
+                            return (
+                                <div key={msg.id} id={`msg-${msg.id}`} data-testid="group-line-unattributed" style={{
+                                    alignSelf: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '0.5rem 0', maxWidth: '90%',
+                                }}>
+                                    {groupLine.name && (
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{groupLine.name}</div>
+                                    )}
+                                    <div style={{
+                                        background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '16px', padding: '0.4rem 0.8rem',
+                                        fontSize: '0.8rem', fontWeight: 500, whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'center',
+                                    }}>
+                                        {groupLine.text}
+                                    </div>
+                                    {groupLine.details && (
+                                        <div data-testid="group-line-details" style={{ fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, textAlign: 'center' }}>
+                                            {groupLine.details}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        }
                         if (!isSystem && dmLineIsUnattributed(lineView)) {
                             // A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed): a line that didn't open, a row
                             // in a member's name that wasn't encrypted, or the admin page's message. In the middle of the
@@ -1362,12 +1803,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             );
                         }
 
-                        const isMe = msg.authorPubkey === identity.publicKey;
+                        // In a locked group chat the key that opened the line says whose it is, never the author column.
+                        const isMe = groupLine ? groupLine.mine : msg.authorPubkey === identity.publicKey;
                         const isDm = activeConv.type === 'dm';
                         const readByPeer = isMe && isDm && !!activeConv?.peerLastReadAt &&
                             new Date(msg.timestamp).getTime() <= new Date(activeConv.peerLastReadAt).getTime();
                         const isEdited = !!msg.editedAt;
                         const canEdit = isMe && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
+                            (!isGroupChat || openGroup?.answer?.canPost !== false) &&
                             (Date.now() - new Date(msg.timestamp).getTime() <= MESSAGE_EDIT_WINDOW_MS);
 
                         let metaObj: any = null;
@@ -1407,9 +1850,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 }}
                             >
                                 {!isMe && activeConv.type === 'group_thread' && (
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
-                                        {membersByPublicKey.get(msg.authorPubkey)?.callsign
-                                            || msg.authorPubkey.substring(0, 8)}
+                                    <div data-testid="group-line-author" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
+                                        {groupLine
+                                            ? <>{groupLine.name}{groupLine.nameHint && <span style={{ opacity: 0.75 }}> · {groupLine.nameHint}</span>}</>
+                                            : (membersByPublicKey.get(msg.authorPubkey)?.callsign || msg.authorPubkey.substring(0, 8))}
                                     </div>
                                 )}
                                 {showEmojiPicker && (
@@ -1544,6 +1988,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             );
                                         })() : decryptMessage(msg)}
                                     </div>
+                                    {groupLine?.details && (
+                                        <div data-testid="group-line-details" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>
+                                            {groupLine.details}
+                                        </div>
+                                    )}
                                     {(() => {
                                         // A line the node moved or reordered, or an old-format line (checkDmThread).
                                         const note = dmLineMarkText(lineView?.mark);
@@ -1778,6 +2227,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         >
                             ✕
                         </button>
+                    </div>
+                )}
+
+                {openGroup && (
+                    // The app's own words for what it decided about this chat (lib/group-chat-lines.ts), never the node's.
+                    <div data-testid="group-chat-notice" style={{
+                        padding: '0.4rem 1rem', borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
+                        fontSize: '0.75rem', color: 'var(--text-muted)', wordBreak: 'break-word',
+                    }}>
+                        {groupLocked ? '🔒 ' : ''}{groupChatNotice({ nodeSaysLocked: openGroup.nodeSaysLocked, seenLocked: openGroup.seenLocked, chatError: openGroup.answer ? null : openGroup.error })}
+                        {openGroup.thread?.waitingForNextKey ? ` ${GROUP_KEY_WAITING_TEXT}` : ''}
                     </div>
                 )}
 

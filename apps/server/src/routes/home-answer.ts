@@ -51,6 +51,7 @@
 import {
     PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, normalizeCategory, readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor,
     HOME_FRAME_LIMITS, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings,
+    type TourRecord,
 } from '@beanpool/core';
 import { ONE_PASS_MAX_MEASURED, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -58,15 +59,16 @@ import {
     getMember, getPosts, getBalance, getMarketplaceTransactions, getConversationsByMember, getListedUnreadCounts,
     listYourChats, keeperOf, isVisitorKey, readsAsMember, passesReadGate, getPublicCommunityInfo,
 } from '../state-engine.js';
-import { getNodeProfile, getNodeFeatures, getProfileSwitches, type NodeFeatures, type NodeProfile, type ProfileSwitches } from '../config/node-profile.js';
-import { getDoor, type Door } from '../config/door.js';
+import { featuresFor } from '../config/features-for.js';
+import { getNodeProfile, getProfileSwitches, type NodeFeatures, type NodeProfile, type ProfileSwitches } from '../config/node-profile.js';
+import { type Door } from '../config/door.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '../engine/admin-queue.js';
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
-import { getInterestsUpdatedAt } from '../engine/home-preferences.js';
+import { getInterestsUpdatedAt, getTourRecord } from '../engine/home-preferences.js';
 import { chatHiddenFrom } from '../engine/event-thread.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
@@ -170,6 +172,11 @@ export interface HomeMe {
      * own unsaved change only while this is still the stamp that change was made on.
      */
     interestsUpdatedAt: string | null;
+    /**
+     * Their tour record (engine/home-preferences.ts `tour`), null when it has not ended: the apps draw Getting started
+     * only while it is null or `open` (DESIGN-getting-started-fable.md §2).
+     */
+    tour: TourRecord | null;
     area: { lat: number; lng: number } | null;
     /**
      * Whether they have posted an Offer here, which decides the `invite` card (§3.1 "after the first Offer"), whatever
@@ -383,6 +390,7 @@ function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>, d
             : `${plural(n, 'emergency suspension', 'emergency suspensions')} the community is voting on`;
         case 'removals': return n === 1 ? '1 removal in its 7-day grace period' : `${n} removals in their 7-day grace period`;
         case 'unclean_shutdown': return 'the node restarted after an unclean shutdown';
+        case 'agent_suggestions': return `${plural(n, 'suggestion', 'suggestions')} from your AI assistant to approve`;
         default: return `${i.label.charAt(0).toLowerCase()}${i.label.slice(1)}: ${n}`;
     }
 }
@@ -427,7 +435,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     const role = nodeRoleOf(me);
     const row = getMember(me);
     if (role && row?.status === 'active' && !isVisitorKey(me)) {
-        const queue = getAdminQueue({ forModerator: role === 'moderator', forOwner: role === 'owner' });
+        const queue = getAdminQueue({ forModerator: role === 'moderator', forOwner: role === 'owner', forMember: me });
         const work = queue.items.filter(i => i.count > 0);
         if (queue.total > 0 && work.length) {
             const parts = work.map(i => adminItemInWords(i, c.switches.decisions));
@@ -845,7 +853,8 @@ export function buildHome(reader: HomeReader): HomeAnswer {
     // The point the request gave, else the member's own coarse area (G4), which only they read back.
     const area = own ? readMemberArea(me!) : null;
     const point = reader.point ?? (member && area ? { lat: area.lat, lng: area.lng } : null);
-    const features = getNodeFeatures();
+    // The reader's own effective set (config/features-for.ts), as GET /api/community/me says.
+    const { door, ...features } = featuresFor(me);
     const c: Ctx = {
         me, own, member, guestView: !member && switches.guestListingsOnly, point, askedPoint: reader.point, now, switches, features, interests,
         lands: reader.lands ?? new Set(),
@@ -877,6 +886,7 @@ export function buildHome(reader: HomeReader): HomeAnswer {
             probation: probation?.onProbation ? probation : null,
             interests,
             interestsUpdatedAt: getInterestsUpdatedAt(me!),
+            tour: getTourRecord(me!),
             area: area ? { lat: area.lat, lng: area.lng } : null,
             firstOffer: firstOfferOf(c),
             standing: member ? 'member' : 'suspended',
@@ -885,7 +895,7 @@ export function buildHome(reader: HomeReader): HomeAnswer {
     return {
         generatedAt: iso(now),
         profile: getNodeProfile(),
-        features: { ...features, door: getDoor() },
+        features: { ...features, door },
         // The visitors' Join card: for a reader with no account here only, never a suspended member (`me.standing`).
         ...(c.guestView && !own ? { welcome: true as const } : {}),
         me: meBlock,

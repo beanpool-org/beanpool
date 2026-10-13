@@ -19,6 +19,7 @@ import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLev
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
+import { useMembersOnDemand, useMemberSearch, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
 
 interface Props {
@@ -87,6 +88,14 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     // Search filter for recipient select dropdown
     const [memberSearch, setMemberSearch] = useState('');
     const [showMemberPicker, setShowMemberPicker] = useState(false);
+    // With members on demand (the worldwide community) this page never reads the directory whole: the Send picker asks
+    // the node by name and keeps the card picked (lib/members-on-demand; review of #1861, N1). Elsewhere the list is
+    // read as before, once the node has said which it is.
+    const membersOnDemand = useMembersOnDemand();
+    const membersOnDemandRef = useRef<boolean | null>(null);
+    membersOnDemandRef.current = membersOnDemand;
+    const pickerSearch = useMemberSearch(memberSearch, membersOnDemand === true && showMemberPicker);
+    const [pickedCard, setPickedCard] = useState<{ publicKey: string; callsign: string } | null>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     // Beans from someone this member has blocked show BLOCKED_BEANS_NOTE in place of their note (@beanpool/core
     // ledgerLineNote): one the community kept from them already comes so, and this covers the rest.
@@ -147,7 +156,8 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     getTransactions(identity.publicKey).catch(() => []),
                     // null, not [], when the list couldn't be read (the node busy with heavy lists answers 503):
                     // the Send picker keeps who it had and the next refresh reads them again.
-                    getMembers().catch(() => null),
+                    // Read only once the node has said it reads whole (the effect below reads them when it says so).
+                    membersOnDemandRef.current === false ? getMembers().catch(() => null) : null,
                 ]);
                 // The balance is the point of this screen, so a balance that failed to load is a
                 // failed refresh even when the other two calls succeeded. Requiring ALL THREE to
@@ -177,6 +187,16 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
         refreshPromiseRef.current = p;
         return p;
     }, [identity.publicKey, viewerIsMember]);
+
+    // The node has just said it reads whole: the list the refresh at open couldn't read yet, read once.
+    useEffect(() => {
+        if (membersOnDemand !== false || !viewerIsMember) return;
+        // Asked inside the promise, so a read that throws before it starts waits for the next refresh too.
+        Promise.resolve()
+            .then(() => getMembers())
+            .then(mem => { if (isMountedRef.current) setMembers(mem.filter(m => m.publicKey !== identity.publicKey)); })
+            .catch(() => { /* the next refresh reads them again */ });
+    }, [membersOnDemand]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -297,8 +317,19 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
 
     // ⚡ Bolt: O(1) Map lookup for selected member recipient instead of O(M) .find() scans
     const membersMap = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
-    const selectedMember = membersMap.get(sendTo);
+    const selectedMember = membersMap.get(sendTo) ?? (pickedCard?.publicKey === sendTo ? pickedCard : undefined);
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
+    const pickable: Array<{ publicKey: string; callsign: string }> = membersOnDemand === true
+        ? (pickerSearch.found ?? []).filter(m => m.publicKey !== identity.publicKey)
+        : filteredMembers;
+    // Said only once it is so: never "nobody" for a search that failed or hasn't answered yet.
+    const pickerNote = membersOnDemand === false ? (filteredMembers.length === 0 ? 'No members found' : null)
+        : membersOnDemand === null ? null
+        : memberSearch.trim().length < MEMBERS_SEARCH_MIN_CHARS ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
+        : pickerSearch.state === 'searching' ? 'Searching…'
+        : pickerSearch.state === 'failed' ? "Couldn't search just now. Check your connection and try again."
+        : pickerSearch.found && pickable.length === 0 ? 'Nobody here has a name starting with that.'
+        : null;
 
     return (
         <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24">
@@ -445,9 +476,11 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     </div>
 
                     {/* ── Medallion shelf ── */}
+                    {/* Levels are merit badges (#1838): one not reached yet keeps its own colours and a dashed edge, something
+                        to grow into. Never a lock, never faded or greyed as if it were out of bounds. */}
                     <div>
                         <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-3">ALL LEVELS</span>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-4 gap-2" data-testid="levels-shelf">
                             {TIERS.map((t, i) => {
                                 const reached = tierIdx >= i;
                                 const isSel = selLevel === i;
@@ -462,12 +495,12 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         style={{
                                             background: isSel ? t.bg : '#fff',
                                             borderColor: isSel ? t.color : '#e5e7eb',
-                                            opacity: reached ? 1 : 0.55,
+                                            borderStyle: reached || isSel ? 'solid' : 'dashed',
                                             fontFamily: 'inherit',
                                         }}
                                     >
                                         <span className="text-3xl leading-none">{t.emoji}</span>
-                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: reached ? t.color : '#9ca3af' }}>{t.name}</span>
+                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: t.color }}>{t.name}</span>
                                         <span className="text-[9px] font-semibold text-nature-400 mt-1 leading-none">
                                             {tierIdx === i ? "You're here" : reached ? 'Reached' : `${t.min} trust`}
                                         </span>
@@ -478,7 +511,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     </div>
 
                     {/* ── Selected-level detail ── */}
-                    <div className="bg-white dark:bg-nature-900 border rounded-2xl p-5 shadow-sm" style={{ borderColor: sel.border }}>
+                    <div className="bg-white dark:bg-nature-900 border rounded-2xl p-5 shadow-sm" style={{ borderColor: sel.border }} data-testid="level-detail">
                         {/* Wraps: at 320px with 1.3x text the level name and badge ran 22px past the card and
                             dragged the whole Ledger page sideways. */}
                         <div className="flex flex-wrap items-center gap-3 mb-4" data-testid="level-detail-heading">
@@ -487,8 +520,8 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                 <div className="text-xl font-black" style={{ color: sel.color }}>{sel.name}</div>
                                 <div className="text-xs text-nature-400 font-semibold">Level {selLevel + 1} of {TIERS.length}</div>
                             </div>
-                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, backgroundColor: selReached ? sel.bg : '#f9fafb', color: selReached ? sel.color : '#9ca3af' }}>
-                                {selCurrent ? "You're here" : selReached ? 'Reached ✓' : '🔒 Locked'}
+                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, borderStyle: selReached ? 'solid' : 'dashed', backgroundColor: sel.bg, color: sel.color }}>
+                                {selCurrent ? "You're here" : selReached ? 'Reached ✓' : selLevel === tierIdx + 1 ? 'Next level' : 'Up ahead'}
                             </span>
                         </div>
 
@@ -513,7 +546,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div className="flex flex-col gap-2">
                             {sel.perks.map(p => (
                                 <div key={p} className="flex items-start gap-2 text-[13px]">
-                                    <span className="mt-0.5 shrink-0" style={{ color: selReached ? '#10b981' : '#d1d5db' }}>{selReached ? '✓' : '○'}</span>
+                                    <span className="mt-0.5 shrink-0" style={{ color: selReached ? '#10b981' : sel.color }}>{selReached ? '✓' : '○'}</span>
                                     <span className="text-nature-700 dark:text-nature-300">{p}</span>
                                 </div>
                             ))}
@@ -655,13 +688,13 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                                 onChange={(e) => setMemberSearch(e.target.value)}
                                                 className="w-full p-3 border-b border-nature-100 dark:border-nature-850 bg-transparent text-sm focus:outline-none text-nature-900 dark:text-white"
                                             />
-                                            {filteredMembers.length === 0 ? (
-                                                <div className="p-4 text-xs text-nature-400 text-center">No members found</div>
+                                            {pickerNote ? (
+                                                <div className="p-4 text-xs text-nature-400 text-center" data-testid="ledger-picker-note">{pickerNote}</div>
                                             ) : (
-                                                filteredMembers.map(m => (
+                                                pickable.map(m => (
                                                     <button
                                                         key={m.publicKey}
-                                                        onClick={() => { setSendTo(m.publicKey); setShowMemberPicker(false); setMemberSearch(''); }}
+                                                        onClick={() => { setSendTo(m.publicKey); setPickedCard({ publicKey: m.publicKey, callsign: m.callsign }); setShowMemberPicker(false); setMemberSearch(''); }}
                                                         className={`w-full p-3 text-left text-sm hover:bg-nature-50 dark:hover:bg-nature-900 flex justify-between items-center cursor-pointer border-none bg-transparent ${sendTo === m.publicKey ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600' : 'text-nature-900 dark:text-white'}`}
                                                     >
                                                         <span className="font-bold">{m.callsign}</span>

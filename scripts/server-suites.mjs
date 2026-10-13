@@ -39,6 +39,7 @@ export const SUITES = [
     'test-ssrf-fetch-timeout',
     'test-pulse-submit',
     'test-pulse-oauth',
+    'test-pulse-verify-identity',
     'test-oauth-ingest-bounds',
     'test-pulse-curated',
     'test-pulse-admin-channels',
@@ -171,6 +172,9 @@ export const SUITES = [
     'test-retire-admin-password',
     'test-retired-password-bundles',
     'test-automation-tokens',
+    'test-admin-mcp',
+    'test-admin-mcp-settings',
+    'test-admin-mcp-suggestions',
     'test-settings-qr-signin',
     'test-challenge-token-leak',
     'test-moderator-routes',
@@ -184,6 +188,7 @@ export const SUITES = [
     'test-offbox-backups',
     'test-alerts',
     'test-alerts-security',
+    'test-alerts-reports',
     'test-takeover-envelope',
     'test-owner-words-check',
     'test-owner-lock-open-check',
@@ -285,6 +290,7 @@ export const SUITES = [
     'test-members-snapshot',
     'test-roster-snapshots',
     'test-members-directory-cost',
+    'test-members-on-demand',
     'test-member-photos-out-of-rows',
     'test-group-pictures-out-of-rows',
     'test-group-rosters-photo-urls',
@@ -327,6 +333,7 @@ export const SUITES = [
     'test-app-store-versions',
     'test-app-floors',
     'test-node-profile',
+    'test-sample-id-guard',
     'test-profile-feature-gate',
     'test-global-no-beans',
     'test-open-door-hardening',
@@ -450,6 +457,7 @@ export const SUITES = [
     'test-dm-never-plaintext',
     'test-group-keys-http',
     'test-group-keys-over-time',
+    'test-key-succession',
     'test-dm-line-relay',
     'test-dm-standby-order',
     'test-keeper-read-cursor',
@@ -484,6 +492,8 @@ export const SUITES = [
  * A variant with no tag is a suite that ONLY runs here, because it refuses to run without its flag.
  */
 export const VARIANTS = [
+    // The members forms on a node with read auth off: keys= and q= stay signed by the route's own check (#1847 NB2).
+    { name: 'test-members-on-demand', tag: 'open-reads', label: 'ENFORCE_READ_AUTH=false', env: { MEMBERS_OPEN_READS: '1' } },
     // The sockets' index for listing pushes against the full loop at the widest radius an operator may set and at a
     // small one: the cells a push looks at change with it (#1791 item 5).
     { name: 'test-ws-push-index-equivalence', tag: 'radius-2000', label: 'NEARBY_LISTINGS_RADIUS_KM=2000', env: { NEARBY_LISTINGS_RADIUS_KM: '2000', PUSH_INDEX_COST: '0' } },

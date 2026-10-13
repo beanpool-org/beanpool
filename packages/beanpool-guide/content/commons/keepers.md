@@ -19,7 +19,7 @@ The full rules, including what happens when a lead goes quiet, are in "Rules and
 
 - Open the enterprise.
 - Under **Ask to join as a keeper**, enter how much of your trust to back it with. Zero is allowed.
-- Tap **Request to join as keeper**.
+- Tap **Request to join as a keeper**.
 
 The lead keeper approves or declines. If the enterprise already has more than one keeper, you become a keeper after 3 days, unless another keeper objects.
 
@@ -34,7 +34,7 @@ Only you see how much trust you have left to back with. The lead keeper sees you
 
 ## Stepping down
 
-Tap **Step down as keeper**, then **Step down**.
+Tap **Step down as a keeper**, then **Step down**.
 
 - The only keeper cannot step down. They can wind the enterprise up instead.
 - If the enterprise is below zero and needs your backing to cover it, the app says **Not yet**.

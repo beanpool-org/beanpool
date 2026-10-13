@@ -106,6 +106,9 @@ import { createBackupRoutes } from './routes/backup.js';
 import { createOffboxBackupRoutes } from './routes/offbox-backups.js';
 import { createAlertsRoutes } from './routes/alerts.js';
 import { createAutomationTokenRoutes } from './routes/automation-tokens.js';
+import { createMcpRoutes } from './agent/mcp-route.js';
+import { createAgentGrantRoutes } from './agent/grants-route.js';
+import { createAgentSuggestionRoutes } from './agent/suggestions-route.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
@@ -180,6 +183,7 @@ import { requestNonces, verifyMemberSignature } from './engine/member-signature.
 import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason } from '@beanpool/core';
 import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
+import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSampleId } from './sample-id-guard.js';
 
 
 // X-1: replay protection for signed requests. A signed request is valid for SIGNATURE_FRESHNESS_MS around its
@@ -769,10 +773,16 @@ function untrackConnection(ws: any) {
  */
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/** 400 `sample_id`: a write carried an id from the sample community (sample-id-guard.ts). Nothing past the parser runs. */
+function refuseSampleId(ctx: Koa.Context): void {
+    ctx.status = 400;
+    ctx.body = { error: SAMPLE_ID_MESSAGE, code: SAMPLE_ID_REFUSAL };
+}
+
 /** /api and /ws, ignoring case: answers that are never documents, so they carry no document headers. */
 function isApiOrWsPath(requestPath: string): boolean {
     const lower = requestPath.toLowerCase();
-    return lower === '/api' || lower.startsWith('/api/') || lower === '/ws' || lower.startsWith('/ws/');
+    return lower === '/api' || lower.startsWith('/api/') || lower === '/ws' || lower.startsWith('/ws/') || lower === '/mcp';
 }
 
 /**
@@ -788,6 +798,7 @@ export function isAdminSurfacePath(requestPath: string): boolean {
         p === '/settings.js' ||
         p === '/api/local/admin' ||
         p.startsWith('/api/local/admin/') ||
+        p === '/mcp' ||
         p === '/api/admin' ||
         p.startsWith('/api/admin/') ||
         p === '/api/local/verify-password' ||
@@ -1436,6 +1447,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     // JSON body parser middleware
     app.use(async (ctx, next) => {
         if (MUTATING_METHODS.has(ctx.method)) {
+            // No write carries an id from the sample community (sample-id-guard.ts): its path and query first, before a byte
+            // of the body is read, and its body's ids once parsed, below.
+            if (urlCarriesSampleId(ctx.path, ctx.query)) return refuseSampleId(ctx);
             if (ctx.request.type === 'application/json' || ctx.get('content-type')?.includes('json')) {
                 // A2-10: reject an over-limit body up-front by Content-Length so a
                 // well-behaved client gets a clean 413 before we read a byte. The
@@ -1492,6 +1506,7 @@ export async function startHttpsServer(port: number): Promise<number> {
                 (ctx as any).requestBody = {};
                 (ctx.request as any).body = {};
             }
+            if (bodyCarriesSampleId((ctx as any).requestBody)) return refuseSampleId(ctx);
         }
         await next();
     });
@@ -1802,6 +1817,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         createOffboxBackupRoutes(deps),
         createAlertsRoutes(deps),
         createAutomationTokenRoutes(deps),
+        createMcpRoutes(deps),
+        createAgentGrantRoutes(deps),
+        createAgentSuggestionRoutes(deps),
         createTakeoverEnvelopeRoutes(deps),
         createOwnerWordsCheckRoutes(deps),
         createOwnerUnlockRoutes(deps),
@@ -2002,6 +2020,8 @@ const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
 /** Routes whose legitimate bodies are much smaller than the global cap, enforced before
  *  a byte is buffered. Pulse OAuth ingest is at most 50 items of link metadata. */
 const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
+    // An AI assistant's MCP request (agent/mcp-route.ts): a method, an id and a few arguments.
+    [/^\/mcp\/?$/, 64 * 1024],
     [/^\/api\/member\/pulse\/oauth-ingest$/, 512 * 1024],
     // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
     [/^\/api\/join\/knock$/, 192 * 1024],

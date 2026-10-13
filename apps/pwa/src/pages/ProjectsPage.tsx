@@ -16,7 +16,11 @@ import { CreateGroupModal } from '../components/CreateGroupModal';
 import { GroupDetailModal } from '../components/GroupDetailModal';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
+import { useMembersOnDemand } from '../lib/members-on-demand';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
+import { modeFor, readerFeaturesOnce } from '../lib/features';
+import type { FeatureMode } from '@beanpool/core';
+import { CommonsPreview } from '../components/ShowcasePreviews';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -58,11 +62,28 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [votes, setVotes] = useState(true);
     // Projects and enterprises hold Beans: where the node has Beans off, the Create form offers neither.
     const [beansOn, setBeansOn] = useState(true);
+    // Enterprises or Decisions off here and the node shows previews: the Commons shows Example Valley's, each by its own
+    // mode (lib/features.ts).
+    const [enterprisesMode, setEnterprisesMode] = useState<FeatureMode>('hidden');
+    const [decisionsMode, setDecisionsMode] = useState<FeatureMode>('hidden');
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
             .then(() => communityInfoOnce())
-            .then((info) => { if (!cancelled) { setVotes(decisionsOn(info)); setBeansOn(info?.features?.beans !== false); } })
+            .then((info) => {
+                if (cancelled) return;
+                // The node's info alone sets Decide and the Beans create options, as before: no wait on the reader's set.
+                setVotes(decisionsOn(info));
+                setBeansOn(info?.features?.beans !== false);
+                // The modes wait for the reader's set too (none is read where it cannot matter): no preview flashes and goes.
+                return readerFeaturesOnce(info).then((reader) => {
+                    if (cancelled) return;
+                    setEnterprisesMode(modeFor('enterprises', info, reader));
+                    const decisions = modeFor('decisions', info, reader);
+                    setDecisionsMode(decisions);
+                    setVotes(decisions === 'live');
+                });
+            })
             .catch(() => { /* Not answered: keep what the page shows; the node refuses a vote itself. */ });
         return () => { cancelled = true; };
     }, []);
@@ -75,6 +96,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [commonsBalance, setCommonsBalance] = useState<number>(0);
     const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
     const [allMembersList, setAllMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
+    // The directory (only the Decision form's name preview uses it) is read whole only where the node has said it reads
+    // whole: never with members on demand, the worldwide community (lib/members-on-demand; review of #1861, N1).
+    const membersOnDemand = useMembersOnDemand();
+    const membersOnDemandRef = useRef<boolean | null>(null);
+    membersOnDemandRef.current = membersOnDemand;
 
     // Groups State
     const [groups, setGroups] = useState<Group[]>([]);
@@ -125,7 +151,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
                 // null, not [], when the directory couldn't be read (the node busy with heavy lists answers 503): the
                 // members list below keeps who it had, and the next fetch reads them again.
-                getAllMembers ? getAllMembers().catch(() => null) : [],
+                // Read only once the node has said it reads whole (the effect below reads them when it says so).
+                membersOnDemandRef.current !== false ? null : getAllMembers ? getAllMembers().catch(() => null) : null,
             ]);
             setTreasuries(tresData.treasuries || []);
             setDecisions(decData.decisions || []);
@@ -155,6 +182,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     useEffect(() => {
         fetchEnterprises();
     }, [identity?.publicKey]);
+
+    // The node has just said it reads whole: the list the fetch at open couldn't read yet, read once.
+    useEffect(() => {
+        if (membersOnDemand !== false) return;
+        // Asked inside the promise, so a read that throws before it starts waits for the next fetch too.
+        Promise.resolve().then(() => getAllMembers()).then((membersData) => {
+            if (Array.isArray(membersData)) setAllMembersList(membersData.map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
+        }).catch(() => { /* the next fetch reads them again */ });
+    }, [membersOnDemand]);
 
     // The viewer's balance (only earnedCredit, for proposing a Decision) is a member's alone. App learns
     // membership after mount, so this waits for it and a guest never asks the node.
@@ -336,7 +372,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     )}
                 </div>
 
+                {/* Enterprises or Decisions off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
+                {(enterprisesMode === 'preview' || decisionsMode === 'preview') && (
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
+                        <CommonsPreview enterprises={enterprisesMode === 'preview'} decisions={decisionsMode === 'preview'} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                    </div>
+                )}
                 {/* Commons Pool & Available Governance Credits */}
+                {enterprisesMode !== 'preview' && (<>
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
                     <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3">
                         <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
@@ -360,6 +403,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         </div>
                     </div>
                 </div>
+                </>)}
             </header>
 
             {/* Section Switcher: Decide vs Groups — the one sticky row */}

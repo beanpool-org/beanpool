@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_TYPES, HOME_FRAME_LIMITS, HOME_NEWCOMER_FIVE, addCard, cardsToAsk, checkHomeLayout, defaultCards, moveCard,
+    HOME_CARD_TYPES, HOME_FRAME_LIMITS, HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardsToAsk, checkHomeLayout, defaultCards, moveCard,
     readHomeLayout, readSearchSettings, removeCard, translateV1, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
 
@@ -155,7 +155,8 @@ describe('home frame §5.2 (3): cardsToAsk', () => {
         const l = layout([one('tips'), one('interests'), one('invite'), FUTURE, one('beans')]);
         expect(cardsToAsk(l)).toEqual(['needs', 'beans', 'community']);
         expect(cardsToAsk(l, ['find'])).toEqual(['needs', 'find', 'beans', 'community']);
-        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'events', 'market', 'notices', 'community']);
+        // A newcomer's Home is Getting started alone (drawn from the device, never asked): only the fixed two are asked.
+        expect(cardsToAsk(null)).toEqual(['needs', 'community']);
     });
 });
 
@@ -163,12 +164,11 @@ describe('home frame §5.2 (3): cardsToAsk', () => {
 const wordDp = (word: string) => word.length * 15 * 1.3 * 0.6;
 
 describe('home frame §5.2 (4): the default and the words', () => {
-    it("defaultCards is the newcomer's five on both profiles, with the two that manage themselves", () => {
+    it("defaultCards is Getting started alone on both profiles; the starter set is the usual five with the two that manage themselves", () => {
         expect(HOME_NEWCOMER_FIVE).toEqual(['steps', 'tips', 'market', 'events', 'notices']);
-        for (const p of ['local', 'global'] as const) {
-            expect(defaultCards(p).map(c => c.id)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'events', 'notices']);
-            expect(defaultCards(p).filter(c => HOME_NEWCOMER_FIVE.includes(c.type))).toHaveLength(5);
-        }
+        expect(HOME_STARTER_SET).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'events', 'notices']);
+        expect(HOME_STARTER_SET.filter(id => HOME_NEWCOMER_FIVE.includes(id))).toHaveLength(5);
+        for (const p of ['local', 'global'] as const) expect(defaultCards(p)).toEqual([{ id: 'start', type: 'start' }]);
     });
 
     it('every name and line fits the 320 model, says nothing locked, earned or tiered, and says Beans never a symbol', () => {
@@ -184,7 +184,7 @@ describe('home frame §5.2 (4): the default and the words', () => {
         const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false } };
         const global: HomeNodeFacts = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, wordsDoor: true } };
         const on = (a: HomeNodeFacts, role?: 'admin' | null) => HOME_CARD_TYPES.filter(t => t.onNode(a, role)).map(t => t.id);
-        expect(on(global)).toEqual(['needs', 'safety', 'find', 'steps', 'tips', 'interests', 'events', 'market', 'search', 'groups', 'joined', 'pulse', 'sky', 'notices', 'community']);
+        expect(on(global)).toEqual(['needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'events', 'market', 'search', 'groups', 'joined', 'pulse', 'sky', 'notices', 'community']);
         expect(on(local)).toEqual(HOME_CARD_TYPES.map(t => t.id).filter(id => id !== 'safety' && id !== 'find'));
         const adminsInvite = { ...local, features: { ...local.features, door: 'admins' } };
         expect(on(adminsInvite, null)).not.toContain('invite');

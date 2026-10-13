@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
@@ -8,8 +8,11 @@ import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { listPhotoUrl } from '@beanpool/core';
+import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
+import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const NONE: any[] = [];
 
 interface MyDealsSheetProps {
     visible: boolean;
@@ -20,10 +23,26 @@ interface MyDealsSheetProps {
     /** False on a community with Beans off (the Market's `showsBeans`): the cards draw no Beans amount. The sheet
      *  still opens there from a link (`dealsTab`), and My Posts lists the member's posts. */
     showsBeans?: boolean;
+    /** Where the node previews deals (its `showcase` on, escrow off: scratch/global-node/DESIGN-global-showcase-fable.md
+     *  §1 row 3, §4 "one component"): this same sheet fed Example Valley (sample-screens.ts sampleDeals), for "an
+     *  example member". Nothing is asked of a node; Review, Edit and every deal open the 🏘️ Local community sheet. */
+    preview?: boolean;
 }
 
-export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending', showsBeans = true }: MyDealsSheetProps) {
+export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview = false, initialTab = 'pending', showsBeans = true }: MyDealsSheetProps) {
+    const identity = preview ? SAMPLE_DEALS_ME : ownIdentity;
+    const [markOpen, setMarkOpen] = useState(false);
+    const openMark = () => setMarkOpen(true);
     const { colors, theme } = useTheme();
+    // The held and pending cards' tones: light keeps its tints; dark takes the scheme's success and warning tones, with
+    // each status line in its tone's ink, so every text on them reads at 4.5:1 or more (my-deals-dark-render.test.ts).
+    const dark = theme === 'dark';
+    const heldTone = dark
+        ? { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border }
+        : { backgroundColor: palette.green50, borderColor: palette.green200 };
+    const actionTone = dark
+        ? { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border }
+        : { backgroundColor: palette.amber50, borderColor: palette.yellow300 };
     const styles = useStyles(({ colors }) => StyleSheet.create({
         overlay: {
             flex: 1,
@@ -203,7 +222,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         statusText: {
             fontSize: 10,
             fontWeight: '800',
-            color: palette.gray600,
+            color: theme === 'dark' ? colors.text.secondary : palette.gray600,
             textTransform: 'uppercase',
         },
         statusTextCompleted: {
@@ -305,21 +324,39 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
 
     const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>(initialTab);
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
-    const [posts, setPosts] = useState<any[]>([]);
-    const [transactions, setTransactions] = useState<any[]>([]);
+    const [heldPosts, setPosts] = useState<any[]>(NONE);
+    const [heldTransactions, setTransactions] = useState<any[]>(NONE);
+    // Whether what is held is Example Valley's. It is drawn only in preview: a preview that turns live while the sheet is
+    // open never shows the sample's deals as the member's own, nor lets a live press (a card, Review) reach a sample id
+    // (review of #1852, finding 2). Nor, the other way, are the member's own drawn in preview.
+    const [heldSample, setHeldSample] = useState(false);
+    const posts = heldSample === preview ? heldPosts : NONE;
+    const transactions = heldSample === preview ? heldTransactions : NONE;
     const [promptReview, setPromptReview] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
 
     useEffect(() => {
         if (visible && identity) {
             loadData();
         }
-    }, [visible, identity]);
+    }, [visible, identity, preview]);
 
     useEffect(() => {
         if (initialTab) setDealsTab(initialTab);
     }, [initialTab]);
 
+    // Each load's answers land only while it is the latest: a load begun before a switch to preview never draws the
+    // member's own deals over Example Valley's.
+    const loadGen = useRef(0);
     const loadData = async () => {
+        const gen = ++loadGen.current;
+        if (preview) {
+            const sample = sampleDeals();
+            setPosts(sample.posts);
+            setTransactions(sample.transactions);
+            setHeldSample(true);
+            return;
+        }
+        if (heldSample) { setPosts(NONE); setTransactions(NONE); setHeldSample(false); }
         if (!identity) return;
         try {
             // Every audience: a deal on a group listing is still my deal.
@@ -330,8 +367,10 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             const byId = new Map<string, any>();
             for (const p of allPosts) byId.set(p.id, p);
             for (const p of mine) byId.set(p.id, p);
+            if (gen !== loadGen.current) return;
             setPosts(Array.from(byId.values()));
             const txs = await getMarketplaceTransactions(identity.publicKey);
+            if (gen !== loadGen.current) return;
             setTransactions(txs);
         } catch (e) {
             console.error('MyDealsSheet: failed to load data', e);
@@ -395,15 +434,17 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             const isCompleted = item.status === 'completed';
             const isPending = item.status === 'pending';
             const needsReview = isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
-            const partnerCallsign = isBuyer ? item.sellerCallsign : item.buyerCallsign;
             const partnerPubkey = isBuyer ? item.sellerPublicKey : item.buyerPublicKey;
+            // No card held for the partner yet (a community that says `membersOnDemand`): the key's first 8 characters,
+            // never a blank after "From " (DESIGN-global-members-by-area §2.4).
+            const partnerCallsign = (isBuyer ? item.sellerCallsign : item.buyerCallsign) || (partnerPubkey || '').slice(0, 8);
             const partnerAvatar = isBuyer ? item.sellerAvatar : item.buyerAvatar;
 
             const card = (
-                <View style={[
+                <View testID={`deal-card-${item.id}`} style={[
                     styles.dealCard,
                     !isCompleted && !isPending && { opacity: 0.5 },
-                    isPending && { backgroundColor: palette.green50, borderColor: palette.green200 },
+                    isPending && heldTone,
                 ]}>
                     {item.coverImage && typeof item.coverImage === 'string' && item.coverImage.trim() !== '' && item.coverImage !== 'null' && item.coverImage !== 'undefined' ? (
                         <ExpoImage source={{ uri: listPhotoUrl(item.coverImage) }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
@@ -447,7 +488,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                                     <Pressable
                                         accessibilityRole="button"
                                         style={[styles.reviewBtn, { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }]}
-                                        onPress={() => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
+                                        onPress={preview ? openMark : () => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
                                     >
                                         <Text style={[styles.reviewBtnText, { fontSize: 11 }]}>Review</Text>
                                     </Pressable>
@@ -455,7 +496,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                                     <Pressable
                                         accessibilityRole="button"
                                         style={[styles.reviewBtn, { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }]}
-                                        onPress={() => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
+                                        onPress={preview ? openMark : () => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
                                     >
                                         <Text style={[styles.reviewBtnText, { color: palette.gray600, fontSize: 11 }]}>Edit</Text>
                                     </Pressable>
@@ -468,7 +509,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
 
             if (isPending) {
                 return (
-                    <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push({ pathname: '/post/[id]', params: { id: item.postId, txId: item.id } }); }}>
+                    <Pressable accessibilityRole="button" onPress={preview ? openMark : () => { onClose(); router.push({ pathname: '/post/[id]', params: { id: item.postId, txId: item.id } }); }}>
                         {card}
                     </Pressable>
                 );
@@ -488,23 +529,28 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         const relatedTx = activeTxsByPostId.get(item.id)?.[0];
         let displayStatusText = 'Active';
         let highlightStyle = {};
-        
+        // The status line's ink: light as it was (muted, amber for Action Required); dark, its card's tone.
+        let statusInk: string | undefined;
+
         if (item.status === 'pending' || relatedTx?.status === 'pending') {
             displayStatusText = '🤝 Held in Trust';
-            highlightStyle = { backgroundColor: palette.green50, borderColor: palette.green200 };
+            highlightStyle = heldTone;
+            if (dark) statusInk = colors.feedback.success.fg;
         } else if (relatedTx?.status === 'requested') {
             if (item.author_pubkey === identity?.publicKey) {
                 displayStatusText = '⚠️ Action Required';
-                highlightStyle = { backgroundColor: palette.amber50, borderColor: palette.yellow300 };
+                highlightStyle = actionTone;
+                statusInk = dark ? colors.feedback.warning.fg : palette.amber600;
             } else {
                 displayStatusText = '⏳ Awaiting Approval';
                 highlightStyle = { backgroundColor: colors.surface.subtle, borderColor: colors.border.default };
+                if (dark) statusInk = colors.text.secondary;
             }
         }
 
         return (
-            <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push(`/post/${item.id}`); }}>
-                <View style={[styles.dealCard, highlightStyle, item.status === 'paused' && styles.dealCardPaused]}>
+            <Pressable accessibilityRole="button" onPress={preview ? openMark : () => { onClose(); router.push(`/post/${item.id}`); }}>
+                <View testID={`deal-card-${item.id}`} style={[styles.dealCard, highlightStyle, item.status === 'paused' && styles.dealCardPaused]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
                         <ExpoImage source={{ uri: listPhotoUrl(coverImage) }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ) : (
@@ -532,7 +578,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                             )}
                         </View>
                         <Text style={styles.dealTitle} numberOfLines={1}>{item.title}</Text>
-                        <Text style={[styles.dateText, displayStatusText.includes('Action') && { color: palette.amber600, fontWeight: '800' }, { marginTop: 2 }]}>{displayStatusText}</Text>
+                        <Text style={[styles.dateText, statusInk !== undefined && { color: statusInk }, displayStatusText.includes('Action') && { fontWeight: '800' }, { marginTop: 2 }]}>{displayStatusText}</Text>
                     </View>
                 </View>
             </Pressable>
@@ -553,6 +599,13 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                             <Text style={styles.closeBtn}>✕</Text>
                         </Pressable>
                     </View>
+
+                    {preview && (
+                        <View testID="deals-preview-head">
+                            <LocalCommunityMark variant="strip" feature="escrow" />
+                            <ExampleHeader />
+                        </View>
+                    )}
 
                     {/* Tab bar */}
                     <View style={styles.tabBar}>
@@ -636,8 +689,10 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                 </Pressable>
             </Pressable>
 
+            <LocalCommunitySheet feature="escrow" visible={markOpen} onClose={() => setMarkOpen(false)} />
+
             {/* Review Modal */}
-            {promptReview && (
+            {promptReview && !preview && (
                 <ReviewModal
                     visible={!!promptReview}
                     txId={promptReview.txId}

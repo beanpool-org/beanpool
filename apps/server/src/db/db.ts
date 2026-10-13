@@ -947,6 +947,35 @@ export function rebuildHealthAccessLogCheck(d: Database.Database): boolean {
 }
 
 /**
+ * Rebuilds system_logs when its CHECK lacks the 'AGENT' category (an AI assistant's calls, agent/mcp-route.ts), keeping
+ * every row and its id; true when it rebuilt. Idempotent. The table is bounded (logger.ts LOG_KEEP_ROWS), so the copy is small.
+ */
+export function rebuildSystemLogsCheck(d: Database.Database): boolean {
+    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='system_logs'").get() as { sql?: string } | undefined;
+    if (!row?.sql || row.sql.includes("'AGENT'")) return false;
+    d.transaction(() => {
+        d.exec(`
+            DROP TABLE IF EXISTS system_logs_migration;
+            CREATE TABLE system_logs_migration (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                level TEXT NOT NULL CHECK (level IN ('INFO', 'WARN', 'ERROR', 'SECURITY', 'SYNC')),
+                category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS', 'AGENT')),
+                message TEXT NOT NULL,
+                metadata TEXT
+            );
+            INSERT INTO system_logs_migration (id, timestamp, level, category, message, metadata)
+                SELECT id, timestamp, level, category, message, metadata FROM system_logs;
+            DROP TABLE system_logs;
+            ALTER TABLE system_logs_migration RENAME TO system_logs;
+            CREATE INDEX IF NOT EXISTS idx_system_logs_timestamp ON system_logs(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level);
+        `);
+    })();
+    return true;
+}
+
+/**
  * Adds health_access_log's `token_id` and `token_name` (the automation token behind a look, #1613's actor survey) to a
  * table from before them: ALTER TABLE ADD COLUMN, so every row is kept as it was, NULL in both (a person's look, or one
  * from before the token was recorded). Nothing on a table that has them, or none; true when it added. Idempotent.
@@ -1497,6 +1526,12 @@ export function initSchema() {
         })();
     } catch { /* the column is there already, or no table yet (schema.sql makes it with the column) */ }
 
+    // invalidated_keys: a completed re-key's succession statement, signed by the new key (group chats,
+    // DESIGN-group-chat-line-display-fable.md §5). NULL on every row from before: a re-key nobody has attested yet.
+    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_sig TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_at TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_stored_at TEXT`).run(); } catch { }
+
     // Escrow dispute arbitration (§5 item 2, §6 correction 2)
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }
@@ -1546,6 +1581,13 @@ export function initSchema() {
         if (rebuildHealthAccessLogCheck(db)) console.log('[DB] ✅ Migrated health_access_log for the looks at disputes, stranded escrows and alerts');
     } catch (err: any) {
         console.error('[DB] ❌ Failed to migrate health_access_log for the looks at disputes and alerts:', err?.message || err);
+    }
+    // system_logs: its CHECK allows the AI assistants' category (a table from before has the old CHECK, so their lines
+    // would fail to write). Before schema.sql, as the access logs above.
+    try {
+        if (rebuildSystemLogsCheck(db)) console.log("[DB] ✅ Migrated system_logs CHECK constraint to allow the AI assistants' AGENT category");
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate system_logs for the AGENT category:', err?.message || err);
     }
     try {
         if (addHealthAccessLogToken(db)) console.log('[DB] ✅ Migrated health_access_log to name the automation token behind a look');
@@ -1614,6 +1656,10 @@ export function initSchema() {
     moveGroupPicturesOutOfRows();
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
+    // Verified channels (#1830): the badge carries the account the platform named. Badges set before
+    // these columns proved nothing and are cleared at boot by clearUnprovenOauthBadges (state-engine.ts).
+    try { db.prepare(`ALTER TABLE creator_channels ADD COLUMN platform_account_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE creator_channels ADD COLUMN verified_handle TEXT`).run(); } catch { }
     db.exec(schemaSql);
 
     // signature_audiences: its CHECK allows `lost` (refusals for a name another community holds, engine/member-signature.ts).

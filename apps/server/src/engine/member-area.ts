@@ -93,6 +93,36 @@ export function withAreaDistances<T extends { publicKey: string }>(people: T[], 
 }
 
 /**
+ * The `n` people of the member directory nearest a point, with each one's distance: exactly the first `n` that
+ * withAreaDistances gives the whole directory (nearest first in whole km, a tie in the directory's order, everyone with
+ * no area after them in that order), for the People list's `limit=` (DESIGN-global-members-by-area §2.1). Reads the
+ * area columns of those who have one and keeps the nearest `n` as it goes, then as many with no area as are still
+ * wanted, never every member's whole row: the person's row is read for the `n` alone (the route).
+ */
+export function nearestPeople(lat: number, lng: number, n: number): Array<{ publicKey: string; distanceKm: number | null }> {
+    // The directory's people (getMemberDirectoryRows, then the route's filter): not pruned, not an escrow, a project or
+    // a treasury. In rowid order, the directory's, so a later row at the same distance never goes before an earlier one.
+    const people = "status != 'pruned' AND NOT coalesce(is_treasury, 0) AND substr(public_key, 1, 7) != 'escrow_' AND substr(public_key, 1, 8) != 'project_'";
+    const placed = db.prepare(`SELECT public_key, area_lat, area_lng FROM members
+        WHERE area_lat IS NOT NULL AND area_lng IS NOT NULL AND ${people} ORDER BY rowid`).raw().all() as Array<[string, number, number]>;
+    const nearest: Array<{ publicKey: string; distanceKm: number | null }> = [];
+    for (const [publicKey, areaLat, areaLng] of placed) {
+        const km = Math.round(haversineKm(lat, lng, areaLat, areaLng));
+        if (nearest.length === n && km >= (nearest[n - 1].distanceKm as number)) continue;
+        let at = nearest.length;
+        while (at > 0 && (nearest[at - 1].distanceKm as number) > km) at--;
+        nearest.splice(at, 0, { publicKey, distanceKm: km });
+        if (nearest.length > n) nearest.pop();
+    }
+    if (nearest.length < n) {
+        const unplaced = db.prepare(`SELECT public_key FROM members WHERE (area_lat IS NULL OR area_lng IS NULL) AND ${people}
+            ORDER BY rowid LIMIT ?`).pluck().all(n - nearest.length) as string[];
+        for (const publicKey of unplaced) nearest.push({ publicKey, distanceKm: null });
+    }
+    return nearest;
+}
+
+/**
  * A replicated member's area as a standby writes it: [area_lat, area_lng, area_updated_at]. Both or neither, rounded
  * again (nothing for what a main server wrote) and in range, so a payload can neither place anyone more precisely nor
  * fail the import on the columns' checks. A main server from before G4 sends none, and never had any.

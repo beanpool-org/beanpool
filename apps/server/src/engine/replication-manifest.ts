@@ -282,7 +282,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     creator_channels: {
         kind: 'replicated-except', payload: 'creatorChannels', watermark: 'updated_at',
-        columns: cols('id owner_pubkey platform url handle category is_primary_video supports_autolist oauth_verified_at post_count_seen autopublish syndicate_to_node created_at updated_at deleted_at'),
+        columns: cols('id owner_pubkey platform url handle category is_primary_video supports_autolist oauth_verified_at platform_account_id verified_handle post_count_seen autopublish syndicate_to_node created_at updated_at deleted_at'),
         except: {
             fail_count: { reason: "the harvester's own record of failed fetches on this server; a promoted server's harvester starts afresh" },
             last_error: { reason: "the harvester's own record of failed fetches on this server" },
@@ -361,8 +361,8 @@ export const TABLES: Record<string, TableEntry> = {
         columns: cols('owner_pubkey blocked_pubkey created_at updated_at'),
     },
     invalidated_keys: {
-        kind: 'replicated', payload: 'invalidatedKeys', watermark: 'invalidated_at',
-        columns: cols('public_key reason invalidated_at rekeyed_to'),
+        kind: 'replicated', payload: 'invalidatedKeys', watermark: 'invalidated_at', orWatermark: 'succession_stored_at',
+        columns: cols('public_key reason invalidated_at rekeyed_to succession_sig succession_at succession_stored_at'),
     },
     tombstones: {
         kind: 'replicated', payload: 'tombstones', watermark: 'deleted_at',
@@ -637,6 +637,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     replicationTokenSalt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     replicationTokenCreatedAt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     replicationTokenOnly: { kind: 'per-server', reason: "the token this server's standbys pull with" },
+    aiAssistantsAllowed: { kind: 'per-server', reason: "the owner switch for this server's AI assistant endpoint (/mcp), beside its agent tokens" },
     automationTokens: { kind: 'per-server', reason: "owners' automation tokens (hashes) for this server; never in a backup file, the stager's copy or the bundle" },
     backupReplicationToken: { kind: 'per-server', reason: "a standby's token for its main server" },
     backupPullSeconds: { kind: 'per-server', reason: "a standby's pull interval" },
@@ -681,6 +682,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     credit_cap: { kind: 'community-settings', reason: "the community's credit cap in Beans (config/known-floor.ts)" },
     health_debt_line_pct: { kind: 'community-settings', reason: "the Community health panel's debt line, a % of the credit line (engine/community-health.ts)" },
     health_quiet_days: { kind: 'community-settings', reason: "the Community health panel's days in debit without a sale (engine/community-health.ts)" },
+    startCommunityUrl: { kind: 'community-settings', reason: "where the Local community sheet's Start a community leads (config/start-community.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '
@@ -707,6 +709,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     standby_copy_record: { kind: 'per-server', reason: "a standby's record of how its copies went, which it reports to its main server, and of its last force-resync for a copy that didn't match (services/standby-copy-record.ts)" },
     standby_swapped_copy: { kind: 'per-server', reason: "the whole copy a standby's database was swapped in from, read once at the start on it (services/stager.ts, services/backup-puller.ts)" },
     standby_health: { kind: 'per-server', reason: "a main server's watch on its own standbys, for its owners (services/standby-health.ts)" },
+    agent_suggestions: { kind: 'per-server', reason: "this server's AI assistants' waiting suggestions, whose grants are this server's own too (agent/suggestions.ts)" },
     replicated_invalidated_keys_v1: { kind: 'per-server', reason: "a standby's own marker" },
     recovery_seal_cleared: { kind: 'per-server', reason: "this server's record of clearing its database after sealing" },
     recovery_seal_reopened: { kind: 'per-server', reason: "this server's record of reopening its seal" },

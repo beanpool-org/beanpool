@@ -41,6 +41,8 @@ export interface GuidePage<B = GuideBlock> {
     related: string[];
     /** A YouTube video id from the Learn lane that shows this task, if one has been made. */
     video?: string;
+    /** One or two sentences for the "?" sheet on the screen this page explains (help-map.ts), written for "you are here". */
+    help?: string;
     blocks: B[];
 }
 
@@ -148,6 +150,8 @@ function validate(raw: unknown, allowImages: boolean): OperatorGuide | null {
             related: [...(page.related as string[])], blocks,
         };
         if (typeof page.video === 'string') out.video = page.video;
+        // Optional and tolerant: a help line that isn't one is left out (the sheet falls back to the summary), never the guide.
+        if (isText(page.help, 160)) out.help = page.help as string;
         guides.push(out);
     }
 

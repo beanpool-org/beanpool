@@ -212,7 +212,7 @@ run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
 # folder, answers the node API from fixtures (no node is contacted), and fails if any screen, the menu, the manual,
 # a modal or the app's sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
 # The browser is downloaded once and cached; in CI --with-deps also installs its system libraries (the runner has sudo).
-run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width'
+run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants && pnpm --filter @beanpool/manager test:agent-suggestions'
 
 run_check "lint"          pnpm turbo run lint $TURBO_AUX_ARGS
 
@@ -286,6 +286,10 @@ run_check "migration_steps" bash scripts/check-migrations-unchanged.sh
 # the image's :latest or makes a Release on the `release` environment (Marty approves each release). The tests check
 # the repository's workflows and each edit the check exists to catch. Instant.
 run_check "workflows" node --test scripts/check-workflows.test.mjs
+
+# No page in apps/ asks Google for a font: the web app, Settings, the website and its guide serve their own files
+# (with their licences), and the node's document policies allow fonts from the node only. Instant.
+run_check "no_google_fonts" node --test scripts/no-google-fonts.test.mjs
 
 # setup-backup.mjs against a stand-in primary on localhost: a password refused for needing two-factor sign-in (step 7c)
 # prints the primary's words and the way out. Instant.

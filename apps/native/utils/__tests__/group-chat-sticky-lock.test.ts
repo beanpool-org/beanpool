@@ -21,17 +21,32 @@ const store = vi.hoisted(() => ({
     keyState: null as { highest: number; after: number } | null,
 }));
 const partsOf = (id: string) => { if (!store.participants.has(id)) store.participants.set(id, new Set()); return store.participants.get(id)!; };
+/**
+ * Rows an `id IN (…)` lookup matches, in the order SQLite answers them: BINARY order, so upper case first (its index visits
+ * the IN list sorted), with the id an `ORDER BY id = ? DESC` asks for first (#1863 review, finding 4).
+ */
+const inSqliteOrder = <T>(rows: T[], idOf: (r: T) => string, first?: unknown) =>
+    [...rows].sort((a, b) => Number(idOf(b) === first) - Number(idOf(a) === first) || (idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0));
+/** The rows whose id matches `id` with ASCII case folded, as SQLite's NOCASE compares. */
+const convsNoCase = (id: string) => [...store.conversations.values()].filter((c) => c.id.toLowerCase() === String(id).toLowerCase());
 const mockDb = {
     execAsync: vi.fn(async (s: string) => { store.execs.push(s); return undefined; }),
     closeAsync: vi.fn(async () => undefined),
     withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { await cb(); }),
     getFirstAsync: vi.fn(async (sql: string, params: any[] = []) => {
+        if (/SELECT id FROM conversations WHERE id IN \(/.test(sql)) {
+            const first = /ORDER BY id = \? DESC/.test(sql) ? params[params.length - 1] : undefined;
+            const ids = first === undefined ? params : params.slice(0, -1);
+            return inSqliteOrder(ids.map((p) => store.conversations.get(p)).filter((c) => c?.type === 'dm'), (c) => c!.id, first)[0] ?? null;
+        }
+        if (/FROM conversations WHERE id = \? COLLATE NOCASE AND type = 'dm'/.test(sql)) return convsNoCase(params[0]).find((c) => c.type === 'dm') ?? null;
         if (/FROM conversations WHERE id = \?/.test(sql)) return store.conversations.get(params[0]) ?? null;
         if (/SELECT metadata FROM messages WHERE id/.test(sql)) return store.messages.get(params[0]) ?? null;
         if (/FROM group_chat_key_state/.test(sql)) return store.keyState;
         return null;
     }),
     getAllAsync: vi.fn(async (sql: string, params: any[] = []) => {
+        if (/SELECT id FROM conversations WHERE id = \? COLLATE NOCASE/.test(sql)) return convsNoCase(params[0]).map((c) => ({ id: c.id }));
         if (/SELECT public_key FROM conversation_participants WHERE conversation_id = \?/.test(sql)) return [...partsOf(params[0])].map((public_key) => ({ public_key }));
         return [];
     }),
@@ -162,6 +177,14 @@ describe('a group chat this phone has held a key of stays locked here', () => {
         expect(groupChatNotice({ nodeSaysLocked: true, seenLocked: true })).toBe(GROUP_CHAT_LOCKED_NOTICE);
         expect(groupChatNotice({ nodeSaysLocked: false, seenLocked: true })).toBe(GROUP_CHAT_LOCK_LOST_TEXT);
         expect(groupChatNotice({ nodeSaysLocked: false, seenLocked: false })).toBe(GROUP_CHAT_OLD_NODE_NOTICE);
+    });
+
+    it('the locked notice names everything the node still sees: replies and reactions too (#1843 check, finding 1)', () => {
+        expect(GROUP_CHAT_LOCKED_NOTICE).toMatch(/^End-to-end encrypted: only this group's members can read it\./);
+        for (const seen of ['who wrote', 'when', 'mentions', 'what each line answers', 'reactions']) {
+            expect(GROUP_CHAT_LOCKED_NOTICE).toContain(seen);
+        }
+        expect(GROUP_CHAT_LOCKED_NOTICE).not.toMatch(/\bonly who\b|sees only/);
     });
 
     it('sign-out (clearDB identityLeaves) drops the four group-key tables; every wipe forgets every opened key (finding 8)', async () => {

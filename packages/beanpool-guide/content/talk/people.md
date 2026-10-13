@@ -2,6 +2,7 @@
 slug: people
 title: People and friends
 summary: Find members of your community, add friends, and vouch for someone.
+help: The members of your community and your friends. Tap someone to see their profile, message them or vouch for them.
 related: messages, your-profile, joining, blocking
 ---
 
@@ -24,6 +25,6 @@ Friends are a shortcut for you. If you choose **Friends** for your contact detai
 
 ## Vouching for someone
 
-Some members are chosen by the community to welcome newcomers. They can vouch for a new member, which gives that person a small credit line to start with. On the person's profile, they tap **Vouch for Member** and choose **Light** (25), **Standard** (50) or **Deep** (100). No beans leave the voucher's own wallet.
+Some members are chosen by the community to welcome newcomers. They can vouch for a new member, which gives that person a small credit line to start with. On the person's profile, they tap **Vouch for Member** and choose **Light** (25), **Standard** (50) or **Deep** (100). No Beans leave the voucher's own wallet.
 
 Who may vouch is decided by an admin or by a community Decision, never by a badge. See "Rules and how decisions work".

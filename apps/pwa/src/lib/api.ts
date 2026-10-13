@@ -4,7 +4,7 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
-import type { ScopedDecisionList, ScopedEffect, GroupEffect } from '@beanpool/core';
+import type { ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -175,6 +175,26 @@ export async function request<T>(method: string, path: string, body?: any, signa
     return res.json();
 }
 
+/**
+ * A signed request as `request` makes it, with the node's answer handed back as it came, refusals included: for a caller
+ * that reads a refusal's own fields (a 409's `current` and `roster`), the group chat keyring (lib/group-chat-keys.ts).
+ */
+export async function signedFetch(method: string, path: string, body?: unknown): Promise<Response> {
+    const bodyString = body === undefined ? '' : JSON.stringify(body);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const identity = await loadIdentity();
+    if (identity && identity.privateKey) {
+        Object.assign(headers, await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
+    }
+    return fetch(`${getNodeApiUrl()}${path}`, { method, cache: 'no-cache', headers, ...(body === undefined ? {} : { body: bodyString }) });
+}
+
+/** How the group chat keyring reaches this node: signed as this browser's member. */
+export const groupKeysNet = {
+    get: (path: string) => signedFetch('GET', path),
+    post: (path: string, body: unknown) => signedFetch('POST', path, body),
+};
+
 /** What `request` throws for an answer that isn't ok. */
 async function refusalError(res: Response): Promise<Error> {
     let unsaid = false;
@@ -281,7 +301,16 @@ export interface CommunityInfo {
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
         /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
+        /** An off feature is previewed from the sample community rather than hidden (lib/features.ts). Absent: hidden, as before. */
+        showcase?: boolean;
+        /**
+         * Present, and true, only where no app reads the member directory whole (the worldwide community): people come
+         * by search, by nearness and by key (lib/members-on-demand.ts).
+         */
+        membersOnDemand?: true;
     };
+    /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
+    startCommunityUrl?: string;
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
     addresses?: string[];
     /**
@@ -381,6 +410,8 @@ export interface CommunityStanding {
     mute: { muted: boolean; until: string | null };
     /** The member's own coarse area (0.1°), or null when they have set none. Absent on a node from before it. */
     area?: { lat: number; lng: number; updatedAt?: string | null } | null;
+    /** The reader's own effective features (lib/features.ts): today the node's. Absent on a node from before it. */
+    features?: Record<string, unknown>;
 }
 
 /** The signer's own standing: members only, and only ever their own (the node reads the signature, not a parameter). */
@@ -884,6 +915,26 @@ export async function getMessageAttachmentApi(messageId: string): Promise<Messag
     return request('GET', `/api/messages/${encodeURIComponent(messageId)}/attachment`);
 }
 
+/**
+ * A Commons group's chat as one member sees it (GET /api/groups/:id/chat): its lines (from this member's first epoch on),
+ * whether they may post, and, on a node that locks group chats, `encryption` (the current epoch, whether it is stale,
+ * this member's first epoch). A node from before locked chats answers without `encryption`.
+ */
+export interface GroupChatAnswer {
+    conversation: Conversation;
+    messages: (ApiMessage & { authorCallsign?: string | null })[];
+    role?: GroupRole;
+    canPost?: boolean;
+    readOnly?: boolean;
+    closedAt?: string | null;
+    isConvenor?: boolean;
+    encryption?: { current: number | null; stale: boolean; fromEpoch: number | null };
+}
+
+export async function getGroupChat(groupId: string, limit = 50): Promise<GroupChatAnswer> {
+    return request('GET', `/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}`);
+}
+
 export async function getConversationMessages(conversationId: string, limit = 50): Promise<{
     conversation: Conversation;
     messages: ApiMessage[];
@@ -1015,6 +1066,8 @@ export interface MarketplacePost {
     photos?: string[];
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
+    /** The author's face, carried on the row for a member's read (null for a visitor's, and for no photo). */
+    authorAvatarUrl?: string | null;
     pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number }>;
     pollClosesAt?: string;
     /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
@@ -1597,6 +1650,28 @@ export interface MemberSummary {
 
 export async function getAllMembers(): Promise<MemberSummary[]> {
     return request('GET', '/api/members');
+}
+
+/**
+ * A member's card as the directory's small forms answer it (`GET /api/members?keys=|q=|lat&lng&limit=`): what the
+ * whole directory gives each member, and `distanceKm` on the nearest-first form (whole km, null for no area).
+ */
+export interface MemberCard {
+    publicKey: string;
+    callsign: string;
+    joinedAt: string;
+    nodeRole?: string | null;
+    avatarUrl?: string | null;
+    profileUpdatedAt?: string | null;
+    earnedCredit?: number;
+    elderVouchedBy?: string | null;
+    archetype?: string | null;
+    distanceKm?: number | null;
+}
+
+/** One of the directory's small forms (lib/members-on-demand.ts builds the path), signed as every read is. */
+export async function getMemberCards(path: string, signal?: AbortSignal): Promise<MemberCard[]> {
+    return request('GET', path, undefined, signal);
 }
 
 // ===================== FEDERATION =====================
@@ -2518,7 +2593,7 @@ export interface SavedHomePreferences { success: boolean; 'home.layout'?: unknow
  * card frame refuses a version-2 layout with a 400 (the error carries `status`): pages/HomePage.tsx keeps the cards in
  * this browser then, and sends them again at the next landing.
  */
-export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[] }): Promise<SavedHomePreferences> {
+export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[]; tour?: TourRecord }): Promise<SavedHomePreferences> {
     return request<SavedHomePreferences>('POST', '/api/members/preferences', { publicKey, preferences });
 }
 

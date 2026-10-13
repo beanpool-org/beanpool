@@ -7,9 +7,7 @@
     <title>First-time setup — BeanPool operator manual</title>
     <meta name="description" content="The first start of your server, claiming it with your phone, the first owner, and what the setup wizard does and does not do.">
     <link rel="icon" type="image/png" href="../../favicon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
     <link rel="stylesheet" href="../../style.css?v=2.5">
     <style>
         /* Width only: .legal-content's top margin is what clears the fixed navbar. */
@@ -81,7 +79,7 @@
         </ul>
         <p>If the community already has an owner, it says so: use beanpool recover instead. To make an owner without a phone claim, give the key the phone shows in Settings: beanpool claim --key KEY --callsign NAME. It prints that owner's break-glass code once, and the community is told.</p>
         <h2>Open Settings</h2>
-        <p>Go to your server's address followed by <strong>/settings</strong>, for example https://example.org/settings. While your community has no owner yet, the page shows how to claim it: see A community with no owner yet, below. Once it has one, owners and admins sign in from the BeanPool app: see Signing in to Settings. On a server that still has an admin password, you can also sign in with it. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. Settings does not open on the password alone: nothing else opens until the server accepts a code from the authenticator. Do it straight away, because until then the password still works on its own for tools that send it with every request. Then Settings, and the setup wizard, open.</p>
+        <p>Go to your server's address followed by <strong>/settings</strong>, for example https://example.org/settings. While your community has no owner yet, the page shows how to claim it: see A community with no owner yet, below. Once it has one, owners and admins sign in from the BeanPool app: see Signing in to Settings. On a server that still has an admin password, you can also sign in with it. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. Settings does not open on the password alone: nothing else opens until the server accepts a code from the authenticator. Do it straight away: until then, tools that send the password with every request are refused too (give them an automation token instead, see Access and security). Then Settings, and the setup wizard, open.</p>
         <h2>A community with no owner yet</h2>
         <p>On a new server, the sign-in page at /settings first says <strong>This community has no owner yet.</strong> and shows how to claim it: see Claim your community: the address, then your phone above.</p>
         <p>The page's QR code carries only your server's address, as it is in the browser's address bar, and a short number that names the waiting code. It never carries the code itself: anyone can open this page, so the code is only ever read on the server. The address is written out under the QR code too, so you can check it. Open the page at the address the app will use (for example https://yourtown.beanpool.org/settings), not the server's home-network address. When opened at an unlisted address, the page shows <strong>Open this page at … to scan</strong> instead of the QR code, because the node answers only at its listed names.</p>
@@ -123,7 +121,7 @@
             <li><strong>Members and invites</strong> (in Settings, under Manual)</li>
             <li><strong>Backups and replicas</strong> (in Settings, under Manual)</li>
         </ul>
-        <p class="guide-foot">The whole manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Only this part of it is on the website. Manual version 116.</p>
+        <p class="guide-foot">The whole manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Only this part of it is on the website. Manual version 119.</p>
     </main>
 </body>
 </html>

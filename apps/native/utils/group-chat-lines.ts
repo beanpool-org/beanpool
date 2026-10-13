@@ -46,7 +46,7 @@ export function chatIsLocked(answer: any): answer is { encryption: GroupChatEncr
 /** The notice an old node's chat keeps (the phone never calls such a chat locked). */
 export const GROUP_CHAT_OLD_NODE_NOTICE = "This community's node is older and can read this group's chat. It will be locked once the node is updated.";
 /** A locked chat's notice (design §8), in the phone's own words. */
-export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, and who was mentioned.";
+export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.";
 /**
  * A chat this phone has held a key of, which the node now says isn't locked: what the phone does, not what it waits for
  * (confirmation of #1788, finding 4). Every line still goes sealed when the keys come; nothing goes readable.
@@ -82,7 +82,11 @@ export interface SendGroupLineInput {
     progress?: GroupEpochProgress;
 }
 
-/** Seal and send one line. Resolves with the node's answer; throws the node's refusal or GroupChatKeyError's sentence. */
+/**
+ * Seal and send one line. Resolves with the node's answer; throws the node's refusal or GroupChatKeyError's sentence. Signed
+ * and routed under the keyring's id (the group's, lower-case), however the caller spelled it: members open a line under
+ * that id (#1841 review, finding 3).
+ */
 export async function sendSealedGroupLine(nodeUrl: string, identity: BeanPoolIdentity, store: GroupKeyStore, input: SendGroupLineInput): Promise<any> {
     const ring = groupKeyring(nodeUrl, identity, input.groupId, store);
     const messageId = input.clientId.toLowerCase();
@@ -90,13 +94,13 @@ export async function sendSealedGroupLine(nodeUrl: string, identity: BeanPoolIde
     for (let attempt = 0; ; attempt++) {
         const { epoch, key } = await ring.prepareToSeal(input.progress);
         const sealed = sealLine(input.text, {
-            myEdPrivHex: identity.privateKey, groupKey: key, groupId: input.groupId, epoch, messageId,
+            myEdPrivHex: identity.privateKey, groupKey: key, groupId: ring.groupId, epoch, messageId,
             after: input.after ?? null, replyToId: input.replyToId ?? null,
         });
         const metadata: Record<string, unknown> = { epoch };
         if (input.replyToId) metadata.replyToId = input.replyToId;
         if (mentions.length) metadata.mentions = mentions;
-        const res = await signedPost(nodeUrl, `/api/groups/${encodeURIComponent(input.groupId)}/chat/message`,
+        const res = await signedPost(nodeUrl, `/api/groups/${encodeURIComponent(ring.groupId)}/chat/message`,
             { ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata, clientId: messageId }, identity);
         const body = await res.json().catch(() => ({}));
         if (res.ok) return body;
@@ -110,7 +114,10 @@ export const GROUP_EDIT_NO_KEY_TEXT = "This message's key isn't on this phone, s
 /** The node answers the chat, but its edit route says it no longer has this line (confirmation 2 of #1788, J2). */
 export const GROUP_EDIT_LINE_GONE_TEXT = 'This message is no longer in this chat.';
 
-/** Edit one of my lines: re-sealed under ITS epoch (part 'edit', after its own id, still answering what it answered). */
+/**
+ * Edit one of my lines: re-sealed under ITS epoch (part 'edit', after its own id, still answering what it answered), and
+ * signed under the keyring's id, as sendSealedGroupLine signs.
+ */
 export async function editSealedGroupLine(
     nodeUrl: string, identity: BeanPoolIdentity, store: GroupKeyStore,
     input: { groupId: string; messageId: string; metadata: any; text: string },
@@ -123,7 +130,7 @@ export async function editSealedGroupLine(
     if (!key) throw new Error(GROUP_EDIT_NO_KEY_TEXT);
     const replyToId = typeof input.metadata?.replyToId === 'string' ? input.metadata.replyToId : null;
     const sealed = sealLine(input.text, {
-        myEdPrivHex: identity.privateKey, groupKey: key, groupId: input.groupId, epoch, messageId: input.messageId,
+        myEdPrivHex: identity.privateKey, groupKey: key, groupId: ring.groupId, epoch, messageId: input.messageId,
         part: 'edit', after: input.messageId, replyToId,
     });
     const res = await signedPost(nodeUrl, '/api/messages/edit',

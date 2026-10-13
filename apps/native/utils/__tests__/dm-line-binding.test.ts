@@ -1347,24 +1347,36 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
     }
 
     /**
-     * The storage answering slowly for a write of Ana's pins that holds only `id` (a screen's or a send's first sight there):
-     * held until another write of them lands, or 300 ms. With a copy of the store per writer, the older copy is then
-     * written last and Ben's pin is gone; with one copy behind one queue, every write holds every pin.
+     * A first sight in `id` (a screen's or a send's) racing the sync pass, in the order that loses a pin when each writer
+     * keeps a copy of its own: the sync's listing is answered only once the store has been read, and a write of Ana's pins
+     * that holds only `id` is held until another write of them lands (or 300 ms). Two copies then end with the older one
+     * written last and Ben's pin gone; one copy behind one queue writes every pin in each write.
      */
-    function slowFirstSightWrite(id: string): () => void {
+    function firstSightRacesTheSync(id: string): () => void {
+        const getItem = vi.mocked(AsyncStorage.getItem);
         const setItem = vi.mocked(AsyncStorage.setItem);
-        const real = setItem.getMockImplementation()!;
+        const realGet = getItem.getMockImplementation()!;
+        const realSet = setItem.getMockImplementation()!;
+        const realFetch = (globalThis as any).fetch;
+        let storeRead!: () => void;
+        const read = new Promise<void>((r) => { storeRead = r; });
         let otherWrote!: () => void;
         const otherWrite = new Promise<void>((r) => { otherWrote = r; });
+        const wait = (p: Promise<void>, ms: number) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]);
+        getItem.mockImplementation(async (k: string) => { const v = await realGet(k); if (k === PINS(ana)) storeRead(); return v; });
         setItem.mockImplementation(async (k: string, v: string) => {
             if (k === PINS(ana)) {
                 const ids = Object.keys(JSON.parse(v));
-                if (ids.length === 1 && ids[0] === id.toLowerCase()) await Promise.race([otherWrite, new Promise((r) => setTimeout(r, 300))]);
-                else { await real(k, v); otherWrote(); return; }
+                if (ids.length === 1 && ids[0] === id.toLowerCase()) await wait(otherWrite, 300);
+                else { await realSet(k, v); otherWrote(); return; }
             }
-            return real(k, v);
+            return realSet(k, v);
         });
-        return () => setItem.mockImplementation(real);
+        (globalThis as any).fetch = async (url: string, init?: any) => {
+            if (new URL(url).pathname.startsWith('/api/messages/conversations/')) await wait(read, 2000);
+            return realFetch(url, init);
+        };
+        return () => { getItem.mockImplementation(realGet); setItem.mockImplementation(realSet); (globalThis as any).fetch = realFetch; };
     }
 
     const firstSights: Array<[string, (id: string) => Promise<unknown>]> = [
@@ -1380,7 +1392,7 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
             await phoneOf(ana);
             h.store.delete(PINS(ana));
             restarted();
-            const restore = slowFirstSightWrite(dm2.id);
+            const restore = firstSightRacesTheSync(dm2.id);
             try { await Promise.all([firstSight(dm2.id), syncMessages(ana.publicKey)]); } finally { restore(); }
             // Straight after, before a later pass could take a lost pin again from the phone's rows:
             expect({ ben: pinOf(ana, dm.id)?.peer, dan: pinOf(ana, dm2.id)?.peer }).toEqual({ ben: ben.publicKey, dan: dan.publicKey });

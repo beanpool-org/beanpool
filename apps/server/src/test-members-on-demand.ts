@@ -33,13 +33,14 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 // The open-reads run (scripts/server-suites.mjs VARIANTS, MEMBERS_OPEN_READS=1): a node with read auth off, where the read
 // gate lets an unsigned read of the whole directory through, so only the route's own check keeps keys= and q= signed
-// (#1847 review NB2). It runs that check and stops.
+// (#1847 review NB2). It runs that check and stops, on a local node: the worldwide one will not start with read auth off
+// (its guest view, config/node-profile.ts), and the forms answer on every node whatever the switch says.
 const OPEN_READS = process.env.MEMBERS_OPEN_READS === '1';
 if (OPEN_READS) process.env.ENFORCE_READ_AUTH = 'false'; else delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NEARBY_LISTINGS_RADIUS_KM;
 delete process.env.NEARBY_LISTINGS_MAX;
-process.env.NODE_PROFILE = 'global';
+process.env.NODE_PROFILE = OPEN_READS ? 'local' : 'global';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';

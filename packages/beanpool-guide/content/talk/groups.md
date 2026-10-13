@@ -78,6 +78,18 @@ Your community's server needs to be up to date for reply, reactions, edit and de
 
 Anything else the server turns down, it turns down in its own words, and the app shows you those words rather than that line. "A removed message cannot be edited" means a convenor removed it while you were typing, not that your server is behind.
 
+## Messages from before you changed phones
+
+When your account moves to a new phone with a new key, the group messages from before were locked to your old phone's key. In each group's chat, a row reads **🔒 N messages from before you changed phones. Unlock →**. Tap it:
+
+- **I have my old phone or old 12 words**: type your old 12 words on the new phone, and the earlier messages unlock. Your old phone shows **This account moved to a new phone**, with a button to show those words behind its lock. They are your own words: type them only into your own new phone, never into a phone someone else holds out.
+- **Ask a member of the group to confirm this phone**: your new phone shows a code. Meet a member of the group in person; they open the group's chat menu, tap **Confirm new phone** and scan it. Their phone hands yours the earlier keys it holds for the groups you share.
+- **Keep them locked**: nothing changes. Your own messages from then show under your name, without their words.
+
+**When you confirm someone else's new phone**, your phone checks the code against what it remembers of that person's old key. Only confirm a new phone for someone you've chatted with in that group before, on this phone, and only with the phone in their hands: whoever holds it can read the earlier messages you can. If your phone says **Don't continue; tell an owner**, stop. It means what your phone saw before doesn't match what the server says now. That also happens when the person changed their name since your phone last saw them: ask an owner. A phone that was just restored from its 12 words, or never opened that group, has seen too little to check: it says it never knew their old key, or it may believe what the server says. Let a member who has been chatting with them confirm instead.
+
+At the end your phone says what happened: **Done** only when it handed every key across, **Handed 3 of 5** when the server refused some. When the server says their new phone already holds some, your phone says **the community says** so, because it can't see into the other phone: if the new phone still can't read those messages, tell an owner.
+
 ## Joining a group
 
 In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Each one shows the start of its description. Open a group to read all of it, then:

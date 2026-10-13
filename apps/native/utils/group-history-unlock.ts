@@ -78,6 +78,8 @@ export const OLD_WORDS_DONE = 'Done. Your earlier messages are unlocked on this 
 export const NEW_PHONE_SHOW_TITLE = 'Ask a member to confirm this phone';
 export const NEW_PHONE_SHOW_BODY = 'Meet a member of your groups in person. They scan this code with "Confirm a member\'s new phone".';
 export const NEW_PHONE_CONFIRM_ACTION = "Confirm a member's new phone";
+/** The chat menu's label for it: ChatMenuSheet keeps a label to one line, and this fits it at 320dp with 1.3× text. */
+export const NEW_PHONE_CONFIRM_MENU = 'Confirm new phone';
 export const NEW_PHONE_BAD_CODE = "This isn't a BeanPool new-phone code.";
 export function newPhoneNotListedText(name: string): string {
     return `This isn't the phone the community lists for ${name}.`;

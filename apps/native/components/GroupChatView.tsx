@@ -29,11 +29,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { markKeyChanged, rememberRosterNames } from '../utils/name-key-memory';
 import { verifiedFormerKeys } from '../utils/group-chat-crypto';
 import {
-    collapseLockedHistory, lockedHistoryRowText, LOCKED_HISTORY_ROW_ID, LOCKED_HISTORY_SHEET_TITLE, LOCKED_HISTORY_WORDS, LOCKED_HISTORY_ASK,
-    LOCKED_HISTORY_KEEP, NEW_PHONE_CONFIRM_ACTION,
+    collapseLockedHistory, lockedHistoryRowText, LOCKED_HISTORY_ROW_ID, LOCKED_HISTORY_SHEET_TITLE, LOCKED_HISTORY_SHEET_BODY, LOCKED_HISTORY_WORDS,
+    LOCKED_HISTORY_ASK, LOCKED_HISTORY_KEEP, NEW_PHONE_CONFIRM_MENU,
 } from '../utils/group-history-unlock';
 import { anchorUrl } from '../utils/node-post';
-import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -627,7 +627,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         { icon: 'account-plus', label: 'Invite people', hidden: kind !== 'group' || !isConvenor, onPress: () => { setMenuOpen(false); setInviteOpen(true); } },
         { icon: muted ? 'bell-ring-outline' : 'bell-off-outline', label: muteMenuLabel(mute), onPress: () => { setMenuOpen(false); if (muted) setMuteTo('off'); else setMuteOpen(true); } },
         { icon: 'magnify', label: 'Search this chat', hidden: kind !== 'group', onPress: () => { setMenuOpen(false); setSearchOpen(true); } },
-        { icon: 'cellphone-check', label: NEW_PHONE_CONFIRM_ACTION, hidden: kind !== 'group', onPress: () => { setMenuOpen(false); router.push('/confirm-new-phone'); } },
+        { icon: 'cellphone-check', label: NEW_PHONE_CONFIRM_MENU, hidden: kind !== 'group', onPress: () => { setMenuOpen(false); router.push('/confirm-new-phone'); } },
         { icon: 'information-outline', label: kind === 'group' ? 'Group info' : 'Enterprise page', onPress: () => { setMenuOpen(false); openOwner(); } },
     ];
 
@@ -838,19 +838,13 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 onPickMute={setMuteTo}
                 bottomInset={insets.bottom}
             />
-            <ChatMenuSheet
+            <LockedHistorySheet
+                open={historyOpen}
                 styles={chat}
-                menuOpen={historyOpen}
-                muteOpen={false}
-                title={LOCKED_HISTORY_SHEET_TITLE}
-                items={[
-                    { icon: 'form-textbox-password', label: LOCKED_HISTORY_WORDS, onPress: () => { setHistoryOpen(false); router.push('/old-words-unlock'); } },
-                    { icon: 'account-check-outline', label: LOCKED_HISTORY_ASK, onPress: () => { setHistoryOpen(false); router.push('/new-phone-code'); } },
-                    { icon: 'lock-outline', label: LOCKED_HISTORY_KEEP, onPress: () => setHistoryOpen(false) },
-                ]}
-                onClose={() => setHistoryOpen(false)}
-                onPickMute={() => { }}
                 bottomInset={insets.bottom}
+                onClose={() => setHistoryOpen(false)}
+                onWords={() => { setHistoryOpen(false); router.push('/old-words-unlock'); }}
+                onAsk={() => { setHistoryOpen(false); router.push('/new-phone-code'); }}
             />
 
             {kind === 'group' && (
@@ -885,6 +879,37 @@ function SealedNoticeLine({ name, text, details, styles }: { name: string | null
             <Text style={styles.sealedText}>{name ? `${name}: ${text}` : text}</Text>
             {!!details && <Text style={styles.sealedDetails}>{details}</Text>}
         </View>
+    );
+}
+
+/**
+ * The sheet behind the row (§7): the two ways back and "Keep them locked". Its own rows, not ChatMenuSheet's: these
+ * labels wrap at 320dp with 1.3× text, where a one-line menu label would be cut.
+ */
+function LockedHistorySheet({ open, styles, bottomInset, onClose, onWords, onAsk }: {
+    open: boolean; styles: ReturnType<typeof makeChatStyles>; bottomInset: number; onClose: () => void; onWords: () => void; onAsk: () => void;
+}) {
+    const { colors } = useTheme();
+    const rows: [string, string, () => void][] = [
+        ['form-textbox-password', LOCKED_HISTORY_WORDS, onWords],
+        ['account-check-outline', LOCKED_HISTORY_ASK, onAsk],
+        ['lock-outline', LOCKED_HISTORY_KEEP, onClose],
+    ];
+    return (
+        <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
+            <Pressable style={styles.menuBackdrop} onPress={onClose} accessibilityLabel="Close">
+                <View style={[styles.menuSheet, { paddingBottom: Math.max(bottomInset, 12) }]}>
+                    <Text style={[styles.menuTitle, { textTransform: 'none' }]}>{LOCKED_HISTORY_SHEET_TITLE}</Text>
+                    <Text style={styles.menuHint}>{LOCKED_HISTORY_SHEET_BODY}</Text>
+                    {rows.map(([icon, label, onPress]) => (
+                        <Pressable key={label} style={styles.menuRow} onPress={onPress} accessibilityRole="button">
+                            <MaterialCommunityIcons name={icon as any} size={22} color={colors.text.body} />
+                            <Text style={[styles.menuLabel, { paddingVertical: 8 }]}>{label}</Text>
+                        </Pressable>
+                    ))}
+                </View>
+            </Pressable>
+        </Modal>
     );
 }
 

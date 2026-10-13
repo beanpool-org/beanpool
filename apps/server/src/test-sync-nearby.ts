@@ -45,7 +45,10 @@
  *      holds (DESIGN-nearby-set-diff-fable §2): a listing enters, leaves and moves at the busy town, and the diff applied
  *      to the held set is the brute force's; the answer's raw bytes drop by the set's ids; #1805's phone still gets it whole;
  *  17. `tied` rides a diff only where it moved: a deal opened on a listing already in the set;
- *  18. a hash this node never sent, another member's hash, her own without setDiff, and a moved area: named whole;
+ *  18. a hash this node never sent, another member's hash, her own without setDiff, and a moved area: named whole. The
+ *      other member is in her very area, with a far tie and a far listing of their own, so a diff against their hash
+ *      would be a few ids and would name their tie and their listing: only the own-list rule answers her whole (the
+ *      review of #1810, finding 2);
  *  19. a 304 after a restart remembers the set, so the next changed set is a diff; NEARBY_SET_MEMORY_MB=0 answers whole.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-sync-nearby)
@@ -781,11 +784,23 @@ async function main() {
         const ask = (held: string, more = '&setDiff=1') => get(`${SYNC}&nearby=1&setOnce=1&setHash=${held}${more}&updatedAfter=${nowCursor()}&paged=1`, dm);
         const unknown = await ask('0123456789abcdef01234567');
         assert(unknown.keys.join() === 'posts,set,setHash,tied' && sameSet(unknown.set, bruteSet(dm).all), `a hash this node never sent: whole (${unknown.keys.join('+')})`);
-        const other = members[4].id;
-        const otherHash = (await heldOf(other)).hash;
-        const theirs = await ask(otherHash);
-        assert(otherHash !== unknown.setHash && theirs.keys.join() === 'posts,set,setHash,tied' && sameSet(theirs.set, bruteSet(dm).all),
-            `another member's hash (on their list, not hers): her own set, whole (${theirs.keys.join('+')})`);
+        // Another member in her very area: their set is hers but for their tie (an open deal on a listing in London) and
+        // their own listing in New York, so a diff from their set to hers is a few ids, and its setDrop would name both.
+        const other = memberAt('Twin', { lat: a.area_lat, lng: a.area_lng });
+        const otherTie = post({ lat: 51.5, lng: -0.1 }, authors[8]);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+                    VALUES (?, ?, ?, ?, 5, 'requested', ?)`).run(crypto.randomUUID(), otherTie, other.pubKeyHex, authors[8].pubKeyHex, iso(Date.now()));
+        const otherOwn = post({ lat: 40.7, lng: -74 }, other);
+        const otherHeld = await heldOf(other);
+        const hers = bruteSet(dm).all;
+        const apart = otherHeld.set.filter(id => !hers.has(id)).length + [...hers].filter(id => !otherHeld.set.includes(id)).length;
+        assert(otherHeld.set.includes(otherTie) && otherHeld.set.includes(otherOwn) && apart > 0 && apart * 10 < hers.size,
+            `their set holds their tie and their own listing, and is ${apart} id(s) from hers of ${hers.size}: a diff would be smaller than the set`);
+        const theirs = await ask(otherHeld.hash);
+        assert(otherHeld.hash !== unknown.setHash && theirs.keys.join() === 'posts,set,setHash,tied' && sameSet(theirs.set, hers),
+            `another member's hash, in her very area (on their list, not hers): her own set, whole (${theirs.keys.join('+')})`);
+        assert(!theirs.text.includes(otherTie) && !theirs.text.includes(otherOwn),
+            'nothing of theirs reaches her: neither their tie nor their own listing is named in her answer');
         const before = (await heldOf(dm)).hash;
         db.prepare(`UPDATE posts SET active = 0, status = 'cancelled', updated_at = ? WHERE id = ?`).run(iso(Date.now()), othersIn(dmHeld.set, dm)[13]);
         const noDiff = await ask(before, '');

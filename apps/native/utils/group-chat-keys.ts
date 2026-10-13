@@ -774,9 +774,10 @@ export class GroupKeyring {
      * `newKey`, and nothing else. The caller has checked on this phone that `oldKey` is the key this phone itself
      * remembers under the member's name (name-key-memory.ts) and that `newKey` is the code scanned from the phone in front
      * of the member (group-history-unlock.ts checkNewPhone). The node is in none of the three: a roster, a chain,
-     * `missing` or a members answer it doctors changes nothing here. One wraps read per epoch held.
+     * `missing` or a members answer it doctors changes nothing here. One wraps read per epoch held. `said`, when given, counts
+     * the epochs left out because the node's list shows the new key a live wrap: the node's word, which the screen says as such.
      */
-    async epochsForConfirmedPhone(oldKey: string, newKey: string): Promise<number[]> {
+    async epochsForConfirmedPhone(oldKey: string, newKey: string, said?: { held: number }): Promise<number[]> {
         await this.ensureLoaded();
         const plan: number[] = [];
         if (oldKey === newKey || newKey === this.identity.publicKey || oldKey === this.identity.publicKey) return plan;
@@ -786,8 +787,9 @@ export class GroupKeyring {
             const set = await this.signedRecipientsWith(epoch, oldKey, holder);
             if (!set || !set.has(oldKey) || set.has(newKey)) continue;
             // The new phone already holds it (an earlier confirmation, its own words, another member): nothing to hand, so
-            // a second scan says "Nothing to unlock" rather than counting the node's 409 as a refusal (#1844 review, finding 4).
-            if (holder.holds) continue;
+            // a second scan says so rather than counting the node's 409 as a refusal (#1844 review, finding 4). It is the node's
+            // word, and the screen says it is (confirmation 1 of #1844, finding 4).
+            if (holder.holds) { if (said) said.held++; continue; }
             plan.push(epoch);
         }
         return plan;

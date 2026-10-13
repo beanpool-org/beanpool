@@ -140,6 +140,7 @@ globalThis.__db = {
     checkScannedNewPhone: async () => ({ ok: true, name: NAME, oldKey: 'c'.repeat(64), newKey: 'b'.repeat(64), groups: GROUPS }),
     confirmScannedNewPhone: (check, onProgress) => {
         if (q.get('hand') === 'partial') return Promise.resolve({ handed: { g1: 3 }, total: 3, already: 0, planned: 120, stopped: false });
+        if (q.get('hand') === 'said') return Promise.resolve({ handed: {}, total: 0, already: 0, listedHeld: 4, planned: 0, stopped: false });
         setTimeout(() => onProgress?.(42, 120), 10);
         return new Promise(() => {});
     },
@@ -296,6 +297,11 @@ try {
         await button('Confirm').click();
         await page.getByText(/Handed 3 of 120\. The community refused the rest/).waitFor();
         await measure(`${scheme} · confirming: Handed 3 of 120, the rest refused`);
+        await open(`case=confirm&scheme=${scheme}&hand=said`);
+        await page.getByText(/You're confirming this is/).waitFor();
+        await button('Confirm').click();
+        await page.getByText(/Nothing handed: the community says/).waitFor();
+        await measure(`${scheme} · confirming: the community says the new phone already holds them`);
 
         await open(`case=code&scheme=${scheme}`);
         await page.getByText(/Confirmed by Bartholomew/).waitFor();

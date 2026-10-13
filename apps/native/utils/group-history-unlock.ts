@@ -148,17 +148,28 @@ export function newPhoneRefusedRestText(handed: number, planned: number): string
     return `Handed ${handed} of ${planned}. The community refused the rest: try again, or tell an owner.`;
 }
 export function newPhoneNothingText(name: string): string {
-    return `Nothing to unlock: this phone holds no earlier key of ${name}'s that the new phone lacks.`;
+    return `Nothing to unlock: this phone found no earlier key of ${name}'s to hand over.`;
 }
 /**
- * The confirming phone's end (review of #1844, finding 4): "Done" only when every planned key was handed; fewer is said
- * as a count, none planned as nothing to unlock, and the node's slow-down as where it stopped.
+ * Some keys the node says the new phone already holds (its wraps list shows one, or it answered 409 wrap_exists): the
+ * node's word, said as such (confirmation 1 of #1844, finding 4); this phone can't see into the new phone.
  */
-export function newPhoneEnd(name: string, r: { total: number; already?: number; planned: number; stopped: boolean }): { text: string; ok: boolean } {
+export function newPhoneSaidHeldText(name: string, handed: number, said: number): string {
+    if (handed > 0) return `Handed ${handed}. The community says ${name}'s new phone already holds the other ${said}. If it can't read those messages, tell an owner.`;
+    return `Nothing handed: the community says ${name}'s new phone already holds ${said === 1 ? 'the earlier key' : `the ${said} earlier keys`} this phone has. If it can't read those messages, tell an owner.`;
+}
+/**
+ * The confirming phone's end (review of #1844, finding 4): "Done" only when this phone handed every planned key; fewer is
+ * said as a count, what the node says the new phone already holds as the node's word (confirmation 1, finding 4), none
+ * planned as nothing to unlock, and the node's slow-down as where it stopped.
+ */
+export function newPhoneEnd(name: string, r: { total: number; already?: number; listedHeld?: number; planned: number; stopped: boolean }): { text: string; ok: boolean } {
     const landed = r.total + (r.already ?? 0);
+    const said = (r.already ?? 0) + (r.listedHeld ?? 0);
     if (r.stopped) return { text: `${newPhoneProgressText(landed, r.planned)} The community asked this phone to slow down: scan again in a minute to carry on.`, ok: true };
+    if (landed < r.planned) return { text: newPhoneRefusedRestText(r.total, r.planned), ok: false };
+    if (said > 0) return { text: newPhoneSaidHeldText(name, r.total, said), ok: true };
     if (r.planned === 0) return { text: newPhoneNothingText(name), ok: true };
-    if (landed < r.planned) return { text: newPhoneRefusedRestText(landed, r.planned), ok: false };
     return { text: newPhoneDoneText(name), ok: true };
 }
 /** The new phone's own note of who confirmed it (§4): kept on this phone only, never published. */
@@ -415,9 +426,9 @@ export async function checkNewPhone(input: {
 /**
  * "Confirm" (§4): for each shared group, hand the new key the epochs this phone holds whose signed record names the old
  * key and not the new one (GroupKeyring.epochsForConfirmedPhone, then handToConfirmedPhone). Every group's list is made
- * first, so progress reads "N of M". Leaves out epochs the new phone already holds. Returns how many went per group, how
- * many the node said were already there, how many were planned, and whether the node's speed limit stopped it (the
- * screen offers to carry on).
+ * first, so progress reads "N of M". Leaves out epochs the node lists the new phone as holding (`listedHeld`). Returns how
+ * many went per group, how many the node said were already there (409, `already`), how many were planned, and whether the
+ * node's speed limit stopped it (the screen offers to carry on).
  */
 export async function confirmNewPhone(input: {
     nodeUrl: string;
@@ -425,13 +436,14 @@ export async function confirmNewPhone(input: {
     store: GroupKeyStore;
     check: Extract<NewPhoneCheck, { ok: true }>;
     onProgress?: (handed: number, planned: number) => void;
-}): Promise<{ handed: Record<string, number>; total: number; already: number; planned: number; stopped: boolean }> {
+}): Promise<{ handed: Record<string, number>; total: number; already: number; listedHeld: number; planned: number; stopped: boolean }> {
     const { oldKey, newKey } = input.check;
+    const said = { held: 0 };
     const plans: { ring: ReturnType<typeof groupKeyring>; id: string; epochs: number[] }[] = [];
     for (const g of input.check.groups) {
         const ring = groupKeyring(input.nodeUrl, input.identity, g.id, input.store);
         await ring.sync().catch(() => null);
-        plans.push({ ring, id: g.id, epochs: await ring.epochsForConfirmedPhone(oldKey, newKey) });
+        plans.push({ ring, id: g.id, epochs: await ring.epochsForConfirmedPhone(oldKey, newKey, said) });
     }
     const planned = plans.reduce((n, p) => n + p.epochs.length, 0);
     const handed: Record<string, number> = {};
@@ -443,9 +455,9 @@ export async function confirmNewPhone(input: {
         handed[p.id] = r.handed.length;
         total += r.handed.length;
         already += r.already.length;
-        if (r.stopped) return { handed, total, already, planned, stopped: true };
+        if (r.stopped) return { handed, total, already, listedHeld: said.held, planned, stopped: true };
     }
-    return { handed, total, already, planned, stopped: false };
+    return { handed, total, already, listedHeld: said.held, planned, stopped: false };
 }
 
 // ─── The new phone's note of who confirmed it (§4) ─────────────────────────────────────────────────────────────────

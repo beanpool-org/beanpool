@@ -66,7 +66,7 @@ import { groupKeyring, memoryGroupKeyStore, forgetGroupKeys, joinGroupWithEpoch,
 import {
     unlockWithOldWords, oldKeyFromWords, newPhoneQrPayload, parseNewPhoneQr, checkNewPhone, confirmNewPhone, newPhoneConfirmText, NEW_PHONE_QR_TAG,
     handOversHeld, noteConfirmations, confirmedNotes, newPhoneProgressText,
-    newPhoneEnd, newPhoneDoneText, newPhoneRefusedRestText, oldWordsEnd, oldWordsNothingText, OLD_WORDS_DONE, OLD_WORDS_NOTHING_LISTED,
+    newPhoneEnd, newPhoneDoneText, newPhoneRefusedRestText, newPhoneSaidHeldText, oldWordsEnd, oldWordsNothingText, OLD_WORDS_DONE, OLD_WORDS_NOTHING_LISTED,
     lockedHistoryCounts, noteLockedHistoryCount, newPhoneKeyWasOtherText,
 } from '../group-history-unlock';
 import { rememberRosterNames } from '../name-key-memory';
@@ -700,7 +700,7 @@ describe('review of #1844: path B against a node that rewrites names, wraps list
         expect(await topUps(pk(ben), pk(cat2))).toEqual([]);
     });
 
-    it('H1 (finding 4): the confirming phone says what landed — "Handed 0 of N" when the node refuses every wrap, "Done" once they land, "Nothing to unlock" on a second scan', async () => {
+    it('H1 (finding 4): the confirming phone says what landed — "Handed 0 of N" when the node refuses every wrap, "Done" once they land, the community\'s word on a second scan', async () => {
         await control('limiters');
         forgetGroupKeys();
         const ben = phone('Benh');
@@ -730,17 +730,21 @@ describe('review of #1844: path B against a node that rewrites names, wraps list
         expect(honest.total).toBe(honest.planned);
         expect(honest.planned).toBe(refused.planned);
         expect(newPhoneEnd(check.name, honest)).toEqual({ text: newPhoneDoneText('Cath'), ok: true });
-        // Scanned again: her new phone holds every one of them, so nothing is planned and nothing is posted.
+        // Scanned again: the node lists a live wrap to her new key for every one of them, so nothing is planned and nothing
+        // is posted; the screen says that is the community's word (confirmation 1 of #1844, finding 4).
         const mark = bodies.length;
         const again = await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check });
-        expect(again).toMatchObject({ planned: 0, total: 0, already: 0, stopped: false });
+        expect(again).toMatchObject({ planned: 0, total: 0, already: 0, listedHeld: honest.planned, stopped: false });
         expect(posts(mark, /\/keys\/wrap$/)).toEqual([]);
-        expect(newPhoneEnd(check.name, again)).toEqual({ text: "Nothing to unlock: this phone holds no earlier key of Cath's that the new phone lacks.", ok: true });
-        // Some handed here, some another member got in first (409 wrap_exists): all of them are on her phone.
-        expect(newPhoneEnd('Cath', { total: 1, already: 1, planned: 2, stopped: false }).text).toBe(newPhoneDoneText('Cath'));
+        expect(newPhoneEnd(check.name, again)).toEqual({ text: newPhoneSaidHeldText('Cath', 0, honest.planned), ok: true });
+        expect(newPhoneSaidHeldText('Cath', 0, 2)).toBe("Nothing handed: the community says Cath's new phone already holds the 2 earlier keys this phone has. If it can't read those messages, tell an owner.");
+        // Nothing this phone holds names her old key: nothing to unlock, said as what this phone found.
+        expect(newPhoneEnd('Cath', { total: 0, already: 0, listedHeld: 0, planned: 0, stopped: false })).toEqual({ text: "Nothing to unlock: this phone found no earlier key of Cath's to hand over.", ok: true });
+        // Some handed here, and the node says another member got in first (409 wrap_exists): its word, never "Done".
+        expect(newPhoneEnd('Cath', { total: 1, already: 1, planned: 2, stopped: false })).toEqual({ text: "Handed 1. The community says Cath's new phone already holds the other 1. If it can't read those messages, tell an owner.", ok: true });
         expect(newPhoneEnd('Cath', { total: 1, already: 0, planned: 2, stopped: false })).toEqual({ text: newPhoneRefusedRestText(1, 2), ok: false });
         expect(newPhoneEnd('Cath', { total: 1, planned: 3, stopped: true }).text).toBe('Unlocking 1 of 3… The community asked this phone to slow down: scan again in a minute to carry on.');
-        console.log(`MEASURED H1: refused ${JSON.stringify(refused)} → "${end.text}"; honest ${honest.total}/${honest.planned} → Done; again planned ${again.planned} → nothing to unlock`);
+        console.log(`MEASURED H1: refused ${JSON.stringify(refused)} → "${end.text}"; honest ${honest.total}/${honest.planned} → Done; again planned ${again.planned}, listed held ${again.listedHeld} → the community's word`);
     });
 
     it('H2 (finding 4): the old-words screen never says "Done" when nothing landed — an empty answer for a group the chat shows locked is named withheld, junk is withheld too, "Done" once keys land', async () => {
@@ -1003,6 +1007,45 @@ describe('confirmation 1 of #1844: a chain in the wrong order, a lookalike name,
         const residual = await checkNewPhone({ ...ctx, scanned: code });
         expect(residual.ok).toBe(true);
         console.log(`MEASURED FS: seen as Zedf → refused; never seen under his name → check ${residual.ok ? 'passes (the documented residual)' : JSON.stringify(residual)}`);
+        expect(elsewhere).toEqual([]);
+    });
+
+    it('ALREADY (finding 4): a junk live wrap the node shows in the new phone\'s slot empties the plan; the screen says that is the community\'s word, never "Nothing to unlock", and a later scan without it hands them', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        mem.async.delete(memKey());
+        mem.async.delete(byKeyKey());
+        const ben = phone('Benj');
+        const cat = phone('Catj');
+        await control('members', { members: [ben, cat].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ben, 'Junk G');
+        await say(ben, g, 'one');
+        await join_(cat, g);
+        await writes(cat, g, 'two');
+        await benSees(ben, [g]);
+        const cat2 = await rekeyed(cat, 'Catj');
+        expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
+        await benSees(ben, [g]);
+        const check = await checkNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, groups: [{ id: g, name: 'Junk G' }], scanned: newPhoneQrPayload(cat2.identity, pk(cat)) });
+        expect(check.ok).toBe(true);
+        if (!check.ok) return;
+        const junk: Hook = async (r) => {
+            if (r.method !== 'GET' || !/\/keys\/\d+\/wraps$/.test(r.path)) return undefined;
+            const a = await (await realFetch(r.input, r.init)).json();
+            const own = a.wraps.find((w: any) => w.sig === null);
+            return jsonResponse(200, { ...a, wraps: [...a.wraps, { ...own, recipient: pk(cat2), wrapper: pk(ben), sig: 'x'.repeat(88), rejectedAt: null }] });
+        };
+        const done = await withHook(junk, () => confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check }));
+        expect(done).toMatchObject({ planned: 0, total: 0, already: 0, stopped: false });
+        expect(done.listedHeld).toBeGreaterThan(0);
+        expect(await topUps(pk(ben), pk(cat2))).toEqual([]);
+        const end = newPhoneEnd('Catj', done);
+        expect(end).toEqual({ text: newPhoneSaidHeldText('Catj', 0, done.listedHeld), ok: true });
+        expect(end.text).not.toMatch(/Nothing to unlock|Done/);
+        const again = await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check });
+        expect(again.total).toBe(again.planned);
+        expect(again.total).toBeGreaterThan(0);
+        console.log(`MEASURED ALREADY: junk slot shown → "${end.text}", 0 posted; without it, handed ${again.total} of ${again.planned}`);
         expect(elsewhere).toEqual([]);
     });
 });

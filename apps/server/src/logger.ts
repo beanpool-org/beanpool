@@ -94,14 +94,22 @@ export function writeLog(
  * system_logs keeps the newest LOG_KEEP_ROWS lines, and none older than LOG_KEEP_DAYS. Count alone let a quiet server keep
  * months of lines, with members' names and the start of their keys in them. Each server keeps its own (a standby copies
  * none, engine/replication-manifest.ts), and a snapshot or backup holds the lines of the day it was made until it goes.
+ *
+ * An AI assistant's lines (category AGENT, one per call: agent/mcp-route.ts) are counted on their own, newest
+ * AGENT_LOG_KEEP_ROWS, and never against LOG_KEEP_ROWS. In one count, an assistant at its limit replaced every line in
+ * about 42 minutes, and a stolen agent token could push the owners' SECURITY lines out the same day (review of #1855,
+ * finding 3). Now no number of assistant calls takes a line that isn't an assistant's. AGENT_LOG_KEEP_ROWS is one
+ * assistant's daily allowance (agent/limits.ts AGENT_CALLS_PER_DAY), so a full day of its calls fits.
  */
 export const LOG_KEEP_DAYS = 30;
 export const LOG_KEEP_ROWS = 2500;
+export const AGENT_LOG_KEEP_ROWS = 2000;
 const LOG_KEEP_MS = LOG_KEEP_DAYS * 24 * 60 * 60_000;
 
 /**
- * Delete the log lines past LOG_KEEP_ROWS or older than LOG_KEEP_DAYS at `now`. A line whose time can't be read is kept
- * until the count takes it. Never throws. Returns how many went.
+ * Delete the log lines past LOG_KEEP_ROWS (AGENT lines: past AGENT_LOG_KEEP_ROWS, counted apart) or older than
+ * LOG_KEEP_DAYS at `now`. A line whose time can't be read is kept until the count takes it. Never throws. Returns how
+ * many went.
  */
 export function pruneSystemLogs(now = Date.now()): number {
     try {
@@ -109,9 +117,15 @@ export function pruneSystemLogs(now = Date.now()): number {
         const byAge = db.prepare('DELETE FROM system_logs WHERE julianday(timestamp) < julianday(?)').run(cutoff).changes;
         const byCount = db.prepare(`
             DELETE FROM system_logs
-            WHERE id < (SELECT id FROM system_logs ORDER BY id DESC LIMIT 1 OFFSET ${LOG_KEEP_ROWS - 1})
+            WHERE category IS NOT 'AGENT'
+              AND id < (SELECT id FROM system_logs WHERE category IS NOT 'AGENT' ORDER BY id DESC LIMIT 1 OFFSET ${LOG_KEEP_ROWS - 1})
         `).run().changes;
-        return byAge + byCount;
+        const agentByCount = db.prepare(`
+            DELETE FROM system_logs
+            WHERE category = 'AGENT'
+              AND id < (SELECT id FROM system_logs WHERE category = 'AGENT' ORDER BY id DESC LIMIT 1 OFFSET ${AGENT_LOG_KEEP_ROWS - 1})
+        `).run().changes;
+        return byAge + byCount + agentByCount;
     } catch (err: any) {
         console.error('Failed to prune administrative log:', err.message);
         return 0;

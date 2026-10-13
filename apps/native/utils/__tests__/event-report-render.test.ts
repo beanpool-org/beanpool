@@ -65,18 +65,18 @@ import { EventDetail } from '../../components/EventDetail';
 let root: Root; let host: HTMLDivElement;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); alerts.length = 0; node.fail = false; node.sent.length = 0; });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
-const button = (name: string | RegExp) => [...host.querySelectorAll('[role=button]')].find((b) => (typeof name === 'string' ? (b.getAttribute('aria-label') ?? b.textContent?.trim()) === name : name.test(b.textContent ?? ''))) as HTMLElement | undefined;
+const button = (name: string | RegExp) => Array.from(host.querySelectorAll('[role=button]')).find((b) => (typeof name === 'string' ? (b.getAttribute('aria-label') ?? b.textContent?.trim()) === name : name.test(b.textContent ?? ''))) as HTMLElement | undefined;
 const click = async (el: HTMLElement | undefined) => { expect(el).toBeTruthy(); await act(async () => { el!.click(); await new Promise((r) => setTimeout(r, 0)); }); };
 const type = async (v: string) => { const i = host.querySelector('input[aria-label="Add a few words (optional)"]') as HTMLInputElement; expect(i).toBeTruthy(); await act(async () => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!; set.call(i, v); i.dispatchEvent(new Event('input', { bubbles: true })); }); };
 const post = { id: 'ev-1', type: 'event', title: 'Working bee', description: 'Bring gloves', author_pubkey: 'host'.repeat(16), eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), photos: [] };
 
 describe('the event screen reports through the shared box (drawn)', () => {
     it('Report event opens the box; Child safety with words goes to reportAbuse with the event id; the box closes', async () => {
-        await act(async () => { root.render(createElement(EventDetail, { post })); });
+        await act(async () => { root.render(createElement(EventDetail, { post }) as unknown as Parameters<Root['render']>[0]); });
         expect(host.textContent).not.toContain('WHY ARE YOU REPORTING IT?');
         await click(button('Report event'));
         expect(host.textContent).toContain('WHY ARE YOU REPORTING IT?');
-        expect([...host.querySelectorAll('[aria-selected]')].slice(-5).map((b) => b.textContent)).toEqual(['Spam or scam', 'Offensive content', 'Misleading post', 'Child safety', 'Other']);
+        expect(Array.from(host.querySelectorAll('[aria-selected]')).slice(-5).map((b) => b.textContent)).toEqual(['Spam or scam', 'Offensive content', 'Misleading post', 'Child safety', 'Other']);
         expect(button('Submit report')?.getAttribute('aria-disabled')).toBe('true');
         await click(button('Child safety'));
         await type('  he asked my son for photos ');
@@ -87,7 +87,7 @@ describe('the event screen reports through the shared box (drawn)', () => {
     });
 
     it('a failed send says "Not sent" and keeps the box open with the choice and the words, ready to send again', async () => {
-        await act(async () => { root.render(createElement(EventDetail, { post })); });
+        await act(async () => { root.render(createElement(EventDetail, { post }) as unknown as Parameters<Root['render']>[0]); });
         await click(button('Report event'));
         await click(button('Child safety'));
         await type('he asked my son for photos');
@@ -97,7 +97,7 @@ describe('the event screen reports through the shared box (drawn)', () => {
         const input = host.querySelector('input[aria-label="Add a few words (optional)"]') as HTMLInputElement;
         expect(input).toBeTruthy();
         expect(input.value).toBe('he asked my son for photos');
-        expect([...host.querySelectorAll('[aria-selected=true]')].map((b) => b.textContent)).toEqual(['✓ Child safety']);
+        expect(Array.from(host.querySelectorAll('[aria-selected=true]')).map((b) => b.textContent)).toEqual(['✓ Child safety']);
         expect(button('Submit report')?.getAttribute('aria-disabled')).toBeNull();
         // The node is back: the same box sends what the member chose and wrote, without retyping.
         node.fail = false;
@@ -108,7 +108,7 @@ describe('the event screen reports through the shared box (drawn)', () => {
     });
 
     it('the screen moves its content up for the keyboard, so the words box and Submit stay in view (finding 2)', async () => {
-        await act(async () => { root.render(createElement(EventDetail, { post })); });
+        await act(async () => { root.render(createElement(EventDetail, { post }) as unknown as Parameters<Root['render']>[0]); });
         await click(button('Report event'));
         const kav = host.querySelector('[data-kav]');
         expect(kav).toBeTruthy();

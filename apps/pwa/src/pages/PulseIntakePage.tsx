@@ -306,7 +306,7 @@ export function PulseIntakePage({
                     <button
                         type="button"
                         onClick={pasteFromClipboard}
-                        className="text-xs font-semibold px-2 py-0.5 rounded-md border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-terra-600 dark:text-terra-400 hover:bg-nature-100 dark:hover:bg-nature-700 cursor-pointer"
+                        className="text-xs font-semibold px-2 py-0.5 rounded-md border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-terra-600 dark:text-terra-200 hover:bg-nature-100 dark:hover:bg-nature-700 cursor-pointer"
                     >
                         Paste
                     </button>
@@ -363,7 +363,7 @@ export function PulseIntakePage({
                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                         isSelected
                                             ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
-                                            : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700'
+                                            : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                     }`}
                                     aria-pressed={isSelected}
                                 >
@@ -393,7 +393,7 @@ export function PulseIntakePage({
                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                         isSelected
                                             ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
-                                            : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700'
+                                            : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                     }`}
                                     aria-pressed={isSelected}
                                 >

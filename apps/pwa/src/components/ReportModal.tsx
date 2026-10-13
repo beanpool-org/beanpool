@@ -134,7 +134,7 @@ export function ReportModal({
                                     className={`min-h-[44px] px-3.5 py-2 rounded-full text-xs font-bold cursor-pointer transition-all border flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
                                         isSelected
                                             ? 'bg-red-600 text-white border-red-600 shadow-sm'
-                                            : 'bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-200 dark:border-nature-700 hover:bg-nature-100 dark:hover:bg-nature-700'
+                                            : 'bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-200 dark:border-nature-700 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                     }`}
                                 >
                                     {isSelected ? '✓ ' : ''}{reason}
@@ -164,7 +164,7 @@ export function ReportModal({
                         type="button"
                         onClick={onClose}
                         disabled={submitting}
-                        className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-400"
+                        className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-400"
                     >
                         Cancel
                     </button>

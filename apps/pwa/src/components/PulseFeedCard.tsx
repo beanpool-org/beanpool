@@ -165,7 +165,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 e.stopPropagation();
                                 setShowReport(true);
                             }}
-                            className="min-h-[48px] min-w-[48px] flex items-center justify-center text-base rounded-lg bg-transparent text-nature-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-nature-100 dark:hover:bg-nature-800 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                            className="min-h-[48px] min-w-[48px] flex items-center justify-center text-base rounded-lg bg-transparent text-nature-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-nature-100 dark:hover:bg-nature-800 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                             aria-label="Report this post"
                             title="Report"
                         >
@@ -179,7 +179,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 <button
                                     type="button"
                                     onClick={handleMuteClick}
-                                    className="min-h-[44px] px-3 py-2 text-xs font-semibold rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 border border-nature-200 dark:border-nature-700 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                                    className="min-h-[44px] px-3 py-2 text-xs font-semibold rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 border border-nature-200 dark:border-nature-700 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
                                     aria-label="Hide this item from feed"
                                 >
                                     Hide

@@ -1531,13 +1531,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             <div className="flex gap-2 mb-2">
                 <button onClick={() => { useMyLocation(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
                     validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
-                    : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                    : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                 }`}>
                     <span className="text-xl leading-none">📍</span> My location
                 </button>
                 <button onClick={() => { enterPinDrop(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
                     validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
-                    : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                    : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                 }`}>
                     <span className="text-xl leading-none">📌</span> Drop a pin
                 </button>
@@ -1573,7 +1573,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </div>
                     ))}
                     {newPostPhotos.length < 5 && (
-                        <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 dark:border-nature-600 flex items-center justify-center cursor-pointer bg-nature-50 dark:bg-nature-900 text-2xl text-nature-400 dark:text-nature-300 hover:text-nature-500 hover:border-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 transition-all shadow-sm">
+                        <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 dark:border-nature-600 flex items-center justify-center cursor-pointer bg-nature-50 dark:bg-nature-900 text-2xl text-nature-400 dark:text-nature-300 hover:text-nature-500 dark:hover:text-nature-300 hover:border-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 transition-all shadow-sm">
                             📷
                             <input
                                 type="file"
@@ -1896,7 +1896,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     <button 
                         onClick={() => setPreviewPost(null)}
                         aria-label="Close preview"
-                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-400 cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
+                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-300 cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
                     >
                         ✕
                     </button>
@@ -2012,7 +2012,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
                                 newPostType === t
                                     ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
-                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
+                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
                             {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? 'Event' : '🗳️ Poll'}

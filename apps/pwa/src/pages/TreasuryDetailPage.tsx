@@ -1321,7 +1321,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         {d.action_required === 'fulfill' ? (
                                                             <div
                                                                 onClick={() => onNavigatePost?.(d.post_id)}
-                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-xs text-center flex items-center justify-center cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors"
+                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-xs text-center flex items-center justify-center cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors"
                                                             >
                                                                 Fulfill Deal · Awaiting Customer Release
                                                             </div>

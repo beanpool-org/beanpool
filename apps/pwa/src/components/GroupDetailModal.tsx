@@ -491,7 +491,7 @@ export function GroupDetailModal({
                                                                 onClick={() => handleRemoveMember(m.memberPubkey, m.callsign)}
                                                                 disabled={actionLoading}
                                                                 aria-label={`Remove ${m.callsign || m.memberPubkey.slice(0, 10)} from group`}
-                                                                className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                                className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                                 title="Remove member"
                                                             >
                                                                 ✕

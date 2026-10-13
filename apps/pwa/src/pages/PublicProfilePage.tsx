@@ -253,7 +253,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             onClick={() => setShowReportModal(true)}
                             title="Report member"
                             aria-label={`Report user ${profile?.callsign || ''}`}
-                            className="min-h-[48px] min-w-[48px] px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors flex items-center justify-center gap-1"
+                            className="min-h-[48px] min-w-[48px] px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors flex items-center justify-center gap-1"
                         >
                             <span aria-hidden="true">🚩</span><span className="hidden sm:inline">Report</span>
                         </button>
@@ -1012,7 +1012,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => setEditingReview(null)}
-                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 rounded-xl transition-colors border-none cursor-pointer"
+                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors border-none cursor-pointer"
                                 >
                                     Cancel
                                 </button>

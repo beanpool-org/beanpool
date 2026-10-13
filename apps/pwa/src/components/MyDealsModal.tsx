@@ -220,7 +220,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                             ref={closeBtnRef}
                             onClick={onClose}
                             aria-label="Close My Deals"
-                            className="w-8 h-8 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500"
+                            className="w-8 h-8 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500"
                         >
                             ✕
                         </button>

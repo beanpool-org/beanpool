@@ -664,7 +664,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                                     <button
                                                         key={m.publicKey}
                                                         onClick={() => { setSendTo(m.publicKey); setShowMemberPicker(false); setMemberSearch(''); }}
-                                                        className={`w-full p-3 text-left text-sm hover:bg-nature-50 dark:hover:bg-nature-900 flex justify-between items-center cursor-pointer border-none bg-transparent ${sendTo === m.publicKey ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600' : 'text-nature-900 dark:text-white'}`}
+                                                        className={`w-full p-3 text-left text-sm hover:bg-nature-50 dark:hover:bg-nature-900 flex justify-between items-center cursor-pointer border-none bg-transparent ${sendTo === m.publicKey ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' : 'text-nature-900 dark:text-white'}`}
                                                     >
                                                         <span className="font-bold">{m.callsign}</span>
                                                         <span className="text-[10px] font-mono opacity-50">{m.publicKey.slice(0, 10)}...</span>

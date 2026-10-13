@@ -1386,7 +1386,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 onClick={() => setReportTarget({ pubkey: peerPubkey, name: getConversationTitle(activeConv) })}
                                 title="Report user"
                                 aria-label="Report user"
-                                className="px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors flex items-center gap-1"
+                                className="px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors flex items-center gap-1"
                             >
                                 <span>🚩</span> <span className="hidden sm:inline">Report</span>
                             </button>

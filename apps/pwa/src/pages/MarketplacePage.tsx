@@ -1441,7 +1441,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             }}
                                             disabled={accepting}
-                                            className="flex-1 py-1.5 rounded-md border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-400 font-bold text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/30 transition-colors"
+                                            className="flex-1 py-1.5 rounded-md border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-400 font-bold text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/30 dark:hover:text-red-300 transition-colors"
                                         >
                                             Deny
                                         </button>
@@ -1875,8 +1875,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-500' 
                                                     : 'bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-500') 
                                                 : (hasExistingRating 
-                                                    ? 'bg-white dark:bg-nature-900 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-nature-800 shadow-sm' 
-                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-nature-800 shadow-sm')
+                                                    ? 'bg-white dark:bg-nature-900 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-nature-800 shadow-sm' 
+                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-nature-800 shadow-sm')
                                         }`}
                                     >
                                         {hasExistingRating ? `⭐ Edit rating for ${targetName} (as ${targetRole})` : `⭐ Rate ${targetName} as ${targetRole}`}
@@ -2078,7 +2078,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             className={`flex-1 py-2.5 rounded-xl border text-sm font-bold capitalize transition-colors ${
                                                 editType === t
                                                     ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-orange-600 border-orange-600 text-white shadow-sm')
-                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800'
+                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
                                             }`}
                                         >
                                             {t === 'offer' ? '🔵 Offer' : '🟠 Need'}
@@ -3165,7 +3165,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <button
                                     type="button"
                                     onClick={() => setPromptReviewForTx(null)}
-                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                 >
                                     Skip for now
                                 </button>

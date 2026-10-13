@@ -314,7 +314,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                         <button
                                             type="button"
                                             onClick={() => setEditingId(editingId === channel.id ? null : channel.id)}
-                                            className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 cursor-pointer transition-colors"
+                                            className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors"
                                         >
                                             {editingId === channel.id ? 'Done' : 'Change category'}
                                         </button>
@@ -452,7 +452,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                             className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                                 active
                                                     ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
-                                                    : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700'
+                                                    : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                             }`}
                                         >
                                             {c.icon} {c.label}

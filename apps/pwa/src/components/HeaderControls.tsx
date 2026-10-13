@@ -35,12 +35,13 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
             justifyContent: 'center',
         }}>
             <button
+                type="button"
                 onClick={() => identityPubkey && onOpenProfile(identityPubkey)}
                 aria-label="My profile"
                 title="My profile"
-                className="text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-nature-200 transition-colors flex items-center justify-center p-0"
+                className="text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-nature-200 transition-colors flex items-center justify-center p-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                 </svg>
             </button>
@@ -48,11 +49,12 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
             <div className="w-[1px] h-[12px] bg-nature-200 dark:bg-nature-700 mx-[1px]" />
 
             <button
+                type="button"
                 onClick={openHelp}
                 aria-label="Help for this screen"
                 title="Help for this screen"
                 data-testid="header-help"
-                className="text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-nature-200 transition-colors flex items-center justify-center p-0"
+                className="text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-nature-200 transition-colors flex items-center justify-center p-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
                 <HelpIcon className="w-4 h-4" />
             </button>
@@ -60,17 +62,18 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
             <div className="w-[1px] h-[12px] bg-nature-200 dark:bg-nature-700 mx-[1px]" />
 
             <button
+                type="button"
                 onClick={() => setShowSettings(!showSettings)}
                 aria-label="Settings"
                 aria-pressed={showSettings}
                 title="Settings"
-                className={`flex items-center justify-center transition-colors p-0 ${
+                className={`flex items-center justify-center transition-colors p-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                     showSettings 
                         ? 'text-accent dark:text-accent' 
                         : 'text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-nature-200'
                 }`}
             >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
                 </svg>
             </button>

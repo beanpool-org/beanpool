@@ -148,7 +148,9 @@ export default function ProjectsScreen() {
         cardTitle: { fontSize: 17, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
         cardMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
 
-        badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
+        // Never wider than the column: on a large text setting a badge wraps at its space rather than clip ("🏛️ ENTERPRISE"
+        // measured 126-137 dp of the 202 dp column at 320 dp x 1.3; at x 2 "⏳ WINDING UP" ran 4 dp past it).
+        badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start', maxWidth: '100%' },
         badgePaused: { backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border },
         badgePausedText: { fontSize: 10, fontWeight: '800', color: colors.feedback.warning.fg, letterSpacing: 0.5 },
         badgeWindingUp: { backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border },
@@ -369,30 +371,30 @@ export default function ProjectsScreen() {
                         <View style={styles.badgeRow}>
                             {stateBadge === 'paused' && (
                                 <View style={[styles.badge, styles.badgePaused]}>
-                                    <Text style={styles.badgePausedText} numberOfLines={1}>⏸️ PAUSED</Text>
+                                    <Text style={styles.badgePausedText}>⏸️ PAUSED</Text>
                                 </View>
                             )}
                             {stateBadge === 'winding_up' && (
                                 <View style={[styles.badge, styles.badgeWindingUp]}>
-                                    <Text style={styles.badgeWindingUpText} numberOfLines={1}>⏳ WINDING UP</Text>
+                                    <Text style={styles.badgeWindingUpText}>⏳ WINDING UP</Text>
                                 </View>
                             )}
                             {stateBadge === 'closed' && (
                                 <View style={[styles.badge, styles.badgeClosed]}>
-                                    <Text style={styles.badgeClosedText} numberOfLines={1}>CLOSED</Text>
+                                    <Text style={styles.badgeClosedText}>CLOSED</Text>
                                 </View>
                             )}
                             {!showKindBadge ? null : kindBadge === 'funded' ? (
                                 <View style={[styles.badge, styles.badgeFunded]}>
-                                    <Text style={styles.badgeFundedText} numberOfLines={1}>🎉 FUNDED</Text>
+                                    <Text style={styles.badgeFundedText}>🎉 FUNDED</Text>
                                 </View>
                             ) : kindBadge === 'project' ? (
                                 <View style={[styles.badge, styles.badgeProject]}>
-                                    <Text style={styles.badgeProjectText} numberOfLines={1}>🌱 PROJECT</Text>
+                                    <Text style={styles.badgeProjectText}>🌱 PROJECT</Text>
                                 </View>
                             ) : (
                                 <View style={[styles.badge, styles.badgeOngoing]}>
-                                    <Text style={styles.badgeOngoingText} numberOfLines={1}>🏛️ ENTERPRISE</Text>
+                                    <Text style={styles.badgeOngoingText}>🏛️ ENTERPRISE</Text>
                                 </View>
                             )}
                         </View>

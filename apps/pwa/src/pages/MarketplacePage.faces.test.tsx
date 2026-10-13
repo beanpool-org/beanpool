@@ -1,8 +1,8 @@
 // The web Market's faces on a community where people are asked for, not read whole (features.membersOnDemand, design
 // DESIGN-global-members-by-area slice M3): each card's face is the one its listing carries (authorAvatarUrl) and the
 // member directory is never read for it. A community without the switch reads the directory for faces, as before.
-import { render, screen, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
@@ -80,5 +80,49 @@ describe('MarketplacePage: authors\' faces (members on demand, M3)', () => {
         await screen.findByText('Bicycle Repair');
         await waitFor(() => expect(faces()).toContain(DIRECTORY_FACE));
         expect(api.getMembers).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('MarketplacePage on global with previews AND members on demand (where #1853 meets #1861)', () => {
+    // The worldwide community as it answers: every showcase feature off, previews on, people asked for, not read whole.
+    const GLOBAL_SHOWCASE = {
+        profile: 'global',
+        features: { ...GLOBAL.features, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true },
+    };
+    const fetchSpy = vi.fn(async (..._args: unknown[]): Promise<Response> => { throw new TypeError('offline'); });
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.stubGlobal('fetch', fetchSpy);
+        fetchSpy.mockClear();
+        vi.mocked(loadRadiusSettings).mockReturnValue(null);
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (f) => (f?.author ? [] : [{ ...offer, authorAvatarUrl: ROW_FACE }]) as any);
+        vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ publicKey: 'member-me', area: AREA } as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([
+            { publicKey: 'member-ada', callsign: 'Ada', joinedAt: '2026-01-01', invitedBy: '', inviteCode: '', avatarUrl: DIRECTORY_FACE },
+        ]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        info.current = GLOBAL_SHOWCASE;
+    });
+    afterEach(() => { vi.unstubAllGlobals(); });
+
+    it('the row face and no directory read; My Deals draws the sample deals; no press sends a sample id', async () => {
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        await waitFor(() => expect(faces()).toContain(ROW_FACE));
+        fireEvent.click(screen.getByRole('button', { name: /My Deals/ }));
+        const deals = await screen.findByTestId('deals-preview');
+        fireEvent.click(within(deals).getByRole('button', { name: /Approve and release/ }));
+        const sheet = await screen.findByTestId('local-community-sheet');
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(faces()).not.toContain(DIRECTORY_FACE);
+        expect(api.getMembers).not.toHaveBeenCalled();
+        // Every call the page made, to the node's api or to fetch: none names a sample id, and nothing was written.
+        const calls = [...(Object.values(api) as unknown[]).filter(vi.isMockFunction).flatMap(f => f.mock.calls), ...fetchSpy.mock.calls];
+        expect(calls.length).toBeGreaterThan(0);
+        expect(calls.map(c => JSON.stringify(c)).filter(s => /\bsample-[a-z0-9]/.test(s))).toEqual([]);
+        expect(fetchSpy.mock.calls.filter(([, init]) => ((init as RequestInit | undefined)?.method ?? 'GET') !== 'GET')).toEqual([]);
     });
 });

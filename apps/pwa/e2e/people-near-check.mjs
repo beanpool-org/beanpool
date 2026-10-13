@@ -15,6 +15,7 @@
  * host but this machine.
  *
  * Run: node e2e/people-near-check.mjs (in apps/pwa; @beanpool/core, engine and signin built)
+ * PEOPLE_NEAR_SCHEME=dark runs it in the app's dark scheme (default: light).
  */
 /* global URL, console, process, setTimeout, document, indexedDB, localStorage -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
@@ -31,6 +32,7 @@ const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SERVER_DIR = path.resolve(PWA_DIR, '../server');
 process.chdir(PWA_DIR);
 const VIEW = { width: 320, height: 720 };
+const SCHEME = process.env.PEOPLE_NEAR_SCHEME === 'dark' ? 'dark' : 'light';
 const BYRON = { lat: -28.6, lng: 153.6 };
 const LAGOS = { lat: 6.5, lng: 3.4 };
 const LENNOX = { lat: -28.8, lng: 153.6 };
@@ -94,13 +96,13 @@ async function startNode(root, profile, members) {
 async function openMember(browser, origin, identity) {
     const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
     const otherHosts = new Set();
-    await context.addInitScript(() => {
+    await context.addInitScript((scheme) => {
         try {
-            localStorage.setItem('beanpool-theme-mode', 'light');
+            localStorage.setItem('beanpool-theme-mode', scheme);
             localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             localStorage.setItem('beanpool-install-dismissed-forever', '1');
         } catch { /* none */ }
-    });
+    }, SCHEME);
     await context.route((url) => url.hostname !== 'localhost', (route) => {
         otherHosts.add(new URL(route.request().url()).hostname);
         return route.abort();
@@ -127,6 +129,8 @@ async function openMember(browser, origin, identity) {
     await page.goto(`${origin}/app`, { waitUntil: 'load' });
     // 1.3x text, as the small-screen floor asks.
     await page.addStyleTag({ content: 'html { font-size: 130% !important; }' });
+    await until(() => page.evaluate(() => document.documentElement.classList.contains('dark')).then(d => d === (SCHEME === 'dark')), 5_000);
+    check(await page.evaluate(() => document.documentElement.classList.contains('dark')) === (SCHEME === 'dark'), `the page is drawn in the ${SCHEME} scheme`);
     return { context, page, reads, otherHosts };
 }
 
@@ -273,7 +277,7 @@ let browser;
 try {
     await build({ root: PWA_DIR, logLevel: 'warn', build: { outDir: path.join(root, 'public'), emptyOutDir: true } });
     browser = await chromium.launch();
-    console.log('The web app as built; Chromium at 320 px, 1.3x text, reduced motion.');
+    console.log(`The web app as built; Chromium at 320 px, 1.3x text, reduced motion, the ${SCHEME} scheme.`);
     for (const run of [globalMembers, localMember]) {
         try { await run(browser, root); } catch (e) { failures.push(String(e?.stack || e)); console.error(e); }
     }

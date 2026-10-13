@@ -6649,14 +6649,16 @@ export async function postGroupChatMessage(
 
 /**
  * The groups a history path may touch (sync, post a self-wrap or a top-up): never a conversation this phone knows as a DM
- * and never held a group's keys for (refuseGroupKeysForDm, confirmation 2 of #1788, finding 2).
+ * and never held a group's keys for (refuseGroupKeysForDm, confirmation 2 of #1788, finding 2). Each comes back under
+ * ring.groupId, the group's id lower-cased, so the routes, records and top-ups agree with its one keyring (#1841).
  */
 async function historyGroups(nodeUrl: string, identity: BeanPoolIdentity, groups: readonly HistoryGroup[]): Promise<HistoryGroup[]> {
     const out: HistoryGroup[] = [];
     for (const g of groups) {
         try {
-            await refuseGroupKeysForDm(groupKeyring(nodeUrl, identity, g.id, groupKeyStore(nodeUrl)));
-            out.push(g);
+            const ring = groupKeyring(nodeUrl, identity, g.id, groupKeyStore(nodeUrl));
+            await refuseGroupKeysForDm(ring);
+            out.push({ ...g, id: ring.groupId });
         } catch { /* a known DM: no group keys under its id */ }
     }
     return out;

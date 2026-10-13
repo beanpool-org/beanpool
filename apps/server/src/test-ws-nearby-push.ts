@@ -22,6 +22,9 @@
  *   8. a standby's copy in this process: an import of a member row whose area moved updates who hears a listing
  *   9. a member who re-keys: their area follows them to the new key, and their new phone hears the listings near it
  *  10. a member removed: their area leaves the map
+ *  10b. a member near a listing who blocked its author (member_blocks, their own list, as their set reads it) hears
+ *      nothing of it, the block made with their socket open; a tie (an open deal on it) still reaches them, as their set
+ *      keeps it; an unblock lets the next push through; the author's own block of them changes nothing (#1812)
  *  11. the cost: 3,500 sockets, the filter on against off, interleaved, with the load printed: a member's listing and an
  *      enterprise's, whose keepers are read once an event, never once a socket
  *  12. the local profile, in its own process: every member socket still gets every listing in full
@@ -48,7 +51,7 @@ import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { setMemberPhoto, haversineKm } from '@beanpool/engine';
+import { setMemberPhoto, haversineKm, getNearbySet } from '@beanpool/engine';
 
 const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
@@ -452,6 +455,64 @@ async function main(): Promise<void> {
         await sleep(100);
         const after = typeof area.memberAreaFor === 'function' ? area.memberAreaFor(fay.pk) : 'no map';
         assert(!!before && after === undefined, `Fay's area leaves the map with her removal (${JSON.stringify(before)} → ${JSON.stringify(after)})`);
+
+        // ── 10b. a member's blocks ──────────────────────────────────────────────────────────────
+        console.log("\n── 10b. Noel, 11 km away, blocks Ana with his socket open: her listings' pushes skip him, as his set does ──");
+        const blocksCall = async (who: Id, urlPath: string, target: Id, what: string) => {
+            const r = await call(who, urlPath, { targetPubkey: target.pk });
+            assert(r.status === 200 && r.body?.success === true, `${what} over HTTP (got ${r.status} ${JSON.stringify(r.body).slice(0, 100)})`);
+        };
+        const postNear = async (title: string) => {
+            const r = await call(ana, '/api/marketplace/posts', { type: 'offer', category: 'other', title, description: `${title}, by the place`, authorPublicKey: ana.pk, lat: PLACE.lat, lng: PLACE.lng });
+            const id = r.body?.post?.id as string;
+            assert(r.status === 200 && !!id, `Ana posts "${title}" at the place (got ${r.status})`);
+            await until(S.ana, 'new_post');
+            return id;
+        };
+        // Noel's set (getNearbySet, as the by-area read works it out): the pushes below hold to it.
+        const noelsSet = () => getNearbySet(db as any, noel.pk, { area: NEAR, radiusKm, max: 400, newestWithoutArea: 100 }).ids;
+        clear();
+        const beforeBlock = await postNear('Before the block');
+        assert(heard('new_post', beforeBlock).noel && noelsSet().includes(beforeBlock), 'before any block, Noel hears her new listing, and his set holds it');
+        await blocksCall(noel, '/api/blocks', ana, 'Noel blocks Ana');
+        clear();
+        const blocked = await postNear('Blocked by Noel');
+        reachIs("her new listing after Noel blocked her", 'new_post', blocked, { ana: true, nia: false, noel: false, unsigned: false });
+        assert(listingEvents(S.noel).length === 0, `Noel's socket gets nothing of it, not even a doorbell (${show(S.noel)})`);
+        assert(!noelsSet().includes(blocked) && !noelsSet().includes(beforeBlock), "and his set holds neither of Ana's listings");
+        clear();
+        const blockedEdit = await call(ana, '/api/marketplace/posts/update', { id: blocked, authorPublicKey: ana.pk, description: 'Blocked by Noel, edited' });
+        assert(blockedEdit.status === 200, `Ana edits it (got ${blockedEdit.status})`);
+        await until(S.ana, 'post_updated');
+        reachIs('its edit', 'post_updated', blocked, { ana: true, noel: false });
+        clear();
+        se.broadcast({ type: 'post_updated', id: beforeBlock });
+        await until(S.ana, 'post_updated');
+        reachIs('the id-only event of the listing he heard before the block', 'post_updated', beforeBlock, { ana: true, noel: false });
+        // A tie is not a nearby listing: an open deal on it reaches him wherever he is, blocked author or not, as his set
+        // keeps the listings he is tied to (getNearbySet's ties hold no block).
+        const tied = `nearby-deal-${crypto.randomBytes(4).toString('hex')}`;
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 1, 'requested')").run(tied, blocked, noel.pk, ana.pk);
+        assert(noelsSet().includes(blocked), 'with his request open on it, his set holds the listing again (a tie)');
+        clear();
+        se.broadcast({ type: 'post_updated', id: blocked });
+        await until(S.noel, 'post_updated');
+        reachIs('with his request open on it, its event', 'post_updated', blocked, { ana: true, noel: true });
+        db.prepare("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = ?").run(tied);
+        // An unblock, his socket still open: the next push reaches him.
+        await blocksCall(noel, '/api/blocks/remove', ana, 'Noel unblocks Ana');
+        clear();
+        const unblocked = await postNear('After the unblock');
+        reachIs("her new listing after Noel unblocked her", 'new_post', unblocked, { ana: true, nia: false, noel: true, unsigned: false });
+        assert(noelsSet().includes(unblocked) && noelsSet().includes(blocked), 'and his set holds her listings again');
+        // The other direction is the author's own list, which a member's set never reads: Ana's block of Noel changes
+        // nothing he hears of her listings.
+        await blocksCall(ana, '/api/blocks', noel, 'Ana blocks Noel');
+        clear();
+        const authorBlocked = await postNear('Ana blocked Noel');
+        reachIs('her new listing after she blocked Noel', 'new_post', authorBlocked, { ana: true, noel: true });
+        assert(noelsSet().includes(authorBlocked), 'his set holds it, as before');
+        await blocksCall(ana, '/api/blocks/remove', noel, 'Ana unblocks Noel');
 
         // ── 11. the cost at 3,500 sockets ───────────────────────────────────────────────────────
         console.log('\n── 11. the cost: 3,500 member sockets, the filter on against off ──');

@@ -147,6 +147,13 @@ export interface ProfileSwitches {
      *  ones they are tied to, instead of every listing on the node (DESIGN-global-sync-by-area §2). A new listing with no
      *  place takes its author's area. Off (a local community): `nearby` is ignored and every listing goes as before. */
     nearbyListings: boolean;
+    /** A member's phone holds only the cards it has a reason to show (its own, the people it talks to, trades with,
+     *  rates, has as friends) and asks the node for any other by key, or searches on the node, instead of reading the
+     *  whole member directory (DESIGN-global-members-by-area §2, #1792). The three small forms of `GET /api/members`
+     *  (`keys=`, `q=`, `lat` and `lng` with `limit=`) answer on every node whatever this says: the switch only tells the
+     *  phone, in `features`, to stop reading the directory whole. Its own switch rather than `nearbyListings`'s (Marty,
+     *  2026-10-13): a self-hosted community with thousands of members may turn it on without by-area listings. */
+    membersOnDemand: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -178,6 +185,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         announceJoins: true,
         announceProfiles: true,
         nearbyListings: false,
+        membersOnDemand: false,
     },
     global: {
         openJoin: true,
@@ -212,6 +220,9 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         announceProfiles: false,
         // The lobby holds the world's listings; a phone keeps the nearest 500 within 250 km (Marty, 2026-10-09).
         nearbyListings: true,
+        // Nor a directory of 20,000 strangers on every phone: each holds the cards it has a reason for and searches the
+        // node for the rest (Marty, 2026-10-13).
+        membersOnDemand: true,
     },
 };
 
@@ -263,6 +274,10 @@ export interface NodeFeatures {
      *  the nearest `max` listings within `radiusKm` of their area (NEARBY_LISTINGS_RADIUS_KM, NEARBY_LISTINGS_MAX).
      *  Absent: the node syncs every listing, as before. */
     nearbyListings?: { radiusKm: number; max: number };
+    /** Present, and true, only where `membersOnDemand` is on: the phone reads no whole member directory and no delta of
+     *  everyone who changed; it asks `GET /api/members?keys=` for the cards it needs, and searches with `q=`. Absent: the
+     *  phone reads the directory as before. */
+    membersOnDemand?: true;
     /** Present, and true, only while the node is in a private preview (config/private-preview.ts): only its members
      *  and the people its owner or an admin invites get in, and a visitor sees nothing. The apps show the preview's
      *  message instead of the doors. Absent otherwise, so a node not in a preview answers exactly as before. */
@@ -425,6 +440,7 @@ export function getNodeFeatures(): NodeFeatures {
         invites: s.invites,
         wordsDoor: s.openJoin && !s.ssoRequiredForJoin,
         ...(s.nearbyListings ? { nearbyListings: { ...nearbyListingsLimits() } } : {}),
+        ...(s.membersOnDemand ? { membersOnDemand: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite.
     if (isPrivatePreview()) return { ...features, openJoin: false, wordsDoor: false, privatePreview: true };

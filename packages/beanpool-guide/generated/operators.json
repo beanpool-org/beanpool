@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 116,
-  "hash": "37cbfbcb8f0263651901b6f21b112e40d4c2d14940b488cd49e710b58de8da5c",
+  "version": 117,
+  "hash": "ec0460e4356f3849c7fe6e277fda3bc5695895692b6d43abea7bd83e5ad9bab7",
   "sections": [
     {
       "id": "setup",
@@ -157,7 +157,7 @@
         },
         {
           "type": "p",
-          "text": "Go to your server's address followed by **/settings**, for example https://example.org/settings. While your community has no owner yet, the page shows how to claim it: see A community with no owner yet, below. Once it has one, owners and admins sign in from the BeanPool app: see Signing in to Settings. On a server that still has an admin password, you can also sign in with it. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. Settings does not open on the password alone: nothing else opens until the server accepts a code from the authenticator. Do it straight away, because until then the password still works on its own for tools that send it with every request. Then Settings, and the setup wizard, open."
+          "text": "Go to your server's address followed by **/settings**, for example https://example.org/settings. While your community has no owner yet, the page shows how to claim it: see A community with no owner yet, below. Once it has one, owners and admins sign in from the BeanPool app: see Signing in to Settings. On a server that still has an admin password, you can also sign in with it. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. Settings does not open on the password alone: nothing else opens until the server accepts a code from the authenticator. Do it straight away: until then, tools that send the password with every request are refused too (give them an automation token instead, see Access and security). Then Settings, and the setup wizard, open."
         },
         {
           "type": "h2",
@@ -329,7 +329,7 @@
         },
         {
           "type": "p",
-          "text": "Settings opened this way can make a change that only an owner may make for **5 minutes** after your phone's unlock. That covers making, removing or demoting an owner; making or removing an admin; suspending an owner, or an owner or admin through a report; removing, offboarding or re-keying an owner or admin, your own re-key included; lifting a suspension, or halting a vote, that gives an owner or admin their role back; ending the waiting time early when an owner or admin is being removed; signing someone else out everywhere; break-glass mode; two-factor sign-in; the password; backups, including downloading a backup, a snapshot or an off-box backup; and every other owner-only setting. After that it says **Confirm it's you first**: press Manage in the app again, which asks for your phone's lock, and make the change there. Reading Settings is not asked, the off-box backups card included, with one exception: the RK- code of an owner's or admin's re-key that is still waiting to be used. It finishes that re-key, so after the 5 minutes the Re-Key window asks you to press Manage again, then **Show the code**. Nor is anything an admin may do asked, such as appointing a moderator or suspending a member, or signing yourself out everywhere. A computer signed in by scanning a code is not asked."
+          "text": "Settings opened this way can make a change that only an owner may make for **5 minutes** after your phone's unlock. That covers making, removing or demoting an owner; making or removing an admin; suspending an owner, or an owner or admin through a report; removing, offboarding or re-keying an owner or admin (nobody can make a re-key code for their own account: another owner makes it, or you restore your 12 words on the new phone); lifting a suspension, or halting a vote, that gives an owner or admin their role back; ending the waiting time early when an owner or admin is being removed; signing someone else out everywhere; break-glass mode; two-factor sign-in; the password; backups, including downloading a backup, a snapshot or an off-box backup; and every other owner-only setting. After that it says **Confirm it's you first**: press Manage in the app again, which asks for your phone's lock, and make the change there. Reading Settings is not asked, the off-box backups card included, with one exception: the RK- code of an owner's or admin's re-key that is still waiting to be used. It is what a new phone needs to ask to take over that account, so after the 5 minutes the Re-Key window asks you to press Manage again, then **Show the code**. Nor is anything an admin may do asked, such as appointing a moderator or suspending a member, or signing yourself out everywhere. A computer signed in by scanning a code is not asked."
         },
         {
           "type": "p",
@@ -380,7 +380,7 @@
         },
         {
           "type": "p",
-          "text": "A sign-in from the app (on the phone or on a computer) ends after **2 hours** without use, and after **12 hours** at most. It also ends when an owner changes or removes your role, and when the server restarts."
+          "text": "A sign-in from the app's Manage button, in the phone's browser, ends after **15 minutes** without use. Settings keeps it going while it is on screen and in use, and pressing Manage again signs you straight back in. A computer you signed in by scanning a code ends after **2 hours** without use. Both end after **12 hours** at most, when an owner changes or removes your role, and when the server restarts."
         },
         {
           "type": "p",
@@ -501,7 +501,7 @@
         },
         {
           "type": "p",
-          "text": "A few numbers in Settings are not calculated yet: the trust score on a member's page, the \"Live Request Traffic\" meter under Gateway & Peers, the \"Backed up recently\" line on Home, and everything on the Commons Pool tab. That tab always shows \"240.0 beans\", \"✓ Solvent & Fully Backed\", \"0.0 drift\" and \"0 queued\", whatever the real figures are. Check the real thing (the member's history, the logs, the backups list, the community's Decisions) before you act on them."
+          "text": "A few numbers in Settings are not calculated yet: the \"Trust Rating\" on a member's page, the \"Live Request Traffic vs Limit\" meter under Gateway & Peers, the \"Backed up recently\" line on Home, and everything on the Commons Pool tab. That tab always shows \"240.0 beans\", \"✓ Solvent & Fully Backed\", \"0.0 drift\" and \"0 queued\", whatever the real figures are. Check the real thing (the member's history, the logs, the backups list, the community's Decisions) before you act on them."
         }
       ]
     },
@@ -717,7 +717,7 @@
         {
           "type": "ul",
           "items": [
-            "**First, make your break-glass code** (below) and keep it safe. Settings asks for it before it lets you retire the password: once the password is gone, it is how you get back in if your phone is lost.",
+            "**First, make your break-glass code** (below) and keep it safe. Settings will not let you retire the password until you have made one: once the password is gone, it is how you get back in if your phone is lost.",
             "**Keep two owners.** With only one, Settings asks you to tick **I accept one owner**, and the server's log records that you did.",
             "**Move your scripts first.** Anything that sends the password (the fleet manager, backup scripts) stops working. Give each one an automation token (below). They then say \"This node's password is retired: use a token\".",
             "Type **RETIRE** and press **Retire the admin password**."
@@ -749,7 +749,7 @@
         },
         {
           "type": "p",
-          "text": "**The legacy Settings page needs two-factor sign-in on.** The older page (**Switch to Legacy Settings Page**) sends the password with every request, so while two-factor sign-in is off it stays on its sign-in screen and says \"Turn on two-factor sign-in in Settings (the new page), then come back\". Turn it on in Settings, then sign in there with the password and a code."
+          "text": "**The legacy Settings page needs two-factor sign-in on.** The older page (**Switch to Legacy Settings Page**) sends the password with every request, so while two-factor sign-in is off it stays on its sign-in screen and says \"Turn on two-factor sign-in in Settings, or use an automation token made from your phone. Open Settings (the new page) to turn it on, then come back.\" Turn it on in Settings, then sign in there with the password and a code."
         },
         {
           "type": "p",
@@ -829,7 +829,7 @@
           "type": "ul",
           "items": [
             "In Settings, signed in with your key: **People & Safety**, then **Owners & admins**, at the bottom. It asks first, then shows the sign-in screen, since this computer is signed out too.",
-            "In the app: **Settings**, under Community admin, **Sign out everywhere**. Owners, admins and moderators all have it. It asks first, then says what happened.",
+            "In the app: **Settings**, under Community admin (Community moderation for a moderator), **Sign out everywhere**. Owners, admins and moderators all have it. It asks first, then says what happened.",
             "An owner's break-glass code stops working too. Make a new one afterwards.",
             "Your key stays on your phone: press **Manage** in the app to sign in again.",
             "It ends only your own sign-ins. Settings opened with the admin password has no sign-ins of anyone's to end, so it doesn't show the button, and the server refuses an automation token here.",
@@ -953,9 +953,9 @@
           "items": [
             "give or take away the owner and admin roles (admins can give and take away the moderator role too);",
             "remove or offboard an owner or an admin;",
-            "re-key an owner or an admin, moving their role to a new phone's key (anyone may still re-key their own account);",
+            "re-key an owner or an admin, moving their role to a new phone's key (nobody can make a re-key code for their own account, so another owner does it);",
             "suspend an owner, or suspend an owner or an admin through a report;",
-            "lift a suspension, or give back a role that a suspension took away;",
+            "lift a suspension that took away an owner's or an admin's role, which gives that role back;",
             "end the waiting time early when an owner or admin is being removed;",
             "sign other people out of Settings;",
             "switch break-glass mode on or off, and be issued a break-glass code;",
@@ -978,7 +978,7 @@
         },
         {
           "type": "p",
-          "text": "Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner. Nor can they re-key an owner or another admin, or suspend one through a report: both take that person's role away. An admin can still re-key their own account, and re-key or suspend a member or a moderator."
+          "text": "Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner. Nor can they re-key an owner or another admin, or suspend one through a report: both take that person's role away. An admin can still re-key or suspend a member or a moderator. Nobody can make a re-key code for their own account, so another owner re-keys an admin."
         },
         {
           "type": "h2",
@@ -1063,7 +1063,7 @@
         },
         {
           "type": "p",
-          "text": "You can also do both from a member's own page: **People & Safety**, then **Members**, open the person and choose **👑 Grant Owner**, **⚡ Grant Admin**, **🛡️ Grant Moderator**, or **Revoke** to take the role away."
+          "text": "You can also do both from a member's own page: **People & Safety**, then **Members**, open the person and choose **👑 Grant Owner**, **⚡ Grant Admin**, **🛡️ Grant Moderator**, or **Revoke owner**, **Revoke admin** or **Revoke moderator** (whichever role they hold) to take the role away."
         },
         {
           "type": "h2",
@@ -1079,10 +1079,10 @@
             "\"Only an owner may grant the admin role\" (or \"revoke\"): you are signed in as an admin. Admins can add and remove moderators, but only an owner can make another admin or owner.",
             "\"Only an owner may change the role of an existing admin\" (or \"owner\"): you are an admin, and that person already holds a role. Giving someone a role replaces the one they have, so an admin may only appoint someone who holds no role, or who is already a moderator. Ask an owner.",
             "\"Only an owner may grant the owner role\": once a community has an owner, only an owner can add another.",
-            "\"Only an owner can re-key an owner or admin\": you are an admin, and that person holds an owner or admin role, or held one before a suspension. A re-key moves their role to the new key, so ask an owner. Re-keying yourself is not refused.",
+            "\"Only an owner can re-key an owner or admin\": you are an admin, and that person holds an owner or admin role, or held one before a suspension. A re-key moves their role to the new key, so ask an owner. Nobody can make a re-key code for their own account either: the server says \"You can't make a re-key code for your own account\". Ask another owner.",
             "\"Only an owner can suspend an owner or admin\": you actioned a report with suspend on someone who holds an owner or admin role. Nothing was changed, the report included. Action it without suspending, or ask an owner.",
             "\"Cannot remove the last owner\": add another owner first, then remove this one.",
-            "\"Only active accounts can hold a node role\": the member is suspended. Suspending or removing someone takes their role away. If the community's vote overturns a suspension the role comes back by itself; otherwise add them again once they are active.",
+            "\"Only active accounts can hold a node role\": the member is suspended. Suspending or removing someone takes their role away. If the community's vote overturns a suspension, or someone lifts it with **Lift suspension**, the role comes back by itself (only an owner can lift a suspension that held an owner or admin role). Otherwise add them again once they are active.",
             "\"Member not found\": the pasted key is not a member of this community.",
             "\"Treasury accounts cannot hold a node role\": an enterprise's account is not a person."
           ]
@@ -1340,7 +1340,7 @@
         {
           "type": "ul",
           "items": [
-            "**Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Members then vote for 7 days on keeping the suspension. If the vote does not pass, it lifts by itself. See Decisions and emergencies.",
+            "**Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Where the community votes, members then vote for 7 days on keeping the suspension, and if the vote does not pass it lifts by itself. On the global community there is no vote: the suspension lasts 7 days and lifts by itself, or sooner if you lift it. See Decisions and emergencies.",
             "**Lift suspension**: ends a suspension early and closes its vote.",
             "**Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation. Their Ledger tells them the admins froze their credit line: they can't spend into debit while it lasts, but can still sell, receive and spend what they hold above zero (a member in debit is also told how far down they are), and to ask an admin. Their level stays the one their line gives them unfrozen, on their profile and their listings alike.",
             "**Promote** and **Demote**: whether they can vouch for others.",
@@ -1448,7 +1448,7 @@
           "items": [
             "A member can delete their own account in the app. That erases more than Prune Account: their profile, and the words, photos and places of all their posts, done or not, except their polls. A poll stays, closed, with its question and votes. The deals made on their posts still show, as \"Deleted post\".",
             "A Re-Key code that runs out unused leaves the person suspended in a way neither the Lift button nor Cancel this code undoes. Make a new Re-Key code, then cancel it if they don't need it: they are back to what they were before the first code.",
-            "The trust score shown on a member's page is not calculated yet. Do not act on it.",
+            "The \"Trust Rating\" shown on a member's page is not calculated yet. It is a placeholder. Do not act on it.",
             "Suspended members can still make invites from their app, where any member invites.",
             "While suspended, a member sees what someone who has not joined sees: no one's contact details, not who voted in a Poll, not the activity feed, not how far away people are. They still get their own messages and deals. All of it comes back when the suspension lifts.",
             "Someone a member messages or sends beans to who has not joined is a visitor. They get those messages and beans, and see only what someone who has not joined sees. In those conversations they can reply, edit or delete what they wrote, and react. They keep the beans, and can pass them on once they join. They can take down a listing of their own, from before visitors were stopped from posting. They can't do anything else: they can't post, trade, join a group, go to an event, report, vote, invite anyone or answer a request to join. If they join with an invite from their own app, they become a member and keep their messages and beans."
@@ -1634,7 +1634,7 @@
             "**The cap.** The most anyone here may owe, from every source together: the known floor, a vouch, and the trust they earn by trading. 2,000 Beans to start; an owner can raise it to 5,000. The known floor can't be more than the cap.",
             "**One offer.** A confirmed member can use their whole known floor while they keep at least one offer listed. With none, they can't go below zero on it. Trust they earn by trading still opens up in steps as they list more offers, as it does for everyone.",
             "**Who it applies to.** Only members with a confirmation from an admin. A confirmation waiting for a second admin doesn't count yet; one taken back stops counting at once.",
-            "**Enterprises.** An enterprise counts half of each confirmed keeper's known floor towards its own."
+            "**Enterprises.** An enterprise counts up to half of each confirmed keeper's known floor towards its own. A keeper who keeps several enterprises shares that half between them."
           ]
         },
         {
@@ -1699,7 +1699,7 @@
         },
         {
           "type": "p",
-          "text": "**Settings → People & Safety → Community health** shows the whole community's totals: Beans in circulation, the credit held and the debt owed, how many members are in debit, the Commons pot and this month's trades. Every owner and admin sees them; they are the community's, not any one member's."
+          "text": "**Settings → People & Safety → Invites & QR → Community health** shows the whole community's totals: Beans in circulation, the credit held and the debt owed, how many members are in debit, the Commons pot and this month's trades. Every owner and admin sees them; they are the community's, not any one member's."
         },
         {
           "type": "p",
@@ -1830,7 +1830,7 @@
         },
         {
           "type": "p",
-          "text": "You open Settings from the app's **🛡️ Moderate** button, or on a computer by scanning the code with the app. Settings shows **Moderator** at the top and one screen, **Reports**. Every link from the app lands there."
+          "text": "You open Settings from the app's **🛡️ Moderate** button (it reads \"Moderate\" and your community's name), or on a computer by scanning the code with the app (\"Moderate this community from a computer\"). Settings shows **Moderator** at the top and one screen, **Reports**. Every link from the app lands there."
         },
         {
           "type": "ul",
@@ -1908,6 +1908,10 @@
         {
           "type": "p",
           "text": "A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once too few circles count to hide it; **Remove the post** takes it down as above."
+        },
+        {
+          "type": "p",
+          "text": "On the global community, a member whose posts moderators have removed 3 times in 30 days is muted. They can still read, but cannot post, edit a post or send messages until a moderator lifts it, and they are told. Pruning stale posts never counts towards this. Settings has no button to lift a mute yet."
         },
         {
           "type": "h2",
@@ -2006,7 +2010,7 @@
         },
         {
           "type": "p",
-          "text": "The Pulse shows what members share from their own channels (videos, feeds and so on), plus the Learn videos. Anyone can see the Pulse feed, even without joining, so it is part of your community's public face."
+          "text": "The Pulse shows what members share from their own channels (videos, feeds and so on), plus the Learn videos. Only members can see the Pulse feed. Someone who has not joined is told it is for members."
         },
         {
           "type": "ul",
@@ -2197,6 +2201,10 @@
           "text": "What a passed Decision can do by itself: suspend or restore a member, freeze or unfreeze, give or take away vouching, remove an enterprise's lead keeper, and pay grants from the commons. A grant the commons cannot yet afford waits in a queue; only one can wait at a time, and it fails after 90 days."
         },
         {
+          "type": "p",
+          "text": "Two other kinds of vote are not the community's. The keepers of an enterprise vote among themselves to pay Beans out of it, to remove a keeper, or to make another keeper the lead (see Enterprises, keepers and the commons). The members of a chat group vote on its lead convenor, its convenors, removing someone from the group, who may join, and closing it. Each runs 7 days, ends early once the result cannot change, and needs more than half of the people on its list to vote. They do not count towards a member's one open Decision. Settings does not show them, and **Halt this Decision** does not reach them: owners and admins hold no power over a group."
+        },
+        {
           "type": "h2",
           "text": "Watching them"
         },
@@ -2229,7 +2237,7 @@
             "If it does not pass, the suspension lifts by itself and their role comes back.",
             "You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.",
             "The suspended person gets no notification. Tell them yourself.",
-            "In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead stays its lead: suspending someone never moves a group to anyone else."
+            "In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead convenor stays its lead convenor: suspending someone never moves a group to anyone else."
           ]
         },
         {
@@ -2319,7 +2327,7 @@
           "type": "ul",
           "items": [
             "make an enterprise. One made here starts with a credit line of 0;",
-            "set its **working capital ceiling**, the most it can owe;",
+            "set its **working capital ceiling**, the most Beans it keeps: surplus it has earned above that is swept to the Commons;",
             "add or remove keepers;",
             "post an offer or a need in the enterprise's name;",
             "put it on the map, or take its pin off."
@@ -2327,7 +2335,7 @@
         },
         {
           "type": "p",
-          "text": "An enterprise must always keep at least one live offer. It cannot vote or propose, and it pays no circulation fee."
+          "text": "An enterprise can spend more than it holds only while it has at least one live offer. It cannot vote or propose, and it pays no circulation fee."
         },
         {
           "type": "h2",
@@ -2341,9 +2349,10 @@
           "type": "ul",
           "items": [
             "Adding someone as a keeper also gives them the Operator switch (see Members and invites).",
-            "Keepers added from Settings are always ordinary keepers, never the lead, and an enterprise made in Settings starts with no lead.",
+            "Keepers added from Settings are always ordinary keepers, never the lead, and an enterprise made in Settings starts with no lead. The **Initial Lead Keeper** box on the create form adds an ordinary keeper too, not a lead.",
             "If the lead leaves, the longest-serving keeper becomes lead. If no keeper is left, the enterprise pauses.",
-            "When the lead adds or removes a keeper from the app, the other keepers have 3 days to object, and one objection cancels it. Keepers added or removed here in Settings change at once, with no waiting time. The community can remove a lead by a Decision."
+            "When the lead adds or removes a keeper from the app, the other keepers have 3 days to object, and one objection cancels it. Keepers added or removed here in Settings change at once, with no waiting time. The community can remove a lead by a Decision.",
+            "Keepers can also decide among themselves in the app. A keeper can start a vote to pay Beans out of the enterprise, to remove a keeper, or to make another keeper the lead (not on a project, where the leader stays). It runs 7 days and ends early once the result cannot change. More than half of the keepers must vote. Paying out and removing a keeper need 60% yes; making someone the lead needs more than half. Paying a keeper is a wage, and it comes only out of what the enterprise has earned. Settings does not show these votes and cannot halt them: to step in, remove a keeper here."
           ]
         },
         {
@@ -2560,7 +2569,7 @@
         },
         {
           "type": "p",
-          "text": "A locked backup is still private: whoever opens it can read everything in it, including how each member voted (see Privacy and what your server can see). It is locked to each owner of the day it was made, so **any one owner can open it with their phone**, and an owner removed later can still open backups made while they were one."
+          "text": "A locked backup is still private: whoever opens it can read everything in it except the chat lines locked on members' phones, including how each member voted (see Privacy and what your server can see). It is locked to each owner of the day it was made, so **any one owner can open it with their phone**, and an owner removed later can still open backups made while they were one."
         },
         {
           "type": "p",
@@ -2580,7 +2589,7 @@
         },
         {
           "type": "p",
-          "text": "**Without a recovery code nothing goes.** A backup that is not locked can be read by anyone who has it, and in someone else's storage that would be every message of the community in the clear. The card and Home say \"Nothing goes off the box: this server has no recovery code…\". Everything else keeps working. Make a recovery code (see Make a recovery code) and the next check sends a locked backup."
+          "text": "**Without a recovery code nothing goes.** A backup that is not locked can be read by anyone who has it, and in someone else's storage that would be the whole community in the clear: members, posts, deals, votes, and the event and enterprise chats. Direct messages and group chats are locked on members' phones, so a backup holds them only as locked lines nobody can read. The card and Home say \"Nothing goes off the box: this server has no recovery code…\". Everything else keeps working. Make a recovery code (see Make a recovery code) and the next check sends a locked backup."
         },
         {
           "type": "p",
@@ -2814,7 +2823,8 @@
           "type": "ul",
           "items": [
             "it holds anything but plain files and folders (a link of either kind, say), or a name that points outside where it unpacks;",
-            "it unpacks to more than 4 GB, or to more than the room the server's disk has left (it always keeps 256 MB free): \"Backup archive too large\";",
+            "the file itself is bigger than 500 MB: \"Backup archive too large (max 500 MB)\";",
+            "it unpacks to more than 4 GB, or to more than the room the server's disk has left (it always keeps 256 MB free): \"Backup archive too large: it unpacks to more than …\";",
             "it holds more than 250,000 files and folders: \"Backup archive refused: it holds more than 250000 files and folders\";",
             "its database is not a SQLite database, or fails SQLite's integrity check;",
             "its database carries a trigger or view this server's own database does not have: \"it was changed after the backup was made, or made by a newer version of BeanPool\". Update this server first, or restore another file. A trigger this version has, whose text in the backup differs, is left out of the restored database, and the restart makes it again as this version has it."
@@ -2857,8 +2867,7 @@
             "**The standby keeps the locked take-over keys.** Each time it copies, it also asks your server for takeover-envelope.json, with the token only. If nothing changed, your server answers \"no change\" and nothing is sent. The standby keeps the last 5 in the folder data/held-takeover-envelopes on its own disk. A sixth deletes only the oldest, so a bad copy from your server can't wipe out a good one.",
             "The standby **can't open them**. It has no owner's key and no recovery code. Only an owner's phone or the recovery code opens them, as with a locked backup, and only when you take over. It keeps the files exactly as they came, and nothing from inside them is ever on the standby's disk.",
             "The standby only keeps a copy signed by the server it copies from (the one it was set up to trust). It refuses any other copy, keeps what it had, and writes a line to its log starting \"Refused a take-over envelope\".",
-            "On the standby, **Live Backup Server** says what it holds: when the newest copy was locked and who can open it. If the owners or the recovery code changed since the copy before, it says who was added or removed.",
-            "On your server, **Replication Access** says which standby holds which copy. When an owner is added or removed, a standby shows as holding keys \"from before the latest change\" until it next copies, about a minute later.",
+            "Settings does not show yet which keys a standby holds. The older page at /settings-legacy (**Switch to Legacy Settings Page** on the sign-in card) does: on the standby, **Live Backup Server** says when the newest copy was locked and who can open it, and on your server, **Replication Access** says which standby holds which copy, or that it holds keys \"from before the latest change\" until it next copies. In Settings, **Take over as the main server**, Step 3, shows when the keys were locked and who opened them.",
             "**Replication Access** shows the internet address each copy came from, and each refused try, for 7 days. After that it says \"address no longer kept\", and keeps the time and whether it was let in. The same goes for which standby holds which keys, and for the standby watch. Snapshots and backups never hold these addresses (a server updated to this version takes them out of the snapshots it already has), so a server restored from one shows none. See Privacy and what your server can see.",
             "A main server running a BeanPool from before this has nothing to send. The standby says \"the main server is too old to send a take-over envelope\" and keeps copying the database as before. A server with no owner and no recovery code has nothing to send either, and the standby says that instead.",
             "**A standby is not a complete copy.** It copies which members are enterprises, who keeps each one and their pledges; members' holiday and notification settings, vouches, granted credit and credit freezes; Decisions and their votes, keepers' wages owed, keeper and lead votes, invites, replacement-phone codes and links with other communities. It also copies the phones members get notifications on (a visitor's phone, or the phone of someone who has not joined, stays on the server it registered with), muted chats, what members have read in enterprise threads, the activity list, event reminders already sent, and the pricing guide's own prices and members' price reports (a report sent without signing in, or by someone who has not joined, stays on the server it was sent to). It does not copy: who holds which role; photos sent in chats; Commons project proposals still waiting for a decision; or the web app's visits a day (each server counts its own). Keep file backups as well. (The roles come back when it takes over: they are in the locked keys.)",
@@ -3190,7 +3199,7 @@
           "type": "ul",
           "items": [
             "the disk is 80, 90 or 95% full (for three minutes running; it clears once it is four points below, 76% for the 80% alert);",
-            "backups going off the server fail twice in a row, none has arrived for two intervals, or destinations are set but nothing goes to them (no recovery code yet, or none of them can be used);",
+            "backups going off the server fail twice in a row, none has arrived for an interval and a half (or an interval and an hour, if that is longer), or destinations are set but nothing goes to them (no recovery code yet, or none of them can be used);",
             "no backup leaves the server and backups are not locked to a recovery code (a weekly nudge to the owners only);",
             "scheduled snapshots fail twice in a row;",
             "the server stopped without shutting down and started again three times in 15 minutes (told at the third start; restarting it yourself, for example with docker compose up -d, does not count), or stopped without shutting down;",
@@ -3233,7 +3242,7 @@
         },
         {
           "type": "p",
-          "text": "**Owners always hear.** Each owner gets a push on their phone (one for everything that started in the same minute, and at most one a day for each alert, unless it gets worse; security changes as above), whatever their Marketplace Activity setting, and a banner in Settings until it is over. Admins and moderators are not told, and only an owner can open **Appliance & Data**, then **Alerts**."
+          "text": "**Owners always hear.** Each owner gets a push on their phone (one for everything that started in the same minute, and at most one a day for each alert, unless it gets worse; security changes as above), whatever their Marketplace Activity setting, and a banner in Settings until it is over. Admins and moderators are not told, and only an owner can open the **Alerts** card: **Appliance & Data**, then **Backups & Restore**."
         },
         {
           "type": "p",
@@ -3281,7 +3290,7 @@
         },
         {
           "type": "p",
-          "text": "Every balance should be a number of Beans. If one isn't (it holds Infinity, text, or nothing at all), the total can't add up, and the audit says how many \"balances that are not a number\" it found. Nothing in Settings mends one, and the server never guesses a value for it. A take-over still finishes on such a ledger, and its last screen says the ledger doesn't add up."
+          "text": "Every balance should be a number of Beans. If one isn't (it holds Infinity, text, or nothing at all), the total can't add up, and the audit card shows the drift as \"not a number\". The audit at start-up writes how many \"balances that are not a finite number\" it found to the server's log. Nothing in Settings mends one, and the server never guesses a value for it. A take-over still finishes on such a ledger, and its last screen says the ledger doesn't add up."
         },
         {
           "type": "p",
@@ -3623,7 +3632,7 @@
         {
           "type": "ul",
           "items": [
-            "**The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. On the global community, where anyone may join, everyone who is not a member yet, joiners included, shares 600 a minute per internet address. Settings itself is not counted, and neither are the two public reads other servers make (/api/community/info and /api/community/health). A member's own requests are counted wherever they go, buying from another community included.",
+            "**The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. On the global community, where anyone may join, everyone who is not a member yet, joiners included, shares 600 a minute per internet address. Settings itself is not counted here (it has its own limit, below). The two public reads other servers make (/api/community/info and /api/community/health) do not use this allowance either: each internet address has a separate one for them, five times the gateway number (600 a minute at the default). A member's own requests are counted wherever they go, buying from another community included.",
             "**Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device, checking names and a phone approving a computer's sign-in.",
             "**The open door**, where it is open: 20 requests a minute from each new account's key, and 600 a minute per internet address, for joining and for checking a name while joining. It does not turn a busy network away: it asks each new account there for a little more setting up instead, and refuses a join only past ceilings no ordinary network reaches. See The open door's numbers, below.",
             "**New sign-in codes** (Sign in with your phone, on the Settings sign-in page): 10 a minute per internet address, and at most 200 waiting on the whole server.",
@@ -3851,7 +3860,7 @@
         },
         {
           "type": "p",
-          "text": "In the Manager, make a seed invite and send it to the person. You can also sign in to the app as an owner or admin and make an invite there. Once they join, they are an ordinary member."
+          "text": "In the Manager, open **People & Safety**, then **Invites & QR**, press **Generate** to make a pass, and send it to the person. You can also sign in to the app as an owner or admin and make an invite there. Once they join, they are an ordinary member."
         }
       ]
     },
@@ -3883,6 +3892,7 @@
             "Messages an older app sent before this update still open, and every one is marked as sent from an older version of the app, since nothing in them proves who wrote them, and so is a reply's quote of one. Those sent without the lock stay readable as they were stored.",
             "What the server can still do to a direct message: hold it back, deliver it late, or make it read \"This message was deleted\"; show an edit's earlier words; add or take away an emoji reaction in either member's name (reactions aren't locked); and add its own notices to the chat, which show as notices (in the chat, in a reply's quote and in the chat list), never as a member's words.",
             "A direct message can't be turned into a group's, an event's or an enterprise's chat: an app that has seen it as a direct message, or holds an encrypted line of it, keeps it one whatever type the server gives it, and ignores the change. An app that has never seen it, and is given none of its encrypted lines, can't tell it from a group's chat. In the web app that includes a browser signed out since, a private window, or one whose site data was cleared; the phone app keeps its list.",
+            "**Group chats** are encrypted on members' phones. The server stores them but cannot read them, and neither can you. Each line is locked with a key only the group's members hold, and the key changes when people join, leave or are removed. A member who joins later is not given the lines from before they joined. The server refuses a group chat line that is not locked. It still sees who wrote each line, when, and who was mentioned, and it can hold a line back or remove one when a convenor asks. The server decides who is in a group, so it could add a member of its own; the group's members see a join line when anyone joins. Only the phone app does group chats so far: the web app cannot send to a group chat yet.",
             "All of this rests on the apps having each member's real key, which they get from this server. In the web app it also rests on the app itself, which this server sends to members' browsers; the phone app comes from the app store."
           ]
         },
@@ -3898,7 +3908,8 @@
           "type": "ul",
           "items": [
             "members' names, profiles, posts, photos, deals, balances and every trade;",
-            "**group chats, event chats and enterprise chats**: these are not encrypted, and the server could write in them in anyone's name;",
+            "on a community that works by area (the global community), each member's rough area, if they gave one: a place rounded to about 10 km. It is how the server picks the listings near them. Only that member can read it back, and other members see only a distance in whole kilometres. A listing a member posts with no place of its own is shown at their area to everyone who can read it;",
+            "**event chats and enterprise chats**: these are not encrypted, and the server could write in them in anyone's name;",
             "the notices the server adds to a direct message about a deal: Beans placed in escrow, released, or refunded when a deal is cancelled, the amount, and how a dispute was settled and why;",
             "who messaged whom, and when, which message each one answers, and their emoji reactions, even for direct messages;",
             "the messages you send members from the admin page;",
@@ -3978,7 +3989,7 @@
             "If you turn ENFORCE_READ_AUTH off, anyone can read all of it: the market and its photos, the enterprises, the Decisions and the Pulse. A post for a group, or for one person, still reaches only the people it is for, and so do its photos.",
             "The live-updates channel tells the apps about changes as they happen. Every version of the BeanPool app signs its connection, so the server knows which member is listening.",
             "A member hears about changes to the whole community, such as new posts, new members and announcements. They also hear about the private things they are part of: their own messages, their own trades, and the groups and event chats they are in. They never hear another member's messages or trades. When someone else's trade changes the market, for example a listing is taken, other members are told only that something changed, so their app can check again.",
-            "Anyone who is not a member is told nothing of what happens on your community, with one exception: someone from another community whom one of your members has paid or messaged here still hears bare notices that something changed, such as that a Decision was proposed or voted on, or that a listing changed. They never hear what changed or who changed it, and they cannot open any of it. On the global community a visitor is told only that a post on the market changed, never what changed or who changed it. This is on by default.",
+            "Anyone who is not a member is told nothing of what happens on your community, with one exception: someone from another community whom one of your members has paid or messaged here still hears bare notices that something changed, such as that a Decision was proposed or voted on, or that a listing changed. They never hear what changed or who changed it, and they cannot open any of it. On the global community a visitor is told nothing about listings: a new or changed listing reaches only the members whose area is near it, and the people it involves. This is on by default.",
             "The setting is ENFORCE_WS_AUTH. The value true goes further and turns away anyone who is not a signed-in member. The value false sends the community-wide changes to anyone who can reach your server, as it was before, but never anyone's messages or trades. Do not use false."
           ]
         },
@@ -4067,6 +4078,7 @@
             "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions. To stop the GitHub check, put DISABLE_UPDATE_CHECK=true in .env (see Updates, health checks and disk space): nothing else depends on it.",
             "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words (\"You have a new message.\", \"Your community has a notice for you.\"), with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. What the notice was about stays on your server for 7 days, for the member it was sent to. The app learns your server's signing key from its own sign-up for notifications and acts on a notification only when that signature checks out for that member: a forged one opens nothing, and the app says it didn't come from the community. A server from before signed notifications sends none of this; the app shows its notifications in general words and opens nothing when one is tapped, until you update.",
             "Members' Pulse channels are fetched from the sites they link to.",
+            "Server alerts, only if an owner sets up a channel of their own (an ntfy topic or a web address) in the Alerts card or in .env: your community's name, what is wrong in plain words, and counts. Never a member's name, key, address or anything anyone wrote (see Updates, health checks and disk space).",
             "With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare."
           ]
         },
@@ -4228,7 +4240,7 @@
             "\"Too many wrong admin passwords\": wait, try from another network, or sign in from the app. See Rate limits.",
             "Lost the password: see Signing in.",
             "Lost the two-factor code: see Access and security.",
-            "Settings keeps signing you out: sign-ins from the app last 2 hours unused, 12 hours at most, and end when the server restarts."
+            "Settings keeps signing you out: a sign-in from the app's Manage button ends after 15 minutes unused (press Manage again to come straight back). A computer signed in by scanning a code ends after 2 hours unused. Both end after 12 hours at most, and when the server restarts."
           ]
         },
         {
@@ -4239,7 +4251,7 @@
           "type": "ul",
           "items": [
             "Check the invite has not been used or passed its 30 days.",
-            "Invites made in Settings while signed in from the app are not real codes. See Members and invites.",
+            "Only an owner or admin can make invites in Settings (a moderator cannot), and the global community has no invites. See Members and invites.",
             "Check Invites is not switched off under Gateway & Peers."
           ]
         },

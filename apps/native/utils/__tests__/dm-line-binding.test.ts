@@ -2817,6 +2817,42 @@ describe('the update\'s memory holds past the first pass and the first run (#187
         expect(h.store.get(LINES())).toBe('{}');
     });
 
+    it('P28 Continue: acceptOfferedPeer drops that DM\'s held lines in its own pin write (here a judged pause whose removal failed kept them); another DM\'s stay; a Continue whose pin write throws keeps them', async () => {
+        const k2 = person('Ben K2');
+        const dm2: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, ben.publicKey] };
+        node.convs = [dm, dm2];
+        sealed(ben, ana, dm2, 'Ben in the other chat');
+        await heldThenUpdate(true, [ana, ben, puppet]);
+        sql.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(dm2.id, puppet.publicKey);
+        dm2.participants = [ana.publicKey, ben.publicKey, puppet.publicKey];   // listed with several keys throughout: never judged
+        await syncMessages(ana.publicKey);
+        const both = [dm.id, dm2.id].map((id) => id.toLowerCase()).sort();
+        expect(Object.keys(stored()!).sort()).toEqual(both);
+        // Ben re-keys to K2 (P25's honest case): judged on the lines held, Ben pinned with K2 offered. The removal after that
+        // pin write fails once (the book swallows an afterWrite error), so the entry stays beside the checked pin.
+        moveAuthor(ben, k2);
+        const removal = failingSet(LINES, 1);
+        try { await syncMessages(ana.publicKey); } finally { removal.restore(); }
+        expect(removal.tried.length).toBe(1);
+        expect(pinOf(dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: k2.publicKey, firstSight: true } });
+        expect(Object.keys(stored()!).sort()).toEqual(both);
+        // Continue whose pin write throws: nothing moves, the lines stay.
+        const pinWrite = failingSet(() => dmPeerPinsStoreKey(ana.publicKey), 1);
+        let threw: unknown = null;
+        try { await acceptOfferedPeer(dm.id, k2.publicKey); } catch (e) { threw = e; } finally { pinWrite.restore(); }
+        expect(threw).toBeTruthy();
+        expect(pinWrite.tried.length).toBe(1);
+        expect(pinOf(dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: k2.publicKey } });
+        expect(Object.keys(stored()!).sort()).toEqual(both);
+        // Continue: K2 pinned by the member, Ben kept as former; that DM's held lines go in that write, dm2's stay.
+        expect(await acceptOfferedPeer(dm.id, k2.publicKey)).toBe(true);
+        expect(pinOf(dm.id)).toEqual({ peer: k2.publicKey, since: expect.any(String), by: 'member', former: [ben.publicKey] });
+        expect(Object.keys(stored()!)).toEqual([dm2.id.toLowerCase()]);
+        restarted();
+        expect(Object.keys(stored()!)).toEqual([dm2.id.toLowerCase()]);
+        expect(await isDmKeyChangePending(dm.id)).toBe(false);
+    });
+
     it('P29 the lines write fails at the seed: the rows\' pins and a heldLost mark go in the first pin write; in that run the DM is still judged on the lines held (W3\'s pause)', async () => {
         const dm2: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, ben.publicKey] };
         node.convs = [dm, dm2];

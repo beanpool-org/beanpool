@@ -257,7 +257,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         pausedBadgeText: {
             fontSize: 10,
             fontWeight: '800',
-            color: theme === 'dark' ? colors.feedback.warning.fg : '#b45309', // amber700 is 3.47:1 on the dark card
+            color: colors.feedback.warning.fg, // ink.warning (amber-700 was 3.47:1 on the dark card)
             letterSpacing: 0.3,
         },
         typeBadgeText: {

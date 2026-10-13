@@ -1457,7 +1457,7 @@ export default function MarketScreen() {
                                     borderWidth: 1,
                                 }
                             ]}>
-                                <Text style={[styles.gridPriceText, { color: theme === 'dark' ? colors.feedback.warning.fg : '#92400e', fontWeight: '900' }]}>🗞️ PULSE</Text>
+                                <Text style={[styles.gridPriceText, { color: colors.feedback.warning.fg, fontWeight: '900' }]}>🗞️ PULSE</Text>
                             </View>
                         )}
                         {!!item.repeatable && !isPulse && (
@@ -1539,7 +1539,7 @@ export default function MarketScreen() {
                                 <Text style={[
                                     styles.compactBadgeText, 
                                     {
-                                        color: isPulse ? (theme === 'dark' ? colors.feedback.warning.fg : '#92400e') : (item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg),
+                                        color: isPulse ? colors.feedback.warning.fg : (item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg),
                                         fontWeight: '800',
                                     }
                                 ]}>
@@ -1589,7 +1589,7 @@ export default function MarketScreen() {
                                         <Text style={{
                                             fontSize: 10,
                                             fontWeight: '800',
-                                            color: theme === 'dark' ? colors.feedback.warning.fg : '#92400e'
+                                            color: colors.feedback.warning.fg
                                         }}>🗞️ DAILY PULSE</Text>
                                     </View>
                                 )}

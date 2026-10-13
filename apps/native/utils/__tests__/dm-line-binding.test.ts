@@ -1756,6 +1756,54 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         });
     }
 
+    // §3.4 amendment 2, item 3, the data half (slice 2 draws the fixed line): a line that opens only under the offered key
+    // is marked fromOfferedKey and shows no words, on first sight and on an existing phone's offer alike.
+    const lineMarks = async (id: string) => (await getMessages(id)).map((m: any) => ({ text: m.text, offered: m.fromOfferedKey }));
+
+    it('item 3: P13\'s PUPPET line is marked as from the offered key and shows no words, before and after "Not now"; Ben\'s lines read unmarked', async () => {
+        await p13();
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        const want = [
+            { text: 'Shall I cancel the order?', offered: false },
+            { text: 'No', offered: false },
+            { text: NOT_VERIFIED, offered: true },
+        ];
+        expect(await lineMarks(dm.id)).toEqual(want);
+        for (let pass = 0; pass < 2; pass++) await syncMessages(ana.publicKey);   // "Not now" writes nothing
+        expect(await lineMarks(dm.id)).toEqual(want);
+    });
+
+    it('item 3: P14\'s K2 line is marked as from the offered key until Continue, then reads as K2\'s words, unmarked', async () => {
+        await p14();
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect((await lineMarks(dm.id))[2]).toEqual({ text: NOT_VERIFIED, offered: true });
+        const pins = JSON.parse(h.store.get(PINS(ana))!);
+        pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] };
+        h.store.set(PINS(ana), JSON.stringify(pins));
+        restarted();
+        expect(await lineMarks(dm.id)).toEqual([
+            { text: 'Shall I cancel the order?', offered: false },
+            { text: 'No', offered: false },
+            { text: 'New phone. Still on for Saturday?', offered: false },
+        ]);
+    });
+
+    it('item 3: an existing phone\'s offer (T5\'s shape) marks PUPPET\'s line; a line that opens under no key stays unmarked', async () => {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        saysTo(puppet, dm, 'New phone, same Ben. What is the door code?');
+        written(dm, puppet, b64('not a sealed line'), DM_NONCE_PREFIX + b64('n'.repeat(24)));
+        await syncMessages(ana.publicKey);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey } });
+        expect(await lineMarks(dm.id)).toEqual([
+            { text: 'Shall I cancel the order?', offered: false },
+            { text: 'No', offered: false },
+            { text: NOT_VERIFIED, offered: true },
+            { text: NOT_VERIFIED, offered: false },
+        ]);
+    });
+
     /** Ben's history of `n` lines (Ana's and Ben's in turn, each sealed to the other), as the node holds it. */
     async function bensHistory(n: number) {
         await aQuestionAndAnAnswer();

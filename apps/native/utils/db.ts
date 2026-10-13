@@ -4358,6 +4358,8 @@ interface PinnedDmKeyContext extends DMKeyContext {
     formerPeers: string[];
     /** True while nothing may be sealed here: another key is offered in place of the pinned one, for the member to decide. */
     keyChanged: boolean;
+    /** The key offered in the pinned one's place (null: none, or the node lists several): its lines are marked, never read. */
+    offeredPeer: string | null;
 }
 
 /** How many encrypted lines first sight reads at each end of a thread (design §3.4 amendment 2). */
@@ -4471,7 +4473,7 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
         // Reading only, with no key pinned: the rows' one other key, as before pins. Nothing is written from a read.
         peers = await peersFromThread(conversationId, conv.created_by, me, peers);
         if (peers.length !== 1) return null;
-        return { myEdPrivHex: identity.privateKey, peerEdPubHex: peers[0], conversationId, formerPeers: [], keyChanged: false };
+        return { myEdPrivHex: identity.privateKey, peerEdPubHex: peers[0], conversationId, formerPeers: [], keyChanged: false, offeredPeer: null };
     }
     const pin = entry;
     if (use === 'seal' && !pin.checked && pin.by === 'first-seen' && !pin.offered) {
@@ -4482,7 +4484,7 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
         await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, pin.peer]).catch(() => {});
         await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, identity.publicKey]).catch(() => {});
     }
-    return { myEdPrivHex: identity.privateKey, peerEdPubHex: pin.peer, conversationId, formerPeers: pin.former ?? [], keyChanged: !!pin.offered };
+    return { myEdPrivHex: identity.privateKey, peerEdPubHex: pin.peer, conversationId, formerPeers: pin.former ?? [], keyChanged: !!pin.offered, offeredPeer: pin.offered?.peer ?? null };
 }
 
 /**
@@ -4963,6 +4965,18 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     const lineViews = isDm
         ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })), dmCtx, conversationId, dmCtx?.formerPeers)
         : null;
+    // The lines that open only under the key offered in the pinned one's place (design §3.4 amendment 2, item 3): marked
+    // so the screen can put one fixed line in their slot, and never read out (no text from a key the member hasn't
+    // accepted). Only whether each opened is kept; until the screen draws the fixed line they show as lines that didn't open.
+    const fromOfferedKey = new Set<string>();
+    if (lineViews && dmCtx?.offeredPeer) {
+        const unopened = rows.filter(r => lineViews.get(r.id)?.mark === 'not-verified' && isEncryptedNonce(r.nonce));
+        if (unopened.length) {
+            const underOffer = checkDmThread(unopened.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })),
+                { myEdPrivHex: dmCtx.myEdPrivHex, peerEdPubHex: dmCtx.offeredPeer }, conversationId);
+            for (const r of unopened) if (underOffer.get(r.id)?.format != null) fromOfferedKey.add(r.id);
+        }
+    }
 
     return rows.map(row => {
         let displayTxt = row.ciphertext;
@@ -5027,6 +5041,9 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             integrityNote,
             // A DM row shown as nobody's: a line that didn't open, one that wasn't encrypted, or the admin page's message.
             unattributed,
+            // A DM line that opens only under the key offered in the pinned one's place: its text is the not-verified line,
+            // never its words; the screen shows "Sent from the new key. Shown after you continue." (slice 2).
+            fromOfferedKey: fromOfferedKey.has(row.id),
             // Who a reply quoting this line shows it as from (e2e-crypto dmQuoteFrom): its check, never its row's name.
             quoteFrom: lineViews ? dmQuoteFrom({ authorPubkey: row.author_pubkey, nonce: row.nonce, type: row.type, metadata: row.metadata }, view) : 'author',
             rawTimestamp: row.timestamp,

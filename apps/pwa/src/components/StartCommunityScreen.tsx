@@ -13,7 +13,7 @@ import {
     START_COMMUNITY_COPY as COPY, START_COMMUNITY_KNOW as KNOW, SETUP_CHAPTER_URL, canCopyDetails, communityDetailsText,
 } from '../lib/start-community';
 
-const FIELD = 'w-full rounded-xl border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-800 px-3 py-2.5 text-[15px] text-nature-900 dark:text-nature-50 placeholder:text-nature-400 dark:placeholder:text-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-500';
+const FIELD = 'w-full rounded-xl border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 px-3 py-2.5 text-[15px] text-nature-900 dark:text-nature-50 placeholder:text-nature-400 dark:placeholder:text-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-500';
 
 export function StartCommunityScreen({ onClose, onNearYou }: { onClose: () => void; onNearYou?: () => void }) {
     const info = useCommunityInfo();

@@ -37,7 +37,7 @@ export function NodeAdminLink() {
 
     return (
         <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                 COMMUNITY ADMIN
             </div>
             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden">
@@ -49,14 +49,14 @@ export function NodeAdminLink() {
                         <span aria-hidden="true">🛡️</span>
                         <span className="min-w-0">
                             <span className="block font-bold text-[15px] break-words">Manage {name}</span>
-                            <span className="block text-xs text-nature-500 dark:text-nature-400 mt-0.5 leading-relaxed">
+                            <span className="block text-xs text-nature-500 dark:text-nature-300 mt-0.5 leading-relaxed">
                                 {role === 'owner' ? "You're an owner." : "You're an admin."} Open Settings on this computer, then
                                 scan its code with the BeanPool app (Settings → Manage this community from a computer; older apps: Sign in
                                 on a computer). Or use the admin password.
                             </span>
                         </span>
                     </span>
-                    <span className="text-nature-400" aria-hidden="true">›</span>
+                    <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                 </a>
             </div>
         </div>

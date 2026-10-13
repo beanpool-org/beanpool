@@ -611,7 +611,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 transition-colors relative">
                     <button
                         onClick={() => setMode('profile')}
-                        className="absolute top-4 right-4 text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 transition-all"
+                        className="absolute top-4 right-4 text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 dark:hover:bg-terra-900/60 dark:hover:text-terra-300 transition-all"
                     >
                         ✏️ Edit Profile
                     </button>
@@ -620,7 +620,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             {profile?.avatar ? (
                                 <img src={resolveAvatarUrl(profile.avatar)!} className="w-full h-full object-cover" alt={identity.callsign} />
                             ) : (
-                                <span className="text-2xl font-bold text-nature-400 dark:text-nature-500 select-none">
+                                <span className="text-2xl font-bold text-nature-400 dark:text-nature-400 select-none">
                                     {identity.callsign.charAt(0).toUpperCase()}
                                 </span>
                             )}
@@ -675,7 +675,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <OwnerUnlockCard identity={identity} />
                         {/* ─── COMMUNITY WORKING STYLE ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 COMMUNITY WORKING STYLE
                             </div>
                             {(() => {
@@ -714,7 +714,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             )}
 
                                             <div className="border-t border-nature-100 dark:border-nature-800 pt-3">
-                                                <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2">
+                                                <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2">
                                                     🌟 What you tend to enjoy
                                                 </div>
                                                 <ul className="space-y-1.5 m-0 p-0 list-none">
@@ -736,7 +736,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                             setQuizInitialMode('deep');
                                                             setShowQuizModal(true);
                                                         }}
-                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
                                                     >
                                                         🧭 More accurate
                                                     </button>
@@ -781,7 +781,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 setQuizInitialMode('quick');
                                                 setShowQuizModal(true);
                                             }}
-                                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
+                                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm"
                                         >
                                             ⚡ Take 60s Quiz
                                         </button>
@@ -792,7 +792,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── ACCOUNT & IDENTITY ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 ACCOUNT & IDENTITY
                             </div>
                             <div className="space-y-2.5">
@@ -825,9 +825,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <span className="text-xl">✨</span>
                                         <div className="flex-1">
                                             <div className="text-[15px] font-bold">Re-run Setup</div>
-                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Update your name & photo, and how BeanPool works</div>
+                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Update your name & photo, and how BeanPool works</div>
                                         </div>
-                                        <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                        <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
                                 )}
 
@@ -840,11 +840,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">🔑</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">View Recovery Phrase</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">
                                             {hasWords ? 'View your 12-word backup seed' : 'Not saved in this browser'}
                                         </div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                                 <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} />
                             </div>
@@ -852,7 +852,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── APP SETTINGS ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 APP SETTINGS
                             </div>
                             <div className="space-y-2.5">
@@ -914,9 +914,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">🔔</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">Notification Preferences</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Phone app push notification settings</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Phone app push notification settings</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
 
                                 {/* Your area: a community that syncs listings by area */}
@@ -929,9 +929,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <span className="text-xl">📍</span>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-[15px] font-bold">{AREA_STEP_WORDS.settingsRow}</div>
-                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-400 break-words">{areaLine}</div>
+                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-300 break-words">{areaLine}</div>
                                         </div>
-                                        <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                        <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
                                 )}
 
@@ -980,7 +980,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 LEGAL & PRIVACY
                             </div>
                             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
@@ -990,26 +990,26 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     className="w-full p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left"
                                 >
                                     <span className="flex items-center gap-3">🚫 Manage Blocked Members</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </button>
                                 <a href="https://beanpool.org/privacy.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">🛡️ Privacy Policy</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                                 <a href="https://beanpool.org/terms.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">⚖️ Terms of Service & EULA</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                                 <a href="https://beanpool.org/safety.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">🚸 Child Safety Standards</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                             </div>
                         </div>
 
                         {/* ─── SYSTEM ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 SYSTEM
                             </div>
                             <div className="space-y-2.5">
@@ -1020,9 +1020,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">📊</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">Database Health & Stats</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Local storage metrics & integrity checks</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Local storage metrics & integrity checks</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
 
                                 <button
@@ -1032,9 +1032,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">⚙️</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">Advanced / Subsystem</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Node management & cache controls</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Node management & cache controls</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                             </div>
                         </div>
@@ -1301,7 +1301,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                                 <button
                                     onClick={handleCopySeed}
-                                    className="w-full py-3 mb-2 rounded-xl font-bold bg-terra-500 hover:bg-terra-600 text-white border-none cursor-pointer transition-colors text-sm shadow-sm"
+                                    className="w-full py-3 mb-2 rounded-xl font-bold bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 text-white border-none cursor-pointer transition-colors text-sm shadow-sm"
                                 >
                                     {seedCopied ? '✅ Copied to Clipboard!' : '📋 Copy All Words'}
                                 </button>
@@ -1321,7 +1321,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
@@ -1339,7 +1339,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         </p>
 
                         {diagLoading ? (
-                            <div className="py-10 text-center text-sm text-nature-500 animate-pulse">Running Structural Integrity Check...</div>
+                            <div className="py-10 text-center text-sm text-nature-500 dark:text-nature-400 animate-pulse">Running Structural Integrity Check...</div>
                         ) : (
                             <>
                                 {/* Status Banner */}
@@ -1355,33 +1355,33 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">👥</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.members ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Community Members</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Community Members</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">🛒</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.posts ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Active Posts</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Active Posts</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">💸</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.transactions ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Ledger Deals</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Ledger Deals</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">💬</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.messages ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Messages</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Messages</div>
                                     </div>
                                 </div>
 
                                 {/* Storage info */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 mb-5 text-xs space-y-1.5">
                                     <div className="flex justify-between">
-                                        <span className="text-nature-500">Storage Usage:</span>
+                                        <span className="text-nature-500 dark:text-nature-400">Storage Usage:</span>
                                         <span className="font-bold text-nature-900 dark:text-white">{storageEstimate}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-nature-500">Active Node:</span>
+                                        <span className="text-nature-500 dark:text-nature-400">Active Node:</span>
                                         <span className="font-mono text-nature-900 dark:text-white">{window.location.origin}</span>
                                     </div>
                                 </div>
@@ -1404,7 +1404,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
@@ -1529,7 +1529,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
@@ -1563,7 +1563,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             </div>
                         )}
                         {blockedActionError && (
-                            <p role="alert" className="mb-4 text-xs font-semibold text-red-600 dark:text-red-400 leading-relaxed">{blockedActionError}</p>
+                            <p role="alert" className="mb-4 text-xs font-semibold text-red-600 dark:text-red-300 leading-relaxed">{blockedActionError}</p>
                         )}
                         {blockedFullNote && (
                             <p role="status" className="mb-4 text-xs font-semibold text-nature-700 dark:text-nature-300 leading-relaxed">{blockedFullNote}</p>
@@ -1586,7 +1586,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
                                                     {item.callsign}
                                                 </div>
-                                                <div className="text-[11px] text-nature-400 dark:text-nature-500 font-mono truncate">
+                                                <div className="text-[11px] text-nature-400 dark:text-nature-300 font-mono truncate">
                                                     {item.pubkey.slice(0, 16)}...{item.pubkey.slice(-8)}
                                                 </div>
                                             </div>
@@ -1594,7 +1594,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 type="button"
                                                 onClick={() => unblockFromList(item.pubkey)}
                                                 disabled={blockedBusy !== null}
-                                                className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
+                                                className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
                                             >
                                                 {blockedBusy === item.pubkey ? 'Unblocking…' : 'Unblock'}
                                             </button>
@@ -1606,7 +1606,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     type="button"
                                     onClick={unblockEveryone}
                                     disabled={blockedBusy !== null}
-                                    className="w-full py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
+                                    className="w-full py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
                                 >
                                     {blockedBusy === 'all' ? 'Unblocking…' : 'Unblock All'}
                                 </button>
@@ -1615,7 +1615,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
@@ -1642,7 +1642,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 autoCapitalize="none"
                             />
                             {nodeTestResult && (
-                                <div className={`p-3 rounded-xl mb-3 text-xs font-mono border ${nodeTestResult.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                <div className={`p-3 rounded-xl mb-3 text-xs font-mono border ${nodeTestResult.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900'}`}>
                                     {nodeTestResult.ok ? `✅ Connected to "${nodeTestResult.callsign}" (${nodeTestResult.latencyMs}ms)` : `❌ ${nodeTestResult.error}`}
                                 </div>
                             )}
@@ -1667,7 +1667,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🔑 Raw Private Key</h4>
                             <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-nature-500">View underlying Ed25519 secret seed</span>
+                                <span className="text-xs text-nature-500 dark:text-nature-400">View underlying Ed25519 secret seed</span>
                                 <button
                                     onClick={() => setShowPrivateKey(!showPrivateKey)}
                                     className="text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1 rounded-lg border border-terra-200 cursor-pointer"
@@ -1701,8 +1701,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             </button>
                         </div>
 
-                        {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
-                        {success && <p className="text-emerald-600 text-xs mb-3">{success}</p>}
+                        {error && <p className="text-red-500 dark:text-red-300 text-xs mb-3">{error}</p>}
+                        {success && <p className="text-emerald-600 dark:text-emerald-400 text-xs mb-3">{success}</p>}
 
                         <button
                             onClick={() => setMode('menu')}
@@ -1748,7 +1748,7 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
     const rowClass = 'w-full min-h-[56px] p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left no-underline';
     return (
         <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                 BEANPOOL
             </div>
             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
@@ -1758,9 +1758,9 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">🫘</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">Help & how it works</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">How to use every part of the app, the rules, questions</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">How to use every part of the app, the rules, questions</span>
                             </span>
-                            <span className="text-nature-400" aria-hidden="true">›</span>
+                            <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                         </button>
                     );
                     if (entry === 'suggest') return (
@@ -1768,9 +1768,9 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">💬</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">Suggest a change</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">Ideas and problems go to the BeanPool project team</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">Ideas and problems go to the BeanPool project team</span>
                             </span>
-                            <span className="text-nature-400" aria-hidden="true">›</span>
+                            <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                         </button>
                     );
                     return (
@@ -1778,9 +1778,9 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">🌐</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">beanpool.org</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">The BeanPool project website</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">The BeanPool project website</span>
                             </span>
-                            <span className="text-nature-400" aria-hidden="true">↗</span>
+                            <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">↗</span>
                         </a>
                     );
                 })}

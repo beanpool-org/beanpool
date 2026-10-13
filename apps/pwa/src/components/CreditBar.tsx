@@ -15,6 +15,11 @@ const WARM = '#c07d2a';
 const MARK = '#38bdf8';
 const BEAN = '#2f9e44';
 const BEAN_DEEP = '#1c6e30';
+// Inks for words and numbers on the card: the same colours in light; dark tokens (index.css) lift them off the dark card.
+const RED_INK = 'var(--credit-red, #bb4b32)';
+const WARM_INK = 'var(--credit-warm, #c07d2a)';
+const BEAN_INK = 'var(--credit-bean, #1c6e30)';
+const MUTED_INK = 'var(--credit-muted, #64748b)';
 
 function marginalRate(b: number): number {
     if (b <= 200) return 0;
@@ -228,12 +233,12 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
 
             {/* Offer ladder caption — what your live Offers unlock, and how many reach your full line */}
             {showLadder && hasLocked && (
-                <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: '#64748b', fontWeight: 500, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: MUTED_INK, fontWeight: 500, display: 'flex', alignItems: 'baseline', gap: 4 }}>
                     <span aria-hidden="true">🎣</span>
                     {uFloor < 0 ? (
-                        <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM }}>{liveOffers + 1} offer{liveOffers + 1 === 1 ? '' : 's'}</b>{"\u00A0"}→{"\u00A0"}−{nextUnlock}</> : ''}</span>
+                        <span><b style={{ color: WARM_INK }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM_INK }}>{liveOffers + 1} offer{liveOffers + 1 === 1 ? '' : 's'}</b>{"\u00A0"}→{"\u00A0"}−{nextUnlock}</> : ''}</span>
                     ) : (
-                        <span><b style={{ color: WARM }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your{"\u00A0"}full{"\u00A0"}−{Math.abs(floor)}.</span>
+                        <span><b style={{ color: WARM_INK }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM_INK }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your{"\u00A0"}full{"\u00A0"}−{Math.abs(floor)}.</span>
                     )}
                 </div>
             )}
@@ -254,15 +259,15 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGr
             {/* Lane 3 — anchors (space-between, can't collide) */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
                 <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: RED, fontVariantNumeric: 'tabular-nums' }}>{floor}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: RED_INK, fontVariantNumeric: 'tabular-nums' }}>{floor}</div>
                     <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>your limit</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: BEAN_DEEP }}><span aria-hidden="true">⚖️ </span>0</div>
-                    <div style={{ fontSize: 9, color: BEAN_DEEP, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>sweet spot</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: BEAN_INK }}><span aria-hidden="true">⚖️ </span>0</div>
+                    <div style={{ fontSize: 9, color: BEAN_INK, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>sweet spot</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: WARM }}>+{feeFreeMax}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: WARM_INK }}>+{feeFreeMax}</div>
                     <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>fee-free</div>
                 </div>
             </div>

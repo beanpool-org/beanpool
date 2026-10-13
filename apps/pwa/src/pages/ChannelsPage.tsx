@@ -200,7 +200,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                 <button
                     type="button"
                     onClick={onViewFeed}
-                    className="text-xs sm:text-sm font-bold text-terra-600 dark:text-terra-400 hover:text-terra-700 bg-transparent border-none cursor-pointer p-1 transition-colors whitespace-nowrap"
+                    className="text-xs sm:text-sm font-bold text-terra-600 dark:text-terra-400 hover:text-terra-700 dark:hover:text-terra-300 bg-transparent border-none cursor-pointer p-1 transition-colors whitespace-nowrap"
                     aria-label="View The Pulse community feed"
                 >
                     View Feed ↗
@@ -314,7 +314,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                         <button
                                             type="button"
                                             onClick={() => setEditingId(editingId === channel.id ? null : channel.id)}
-                                            className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 cursor-pointer transition-colors"
+                                            className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors"
                                         >
                                             {editingId === channel.id ? 'Done' : 'Change category'}
                                         </button>
@@ -336,7 +336,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                                             onClick={() => handleChangeCategory(channel.id, cat.id)}
                                                             className={`flex items-center gap-1.5 p-2 rounded-lg text-xs font-semibold border text-left cursor-pointer transition-colors ${
                                                                 isSelected
-                                                                    ? 'bg-terra-500 border-terra-500 text-white shadow-xs'
+                                                                    ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-xs'
                                                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-nature-200 hover:bg-nature-100 dark:hover:bg-nature-700'
                                                             }`}
                                                         >
@@ -381,7 +381,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                         <button
                                             type="button"
                                             onClick={() => setChannelToRemove(channel)}
-                                            className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 bg-transparent border-none cursor-pointer transition-colors ml-auto"
+                                            className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 bg-transparent border-none cursor-pointer transition-colors ml-auto"
                                         >
                                             Remove
                                         </button>
@@ -451,8 +451,8 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                             onClick={() => setCategory(c.id)}
                                             className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                                 active
-                                                    ? 'bg-terra-500 border-terra-500 text-white shadow-sm'
-                                                    : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700'
+                                                    ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
+                                                    : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                             }`}
                                         >
                                             {c.icon} {c.label}
@@ -548,14 +548,14 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     await handleSetPrimary(crossPostPrompt.rivalChannel.id);
                                     setCrossPostPrompt(null);
                                 }}
-                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-50 cursor-pointer"
+                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer"
                             >
                                 {platformMeta(crossPostPrompt.rivalChannel.platform).label} {crossPostPrompt.rivalChannel.supportsAutolist ? '(updates itself)' : ''}
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setCrossPostPrompt(null)}
-                                className="w-full py-2 text-xs text-nature-500 hover:text-nature-800 dark:hover:text-white bg-transparent border-none cursor-pointer"
+                                className="w-full py-2 text-xs text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-white bg-transparent border-none cursor-pointer"
                             >
                                 {crossPostPrompt.several ? 'Keep all — I post different things' : 'Both — I post different things'}
                             </button>
@@ -587,7 +587,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                             <button
                                 type="button"
                                 onClick={() => setChannelToRemove(null)}
-                                className="px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 cursor-pointer"
+                                className="px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer"
                             >
                                 Keep it
                             </button>

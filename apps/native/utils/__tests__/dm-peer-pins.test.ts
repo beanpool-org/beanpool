@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmOpenPeers, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, type DmPeerPins } from '../dm-peer-pins';
+import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmOpenPeers, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, type DmPeerPins, type DmPeerPin } from '../dm-peer-pins';
 import { dmPeerPinsStoreKey } from '../storage-keys';
 
 // The pin store itself (utils/dm-peer-pins.ts): what a listing may do to a pin, and what an unreadable store does. The
@@ -71,19 +71,19 @@ describe('applyDmListings: a listing offers, never moves', () => {
     it('a listing without the pinned key offers the other key and leaves the pin; one with it as well as others changes nothing', () => {
         const p = pinned();
         expect(applyDmListings(p, D0, [[BEN, PUPPET]], NOW)).toBe(false);
-        expect(p[D0].offered).toBeUndefined();
+        expect((p[D0] as DmPeerPin).offered).toBeUndefined();
         expect(applyDmListings(p, D0, [[PUPPET]], NOW)).toBe(true);
         expect(p[D0]).toEqual({ peer: BEN, since: NOW, by: 'first-seen', offered: { peer: PUPPET, at: NOW } });
         expect(applyDmListings(p, D0, [[PUPPET]], '2026-10-15T00:00:00.000Z')).toBe(false);   // the same offer keeps its time
-        expect(p[D0].offered?.at).toBe(NOW);
+        expect((p[D0] as DmPeerPin).offered?.at).toBe(NOW);
     });
 
     it('a twin listed beside the DM (the same id in capitals) offers its key; the offer clears only once every listing names the pinned key', () => {
         const p = pinned();
         expect(applyDmListings(p, D0, [[BEN], [PUPPET]], NOW)).toBe(true);
-        expect(p[D0].offered).toEqual({ peer: PUPPET, at: NOW });
+        expect((p[D0] as DmPeerPin).offered).toEqual({ peer: PUPPET, at: NOW });
         expect(applyDmListings(p, D0, [[BEN], []], NOW)).toBe(false);
-        expect(p[D0].offered).toBeDefined();
+        expect((p[D0] as DmPeerPin).offered).toBeDefined();
         expect(applyDmListings(p, D0, [[BEN]], NOW)).toBe(true);
         expect(p[D0]).toEqual({ peer: BEN, since: NOW, by: 'first-seen' });
     });
@@ -91,8 +91,8 @@ describe('applyDmListings: a listing offers, never moves', () => {
     it('several other keys and not the pinned one: sends stop, with no key offered', () => {
         const p = pinned();
         expect(applyDmListings(p, D0, [[PUPPET, OTHER]], NOW)).toBe(true);
-        expect(p[D0].offered).toEqual({ peer: null, at: NOW });
-        expect(p[D0].peer).toBe(BEN);
+        expect((p[D0] as DmPeerPin).offered).toEqual({ peer: null, at: NOW });
+        expect((p[D0] as DmPeerPin).peer).toBe(BEN);
     });
 });
 

@@ -46,10 +46,49 @@ export interface DmPeerPin {
     /** Keys pinned here before, newest first: old lines still open under them (pick 3). */
     former?: string[];
     offered?: DmPeerOffer;
+    /**
+     * A first-seen pin's verdict (design §3.4 amendment): true once the thread's own lines placed it (history decides the
+     * pin) or this phone sealed a line to it. Until then it was taken with no line to check, on the node's or the rows'
+     * word, and the next send or screen check judges it on the thread's lines before anything is sealed to it.
+     */
+    checked?: boolean;
+    /** What the node's listing says about the key it lists now: see {@link DmHeard}. */
+    heard?: DmHeard;
 }
 
+/**
+ * What the listing last said about the key it lists for a DM, kept for the history rule: `tryKeys`, the keys it names as
+ * that key's former ones (#1871 formerKeys), only tell the rule which keys to try a line under, never proof of anything;
+ * `rekeyedAt`, the date a succession statement verified against that key gives (wording for the banner, pick 4).
+ */
+export interface DmHeard {
+    tryKeys?: string[];
+    rekeyedAt?: string;
+}
+
+/**
+ * First sight found lines it couldn't place (rule 5 of the §3.4 amendment): no key is pinned and every send is refused
+ * as not locked. Kept, so a prune and a relist can't make this DM first sight again and take the listed key (the R5 stop
+ * is durable): only a later judgement that places every line under a key the listing doesn't name, with the listed key
+ * offered (a pause the member decides on), replaces it. `listed` and `heard`: what the listing said; `stale`: it has said
+ * something since the last judgement, so the next send or screen check judges again (#1871 formerKeys arriving, P15).
+ */
+export interface DmUnplacedSight {
+    unplaced: true;
+    since: string;
+    listed: string | null;
+    heard?: DmHeard;
+    stale?: boolean;
+}
+
+export type DmPinEntry = DmPeerPin | DmUnplacedSight;
+
 /** One account's pins, by conversation id lower-cased. */
-export type DmPeerPins = Record<string, DmPeerPin>;
+export type DmPeerPins = Record<string, DmPinEntry>;
+
+export function isUnplacedSight(e: DmPinEntry | null | undefined): e is DmUnplacedSight {
+    return !!e && (e as DmUnplacedSight).unplaced === true;
+}
 
 const KEY_HEX = /^[0-9a-f]{64}$/;
 
@@ -79,9 +118,30 @@ export function isDmPinStoreError(e: unknown): e is DmPinStoreError {
     return e instanceof DmPinStoreError || (e as { name?: unknown } | null)?.name === 'DmPinStoreError';
 }
 
-function pinOf(raw: unknown): DmPeerPin | null {
+const TRY_KEYS_MAX = 8;
+
+function heardOf(raw: unknown): DmHeard | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const r = raw as Record<string, unknown>;
+    const heard: DmHeard = {};
+    if (Array.isArray(r.tryKeys)) {
+        const keys = [...new Set(r.tryKeys.map(pinKeyOf).filter((k): k is string => !!k))].slice(0, TRY_KEYS_MAX);
+        if (keys.length) heard.tryKeys = keys;
+    }
+    if (typeof r.rekeyedAt === 'string') heard.rekeyedAt = r.rekeyedAt;
+    return heard.tryKeys || heard.rekeyedAt ? heard : undefined;
+}
+
+function pinOf(raw: unknown): DmPinEntry | null {
     if (!raw || typeof raw !== 'object') return null;
     const r = raw as Record<string, unknown>;
+    if (r.unplaced === true) {
+        const sight: DmUnplacedSight = { unplaced: true, since: typeof r.since === 'string' ? r.since : '', listed: pinKeyOf(r.listed) };
+        const heard = heardOf(r.heard);
+        if (heard) sight.heard = heard;
+        if (r.stale === true) sight.stale = true;
+        return sight;
+    }
     const peer = pinKeyOf(r.peer);
     if (!peer) return null;
     const by = r.by === 'member' || r.by === 'handover' ? r.by : 'first-seen';
@@ -97,6 +157,9 @@ function pinOf(raw: unknown): DmPeerPin | null {
         if (says && typeof says.rekeyedAt === 'string') offered.nodeSays = { rekeyedAt: says.rekeyedAt };
         pin.offered = offered;
     }
+    if (r.checked === true) pin.checked = true;
+    const heard = heardOf(r.heard);
+    if (heard) pin.heard = heard;
     return pin;
 }
 
@@ -105,13 +168,18 @@ function pinOf(raw: unknown): DmPeerPin | null {
  * sealing then refuses, never "no pin" (which would be first sight again). A single entry that isn't a pin is passed over.
  */
 export async function readDmPeerPins(storage: Pick<PinStorage, 'getItem'>, myPubkey: string): Promise<DmPeerPins> {
+    return (await readStoredPins(storage, myPubkey)).pins;
+}
+
+/** As readDmPeerPins, and whether storage held nothing at all for this account (no build with pins has met it yet). */
+async function readStoredPins(storage: Pick<PinStorage, 'getItem'>, myPubkey: string): Promise<{ pins: DmPeerPins; absent: boolean }> {
     let raw: string | null;
     try {
         raw = await storage.getItem(dmPeerPinsStoreKey(myPubkey));
     } catch {
         throw new DmPinStoreError();
     }
-    if (raw == null) return Object.create(null);
+    if (raw == null) return { pins: Object.create(null), absent: true };
     let parsed: unknown;
     try {
         parsed = JSON.parse(raw);
@@ -124,7 +192,7 @@ export async function readDmPeerPins(storage: Pick<PinStorage, 'getItem'>, myPub
         const pin = pinOf(value);
         if (pin) setPin(pins, dmPinId(id), pin);
     }
-    return pins;
+    return { pins, absent: false };
 }
 
 /** Write one account's pins. Throws DmPinStoreError when the storage refuses. */
@@ -149,8 +217,12 @@ export async function writeDmPeerPins(storage: Pick<PinStorage, 'setItem'>, myPu
 export interface DmPinBook {
     /** This account's pins (read from storage the first time). */
     read(myPubkey: string): Promise<DmPeerPins>;
-    /** Run `change` on this account's pins after every change queued before it; written through when it returns true. */
-    update(myPubkey: string, change: (pins: DmPeerPins) => boolean): Promise<boolean>;
+    /**
+     * Run `change` on this account's pins after every change queued before it; written through when it returns true.
+     * `fresh`: storage held nothing for this account when the copy was read and nothing has been written since, so this is
+     * the first change a build with pins makes for it (the sync's seed from the phone's own rows, design §3.4 amendment).
+     */
+    update(myPubkey: string, change: (pins: DmPeerPins, state: { fresh: boolean }) => boolean): Promise<boolean>;
     /** Drop every copy: the next ask reads storage again (a fresh app session). */
     forget(): void;
 }
@@ -158,23 +230,28 @@ export interface DmPinBook {
 export function createDmPinBook(storage: PinStorage): DmPinBook {
     const copies = new Map<string, Promise<DmPeerPins>>();
     const queues = new Map<string, Promise<unknown>>();
+    const absent = new Set<string>();
     function read(myPubkey: string): Promise<DmPeerPins> {
         const key = dmPeerPinsStoreKey(myPubkey);
         const held = copies.get(key);
         if (held) return held;
-        const loading = readDmPeerPins(storage, myPubkey);
+        const loading = readStoredPins(storage, myPubkey).then((r) => {
+            if (r.absent) absent.add(key); else absent.delete(key);
+            return r.pins;
+        });
         copies.set(key, loading);
         loading.catch(() => { if (copies.get(key) === loading) copies.delete(key); });
         return loading;
     }
-    function update(myPubkey: string, change: (pins: DmPeerPins) => boolean): Promise<boolean> {
+    function update(myPubkey: string, change: (pins: DmPeerPins, state: { fresh: boolean }) => boolean): Promise<boolean> {
         const key = dmPeerPinsStoreKey(myPubkey);
         const turn = (queues.get(key) ?? Promise.resolve()).catch(() => {}).then(async () => {
             const copy = read(myPubkey);
             const pins = await copy;
-            if (!change(pins)) return false;
+            if (!change(pins, { fresh: absent.has(key) })) return false;
             try {
                 await writeDmPeerPins(storage, myPubkey, pins);
+                absent.delete(key);
             } catch (e) {
                 if (copies.get(key) === copy) copies.delete(key);
                 throw e;
@@ -184,29 +261,115 @@ export function createDmPinBook(storage: PinStorage): DmPinBook {
         queues.set(key, turn);
         return turn;
     }
-    return { read, update, forget: () => { copies.clear(); queues.clear(); } };
+    return { read, update, forget: () => { copies.clear(); queues.clear(); absent.clear(); } };
 }
 
-/** The pin kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */
-function ownPin(pins: DmPeerPins, id: string): DmPeerPin | undefined {
+/** The entry kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */
+function ownPin(pins: DmPeerPins, id: string): DmPinEntry | undefined {
     return Object.prototype.hasOwnProperty.call(pins, id) ? pins[id] : undefined;
 }
 
 /** Keep `pin` under `id` as an own entry, whatever the id (a plain assignment of "__proto__" would set a prototype). */
-function setPin(pins: DmPeerPins, id: string, pin: DmPeerPin): void {
+function setPin(pins: DmPeerPins, id: string, pin: DmPinEntry): void {
     Object.defineProperty(pins, id, { value: pin, enumerable: true, writable: true, configurable: true });
 }
 
+/** The key pinned for this DM, or null: none yet, or first sight found lines it couldn't place ({@link dmSightFor}). */
 export function dmPinFor(pins: DmPeerPins, conversationId: string): DmPeerPin | null {
+    const e = ownPin(pins, dmPinId(conversationId));
+    return e && !isUnplacedSight(e) ? e : null;
+}
+
+/** Whatever this phone keeps for the DM: its pin, the rule-5 record, or null (never met). */
+export function dmSightFor(pins: DmPeerPins, conversationId: string): DmPinEntry | null {
     return ownPin(pins, dmPinId(conversationId)) ?? null;
 }
 
-/** First sight: pin `peer` for this DM if nothing is pinned yet. True when it wrote one. */
-export function pinAtFirstSight(pins: DmPeerPins, conversationId: string, peer: string, now: string): boolean {
+/**
+ * First sight with no line to check: pin `peer` for this DM if this phone keeps nothing for it yet (no pin, and no rule-5
+ * record, which a prune can't clear: R5). Unchecked: the history rule judges it before a line is sealed to it. True when
+ * it wrote one.
+ */
+export function pinAtFirstSight(pins: DmPeerPins, conversationId: string, peer: string, now: string, heard?: DmHeard, checked?: boolean): boolean {
     const id = dmPinId(conversationId);
     const key = pinKeyOf(peer);
     if (!key || ownPin(pins, id)) return false;
-    setPin(pins, id, { peer: key, since: now, by: 'first-seen' });
+    const pin: DmPeerPin = { peer: key, since: now, by: 'first-seen' };
+    if (checked) pin.checked = true;
+    if (heard) pin.heard = heard;
+    setPin(pins, id, pin);
+    return true;
+}
+
+/**
+ * The history rule (design §3.4 amendment, rules 1-5): what the newest encrypted lines of a thread, oldest first, say the
+ * pin is. `lines[i]` is the key line i opened under (tried under the listed key, the keys the listing names as its former
+ * ones, and the keys the rows name), or null when it opened under none. `listed`: the key the node lists now (null when it
+ * lists several, or none). The oldest opening line's key is the pin; the listing only ever offers.
+ */
+export type SightVerdict =
+    | { rule: 1 }
+    | { rule: 2 | 3 | 4; pin: string; offer: boolean }
+    | { rule: 5 };
+
+export function judgeFirstSight(lines: ReadonlyArray<string | null>, listed: string | null): SightVerdict {
+    if (!lines.length) return { rule: 1 };
+    if (lines.some((k) => !k)) return { rule: 5 };
+    const keys = [...new Set(lines as string[])];
+    if (keys.length === 1) {
+        if (keys[0] === listed) return { rule: 2, pin: keys[0], offer: false };
+        return { rule: 3, pin: keys[0], offer: true };
+    }
+    if (keys.length === 2 && listed && keys[0] !== listed && keys[1] === listed) {
+        // Every line under the older key comes before every line under the listed one.
+        const firstListed = lines.indexOf(listed);
+        if (lines.slice(firstListed).every((k) => k === listed)) return { rule: 4, pin: keys[0], offer: true };
+    }
+    return { rule: 5 };
+}
+
+/**
+ * Write what the history rule decided for one DM (`verdict`, judged against `listed`) over whatever is kept now. Rule 1
+ * keeps it all (a thread with no line has nothing to say; a DM with nothing kept is pinned to `listed` unchecked). Rules
+ * 2-4 pin the key the lines placed, checked, with `listed` offered when it differs. Rule 5 keeps no pin, only the record.
+ * A rule-5 record is replaced only by rule 3 or 4 (a pause the member decides on), never by rule 1 or 2, which would take
+ * the listed key with no question after lines were seen that it couldn't place (R5). A pin already checked, or one the
+ * member or a handover chose, is never judged again. True when the pins changed.
+ */
+export function applySightVerdict(pins: DmPeerPins, conversationId: string, verdict: SightVerdict, listed: string | null, heard: DmHeard | undefined, now: string): boolean {
+    const id = dmPinId(conversationId);
+    const held = ownPin(pins, id);
+    if (held && !isUnplacedSight(held) && (held.checked || held.by !== 'first-seen')) return false;
+    if (verdict.rule === 1) {
+        if (held || !listed) return false;
+        return pinAtFirstSight(pins, id, listed, now, heard);
+    }
+    if (verdict.rule === 5) {
+        if (isUnplacedSight(held) && !held.stale) return false;
+        const sight: DmUnplacedSight = { unplaced: true, since: isUnplacedSight(held) ? held.since : now, listed };
+        if (heard) sight.heard = heard;
+        setPin(pins, id, sight);
+        return true;
+    }
+    if (isUnplacedSight(held) && !verdict.offer) {
+        if (!held.stale) return false;
+        delete held.stale;
+        return true;
+    }
+    const pin: DmPeerPin = { peer: verdict.pin, since: now, by: 'first-seen', checked: true };
+    if (verdict.offer && listed !== verdict.pin) {
+        pin.offered = { peer: listed, at: now };
+        if (heard?.rekeyedAt) pin.offered.nodeSays = { rekeyedAt: heard.rekeyedAt };
+    }
+    setPin(pins, id, pin);
+    return true;
+}
+
+/** A send seals to an unchecked first-seen pin: it is this phone's from now on (§3.6, "the first key this phone sealed to"). */
+export function settleFirstSight(pins: DmPeerPins, conversationId: string): boolean {
+    const pin = dmPinFor(pins, conversationId);
+    if (!pin || pin.checked || pin.by !== 'first-seen' || pin.offered) return false;
+    pin.checked = true;
     return true;
 }
 
@@ -217,14 +380,38 @@ export function pinAtFirstSight(pins: DmPeerPins, conversationId: string, peer: 
  * listing naming the same one other key pins it at first sight; listings that disagree, or name several, pin nothing.
  * The pinned key itself never moves here. True when the pins changed.
  */
-export function applyDmListings(pins: DmPeerPins, conversationId: string, listings: ReadonlyArray<ReadonlyArray<string>>, now: string): boolean {
+export function applyDmListings(pins: DmPeerPins, conversationId: string, listings: ReadonlyArray<ReadonlyArray<string>>, now: string, heard?: DmHeard): boolean {
     const id = dmPinId(conversationId);
     const named = listings.map((others) => [...new Set(others.map(pinKeyOf).filter((k): k is string => !!k))]);
-    const pin = ownPin(pins, id);
-    if (!pin) {
-        if (!named.length || named.some((o) => o.length !== 1) || new Set(named.map((o) => o[0])).size !== 1) return false;
-        return pinAtFirstSight(pins, id, named[0][0], now);
+    const one = named.length > 0 && named.every((o) => o.length === 1) && new Set(named.map((o) => o[0])).size === 1 ? named[0][0] : null;
+    const entry = ownPin(pins, id);
+    if (!entry) {
+        if (!one) return false;
+        return pinAtFirstSight(pins, id, one, now, heard);
     }
+    if (isUnplacedSight(entry)) {
+        // Rule 5 stands: the listing is only heard, for the next judgement (never a pin from it).
+        if (entry.listed === one && sameHeard(entry.heard, heard)) return false;
+        entry.listed = one;
+        if (heard) entry.heard = heard; else delete entry.heard;
+        entry.stale = true;
+        return true;
+    }
+    const pin = entry;
+    if (!pin.checked && pin.by === 'first-seen' && one && !sameHeard(pin.heard, heard)) {
+        // An unchecked pin keeps what the listing says about the key it lists, for its judgement.
+        if (heard) pin.heard = heard; else delete pin.heard;
+        applyDmListingsTo(pin, named, now, heard);
+        return true;
+    }
+    return applyDmListingsTo(pin, named, now, heard);
+}
+
+function sameHeard(a: DmHeard | undefined, b: DmHeard | undefined): boolean {
+    return (a?.rekeyedAt ?? '') === (b?.rekeyedAt ?? '') && (a?.tryKeys ?? []).join() === (b?.tryKeys ?? []).join();
+}
+
+function applyDmListingsTo(pin: DmPeerPin, named: string[][], now: string, heard?: DmHeard): boolean {
     const without = named.find((o) => o.length > 0 && !o.includes(pin.peer));
     if (!without) {
         if (!pin.offered || named.some((o) => !o.includes(pin.peer))) return false;
@@ -232,8 +419,10 @@ export function applyDmListings(pins: DmPeerPins, conversationId: string, listin
         return true;
     }
     const peer = without.length === 1 ? without[0] : null;
-    if (pin.offered && pin.offered.peer === peer) return false;
-    pin.offered = { peer, at: now };
+    const rekeyedAt = peer && named.length === 1 ? heard?.rekeyedAt : undefined;
+    if (pin.offered && pin.offered.peer === peer && pin.offered.nodeSays?.rekeyedAt === rekeyedAt) return false;
+    pin.offered = { peer, at: pin.offered?.peer === peer ? pin.offered.at : now };
+    if (rekeyedAt) pin.offered.nodeSays = { rekeyedAt };
     return true;
 }
 

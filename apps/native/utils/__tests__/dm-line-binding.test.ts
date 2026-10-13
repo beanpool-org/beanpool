@@ -1418,9 +1418,13 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
         expect(await sendTo(dm.id, 'The code is 4821')).toEqual({ err: 'DmKeyChangedError', puppetRead: false });
     });
 
-    it('reading a thread or a photo neither reads the pin store again nor runs the first-sight check; the screen\'s check and a send each run it once', async () => {
+    it('P19: first sight is judged once per DM (the screen\'s check on a restored phone); a read, a photo, a later poll and a send never judge it again nor read the pin store', async () => {
         const { question } = await aQuestionAndAnAnswer();
+        h.store.delete(PINS(ana));   // a restored phone: no pins, the history on the node
+        restarted();
         await phoneOf(ana);
+        expect(pinOf(ana, dm.id)).toEqual(expect.objectContaining({ peer: ben.publicKey, by: 'first-seen' }));
+        expect(pinOf(ana, dm.id)?.checked).toBeUndefined();
         const db = await getDb();
         const getItem = vi.mocked(AsyncStorage.getItem);
         const getAll = vi.mocked(db.getAllAsync);
@@ -1434,8 +1438,12 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
         expect(counts()).toEqual({ pinReads: 0, firstSightChecks: 0 });
         expect(await isDmKeyChangePending(dm.id)).toBe(false);
         expect(counts()).toEqual({ pinReads: 0, firstSightChecks: 1 });
+        expect(pinOf(ana, dm.id)).toEqual(expect.objectContaining({ peer: ben.publicKey, checked: true }));
+        for (let poll = 0; poll < 3; poll++) expect(await isDmKeyChangePending(dm.id)).toBe(false);
+        await getMessages(dm.id);
+        await getDecryptedAttachment(dm.id, question.id);
         expect(await sendTo(dm.id, 'Still on for Saturday?')).toEqual({ err: null, puppetRead: false });
-        expect(counts()).toEqual({ pinReads: 0, firstSightChecks: 2 });
+        expect(counts()).toEqual({ pinReads: 0, firstSightChecks: 1 });
     });
 
     it('the send is the first key resolve for an unpinned DM (the post screen\'s decline message): a first sight none of the thread opens under is refused', async () => {

@@ -13,6 +13,9 @@ import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } f
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { marked, useFeatureMode } from '../lib/features';
+import { LocalCommunityLine } from '../components/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -25,6 +28,8 @@ interface Props {
 }
 
 export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab }: Props) {
+    // Beans live in a local community here (preview or read-only): the trust card's slot carries the line (§1 row 9).
+    const beansMarked = marked(useFeatureMode('beans'));
     const [profile, setProfile] = useState<MemberProfile | null>(null);
     const [viewerProfile, setViewerProfile] = useState<MemberProfile | null>(null);
     const [showQuizModal, setShowQuizModal] = useState(false);
@@ -516,8 +521,17 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     return null;
                 })()}
 
+                {/* Where Beans live in a local community: the line in the trust card's slot, on every profile */}
+                {beansMarked && (
+                    <div className="mx-4 mt-4" data-testid="profile-local-line">
+                        <LocalCommunityLine feature="beans" text={LOCAL_COMMUNITY_LINES.profile}
+                            onNearYou={onNavigateTab ? () => onNavigateTab('home') : undefined}
+                            onGuide={onNavigateTab ? (slug) => onNavigateTab('guide', slug) : undefined} />
+                    </div>
+                )}
+
                 {/* Trust summary card (self only) — links to Ledger */}
-                {isSelf && balanceInfo && (
+                {!beansMarked && isSelf && balanceInfo && (
                     <div 
                         onClick={() => onNavigateTab && onNavigateTab('ledger')}
                         className="flex items-center justify-between bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-4 p-4 shadow-sm cursor-pointer hover:shadow-md transition-all duration-200"

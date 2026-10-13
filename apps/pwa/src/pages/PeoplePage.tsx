@@ -493,7 +493,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
             <div role="tabpanel" id={panelId('invites')} aria-labelledby={tabId('invites')} hidden={view !== 'invites'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
             {view === 'invites' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden">
-                    <InvitePage identity={identity} />
+                    <InvitePage identity={identity} onNavigate={onNavigate} />
                 </div>
             )}
             </div>

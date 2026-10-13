@@ -17,6 +17,11 @@ import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
+import { DealsPreviewDialog } from '../components/ShowcasePreviews';
+import { LocalCommunityAction, LocalCommunityLine, DEAL_ACTION_LABEL } from '../components/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { NO_BEANS_TERMS_TEXT } from '../lib/visitor-lobby';
+import { marked, useFeatureMode } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
@@ -165,7 +170,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // #108: beans-only browse, so a cash requirement can't ambush anyone. A browse preference,
     // so it persists across sessions.
     // Never for a visitor, whose list has no such chip to undo it.
-    const [beansOnly, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
+    const [beansOnlyPicked, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
     const [foundingOnly, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
     const [groupFilter, setGroupFilter] = useState<string>('all');
@@ -320,6 +325,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
     const [showDealsModal, setShowDealsModal] = useState(false);
+    // Deals off here and the node shows previews: My Deals opens Example Valley's two deals (DESIGN-global-showcase-fable.md §1 row 5).
+    const dealsMode = useFeatureMode('escrow');
+    // Beans and deals that live in a local community (preview or read-only): the price slot and the deal action carry the
+    // 🏘️ marker instead of a price and a Request that would move Beans (design §1 rows 2 and 4). Live and hidden: as before.
+    const priceMarked = marked(useFeatureMode('beans'));
+    // There the Beans-only chip and the Pricing Guide are hidden (design §1, "Hidden on global"), and a Beans-only picked
+    // before does not quietly filter the feed.
+    const beansOnly = beansOnlyPicked && !priceMarked;
+    const dealMarked = marked(dealsMode);
+    const markWays = {
+        onNearYou: onNavigate ? () => { setSelectedPost(null); onNavigate('home'); } : undefined,
+        onGuide: onNavigate ? (slug: string) => { setSelectedPost(null); onNavigate('guide', slug); } : undefined,
+    };
     const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
 
     // Detail view
@@ -985,7 +1003,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             refresh();
                         }}
                         onOpenProfile={onOpenProfile}
-                        informal={informalPolls}
+                        informal={informalPolls} localWays={markWays}
                     />
                 </div>
             );
@@ -1169,8 +1187,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </div>
                         )}
 
-                        {/* Credits */}
-                        {!isPulsePost && (
+                        {/* Credits; where Beans live in a local community, what the description asks in return and the line */}
+                        {!isPulsePost && priceMarked && (
+                            <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 border border-nature-100 dark:border-nature-800 shadow-inner" data-testid="listing-in-return">
+                                <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">In return</span>
+                                <p className="font-bold text-nature-900 dark:text-white mb-2">{NO_BEANS_TERMS_TEXT}</p>
+                                <LocalCommunityLine feature="beans" text={LOCAL_COMMUNITY_LINES.price} {...markWays} />
+                            </div>
+                        )}
+                        {!isPulsePost && !priceMarked && (
                             <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 text-center border border-nature-100 dark:border-nature-800 shadow-inner block">
                                 <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">
                                     {selectedPost.type === 'offer' ? 'Asking Price' : 'Willing to Pay'}
@@ -1543,6 +1568,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 );
                             }
 
+                            // Deals live in a local community: the action keeps its place and words, and opens the sheet.
+                            if (dealMarked) {
+                                return <LocalCommunityAction feature="escrow" label={DEAL_ACTION_LABEL} className="w-full py-3.5 text-[15px]" {...markWays} />;
+                            }
                             return showAcceptConfirm ? (
                             <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-2">
                                 <p className="font-bold text-nature-900 dark:text-white mb-2 text-center text-sm">
@@ -2417,6 +2446,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     new members and the pricing guide are about listings. */}
                 <div className="flex flex-wrap items-center gap-2 my-1.5">
                     {typeFilter !== 'event' && !isVisitor && (<>
+                    {!priceMarked && (
                     <button
                         onClick={() => {
                             const next = !beansOnly;
@@ -2433,6 +2463,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         🫘 Beans only{beansOnly ? ' ✓' : ''}
                     </button>
+                    )}
 
                     <button
                         onClick={() => setFoundingOnly(v => !v)}
@@ -2446,6 +2477,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         🌱 New members{foundingOnly ? ' ✓' : ''}
                     </button>
 
+                    {!priceMarked && (
                     <button
                         onClick={() => setShowPricingGuide(true)}
                         className="px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-300 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
@@ -2453,6 +2485,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         💡 Pricing Guide
                     </button>
+                    )}
                     </>)}
 
                     {userGroups.length > 0 && (
@@ -2785,7 +2818,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
                                                     aria-label={`Open poll: ${post.title}`}
                                                     className="self-start rounded-2xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
-                                                    <PollCard post={post} visitor viewMode="list" informal={informalPolls} />
+                                                    <PollCard post={post} visitor viewMode="list" informal={informalPolls} localWays={markWays} />
                                                 </div>
                                             ) : (
                                                 <VisitorCard post={post} beans={visitor.beans} distanceKm={eventDistance(post)} onOpen={() => setSelectedPost(post)} />
@@ -2963,7 +2996,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                             viewMode={viewMode}
                                                             onVoteSuccess={() => refresh()}
                                                             onOpenProfile={onOpenProfile}
-                                                            informal={informalPolls}
+                                                            informal={informalPolls} localWays={markWays}
                                                         />
                                                     </div>
                                                 );
@@ -3073,7 +3106,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                                 viewMode={viewMode}
                                                                 onVoteSuccess={() => refresh()}
                                                                 onOpenProfile={onOpenProfile}
-                                                                informal={informalPolls}
+                                                                informal={informalPolls} localWays={markWays}
                                                             />
                                                         </div>
                                                     );
@@ -3238,8 +3271,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 onClose={() => setShowCategoryPicker(false)}
             />
 
+            {showDealsModal && dealsMode === 'preview' && (
+                <DealsPreviewDialog onClose={() => setShowDealsModal(false)} onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined} onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined} />
+            )}
             <MyDealsModal
-                visible={showDealsModal}
+                visible={showDealsModal && dealsMode !== 'preview'}
                 identity={identity}
                 onClose={() => setShowDealsModal(false)}
                 posts={posts}

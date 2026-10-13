@@ -131,7 +131,7 @@ The fleet manager signs in to a node with an automation token instead of the adm
 
 ## Connected assistants
 
-An owner or an admin can connect their own AI assistant (Claude, ChatGPT, Cursor) to the server under **Connected assistants**, see exactly what it would read before and after, and disconnect it. Its token is not an automation token and is not listed under Automation tokens. Owners see every connected assistant and can turn AI assistants off. See AI assistants for what an assistant can and can't see.
+An owner can connect their own AI assistant (Claude, ChatGPT, Cursor) to the server under **Connected assistants**, see exactly what it would read before and after, and disconnect it. Admins will connect theirs there, approved on their phone, in a coming update; until then they see their own and what theirs would read. Its token is not an automation token and is not listed under Automation tokens. Owners see every connected assistant and can turn AI assistants off. See AI assistants for what an assistant can and can't see.
 
 ## Factory reset
 

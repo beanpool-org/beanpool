@@ -226,17 +226,22 @@ async function main(): Promise<void> {
         const ownerS = await keySignIn(owner);
         const adminS = await keySignIn(admin);
         assert(!!ownerS && !!adminS, 'the owner and the admin sign in with their keys');
-        const make = (h: Record<string, string>, body: unknown) => call('POST', '/api/local/admin/automation-tokens', { headers: h, body });
+        // Connected assistants makes every agent token (the automation-token route refuses the scope: #1865 review finding 2).
+        const make = (h: Record<string, string>, body: unknown) => call('POST', '/api/local/admin/agent/grants', { headers: h, body });
+        const viaOldRoute = await call('POST', '/api/local/admin/automation-tokens', { headers: asSession(ownerS), body: { name: 'old way', scope: 'agent' } });
+        assert(viaOldRoute.status === 400 && viaOldRoute.body?.code === 'agent_via_grants' && !viaOldRoute.body?.token
+            && !(getLocalConfig().automationTokens ?? []).some((t: any) => t.scope === 'agent'),
+        `the automation-token route makes no agent token: it points to Connected assistants (${show(viaOldRoute)})`);
         const before = Date.now();
-        const tAgent = await make(asSession(ownerS), { name: 'Claude Desktop', scope: 'agent' });
+        const tAgent = await make(asSession(ownerS), { name: 'Claude Desktop' });
         assert(tAgent.status === 201 && /^bp_[0-9a-f]{12}_[0-9a-f]{64}$/.test(tAgent.body?.token ?? ''), `an owner's key session makes an agent token (${tAgent.status})`);
         const AGENT: string = tAgent.body.token;
         secrets.push(AGENT);
-        const exp = Number(tAgent.body?.record?.expiresAt);
+        const exp = Number(tAgent.body?.grant?.expiresAt);
         assert(Math.abs(exp - (before + 30 * 86_400_000)) < 120_000, `it lives 30 days when no expiry is asked (${new Date(exp).toISOString()})`);
-        const tooLong = await make(asSession(ownerS), { name: 'x', scope: 'agent', expiresAt: Date.now() + 91 * 86_400_000 });
+        const tooLong = await make(asSession(ownerS), { name: 'x', days: 91 });
         assert(tooLong.status === 400 && /90 days/.test(tooLong.body?.error ?? ''), `an agent token past 90 days is refused (${show(tooLong)})`);
-        const byAdmin = await make(asSession(adminS), { name: 'x', scope: 'agent' });
+        const byAdmin = await make(asSession(adminS), { name: 'x' });
         assert(byAdmin.status === 403, `an admin's session cannot make one (${show(byAdmin)})`);
         await new Promise(r => setTimeout(r, 50));
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent');
@@ -410,7 +415,7 @@ async function main(): Promise<void> {
         assert(none.status === 401 && /Bearer/.test(none.headers.get('www-authenticate') ?? ''), `no credential: 401 with WWW-Authenticate (${show(none)})`);
         const sess = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...asSession(ownerS), Cookie: `admin_session=${ownerS}` } });
         assert(sess.status === 401, `an owner's Settings session or cookie does not reach it (${show(sess)})`);
-        const tRead = await make(asSession(ownerS), { name: 'nightly read', scope: 'read' });
+        const tRead = await call('POST', '/api/local/admin/automation-tokens', { headers: asSession(ownerS), body: { name: 'nightly read', scope: 'read' } });
         secrets.push(tRead.body.token);
         const other = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(tRead.body.token) } });
         assert(other.status === 403 && /agent scope/.test(other.body?.error?.message ?? ''), `a read-scope token is refused (${show(other)})`);
@@ -546,7 +551,7 @@ async function main(): Promise<void> {
         for (let i = 0; i < 5000; i += 25) await Promise.all(Array.from({ length: 25 }, () => send(MCP_HEADERS)));
         // Used up here, not before the 5,000: on a slow machine those can take past a minute, and a new minute admits 60.
         resetAgentLimits();
-        while (admitAgentCall(tAgent.body.record.id).ok) { /* this minute's 60 */ }
+        while (admitAgentCall(tAgent.body.grant.id).ok) { /* this minute's 60 */ }
         for (let i = 0; i < 300; i += 25) await Promise.all(Array.from({ length: 25 }, () => send({ ...MCP_HEADERS, ...bearer(AGENT) })));
         const elapsed = Date.now() - t0;
         endRefusalMinute();
@@ -585,7 +590,7 @@ async function main(): Promise<void> {
         // ── 7. The maker's role, read on every call ───────────────────────────────────────────────
         console.log("── 7. The maker's live role: demoted to admin, then no role ──");
         const o2S = await keySignIn(owner2);
-        const t2 = await make(asSession(o2S), { name: 'Cursor', scope: 'agent' });
+        const t2 = await make(asSession(o2S), { name: 'Cursor' });
         assert(t2.status === 201, `a second owner makes an agent token (${t2.status})`);
         secrets.push(t2.body.token);
         grantNodeRole(owner2.pub, 'admin', 'SYSTEM');
@@ -603,7 +608,7 @@ async function main(): Promise<void> {
         // The demoted maker's token sent 100 times: the one refusal no per-grant limit bounds. Every line it leaves is a
         // refusal's, within the minute's budget, and the "…and M more" line names its grant and why, so no flood can make
         // its attempts anonymous (#1855 confirmation 2, findings 1 and 2, mutant R5).
-        const t2Id: string = t2.body.record.id;
+        const t2Id: string = t2.body.grant.id;
         endRefusalMinute();
         pruneSystemLogs();
         const demotedFrom = maxId();
@@ -644,16 +649,30 @@ async function main(): Promise<void> {
         assert(firstNamed === BUDGET && secondNamed === BUDGET && firstMore.length === 1 && lineMeta(firstMore[0]).byStatus?.['401'] === 5,
             `the refusal minute rolls over on its own: ${firstNamed} lines, then 61 s later ${secondNamed} fresh ones and the first minute's "…and 5 more" (${firstMore.length}, by status ${JSON.stringify(lineMeta(firstMore[0] ?? { metadata: null }).byStatus ?? null)})`);
 
+        // A wrong-scope token is counted under its own grant in the summary, not only by status (#1865 review finding 6,
+        // mutant G22): BUDGET tokenless refusals spend the minute's named lines, then 25 with the read token are all summarised.
+        endRefusalMinute();
+        const scopeFrom = maxId();
+        for (let i = 0; i < BUDGET; i++) await call('POST', '/mcp', { body: init, headers: MCP_HEADERS });
+        await Promise.all(Array.from({ length: 25 }, () => call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(tRead.body.token) } })));
+        endRefusalMinute();
+        const readId: string = tRead.body.record.id;
+        const scopeMore = (db.prepare("SELECT message, metadata FROM system_logs WHERE category = 'AGENT' AND id > ?").all(scopeFrom) as Array<{ message: string; metadata: string | null }>)
+            .filter(l => /^Assistant refused \d+ more requests in that minute/.test(l.message));
+        const scopeMeta = scopeMore.length === 1 ? lineMeta(scopeMore[0]) : {};
+        assert(scopeMore.length === 1 && scopeMeta.grants?.[readId] === 25 && scopeMeta.byStatus?.['403'] === 25,
+            `25 wrong-scope refusals past the minute's ${BUDGET} lines: the summary counts them under the read token's grant and as 403 (${scopeMore.length} line, ${JSON.stringify(scopeMeta)})`);
+
         // ── 8. Revoke, method, Origin, the switch ─────────────────────────────────────────────────
         console.log('── 8. Revoked 401, GET 405, a foreign Origin 403, the switch off 404 ──');
         await client.close();
-        const revoke = await call('POST', `/api/local/admin/automation-tokens/${tAgent.body.record.id}/revoke`, { headers: asSession(ownerS), body: {} });
+        const revoke = await call('POST', `/api/local/admin/automation-tokens/${tAgent.body.grant.id}/revoke`, { headers: asSession(ownerS), body: {} });
         const afterRevoke = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(AGENT) } });
         await new Promise(r => setTimeout(r, 50));
         assert(revoke.status === 200 && afterRevoke.status === 401
             && getAlertsStatus().history.some(e => e.key === 'sec.agent' && /An AI assistant \(Claude Desktop\) was disconnected by an owner\./.test(e.detail)),
         `revoked: 401 on its next call, and owners are told it was disconnected (${show(afterRevoke)})`);
-        const tAgain = await make(asSession(ownerS), { name: 'Claude Desktop again', scope: 'agent' });
+        const tAgain = await make(asSession(ownerS), { name: 'Claude Desktop again' });
         assert(tAgain.status === 201, `the owner connects it again (${tAgain.status})`);
         const AGENT2: string = tAgain.body.token;
         secrets.push(AGENT2);

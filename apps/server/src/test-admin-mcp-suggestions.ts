@@ -173,9 +173,16 @@ async function main(): Promise<void> {
         const pwS = pw.sessionId;
         assert(!!ownerS && !!adminS && !!admin2S && !!modS && !!pwS, 'the owner, two admins and a moderator sign in with their keys; the password signs in');
         const mk = async (s: string | null, name: string) => (await call('POST', GRANTS, { headers: asSession(s), body: { name } })).body?.token as string;
-        const ADMIN_TOKEN = await mk(adminS, "Adam's Claude");
+        // Only owners make agent tokens through the route (S3); an admin's assistant (an owner who became an admin keeps one;
+        // S2's OAuth makes them) is minted in the store, as S3's suite seeds it.
+        const seed = (k: Key, name: string) => {
+            const r = issueAutomationToken({ name, scope: 'agent', expiresAt: Date.now() + 30 * 86_400_000, createdBy: k.pub });
+            if (!r.ok) throw new Error(r.error);
+            return r.token;
+        };
+        const ADMIN_TOKEN = seed(admin, "Adam's Claude");
         const OWNER_TOKEN = await mk(ownerS, "Olive's Claude");
-        const ADMIN2_TOKEN = await mk(admin2S, "Ada's Cursor");
+        const ADMIN2_TOKEN = seed(admin2, "Ada's Cursor");
         assert([ADMIN_TOKEN, OWNER_TOKEN, ADMIN2_TOKEN].every(t => /^bp_/.test(t ?? '')), 'each connects an assistant');
         const READ_TOKEN = (issueAutomationToken({ name: 'reader', scope: 'read', createdBy: owner.pub }) as any).token as string;
 

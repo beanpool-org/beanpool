@@ -18,11 +18,25 @@ const store = vi.hoisted(() => ({
     writes: [] as Array<{ sql: string; params: any[] }>,
 }));
 const partsOf = (id: string) => { if (!store.participants.has(id)) store.participants.set(id, new Set()); return store.participants.get(id)!; };
+/**
+ * Rows an `id IN (…)` lookup matches, in the order SQLite answers them: BINARY order, so upper case first (its index visits
+ * the IN list sorted), with the id an `ORDER BY id = ? DESC` asks for first (#1863 review, finding 4).
+ */
+const inSqliteOrder = <T>(rows: T[], idOf: (r: T) => string, first?: unknown) =>
+    [...rows].sort((a, b) => Number(idOf(b) === first) - Number(idOf(a) === first) || (idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0));
+/** The rows whose id matches `id` with ASCII case folded, as SQLite's NOCASE compares. */
+const convsNoCase = (id: string) => [...store.conversations.values()].filter((c) => c.id.toLowerCase() === String(id).toLowerCase());
 const mockDb = {
     execAsync: vi.fn(async () => undefined),
     closeAsync: vi.fn(async () => undefined),
     withTransactionAsync: vi.fn(async (cb: () => Promise<void>) => { await cb(); }),
     getFirstAsync: vi.fn(async (sql: string, params: any[] = []) => {
+        if (/SELECT id FROM conversations WHERE id IN \(/.test(sql)) {
+            const first = /ORDER BY id = \? DESC/.test(sql) ? params[params.length - 1] : undefined;
+            const ids = first === undefined ? params : params.slice(0, -1);
+            return inSqliteOrder(ids.map((p) => store.conversations.get(p)).filter((c) => c?.type === 'dm'), (c) => c!.id, first)[0] ?? null;
+        }
+        if (/FROM conversations WHERE id = \? COLLATE NOCASE AND type = 'dm'/.test(sql)) return convsNoCase(params[0]).find((c) => c.type === 'dm') ?? null;
         if (/FROM conversations WHERE id = \?/.test(sql)) return store.conversations.get(params[0]) ?? null;
         if (/SELECT author_pubkey FROM messages WHERE conversation_id = \?/.test(sql)) {
             return [...store.messages.values()].find(m => m.conversation_id === params[0] && m.author_pubkey !== params[1] && m.author_pubkey !== 'SYSTEM') ?? null;
@@ -31,6 +45,7 @@ const mockDb = {
         return null;
     }),
     getAllAsync: vi.fn(async (sql: string, params: any[] = []) => {
+        if (/SELECT id FROM conversations WHERE id = \? COLLATE NOCASE/.test(sql)) return convsNoCase(params[0]).map((c) => ({ id: c.id }));
         if (/SELECT public_key FROM conversation_participants WHERE conversation_id = \?/.test(sql)) {
             return [...partsOf(params[0])].map(public_key => ({ public_key }));
         }

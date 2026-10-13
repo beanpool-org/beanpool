@@ -112,6 +112,70 @@ export function blockersOf(key: string): Set<string> {
         .map(r => r.owner_pubkey));
 }
 
+// ── who blocked an author, kept from one push to the next ───────────────────────────────────────────────────────
+
+/**
+ * The block lists' version: one more for every row that any statement inserts, changes or deletes in member_blocks on
+ * this node's connection, counted by SQLite itself (temporary triggers, watchBlockWrites), so no writer can leave it
+ * behind: a block, an unblock, Unblock All, a prune, a self-deletion, a re-key's move, a standby's copy and its
+ * tombstones, a whole copy's start, and any written later. A rolled-back write moves it too, which only empties the
+ * kept lists once more.
+ */
+let blocksVersion = 0;
+let watching = false;
+/** What blockersOfKept read, by key, at `keptAt`; emptied whenever the version moves on. */
+const kept = new Map<string, Set<string>>();
+let keptAt = -1;
+let keptKeys = 0;
+/** The most keys the kept lists hold together (an author nobody blocked counts as one). Past it they start again. */
+export const KEPT_BLOCKERS_MAX = 100_000;
+
+/** The block lists' version (blocksVersion above). */
+export function blockListsVersion(): number {
+    return blocksVersion;
+}
+
+/**
+ * Has SQLite count every write to member_blocks on this connection from now on (blocksVersion). Once per process; the
+ * first kept read calls it, so nothing was kept before the count began. Its triggers are TEMP: on this connection
+ * only, never stored in the database, never copied, and gone with the process.
+ */
+export function watchBlockWrites(): void {
+    if (watching) return;
+    db.function('member_blocks_written', { deterministic: false }, () => { blocksVersion++; return null; });
+    for (const op of ['INSERT', 'UPDATE', 'DELETE']) {
+        db.exec(`CREATE TEMP TRIGGER IF NOT EXISTS member_blocks_${op.toLowerCase()}_counted AFTER ${op} ON main.member_blocks
+                 BEGIN SELECT member_blocks_written(); END`);
+    }
+    watching = true;
+}
+
+/**
+ * blockersOf, kept until the block lists change (a listing's push by area reads its author's at every event: an author
+ * blocked by 10,000 members cost 3.5 ms a push to read, #1831). The next read after any write to member_blocks reads
+ * the table again, so a block or an unblock holds from the next push, as before. Inside a transaction it reads the
+ * table and keeps nothing: a write there may still be rolled back, and the rollback writes no row.
+ */
+export function blockersOfKept(key: string): ReadonlySet<string> {
+    if (db.inTransaction) return blockersOf(key);
+    watchBlockWrites();
+    if (keptAt !== blocksVersion) {
+        kept.clear();
+        keptKeys = 0;
+        keptAt = blocksVersion;
+    }
+    const known = kept.get(key);
+    if (known) return known;
+    const read = blockersOf(key);
+    if (keptKeys + read.size + 1 > KEPT_BLOCKERS_MAX) {
+        kept.clear();
+        keptKeys = 0;
+    }
+    kept.set(key, read);
+    keptKeys += read.size + 1;
+    return read;
+}
+
 /** A member's own list, oldest block first. */
 export function listBlocks(owner: string): MemberBlock[] {
     return (db.prepare('SELECT blocked_pubkey, created_at FROM member_blocks WHERE owner_pubkey = ? ORDER BY created_at, blocked_pubkey')

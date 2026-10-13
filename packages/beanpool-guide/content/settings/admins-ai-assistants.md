@@ -5,7 +5,7 @@ summary: What an owner's or admin's AI assistant can read about you, what it nev
 related: what-the-admins-can-see, reporting, privacy, joining
 ---
 
-Your community's owners and admins can connect their own AI assistant (for example Claude or ChatGPT) to your community's server, to help them look after it: to ask what needs them, or to summarise the open reports. They connect it themselves, and they can disconnect it at any time. The other owners are told when one is connected.
+Your community's owners can connect their own AI assistant (for example Claude or ChatGPT) to your community's server, to help them look after it: to ask what needs them, or to summarise the open reports. Admins will be able to as well, approved on their phone, in a coming update. They connect it themselves, and they can disconnect it at any time. The other owners are told when one is connected.
 
 ## What it can read about you
 

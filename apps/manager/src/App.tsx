@@ -44,7 +44,7 @@ import {
     type NodeDataPayload,
 } from './lib/node-client';
 
-import { FleetSidebar, type TabId, type NodeHealthStatus, type AlertCounts } from './components/layout/FleetSidebar';
+import { FleetSidebar, isTabId, type TabId, type NodeHealthStatus, type AlertCounts } from './components/layout/FleetSidebar';
 import { AddNodeModal } from './components/nodes/AddNodeModal';
 import { EditNodeModal } from './components/nodes/EditNodeModal';
 import { TotpModal } from './components/nodes/TotpModal';
@@ -158,11 +158,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     });
     const [activeTab, setActiveTab] = useState<TabId>(() => {
         try {
-            const saved = (localStorage.getItem(isFleetMode ? 'bp_fleet_active_tab' : 'bp_settings_active_tab') as TabId);
-            if (saved) return saved;
+            const saved = localStorage.getItem(isFleetMode ? 'bp_fleet_active_tab' : 'bp_settings_active_tab');
+            if (isTabId(saved)) return saved;
         } catch {}
         return isFleetMode ? 'overview' : 'home';
     });
+    // The fleet copilot is gone (#1865): what it kept in this browser, an OpenRouter key among it, goes with it.
+    useEffect(() => {
+        try { localStorage.removeItem('bp_fleet_ai_config'); } catch {}
+    }, []);
     const [navSubTab, setNavSubTab] = useState<string | undefined>(undefined);
 
     /**

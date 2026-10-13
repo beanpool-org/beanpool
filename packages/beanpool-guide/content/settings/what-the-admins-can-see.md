@@ -79,7 +79,7 @@ Nothing else of your trades.
 
 ## An admin's AI assistant
 
-An owner or admin may connect their own AI assistant to the server to help them. It sees less than they do: never your messages, balance, trades, keys, photos or the names list, and never who reported anyone. See "When an admin uses an AI assistant".
+An owner (and, in a coming update, an admin) may connect their own AI assistant to the server to help them. It sees less than they do: never your messages, balance, trades, keys, photos or the names list, and never who reported anyone. See "When an admin uses an AI assistant".
 
 ## Asking about your entry
 

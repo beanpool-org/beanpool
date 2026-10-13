@@ -15,7 +15,8 @@ process.env.BEANPOOL_ADDRESSES = OWN_NAME;
 import crypto from 'node:crypto';
 import { buildBoundRequestHeaders, ed25519Signer } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, broadcast } from './state-engine.js';
+import { registerMemberInternal } from './engine/members.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { localFetch } from './keepalive-test-fetch.js';
@@ -36,11 +37,18 @@ function keypair(callsign: string): Id {
     return { pk: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), seed, callsign };
 }
 let memberNo = 0;
-/** A new member of this node, joined just now with no trades (so with no connection in common the band is red). */
-function member(prefix: string): Id {
-    const id = keypair(`${prefix}-${String(++memberNo).padStart(3, '0')}`);
-    seedGenesisMember(id.pk, id.callsign);
+/** The one founder, who holds `owner` (seedGenesisMember grants it) and only invites: no check reads as them. */
+let founder: Id | null = null;
+/** A plain member of this node (invited by the founder: no owner or admin role), joined just now with no trades, so
+ *  with no connection in common the band is red. The trade-safety band is mostly read by plain members, so every
+ *  viewer, friend, target and attacker here is one (#1911 review finding 1: a rule kept only for owners passed). */
+function join(id: Id): Id {
+    if (!founder) { founder = keypair('founder'); seedGenesisMember(founder.pk, founder.callsign); }
+    if (!registerMemberInternal(broadcast, id.pk, id.callsign, founder.pk, null)) throw new Error(`could not join ${id.callsign}`);
     return id;
+}
+function member(prefix: string): Id {
+    return join(keypair(`${prefix}-${String(++memberNo).padStart(3, '0')}`));
 }
 
 /** Set-up rows, seeded straight into the table: `a` has added `b`. */
@@ -136,7 +144,7 @@ async function main() {
         resetGatewayRateLimit();
         const v = member('t2b-viewer'), t2 = member('t2b-target');
         const refs = Array.from({ length: 13 }, () => keypair('')).sort((x, y) => (x.pk < y.pk ? -1 : 1));
-        refs.forEach((r, i) => { r.callsign = `t2b-ref-${String(13 - i).padStart(2, '0')}`; seedGenesisMember(r.pk, r.callsign); });
+        refs.forEach((r, i) => { r.callsign = `t2b-ref-${String(13 - i).padStart(2, '0')}`; join(r); });
         for (const r of refs) { bothWays(v, r); bothWays(r, t2); }
         const q = await profile(v, t2);
         const want = refs.map(r => r.callsign).sort().slice(0, 12);
@@ -239,6 +247,27 @@ async function main() {
         const ok = await profile(a, t);
         assert(ok.status === 200 && JSON.stringify(keys(ok.body)) === JSON.stringify([f.pk]), `T8: a member still reads it (${ok.status})`);
     }
+
+    // T9 — two viewers of one target get their own answers, in either order: V1↔F↔T names F for V1; V2, who knows none
+    // of them, gets nobody. A list kept per target and handed to the next viewer fails here (review finding 2, R2).
+    {
+        resetGatewayRateLimit();
+        const v1 = member('t9-viewer1'), v2 = member('t9-viewer2'), f = member('t9-friend'), t = member('t9-target');
+        bothWays(v1, f); bothWays(f, t);
+        for (const order of [[v1, v2], [v2, v1]] as const) {
+            const seen = new Map<string, any>();
+            for (const v of order) seen.set(v.pk, (await profile(v, t)).body);
+            const label = order[0] === v1 ? 'V1 then V2' : 'V2 then V1';
+            assert(JSON.stringify(keys(seen.get(v1.pk))) === JSON.stringify([f.pk]) && seen.get(v1.pk)?.mutualCount === 1,
+                `T9 ${label}: V1 sees F (${names(seen.get(v1.pk)).join(',') || 'none'})`);
+            assert(keys(seen.get(v2.pk)).length === 0 && seen.get(v2.pk)?.mutualCount === 0 && seen.get(v2.pk)?.risk?.band === 'red',
+                `T9 ${label}: V2 sees nobody, red (${names(seen.get(v2.pk)).join(',') || 'none'}, ${seen.get(v2.pk)?.risk?.band})`);
+        }
+    }
+
+    // Every actor above was a plain member: only the founder holds a role.
+    const roled = (db.prepare('SELECT member_pubkey FROM node_roles').all() as { member_pubkey: string }[]).map(r => r.member_pubkey);
+    assert(roled.length === 1 && roled[0] === founder?.pk, `every viewer, friend and target was a plain member: only the founder has a role (${roled.length})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

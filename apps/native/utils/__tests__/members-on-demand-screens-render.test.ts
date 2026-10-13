@@ -170,6 +170,8 @@ vi.mock('../../app/ThemeContext', async () => {
 // The screens read it through useNodeProfile, the db's syncMessages from the phone's copy (getCachedNodeProfile): one answer.
 const community = vi.hoisted(() => ({
     membersOnDemand: true,
+    // The worldwide community as it ships also shows its switched-off features from Example Valley (#1852).
+    showcase: false,
     // On a real phone useNodeProfile starts null and answers a moment after the screen mounts; set, it answers this late.
     lateMs: 0,
     area: { lat: -28.55, lng: 153.5 } as null | { lat: number; lng: number },
@@ -177,7 +179,7 @@ const community = vi.hoisted(() => ({
         const on = this.membersOnDemand;
         return {
             profile: on ? 'global' : 'local', checkedAt: new Date().toISOString(),
-            features: { beans: !on, escrow: !on, invites: !on, decisions: !on, exampleListings: false, ...(on ? { membersOnDemand: true } : {}) },
+            features: { beans: !on, escrow: !on, invites: !on, decisions: !on, exampleListings: false, ...(on ? { membersOnDemand: true } : {}), ...(this.showcase ? { showcase: true } : {}) },
         };
     },
 }));
@@ -255,6 +257,7 @@ import ChatsScreen from '../../app/(tabs)/chats';
 import PublicProfileScreen from '../../app/public-profile';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { InvitePeopleSheet } from '../../components/InvitePeopleSheet';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 
 const realLoad = (Module as any)._load;
 beforeAll(() => {
@@ -275,6 +278,7 @@ beforeEach(async () => {
     nav.params = {};
     nav.pushed.length = 0;
     community.membersOnDemand = true;
+    community.showcase = false;
     community.lateMs = 0;
     community.area = { lat: -28.55, lng: 153.5 };
     globalThis.fetch = vi.fn(nodeFetch) as typeof fetch;
@@ -682,6 +686,49 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(text()).toContain('Rosa');
                 expect(text()).not.toContain('Connect to see more');
                 await fits([OWN, ROSA]);
+            });
+        });
+
+        // Both switches on, as the worldwide community ships: members on demand's live lists and the showcase's
+        // preview lines on the same screens (#1859 merged with #1852).
+        describe('The worldwide community with the showcase on too', () => {
+            beforeEach(() => { community.showcase = true; });
+
+            it('People → Community: still the 50 nearest from one small read, and no whole directory', async () => {
+                await render(createElement(PeopleScreen));
+                await settle(450);
+                expect(membersRequests()).toEqual([`/api/members?lat=-28.55&lng=153.5&limit=50`]);
+                expect(text()).toContain('Near you: the 50 closest members. Search a name to find anyone else.');
+                expect(text()).toContain('about 3 km');
+                await fits([OWN]);
+            });
+
+            it("People → Invites: the showcase's line, the member's codes never asked for, no whole directory", async () => {
+                nav.params = { view: 'invites' };
+                await render(createElement(PeopleScreen));
+                await settle(100);
+                expect(text()).toContain(LOCAL_COMMUNITY_LINES.invites);
+                expect(node.requests.filter(r => r.startsWith('/api/invite/mine'))).toEqual([]);
+                await fits([OWN]);
+            });
+
+            it("Public profile: the card by key in one request, and the showcase's trust line", async () => {
+                nav.params = { publicKey: KOFI };
+                await render(createElement(PublicProfileScreen));
+                expect(membersRequests()).toEqual([`/api/members?keys=${KOFI}`]);
+                expect(text()).toContain('Kofi');
+                expect(text()).toContain(LOCAL_COMMUNITY_LINES.profile);
+                await fits([OWN, KOFI]);
+            });
+
+            it('Public profile offline with no card: the key\'s first 8 characters and "Connect to see more", beside the trust line', async () => {
+                node.online = false;
+                nav.params = { publicKey: ROSA };
+                await render(createElement(PublicProfileScreen));
+                expect(text()).toContain(ROSA.slice(0, 8));
+                expect(text()).toContain('Connect to see more');
+                expect(text()).toContain(LOCAL_COMMUNITY_LINES.profile);
+                await fits([OWN]);
             });
         });
     });

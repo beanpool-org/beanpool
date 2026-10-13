@@ -84,6 +84,7 @@ import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type Adm
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
+import { noteNewReport } from '../services/alerts.js';
 import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
@@ -2099,6 +2100,9 @@ router.post('/api/reports', async (ctx) => {
         ctx.body = { error: 'Failed — must be a registered member, cannot report yourself' };
         return;
     }
+    // The owners and admins hear of it (by kind and count, never who or what): not awaited, so a slow alert channel
+    // never holds the reporter's answer.
+    noteNewReport(reason).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
     ctx.body = { success: true, report };
 });
 

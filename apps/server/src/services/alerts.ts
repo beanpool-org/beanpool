@@ -19,6 +19,12 @@
  * another with the same keys, told urgent and daily until an owner acknowledges it. A one-shot security event counts in
  * the banner for a day, or until an owner acknowledges it. Each says what happened and how, never who.
  *
+ * And reports coming in (the launch-readiness review's B9): the first report is told at once, and those that follow
+ * inside the fold window (an hour, or ALERTS_REPORT_FOLD_MINUTES in .env) are counted and told as one line when it is
+ * over: "N more reports came in", by kind (the reason the member picked: spam or scam, offensive, misleading, child
+ * safety, other). A child-safety report is told at once, urgent, every time, and never folded. Owners and admins are
+ * pushed (admins act on reports); the line says how many and what kind, never who reported whom or what they wrote.
+ *
  * A condition that starts is told once (raised), again every 24 hours while it lasts (still), and once when it has been
  * over for 15 minutes (resolved). Back within those 15 minutes, nothing is told: the condition just goes on. One that
  * starts again within 6 hours of a told end is told as `still`, not as new. So a condition that swings back within 15
@@ -119,7 +125,8 @@ export type AlertKey =
     | 'standby.incident'
     | 'tls.fallback'
     | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
-    | 'sec.log';
+    | 'sec.log'
+    | 'reports.new' | 'reports.child';
 
 interface Row {
     title: string;
@@ -160,6 +167,10 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.seen': { title: 'security alerts marked as seen', priority: 2, webhook: false, pushEveryMs: 0, banner: false },
     /** A logger.security() line was written (design §3.2): kept in the history only, one line per category, counted. */
     'sec.log': { title: 'security log lines', priority: 1, webhook: false, pushEveryMs: 0, banner: false },
+    /** Reports in the Manager's queue (noteNewReport): the first at once, the rest of the fold window as one line. */
+    'reports.new': { title: 'new reports waiting', priority: 3, webhook: true, pushEveryMs: EACH, banner: false },
+    /** A report in the child-safety category: urgent, told and pushed every time, never folded. */
+    'reports.child': { title: 'a child-safety report waiting', priority: 5, webhook: true, pushEveryMs: EACH, banner: false },
 };
 
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
@@ -254,12 +265,20 @@ interface BookState {
     recent: AlertEvent[];
     /** Each actor's hour of security events, by a hash of who acted (never the key itself). */
     actors: Record<string, ActorHour>;
+    /** The open fold window of new reports (noteNewReport): when its first was told, and what came in after it, by kind. */
+    reports: ReportWindow | null;
+}
+
+interface ReportWindow {
+    from: number;
+    folded: number;
+    kinds: Partial<Record<ReportKind, number>>;
 }
 
 const emptyChannel = (): ChannelState => ({ lastOkAt: null, lastTriedAt: null, failedInARow: 0, error: null, nextTryAt: 0 });
 const emptyState = (): BookState => ({
     raised: {}, clearedAt: {}, waiting: [], history: [], pushedAt: {}, sentAt: [], channel: emptyChannel(), dropped: 0,
-    diskTicks: { '80': 0, '90': 0, '95': 0 }, watchdogRecoveries: null, seenAt: {}, acked: {}, recent: [], actors: {},
+    diskTicks: { '80': 0, '90': 0, '95': 0 }, watchdogRecoveries: null, seenAt: {}, acked: {}, recent: [], actors: {}, reports: null,
 });
 
 let clockOffsetMs = 0;
@@ -916,6 +935,107 @@ export async function acknowledgeSecurityAlerts(by: 'owner' | 'password' = 'owne
     return { replacedAcknowledged: !!info };
 }
 
+// ── Reports coming in (B9) ─────────────────────────────────────────────────────────────────
+
+export type ReportKind = 'child safety' | 'spam or scam' | 'offensive content' | 'misleading post' | 'other';
+
+/** The fold window when .env sets none: the first report told at once, the rest of the hour as one line. */
+export const REPORT_FOLD_DEFAULT_MINUTES = 60;
+const REPORT_FOLD_MIN_MINUTES = 1;
+const REPORT_FOLD_MAX_MINUTES = 24 * 60;
+
+/** ALERTS_REPORT_FOLD_MINUTES in .env (1 to 1440, whole minutes), else an hour; a value out of range is the default. */
+export function reportFoldMs(env: NodeJS.ProcessEnv = process.env): number {
+    const raw = env.ALERTS_REPORT_FOLD_MINUTES?.trim();
+    const n = raw && /^\d+$/.test(raw) ? Number(raw) : NaN;
+    const minutes = n >= REPORT_FOLD_MIN_MINUTES && n <= REPORT_FOLD_MAX_MINUTES ? n : REPORT_FOLD_DEFAULT_MINUTES;
+    return minutes * 60_000;
+}
+
+/** The child-safety category, whether picked from a list or written in: read to sort the report, never repeated. */
+const CHILD_SAFETY = /\b(child[- ]safety|csae|csam|child (sexual|abuse|exploitation|porn)\w*|sexual(ly)? (abuse|exploit)\w* (of )?(a )?(child|minor)s?|underage)\b/i;
+
+/** What kind a report is, from its reason: one of the apps' fixed choices, child safety, or other. Never its words. */
+export function reportKind(reason: unknown): ReportKind {
+    const r = typeof reason === 'string' ? reason.trim().toLowerCase() : '';
+    if (CHILD_SAFETY.test(r)) return 'child safety';
+    for (const k of ['spam or scam', 'offensive content', 'misleading post'] as const) if (r.startsWith(k)) return k;
+    return 'other';
+}
+
+function pendingReports(): number {
+    try {
+        return (db.prepare("SELECT COUNT(*) AS c FROM abuse_reports WHERE status = 'pending'").get() as { c: number }).c;
+    } catch {
+        return 0;
+    }
+}
+
+/** The admins who act: pushed with the owners for a report (they work the queue). */
+function admins(): string[] {
+    return (db.prepare(
+        `SELECT nr.member_pubkey AS pk FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.role = 'admin' AND ${NODE_ROLE_ACTS}`,
+    ).all() as { pk: string }[]).map((r) => r.pk);
+}
+
+function waitingWords(n: number): string {
+    return `${n} report${n === 1 ? '' : 's'} ${n === 1 ? 'waits' : 'wait'} in the Manager's Reports queue.`;
+}
+
+function minutesWords(ms: number): string {
+    const m = Math.round(ms / 60_000);
+    return m === 60 ? 'the hour' : m % 60 === 0 ? `the ${m / 60} hours` : `the ${m} minute${m === 1 ? '' : 's'}`;
+}
+
+/** The fold window that is over: what it counted after its first, told as one line (pushed), and the window closed. */
+function foldedReportConditions(s: BookState, t: number, foldMs: number = reportFoldMs()): Condition[] {
+    const w = s.reports;
+    if (!w || t - w.from < foldMs) return [];
+    s.reports = null;
+    if (w.folded === 0) return [];
+    const kinds = (Object.entries(w.kinds) as Array<[ReportKind, number]>).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ');
+    let also: string[] = [];
+    try { also = admins(); } catch { /* the owners still are */ }
+    return [{
+        key: 'reports.new', active: true, oneShot: true, alsoPush: also,
+        detail: `${w.folded} more report${w.folded === 1 ? '' : 's'} came in in ${minutesWords(foldMs)} after the first was told (${kinds}). `
+            + waitingWords(pendingReports()),
+    }];
+}
+
+/**
+ * A new report in the queue (routes/community.ts POST /api/reports, once a new row is written): told to the owners and
+ * admins, by kind and count only. The first of a fold window goes at once; the rest are counted in memory (the tick
+ * writes the book every minute, so a crash loses at most a minute of counts, and the reports themselves are in the
+ * queue) and told as one line when the window is over. A child-safety one is told at once, urgent and pushed, every time.
+ */
+export function noteNewReport(reason: unknown): Promise<AlertEvent[]> {
+    const s = readState();
+    const t = now();
+    const kind = reportKind(reason);
+    const conditions = foldedReportConditions(s, t);
+    let also: string[] = [];
+    try { also = admins(); } catch { /* the owners still are */ }
+    if (kind === 'child safety') {
+        conditions.push({
+            key: 'reports.child', active: true, oneShot: true, high: true, priority: 5, alsoPush: also,
+            detail: `A report in the child-safety category came in: look at it first. ${waitingWords(pendingReports())}`,
+        });
+    } else if (!s.reports) {
+        s.reports = { from: t, folded: 0, kinds: {} };
+        conditions.push({
+            key: 'reports.new', active: true, oneShot: true, alsoPush: also,
+            detail: `A new report came in (${kind}). ${waitingWords(pendingReports())} More in ${minutesWords(reportFoldMs())} are told as one line.`,
+        });
+    } else {
+        s.reports.folded++;
+        s.reports.kinds[kind] = (s.reports.kinds[kind] ?? 0) + 1;
+    }
+    if (!conditions.length) return Promise.resolve([]);
+    return updateAlerts(conditions);
+}
+
 // ── The conditions ─────────────────────────────────────────────────────────────────────────
 
 function bootsFile(): string {
@@ -1075,6 +1195,7 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             ...securityQuietConditions(s, t),
             ...nameConditions(),
             ...foldedConditions(s, t),
+            ...foldedReportConditions(s, t),
         ];
         return await updateAlerts(conditions);
     } catch (e) {

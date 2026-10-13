@@ -45,7 +45,7 @@ import { pruneAgedOut } from './engine/plain-tables.js';
 import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
 import { pruneOldActivity, renameMemberInActivity } from './db/activity-feed-db.js';
-import { scrubChannelRows } from './engine/creator-channels.js';
+import { scrubChannelRows, clearUnprovenOauthBadges } from './engine/creator-channels.js';
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
@@ -54,7 +54,7 @@ import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
-import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
+import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
@@ -226,6 +226,8 @@ import {
     getMembers as getMembersEngine,
     getAllMembers as getAllMembersEngine,
     getMemberDirectoryRows as getMemberDirectoryRowsEngine,
+    getMemberDirectoryRowsByKeys as getMemberDirectoryRowsByKeysEngine,
+    searchMemberDirectoryRows as searchMemberDirectoryRowsEngine,
     checkInvite as checkInviteEngine,
     verifyOfflineTicket as verifyOfflineTicketEngine,
     getInvitesByMember as getInvitesByMemberEngine,
@@ -646,6 +648,9 @@ export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
+    // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
+    try { clearUnprovenOauthBadges(); } catch (e) { console.error('[Boot] Could not clear unproven channel badges:', e); }
     clearEnterpriseFloorCache();
     migrateLegacyState();
     // NODE_PROFILE decides what the node runs as; node_config.nodeProfile records it, and a main server recorded as
@@ -1544,13 +1549,14 @@ function keepersOf(treasuries: string[]): Set<string> {
  * and not yet done: a member's set ties them to it, getNearbySet) or of one a removal just closed (`extraParties`,
  * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. A member near it who blocked its author
  * is not reached, as their set holds none of that author's listings (getNearbySet: the member's own list, never the
- * author's); a party is, blocked or not, as their set keeps the listings they are tied to. The block list is read at
- * each event, so a block or an unblock holds from the next one (#1812). Every other socket gets nothing, not
+ * author's); a party is, blocked or not, as their set keeps the listings they are tied to. The author's blockers are
+ * kept from one event to the next until any write to member_blocks (blockersOfKept), so a block or an unblock holds from
+ * the next one (#1812), and an author blocked by thousands costs a lookup, not a read (#1831). Every other socket gets nothing, not
  * even a doorbell (a doorbell sends an app back for every listing): one with no area, or with no member's key, among
  * them. Their apps have the newest listings and the poll. A listing with no place reaches
  * its parties alone. The place and the parties are the stored row's, so an event carrying only an id is measured as one
- * carrying the post. Everything is read once for the event (the author's blockers too, one read on
- * idx_member_blocks_blocked, not one per socket); each socket is then a lookup and a distance, no read.
+ * carrying the post. Everything is read once for the event (the author's blockers at most once, never once a socket);
+ * each socket is then a lookup and a distance, no read.
  *
  * Null for an event that names no listing, or one not on this node: it goes as before. That is a bare doorbell for many
  * listings at once (a burst's hide, engine/burst-cleanup.ts), rare and about no one place.
@@ -1575,7 +1581,7 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
     const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
         .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
-    const blockers = placed ? blockersOf(row.author_pubkey) : null;
+    const blockers = placed ? blockersOfKept(row.author_pubkey) : null;
     const reaches = (pubkey: string | null | undefined) => {
         if (!pubkey) return false;
         if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
@@ -1812,6 +1818,16 @@ export function getAllMembers(): Member[] {
 /** The member directory's rows, every one or those changed after a delta cursor (engine members.ts). */
 export function getMemberDirectoryRows(updatedAfter?: unknown): DirectoryRow[] {
     return getMemberDirectoryRowsEngine(db, updatedAfter);
+}
+
+/** The directory's rows of these members, in the order asked; with `updatedAfter`, only those changed after it (engine members.ts). */
+export function getMemberDirectoryRowsByKeys(keys: string[], updatedAfter?: string): DirectoryRow[] {
+    return getMemberDirectoryRowsByKeysEngine(db, keys, updatedAfter);
+}
+
+/** The members whose name starts with `prefix`, shortest first, at most `limit` (engine members.ts). */
+export function searchMemberDirectoryRows(prefix: string, limit: number): DirectoryRow[] {
+    return searchMemberDirectoryRowsEngine(db, prefix, limit);
 }
 
 // ===================== INVITE CODES =====================

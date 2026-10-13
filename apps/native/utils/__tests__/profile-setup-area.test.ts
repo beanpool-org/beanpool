@@ -55,8 +55,9 @@ const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(64), callsi
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: IDENTITY, setIdentity: vi.fn() }) }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
+    const { onboardingColors } = await import('../onboarding-colors');
     const ctx = { colors: lightColors, theme: 'light' };
-    return { useTheme: () => ctx, useStyles: (f: (t: unknown) => unknown) => f(ctx) };
+    return { useTheme: () => ctx, useStyles: (f: (t: unknown) => unknown) => f(ctx), useOnboardingColors: () => onboardingColors('light') };
 });
 vi.mock('react-native-safe-area-context', () => ({
     useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }),

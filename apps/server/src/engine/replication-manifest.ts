@@ -282,7 +282,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     creator_channels: {
         kind: 'replicated-except', payload: 'creatorChannels', watermark: 'updated_at',
-        columns: cols('id owner_pubkey platform url handle category is_primary_video supports_autolist oauth_verified_at post_count_seen autopublish syndicate_to_node created_at updated_at deleted_at'),
+        columns: cols('id owner_pubkey platform url handle category is_primary_video supports_autolist oauth_verified_at platform_account_id verified_handle post_count_seen autopublish syndicate_to_node created_at updated_at deleted_at'),
         except: {
             fail_count: { reason: "the harvester's own record of failed fetches on this server; a promoted server's harvester starts afresh" },
             last_error: { reason: "the harvester's own record of failed fetches on this server" },
@@ -637,6 +637,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     replicationTokenSalt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     replicationTokenCreatedAt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     replicationTokenOnly: { kind: 'per-server', reason: "the token this server's standbys pull with" },
+    aiAssistantsAllowed: { kind: 'per-server', reason: "the owner switch for this server's AI assistant endpoint (/mcp), beside its agent tokens" },
     automationTokens: { kind: 'per-server', reason: "owners' automation tokens (hashes) for this server; never in a backup file, the stager's copy or the bundle" },
     backupReplicationToken: { kind: 'per-server', reason: "a standby's token for its main server" },
     backupPullSeconds: { kind: 'per-server', reason: "a standby's pull interval" },
@@ -681,6 +682,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     credit_cap: { kind: 'community-settings', reason: "the community's credit cap in Beans (config/known-floor.ts)" },
     health_debt_line_pct: { kind: 'community-settings', reason: "the Community health panel's debt line, a % of the credit line (engine/community-health.ts)" },
     health_quiet_days: { kind: 'community-settings', reason: "the Community health panel's days in debit without a sale (engine/community-health.ts)" },
+    startCommunityUrl: { kind: 'community-settings', reason: "where the Local community sheet's Start a community leads (config/start-community.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

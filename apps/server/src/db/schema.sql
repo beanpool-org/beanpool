@@ -1203,7 +1203,7 @@ CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     level TEXT NOT NULL CHECK (level IN ('INFO', 'WARN', 'ERROR', 'SECURITY', 'SYNC')),
-    category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS')),
+    category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS', 'AGENT')),
     message TEXT NOT NULL,
     metadata TEXT -- JSON string metadata
 );
@@ -2089,9 +2089,15 @@ CREATE TABLE IF NOT EXISTS creator_channels (
     -- Whether the node can list this channel's items unaided (YouTube/RSS = 1). Instagram and
     -- TikTok cannot be enumerated without OAuth, so they arrive one item at a time and stay 0.
     supports_autolist INTEGER NOT NULL DEFAULT 0,
-    -- Set only by a completed OAuth connection. It is the ONLY proof that a handle belongs to the
-    -- member claiming it — a typed handle is a claim, not a fact.
+    -- Set only when THIS node asked the platform who a token belongs to and the platform named
+    -- exactly this channel's account (engine/platform-identity.ts, #1830). It is the ONLY proof that
+    -- a handle belongs to the member claiming it — a typed handle is a claim, not a fact.
     oauth_verified_at DATETIME,
+    -- The platform's stable id for that account (TikTok open_id, Instagram user_id), so a renamed
+    -- account keeps its badge on reconnect. Owner-only; NULLed with the badge and on delete.
+    platform_account_id TEXT,
+    -- The handle the platform named at the last verification. NULLed with the badge and on delete.
+    verified_handle   TEXT,
     -- Last post count seen on the channel, for the "you've posted 2 new things" nudge. A
     -- watermark, never a backlog: it advances on dismissal as well as on action.
     post_count_seen   INTEGER,

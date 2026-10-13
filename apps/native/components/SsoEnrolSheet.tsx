@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, ScrollView } from 'react-native';
-import { colors } from '../constants/colors';
+import { type AppColors } from '../constants/colors';
+import { useOnboardingColors } from '../app/ThemeContext';
 import { anchorUrl } from '../utils/node-post';
 import { hasVault } from '../utils/vault-config';
 import { SsoSignInError, returnToApp } from '../utils/sso-signin';
@@ -34,6 +35,8 @@ export function SsoEnrolSheet({
      */
     askPhoneLock?: boolean;
 }): React.JSX.Element | null {
+    const { colors } = useOnboardingColors();
+    const styles = useMemo(() => makeStyles(colors), [colors]);
     const PROVIDER_NAME = SSO_PROVIDER_NAMES[provider];
     /** Where this build keeps the copy (utils/vault.ts `signInCopiesAt`): fixed when the app is built. */
     const atVault = hasVault();
@@ -245,94 +248,96 @@ export function SsoEnrolSheet({
     );
 }
 
-const styles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        justifyContent: 'flex-end',
-        backgroundColor: colors.overlay.scrim,
-    },
-    sheet: {
-        backgroundColor: colors.surface.card,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        padding: 24,
-        // More on Android: set clear of the clipboard chip Android floats over the bottom-left
-        // after a copy, back when this sheet copied a code, and not measured lower since. 96px
-        // everywhere pushed content, including Cancel, off a 320dp screen at 1.3x font scale.
-        paddingBottom: Platform.OS === 'android' ? 80 : 40,
-        minHeight: 320,
-    },
-    sheetScroll: {
-        // Bounded so the sheet cannot grow past the viewport, and scrollable so a small screen at
-        // large font scale can still reach the Cancel button rather than having it clipped.
-        maxHeight: '90%',
-        flexGrow: 0,
-    },
-    content: {
-        flex: 1,
-    },
-    centerContent: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: 200,
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: colors.text.heading,
-        marginBottom: 16,
-    },
-    body: {
-        fontSize: 16,
-        color: colors.text.body,
-        lineHeight: 24,
-        marginBottom: 24,
-    },
-    warningBox: {
-        backgroundColor: colors.feedback.warning.bg,
-        borderColor: colors.feedback.warning.border,
-        borderWidth: 1,
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 32,
-    },
-    warningText: {
-        fontSize: 14,
-        color: colors.feedback.warning.fg,
-        lineHeight: 20,
-    },
-    processingText: {
-        fontSize: 16,
-        color: colors.text.secondary,
-        marginTop: 16,
-        textAlign: 'center',
-    },
-    successIconWrapper: {
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    successIcon: {
-        fontSize: 48,
-    },
-    primaryButton: {
-        backgroundColor: colors.brand.primary,
-        borderRadius: 12,
-        paddingVertical: 16,
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    primaryButtonText: {
-        color: colors.text.inverse,
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    secondaryButton: {
-        paddingVertical: 16,
-        alignItems: 'center',
-    },
-    secondaryButtonText: {
-        color: colors.text.secondary,
-        fontSize: 16,
-    },
-});
+function makeStyles(colors: AppColors) {
+    return StyleSheet.create({
+        overlay: {
+            flex: 1,
+            justifyContent: 'flex-end',
+            backgroundColor: colors.overlay.scrim,
+        },
+        sheet: {
+            backgroundColor: colors.surface.card,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            padding: 24,
+            // More on Android: set clear of the clipboard chip Android floats over the bottom-left
+            // after a copy, back when this sheet copied a code, and not measured lower since. 96px
+            // everywhere pushed content, including Cancel, off a 320dp screen at 1.3x font scale.
+            paddingBottom: Platform.OS === 'android' ? 80 : 40,
+            minHeight: 320,
+        },
+        sheetScroll: {
+            // Bounded so the sheet cannot grow past the viewport, and scrollable so a small screen at
+            // large font scale can still reach the Cancel button rather than having it clipped.
+            maxHeight: '90%',
+            flexGrow: 0,
+        },
+        content: {
+            flex: 1,
+        },
+        centerContent: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: 200,
+        },
+        title: {
+            fontSize: 24,
+            fontWeight: 'bold',
+            color: colors.text.heading,
+            marginBottom: 16,
+        },
+        body: {
+            fontSize: 16,
+            color: colors.text.body,
+            lineHeight: 24,
+            marginBottom: 24,
+        },
+        warningBox: {
+            backgroundColor: colors.feedback.warning.bg,
+            borderColor: colors.feedback.warning.border,
+            borderWidth: 1,
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 32,
+        },
+        warningText: {
+            fontSize: 14,
+            color: colors.feedback.warning.fg,
+            lineHeight: 20,
+        },
+        processingText: {
+            fontSize: 16,
+            color: colors.text.secondary,
+            marginTop: 16,
+            textAlign: 'center',
+        },
+        successIconWrapper: {
+            alignItems: 'center',
+            marginBottom: 16,
+        },
+        successIcon: {
+            fontSize: 48,
+        },
+        primaryButton: {
+            backgroundColor: colors.brand.primary,
+            borderRadius: 12,
+            paddingVertical: 16,
+            alignItems: 'center',
+            marginBottom: 12,
+        },
+        primaryButtonText: {
+            color: colors.text.inverse,
+            fontSize: 16,
+            fontWeight: 'bold',
+        },
+        secondaryButton: {
+            paddingVertical: 16,
+            alignItems: 'center',
+        },
+        secondaryButtonText: {
+            color: colors.text.secondary,
+            fontSize: 16,
+        },
+    });
+}

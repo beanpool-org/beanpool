@@ -1161,6 +1161,9 @@ async function main(): Promise<void> {
         /** A write's own body, in place of BAIT, where BAIT won't reach the part of it that could hand back a person. */
         const BODIES: Record<string, Record<string, unknown>> = {
             'POST /api/trust/profile': { targetPubkey: alice.pk },
+            // An assistant's call for the reports, which name members, and the owner switch turned off.
+            'POST /mcp': { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'reports_list', arguments: {} } },
+            'POST /api/local/admin/agent/switch': { allowed: false },
             // A succession statement naming Alice's key as the caller's old one (line-display design §5).
             'POST /api/community/me/key-succession': { oldPubkey: alice.pk, at: '2026-10-03T04:00:00.000Z', sig: 'A'.repeat(86) + '==' },
             'POST /api/friends/add': { friendPubkey: alice.pk },
@@ -1210,6 +1213,7 @@ async function main(): Promise<void> {
             'POST /api/names/health/settings': { debtLinePct: 90, quietDays: 30 },
             'POST /api/names/consent': { version: '1:50:60' },
             'POST /api/local/admin/community-health': { debtLinePct: 90 },
+            'POST /api/local/admin/start-community-url': { url: 'https://start.example.org/how' },
             // An enterprise's keepers' vote: paying Alice out of the enterprise, and a yes on a vote.
             'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
                 params: { to: alice.pk, amount: 1 } },
@@ -1313,6 +1317,7 @@ async function main(): Promise<void> {
             'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
             'GET /api/local/admin/known-floor/member/:pubkey',
             'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health',
+            'POST /api/local/admin/start-community-url',
             'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
             'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',
             'POST /api/local/admin/members/:pubkey/burst/remove',
@@ -1427,6 +1432,9 @@ async function main(): Promise<void> {
             'GET /api/your-groups',
             // Only where an operator runs the Apple probe (APPLE_PROBE=1, routes/apple-probe.ts).
             'GET /apple-probe', 'POST /apple-probe',
+            // The AI assistant endpoint (agent/mcp-route.ts): an agent token is the only way in (every guest refused, below),
+            // and the owner switch that turns it off.
+            'POST /mcp', 'GET /mcp', 'DELETE /mcp', 'GET /api/local/admin/agent/switch', 'POST /api/local/admin/agent/switch',
         ]);
         const ID_BY_PREFIX: Array<[RegExp, string]> = [
             [/^\/api\/groups\//, prunedClub.id], [/^\/api\/marketplace\/posts\/:id\/chat/, clubEvent.id], [/^\/api\/marketplace\/posts\//, offer.id], [/^\/api\/commons\/decisions\//, 'dec-sentinel'],
@@ -1499,6 +1507,30 @@ async function main(): Promise<void> {
             + `and a HEAD for each of the ${gets} GETs × ${guestsHere.length} = ${gets * guestsHere.length}; the admin tarpit answered at once ${tarpitsAnsweredAtOnce} times)`);
         const stillPruned = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pruned.pk) as { status: string }).status;
         assert(stillPruned === 'pruned', `the pruned account is still pruned after the sweep (${stillPruned})`);
+        // The AI assistant endpoint: an agent token is the only way in. No guest gets an MCP answer by what it has (no signature,
+        // a non-member's, a pruned account's), even sending the Accept header the transport needs; the switch is still on.
+        {
+            const { aiAssistantsAllowed } = await import('./agent/mcp-route.js');
+            const accept = { Accept: 'application/json, text/event-stream' };
+            const seen: string[] = [];
+            const wrong: string[] = [];
+            for (const [who, idFor] of guestsHere) {
+                const id = idFor();
+                const post = await call('POST', id, '/mcp', BODIES['POST /mcp'], accept);
+                const get = await call('GET', id, '/mcp', undefined, accept);
+                const del = await call('DELETE', id, '/mcp', undefined, accept);
+                const line = `${who}: POST ${post.status} ${post.text.slice(0, 120)}, GET ${get.status}, DELETE ${del.status}`;
+                seen.push(line);
+                // A closed account's signature is refused by the middleware before /mcp; anyone else's reaches it and has no token.
+                const refused = id === pruned
+                    ? [post, get, del].every(r => r.status === 403 && r.body?.code === 'account_closed')
+                    : post.status === 401 && get.status === 405 && del.status === 405;
+                if (!refused || [post, get, del].some(r => r.text.includes('"result"'))) wrong.push(line);
+            }
+            assert(wrong.length === 0 && aiAssistantsAllowed(),
+                `every guest is refused /mcp with no MCP answer (unsigned and a non-member: POST 401, GET and DELETE 405; a pruned account: `
+                + `403 account_closed), and AI assistants are still allowed — ${(wrong.length ? wrong : seen).join(' | ')}`);
+        }
         // 11e. What the sweep sent it could not change: Alice's lines, its trades, the event it convenes, and no invite of its own.
         {
             for (const [label, ev, line] of [['its own event', prunedEvent, aliceLines[0]], ['the group event it convenes', clubEvent, aliceLines[1]]] as const) {

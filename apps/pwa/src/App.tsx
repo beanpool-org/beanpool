@@ -582,6 +582,22 @@ export function App() {
         };
     }, [identity]);
 
+    // Home first; the Pulse is a card on Home with its page one tap away, so Home takes its slot (design §8, §13 Q1).
+    const TABS: { id: Tab; label: string; emoji: string }[] = [
+        { id: 'home', label: 'Home', emoji: '🏠' },
+        { id: 'marketplace', label: 'Market', emoji: '🤝' },
+        { id: 'map', label: 'Map', emoji: '🗺️' },
+        { id: 'projects', label: 'Commons', emoji: '🌱' },
+        { id: 'messages', label: 'Chat', emoji: '💬' },
+        { id: 'people', label: 'People', emoji: '👥' },
+        { id: 'ledger', label: 'Ledger', emoji: '📊' },
+    ];
+
+    // The mobile header's title (none on the map, which shows the community's name), and the sync chip as its dot alone
+    // where the title wouldn't fit beside the chip's words (a hook, so above the returns before the app).
+    const headerTitle = activeTab !== 'map' || showSettings ? ((activeTab === 'pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label) ?? '') : null;
+    const [headerRef, chipDotOnly] = useDotOnlyChip(headerTitle);
+
     if (loading || (!identity && visitorView.kind === 'checking')) {
         return (
             <div style={{
@@ -616,23 +632,6 @@ export function App() {
             </>
         );
     }
-
-    // Home first; the Pulse is a card on Home with its page one tap away, so Home takes its slot (design §8, §13 Q1).
-    const TABS: { id: Tab; label: string; emoji: string }[] = [
-        { id: 'home', label: 'Home', emoji: '🏠' },
-        { id: 'marketplace', label: 'Market', emoji: '🤝' },
-        { id: 'map', label: 'Map', emoji: '🗺️' },
-        { id: 'projects', label: 'Commons', emoji: '🌱' },
-        { id: 'messages', label: 'Chat', emoji: '💬' },
-        { id: 'people', label: 'People', emoji: '👥' },
-        { id: 'ledger', label: 'Ledger', emoji: '📊' },
-    ];
-
-    // The mobile header's title (none on the map, which shows the community's name), and the sync chip as its dot alone
-    // where the title wouldn't fit beside the chip's words.
-    const headerTitle = activeTab !== 'map' || showSettings ? ((activeTab === 'pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label) ?? '') : null;
-    const headerRef = useRef<HTMLElement>(null);
-    const chipDotOnly = useDotOnlyChip(headerRef, headerTitle);
 
     // The community's status, opened from the header's title (or, on the map, its name).
     const communityStatus = showCommunityStatus && communityHealth && (

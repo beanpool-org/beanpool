@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type ReactNode, type RefObject } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { openHelp } from '../lib/tour-store';
 
 /** The pill's width: profile, the "?" and Settings (72 px before the "?"). */
@@ -34,12 +34,13 @@ export function HeaderTitle({ title, onClick, children }: { title: string; onCli
  * in the row as laid out, again whenever the row, the chip or the title changes size: the chip at its dot alone keeps its
  * words laid out but hidden (SyncChip), so the room the title would have beside them is known either way. The words come
  * back only with a pixel to spare, so the chip can't flick between the two at the edge. `title`: null where the row has
- * no HeaderTitle (the map's).
+ * no HeaderTitle (the map's). Returns the ref for the header row (a callback, so a row that mounts after the first render,
+ * as App's does after loading, is measured) and whether the chip is at its dot alone.
  */
-export function useDotOnlyChip(row: RefObject<HTMLElement | null>, title: string | null): boolean {
+export function useDotOnlyChip(title: string | null): [(row: HTMLElement | null) => void, boolean] {
+    const [el, setRow] = useState<HTMLElement | null>(null);
     const [dotOnly, setDotOnly] = useState(false);
     useLayoutEffect(() => {
-        const el = row.current;
         if (!el || title === null || typeof ResizeObserver === 'undefined') {
             setDotOnly(false);
             return;
@@ -75,8 +76,8 @@ export function useDotOnlyChip(row: RefObject<HTMLElement | null>, title: string
             observer.disconnect();
             cancelAnimationFrame(frame);
         };
-    }, [row, title]);
-    return dotOnly;
+    }, [el, title]);
+    return [setRow, dotOnly];
 }
 
 /** The "?" (DESIGN-getting-started-fable.md §4–§5): help for the screen you're on, in the pill and the sidebar. */

@@ -9,7 +9,6 @@
  * (components/SyncChip.tsx, stacked as the header draws it: Online, Online and Offline with how long ago, Guest; at its dot
  * alone where the title wouldn't fit beside its words, useDotOnlyChip), the real title (HeaderTitle) and the real pill.
  */
-import { useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TourBar } from '../src/components/TourBar';
 import { HelpDialog } from '../src/components/HelpDialog';
@@ -33,8 +32,7 @@ const HEADER_TITLES = ['Home', 'Market', 'Map', 'Commons', 'Chat', 'People', 'Le
 const HEADER_CHIPS: [SyncMode, string | null][] = [['online', null], ['online', '5s ago'], ['offline', '59m ago'], ['guest', null]];
 /** One mobile header row as App.tsx draws it (its own inline styles), with the real chip, title and pill. */
 function HeaderRow({ title, mode, ago }: { title: string; mode: SyncMode; ago: string | null }) {
-    const ref = useRef<HTMLElement>(null);
-    const dotOnly = useDotOnlyChip(ref, title);
+    const [ref, dotOnly] = useDotOnlyChip(title);
     return (
         <header ref={ref} data-row={title + ' · ' + mode + (ago ? ' ' + ago : '')} className="relative shadow-md" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.3rem 0.75rem', background: '#14281d' }}>
             <div className="relative z-10 shrink-0" style={{ marginTop: '12px' }}>

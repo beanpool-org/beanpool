@@ -39,7 +39,7 @@ import { resetAdminAuthTarpit, TOKEN_REFUSED_CODE } from './admin-auth.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import { submitKnock } from './engine/knocks.js';
 import { listSnapshots } from './services/snapshot-scheduler.js';
-import { getAlertsStatus } from './services/alerts.js';
+import { getAlertsStatus, updateAlerts } from './services/alerts.js';
 import { db, rebuildSystemLogsCheck } from './db/db.js';
 import { resetAgentLimits, AGENT_CALLS_PER_MINUTE, AGENT_CALLS_PER_DAY } from './agent/limits.js';
 import { logger, pruneSystemLogs, LOG_KEEP_ROWS, AGENT_LOG_KEEP_ROWS } from './logger.js';
@@ -201,6 +201,8 @@ async function main(): Promise<void> {
     const r3 = submitReport(reporter.pub, poster.pub, 'Spam link', undefined, 'item_test1');
     const knock = submitKnock({ pubkey: knocker.pub, callsign: 'Kim Knocker', message: 'Hi! I live nearby and want to join.', avatar: 'data:image/png;base64,AVATARSECRET', fromNode: 'https://other.example.org', address: 'ip:198.51.100.7' }) as any;
     assert(knock?.ok !== false, `a join request is seeded (${JSON.stringify(knock).slice(0, 80)})`);
+    // An active server alert whose detail names a member: server_health gives its key and title, never the detail.
+    await updateAlerts([{ key: 'standby.incident', active: true, detail: 'Reggie Reporter asked for a copy that stalled at the members table.' }]);
     // An off-box destination whose name, endpoint and bucket must never come back.
     process.env.BACKUP_OFFBOX_1_NAME = 'SecretBucketDest';
     process.env.BACKUP_OFFBOX_1_ENDPOINT = 'https://s3.secret-endpoint.example';
@@ -309,6 +311,9 @@ async function main(): Promise<void> {
         const health = structured(answers.server_health);
         assert(Array.isArray(health.communityAlerts) && health.communityAlerts.every((f: any) => !('description' in f) && !('members' in f)),
             'server_health gives community alerts by type only, never their members or description');
+        const seeded = (health.serverAlerts ?? []).find((a: any) => a.key === 'standby.incident');
+        assert(seeded?.title === 'standby needs attention' && !('detail' in seeded) && !/Reggie|stalled/.test(JSON.stringify(health)),
+            `server_health names an active server alert by its title, never its detail (${JSON.stringify(health.serverAlerts)})`);
 
         // ── 4. Member text ────────────────────────────────────────────────────────────────────────
         console.log('── 4. Member text: on request, fenced, a boundary per call, intact against <<<END ──');
@@ -384,6 +389,12 @@ async function main(): Promise<void> {
         assert(fails.length === 0, `the agent token is refused 403 on all ${refusedCount} admin routes behind a credential (${otherCredential} take another credential only, ${publicCount} public ones unchanged)${fails.length ? `: ${fails.slice(0, 5).join(' | ')}` : ''}`);
         const signed = await call('GET', '/api/node-admin/queue', { headers: bearer(AGENT) });
         assert(signed.status === 401 || signed.status === 403, `a member route that takes a signature ignores the token (${show(signed)})`);
+        const asOther: Record<string, Record<string, string>> = {
+            'a session header': { 'X-Admin-Session': AGENT }, 'a session cookie': { Cookie: `admin_session=${AGENT}` }, 'the admin password': { 'X-Admin-Password': AGENT },
+        };
+        const otherWays = await Promise.all(Object.entries(asOther).map(async ([way, h]) => [way, await call('GET', '/api/local/admin/reports', { headers: h })] as const));
+        resetAdminAuthTarpit();
+        assert(otherWays.every(([, r]) => r.status === 401), `the agent token sent as a session header, a session cookie or the admin password is 401 (${otherWays.map(([w, r]) => `${w} ${r.status}`).join(', ')})`);
 
         console.log('── 5b. Nothing but an agent token reaches /mcp ──');
         const init = rpc('initialize', 1, { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'raw', version: '1' } });

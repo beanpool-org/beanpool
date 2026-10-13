@@ -16,6 +16,7 @@
 import { beansOn, type NodeFeatures, type NodeProfile } from './node-profile';
 import type { MarketExtraFilter } from './market-filters';
 import { feedSections, type FeedSection } from './feed-sections';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 
 /** Whether the Market shows Beans: a price on each card and the "Beans only" filter. */
 export function marketShowsBeans(features: NodeFeatures | null | undefined): boolean {
@@ -31,7 +32,7 @@ export function marketExtras(extras: readonly MarketExtraFilter[], features: Nod
 export const NO_BEANS_TERMS = {
     label: 'IN RETURN',
     value: 'Free, a swap, or ask',
-    note: 'There are no Beans here. The description says what they would like in return, or that it is free. Message them to ask.',
+    note: `${LOCAL_COMMUNITY_LINES.noBeansTerms} The description says what they would like in return, or that it is free. Message them to ask.`,
 } as const;
 
 /** What a post's edit form, and the map's Offer/Need form, say in place of the price field, on a node with Beans off. */

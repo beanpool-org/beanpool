@@ -17,6 +17,7 @@ import { recordRequestSigning } from './nodes';
 import { trackInfoRead } from './request-signing-version';
 
 import { GLOBAL_NODE_URL } from './global-node-url';
+import { featureModeFor, type FeatureMode, type ShowcaseFeature } from '@beanpool/core';
 
 /** The worldwide community's one address (utils/global-node-url.ts, which imports nothing). */
 export { GLOBAL_NODE_URL };
@@ -51,6 +52,12 @@ export interface NodeFeatures {
      *  visitor sees nothing. The door offers an invite only. A node that doesn't say is not in one. */
     privatePreview?: boolean;
     /**
+     * A switched-off feature is shown from the sample community, Example Valley, rather than hidden (the showcase,
+     * scratch/global-node/DESIGN-global-showcase-fable.md §4): the worldwide community's, overridable. A node that
+     * doesn't say hides what it has off, as before: an operator who turned a feature off meant it.
+     */
+    showcase?: boolean;
+    /**
      * Who may invite here (the door, apps/server config/door.ts): `members` (any member, every community until now),
      * `admins` (only its owners and admins, the community's choice) or `open` (the worldwide community: anyone joins with
      * a sign-in, and nobody makes invites). A node from before the door says nothing: any member, as before.
@@ -70,7 +77,7 @@ const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview',
+    'privatePreview', 'showcase',
 ];
 
 export interface NodeProfile {
@@ -243,15 +250,40 @@ export function wordsDoorOn(features: NodeFeatures | null | undefined): boolean 
     return features?.wordsDoor === true;
 }
 
-/** The tabs a node hides. Only a node that says outright that Beans are off hides any. */
+/**
+ * The reader's own feature set: the node's (`GET /api/community/info`), each switch also off where the reader's own
+ * (`features` on `GET /api/community/me`) says so. Signed out, or before the reader's is known, the node's. A switch
+ * the node has off stays off whatever the reader's says (design §4: per reader, never wider than the node).
+ */
+export function effectiveFeatures(node: NodeFeatures | null | undefined, reader?: NodeFeatures | null): NodeFeatures {
+    const out: NodeFeatures = { ...(node ?? {}) };
+    if (!reader) return out;
+    for (const key of FEATURE_KEYS) {
+        if (key === 'showcase') continue;
+        if (reader[key] === false) out[key] = false;
+    }
+    return out;
+}
+
+/**
+ * How one switched-off feature shows to this reader (@beanpool/core featureModeFor): `live`, `read-only` (the node
+ * has it, the reader not yet), `preview` (from the sample community, on a node whose `showcase` is on) or `hidden`.
+ */
+export function showcaseMode(feature: ShowcaseFeature, node: NodeFeatures | null | undefined, reader?: NodeFeatures | null): FeatureMode {
+    return featureModeFor(feature, node ?? undefined, reader ?? undefined);
+}
+
+/** The tabs a node hides. Only a node that says outright that Beans are off hides any, and not one that previews them. */
 export type HideableTab = 'projects' | 'ledger';
 
 /**
  * Commons (the `projects` route) and Ledger are money: the pool, enterprises, crowdfunds, balances.
- * On a node with Beans off they would show a ledger that is 0 forever, so they are hidden. The
+ * On a node with Beans off they would show a ledger that is 0 forever, so they are hidden, unless the node's
+ * `showcase` is on: then both stay, and show Example Valley in preview (design §1 rows 3 and 6). The
  * routes stay (a link to them still opens), only the tab strip changes.
  */
 export function hiddenTabsFor(features: NodeFeatures | null | undefined): HideableTab[] {
+    if (features?.showcase === true) return [];
     return features?.beans === false ? ['projects', 'ledger'] : [];
 }
 

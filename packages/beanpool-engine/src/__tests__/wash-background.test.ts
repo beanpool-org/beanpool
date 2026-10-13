@@ -170,6 +170,29 @@ describe('wash analysis: paged pair totals (S1)', () => {
         db.close();
     });
 
+    it('a refresh whose handle closes after its last step, before it returns, lands nothing', async () => {
+        const db = fileDb();
+        seedPagedWorld(db);
+        let turns = 0;
+        await runWashAnalysisInSlices(db, { sliceMs: 0, onYield: () => turns++ });
+        let turn = 0;
+        const run = runWashAnalysisInSlices(db, { sliceMs: 0, onYield: () => { if (++turn === turns) closeWashSnapshotHandle(db); } });
+        await expect(run).rejects.toThrow(/snapshot ended/);
+        expect(turn).toBe(turns);
+        db.close();
+    });
+
+    it('a refresh with a step whose query fails lands nothing, where the one-go goes on without that step', async () => {
+        const db = fileDb();
+        seedPagedWorld(db);
+        db.exec('DROP TABLE members');
+        // One go, as today: the ages' query fails, is logged, and the analysis comes back without the clusters.
+        expect(runWashTradingAnalysis(db).flaggedPairs.size).toBe(4);
+        await expect(runWashAnalysisInSlices(db)).rejects.toThrow(/members/);
+        closeWashSnapshotHandle(db);
+        db.close();
+    });
+
     it('counts every complete analysis for the node\'s own handle, a refresh through the snapshot included', async () => {
         const db = fileDb();
         seedPagedWorld(db);

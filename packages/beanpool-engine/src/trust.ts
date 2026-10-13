@@ -402,11 +402,8 @@ export async function runWashAnalysisInSlices(db: Db, opts: { sliceMs?: number; 
     const wallStart = performance.now();
     const snap = snapshotHandleFor(db);
     const snapshotAt = Date.now();
-    if (snap) {
-        snap.exec('BEGIN');
-        // A deferred transaction takes its snapshot at its first read: this one, now.
-        snap.prepare('SELECT COUNT(*) FROM sqlite_master').get();
-    }
+    // A deferred transaction takes its snapshot at its first read: the first page of buyers, read before this returns.
+    if (snap) snap.exec('BEGIN');
     try {
         const time = { ms: 0 };
         const analysis = await runStepsInSlices(timedSteps(analysisSteps(snap ?? db, true, db), time), opts);

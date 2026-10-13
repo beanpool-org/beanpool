@@ -2806,7 +2806,7 @@ export default function WelcomeScreen() {
                             <View style={styles.ssoRecoverRow}>
                                 <Text style={styles.ssoRecoverBtnText}>🌐 Recover with Social</Text>
                                 <View style={styles.ssoRecoverLogos}>
-                                    {Platform.OS === 'ios' && <AppleLogo size={16} color="#1D4ED8" />}
+                                    {Platform.OS === 'ios' && <AppleLogo size={16} color={dark ? palette.blue400 : '#1D4ED8'} />}
                                     <GoogleLogo size={16} />
                                     <FacebookLogo size={16} />
                                 </View>
@@ -3746,7 +3746,8 @@ const stepperStyles = StyleSheet.create({
         justifyContent: 'center',
     },
     dotCheck: {
-        color: colors.text.inverse,
+        // Dark ink on the green dot in both schemes: white on green500 read 2.28:1, this reads 6.36:1.
+        color: palette.green950,
         fontSize: 9,
         fontWeight: '800',
     },

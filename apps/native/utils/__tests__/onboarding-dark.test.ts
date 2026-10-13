@@ -43,11 +43,15 @@ describe('onboarding screens follow dark mode', () => {
         expect(onboardingColors('light')).toEqual({ colors: lightColors, dark: false });
     });
 
-    it('dark draws the app dark tokens on a solid page', () => {
+    it('dark draws the app dark tokens on a solid page, with muted text and strong borders raised', () => {
         const { colors, dark } = onboardingColors('dark');
         expect(dark).toBe(true);
-        expect(colors).toBe(darkColors);
         expect(colors.surface.page).toMatch(/^#/);
+        expect(colors.text.muted).toBe(palette.gray400);
+        expect(colors.border.strong).toBe(palette.gray500);
+        // Everything else is the app dark tokens, unchanged.
+        expect({ ...colors, text: { ...colors.text, muted: darkColors.text.muted }, border: { ...colors.border, strong: darkColors.border.strong } })
+            .toEqual(darkColors);
     });
 
     describe('dark text reads at 4.5:1 or better on every onboarding surface', () => {
@@ -62,6 +66,8 @@ describe('onboarding screens follow dark mode', () => {
             ok: palette.emerald400,
             warn: palette.amber400,
             danger: colors.feedback.danger.fg,
+            // The 13 px consent note, the hints, the callsign tip and every placeholder draw with text.muted.
+            muted: colors.text.muted,
         };
         for (const [inkName, ink] of Object.entries(inks)) {
             for (const [groundName, ground] of Object.entries(grounds)) {
@@ -73,8 +79,35 @@ describe('onboarding screens follow dark mode', () => {
         it('the info box text (accent ink on the info tint) reads', () => {
             expect(contrast(palette.blue400, colors.feedback.info.bg)).toBeGreaterThanOrEqual(4.5);
         });
+        it('the Apple logo on the dark Recover-with-Social button reads at 3:1 (graphic)', () => {
+            expect(read('app/welcome.tsx')).toContain("<AppleLogo size={16} color={dark ? palette.blue400 : '#1D4ED8'} />");
+            expect(contrast(palette.blue400, colors.feedback.info.bg)).toBeGreaterThanOrEqual(3);
+        });
+        it('no onboarding screen hands a literal hex colour to a JSX prop without a dark branch', () => {
+            for (const rel of ONBOARDING_SCREENS) {
+                const bare = read(rel).split('\n').filter((l) => /=\s*"#[0-9a-fA-F]{3,8}"/.test(l));
+                expect(bare, rel).toEqual([]);
+            }
+        });
         it('white on the filled blue buttons reads in both schemes', () => {
             expect(contrast('#ffffff', palette.blue600)).toBeGreaterThanOrEqual(4.5);
         });
+    });
+
+    describe('UI outlines and the stepper tick read at 3:1 or better', () => {
+        it('the stepper tick reads on the green done-dot (fixed colours, the same in light and dark)', () => {
+            const src = read('app/welcome.tsx');
+            expect(src).toMatch(/dotCompleted: \{\s*backgroundColor: palette\.green500,/);
+            expect(src).toMatch(/dotCheck: \{[^}]*color: palette\.green950,/);
+            expect(contrast(palette.green950, palette.green500)).toBeGreaterThanOrEqual(3);
+        });
+        const { colors } = onboardingColors('dark');
+        // Inputs are filled with the card (welcome) or app (profile setup) colour and sit on the card or the page.
+        const grounds = { page: colors.surface.page, app: colors.surface.app, card: colors.surface.card, subtle: colors.surface.subtle };
+        for (const [groundName, ground] of Object.entries(grounds)) {
+            it(`dark input outline (border.strong ${colors.border.strong}) on ${groundName} ${ground}`, () => {
+                expect(contrast(colors.border.strong, ground)).toBeGreaterThanOrEqual(3);
+            });
+        }
     });
 });

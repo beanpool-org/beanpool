@@ -2,6 +2,7 @@
 slug: appearance
 title: Light and dark
 summary: The app starts light. Make it dark, or follow your phone.
+help: Make the app light or dark, or follow your phone.
 related: privacy, notifications, the-bean, web-app
 ---
 

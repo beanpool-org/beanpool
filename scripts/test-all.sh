@@ -212,7 +212,17 @@ run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
 # folder, answers the node API from fixtures (no node is contacted), and fails if any screen, the menu, the manual,
 # a modal or the app's sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
 # The browser is downloaded once and cached; in CI --with-deps also installs its system libraries (the runner has sudo).
-run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width'
+run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants && pnpm --filter @beanpool/manager test:agent-suggestions'
+
+# The group-history screens on a phone (the group-history-after-rekey design, section 7): apps/native/e2e/locked-history-320.mjs
+# renders the real components through react-native-web in Chromium at 320 wide with 1.3x text, light and dark, and fails on
+# a sideways scroll, cut text, a button under 48dp or text under 4.5:1. Same browser as above, from the PWA's Playwright.
+# It bundles @beanpool/core from its dist, so like the server suites it starts once build has finished.
+run_native_phone_width() {
+  while [ ! -f "$LOGDIR/build.rc" ]; do sleep 1; done
+  pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && node apps/native/e2e/locked-history-320.mjs
+}
+run_check "native_phone_width" run_native_phone_width
 
 run_check "lint"          pnpm turbo run lint $TURBO_AUX_ARGS
 

@@ -23,12 +23,14 @@ import {
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
-import { HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, translateV1 } from '@beanpool/core';
+import { HOME_STARTER_SET, HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, starterCards, translateV1 } from '@beanpool/core';
 import { mayInviteHere } from '../invite-entries';
 
 const ME = 'a'.repeat(64);
 // A fixed local afternoon, so "tonight" and "tomorrow" are stable wherever the suite runs.
 const NOW = new Date(2026, 9, 2, 14, 0, 0).getTime();
+/** The starter set as a saved Home: what a member has after Skip, or Done with nothing picked (DESIGN-getting-started §1). */
+const STARTER = { v: 2 as const, cards: starterCards(), dismissed: {}, updatedAt: null };
 const H = 3600_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -71,9 +73,10 @@ const find = (over: Partial<NonNullable<HomeCards['find']>> = {}): NonNullable<H
 });
 
 describe('the catalogue and the newcomer\'s Home (CARD-FRAME §2.2, §3)', () => {
-    it('one catalogue, core\'s: every type this build draws is in the registry; a newcomer starts with the five and the two riders', () => {
+    it('one catalogue, core\'s: every type this build draws is in the registry; a newcomer starts with Getting started alone, and the starter set is the five and the two riders', () => {
         for (const t of HOME_DRAWN) expect(homeCardType(t)).toBeDefined();
-        expect(ids(cardOrder(null))).toEqual(['needs', 'safety', 'steps', 'tips', 'interests', 'market', 'events', 'notices', 'community']);
+        expect(ids(cardOrder(null))).toEqual(['needs', 'start', 'community']);
+        expect(ids(cardOrder(STARTER))).toEqual(['needs', 'safety', 'steps', 'tips', 'interests', 'market', 'events', 'notices', 'community']);
     });
 
     it('this build draws every type of version 1 and the saved search; Find your community came to Home in H4', () => {
@@ -326,11 +329,12 @@ describe('the layout (§4)', () => {
         expect(ids(cardOrder(layout({ order: ['community', 'beans', 'needs'] }))).at(-1)).toBe('community');
     });
 
-    it('reset: the newcomer\'s list; the safety card\'s dismissal (a schedule, not a choice) is kept', () => {
+    it('reset: the starter set (never Getting started: a Home reset after the tour is never empty); the safety card\'s dismissal (a schedule, not a choice) is kept', () => {
         const l = layout({ order: ['beans'], hidden: ['pulse'], dismissed: { safety: iso(NOW - H) } });
         const r = resetLayout(l, NOW);
-        expect(r).toEqual({ v: 2, cards: defaultCards(), dismissed: { safety: iso(NOW - H) }, updatedAt: iso(NOW) });
-        expect(ids(cardOrder(r))).toEqual(ids(cardOrder(null)));
+        expect(r).toEqual({ v: 2, cards: starterCards(), dismissed: { safety: iso(NOW - H) }, updatedAt: iso(NOW) });
+        expect(ids(cardOrder(r))).toEqual(['needs', ...HOME_STARTER_SET, 'community']);
+        expect(defaultCards()).toEqual([{ id: 'start', type: 'start' }]);
     });
 
     it('the newer copy wins by updatedAt; a phone copy newer than the account\'s is sent', () => {
@@ -383,8 +387,11 @@ describe('the frame: the picker, adding, and the members who were here before (C
     const row = (g: ReturnType<typeof pickerGroups>, type: string) => g.groups.flatMap(x => x.rows).find(r => r.type === type);
 
     it('the picker: three groups in order, only this node\'s types, "On Home" for a one-of-a-kind already there, counts for an instance type', () => {
-        const g = pickerGroups(LOCAL_NODE, null, 'admin');
+        const g = pickerGroups(LOCAL_NODE, STARTER, 'admin');
         expect(g.groups.map(x => x.name)).toEqual(['For you', 'Around you', 'Getting started']);
+        // Getting started is in the picker under its group, for whoever wants it (DESIGN-getting-started §1).
+        expect(row(g, 'start')).toMatchObject({ state: 'add' });
+        expect(row(pickerGroups(LOCAL_NODE, null, 'admin'), 'start')!.state).toBe('on-home');
         expect(types(g)).not.toContain('needs');
         expect(types(g)).not.toContain('community');
         expect(types(g)).not.toContain('find');
@@ -462,10 +469,10 @@ describe('the frame: the picker, adding, and the members who were here before (C
         const at = iso(NOW - 2 * H);
         const standby = readHomeAnswer({ ...answer(), layout: { v: 1, order: [], hidden: [], dismissed: { safety: at }, updatedAt: at } })!;
         // Not every version-1 card: the newcomer's list, with the account's dismissal; nothing sent.
-        expect(pickLayout(standby.layout, null, standby.layoutV1)).toEqual({ layout: { ...defaultHomeLayout(), dismissed: { safety: at } }, push: false });
+        expect(pickLayout(standby.layout, null, standby.layoutV1)).toEqual({ layout: { ...defaultHomeLayout(), cards: starterCards(), dismissed: { safety: at } }, push: false });
         // The member edits there: the phone's list, marked as made over that list (its date). It is sent, and the standby
         // refuses it (once per landing), so it stays the phone's.
-        const edit = { v: 2 as const, cards: defaultCards().filter(c => c.type !== 'events'), dismissed: {}, updatedAt: iso(NOW) };
+        const edit = { v: 2 as const, cards: starterCards().filter(c => c.type !== 'events'), dismissed: {}, updatedAt: iso(NOW) };
         expect(pickLayout(standby.layout, edit, standby.layoutV1, at)).toEqual({ layout: edit, push: true });
         // The primary is back with the real list, dated like the empty one or later: it wins, and nothing is sent.
         const real = { v: 2 as const, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: at };
@@ -895,12 +902,13 @@ describe('the global node\'s Home (H4)', () => {
 
     it('pinned: under Needs you, and under "Your way back in" while that one leads; after the pin it is the picker\'s, like any card', () => {
         const pins: ['find'] = ['find'];
-        expect(ids(cardOrder(null, pins)).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'steps']);
+        expect(ids(cardOrder(STARTER, pins)).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'steps']);
+        expect(ids(cardOrder(null, pins))).toEqual(['needs', 'find', 'start', 'community']);
         expect(ids(cardOrder(layout({ order: ['market', 'events'] }), pins)).slice(0, 4)).toEqual(['needs', 'find', 'market', 'events']);
         expect(ids(cardOrder(layout({ order: ['safety', 'market', 'find'] }), pins)).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'market']);
-        expect(ids(cardOrder(null, pins)).at(-1)).toBe('community');
+        expect(ids(cardOrder(STARTER, pins)).at(-1)).toBe('community');
         // A move made during the pin moves the two cards and nothing else.
-        const moved = moveCard(null, 'market', 'up', inst('find', 'events', 'market'), NOW, pins)!;
+        const moved = moveCard(STARTER, 'market', 'up', inst('find', 'events', 'market'), NOW, pins)!;
         expect(ids(moved.cards)).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'market', 'notices']);
         // The newcomer's list doesn't hold `find`: once the pin ends, the picker brings it back (CARD-FRAME §1.2, §3).
         expect(ids(cardOrder(moved))).not.toContain('find');

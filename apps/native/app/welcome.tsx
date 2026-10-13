@@ -44,6 +44,7 @@ import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
 import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
 import { RecoveryKitButtons } from '../components/RecoveryKitButtons';
+import { RecoveryWordsEntry } from '../components/RecoveryWordsEntry';
 import { copyWordsForAMinute } from '../utils/words-clipboard';
 import { GoogleButton, AppleButton, FacebookButton, GoogleLogo, AppleLogo, FacebookLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
@@ -1970,6 +1971,7 @@ export default function WelcomeScreen() {
                 
                 <AvatarPickerSheet
                     visible={showAvatarPicker}
+                    colors={dark ? colors : undefined}
                     onClose={() => setShowAvatarPicker(false)}
                     onSelectImage={(uri) => setPendingAvatar(uri)}
                 />
@@ -2960,58 +2962,7 @@ export default function WelcomeScreen() {
                     <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <View style={styles.card}>
                         <Text style={styles.title}>🔑 Recover Identity</Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                            <Text style={[styles.subtitle, { flex: 1, marginBottom: 0 }]}>Enter your 12 recovery words.</Text>
-                            <Pressable
-                                style={styles.pasteBtn}
-                                onPress={async () => {
-                                    try {
-                                        const text = await Clipboard.getStringAsync();
-                                        const tokens = (text || '').trim().split(/\s+/).filter(Boolean);
-                                        if (tokens.length === 0) return;
-                                        const updated = Array(12).fill('');
-                                        tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase(); });
-                                        setRecoveryWords(updated);
-                                    } catch { /* clipboard unavailable — user can still type */ }
-                                }}
-                                accessibilityRole="button"
-                                accessibilityLabel="Paste 12 recovery words"
-                            >
-                                <Text style={styles.pasteBtnText}>📋 Paste</Text>
-                            </Pressable>
-                        </View>
-
-                        <View style={styles.recoveryGrid}>
-                            {/* The boxes show the words as they are typed (and pasted). */}
-                            <NoScreenCapture>
-                            {recoveryWords.map((word, i) => (
-                                <TextInput
-                                    key={i}
-                                    accessibilityLabel={`Recovery word ${i + 1}`}
-                                    style={styles.recoveryInput}
-                                    value={word}
-                                    onChangeText={(t) => {
-                                        // Pasting the whole space-separated phrase into any box
-                                        // fans it out across all 12; a single word fills its box.
-                                        const tokens = t.trim().split(/\s+/).filter(Boolean);
-                                        if (tokens.length > 1) {
-                                            const updated = Array(12).fill('');
-                                            tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase(); });
-                                            setRecoveryWords(updated);
-                                        } else {
-                                            const updated = [...recoveryWords];
-                                            updated[i] = t.toLowerCase().trim();
-                                            setRecoveryWords(updated);
-                                        }
-                                    }}
-                                    placeholder={`${i + 1}`}
-                                    placeholderTextColor={colors.text.muted}
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                />
-                            ))}
-                            </NoScreenCapture>
-                        </View>
+                        <RecoveryWordsEntry words={recoveryWords} onChange={setRecoveryWords} labelStyle={styles.subtitle} colors={colors} />
 
                         <TextInput
                             accessibilityLabel="Community name or node address"
@@ -3552,8 +3503,6 @@ const styles = StyleSheet.create({
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },
     fieldHint: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 16, lineHeight: 18 },
-    pasteBtn: { backgroundColor: colors.surface.subtle, paddingHorizontal: 16, paddingVertical: 12, borderLeftWidth: 1, borderColor: colors.border.strong, justifyContent: 'center' },
-    pasteBtnText: { color: dark ? colors.text.secondary : palette.gray600, fontSize: 14, fontWeight: '600' },
     pasteCard: { backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', borderRadius: 12, padding: 14, marginBottom: 16, alignItems: 'center' },
     pasteCardText: { color: colors.text.body, fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 12 },
     pasteCardSystemBtn: { width: 170, height: 44 },
@@ -3609,8 +3558,6 @@ const styles = StyleSheet.create({
     seedCell: { width: '31%', backgroundColor: colors.surface.subtle, borderRadius: 8, padding: 8, marginBottom: 8, alignItems: 'center' },
     seedIndex: { color: colors.text.muted, fontSize: 10 },
     seedWord: { color: colors.text.heading, fontSize: 14, fontWeight: 'bold', minHeight: 20 },
-    recoveryGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16 },
-    recoveryInput: { width: '31%', backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 8, padding: 8, color: colors.text.heading, fontSize: 12, marginBottom: 8, textAlign: 'center' }
 });
 
 // Styles for the "Who Are You?" profile setup gate

@@ -48,7 +48,7 @@ function formatConsoleLog(entry: { timestamp: string; level: string; category: s
  */
 export function writeLog(
     level: 'INFO' | 'WARN' | 'ERROR' | 'SECURITY' | 'SYNC',
-    category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS',
+    category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT',
     message: string,
     metadata?: any
 ) {
@@ -94,14 +94,30 @@ export function writeLog(
  * system_logs keeps the newest LOG_KEEP_ROWS lines, and none older than LOG_KEEP_DAYS. Count alone let a quiet server keep
  * months of lines, with members' names and the start of their keys in them. Each server keeps its own (a standby copies
  * none, engine/replication-manifest.ts), and a snapshot or backup holds the lines of the day it was made until it goes.
+ *
+ * An AI assistant's lines (category AGENT, one per call: agent/mcp-route.ts) are counted on their own, newest
+ * AGENT_LOG_KEEP_ROWS, and never against LOG_KEEP_ROWS. In one count, an assistant at its limit replaced every line in
+ * about 42 minutes, and a stolen agent token could push the owners' SECURITY lines out the same day (review of #1855,
+ * finding 3). Now no number of assistant calls takes a line that isn't an assistant's.
+ *
+ * A request /mcp refused writes an AGENT line starting "Assistant refused", the first 20 a minute node-wide and one
+ * "…and M more" line after (agent/mcp-route.ts logRefusal). Those lines are counted apart again, newest
+ * AGENT_REFUSED_LOG_KEEP_ROWS: anyone can send refusals, and 5,000 tokenless requests emptied the assistant's own record
+ * (review of #1855 confirmation, finding 1). So only calls let in fill AGENT_LOG_KEEP_ROWS, one line each, and it is one
+ * assistant's daily allowance (agent/limits.ts AGENT_CALLS_PER_DAY): a full day of its calls fits while it is the only busy
+ * one. The ring is shared by every grant, so another grant's admitted calls can flush a token's record: the newest lines
+ * kept are the busiest assistant's, which is what an inquiry into a stolen token reads first (#1855 confirmation 2, finding 3).
  */
 export const LOG_KEEP_DAYS = 30;
 export const LOG_KEEP_ROWS = 2500;
+export const AGENT_LOG_KEEP_ROWS = 2000;
+export const AGENT_REFUSED_LOG_KEEP_ROWS = 500;
 const LOG_KEEP_MS = LOG_KEEP_DAYS * 24 * 60 * 60_000;
 
 /**
- * Delete the log lines past LOG_KEEP_ROWS or older than LOG_KEEP_DAYS at `now`. A line whose time can't be read is kept
- * until the count takes it. Never throws. Returns how many went.
+ * Delete the log lines past LOG_KEEP_ROWS (AGENT lines: past AGENT_LOG_KEEP_ROWS, and their "Assistant refused" lines
+ * past AGENT_REFUSED_LOG_KEEP_ROWS, each counted apart) or older than LOG_KEEP_DAYS at `now`. A line whose time can't be
+ * read is kept until the count takes it. Never throws. Returns how many went.
  */
 export function pruneSystemLogs(now = Date.now()): number {
     try {
@@ -109,9 +125,22 @@ export function pruneSystemLogs(now = Date.now()): number {
         const byAge = db.prepare('DELETE FROM system_logs WHERE julianday(timestamp) < julianday(?)').run(cutoff).changes;
         const byCount = db.prepare(`
             DELETE FROM system_logs
-            WHERE id < (SELECT id FROM system_logs ORDER BY id DESC LIMIT 1 OFFSET ${LOG_KEEP_ROWS - 1})
+            WHERE category IS NOT 'AGENT'
+              AND id < (SELECT id FROM system_logs WHERE category IS NOT 'AGENT' ORDER BY id DESC LIMIT 1 OFFSET ${LOG_KEEP_ROWS - 1})
         `).run().changes;
-        return byAge + byCount;
+        const refused = "category = 'AGENT' AND message LIKE 'Assistant refused%'";
+        const admitted = "category = 'AGENT' AND message NOT LIKE 'Assistant refused%'";
+        const agentByCount = db.prepare(`
+            DELETE FROM system_logs
+            WHERE ${admitted}
+              AND id < (SELECT id FROM system_logs WHERE ${admitted} ORDER BY id DESC LIMIT 1 OFFSET ${AGENT_LOG_KEEP_ROWS - 1})
+        `).run().changes;
+        const refusedByCount = db.prepare(`
+            DELETE FROM system_logs
+            WHERE ${refused}
+              AND id < (SELECT id FROM system_logs WHERE ${refused} ORDER BY id DESC LIMIT 1 OFFSET ${AGENT_REFUSED_LOG_KEEP_ROWS - 1})
+        `).run().changes;
+        return byAge + byCount + agentByCount + refusedByCount;
     } catch (err: any) {
         console.error('Failed to prune administrative log:', err.message);
         return 0;
@@ -288,7 +317,7 @@ export function scrubMemberFromLogs(callsign: string | null | undefined, keys: r
     return changed;
 }
 
-export type LogCategory = 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS';
+export type LogCategory = 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT';
 let securityLineListener: ((category: LogCategory) => void) | null = null;
 
 /**
@@ -300,12 +329,12 @@ export function onSecurityLogLine(fn: ((category: LogCategory) => void) | null):
 }
 
 export const logger = {
-    info: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('INFO', category, message, metadata),
-    warn: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('WARN', category, message, metadata),
-    error: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('ERROR', category, message, metadata),
+    info: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT', message: string, metadata?: any) => writeLog('INFO', category, message, metadata),
+    warn: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT', message: string, metadata?: any) => writeLog('WARN', category, message, metadata),
+    error: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT', message: string, metadata?: any) => writeLog('ERROR', category, message, metadata),
     security: (category: LogCategory, message: string, metadata?: any) => {
         writeLog('SECURITY', category, message, metadata);
         try { securityLineListener?.(category); } catch { /* a log line never fails for the alert book */ }
     },
-    sync: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS', message: string, metadata?: any) => writeLog('SYNC', category, message, metadata),
+    sync: (category: 'P2P' | 'LEDGER' | 'TLS' | 'ADMIN' | 'AUTH' | 'DB' | 'SYS' | 'AGENT', message: string, metadata?: any) => writeLog('SYNC', category, message, metadata),
 };

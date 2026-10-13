@@ -19,6 +19,17 @@
  * another with the same keys, told urgent and daily until an owner acknowledges it. A one-shot security event counts in
  * the banner for a day, or until an owner acknowledges it. Each says what happened and how, never who.
  *
+ * And reports coming in (the launch-readiness review's B9): the first report is told at once, and those that follow
+ * inside the fold window (an hour, or ALERTS_REPORT_FOLD_MINUTES in .env) are counted and told as one line when it is
+ * over: "N more reports came in", by kind (the reason the member picked: spam or scam, offensive, misleading, child
+ * safety, other). A child-safety report is told at once, urgent: each member's first in their hour; their others that
+ * hour as one urgent line when it ends (#1807's model); up to 10 lines an hour on the server told so. Past those 10, it
+ * is counted into one urgent line told within about 10 minutes. None is dropped. Owners and
+ * admins are pushed (admins act on reports; they are pushed the report lines alone); the line says how many and what
+ * kind, never who reported whom or what they wrote. Report lines are members' doing: urgent to deliver, but never kept
+ * over another line, so no flood of them pushes a security line out of the history or the channel's queue, or past it in
+ * a held message.
+ *
  * A condition that starts is told once (raised), again every 24 hours while it lasts (still), and once when it has been
  * over for 15 minutes (resolved). Back within those 15 minutes, nothing is told: the condition just goes on. One that
  * starts again within 6 hours of a told end is told as `still`, not as new. So a condition that swings back within 15
@@ -32,7 +43,10 @@
  *    and moderators are not told: the Alerts panel is the owners' (routes/alerts.ts).
  * 2. Optionally, one channel the operator chooses: an ntfy topic, or any URL that takes a JSON POST. Nothing goes through
  *    BeanPool's servers: with none set, the push and the banner still work and nothing leaves the server. A channel
- *    that fails keeps what it missed (up to 50 events) and is tried again every 5 minutes, with all of it in one message.
+ *    that fails keeps what it missed (up to 50 events) and is tried again every 5 minutes, with all of it in one message
+ *    whose text is at most 4096 bytes (ntfy's limit; a JSON channel's POST body carries that text with the subject, a
+ *    2000-character copy and each shown line's details, so it is larger): the high and urgent lines first, report lines
+ *    last, the rest as a count.
  *    At most 20 messages an hour; high and urgent ones are never held by that, only by a hard ceiling of 60. A redirect
  *    is a failed send, never followed: the address the owner gave is the only one the alerts go to.
  *
@@ -58,7 +72,7 @@ import { logger, onSecurityLogLine, type LogCategory } from '../logger.js';
 import { errorMessage } from '../error-message.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
-import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
+import { NODE_ROLE_ACTS, nodeRoleOf } from '../engine/node-roles.js';
 import { getDiskHealth } from '../engine/storage-health.js';
 import { getShutdownStatus } from '../engine/shutdown-recovery.js';
 import { dispatchPushNotification, readWatchdogStatus, resolvePublicNodeUrl } from '../state-engine.js';
@@ -70,6 +84,10 @@ import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
 import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, type SecurityNote } from './security-signal.js';
 import { registrarNames } from '../engine/registrar-names.js';
+import { listAutomationTokens } from '../automation-tokens.js';
+import { agentCallsTodayAll } from '../agent/limits.js';
+import { listOAuthGrants } from '../agent/oauth.js';
+import { suggestionCountsToday } from '../agent/suggestions.js';
 
 function dataDir(): string {
     return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -119,7 +137,9 @@ export type AlertKey =
     | 'standby.incident'
     | 'tls.fallback'
     | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
-    | 'sec.log';
+    | 'sec.agent'
+    | 'sec.log'
+    | 'reports.new' | 'reports.child' | 'reports.child-more';
 
 interface Row {
     title: string;
@@ -155,15 +175,26 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.keys': { title: 'a sign-in key or code changed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.replaced': { title: 'replaced by another server', priority: 5, webhook: true, pushEveryMs: DAY, banner: true },
     'sec.name': { title: 'its address is not its own', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
+    /** An AI assistant connected to /mcp or disconnected (admin MCP design §8): told as a role change is. */
+    'sec.agent': { title: 'an AI assistant connected or disconnected', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.more': { title: 'more security changes', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     /** The record of an acknowledgement, kept in the history only: who saw them, as a role, and when. */
     'sec.seen': { title: 'security alerts marked as seen', priority: 2, webhook: false, pushEveryMs: 0, banner: false },
     /** A logger.security() line was written (design §3.2): kept in the history only, one line per category, counted. */
     'sec.log': { title: 'security log lines', priority: 1, webhook: false, pushEveryMs: 0, banner: false },
+    /** Reports in the Manager's queue (noteNewReport): the first at once, the rest of the fold window as one line. */
+    'reports.new': { title: 'new reports waiting', priority: 3, webhook: true, pushEveryMs: EACH, banner: false },
+    /** A report in the child-safety category, told at once, urgent: a member's first in their hour, up to 10 an hour. */
+    'reports.child': { title: 'a child-safety report waiting', priority: 5, webhook: true, pushEveryMs: EACH, banner: false },
+    /** The child-safety reports past those bounds, counted: one urgent line, told within about 10 minutes. */
+    'reports.child-more': { title: 'more child-safety reports waiting', priority: 5, webhook: true, pushEveryMs: EACH, banner: false },
 };
 
+/** Told because members reported: urgent ones too are never kept over another line (keepIn), and the same line is counted. */
+const REPORT_KEYS: ReadonlySet<AlertKey> = new Set<AlertKey>(['reports.new', 'reports.child', 'reports.child-more']);
+
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
-const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.role', 'sec.claim', 'sec.keys', 'sec.more']);
+const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.role', 'sec.claim', 'sec.keys', 'sec.more', 'sec.agent']);
 /** Going on while it is seen; over after an hour without another (then the usual 15-minute hold). */
 const SECURITY_SEEN: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.password-burst', 'sec.claim-guess']);
 const SECURITY_QUIET_MS = 60 * 60_000;
@@ -196,7 +227,7 @@ export interface AlertEvent {
     since: number;
     priority: AlertPriority;
     detail: string;
-    /** Never dropped to make room (Condition.high; urgent ones too). */
+    /** Never dropped to make room (Condition.high; urgent ones too, but never a report's: REPORT_KEYS). */
     high?: boolean;
     /** The same line told this many times while it waited (or, for a security event, in the card). */
     count?: number;
@@ -254,12 +285,32 @@ interface BookState {
     recent: AlertEvent[];
     /** Each actor's hour of security events, by a hash of who acted (never the key itself). */
     actors: Record<string, ActorHour>;
+    /** The open fold window of new reports (noteNewReport): when its first was told, and what came in after it, by kind. */
+    reports: ReportWindow | null;
+    /** Child-safety reports (noteNewReport): those told at once in the last hour, each reporter's hour, the open summary. */
+    child: ChildReports;
+}
+
+interface ChildReports {
+    /** When each line was told on its own (a member's first, a member's hour folded), the last hour's: at most REPORT_CHILD_AT_ONCE_PER_HOUR. */
+    told: number[];
+    /** Each reporter's hour, by a hash of who reported (never the key itself): when it began, and their reports after the first. */
+    reporters: Record<string, { from: number; folded: number }>;
+    /** Those past the server's hourly bound: counted from `from`, told as one line REPORT_CHILD_SUMMARY_MS later; who by hash, for a count. */
+    summary: { from: number; count: number; reporters: string[] } | null;
+}
+
+interface ReportWindow {
+    from: number;
+    folded: number;
+    kinds: Partial<Record<ReportKind, number>>;
 }
 
 const emptyChannel = (): ChannelState => ({ lastOkAt: null, lastTriedAt: null, failedInARow: 0, error: null, nextTryAt: 0 });
 const emptyState = (): BookState => ({
     raised: {}, clearedAt: {}, waiting: [], history: [], pushedAt: {}, sentAt: [], channel: emptyChannel(), dropped: 0,
-    diskTicks: { '80': 0, '90': 0, '95': 0 }, watchdogRecoveries: null, seenAt: {}, acked: {}, recent: [], actors: {},
+    diskTicks: { '80': 0, '90': 0, '95': 0 }, watchdogRecoveries: null, seenAt: {}, acked: {}, recent: [], actors: {}, reports: null,
+    child: { told: [], reporters: {}, summary: null },
 });
 
 let clockOffsetMs = 0;
@@ -468,27 +519,53 @@ export interface AlertMessage {
     events: AlertEvent[];
 }
 
-/** One message for `events`: the community's name, each condition, since when, what to do. Nothing about any member. */
+/**
+ * ntfy's limit for one message's words (a longer one becomes an attachment, or is refused): no message's text is longer.
+ * It bounds the text, an ntfy POST's whole body; a JSON channel's body adds the subject, a 2000-character copy for
+ * Discord-style hooks and each shown line's details (sendToChannel), so it is larger.
+ */
+export const ALERT_MESSAGE_MAX_BYTES = 4096;
+
+const shownPriority = (e: AlertEvent) => (e.kind === 'cleared' ? 2 : e.priority);
+
+/**
+ * One message for `events`: the community's name, each condition, since when, what to do. Nothing about any member. At
+ * most ALERT_MESSAGE_MAX_BYTES of text: a held queue too long for that (a channel down for hours) says the high lines
+ * first, then the other lines before report lines (members' doing), most urgent first, as many as fit, and the rest as a
+ * count; `events` is what it shows.
+ */
 export function composeAlert(community: string, events: AlertEvent[], click: string | null = settingsLink()): AlertMessage {
     const first = events[0];
     const head = first.kind === 'cleared' ? `${ROWS[first.key].title}: resolved` : ROWS[first.key].title;
     const subject = `${community}: ${head}${events.length > 1 ? ` (+${events.length - 1} more)` : ''}`;
-    const lines = events.map((e) => {
+    const line = (e: AlertEvent) => {
         const title = ROWS[e.key].title;
         const times = (e.count ?? 1) > 1 ? ` (×${e.count})` : '';
         if (e.kind === 'cleared') return `- RESOLVED (${title}, since ${when(e.since)}): ${e.detail}${times}`;
         return `- ${e.kind === 'still' ? 'STILL ' : ''}${title.toUpperCase()} since ${when(e.since)}: ${e.detail}${times}`;
-    });
-    const text = [
+    };
+    const compose = (shown: AlertEvent[]) => [
         `${community}, its BeanPool server:`,
         '',
-        ...lines,
+        ...shown.map(line),
+        ...(shown.length < events.length ? [`- And ${events.length - shown.length} more, too many for one message: Settings → Alerts lists them.`] : []),
         '',
         click ? `Open Settings: ${click}` : 'Open Settings on this server to see more.',
         'This message names no member.',
     ].join('\n');
-    const priority = Math.max(...events.map((e) => (e.kind === 'cleared' ? 2 : e.priority))) as AlertPriority;
-    return { subject, text, priority, click, events };
+    let shown = events;
+    if (Buffer.byteLength(compose(events)) > ALERT_MESSAGE_MAX_BYTES) {
+        const ranked = events.map((e, i) => ({ e, i }))
+            .sort((a, b) => Number(isHigh(b.e)) - Number(isHigh(a.e)) || Number(REPORT_KEYS.has(a.e.key)) - Number(REPORT_KEYS.has(b.e.key))
+                || shownPriority(b.e) - shownPriority(a.e) || a.i - b.i);
+        const keep = new Set<AlertEvent>();
+        for (const { e } of ranked) {
+            if (Buffer.byteLength(compose(events.filter((x) => keep.has(x) || x === e))) <= ALERT_MESSAGE_MAX_BYTES) keep.add(e);
+        }
+        shown = events.filter((x) => keep.has(x));
+    }
+    const priority = Math.max(...events.map(shownPriority)) as AlertPriority;
+    return { subject, text: compose(shown), priority, click, events: shown };
 }
 
 // ── Sending ────────────────────────────────────────────────────────────────────────────────
@@ -639,11 +716,26 @@ function pushOwners(s: BookState, events: readonly AlertEvent[], t: number,
     const topDisk = Math.max(0, ...(Object.keys(s.raised) as AlertKey[]).map((k) => DISK_LEVEL[k] ?? 0));
     const shown = due.filter((e) => (DISK_LEVEL[e.key] ?? topDisk) >= topDisk).sort((a, b) => b.priority - a.priority);
     if (!shown.length) return;
-    const first = shown[0];
     try {
-        const to = [...new Set([...owners(), ...shown.flatMap((e) => also.get(e) ?? [])])];
-        if (to.length) {
-            dispatchPushNotification(to, 'SYSTEM', `${communityName()}: ${ROWS[first.key].title}${shown.length > 1 ? ` (+${shown.length - 1} more)` : ''}`,
+        // The owners are pushed everything shown; a member pushed with them (an admin, of reports; one who lost a role) is
+        // pushed only what named them, never the owners' other lines (the deciding review of #1850, finding 3). Members
+        // shown the same lines share one push.
+        const groups = new Map<string, { lines: AlertEvent[]; to: string[] }>();
+        const add = (pk: string, lines: AlertEvent[]) => {
+            const k = lines.map((e) => shown.indexOf(e)).join(',');
+            const g = groups.get(k) ?? groups.set(k, { lines, to: [] }).get(k)!;
+            if (!g.to.includes(pk)) g.to.push(pk);
+        };
+        const ownerKeys = owners();
+        for (const pk of ownerKeys) add(pk, shown);
+        const others = new Map<string, AlertEvent[]>();
+        for (const e of shown) {
+            for (const pk of also.get(e) ?? []) if (!ownerKeys.includes(pk)) (others.get(pk) ?? others.set(pk, []).get(pk)!).push(e);
+        }
+        for (const [pk, lines] of others) add(pk, lines);
+        for (const { lines, to } of groups.values()) {
+            const first = lines[0];
+            dispatchPushNotification(to, 'SYSTEM', `${communityName()}: ${ROWS[first.key].title}${lines.length > 1 ? ` (+${lines.length - 1} more)` : ''}`,
                 first.detail, { kind: 'server_alert', alert: first.key, section: 'home' }, 'marketplace', 'owner.alert');
         }
     } catch (err) {
@@ -664,7 +756,7 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
     const tell = (e: AlertEvent) => {
         told.push(e);
         const security = SECURITY_ONE_SHOTS.has(e.key);
-        keepIn(s.history, e, MAX_HISTORY, security);
+        keepIn(s.history, e, MAX_HISTORY, security || REPORT_KEYS.has(e.key));
         if (security) {
             const standby = getNodeRole() === 'backup';
             s.recent = s.recent.filter((x) => t - x.at < SECURITY_BANNER_MS && x.at > (s.acked.oneShotsAt ?? 0) && (standby || !x.standby));
@@ -716,13 +808,21 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
     return told;
 }
 
-const isHigh = (e: AlertEvent) => !!e.high || e.priority >= 5;
+/**
+ * A report line, however urgent, is not: members can file 10 an hour each, and their lines must never push a security
+ * line out of the history or the channel's queue (the deciding reviews of #1850, finding 1): keepIn drops report lines
+ * first, and composeAlert shows them after every other line.
+ */
+const isHigh = (e: AlertEvent) => !REPORT_KEYS.has(e.key) && (!!e.high || e.priority >= 5);
 
 /**
  * Adds `e` to a bounded list: the same line already there (same row, kind and words, and not on its way to the channel)
- * is counted (×n) and moved last instead, when `coalesce`. Past `max`, the oldest line that is not high makes room; a
- * high one never does (four times `max` is the last stop for a list of nothing but high lines, which the coalescing
- * keeps to a handful). Returns how many lines were dropped.
+ * is counted (×n) and moved last instead, when `coalesce`. Past `max`, the oldest report line makes room first, then the
+ * oldest line that is not high; a high one never does (four times `max` is the last stop for a list of nothing but high
+ * lines, which the coalescing keeps to a handful). A new report line with no older one to drop makes room with the oldest
+ * disk, backup or other condition line that is not high, never a security line, and only then drops itself: so a
+ * history full of daily reminders still shows the reports (the deciding review of #1850, confirmation 2, finding 1).
+ * Returns how many lines were dropped.
  */
 function keepIn(list: AlertEvent[], e: AlertEvent, max: number, coalesce: boolean): number {
     const same = coalesce ? list.findIndex((x) => x.key === e.key && x.kind === e.kind && x.detail === e.detail && !inFlight.includes(x)) : -1;
@@ -734,7 +834,10 @@ function keepIn(list: AlertEvent[], e: AlertEvent, max: number, coalesce: boolea
     list.push(e);
     let dropped = 0;
     while (list.length > max) {
-        const i = list.findIndex((x) => !isHigh(x) && !inFlight.includes(x));
+        let i = list.findIndex((x) => REPORT_KEYS.has(x.key) && x !== e && !inFlight.includes(x));
+        if (i < 0 && REPORT_KEYS.has(e.key)) i = list.findIndex((x) => !isHigh(x) && !REPORT_KEYS.has(x.key) && !x.key.startsWith('sec.') && !inFlight.includes(x));
+        if (i < 0 && REPORT_KEYS.has(e.key)) i = list.indexOf(e);
+        if (i < 0) i = list.findIndex((x) => !isHigh(x) && !inFlight.includes(x));
         if (i < 0 && list.length <= 4 * max) break;
         list.splice(Math.max(i, 0), 1);
         dropped++;
@@ -827,7 +930,7 @@ function foldedConditions(s: BookState, t: number, only?: string): Condition[] {
 /** The security log's lines by category, in words: what Settings → Logs holds them under, never what a line says. */
 const LOG_KINDS: Record<LogCategory, string> = {
     AUTH: 'sign-in, keys and codes', ADMIN: 'admin actions', P2P: 'backups, the standby and other servers', SYS: 'the server itself',
-    TLS: 'certificates', LEDGER: 'the ledger', DB: 'the database',
+    TLS: 'certificates', LEDGER: 'the ledger', DB: 'the database', AGENT: 'AI assistants',
 };
 
 /**
@@ -914,6 +1017,216 @@ export async function acknowledgeSecurityAlerts(by: 'owner' | 'password' = 'owne
     }
     await updateAlerts(replacedCondition(s));
     return { replacedAcknowledged: !!info };
+}
+
+// ── Reports coming in (B9) ─────────────────────────────────────────────────────────────────
+
+export type ReportKind = 'child safety' | 'spam or scam' | 'offensive content' | 'misleading post' | 'other';
+
+/** The fold window when .env sets none: the first report told at once, the rest of the hour as one line. */
+export const REPORT_FOLD_DEFAULT_MINUTES = 60;
+const REPORT_FOLD_MIN_MINUTES = 1;
+const REPORT_FOLD_MAX_MINUTES = 24 * 60;
+
+function foldMinutes(raw: string | undefined): number | null {
+    const v = raw?.trim();
+    const n = v && /^\d+$/.test(v) ? Number(v) : NaN;
+    return n >= REPORT_FOLD_MIN_MINUTES && n <= REPORT_FOLD_MAX_MINUTES ? n : null;
+}
+
+/** ALERTS_REPORT_FOLD_MINUTES in .env (1 to 1440, whole minutes), else an hour; a value out of range is the default. */
+export function reportFoldMs(env: NodeJS.ProcessEnv = process.env): number {
+    return (foldMinutes(env.ALERTS_REPORT_FOLD_MINUTES) ?? REPORT_FOLD_DEFAULT_MINUTES) * 60_000;
+}
+
+/**
+ * The log's one line at start for an ALERTS_REPORT_FOLD_MINUTES that is set but not used (the confirmation review of
+ * #1850, finding 4: it fell back to the hour without a word): the variable, at most 40 characters of what it says
+ * (quoted, so it can't break the line), and the hour used instead. Null when it is empty or good.
+ */
+export function reportFoldWarning(env: NodeJS.ProcessEnv = process.env): string | null {
+    const raw = env.ALERTS_REPORT_FOLD_MINUTES?.trim();
+    if (!raw || foldMinutes(raw) !== null) return null;
+    return `[Alerts] ALERTS_REPORT_FOLD_MINUTES=${JSON.stringify(raw.slice(0, 40))}${raw.length > 40 ? '…' : ''} is not a whole number of minutes `
+        + `from ${REPORT_FOLD_MIN_MINUTES} to ${REPORT_FOLD_MAX_MINUTES}: reports are folded over the hour (${REPORT_FOLD_DEFAULT_MINUTES} minutes) instead.`;
+}
+
+/** The child-safety category, whether picked from a list or written in: read to sort the report, never repeated. */
+const CHILD_SAFETY = /\b(child[- ]safety|csae|csam|child (sexual|abuse|exploitation|porn)\w*|sexual(ly)? (abuse|exploit)\w* (of )?(a )?(child|minor)s?|underage)\b/i;
+
+/** What kind a report is, from its reason: one of the apps' fixed choices, child safety, or other. Never its words. */
+export function reportKind(reason: unknown): ReportKind {
+    const r = typeof reason === 'string' ? reason.trim().toLowerCase() : '';
+    if (CHILD_SAFETY.test(r)) return 'child safety';
+    for (const k of ['spam or scam', 'offensive content', 'misleading post'] as const) if (r.startsWith(k)) return k;
+    return 'other';
+}
+
+function pendingReports(): number {
+    try {
+        return (db.prepare("SELECT COUNT(*) AS c FROM abuse_reports WHERE status = 'pending'").get() as { c: number }).c;
+    } catch {
+        return 0;
+    }
+}
+
+/** The admins who act: pushed with the owners for a report (they work the queue). */
+function admins(): string[] {
+    return (db.prepare(
+        `SELECT nr.member_pubkey AS pk FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.role = 'admin' AND ${NODE_ROLE_ACTS}`,
+    ).all() as { pk: string }[]).map((r) => r.pk);
+}
+
+function waitingWords(n: number): string {
+    return `${n} report${n === 1 ? '' : 's'} ${n === 1 ? 'waits' : 'wait'} in the Manager's Reports queue.`;
+}
+
+function minutesWords(ms: number): string {
+    const m = Math.round(ms / 60_000);
+    return m === 60 ? 'the hour' : m % 60 === 0 ? `the ${m / 60} hours` : `the ${m} minute${m === 1 ? '' : 's'}`;
+}
+
+/** The fold window that is over: what it counted after its first, told as one line (pushed), and the window closed. */
+function foldedReportConditions(s: BookState, t: number, foldMs: number = reportFoldMs()): Condition[] {
+    const w = s.reports;
+    if (!w || t - w.from < foldMs) return [];
+    s.reports = null;
+    if (w.folded === 0) return [];
+    const kinds = (Object.entries(w.kinds) as Array<[ReportKind, number]>).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ');
+    let also: string[] = [];
+    try { also = admins(); } catch { /* the owners still are */ }
+    return [{
+        key: 'reports.new', active: true, oneShot: true, alsoPush: also,
+        detail: `${w.folded} more report${w.folded === 1 ? '' : 's'} came in in ${minutesWords(foldMs)} after the first was told (${kinds}). `
+            + waitingWords(pendingReports()),
+    }];
+}
+
+/**
+ * Child-safety lines told on their own on this server in any hour (a member's first, a member's hour folded), whoever
+ * filed them (the director's call on the deciding review of #1850: global's open door makes accounts cheap). Past it
+ * they go in the summary, never dropped.
+ */
+export const REPORT_CHILD_AT_ONCE_PER_HOUR = 10;
+/** The summary of child-safety reports past the server's bound: told, urgent and pushed, this long after the first it counts. */
+export const REPORT_CHILD_SUMMARY_MS = 10 * 60_000;
+
+/** The same words every time, so the history and the channel's queue count them (×n) rather than keep each. */
+const CHILD_AT_ONCE_WORDS = "A report in the child-safety category came in: look at it first, in the Manager's Reports queue.";
+
+/** One of the server's hourly slots for a child-safety line told on its own, taken if there is one left. */
+function childSlot(c: ChildReports, t: number): boolean {
+    c.told = c.told.filter((x) => t - x < HOUR_MS);
+    if (c.told.length >= REPORT_CHILD_AT_ONCE_PER_HOUR) return false;
+    c.told.push(t);
+    return true;
+}
+
+/** Reports past the server's hourly bound, counted into the summary (opened now if none is). */
+function childToSummary(c: ChildReports, t: number, id: string, count: number): void {
+    const w = c.summary ??= { from: t, count: 0, reporters: [] };
+    w.count += count;
+    if (!w.reporters.includes(id)) w.reporters.push(id);
+}
+
+/**
+ * Whether this child-safety report is told at once, #1807's model (the director's call on the confirmation review of
+ * #1850, finding 2): a member's first in their hour is, while the server's hour has a slot (REPORT_CHILD_AT_ONCE_PER_HOUR,
+ * whoever filed them); their others that hour are counted and told as one line when it ends (childFoldConditions). A
+ * first with no slot left is counted into the summary, told within about 10 minutes. So one member filing their 10 an
+ * hour, together or one every 6 minutes, sends each owner and admin 2 pushes; any number of new accounts, at most 10 lines
+ * an hour told on their own and a summary every 10 minutes. Call childFoldConditions first: it closes the hours that are over.
+ */
+function childAtOnce(s: BookState, t: number, reporter: string): boolean {
+    const c = s.child;
+    const id = actorId(`report:${reporter}`);
+    const mine = c.reporters[id];
+    if (mine) {
+        mine.folded++;
+        return false;
+    }
+    c.reporters[id] = { from: t, folded: 0 };
+    if (childSlot(c, t)) return true;
+    childToSummary(c, t, id, 1);
+    return false;
+}
+
+/**
+ * Each member's hour that is over: their child-safety reports after their first, told as one urgent line (pushed), and
+ * the hour closed. Hours that end on the same tick are one line. It takes one of the server's hourly slots; with none
+ * left, the reports are counted into the summary instead.
+ */
+function childFoldConditions(s: BookState, t: number): Condition[] {
+    const c = s.child;
+    const due: Array<[string, number]> = [];
+    for (const [id, w] of Object.entries(c.reporters)) {
+        if (t - w.from < HOUR_MS) continue;
+        delete c.reporters[id];
+        if (w.folded > 0) due.push([id, w.folded]);
+    }
+    if (!due.length) return [];
+    if (!childSlot(c, t)) {
+        for (const [id, n] of due) childToSummary(c, t, id, n);
+        return [];
+    }
+    const count = due.reduce((sum, [, n]) => sum + n, 0);
+    let also: string[] = [];
+    try { also = admins(); } catch { /* the owners still are */ }
+    const by = due.length === 1 ? 'the same member in the hour after their first was told' : `${due.length} members, each in the hour after their first was told`;
+    return [{
+        key: 'reports.child-more', active: true, oneShot: true, priority: 5, alsoPush: also,
+        detail: `${count} more child-safety report${count === 1 ? '' : 's'} came in from ${by}: look at them first. ${waitingWords(pendingReports())}`,
+    }];
+}
+
+/** The child-safety summary that is due: what it counted, told as one urgent line (pushed), and closed. */
+function childSummaryConditions(s: BookState, t: number): Condition[] {
+    const w = s.child.summary;
+    if (!w || t - w.from < REPORT_CHILD_SUMMARY_MS) return [];
+    s.child.summary = null;
+    let also: string[] = [];
+    try { also = admins(); } catch { /* the owners still are */ }
+    const by = w.reporters.length === 1 ? 'one member' : `${w.reporters.length} members`;
+    return [{
+        key: 'reports.child-more', active: true, oneShot: true, priority: 5, alsoPush: also,
+        detail: `${w.count} more child-safety report${w.count === 1 ? '' : 's'} came in, from ${by}, past the ${REPORT_CHILD_AT_ONCE_PER_HOUR} lines `
+            + `an hour this server tells on their own: look at them first. ${waitingWords(pendingReports())}`,
+    }];
+}
+
+/**
+ * A new report in the queue (routes/community.ts POST /api/reports, once a new row is written, with who filed it): told to
+ * the owners and admins, by kind and count only. The first of a fold window goes at once; the rest are counted in memory
+ * (the tick writes the book every minute, so a crash loses at most a minute of counts, and the reports themselves are in
+ * the queue) and told as one line when the window is over. A child-safety one is told at once, urgent and pushed, or
+ * counted (the book written) into its member's hour or the summary: childAtOnce.
+ */
+export function noteNewReport(reason: unknown, reporter: string): Promise<AlertEvent[]> {
+    const s = readState();
+    const t = now();
+    const kind = reportKind(reason);
+    const conditions = [...foldedReportConditions(s, t), ...childFoldConditions(s, t), ...childSummaryConditions(s, t)];
+    let also: string[] = [];
+    try { also = admins(); } catch { /* the owners still are */ }
+    if (kind === 'child safety') {
+        if (childAtOnce(s, t, reporter)) {
+            conditions.push({ key: 'reports.child', active: true, oneShot: true, priority: 5, alsoPush: also, detail: CHILD_AT_ONCE_WORDS });
+        } else if (!conditions.length) {
+            writeState();
+        }
+    } else if (!s.reports) {
+        s.reports = { from: t, folded: 0, kinds: {} };
+        conditions.push({
+            key: 'reports.new', active: true, oneShot: true, alsoPush: also,
+            detail: `A new report came in (${kind}). ${waitingWords(pendingReports())} More in ${minutesWords(reportFoldMs())} are told as one line.`,
+        });
+    } else {
+        s.reports.folded++;
+        s.reports.kinds[kind] = (s.reports.kinds[kind] ?? 0) + 1;
+    }
+    if (!conditions.length) return Promise.resolve([]);
+    return updateAlerts(conditions);
 }
 
 // ── The conditions ─────────────────────────────────────────────────────────────────────────
@@ -1075,6 +1388,9 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             ...securityQuietConditions(s, t),
             ...nameConditions(),
             ...foldedConditions(s, t),
+            ...foldedReportConditions(s, t),
+            ...childFoldConditions(s, t),
+            ...childSummaryConditions(s, t),
         ];
         return await updateAlerts(conditions);
     } catch (e) {
@@ -1088,6 +1404,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 /** Every minute on every server, from the start: a crash loop's third start is told before it can crash again. */
 export function startServerAlerts(): void {
     if (timer) return;
+    const foldWarning = reportFoldWarning();
+    if (foldWarning) logger.warn('SYS', foldWarning);
     void checkServerAlerts();
     timer = setInterval(() => { void checkServerAlerts(); }, ALERT_TICK_MS);
     timer.unref?.();
@@ -1136,6 +1454,24 @@ export interface AlertsStatus {
     recent: Array<AlertEvent & { title: string }>;
     /** Whether an owner has something to acknowledge: those, or this server replaced. */
     acknowledge: boolean;
+    /**
+     * AI assistants today (admin MCP design §8), counts only: calls let in since midnight UTC, how many are connected, and
+     * the suggestions they filed and the ones approved (agent/suggestions.ts).
+     */
+    assistants: { calls: number; connected: number; suggestions: number; approved: number };
+}
+
+/**
+ * Assistants that can call /mcp now: agent tokens not expired and OAuth grants not idle 30 days (S2), their member still an
+ * owner or admin (as /mcp reads them).
+ */
+function connectedAssistants(t: number): number {
+    const live = (member: unknown) => {
+        const role = typeof member === 'string' ? nodeRoleOf(member) : null;
+        return role === 'owner' || role === 'admin';
+    };
+    return listAutomationTokens().filter((k) => k.scope === 'agent' && (k.expiresAt === null || k.expiresAt > t) && live(k.createdBy)).length
+        + listOAuthGrants(t).filter((g) => live(g.member)).length;
 }
 
 export function getAlertsStatus(): AlertsStatus {
@@ -1153,5 +1489,6 @@ export function getAlertsStatus(): AlertsStatus {
         history: s.history.slice().reverse().map((e) => ({ ...e, title: ROWS[e.key].title })),
         recent: recentSecurityEvents(s, t).map((e) => ({ ...e, title: ROWS[e.key].title })),
         acknowledge: recentSecurityEvents(s, t).length > 0 || (!!s.raised['sec.replaced'] && s.raised['sec.replaced'].endedAt === undefined),
+        assistants: { calls: agentCallsTodayAll(t), connected: connectedAssistants(t), ...suggestionCountsToday(t) },
     };
 }

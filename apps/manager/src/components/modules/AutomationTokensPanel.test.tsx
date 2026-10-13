@@ -203,6 +203,14 @@ describe('AutomationTokensPanel', () => {
         expect(screen.getByLabelText('Name').className).toContain('w-full');
     });
 
+    it("an AI assistant's token is not listed here: it is under Connected assistants", async () => {
+        fakeNode({ tokens: [row, { ...row, id: 'agent1', name: 'Claude on my laptop', scope: 'agent' }] });
+        render(<AutomationTokensPanel activeNode={node} viewer={OWNER_KEY} />);
+        expect(await screen.findByText('Nightly backups')).toBeInTheDocument();
+        expect(screen.getAllByTestId('automation-token-row')).toHaveLength(1);
+        expect(screen.queryByText('Claude on my laptop')).toBeNull();
+    });
+
     it('Revoke asks first, then calls the revoke route and refreshes the list', async () => {
         const calls = fakeNode({ tokens: [row] });
         const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);

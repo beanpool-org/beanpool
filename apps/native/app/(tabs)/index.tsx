@@ -8,17 +8,21 @@ import * as Location from 'expo-location';
 import {
     TIPS_ALL_SEEN, dismissTips, emptyTipsRecord, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
     tipsCaption, tipsFor, type TipsRecord,
+    START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourEnded, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
+import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
 import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
+import { KeyMovedCard } from '../../components/KeyMovedCard';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { NewPollModal } from '../../components/NewPollModal';
 import { NewEventModal } from '../../components/NewEventModal';
 import { goToNeedsTarget } from '../../components/NeedsYouIcons';
 import { useManageNode } from '../../components/useManageNode';
 import { FabBandContext, HomeCard, HomeButton, homeStyles, type FabBand } from '../../components/home/HomeParts';
+import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
 import { EditHomeSheet } from '../../components/home/EditHomeSheet';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
@@ -26,13 +30,13 @@ import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
-    MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StepsBody, TipsBody,
+    MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
     FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
-    effectiveInterests, fewerCardsNews, firstSteps, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
-    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, skyOf, starredFirst,
+    effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
+    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
     type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
@@ -42,7 +46,7 @@ import {
 } from '../../utils/home-store';
 import { readGlobalHome } from '../../utils/community-directory';
 import { rememberedKnocks, type RememberedKnock } from '../../utils/knock';
-import { getCachedNodeProfile } from '../../utils/node-profile';
+import { getCachedNodeProfile, hiddenTabsFor } from '../../utils/node-profile';
 import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-account';
 import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
@@ -166,6 +170,11 @@ export default function HomeScreen() {
     const [pollModal, setPollModal] = useState(false);
     const [eventModal, setEventModal] = useState(false);
     const [hint, setHint] = useState(false);
+    /** The tour ended on this phone (Done or Skip) before the account's answer says so (DESIGN-getting-started-fable.md §2). */
+    const [tourOver, setTourOver] = useState(false);
+    /** A tour part way on this phone, for "Pick up the tour at step n ›". */
+    const [tourProgress, setTourProgress] = useState<TourProgress | null>(null);
+    const { run: tourRun } = useTour();
     /** The member's role here, asked only where only admins invite (undefined: not heard, so no invite asked of them). */
     const [role, setRole] = useState<HomeRole>(undefined);
     /** On the global node: the place the last read was measured from (the phone's, where allowed), and this phone's knocks. */
@@ -197,7 +206,10 @@ export default function HomeScreen() {
     // finding 2; review of #1715, finding 1). Kept with the mark.
     const phoneSent = useRef<MarkSent[]>([]);
     const layoutRef = useRef<HomeLayout | null>(null);
-    layoutRef.current = layout;
+    // A Home never saved, once the tour has ended (Skip or Done, here or on another device): the starter set, edited as any
+    // saved Home is. Before the tour ends it is Getting started alone, core's default (DESIGN-getting-started-fable.md §1).
+    const shown: HomeLayout | null = shownLayout(stored?.answer, layout, { tourOver });
+    layoutRef.current = shown;
     const focused = useRef(false);
     const scrollRef = useRef<ScrollView>(null);
     const cardY = useRef(new Map<string, number>());
@@ -241,7 +253,10 @@ export default function HomeScreen() {
         if (await seenOnce(whose.publicKey, 'reveal')) return;
         if (!stillOnPhone(whose)) return;
         void markSeenOnce(whose, 'reveal');
-        if (!(await seenOnce(whose.publicKey, 'hint')) && stillOnPhone(whose)) {
+        // Getting started says the same as the hint: while it is up the hint waits (it shows after a Skip, never after Done).
+        const ans = storedRef.current?.answer;
+        const startUp = !!ans?.me && !tourEnded(ans.me.tour);
+        if (!startUp && !(await seenOnce(whose.publicKey, 'hint')) && stillOnPhone(whose)) {
             setHint(true);
             void markSeenOnce(whose, 'hint');
         }
@@ -672,7 +687,7 @@ export default function HomeScreen() {
     // Tips: the node's list, from the answer in hand; the card only once the record is read, and never advanced here.
     const tipsList = answer ? tipsFor(answer, role) : [];
     const tipsView = tips && answer?.me ? tipNow(tips, tipsList, localDay()).view : null;
-    const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now, tipsUp: !!tipsView, place }) : [];
+    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now, tipsUp: !!tipsView, place, tourOver }) : [];
     // Find your community's pin (the global node, a member's first 30 days): no "…", no move, at the top.
     const pins = pinnedCards(answer, now);
     const interestsUp = drawn.some(c => c.type === 'interests');
@@ -682,19 +697,87 @@ export default function HomeScreen() {
     const profile = answer?.profile ?? 'local';
     const showsBeans = answer?.features.beans !== false;
     const invitesOn = !!answer && invitesForReader(answer.features, role);
-    const ordered = cardOrder(layout, pins);
+    const ordered = cardOrder(shown, pins);
     const tailor = canTailor(answer);
     const menuCard = tailor ? menuFor : null;
     const menuAt = menuCard ? drawn.findIndex(d => d.id === menuCard.id) : -1;
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
-    const picker = answer && tailor && addOpen ? pickerGroups(answer, layout, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}) : null;
+    const picker = answer && tailor && addOpen ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}) : null;
+
+    // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
+    // The bar is the tab layout's (utils/tour-store.ts); Home lends it the chips (the picker's own add) and the end (one
+    // layout write, then the account's record). Nothing here starts a tour by itself.
+    const chips = answer?.me && tailor
+        ? tourChips({ profile: answer.profile, features: answer.features, cards: answer.cards as Record<string, unknown> }, role, { members: answer.cards.community?.members ?? null })
+        : [];
+    const tourEnd = useCallback(async (kind: 'done' | 'skipped') => {
+        const id = identityRef.current;
+        const u = storedRef.current?.url ?? url;
+        if (!id) return;
+        const whose = homeAccount(id.publicKey);
+        setTourOver(true);
+        setTourProgress(null);
+        const ans = storedRef.current?.answer;
+        if (canTailor(ans)) changeLayout(endTourLayout(layoutRef.current, { pinned: pinnedCards(ans, Date.now()) }), { reread: true });
+        if (kind === 'done') {
+            setHint(false);
+            void markSeenOnce(whose, 'hint');
+        } else if (!(await seenOnce(id.publicKey, 'hint')) && stillOnPhone(whose)) {
+            setHint(true);
+            void markSeenOnce(whose, 'hint');
+        }
+        if (u && stillOnPhone(whose)) void saveTourRecord(u, id, tourRecord(kind));
+    }, [url, changeLayout]);
+    const tourRestart = useCallback(() => {
+        const id = identityRef.current;
+        const u = storedRef.current?.url ?? url;
+        if (!id) return;
+        setTourOver(false);
+        // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
+        const ans = storedRef.current?.answer;
+        if (canTailor(ans) && layoutRef.current) {
+            const added = addCard(layoutRef.current, 'start', Date.now(), { pinned: pinnedCards(ans, Date.now()) });
+            if (added.ok) changeLayout(added.layout);
+        }
+        if (u) void saveTourRecord(u, id, tourRecord('open'));
+        startTour(id.publicKey, 0);
+    }, [url, changeLayout]);
+    const tourAddChip = useCallback((type: string) => {
+        const ans = storedRef.current?.answer;
+        const added = addCard(layoutRef.current, type, Date.now(), { pinned: pinnedCards(ans, Date.now()) });
+        if (added.ok) changeLayout(added.layout, { reread: true });
+    }, [changeLayout]);
+    const chipsKey = chips.join(',');
+    useEffect(() => {
+        if (!answer?.me || !tailor) { lendTourHome(null); return; }
+        lendTourHome({
+            chips,
+            chipName: (type) => cardName(type, profile),
+            onHome: (type) => (layoutRef.current?.cards ?? []).some(c => c.type === type),
+            addChip: tourAddChip,
+            moreCards: () => setAddOpen(true),
+            end: (kind) => { void tourEnd(kind); },
+            restart: tourRestart,
+        });
+    }, [answer, tailor, layout, chipsKey, profile, tourAddChip, tourEnd, tourRestart]);
+    useEffect(() => () => lendTourHome(null), []);
+    // Another account on the phone: this one's tour words go; a tour part way here is read again whenever the bar closes.
+    useEffect(() => { setTourOver(false); }, [identity?.publicKey]);
+    useEffect(() => {
+        const pk = identity?.publicKey;
+        if (!pk || tourRun) return;
+        void readProgress(pk).then(p => { if (identityRef.current?.publicKey === pk) setTourProgress(p); });
+    }, [identity?.publicKey, tourRun]);
+    // A Done or Skip the node didn't take (offline) is sent again on the next Home open.
+    useEffect(() => { if (url && identity) void resendTourRecord(url, identity); }, [url, identity?.publicKey]);
 
     const card = (inst: HomeCardInstance): React.ReactNode => {
         if (!answer) return null;
         const { id, type } = inst;
         const c = answer.cards;
         const caption = type === 'tips' && tipsView ? tipsCaption(tipsView) : cardCaption(type, answer);
-        const menu = tailor && canRemoveCard(type, pins) ? () => setMenuFor(inst) : undefined;
+        // Getting started has no "…": Skip is its remove.
+        const menu = tailor && type !== 'start' && canRemoveCard(type, pins) ? () => setMenuFor(inst) : undefined;
         const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean }) => (
             <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
                 {body}
@@ -726,6 +809,22 @@ export default function HomeScreen() {
                 if (!c.steps) return null;
                 const steps = firstSteps(answer, { interests, role, knocked });
                 return frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
+            }
+            case 'start': {
+                // The same rule the tab layout builds the running tour from: the Ledger step is in whenever its tab shows (the showcase included).
+                const total = tourSteps('phone', { global: answer.profile === 'global', beans: !hiddenTabsFor(answer.features).includes('ledger') }).length;
+                return frame(
+                    <StartBody
+                        words={START_CARD_WORDS}
+                        button={startCardButton(tourProgress, total)}
+                        colors={colors}
+                        onLookAround={() => {
+                            const pk = identityRef.current?.publicKey;
+                            if (pk) startTour(pk, resumeStep(tourProgress, total));
+                        }}
+                        onSkip={() => { closeTour(); void tourEnd('skipped'); }}
+                    />,
+                );
             }
             case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} />);
             case 'tips': return tipsView ? frame(
@@ -798,6 +897,14 @@ export default function HomeScreen() {
     // Each card in the member's order: the drawn ones, and the "one way back" card while it may be up (it decides).
     const list = ordered.filter(c => drawn.some(d => d.id === c.id) || (c.type === 'safety' && !!answer));
     const firstDrawn = list.find(c => c.type !== 'safety' || safetyUp);
+    // Where Beans are previewed, the Your Beans card (design §1 row 1): no API, the Ledger's example behind its link. It
+    // sits under First steps while that is up, else under the first card, and only its own "Hide this card" puts it away:
+    // First steps done, removed or out of its days leaves it. While Getting started is up for a tour not yet ended it waits,
+    // as the five do: a newcomer's Home is that card alone, and the tour's Ledger step is the example's way in
+    // (DESIGN-getting-started-fable.md §0, pick 10).
+    const touring = !!answer && list.some(c => c.type === 'start') && !tourOverFor(answer, { tourOver });
+    const beansPreviewCard = !!answer && !touring && homeBeansPreview(answer);
+    const beansCardUnder = beansPreviewCard ? (list.find(c => c.type === 'steps') ?? firstDrawn)?.id ?? null : null;
 
     let empty: React.ReactNode = null;
     if (!answer) {
@@ -864,6 +971,7 @@ export default function HomeScreen() {
                     testID="home-scroll"
                 >
                     <PageTitle title="Home" testID="page-title-home" />
+                    <KeyMovedCard colors={colors} />
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">
                             Couldn't reach your community; showing what we had.
@@ -895,8 +1003,10 @@ export default function HomeScreen() {
                                         </Pressable>
                                     </View>
                                 )}
+                                {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} />}
                             </View>
                         ))}
+                        {beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} />}
                     </Animated.View>
                 </ScrollView>
 
@@ -926,7 +1036,7 @@ export default function HomeScreen() {
                 />
                 <EditHomeSheet
                     visible={editOpen && tailor && !!answer}
-                    layout={layout}
+                    layout={shown}
                     node={answer ?? { profile, features: {} }}
                     role={role}
                     pinned={pins}

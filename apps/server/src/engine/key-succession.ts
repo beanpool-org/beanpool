@@ -81,3 +81,61 @@ export function formerKeysReader(): (memberPubkey: string) => FormerKey[] {
         return chain;
     };
 }
+
+/** Each statement's verdict, by everything its signature covers: a member's DM list is read on every sync. */
+const verdicts = new Map<string, boolean>();
+const VERDICTS_MAX = 4096;
+function statementVerifies(former: FormerKey, successor: string): boolean {
+    const key = `${successor}:${former.pubkey}:${former.at}:${former.sig}`;
+    let ok = verdicts.get(key);
+    if (ok === undefined) {
+        ok = verifyKeySuccession(former, successor);
+        if (verdicts.size >= VERDICTS_MAX) verdicts.clear();
+        verdicts.set(key, ok);
+    }
+    return ok;
+}
+
+/**
+ * formerKeysReader's chains with every link checked as it is served: the first statement that does not verify against
+ * the key after it is dropped with every older one, where core walkKeySuccession would stop too. The node checks a
+ * statement when it takes it (recordKeySuccession), but a standby's copy takes them by merge unchecked (key-move.ts).
+ */
+export function verifiedFormerKeysReader(): (memberPubkey: string) => FormerKey[] {
+    const formerKeysOf = formerKeysReader();
+    return (memberPubkey: string) => {
+        const chain = formerKeysOf(memberPubkey);
+        let successor = memberPubkey;
+        for (let i = 0; i < chain.length; i++) {
+            if (!statementVerifies(chain[i], successor)) return chain.slice(0, i);
+            successor = chain[i].pubkey;
+        }
+        return chain;
+    };
+}
+
+/**
+ * A DM names its people's former keys (DESIGN-dm-peer-key-pin-fable.md §3.3, §5 slice 3, P11): `formerKeys`, by
+ * participant, each the chain of signed statements the node holds from their re-keys, newest first, with the date each
+ * statement signed. A phone that pinned Ben₁ and is now told the DM is with Ben₂ words its banner with that date ("the
+ * account was re-keyed on 3 Oct"), after verifying the chain itself; the pin never moves on it.
+ *
+ * Only on a DM, only to `viewer` when they are in it, and only for a participant with a chain: a DM in which nobody has
+ * re-keyed is served exactly as before, and an app from before the field reads past it.
+ */
+export function withDmFormerKeys<T extends { type?: string; participants?: readonly string[] }>(
+    conversations: T[], viewer: string | undefined,
+): (T & { formerKeys?: Record<string, FormerKey[]> })[] {
+    if (!viewer) return conversations;
+    let formerKeysOf: ((memberPubkey: string) => FormerKey[]) | null = null;
+    return conversations.map((c) => {
+        if (c.type !== 'dm' || !Array.isArray(c.participants) || !c.participants.includes(viewer)) return c;
+        formerKeysOf ??= verifiedFormerKeysReader();
+        let formerKeys: Record<string, FormerKey[]> | null = null;
+        for (const p of c.participants) {
+            const chain = formerKeysOf(p);
+            if (chain.length > 0) (formerKeys ??= {})[p] = chain;
+        }
+        return formerKeys ? { ...c, formerKeys } : c;
+    });
+}

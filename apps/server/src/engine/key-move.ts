@@ -5,7 +5,6 @@
 // and the re-key share one list.
 
 import { db, deletePlainRows } from '../db/db.js';
-import { dropGroupWrapsOf } from './group-keys.js';
 import { refreshMemberAreas } from './member-area.js';
 
 // ── both ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -157,9 +156,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('groups', 'created_by');
     move('group_members', 'member_pubkey');
     move('group_members', 'invited_by');
-    // A group chat's wraps for the old key can never open again (group chat encryption design §6): they go, on each
-    // server, and the member shows in …/keys/missing under the new key, from their unchanged joined_at.
-    dropGroupWrapsOf(oldKey);
+    // A group chat's wraps for the old key stay (DESIGN-group-history-after-rekey-fable.md §3, Marty's pick 3 of 13 Oct):
+    // only the old key's seed opens them, so the member's phone can bring the history back with their old 12 words
+    // (GET …/keys/former). The old key has no group_members row now, so it is never listed or topped up; the member
+    // shows in …/keys/missing under the new key, from their unchanged from_epoch.
     move('group_convenor_proposals', 'convenor_pubkey');
     move('group_convenor_proposals', 'candidate_pubkey');
     move('group_convenor_proposals', 'proposer_pubkey');

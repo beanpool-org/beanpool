@@ -2,6 +2,7 @@
 slug: your-balance
 title: Your balance and history
 summary: How many beans you have, what is held, and every trade and gift.
+help: Your Beans: what you have, what is held in a deal, and every trade and gift. Everyone starts at zero.
 related: credit-line, gifts, circulation-fee, my-deals
 ---
 

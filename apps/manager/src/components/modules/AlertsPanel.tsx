@@ -132,6 +132,11 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                                 <span className="text-xs text-white min-w-0 flex-1 break-words">{r.detail}{times(r.count)} <span className="text-nature-500">{when(r.at)}.</span></span>
                             </div>
                         ))}
+                        {status.assistants && (status.assistants.connected > 0 || status.assistants.calls > 0) && (
+                            <p className="text-xs text-nature-300 m-0 break-words" data-testid="alerts-assistants">
+                                AI assistants today: {status.assistants.calls} call{status.assistants.calls === 1 ? '' : 's'} · {status.assistants.connected} connected.
+                            </p>
+                        )}
                         {status.acknowledge && (
                             <button type="button" disabled={busy} onClick={() => void seen()}
                                 className="px-4 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white disabled:opacity-50">

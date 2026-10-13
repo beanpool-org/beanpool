@@ -20,7 +20,7 @@
 
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
-    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard,
+    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, starterCards,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
 } from '@beanpool/core';
 
@@ -39,7 +39,7 @@ const FIXED: ReadonlySet<string> = new Set([FIXED_FIRST, FIXED_LAST]);
  * drawn nowhere; a type in neither is a newer app's, kept and not drawn.
  */
 export const HOME_DRAWN: ReadonlySet<string> = new Set([
-    'needs', 'safety', 'find', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'search', 'decide', 'groups',
+    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'search', 'decide', 'groups',
     'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'community',
 ]);
 
@@ -147,7 +147,9 @@ export function pickLayout(
     account: HomeLayoutV2 | null, local: HomeLayoutV2 | null, accountV1?: { empty: boolean }, localOnlyOver?: string | null,
 ): { layout: HomeLayoutV2 | null; push: boolean } {
     if (!local) {
-        if (accountV1?.empty) return { layout: { ...defaultHomeLayout(), dismissed: account?.dismissed ?? {} }, push: false };
+        // A node from before the frame, an account never edited there: the starter set, as before Getting started (a node
+        // that old keeps no tour record either).
+        if (accountV1?.empty) return { layout: { ...STARTER_LAYOUT, dismissed: account?.dismissed ?? {} }, push: false };
         return { layout: account, push: false };
     }
     if (!account) return { layout: local, push: true };
@@ -249,6 +251,9 @@ export function askPinned(answer: Pick<FrameAnswer, 'profile' | 'me'> | null | u
     return answer ? pinnedCards(answer, now) : ['find'];
 }
 
+/** The starter set as a Home never saved (DESIGN-getting-started-fable.md §1): after the tour, for a visitor, after Reset. */
+export const STARTER_LAYOUT: HomeLayoutV2 = { v: 2, cards: starterCards(), dismissed: {}, updatedAt: null };
+
 /** The list a layout holds: the member's, or the newcomer's while there is none. */
 export const listOf = (layout: HomeLayoutV2 | null): HomeCardInstance[] => layout?.cards ?? defaultHomeLayout().cards;
 
@@ -341,7 +346,8 @@ export function moveCard(
  */
 export function resetLayout(layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 {
     const unknown = listOf(layout).filter(c => !homeCardType(c.type));
-    const cards = [...defaultHomeLayout().cards, ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
+    // The starter set, never Getting started: a Home reset after the tour would otherwise be empty.
+    const cards = [...starterCards(), ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
     return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: iso(editAt(layout, now)) };
 }
 
@@ -456,8 +462,11 @@ export const removedLine = (name: string) => `${name} removed. Add a card brings
 export function cardsToAsk(
     layout: HomeLayoutV2 | null, pinned: readonly string[] = [], answer?: Pick<FrameAnswer, 'profile' | 'features' | 'cards'> | null,
 ): string[] {
-    return frameCardsToAsk(layout ?? defaultHomeLayout(), pinned).filter(id => {
-        const type = listOf(layout).find(l => l.id === id)?.type ?? id;
+    // A Home never saved is Getting started, and the starter set at Skip or Done: their bodies are asked for already, so
+    // the five are drawn the moment the tour ends, with no second read (DESIGN-getting-started-fable.md §1).
+    const base = layout ?? { ...defaultHomeLayout(), cards: [...defaultHomeLayout().cards, ...starterCards()] };
+    return frameCardsToAsk(base, pinned).filter(id => {
+        const type = base.cards.find(l => l.id === id)?.type ?? id;
         return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));
     });
 }

@@ -41,7 +41,7 @@ import {
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
 import {
-    GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
+    GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getFormerGroupWraps, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
     rotateGroupEpoch, storeGroupTopUp,
 } from '../engine/group-keys.js';
 import { CONVENOR_POWERS_PAUSED } from '@beanpool/engine';
@@ -595,6 +595,16 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
         ctx.set('Cache-Control', 'private, no-store');
         ctx.body = getMissingGroupWraps(ctx.params.id, actor);
+    });
+
+    // A re-keyed member's old key's wraps (DESIGN-group-history-after-rekey-fable.md §3): only that key's seed opens them.
+    router.get('/api/groups/:id/keys/former', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const after = typeof ctx.query.after === 'string' && /^\d{1,9}$/.test(ctx.query.after) ? Number(ctx.query.after) : undefined;
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = getFormerGroupWraps(ctx.params.id, actor, { after });
     });
 
     router.get('/api/groups/:id/keys/:epoch/wraps', async (ctx) => {

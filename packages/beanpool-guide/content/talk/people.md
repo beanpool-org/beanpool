@@ -2,6 +2,7 @@
 slug: people
 title: People and friends
 summary: Find members of your community, add friends, and vouch for someone.
+help: The members of your community and your friends. Tap someone to see their profile, message them or vouch for them.
 related: messages, your-profile, joining, blocking
 ---
 

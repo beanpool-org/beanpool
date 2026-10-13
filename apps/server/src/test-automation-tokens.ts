@@ -1,6 +1,6 @@
 /**
  * Node sign-in, design step 7a (D8): owner automation tokens. Over REAL HTTPS through the real middleware; nothing here
- * contacts anything but the server it starts.
+ * contacts anything but the server it starts (the update check's GitHub lookup, which the sweep runs, is answered here).
  *
  *   1. Making one: an owner's key session (fresh), not a stale phone session (step-up), the password session (with its
  *      2FA code); never an admin, never a token. Shown once: the list carries no secret and no hash. Unknown scope,
@@ -37,9 +37,24 @@ import { BACKUPS_SCOPE_ROUTES, resetAutomationTokenUseThrottle, issueAutomationT
 import { TOKEN_NEEDS_KEY_CODE } from './routes/automation-tokens.js';
 import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
 import { signedRequestText, signedRequestBytes, SIGNED_FOR_HEADER } from '@beanpool/core';
+import { localFetch } from './keepalive-test-fetch.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
+
+// ── GitHub, answered here: nothing leaves this machine (#1877) ──
+// The sweep runs POST /api/admin/check-update as an admin, and its release lookup (node-release-check.ts) asks GitHub.
+// DISABLE_UPDATE_CHECK stops only the background timer, so the lookup is answered here; any other host is refused.
+const offMachine: string[] = [];
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: any, init?: any) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return realFetch(input, init);
+    offMachine.push(`${url.host}${url.pathname}`);
+    if (url.hostname !== 'api.github.com') throw new Error(`not this machine: ${url.host}`);
+    return new Response(JSON.stringify([{ tag_name: 'v9.9.9', draft: false, prerelease: false, body: '', html_url: '', published_at: '' }]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } });
+}) as typeof fetch;
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -58,7 +73,7 @@ interface Reply { status: number; body: any; text: string; sessionId: string | n
 
 async function call(method: string, p: string, opts: { body?: unknown; headers?: Record<string, string> } = {}): Promise<Reply> {
     forgetUsedTotpCodesForTests();
-    const res = await fetch(`${BASE}${p}`, {
+    const res = await localFetch(`${BASE}${p}`, {
         method,
         headers: { ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) },
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
@@ -92,7 +107,7 @@ async function keySignIn(k: Key): Promise<Reply> {
 
 /** Every admin route the server mounts, read from the route sources (method, path with its :params). */
 function adminRoutes(): Array<[string, string]> {
-    const files = [path.join(HERE, 'https-server.ts'), ...fs.readdirSync(path.join(HERE, 'routes')).filter(f => f.endsWith('.ts')).map(f => path.join(HERE, 'routes', f))];
+    const files = [path.join(HERE, 'https-server.ts'), path.join(HERE, 'agent', 'mcp-route.ts'), path.join(HERE, 'agent', 'grants-route.ts'), path.join(HERE, 'agent', 'suggestions-route.ts'), ...fs.readdirSync(path.join(HERE, 'routes')).filter(f => f.endsWith('.ts')).map(f => path.join(HERE, 'routes', f))];
     const out = new Map<string, [string, string]>();
     const re = /router\.(get|post|put|delete|patch)\(\s*'([^']+)'/g;
     for (const f of files) {
@@ -281,6 +296,7 @@ async function main(): Promise<void> {
                 continue;
             }
             const everyTokenRefused = lowered.startsWith('/api/local/admin/auth/') || lowered.startsWith('/api/local/admin/automation-tokens')
+                || lowered.startsWith('/api/local/admin/agent/')
                 || lowered.startsWith('/api/local/admin/2fa/') || lowered === '/api/local/admin/ws-ticket' || lowered === '/api/local/admin/csrf-token';
 
             if (!isRead(m) || everyTokenRefused) {
@@ -317,6 +333,9 @@ async function main(): Promise<void> {
         assert(backupsFails.length === 0, `backups token: every route off its list refused (${backupsFails.length} not)`);
         assert(refusedEvery.length === 0, `admin token: the sign-in, session, 2FA and token routes refused (${refusedEvery.length} not)`);
         assert(ownerOnlySeen > 20 && adminFails.length === 0, `admin token: refused on all ${ownerOnlySeen} routes an admin's session is refused on (${adminFails.length} not)`);
+        const askedGitHub = offMachine.filter(h => h.startsWith('api.github.com/'));
+        assert(askedGitHub.length > 0 && askedGitHub.length === offMachine.length,
+            `the sweep's update check asked GitHub ${askedGitHub.length} time(s), answered here; nothing else off this machine (${offMachine.join(', ') || 'none'})`);
 
         resetAdminRateLimit();
         // Named owner-only changes, with a fresh owner's step-up in hand: still refused to every token.
@@ -479,6 +498,10 @@ async function main(): Promise<void> {
         assert(!secrets.some(s => cfgText.includes(s.split('_')[2])) && cfgText.includes('"automationTokens"'), 'local-config.json keeps the tokens, hashes only');
         assert(!('automationTokens' in redactLocalConfig(getLocalConfig())), "a backup file's config leaves them out");
         assert(LOCAL_CONFIG_FIELDS.automationTokens?.kind === 'per-server', 'the manifest keeps them with this server');
+    } catch (e) {
+        // A throw is a failure, never a quiet end: the count would otherwise stop short and the exit say 0 (#1865 review finding 8).
+        console.error(e);
+        process.exitCode = 1;
     } finally {
         console.log(`\n${passed}/${run} passed`);
         process.exit(process.exitCode ?? 0);

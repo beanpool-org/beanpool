@@ -186,3 +186,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-12-19 - Add dynamic accessibilityLabel, hint, and busy state to re-key code submit button
 **Learning:** Primary submit buttons in re-key and re-enrollment flows whose child text is replaced by an `ActivityIndicator` during request verification leave screen reader users without accessible text feedback when submitting unless explicit dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` attributes are supplied.
 **Action:** Always supply dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled: busy, busy }}` on re-enrollment submit buttons rendering `ActivityIndicator` when submitting.
+
+## 2026-12-26 - Add dynamic accessibilityLabel to event reminder save button
+**Learning:** Event reminder save buttons whose text child is conditionally replaced by an `ActivityIndicator` during saving leave screen readers without explicit text feedback during loading unless dynamic `accessibilityLabel` and `accessibilityState={{ busy: saving, disabled: saving }}` are provided.
+**Action:** Always supply dynamic `accessibilityLabel` (`saving ? "Saving reminder for this event..." : "Save for this event"`) and `accessibilityState={{ busy: saving, disabled: saving }}` on save buttons rendering `ActivityIndicator` when saving.

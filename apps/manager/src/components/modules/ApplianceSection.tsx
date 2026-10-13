@@ -31,6 +31,7 @@ import { TakeoverLockPanel } from './TakeoverLockPanel';
 import type { RolesViewer } from './NodeRolesPanel';
 import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
 import { AutomationTokensPanel } from './AutomationTokensPanel';
+import { ConnectedAssistantsPanel } from './ConnectedAssistantsPanel';
 import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
@@ -1726,6 +1727,11 @@ export function ApplianceSection({
                     {/* Automation tokens: owners only (the panel draws nothing for anyone else) */}
                     <SectionErrorBoundary sectionName="Automation tokens" resetKey={activeNode.id}>
                         <AutomationTokensPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
+
+                    {/* Connected assistants (admin MCP S3): owners and admins, each their own; owners see every one */}
+                    <SectionErrorBoundary sectionName="Connected assistants" resetKey={activeNode.id}>
+                        <ConnectedAssistantsPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
                     </SectionErrorBoundary>
 
                     {/* Factory Reset Danger Zone */}

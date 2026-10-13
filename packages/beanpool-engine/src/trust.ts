@@ -42,11 +42,6 @@ export interface WashAnalysis {
     }[];
 }
 
-// Memoized per database handle (10s). Keyed by the handle itself so the node's
-// single live DB keeps its original 10s memo AND the manager can run the same
-// analysis against many replica DBs without cross-contamination.
-const washCache = new WeakMap<Db, { analysis: WashAnalysis; time: number }>();
-
 export function runWashTradingAnalysis(db: Db): WashAnalysis {
     return drainSteps(washTradingAnalysisSteps(db));
 }
@@ -60,40 +55,109 @@ export function drainSteps<T>(steps: Generator<void, T>): T {
 }
 
 /**
- * runWashTradingAnalysis, one step at a time: it yields after each cluster's query, so a caller can give the event loop
- * a turn between steps (engine audit.ts computeWashSybilMetricsInSlices) and the analysis never holds it for long.
- * runWashTradingAnalysis drains it in one go, so both give the same analysis.
+ * Steps a slice runs one after another, giving the event loop a turn (setImmediate) whenever a slice has held it for
+ * `sliceMs` (default 20). A slice can't split a step. `onYield` is called at each turn given (a test counts them).
+ * The wash/Sybil audit (audit.ts computeWashSybilMetricsInSlices) and the wash analysis's background refresh
+ * (runWashAnalysisInSlices) both run this way.
  */
-export function* washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis> {
+export async function runStepsInSlices<T>(steps: Generator<void, T>, opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<T> {
+    const sliceMs = opts.sliceMs ?? 20;
+    let sliceStart = performance.now();
+    for (;;) {
+        const r = steps.next();
+        if (r.done) return r.value;
+        if (performance.now() - sliceStart >= sliceMs) {
+            opts.onYield?.();
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            sliceStart = performance.now();
+        }
+    }
+}
+
+/** `steps`, adding the time each step holds the loop to `time.ms` (the analysis's step time, its `c`). */
+function* timedSteps<T>(steps: Generator<void, T>, time: { ms: number }): Generator<void, T> {
+    for (;;) {
+        const start = performance.now();
+        const r = steps.next();
+        time.ms += performance.now() - start;
+        if (r.done) return r.value;
+        yield;
+    }
+}
+
+/**
+ * Buyers one page of the pair totals reads (washTradingAnalysisSteps' first step). Measured on the 100,000-member review
+ * world (101,400 completed trades, an M4 at load 30-50, 2026-10-13): 2,000 buyers is 28 pages, the worst 43 ms warm and
+ * 273 ms cold; 1,000 was 57 / 137 ms, 5,000 was 268 / 443 ms, and the whole query in one 896 ms warm.
+ */
+export const WASH_PAIR_PAGE_BUYERS = 2000;
+
+/** A pair whose gross is at least the cap and whose flows are this close (|a − b| / gross below it) is a wash pair. */
+export const WASH_PAIR_MAX_RATIO = 0.15;
+
+/**
+ * runWashTradingAnalysis, one step at a time: it yields after each page of buyers' pair totals and after each cluster's
+ * query, so a caller can give the event loop a turn between steps (engine audit.ts computeWashSybilMetricsInSlices) and
+ * the analysis never holds it for long. runWashTradingAnalysis drains it in one go, so both give the same analysis.
+ */
+export function washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis> {
+    return analysisSteps(db, false, db);
+}
+
+/**
+ * washTradingAnalysisSteps, with `strict`: a step whose query fails throws rather than going on without it (a background
+ * refresh then lands nothing, where a part analysis would flag fewer: the wrong way for a credit floor). `countFor`: the
+ * handle washAnalysisCount counts it for (a refresh reads through a second handle, for the node's own).
+ */
+function* analysisSteps(db: Db, strict: boolean, countFor: Db): Generator<void, WashAnalysis> {
     const flaggedPairs = new Set<string>();
     const flaggedClusters = new Map<string, number>();
     const clusterDetails: any[] = [];
     const pairDetails: any[] = [];
 
     // --- 1. Net-flow ratio (per counterparty pair) ---
+    // A page at a time: the buyers in key order, WASH_PAIR_PAGE_BUYERS of them, then their totals per seller. Every
+    // (buyer, seller) total lies wholly in one page, so the totals are the one query's over every trade; in one query it
+    // held the loop 243 ms warm and up to 953 ms cold at 101,400 trades, which no slice could split.
     try {
-        const rows = db.prepare(`
+        const firstBuyers = db.prepare(`
+            SELECT MIN(b) AS lo, MAX(b) AS hi FROM (
+                SELECT DISTINCT buyer_pubkey AS b FROM marketplace_transactions
+                WHERE status = 'completed' ORDER BY buyer_pubkey LIMIT ?)
+        `);
+        const nextBuyers = db.prepare(`
+            SELECT MIN(b) AS lo, MAX(b) AS hi FROM (
+                SELECT DISTINCT buyer_pubkey AS b FROM marketplace_transactions
+                WHERE buyer_pubkey > ? AND status = 'completed' ORDER BY buyer_pubkey LIMIT ?)
+        `);
+        const pageTotals = db.prepare(`
             SELECT buyer_pubkey, seller_pubkey, SUM(credits) as vol
             FROM marketplace_transactions
-            WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
+            WHERE buyer_pubkey >= ? AND buyer_pubkey <= ? AND status = 'completed' AND buyer_pubkey != seller_pubkey
             GROUP BY buyer_pubkey, seller_pubkey
-        `).all() as { buyer_pubkey: string; seller_pubkey: string; vol: number }[];
+        `);
 
         const pairVolumes = new Map<string, { u: string; v: string; volUtoV: number; volVtoU: number }>();
-        for (const row of rows) {
-            const u = row.buyer_pubkey;
-            const v = row.seller_pubkey;
-            const key = u < v ? `${u}|${v}` : `${v}|${u}`;
-            let data = pairVolumes.get(key);
-            if (!data) {
-                data = { u: u < v ? u : v, v: u < v ? v : u, volUtoV: 0, volVtoU: 0 };
-                pairVolumes.set(key, data);
+        let page = firstBuyers.get(WASH_PAIR_PAGE_BUYERS) as { lo: string | null; hi: string | null };
+        while (page.lo !== null && page.hi !== null) {
+            const rows = pageTotals.all(page.lo, page.hi) as { buyer_pubkey: string; seller_pubkey: string; vol: number }[];
+            for (const row of rows) {
+                const u = row.buyer_pubkey;
+                const v = row.seller_pubkey;
+                const key = u < v ? `${u}|${v}` : `${v}|${u}`;
+                let data = pairVolumes.get(key);
+                if (!data) {
+                    data = { u: u < v ? u : v, v: u < v ? v : u, volUtoV: 0, volVtoU: 0 };
+                    pairVolumes.set(key, data);
+                }
+                if (row.buyer_pubkey === data.u) {
+                    data.volUtoV += row.vol;
+                } else {
+                    data.volVtoU += row.vol;
+                }
             }
-            if (row.buyer_pubkey === data.u) {
-                data.volUtoV += row.vol;
-            } else {
-                data.volVtoU += row.vol;
-            }
+            yield;
+            page = nextBuyers.get(page.hi, WASH_PAIR_PAGE_BUYERS) as { lo: string | null; hi: string | null };
         }
 
         for (const [key, data] of pairVolumes.entries()) {
@@ -101,12 +165,13 @@ export function* washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis>
             if (gross >= PER_COUNTERPARTY_VOLUME_CAP) {
                 const r = Math.abs(data.volUtoV - data.volVtoU) / gross;
                 pairDetails.push({ a: data.u, b: data.v, gross, r });
-                if (r < 0.15) {
+                if (r < WASH_PAIR_MAX_RATIO) {
                     flaggedPairs.add(key);
                 }
             }
         }
     } catch (e) {
+        if (strict) throw e;
         console.error('Wash analysis (pair net flow) failed:', e);
     }
     yield;
@@ -207,6 +272,7 @@ export function* washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis>
                         `).get(...comp, ...comp) as any;
                         totalVol = allTimeRes ? allTimeRes.s : 0;
                     } catch (e) {
+                        if (strict) throw e;
                         console.error('Failed to query all-time volume for component:', e);
                         totalVol = internalVol;
                     }
@@ -243,24 +309,259 @@ export function* washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis>
             }
         }
     } catch (e) {
+        if (strict) throw e;
         console.error('Wash analysis (cluster insularity) failed:', e);
     }
 
+    stateOf(countFor).analyses++;
     return { flaggedPairs, flaggedClusters, clusterDetails, pairDetails };
 }
 
-export function getWashTradingEnforcement(db: Db): WashAnalysis {
-    const cached = washCache.get(db);
-    if (cached && (Date.now() - cached.time < 10000)) {
-        return cached.analysis;
+/** A complete analysis and what it took. */
+export interface WashRun {
+    analysis: WashAnalysis;
+    /** Date.now() as its rows were read from: a refresh's snapshot, a one-go's start. */
+    snapshotAt: number;
+    /** Date.now() as it finished. */
+    finishedAt: number;
+    /** How long its steps held the event loop, summed: its `c`. */
+    stepMs: number;
+    /** Its wall time, start to finish, the turns it gave included: its `D`. */
+    wallMs: number;
+}
+
+// What floors read, per database handle (getWashTradingEnforcement). Keyed by the handle itself so the node's live DB
+// keeps its own AND the manager can run the same analysis against many replica DBs without cross-contamination.
+interface WashState {
+    /** Complete analyses run for this handle (washAnalysisCount). */
+    analyses: number;
+    /** The analysis floors read, and what it took; null until the first, and after a clear. */
+    current: WashRun | null;
+    /** Moved on by clearWashTradingCache: a refresh started before it lands nothing. */
+    generation: number;
+    /** The background refresh running, if one is. */
+    refreshing: Promise<void> | null;
+    /** Another refresh asked for while one ran (refreshWashTradingInBackground): it starts when that one ends. */
+    again: boolean;
+    /** The refresh running can no longer land: an analysis worked out in one go since it started read later rows. */
+    stale: boolean;
+    /** When the refresh running started (Date.now()): one that `again` or the server started past the bound of the
+     *  analysis serving floors holds off no one go (a refresh a read started always starts before that bound). */
+    refreshStartedAt: number;
+    /** When the hard cap was last logged (once a minute). */
+    capSaidAt: number;
+}
+
+const washState = new WeakMap<Db, WashState>();
+
+function stateOf(db: Db): WashState {
+    let s = washState.get(db);
+    if (!s) washState.set(db, s = { analyses: 0, current: null, generation: 0, refreshing: null, again: false, stale: false, refreshStartedAt: 0, capSaidAt: 0 });
+    return s;
+}
+
+/** How many complete wash analyses have run for this handle, by any path (a test counts them). */
+export function washAnalysisCount(db: Db): number {
+    return washState.get(db)?.analyses ?? 0;
+}
+
+/** Each handle's second, read-only handle on the same file, for a refresh's snapshot; null where there can be none. */
+const snapshotHandles = new WeakMap<Db, Db | null>();
+
+/**
+ * The read-only handle a refresh reads its snapshot through, opened the first time (WAL lets it read one moment's rows
+ * while the node's own handle writes). None for an in-memory database (tests): the refresh then reads through the node's
+ * own handle, which it says once. A file database's handle that does not open throws, and is tried again at the next
+ * refresh: a file database never refreshes without a snapshot (rows read at different moments could miss a ring), so
+ * until one opens its analysis is worked out in one go at a read, as before.
+ */
+function snapshotHandleFor(db: Db): Db | null {
+    const kept = snapshotHandles.get(db);
+    if (kept === null) return null;
+    if (kept?.open) return kept;
+    if (db.memory) {
+        console.warn('[Wash] The wash analysis refreshes through the node\'s own handle, with no snapshot: the database is in memory.');
+        snapshotHandles.set(db, null);
+        return null;
     }
-    const analysis = runWashTradingAnalysis(db);
-    washCache.set(db, { analysis, time: Date.now() });
+    try {
+        const Ctor = db.constructor as unknown as new (file: string, options: Database.Options) => Db;
+        const handle = new Ctor(db.name, { readonly: true, fileMustExist: true });
+        handle.pragma('busy_timeout = 5000');
+        snapshotHandles.set(db, handle);
+        return handle;
+    } catch (e) {
+        throw new Error(`the refresh's read-only snapshot did not open (${e instanceof Error ? e.message : String(e)})`);
+    }
+}
+
+/**
+ * Closes the refresh's read-only handle, where the node closes its data-version probe (a restore about to replace the
+ * file, a shutdown): open, closing the node's own handle would not be the last close. A refresh reading through it
+ * then throws, and lands nothing. The next refresh opens a new one.
+ */
+export function closeWashSnapshotHandle(db: Db): void {
+    const handle = snapshotHandles.get(db);
+    snapshotHandles.delete(db);
+    try { handle?.close(); } catch { /* closed either way */ }
+}
+
+/** A refresh whose snapshot handle was closed under it (closeWashSnapshotHandle): expected, and logged as such. */
+class WashSnapshotClosed extends Error {
+    constructor() { super('the snapshot ended before the analysis did: its handle was closed (a checkpoint, a VACUUM, a restore or a shutdown)'); }
+}
+
+/**
+ * The analysis in slices (runStepsInSlices), every slice reading the same snapshot: one read transaction on the
+ * read-only handle spans them all, so the result is the one-go analysis of the rows as they stood at its start, whatever
+ * is written meanwhile. A step whose query fails, or the handle closing, throws: nothing part-made comes back.
+ */
+export async function runWashAnalysisInSlices(db: Db, opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<WashRun> {
+    const wallStart = performance.now();
+    const snap = snapshotHandleFor(db);
+    const snapshotAt = Date.now();
+    // A deferred transaction takes its snapshot at its first read: the first page of buyers, read before this returns.
+    if (snap) snap.exec('BEGIN');
+    try {
+        const time = { ms: 0 };
+        const analysis = await runStepsInSlices(timedSteps(analysisSteps(snap ?? db, true, db), time), opts);
+        if (snap && !(snap.open && snap.inTransaction)) throw snap.open ? new Error('the snapshot ended before the analysis did') : new WashSnapshotClosed();
+        return { analysis, snapshotAt, finishedAt: Date.now(), stepMs: time.ms, wallMs: performance.now() - wallStart };
+    } catch (e) {
+        throw snap && !snap.open && !(e instanceof WashSnapshotClosed) ? new WashSnapshotClosed() : e;
+    } finally {
+        if (snap?.open && snap.inTransaction) snap.exec('COMMIT');
+    }
+}
+
+/** How long an analysis serves floors before the next: 10 s. */
+export const WASH_KEEP_MS = 10_000;
+/**
+ * The step time (an analysis's `c`) from which the next analysis is worked out in the background rather than in one go
+ * at a read. Time, not a trade count: it is what the event loop feels, and a slow VM gets there with fewer trades.
+ */
+export const WASH_BACKGROUND_STEP_MS = 50;
+/** The soonest a background refresh is due after the last one's snapshot. */
+export const WASH_MIN_DUE_MS = 7_000;
+/** The oldest snapshot a floor reads: past it, the read works one out in one go, as before. */
+export const WASH_HARD_CAP_MS = 60_000;
+
+/**
+ * The wash analysis floors read (#1811, scratch/global-node/DESIGN-wash-analysis-background-fable.md).
+ *
+ * - None yet (the first read after a boot, a clear, a take-over): one is worked out now, in one go. A fresh, exact
+ *   analysis never gives more credit than the rules allow, and making a spend wait for one in the background would refuse
+ *   a member who should not be.
+ * - The last one's steps held the loop less than WASH_BACKGROUND_STEP_MS (every small node): one go, as before. It serves
+ *   reads for WASH_KEEP_MS from when it finished; the first read after that works out the next, in one go.
+ * - Otherwise a read never waits. It gets the last complete analysis, and when the next is due it starts one in the
+ *   background (runWashAnalysisInSlices: slices, one snapshot) that lands for the reads after. Due WASH_KEEP_MS after the
+ *   last one's snapshot, less the time its turns took (its `D` less its `c`), never sooner than WASH_MIN_DUE_MS: so the
+ *   next lands about WASH_KEEP_MS after the last one's rows were read, and what a read sees is at most WASH_KEEP_MS + `c`
+ *   old, as when it was worked out in one go. A read that finds it older than that with no refresh running that can land
+ *   (after a quiet spell, when no read started one; or one that read its rows before an analysis worked out in one go
+ *   since) works the next out in one go, as before. A snapshot WASH_HARD_CAP_MS old (refreshes
+ *   failing to land) is worked out in one go at the read, as before, and said once a minute.
+ *
+ * Wash pairs are also caught live, per member, whatever the analysis's age (qualifiedTradeValue); clusters are the
+ * analysis's alone.
+ */
+export function getWashTradingEnforcement(db: Db): WashAnalysis {
+    const s = stateOf(db);
+    const current = s.current;
+    if (!current) return analyseNow(db, s);
+    const now = Date.now();
+    if (current.stepMs < WASH_BACKGROUND_STEP_MS) {
+        return now - current.finishedAt < WASH_KEEP_MS ? current.analysis : analyseNow(db, s);
+    }
+    if (now - current.snapshotAt >= WASH_HARD_CAP_MS) {
+        if (now - s.capSaidAt >= 60_000) {
+            s.capSaidAt = now;
+            console.warn(`[Wash] No background refresh of the wash analysis has landed for ${Math.round((now - current.snapshotAt) / 1000)} s: a floor read works one out in one go.`);
+        }
+        return analyseNow(db, s);
+    }
+    // Past today's bound with no refresh coming that can land in time (a quiet spell: refreshes start only at reads; or
+    // the one running read its rows before an analysis worked out in one go since, so `again`'s next waits behind it; or
+    // the one running started after this bound, by `again` or the server, so waiting on it would add how late it
+    // started to its run time): one go at the read, as before, so no read gets rows older than today's rules ever served.
+    const bound = current.snapshotAt + WASH_KEEP_MS + current.stepMs;
+    if ((!s.refreshing || s.stale || s.refreshStartedAt >= bound) && now >= bound) return analyseNow(db, s);
+    if (!s.refreshing && now - current.snapshotAt >= washRefreshDueMs(current)) startRefresh(db, s);
+    return current.analysis;
+}
+
+/** How long after an analysis's snapshot the next background refresh is due (getWashTradingEnforcement). */
+function washRefreshDueMs(run: WashRun): number {
+    return Math.max(WASH_MIN_DUE_MS, WASH_KEEP_MS - (run.wallMs - run.stepMs));
+}
+
+/** The analysis in one go, now, through the node's own handle; it serves floors from here. */
+function analyseNow(db: Db, s: WashState): WashAnalysis {
+    const time = { ms: 0 };
+    const wallStart = performance.now();
+    const snapshotAt = Date.now();
+    const analysis = drainSteps(timedSteps(analysisSteps(db, false, db), time));
+    if (s.refreshing) s.stale = true;
+    land(s, { analysis, snapshotAt, finishedAt: Date.now(), stepMs: time.ms, wallMs: performance.now() - wallStart });
     return analysis;
 }
 
+/** An analysis serves floors from now, unless the one serving them read its rows later. */
+function land(s: WashState, run: WashRun): void {
+    if (s.current && run.snapshotAt < s.current.snapshotAt) return;
+    s.current = run;
+}
+
+/** Starts a background refresh at the loop's next turn (never inline: its first step would run before the read returns). */
+function startRefresh(db: Db, s: WashState): void {
+    if (s.refreshing) return;
+    const generation = s.generation;
+    const run = new Promise<void>((resolve) => setImmediate(resolve))
+        .then(() => runWashAnalysisInSlices(db))
+        .then((r) => { if (s.generation === generation) land(s, r); })
+        .catch((e) => {
+            if (e instanceof WashSnapshotClosed) console.log('[Wash] A background refresh of the wash analysis stopped: its snapshot was closed (a checkpoint, a VACUUM, a restore or a shutdown). Floors read the last one; the next refresh opens a new snapshot.');
+            else console.warn('[Wash] A background refresh of the wash analysis failed; floors read the last one:', e);
+        })
+        .finally(() => {
+            s.refreshing = null;
+            if (s.again) {
+                s.again = false;
+                startRefresh(db, s);
+            }
+        });
+    s.refreshing = run;
+    s.stale = false;
+    s.refreshStartedAt = Date.now();
+}
+
+/**
+ * Starts a background refresh now, whatever the mode (the server once it listens, and on a take-over after
+ * clearWashTradingCache); with one running, another starts when it ends. Resolves when the one asked for has ended,
+ * landed or not.
+ */
+export function refreshWashTradingInBackground(db: Db): Promise<void> {
+    const s = stateOf(db);
+    if (s.refreshing) {
+        s.again = true;
+        return s.refreshing.then(() => s.refreshing ?? undefined);
+    }
+    startRefresh(db, s);
+    return s.refreshing ?? Promise.resolve();
+}
+
+/** The background refresh running for this handle, if one is (a test awaits it). */
+export function washRefreshRunning(db: Db): Promise<void> | null {
+    return washState.get(db)?.refreshing ?? null;
+}
+
+/** Drops the analysis floors read: the next read works one out in one go. A refresh running now lands nothing. */
 export function clearWashTradingCache(db: Db): void {
-    washCache.delete(db);
+    const s = washState.get(db);
+    if (!s) return;
+    s.current = null;
+    s.generation++;
 }
 
 /**
@@ -274,25 +575,38 @@ export function clearWashTradingCache(db: Db): void {
  *
  * Enforcement (soft haircut — Change 3): Excludes flagged wash-trading pairs and intra-cluster trades
  * for flagged insular clusters from the trust sum.
+ *
+ * A pair is also excluded on the member's own rows as they stand (#1811): the analysis's rule (gross at least the cap,
+ * |bought − sold| / gross under WASH_PAIR_MAX_RATIO) on what this member bought from and sold to the counterparty, which
+ * are the analysis's two totals for the pair. So a wash pair counts for nothing from the first read after its trades
+ * complete, however old the analysis is. It only ever excludes more than the analysis does.
  */
 export function qualifiedTradeValue(db: Db, publicKey: string, wash: WashAnalysis = getWashTradingEnforcement(db)): number {
     const { flaggedPairs, flaggedClusters } = wash;
 
     const rows = prepared(db, `
-        SELECT counterparty, COALESCE(SUM(credits), 0) as v FROM (
-            SELECT seller_pubkey AS counterparty, credits FROM marketplace_transactions
+        SELECT counterparty, COALESCE(SUM(credits), 0) as v,
+            COALESCE(SUM(CASE WHEN bought THEN credits END), 0) AS bought,
+            COALESCE(SUM(CASE WHEN bought THEN NULL ELSE credits END), 0) AS sold
+        FROM (
+            SELECT seller_pubkey AS counterparty, credits, 1 AS bought FROM marketplace_transactions
                 WHERE buyer_pubkey = ? AND status = 'completed' AND seller_pubkey != ?
             UNION ALL
-            SELECT buyer_pubkey AS counterparty, credits FROM marketplace_transactions
+            SELECT buyer_pubkey AS counterparty, credits, 0 AS bought FROM marketplace_transactions
                 WHERE seller_pubkey = ? AND status = 'completed' AND buyer_pubkey != ?
         ) GROUP BY counterparty
-    `).all(publicKey, publicKey, publicKey, publicKey) as { counterparty: string; v: number }[];
+    `).all(publicKey, publicKey, publicKey, publicKey) as { counterparty: string; v: number; bought: number; sold: number }[];
 
     return rows.reduce((sum, r) => {
         const pairKey = publicKey < r.counterparty ? `${publicKey}|${r.counterparty}` : `${r.counterparty}|${publicKey}`;
         // Haircut check:
         // 1. Exclude if pair is flagged as wash trading
         if (flaggedPairs.has(pairKey)) {
+            return sum;
+        }
+        // 1b. Exclude if the pair is a wash pair on its rows as they stand (the analysis's rule, live)
+        const gross = r.bought + r.sold;
+        if (gross >= PER_COUNTERPARTY_VOLUME_CAP && Math.abs(r.bought - r.sold) / gross < WASH_PAIR_MAX_RATIO) {
             return sum;
         }
         // 2. Exclude if both members are in the same flagged cluster component

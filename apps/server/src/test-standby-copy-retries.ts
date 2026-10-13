@@ -71,9 +71,13 @@ const ROUTINE_MS = 1000;
 /** The orphan sweep's grace (engine/storage-health.ts ORPHAN_OBJECT_GRACE_MS): an object no row names is kept this long. */
 const ORPHAN_GRACE_MS = 60 * 60_000;
 /**
- * Slack on a wait read as `retryAt - at`, both on S's own clock: `timed-pull` and `timed-resync` (below) take `at` and the
- * status in the tick the pull returns in, so no reply's trip to this process sits inside the measured wait. What is left
- * is the few ms between S's catch block drawing the wait and the pull returning.
+ * Slack on a wait read on S's own clock. `timed-pull` and `timed-resync` (below) take the status in the tick the pull
+ * returns in, so no reply's trip to this process sits inside the measured wait, and read it two ways (waitOf): from the
+ * pull's return, which a stall between S drawing the wait and the pull returning can only make shorter, and from the
+ * failure S recorded in the same synchronous run, just before the draw, which nothing after the draw moves. "Never
+ * longer than" is checked on the first, "never shorter than" on the second, so a busy machine can fail neither: on CI a
+ * stall of a second after the draw read a wait at the cap as 2997 ms (#1874). What is left is the few ms of synchronous
+ * code between the failure's record and the draw.
  */
 const SLACK_MS = 50;
 
@@ -100,6 +104,13 @@ const sha256 = (b: Buffer) => crypto.createHash('sha256').update(b).digest('hex'
 const first = (xs: unknown[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.slice(0, 5).map((x) => JSON.stringify(x)).join(' | ')}`);
 /** The wait S draws for the `n`-th failed copy in a row from `base`, before its jitter (services/backup-puller.ts). */
 const schedule = (base: number, n: number) => Math.min(Math.max(CAP_MS, base), base * 2 ** (n - 1));
+/**
+ * A failed pull's wait until `retryAt`, from a `timed-pull` or `timed-resync` answer (SLACK_MS): `short` from the pull's
+ * return, for "never longer than"; `long` from the failure S recorded just before drawing it, for "never shorter than".
+ * NaN when the pull recorded no failure, so that every check on it fails.
+ */
+const waitOf = (retryAt: number, a: { at: number; failedAt: number | null }) =>
+    ({ short: retryAt - a.at, long: a.failedAt === null ? NaN : retryAt - a.failedAt });
 
 /**
  * The proxy S reaches M through. `broken`: objects answered 503 here, as a main server whose store refuses them.
@@ -266,15 +277,16 @@ async function main(): Promise<void> {
          * pull's answer.
          */
         const pullUntilFailed = async (copies: number, retryAtOf: (st: any) => number | null, isCopy: (o: { delta: boolean }) => boolean) => {
-            const tries: { openedAt: number; answeredAt: number; retryAt: number; error: string | null; tries: number | null }[] = [];
+            const tries: { openedAt: number; wait: ReturnType<typeof waitOf>; retryAt: number; error: string | null; tries: number | null }[] = [];
             const between: { ok: boolean; mode: string | null; error: string | null; opened: boolean }[] = [];
             const deadline = Date.now() + 60_000;
             while (tries.length < copies && Date.now() < deadline) {
                 const o0 = px.opened.length;
-                const { st, at: answeredAt, ...r } = await s.send('timed-pull', {});
+                const { st, at, failedAt, ...r } = await s.send('timed-pull', {});
                 const mine = px.opened.slice(o0).find(isCopy);
                 if (mine && !r.ok) {
-                    tries.push({ openedAt: mine.at, answeredAt, retryAt: retryAtOf(st) ?? 0, error: r.error, tries: st.copyWait?.tries ?? null });
+                    const retryAt = retryAtOf(st) ?? 0;
+                    tries.push({ openedAt: mine.at, wait: waitOf(retryAt, { at, failedAt }), retryAt, error: r.error, tries: st.copyWait?.tries ?? null });
                 } else {
                     between.push({ ok: r.ok, mode: r.mode, error: r.error, opened: px.opened.length > o0 });
                 }
@@ -294,17 +306,18 @@ async function main(): Promise<void> {
             const { tries, between } = await pullUntilFailed(FAILS, (st) => st.resyncRetryAt, () => true);
             require_(tries.length === FAILS && tries.every((t) => /HTTP 503/.test(t.error ?? '')),
                 `S's first copy came, every page, and failed at the broken photo, M's store answering 503, ${tries.length} times (${first(tries.map((t) => t.error?.slice(0, 120)))})`);
-            const waits = tries.map((t, i) => ({ n: i + 1, drawn: t.retryAt - t.answeredAt, schedule: schedule(RETRY_MS, i + 1) }));
-            const off = waits.filter((w) => w.drawn > w.schedule || w.drawn < (1 - JITTER) * w.schedule - SLACK_MS);
+            const waits = tries.map((t, i) => ({ n: i + 1, ...t.wait, schedule: schedule(RETRY_MS, i + 1) }));
+            const off = waits.filter((w) => !(w.short <= w.schedule && w.long >= (1 - JITTER) * w.schedule - SLACK_MS));
+            const shown = (w: { short: number; long: number }) => (w.long - w.short > 5 ? `${w.short}–${w.long}` : `${w.long}`);
             assert(off.length === 0,
                 `each failed copy in a row waits about twice as long as the one before, from RESYNC_RETRY_MS (${RETRY_MS} ms) to the cap (${CAP_MS} ms), `
-                + `each at most a fifth shorter: ${waits.map((w) => `${w.drawn}/${w.schedule}`).join(', ')} ms (outside: ${first(off)}; before: ${RETRY_MS} every time)`);
-            assert(waits.every((w) => w.drawn <= CAP_MS) && waits.slice(-2).every((w) => w.drawn >= (1 - JITTER) * CAP_MS - SLACK_MS),
-                `the waits stop growing at the cap: the last two ${waits.slice(-2).map((w) => w.drawn).join(' and ')} ms, none past ${CAP_MS} ms`);
+                + `each at most a fifth shorter: ${waits.map((w) => `${shown(w)}/${w.schedule}`).join(', ')} ms (outside: ${first(off)}; before: ${RETRY_MS} every time)`);
+            assert(waits.every((w) => w.short <= CAP_MS) && waits.slice(-2).every((w) => w.long >= (1 - JITTER) * CAP_MS - SLACK_MS),
+                `the waits stop growing at the cap: the last two ${waits.slice(-2).map(shown).join(' and ')} ms, none past ${CAP_MS} ms`);
             // Each wait over its schedule: between 0.8 and 1, and not the same for all (six draws all within 0.01 of each other
-            // happen about twice in a million runs).
-            const ratios = waits.map((w) => w.drawn / w.schedule);
-            assert(ratios.every((r, i) => r >= 1 - JITTER - SLACK_MS / waits[i].schedule && r <= 1) && Math.max(...ratios) - Math.min(...ratios) > 0.01,
+            // happen about twice in a million runs). The spread is read from the failure, so a stall can't make one.
+            const ratios = waits.map((w) => w.long / w.schedule);
+            assert(waits.every((w, i) => ratios[i] >= 1 - JITTER - SLACK_MS / w.schedule && w.short <= w.schedule) && Math.max(...ratios) - Math.min(...ratios) > 0.01,
                 `the waits are jittered, each its schedule shortened by a different fraction up to a fifth (${ratios.map((r) => r.toFixed(3)).join(', ')}; before: 1, 1/2, 1/4…)`);
             const early = tries.slice(1).filter((t, i) => t.openedAt < tries[i].retryAt);
             const askedBetween = between.filter((b) => b.opened);
@@ -325,10 +338,11 @@ async function main(): Promise<void> {
 
             // The operator's resync is taken at once, whatever the wait; failing so too, it waits at the cap.
             const o0 = px.opened.length;
-            const { st: st2, at: answeredAt, ...r } = await s.send('timed-resync');
+            const { st: st2, at, failedAt, ...r } = await s.send('timed-resync');
+            const capWait = waitOf(st2.resyncRetryAt, { at, failedAt });
             assert(r.ok === false && px.opened.length === o0 + 1 && st2.copyWait?.tries === FAILS + 1
-                && st2.resyncRetryAt - answeredAt <= CAP_MS && st2.resyncRetryAt - answeredAt >= (1 - JITTER) * CAP_MS - SLACK_MS,
-                `an operator's resync is asked for at once, and, failing so, waits at the cap (${JSON.stringify({ r, opened: px.opened.length - o0, wait: st2.resyncRetryAt - answeredAt, tries: st2.copyWait?.tries })})`);
+                && capWait.short <= CAP_MS && capWait.long >= (1 - JITTER) * CAP_MS - SLACK_MS,
+                `an operator's resync is asked for at once, and, failing so, waits at the cap (${JSON.stringify({ r, opened: px.opened.length - o0, wait: capWait, tries: st2.copyWait?.tries })})`);
             fetchedBefore = new Set(px.objectGets.slice(g0));
             require_(px.objectGets.length - g0 === fetchedBefore.size, `the resync fetched nothing fetched before (${px.objectGets.length - g0}/${fetchedBefore.size})`);
 
@@ -395,11 +409,11 @@ async function main(): Promise<void> {
             px.broken.delete(lost.sha256);
             require_(tries.length === 3 && tries.every((t) => /HTTP 503/.test(t.error ?? '')),
                 `three routine whole copies fail at the broken photo (${first(tries.map((t) => t.error?.slice(0, 120)))})`);
-            const waits = tries.map((t, i) => ({ drawn: t.retryAt - t.answeredAt, schedule: schedule(ROUTINE_MS, i + 1) }));
-            const off = waits.filter((w) => w.drawn > w.schedule || w.drawn < (1 - JITTER) * w.schedule - SLACK_MS);
+            const waits = tries.map((t, i) => ({ ...t.wait, schedule: schedule(ROUTINE_MS, i + 1) }));
+            const off = waits.filter((w) => !(w.short <= w.schedule && w.long >= (1 - JITTER) * w.schedule - SLACK_MS));
             assert(off.length === 0 && tries[0].tries === 1,
                 `they wait from the routine interval, the count started over by the copy that landed, twice as long each time: `
-                + `${waits.map((w) => `${w.drawn}/${w.schedule}`).join(', ')} ms (tries ${tries.map((t) => t.tries).join(', ')}; before: ${ROUTINE_MS} every time)`);
+                + `${waits.map((w) => `${w.long}/${w.schedule}`).join(', ')} ms (tries ${tries.map((t) => t.tries).join(', ')}; before: ${ROUTINE_MS} every time)`);
             const deltas = between.filter((b) => b.opened);
             assert(deltas.length > 0 && deltas.every((b) => b.ok && b.mode === 'delta'),
                 `every pull between them is a delta, and lands (${deltas.length}: ${first(deltas.filter((b) => !b.ok || b.mode !== 'delta'))})`);
@@ -418,29 +432,29 @@ async function main(): Promise<void> {
             const need = new Set(mRows.map((r) => r.sha256!));
             const others = (from: number) => px.objectGets.slice(from).filter((x) => x !== bad.sha256);
             const refusedOnce = async () => {
-                const { st, at: answeredAt, ...r } = await s2.send('timed-pull', {});
-                return { r, wait: (st.resyncRetryAt ?? 0) - answeredAt, st };
+                const { st, at, failedAt, ...r } = await s2.send('timed-pull', {});
+                return { r, wait: waitOf(st.resyncRetryAt ?? 0, { at, failedAt }), st };
             };
             const g0 = px.objectGets.length;
             const a = await refusedOnce();
             const fetched = new Set(others(g0));
             require_(a.r.ok === false && /bytes its row doesn't name/.test(a.r.error ?? '') && fetched.size > 0,
                 `the new standby's first copy is refused at the photo whose bytes come wrong, having fetched ${fetched.size} others (${a.r.error?.slice(0, 160)})`);
-            assert(a.wait <= RETRY_MS && a.wait >= RETRY_MS - SLACK_MS && a.st.copyWait?.cause === 'refused' && a.st.copyWait?.tries === null
+            assert(a.wait.short <= RETRY_MS && a.wait.long >= RETRY_MS - SLACK_MS && a.st.copyWait?.cause === 'refused' && a.st.copyWait?.tries === null
                 && a.st.copyWait?.keptObjects === fetched.size && /was not taken/.test(a.st.copyWait?.waitingOn ?? ''),
-                `it waits RESYNC_RETRY_MS (${a.wait} ms), and Settings says it was refused, with the ${fetched.size} photos kept (${JSON.stringify(a.st.copyWait)})`);
+                `it waits RESYNC_RETRY_MS (${a.wait.long} ms), and Settings says it was refused, with the ${fetched.size} photos kept (${JSON.stringify(a.st.copyWait)})`);
             const swept = await s2.send('sweep-orphans', { aheadMs: ORPHAN_GRACE_MS + 60_000 });
             const held: number = await s2.send('has-objects', { groups: mRows.filter((r) => fetched.has(r.sha256!)).map((r) => [r.storage_key!]) });
             assert(held === fetched.size,
                 `the ${fetched.size} objects the refused copy fetched are kept through an orphan sweep an hour and a minute on (${held} held; ${JSON.stringify(swept)})`);
-            await sleep(Math.max(0, a.wait + 150));
+            await sleep(Math.max(0, a.wait.long + 150));
             const g1 = px.objectGets.length;
             const b = await refusedOnce();
-            assert(b.r.ok === false && b.wait <= RETRY_MS && b.wait >= RETRY_MS - SLACK_MS && others(g1).every((x) => !fetched.has(x)),
-                `refused again, it waits RESYNC_RETRY_MS again, no longer (${b.wait} ms), and fetched nothing fetched before (${others(g1).filter((x) => fetched.has(x)).length} again)`);
+            assert(b.r.ok === false && b.wait.short <= RETRY_MS && b.wait.long >= RETRY_MS - SLACK_MS && others(g1).every((x) => !fetched.has(x)),
+                `refused again, it waits RESYNC_RETRY_MS again, no longer (${b.wait.long} ms), and fetched nothing fetched before (${others(g1).filter((x) => fetched.has(x)).length} again)`);
             for (const x of others(g1)) fetched.add(x);
             px.corrupt.delete(bad.sha256);
-            await sleep(Math.max(0, b.wait + 150));
+            await sleep(Math.max(0, b.wait.long + 150));
             const g2 = px.objectGets.length;
             const before = s2.swaps();
             const c = await s2.send('pull', {});
@@ -460,13 +474,13 @@ async function main(): Promise<void> {
             const g0 = px.objectGets.length;
             px.gone.nth = 6;
             const t0 = Date.now();
-            const tries: { wait: number; error: string | null; tries: number | null; failedOn: string | null }[] = [];
+            const tries: { wait: ReturnType<typeof waitOf>; error: string | null; tries: number | null; failedOn: string | null }[] = [];
             let landed = false;
             const before = s3.swaps();
             while (!landed && tries.length < 12 && Date.now() - t0 < 60_000) {
-                const { st, at, ...r } = await s3.send('timed-pull', {});
+                const { st, at, failedAt, ...r } = await s3.send('timed-pull', {});
                 if (r.ok) { landed = true; if (r.staged) await until('the new standby to start again on its copy', () => s3.swaps() > before, 60_000); break; }
-                tries.push({ wait: (st.resyncRetryAt ?? 0) - at, error: r.error, tries: st.copyWait?.tries ?? null, failedOn: st.copyWait?.reason ?? null });
+                tries.push({ wait: waitOf(st.resyncRetryAt ?? 0, { at, failedAt }), error: r.error, tries: st.copyWait?.tries ?? null, failedOn: st.copyWait?.reason ?? null });
                 await sleep(Math.max(0, (st.resyncRetryAt ?? 0) - Date.now()) + 50);
             }
             px.gone.nth = null;
@@ -474,8 +488,8 @@ async function main(): Promise<void> {
             const got = px.objectGets.slice(g0);
             require_(tries.length >= 2 && tries.every((t) => /404|not|gone/i.test(t.error ?? '')),
                 `S's first copy fails at a 404 more than once (${tries.length} tries: ${first(tries.map((t) => t.error?.slice(0, 100)))})`);
-            assert(tries.every((t) => t.wait <= RETRY_MS && t.wait >= (1 - JITTER) * RETRY_MS - SLACK_MS && t.tries === 1),
-                `every wait is the first step again, never doubled (${tries.map((t) => `${t.wait} ms, try ${t.tries}`).join('; ')})`);
+            assert(tries.every((t) => t.wait.short <= RETRY_MS && t.wait.long >= (1 - JITTER) * RETRY_MS - SLACK_MS && t.tries === 1),
+                `every wait is the first step again, never doubled (${tries.map((t) => `${t.wait.long} ms, try ${t.tries}`).join('; ')})`);
             assert(landed && new Set(got).size === got.length && got.length === need.size,
                 `the copy lands after ${tries.length} failed ones in ${(took / 1000).toFixed(1)} s, every object fetched once (${got.length} fetches, ${new Set(got).size} distinct, ${need.size} needed)`);
         });
@@ -490,6 +504,17 @@ async function main(): Promise<void> {
 
 // ── Inside M's or S's process ──────────────────────────────────────────────────────────────
 
+/**
+ * When the pull that began at `t0` recorded its failure, on this server's clock: the copy record's lastPullAt, which the
+ * puller's catch block writes in the same synchronous run as it draws the wait, just before it (services/backup-puller.ts,
+ * noteCopyFailed then `now`). Null when this pull recorded none (it landed, or was not asked for).
+ */
+async function failedSince(t0: number): Promise<number | null> {
+    const { readCopyRecord } = await import('./services/standby-copy-record.js');
+    const r = readCopyRecord();
+    return r.lastOutcome !== 'ok' && r.lastPullAt !== null && r.lastPullAt >= t0 ? r.lastPullAt : null;
+}
+
 const commands: Record<string, (args: any) => Promise<unknown>> = {
     /** The puller's status, as backup-status reads it. */
     status: async () => {
@@ -502,16 +527,18 @@ const commands: Record<string, (args: any) => Promise<unknown>> = {
      */
     'timed-pull': async () => {
         const { pullNow, getBackupStatus } = await import('./services/backup-puller.js');
+        const t0 = Date.now();
         const result = await pullNow();
         const st = getBackupStatus();
-        return { ok: result.ok, error: result.error ?? null, mode: st.lastPullMode ?? null, st, at: Date.now() };
+        return { ok: result.ok, error: result.error ?? null, mode: st.lastPullMode ?? null, st, at: Date.now(), failedAt: await failedSince(t0) };
     },
     /** The operator's force-resync, as `timed-pull` times it. */
     'timed-resync': async () => {
         const { requestResync, getBackupStatus } = await import('./services/backup-puller.js');
+        const t0 = Date.now();
         const result = await requestResync();
         const st = getBackupStatus();
-        return { ...result, st, at: Date.now() };
+        return { ...result, st, at: Date.now(), failedAt: await failedSince(t0) };
     },
     /** Listing photos in this server's image store, as a member's upload puts them: `perPost` on every listing, from slot `from`. */
     'add-photos': async (a: { posts: string[]; perPost?: number; bytes?: number; from?: number }) => {

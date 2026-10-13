@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import {
-    memberKeysPaths, memberSearchPath, membersNearPath, membersOnDemandOn, useMembersOnDemand, MEMBERS_ON_DEMAND_SEEN_PREFIX,
+    memberKeysPaths, memberSearchPath, membersNearPath, membersOnDemandOn, useMembersOnDemand, useMemberSearch,
+    MEMBERS_ON_DEMAND_SEEN_PREFIX, MEMBERS_SEARCH_DEBOUNCE_MS, MEMBERS_REQUEST_TIMEOUT_MS, membersNear, searchMembers,
 } from './members-on-demand';
+import * as api from './api';
 
 const info = vi.hoisted(() => ({ read: (async () => ({})) as () => Promise<unknown> }));
 vi.mock('./visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn(() => info.read()) }));
@@ -93,5 +95,86 @@ describe('members on demand: a node that can\'t be asked counts as it last answe
         expect(await switchOnce()).toBe(true);
         fails();
         expect(await switchOnce()).toBe(false);
+    });
+});
+
+describe('members on demand: the search box (review of #1861, N3)', () => {
+    const card = (k: string, callsign: string) => ({ publicKey: k.repeat(64), callsign, joinedAt: '2026-01-01T00:00:00.000Z' });
+    afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+    it('asks only once the typing has paused for 400 ms, and only for what was typed last (L8)', async () => {
+        vi.useFakeTimers();
+        const cards = vi.spyOn(api, 'getMemberCards').mockResolvedValue([card('e', 'Alma')]);
+        const { result, rerender } = renderHook(({ typed }) => useMemberSearch(typed, true), { initialProps: { typed: 'al' } });
+        expect(result.current.state).toBe('searching');
+        await act(async () => { vi.advanceTimersByTime(MEMBERS_SEARCH_DEBOUNCE_MS - 1); });
+        expect(cards).not.toHaveBeenCalled();
+        // A letter typed inside the pause starts it again.
+        rerender({ typed: 'alm' });
+        await act(async () => { vi.advanceTimersByTime(MEMBERS_SEARCH_DEBOUNCE_MS - 1); });
+        expect(cards).not.toHaveBeenCalled();
+        await act(async () => { vi.advanceTimersByTime(1); });
+        expect(cards.mock.calls.map(c => c[0])).toEqual(['/api/members?q=alm&limit=20']);
+        expect(MEMBERS_SEARCH_DEBOUNCE_MS).toBe(400);
+        await act(async () => { await Promise.resolve(); });
+        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
+    });
+
+    it("an older search's late answer never replaces a newer one's, and the older request is stopped (L9)", async () => {
+        vi.useFakeTimers();
+        let answerOld: (v: api.MemberCard[]) => void = () => {};
+        const signals: Record<string, AbortSignal | undefined> = {};
+        vi.spyOn(api, 'getMemberCards').mockImplementation((path: string, signal?: AbortSignal) => {
+            signals[path] = signal;
+            // The first search's answer is slow; it arrives after the second's.
+            if (path.includes('q=al&')) return new Promise(resolve => { answerOld = resolve; });
+            return Promise.resolve([card('e', 'Alma')]);
+        });
+        const { result, rerender } = renderHook(({ typed }) => useMemberSearch(typed, true), { initialProps: { typed: 'al' } });
+        await act(async () => { vi.advanceTimersByTime(MEMBERS_SEARCH_DEBOUNCE_MS); });
+        rerender({ typed: 'alma' });
+        expect(signals['/api/members?q=al&limit=20']?.aborted).toBe(true);
+        await act(async () => { vi.advanceTimersByTime(MEMBERS_SEARCH_DEBOUNCE_MS); });
+        await act(async () => { await Promise.resolve(); });
+        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
+        await act(async () => { answerOld([card('f', 'Alder')]); await Promise.resolve(); });
+        expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
+    });
+});
+
+describe('members on demand: a node that never answers (review of #1861, N4)', () => {
+    afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+    const neverAnswers = () => {
+        const signals: AbortSignal[] = [];
+        vi.spyOn(api, 'getMemberCards').mockImplementation((_path: string, signal?: AbortSignal) => {
+            if (signal) signals.push(signal);
+            return new Promise(() => {});
+        });
+        return signals;
+    };
+
+    it('the near read and the search give up after 30 s, not before, and stop their requests', async () => {
+        expect(MEMBERS_REQUEST_TIMEOUT_MS).toBe(30_000);
+        vi.useFakeTimers();
+        const signals = neverAnswers();
+        const outcomes: string[] = [];
+        membersNear({ lat: -28.6, lng: 153.6 }).then(() => outcomes.push('near answered'), () => outcomes.push('near gave up'));
+        searchMembers('al').then(() => outcomes.push('search answered'), () => outcomes.push('search gave up'));
+        await vi.advanceTimersByTimeAsync(MEMBERS_REQUEST_TIMEOUT_MS - 1);
+        expect(outcomes).toEqual([]);
+        expect(signals.map(s => s.aborted)).toEqual([false, false]);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(outcomes.sort()).toEqual(['near gave up', 'search gave up']);
+        expect(signals.map(s => s.aborted)).toEqual([true, true]);
+    });
+
+    it('a search box whose search never answers says it failed once the limit passes', async () => {
+        vi.useFakeTimers();
+        neverAnswers();
+        const { result } = renderHook(() => useMemberSearch('al', true));
+        await act(async () => { await vi.advanceTimersByTimeAsync(MEMBERS_SEARCH_DEBOUNCE_MS + MEMBERS_REQUEST_TIMEOUT_MS - 1); });
+        expect(result.current.state).toBe('searching');
+        await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+        expect(result.current).toEqual({ found: null, state: 'failed' });
     });
 });

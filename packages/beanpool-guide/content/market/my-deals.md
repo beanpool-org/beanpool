@@ -10,6 +10,8 @@ related: a-deal-step-by-step, posting, your-balance, when-a-deal-goes-wrong, the
 
 Tap **My Deals** at the top of the Market tab. A red number on it counts your deals in progress.
 
+On the global community there are no deals, so **My Deals** shows two example deals from a local community, Example Valley, marked **🏘️ Local community**: one waiting on you and one done. Their buttons say why deals live in a local community, and change nothing. See "Beans and the global community".
+
 ## Three tabs
 
 - **In Progress:** deals under way, and requests waiting for an answer. Each shows where it stands: **Held in Trust** (the beans are held), **Action Required** (someone has asked and you need to answer) or **Awaiting Approval** (you asked and are waiting for them).

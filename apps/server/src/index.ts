@@ -67,7 +67,7 @@ import { registerFederationHandler, federatedReceiptStatus } from './federation-
 import { startListingPull } from './federation-listings.js';
 import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
-import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury, adminBroadcastAnnouncement } from './state-engine.js';
+import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury, adminBroadcastAnnouncement, startWashTradingRefreshAtBoot } from './state-engine.js';
 import { startRecoverNoticeWatch } from './recover-command.js';
 import { logger } from './logger.js';
 import { bumpMembersVersion } from './engine/versions.js';
@@ -210,6 +210,9 @@ async function main() {
 
     // Step 6: HTTPS server (PWA + Settings API)
     await startHttpsServer(PORT_HTTPS);
+    // Step 6.1: the wash analysis's first refresh, in the background, now the server listens (state-engine.ts
+    // startWashTradingRefreshAtBoot): the first floor read finds it landed. Not awaited.
+    void startWashTradingRefreshAtBoot();
 
     // Step 7: libp2p (persistent identity, no auto-discovery)
     const p2pNode = await startP2P(PORT_P2P, PORT_P2P_WS);

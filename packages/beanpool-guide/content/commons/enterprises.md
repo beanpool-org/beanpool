@@ -2,12 +2,14 @@
 slug: enterprises
 title: Projects and enterprises
 summary: Shared ventures with their own beans: find one, back one, or start one.
-related: keepers, commons-fund, proposing-a-decision, rules
+related: keepers, commons-fund, proposing-a-decision, rules, beans-and-the-global-community
 ---
 
 ## What they are
 
 Projects and enterprises are the groups that hold Beans. Each has its own beans, its own Offers and Needs, and its own credit line.
+
+On the global community there are no enterprises, so **Commons** shows an example one from a local community, the Example Valley Bakery, marked **🏘️ Local community**. Its buttons, such as **Pledge** and **Pause**, say why enterprises live in a local community, and change nothing. See "Beans and the global community".
 
 - A **project** has a leader, a goal in Beans and usually an end date: raise 500 Beans for a new roof, build the shade house by November. The **leader** runs it; **collaborators** help. When the goal is met or the date passes, it winds up and what is left goes back to the Commons.
 - An **enterprise** keeps going and trades: a tool library, the egg flock, a market stall. Its **keepers** run it together and stand behind it. One of them is the **lead keeper**.

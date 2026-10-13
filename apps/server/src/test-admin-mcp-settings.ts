@@ -194,7 +194,7 @@ async function main(): Promise<void> {
         const tokens = [OWNER_TOKEN, m90.body.token];
         await new Promise(r => setTimeout(r, 50));
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
-        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, and take a backup\./.test(d)),
+        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, and suggest actions it cannot take\./.test(d)),
             `owners are told an owner connected one (${told.join(' | ').slice(0, 300)})`);
 
         const tooLong = await make(ownerS, { name: 'x', days: 91 });
@@ -419,7 +419,8 @@ async function main(): Promise<void> {
             `the card counts today's calls from every assistant, the disconnected ones' kept (${JSON.stringify(card.body?.assistants)})`);
         assert(deadOnes.join() === '401,401' && storedAgents === AGENT_GRANTS_PER_MEMBER + 2 && card.body?.assistants?.connected === AGENT_GRANTS_PER_MEMBER,
             `connected counts only those that can call now: ${card.body?.assistants?.connected} of ${storedAgents} stored (the expired one and the demoted maker's answer ${deadOnes.join(', ')})`);
-        assert(Object.keys(card.body?.assistants ?? {}).sort().join() === 'calls,connected', 'counts only: no names, no grants');
+        // S4 adds today's suggestions and approvals (design §8), counts too.
+        assert(Object.keys(card.body?.assistants ?? {}).sort().join() === 'approved,calls,connected,suggestions', 'counts only: no names, no grants');
         resetAgentLimits();
         assert(getAlertsStatus().assistants.calls === 0, 'a new day (or a restart) starts from 0');
     } catch (e) {

@@ -47,6 +47,7 @@ import {
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
+import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
@@ -1445,6 +1446,8 @@ function refuseModeratorsOwnPost(ctx: any, postId: string | null | undefined, do
 router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (refuseModeratorsOwnPost(ctx, ctx.params.id, 'restore')) return;
+    // An assistant's suggestion is approved by this same call (agent/suggestions.ts): it must match before anything changes.
+    if (!admitSuggestion(ctx, { kind: 'restore_post', postId: ctx.params.id })) return;
     const result = restoreHiddenPost(ctx.params.id);
     if (result === 'not_found') {
         ctx.status = 404;
@@ -1457,8 +1460,9 @@ router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
         return;
     }
     const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
-    logger.info('ADMIN', `Restored post ${ctx.params.id}, hidden by reports, by ${by} (${(ctx.state as any)?.adminRole})`);
+    logger.info('ADMIN', `Restored post ${ctx.params.id}, hidden by reports, by ${by} (${(ctx.state as any)?.adminRole})${suggestionAuditSuffix(ctx)}`);
     ctx.body = { success: true };
+    settleSuggestion(ctx, '', { logged: true });
 });
 
 /**
@@ -1851,6 +1855,7 @@ router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
         // A Pulse report is about its item, whatever post id it carries (state-engine reportSubjectOf).
         const reported = db.prepare('SELECT CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as { target_post_id: string | null } | undefined;
         if (refuseModeratorsOwnPost(ctx, reported?.target_post_id, 'dismiss a report on')) return;
+        if (!admitSuggestion(ctx, { kind: 'dismiss_report', reportId: ctx.params.id })) return;
         const ok = dismissReport(ctx.params.id);
         if (!ok) {
             ctx.status = 404;
@@ -1858,6 +1863,7 @@ router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
             return;
         }
         ctx.body = { success: true, message: 'Report dismissed' };
+        settleSuggestion(ctx, `Dismissed report ${ctx.params.id}`);
     } catch (e: any) {
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Failed to dismiss report' };
@@ -1868,6 +1874,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const { deletePost, suspendUser, removePulseItem, reasonCategory } = (ctx as any).requestBody || {};
+        if (!admitSuggestion(ctx, { kind: 'remove_reported', reportId: ctx.params.id, body: (ctx as any).requestBody || {} })) return;
         // Moderators remove what was reported; suspending a member stays with owners and admins.
         if (suspendUser && (ctx.state as any)?.adminRole === 'moderator') {
             ctx.status = 403;
@@ -1927,6 +1934,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
                     + refundShortfalls.map(describeRefundShortfall).join('; '),
             }
             : { success: true, message: 'Report actioned successfully' };
+        settleSuggestion(ctx, `Removed what report ${ctx.params.id} was about`);
     } catch (e: any) {
         if (answerPotPaused(ctx, e)) return;
         ctx.status = e?.status || 500;

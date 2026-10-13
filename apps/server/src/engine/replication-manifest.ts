@@ -709,6 +709,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     standby_copy_record: { kind: 'per-server', reason: "a standby's record of how its copies went, which it reports to its main server, and of its last force-resync for a copy that didn't match (services/standby-copy-record.ts)" },
     standby_swapped_copy: { kind: 'per-server', reason: "the whole copy a standby's database was swapped in from, read once at the start on it (services/stager.ts, services/backup-puller.ts)" },
     standby_health: { kind: 'per-server', reason: "a main server's watch on its own standbys, for its owners (services/standby-health.ts)" },
+    agent_suggestions: { kind: 'per-server', reason: "this server's AI assistants' waiting suggestions, whose grants are this server's own too (agent/suggestions.ts)" },
     replicated_invalidated_keys_v1: { kind: 'per-server', reason: "a standby's own marker" },
     recovery_seal_cleared: { kind: 'per-server', reason: "this server's record of clearing its database after sealing" },
     recovery_seal_reopened: { kind: 'per-server', reason: "this server's record of reopening its seal" },

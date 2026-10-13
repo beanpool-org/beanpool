@@ -19,6 +19,8 @@ An assistant sees much less than an admin does in Settings. Your community's ser
 
 Your messages and chats, your balance and trades, your keys, your address, your photos, the names list, and who reported anyone. It can't change anything about you: it can't remove you, mute you, take down your post or answer your join request. An admin does those, in Settings.
 
+An assistant can suggest what to do about a report, for example to keep your post or take it down. Nothing happens unless the admin it works for reads the report and approves; anything you hear about it comes from your community's moderators, as always.
+
 ## Who receives it
 
 What the assistant reads goes to the company that runs it, as when you paste something into an AI chat yourself. The server sends a report's words or a join message only when the admin's assistant asks for them, marked as words from a member and not instructions.

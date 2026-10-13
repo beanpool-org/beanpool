@@ -6,6 +6,12 @@
  * backup" for an admin, whose grant cannot.
  */
 
+/**
+ * What an assistant may suggest, as built (agent/suggestions.ts SUGGESTION_KINDS). §6 lists more (lift a mute, answer a join
+ * request, send an announcement); the welcome names them only once those kinds exist, so it never promises what is refused.
+ */
+export const SUGGESTABLE_WORDS = 'dismiss or act on a report, restore a post hidden by reports';
+
 export interface WelcomeFacts {
     community: string;
     url: string;
@@ -28,7 +34,7 @@ export function welcomeInstructions(f: WelcomeFacts): string {
     ];
     if (f.canBackup) can.push('take a backup');
     if (f.canSuggest) {
-        can.push('SUGGEST actions (dismiss or act on a report, restore a post, lift a mute, answer a join request, send an announcement)');
+        can.push(`SUGGEST actions (${SUGGESTABLE_WORDS})`);
     }
     const suggestions = f.canSuggest
         ? ` A suggestion changes nothing: it becomes a card ${f.callsign} approves on their phone, where they see the original. When you suggest, say so; never say you did it.`
@@ -121,8 +127,9 @@ export const PROMPTS: PromptDef[] = [
         name: 'who-is-waiting-to-join',
         description: 'How many people are asking to join, messages only after asking.',
         arguments: [],
-        body: (_a, f) => 'Tell me how many people are asking to join, with knocks_list without text. Ask me before reading their messages.'
-            + (f.canSuggest ? ' Suggest approve or decline only when I tell you to.' : ' I answer them myself in the app.'),
+        // Not a suggestion kind yet (agent/suggestions.ts SUGGESTION_KINDS): the admin answers in the app.
+        body: () => 'Tell me how many people are asking to join, with knocks_list without text. Ask me before reading their messages.'
+            + ' I answer them myself in the app.',
     },
     {
         name: 'safety-settings-check',
@@ -146,9 +153,10 @@ export const PROMPTS: PromptDef[] = [
             { name: 'occasion', description: 'what it is about' },
             { name: 'tone', description: 'for example warm, brief or formal' },
         ],
-        body: (a, f) => `Draft an announcement about ${arg(a, 'occasion', 'what I tell you')} in a ${arg(a, 'tone', 'warm', 30)} tone: a title of at most `
+        // Not a suggestion kind yet: the admin sends it from Settings.
+        body: (a) => `Draft an announcement about ${arg(a, 'occasion', 'what I tell you')} in a ${arg(a, 'tone', 'warm', 30)} tone: a title of at most `
             + `200 characters and a body of at most 4000. Use community_totals and node_overview for facts. `
-            + (f.canSuggest ? 'Use suggest_action only if I ask.' : 'I send it myself from Settings.'),
+            + 'I send it myself from Settings.',
     },
 ];
 

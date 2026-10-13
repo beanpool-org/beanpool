@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 126,
-  "hash": "c1549846eeda948d588dc087a0828661ec753aa981cdc4f91c1d07c07880d5e9",
+  "version": 128,
+  "hash": "4eabc936184cda359e0bf826a01081fd2a82c3a549034f1a55fd209186da4950",
   "sections": [
     {
       "id": "about",
@@ -901,6 +901,7 @@
       "slug": "home",
       "title": "Home",
       "summary": "What Home is, which cards it shows on the phone and in the web app, how to add, move or remove them, picking what you're into, and privacy when you sign out.",
+      "help": "This is your Home: a few cards on what needs you and what is on nearby. Add a card at the bottom, or tap … on one to move or remove it.",
       "section": "getting-started",
       "related": [
         "the-top-bar",
@@ -922,8 +923,27 @@
           "text": "The phone and the web app show the same cards, with a few differences. This page says \"on the phone\" or \"in the web app\" where they differ."
         },
         {
+          "type": "h2",
+          "text": "Getting started"
+        },
+        {
           "type": "p",
-          "text": "When a member first sees Home, a one-line tip appears under the first card. Tap **✕** to put it away."
+          "text": "A new member's Home starts nearly empty: one card, **Getting started**, between **Needs you** and **Your community** (on the global community, **Find your community** stays above it). It says \"This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.\""
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Look around** starts a short tour. A bar at the bottom of the screen moves the app to each tab in turn and says what it is for, one or two sentences a step, with **Step 2 of 7** above. Tap **Next** to go on, or **Skip** to stop. The tab behind the bar works as usual: tap anything, or tap another tab and the tour follows you there.",
+            "The last step comes back to Home: **Add your first cards**. Tap a card to put it on Home, or **More cards** for the whole list. Tap **Done**. If you picked nothing, Home starts with the usual five (below).",
+            "**Skip**, on the card or the bar, ends the tour. If you have not put a card on Home yourself, it gives you the usual five. If you have (from **Add a card**, or a pick on the tour's last step), Home keeps the cards you chose.",
+            "The tour never starts by itself. If you close the app part way, the card says \"Pick up the tour at step 3\".",
+            "Done or Skip is kept on your account, so the card does not come back on your other phones or browsers. To see the tour again, tap **?** at the top and **Take the tour again**.",
+            "If you had set up your Home before the tour existed, nothing changes for you. **Getting started** is in **Add a card**, under **Getting started**, if you want it."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "When Home first shows your cards, a one-line tip appears under the first card. Tap **✕** to put it away."
         },
         {
           "type": "ul",
@@ -938,7 +958,7 @@
         },
         {
           "type": "p",
-          "text": "On the phone and in the web app, your Home is a list of cards you choose. A new member starts with five: **First steps**, **Tips**, **New in the Market** (**Near you** on the global community), **Coming up** and **From your community**. **What are you into?** and **Your way back in** come along too, and show only when they have something to say. **Needs you** is always at the top and **Your community** always at the bottom."
+          "text": "On the phone and in the web app, your Home is a list of cards you choose. After the tour, the usual five are: **First steps**, **Tips**, **New in the Market** (**Near you** on the global community), **Coming up** and **From your community**. **What are you into?** and **Your way back in** come along too, and show only when they have something to say. **Needs you** is always at the top and **Your community** always at the bottom."
         },
         {
           "type": "ul",
@@ -949,7 +969,7 @@
             "**Sun and moon** asks whose place to use before it is added: **Your community** (the usual choice) or **Your area**.",
             "A Home holds at most 24 cards. When it is full, the list says so, and you remove a card to add another.",
             "Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Edit home** says \"Your community's server needs an update before your cards follow you to other devices.\" They are sent again each time you open Home.",
-            "If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you start with the five, and Home tells you once: \"Home now starts with fewer cards. Add a card brings the rest back.\""
+            "If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** on its own, and **Skip** or **Done** brings the five back. After a **Skip**, Home tells you once: \"Home now starts with fewer cards. Add a card brings the rest back.\""
           ]
         },
         {
@@ -980,7 +1000,7 @@
             "**Who joined:** people who joined this week. On a local community it shows names and faces. On the global community it shows only a count, by area, and no names.",
             "**The Pulse:** posts shared by neighbours from external channels like YouTube and blogs, with starred categories first. Tap **See all** to open the Pulse.",
             "**Sun and moon:** tonight's moon and today's sunrise and sunset, in one line, such as \"🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48\". Your phone or browser works it out by itself: the card asks nothing of your community's server. It uses your community's place, rounded to about a kilometre, or your area where your community has no place (on the global community it is always your area). On the global community, the phone can also use where it last was, but only if you have already let the app use your location: it never asks. To use your area even where your community has a place, tap **…** then **Settings…** and choose **Your area**. The times are on your own phone's or computer's clock, so when you travel you see them in your own time. The moon is drawn as it looks from that side of the equator. Where the sun doesn't rise or set today, it says so, such as \"Sun up all day\" or \"No sunset today\". If no place is known, the card doesn't show, and **Edit home** says \"Nothing to show now: no place is known.\" A screen reader reads it in words, such as \"Moon waxing gibbous, 72 percent lit. Sunrise 6:12 am. Sunset 5:48 pm.\"",
-            "**Your Beans:** your balance and credit line (room to spend). Not on the global community. There the phone shows an example card instead: what Beans do in a local community, and **See an example ledger**. It stays until you tap **Hide this card**, even after **First steps** has gone.",
+            "**Your Beans:** your balance and credit line (room to spend). Not on the global community. There the phone shows an example card instead: what Beans do in a local community, and **See an example ledger**. It comes once the tour is done or skipped (while **Getting started** is up, the tour's Ledger step shows the example), and stays until you tap **Hide this card**, even after **First steps** has gone.",
             "**From your community:** announcements and notices from your community's admins.",
             "**Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin.",
             "**Your community:** member count and trades this month. It has **Add a card** and **Edit home**. This card stays at the bottom and cannot be moved or removed."
@@ -1036,7 +1056,7 @@
             "**＋ Add a card** comes first. It opens the same list as **Add a card** on Home.",
             "Then come the cards on your Home, in your order. Each has up and down arrows and its own **…** (Settings…, Move up, Move down, Remove). A saved search is listed by its words, and by **Offers** or **Needs** when it looks for only one, such as \"eggs\" or \"Needs · eggs\", so two searches are two different rows.",
             "A card with nothing to show right now says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip, and **Sun and moon** says **Nothing to show now: no place is known.** while there is no place to work from.",
-            "Tap **Reset to defaults** to go back to the five cards a new member starts with.",
+            "Tap **Reset to defaults** to go back to the usual five cards.",
             "There are no switches and no hidden list: a card you removed is in **Add a card**.",
             "Only the cards your community can show are listed, on the phone and in the web app. For example, there is no **Your Beans** or **Your deals** on the global community.",
             "**Needs you** always stays at the top, and **Your community** always stays at the bottom.",
@@ -1095,6 +1115,7 @@
       "slug": "joining",
       "title": "Joining BeanPool",
       "summary": "Two ways in: a community, with an invite from a member, or the global community when it is open, with 12 secret words or one sign-in. Asking a community to let you in, and how to invite someone else.",
+      "help": "Join a community with an invite from a member, or the global community with 12 secret words or one sign-in.",
       "section": "getting-started",
       "related": [
         "home",
@@ -1731,7 +1752,7 @@
           "items": [
             "**The bean:** your community, and this guide.",
             "**The \"needs you\" icons:** only while something is waiting for you.",
-            "**The invite icon, Settings and your picture.**"
+            "**The ? icon, the invite icon, Settings and your picture.**"
           ]
         },
         {
@@ -1786,7 +1807,7 @@
         },
         {
           "type": "p",
-          "text": "The icons stack from the right. The most important one sits next to the invite icon, and keeps its place as others come and go."
+          "text": "The icons stack from the right. The most important one sits next to the ? icon, and keeps its place as others come and go."
         },
         {
           "type": "h3",
@@ -1841,6 +1862,7 @@
         {
           "type": "ul",
           "items": [
+            "**The ? icon** (a question mark in a circle): help for the screen you are on. It opens a short sheet with what that screen is for, then **Read the guide page**, **Search the guide** and **Take the tour again**. It is on every tab, for members and guests. In the web app it sits between your picture and Settings at the top, and beside Settings at the bottom of the side bar on a wide screen.",
             "**The invite icon** (a person with a plus): opens **Invites**, to invite someone or join another community. See \"Joining BeanPool\".",
             "**Settings** (the sliders): opens **Settings**. Tap it again to go back to where you were.",
             "**Your picture:** opens your own profile, as others see it."
@@ -1977,6 +1999,7 @@
         {
           "type": "ul",
           "items": [
+            "**The ? at the top:** on every tab, tap **?** for a short note on the screen you are on. From there, **Read the guide page** opens the page about it, **Search the guide** opens this guide's search, and **Take the tour again** shows you round the tabs once more.",
             "**This guide:** search it for a word, like \"gift\" or \"photo\".",
             "**The ⓘ buttons:** many screens have a small ⓘ. Tap it for a short explanation of that screen. The Ledger has several.",
             "**The pricing guide:** in **Settings**, under **Community Pricing Guide**, tap **Browse 500+ Item Estimates** to see what things usually cost in beans."
@@ -2412,6 +2435,7 @@
       "slug": "browsing-the-market",
       "title": "Browsing the market",
       "summary": "Find Offers and Needs with search, filters and distance.",
+      "help": "Offers and Needs from people near you. Search, filter by category or distance, or tap + ADD POST to put up your own.",
       "section": "market",
       "related": [
         "home",
@@ -2665,6 +2689,7 @@
       "slug": "my-deals",
       "title": "My Deals",
       "summary": "One place for every trade you are in, every post you have up, and your past trades.",
+      "help": "Every trade you are in and every post you have up. A deal waiting on you is at the top.",
       "section": "market",
       "related": [
         "a-deal-step-by-step",
@@ -2888,6 +2913,7 @@
       "slug": "map-pins",
       "title": "What the map shows",
       "summary": "The pins on the Map, what their colours mean, and the buttons around them.",
+      "help": "What is near you: green pins are Offers, orange are Needs, purple are events. Tap a pin to see it.",
       "section": "map",
       "related": [
         "pin-locations",
@@ -3126,6 +3152,7 @@
       "slug": "messages",
       "title": "Messages",
       "summary": "Start a chat, send photos, reply, react, edit, delete, mute, and what is private.",
+      "help": "Your chats. A chat with one person is locked end to end. Tap a chat to open it, or start one from a member's profile.",
       "section": "talk",
       "related": [
         "people",
@@ -3274,6 +3301,7 @@
       "slug": "groups",
       "title": "Groups",
       "summary": "Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.",
+      "help": "Your groups and their chats. Start a group, invite people, or open one to talk and vote together.",
       "section": "talk",
       "related": [
         "messages",
@@ -3615,6 +3643,7 @@
       "slug": "people",
       "title": "People and friends",
       "summary": "Find members of your community, add friends, and vouch for someone.",
+      "help": "The members of your community and your friends. Tap someone to see their profile, message them or vouch for them.",
       "section": "talk",
       "related": [
         "messages",
@@ -3836,6 +3865,7 @@
       "slug": "the-pulse",
       "title": "The Pulse",
       "summary": "What your neighbours make and share elsewhere, in one feed.",
+      "help": "Links your neighbours made or shared elsewhere, in one feed. Tap one to open it.",
       "section": "pulse",
       "related": [
         "home",
@@ -4249,6 +4279,7 @@
       "slug": "polls",
       "title": "Polls",
       "summary": "Ask the community a quick question. Polls show opinion; they change nothing by themselves.",
+      "help": "A poll asks the community a quick question. It shows what people think; it changes nothing by itself.",
       "section": "commons",
       "related": [
         "decisions",
@@ -4776,6 +4807,7 @@
       "slug": "your-balance",
       "title": "Your balance and history",
       "summary": "How many beans you have, what is held, and every trade and gift.",
+      "help": "Your Beans: what you have, what is held in a deal, and every trade and gift. Everyone starts at zero.",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -5232,6 +5264,7 @@
       "slug": "privacy",
       "title": "Your privacy",
       "summary": "What others can see about you, and the settings that control it.",
+      "help": "What other members can see about you, and the switches that control it.",
       "section": "settings",
       "related": [
         "your-profile",
@@ -5337,6 +5370,7 @@
       "slug": "your-area",
       "title": "Your area",
       "summary": "The rough place the global community uses to show you the listings near you, and how to change or clear it.",
+      "help": "The rough place used to show you listings near you. Change it or clear it here; it is never your exact address.",
       "section": "settings",
       "related": [
         "communities",
@@ -5635,6 +5669,10 @@
           "text": "Your messages and chats, your balance and trades, your keys, your address, your photos, the names list, and who reported anyone. It can't change anything about you: it can't remove you, mute you, take down your post or answer your join request. An admin does those, in Settings."
         },
         {
+          "type": "p",
+          "text": "An assistant can suggest what to do about a report, for example to keep your post or take it down. Nothing happens unless the admin it works for reads the report and approves; anything you hear about it comes from your community's moderators, as always."
+        },
+        {
           "type": "h2",
           "text": "Who receives it"
         },
@@ -5652,6 +5690,7 @@
       "slug": "blocking",
       "title": "Blocking someone",
       "summary": "Hide someone's posts and messages from you, and undo it later.",
+      "help": "People you have blocked. Their posts and messages are hidden from you; unblock someone here.",
       "section": "settings",
       "related": [
         "reporting",
@@ -5864,6 +5903,7 @@
       "slug": "notifications",
       "title": "Notifications",
       "summary": "Choose which alerts reach your phone, and when events remind you.",
+      "help": "Choose which alerts reach you, and when events remind you.",
       "section": "settings",
       "related": [
         "mute",
@@ -6002,6 +6042,7 @@
       "slug": "appearance",
       "title": "Light and dark",
       "summary": "The app starts light. Make it dark, or follow your phone.",
+      "help": "Make the app light or dark, or follow your phone.",
       "section": "settings",
       "related": [
         "privacy",
@@ -6244,6 +6285,7 @@
       "slug": "recovery",
       "title": "Getting your account back",
       "summary": "Restore your account on a new phone, and protect it with a sign-in account.",
+      "help": "How to get your account back on a new phone: your 12 words, or a sign-in account you linked.",
       "section": "settings",
       "related": [
         "your-12-words",

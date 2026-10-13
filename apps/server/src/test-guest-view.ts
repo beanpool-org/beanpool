@@ -1440,6 +1440,8 @@ async function main(): Promise<void> {
             // Settings' Connected assistants (agent/grants-route.ts): a person's own session only, never a token or a guest.
             'GET /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants/:id/revoke',
             'POST /api/local/admin/agent/preview',
+            // An assistant's suggestions (agent/suggestions-route.ts): a person's own session only; approve is the existing route.
+            'GET /api/local/admin/agent/suggestions', 'POST /api/local/admin/agent/suggestions/:id/decline',
         ]);
         const ID_BY_PREFIX: Array<[RegExp, string]> = [
             [/^\/api\/groups\//, prunedClub.id], [/^\/api\/marketplace\/posts\/:id\/chat/, clubEvent.id], [/^\/api\/marketplace\/posts\//, offer.id], [/^\/api\/commons\/decisions\//, 'dec-sentinel'],

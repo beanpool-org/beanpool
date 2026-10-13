@@ -45,6 +45,9 @@ import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
 import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { marked, useFeatureMode } from '../lib/features';
+import { LocalCommunityLine } from '../components/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
@@ -190,6 +193,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [newPostTitle, setNewPostTitle] = useState('');
     const [newPostDescription, setNewPostDescription] = useState('');
     const [newPostCredits, setNewPostCredits] = useState('');
+    // Beans live in a local community here (preview or read-only, lib/features.ts): no price field, the line in its slot,
+    // and the listing goes up free with its terms in the description (design §1 row 2). Live and hidden: as before.
+    const priceMarked = marked(useFeatureMode('beans', !visitor));
     const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
@@ -948,7 +954,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         // Validate all fields
         const errors = new Set<string>();
         if (!newPostTitle.trim()) errors.add('title');
-        if (newPostCredits.trim() === '' || isNaN(Number(newPostCredits)) || Number(newPostCredits) < 0) errors.add('credits');
+        if (!priceMarked && (newPostCredits.trim() === '' || isNaN(Number(newPostCredits)) || Number(newPostCredits) < 0)) errors.add('credits');
         if (!newPostDescription.trim()) errors.add('description');
         if (postLat == null || postLng == null) errors.add('location');
         if (newPostPhotos.length < 1) errors.add('photos');
@@ -970,8 +976,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 category: newPostCategory,
                 title: newPostTitle.trim(),
                 description: newPostDescription.trim(),
-                credits: Number(newPostCredits) || 0,
-                priceType: newPostPriceType,
+                credits: priceMarked ? 0 : Number(newPostCredits) || 0,
+                priceType: priceMarked ? 'fixed' : newPostPriceType,
                 authorPublicKey: identity?.publicKey || '',
                 repeatable: newPostRepeatable,
                 cashAlsoNeeded: newPostCashAlsoNeeded,
@@ -2431,6 +2437,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     validationErrors.has('title') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'
                                 }`}
                             />
+                            {!priceMarked && (<>
                             <input
                                 placeholder="B"
                                 type="number"
@@ -2453,9 +2460,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 <option value="weekly">/ Wk</option>
                                 <option value="monthly">/ Mo</option>
                             </select>
+                            </>)}
                         </div>
 
-                        <p 
+                        {priceMarked && (
+                            <div className="mt-1 mb-3" data-testid="composer-price-line">
+                                <LocalCommunityLine feature="beans" text={LOCAL_COMMUNITY_LINES.price}
+                                    onNearYou={onNavigate ? () => onNavigate('home') : undefined}
+                                    onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                            </div>
+                        )}
+                        {!priceMarked && <p 
                             onClick={() => setShowCommonsInfo(true)}
                             className="text-[13.5px] text-nature-700 dark:text-nature-300 mt-1 mb-3 font-semibold cursor-pointer hover:text-nature-900 dark:hover:text-white transition-colors"
                         >
@@ -2468,7 +2483,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 return '1.5% transaction fee funds community projects & solvency. ';
                             })()}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">Learn more ⓘ</span>
                             <span className="text-emerald-600 dark:text-emerald-500 font-bold ml-1">(100% community owned)</span>
-                        </p>
+                        </p>}
 
                         {/* Repeatable toggle */}
                         <label className="flex items-center gap-3 text-sm font-medium text-nature-700 cursor-pointer py-2 px-1 mb-1">

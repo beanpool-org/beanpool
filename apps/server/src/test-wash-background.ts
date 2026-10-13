@@ -7,10 +7,12 @@
  *  2. Take-over in this process: a standby's analysis, from before the final copy's rows, is dropped when the role turns
  *     to primary, and a fresh one started; the promoted server's floors then equal a one-go on its final rows.
  *  3. Clean storage during a refresh: its truncating checkpoint closes the refresh's snapshot first (as it closes the
- *     standby copies), so it holds the loop well under the 5 s busy timeout and empties the WAL; the refresh lands nothing.
+ *     standby copies), so it holds the loop well under the 5 s busy timeout and empties the WAL; the refresh lands nothing,
+ *     and says so in one line, not as a failure. The same for the recovery seal's copy removal and its VACUUM, and the
+ *     image evacuation's VACUUM: each one's first truncating checkpoint finds no reader.
  *  4. The refresh's read-only handle closes with the data-version probe (a restore, a shutdown): a refresh in flight lands
  *     nothing, and closing the node's own handle after is the last close (state.db-wal folded and gone).
- *  5. The server starts the boot refresh (index.ts Step 6.1) once the HTTPS server listens.
+ *  5. The server starts the boot refresh (index.ts Step 6.1) once the HTTPS server listens (code, not a comment).
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-wash-background.ts
  */
@@ -18,6 +20,8 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { cleanStorageAndCompressLogs } from './engine/storage-health.js';
+import { clearCopiesDroppedBeforeSeal, vacuumAndCheckpoint } from './services/recovery-seal-key.js';
+import { reclaimSpaceOnce } from './services/image-evacuation.js';
 import {
     initStateEngine, getWashTradingEnforcement, clearWashTradingCache, runWashTradingAnalysis, washAnalysisCount,
     startWashTradingRefreshAtBoot, setNodeRole, getNodeRole,
@@ -57,6 +61,16 @@ async function slowStepsAcross(fn: () => Promise<void>): Promise<void> {
     performance.now = () => (t += 60);
     try { await fn(); } finally { performance.now = real; }
 }
+
+/** The `[Wash]` lines console.log and console.warn print from now until restore(). */
+function captureWashLines() {
+    const log = console.log, warn = console.warn;
+    const said: string[] = [], warned: string[] = [];
+    console.log = (...a: unknown[]) => { if (String(a[0]).startsWith('[Wash]')) said.push(String(a[0])); log(...a); };
+    console.warn = (...a: unknown[]) => { if (String(a[0]).startsWith('[Wash]')) warned.push(String(a[0])); warn(...a); };
+    return { said, warned, restore: () => { console.log = log; console.warn = warn; } };
+}
+const closedAsExpected = (l: { said: string[]; warned: string[] }) => l.warned.length === 0 && l.said.some((s) => s.includes('its snapshot was closed'));
 
 async function main() {
     try {
@@ -140,19 +154,70 @@ async function main() {
                 if (readingAtCheckpoint === null && /wal_checkpoint\(TRUNCATE\)/i.test(source)) readingAtCheckpoint = washRefreshRunning(db) === inFlight;
                 return pragma.call(db, source, options);
             }) as typeof db.pragma;
+            const lines = captureWashLines();
             const t0 = Date.now();
             try { await slowStepsAcross(() => cleanStorageAndCompressLogs().then(() => undefined)); } finally { db.pragma = pragma; }
             const ms = Date.now() - t0;
             assert(readingAtCheckpoint === true, 'The refresh was still in flight at the truncating checkpoint');
             await turn();
             clearInterval(watcher);
-            await inFlight;
+            try { await inFlight; } finally { lines.restore(); }
+            assert(closedAsExpected(lines), `The refresh's closed snapshot is logged as expected, in one line, not as a failure (${lines.warned.length} warning(s))`);
             const wal = fs.statSync(`${dbPath}-wal`).size;
             assert(ms < 1000 && worst < 1000, `Clean storage during a refresh holds the loop well under 1 s (${Math.round(ms)} ms; worst gap ${Math.round(worst)} ms)`);
             assert(wal === 0, `Its truncating checkpoint emptied the WAL (${wal} bytes)`);
             assert(washAnalysisCount() === n3 && slowSteps(() => getWashTradingEnforcement()) === before, 'The refresh in flight landed nothing');
         } finally {
             Date.now = realNow3;
+        }
+
+        // --- 3b. The recovery seal's copy removal and its VACUUM, and the image evacuation's VACUUM, during a refresh ---
+        // Each closes the refresh's snapshot before its first truncating checkpoint, as Clean storage does: left open, that
+        // checkpoint waits on it the whole busy timeout with the loop held (busy 1), and the WAL stays as it was.
+        const realNow3b = Date.now;
+        let ahead3b = WASH_KEEP_MS;
+        Date.now = () => realNow3b() + ahead3b;
+        try {
+            const sites: [string, () => void][] = [
+                ['The recovery seal\'s removal of copies its main server deleted', () => {
+                    db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, kdf_params)
+                        VALUES ('wbg-o1', 'hub', 'self', 1, 'x', 'x', 'x', NULL)`).run();
+                    clearCopiesDroppedBeforeSeal({ standby: true, wholeCopy: [] });
+                }],
+                ['The recovery seal\'s VACUUM', () => { vacuumAndCheckpoint(); }],
+                ['The image evacuation\'s VACUUM', () => reclaimSpaceOnce()],
+            ];
+            for (const [site, run] of sites) {
+                clearWashTradingCache();
+                const before = slowSteps(() => getWashTradingEnforcement()); // background mode
+                ahead3b += WASH_KEEP_MS;
+                slowSteps(() => getWashTradingEnforcement()); // due: a refresh starts
+                const inFlight = washRefreshRunning(db);
+                await slowStepsAcross(turn); // its snapshot is taken: a reader on the WAL
+                const n = washAnalysisCount();
+                for (let i = 0; i < 50; i++) trade('wbg-o1', 'wbg-o3', 1); // frames in the WAL
+                const pragma = db.pragma;
+                let first: { inFlight: boolean; busy: number; ms: number } | null = null;
+                db.pragma = ((source: string, options?: Parameters<typeof db.pragma>[1]) => {
+                    if (first || !/wal_checkpoint\(TRUNCATE\)/i.test(source)) return pragma.call(db, source, options);
+                    const at = inFlight !== null && washRefreshRunning(db) === inFlight;
+                    const t0 = Date.now();
+                    const r = pragma.call(db, source, options);
+                    first = { inFlight: at, busy: Number((r as { busy?: number }[])[0]?.busy ?? -1), ms: Date.now() - t0 };
+                    return r;
+                }) as typeof db.pragma;
+                const lines = captureWashLines();
+                let threw: unknown = null;
+                try { slowSteps(run); } catch (e) { threw = e; } finally { db.pragma = pragma; }
+                try { await inFlight; } finally { lines.restore(); }
+                const cp = first as { inFlight: boolean; busy: number; ms: number } | null;
+                assert(cp !== null && cp.inFlight && cp.busy === 0 && cp.ms < 1000 && threw === null,
+                    `${site} during a refresh: its first truncating checkpoint finds no reader (${cp ? `in flight ${cp.inFlight}, busy ${cp.busy}, ${cp.ms} ms` : 'none'}${threw ? `; threw ${(threw as Error).message}` : ''})`);
+                assert(washAnalysisCount() === n && slowSteps(() => getWashTradingEnforcement()) === before && closedAsExpected(lines),
+                    `${site}: the refresh in flight landed nothing, and its closed snapshot is logged as expected (${lines.warned.length} warning(s))`);
+            }
+        } finally {
+            Date.now = realNow3b;
         }
 
         // --- 4. The read-only handle closes with the data-version probe ---
@@ -182,7 +247,9 @@ async function main() {
         assert(!fs.existsSync(`${dbPath}-wal`), 'Closing the node\'s handle after is the last close: state.db-wal is folded and gone');
 
         // --- 5. The boot refresh starts once the server listens (index.ts Step 6.1) ---
-        const index = fs.readFileSync(fileURLToPath(new URL('./index.ts', import.meta.url)), 'utf8');
+        // Code lines only: a call commented out starts nothing.
+        const index = fs.readFileSync(fileURLToPath(new URL('./index.ts', import.meta.url)), 'utf8')
+            .split('\n').filter((l) => !/^\s*(\/\/|\/\*|\*)/.test(l)).join('\n');
         const https = index.indexOf('await startHttpsServer(');
         const kick = index.indexOf('void startWashTradingRefreshAtBoot();');
         const p2p = index.indexOf('await startP2P(');

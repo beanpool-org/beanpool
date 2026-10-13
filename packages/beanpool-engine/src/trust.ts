@@ -406,6 +406,11 @@ export function closeWashSnapshotHandle(db: Db): void {
     try { handle?.close(); } catch { /* closed either way */ }
 }
 
+/** A refresh whose snapshot handle was closed under it (closeWashSnapshotHandle): expected, and logged as such. */
+class WashSnapshotClosed extends Error {
+    constructor() { super('the snapshot ended before the analysis did: its handle was closed (a checkpoint, a VACUUM, a restore or a shutdown)'); }
+}
+
 /**
  * The analysis in slices (runStepsInSlices), every slice reading the same snapshot: one read transaction on the
  * read-only handle spans them all, so the result is the one-go analysis of the rows as they stood at its start, whatever
@@ -420,8 +425,10 @@ export async function runWashAnalysisInSlices(db: Db, opts: { sliceMs?: number; 
     try {
         const time = { ms: 0 };
         const analysis = await runStepsInSlices(timedSteps(analysisSteps(snap ?? db, true, db), time), opts);
-        if (snap && !(snap.open && snap.inTransaction)) throw new Error('the snapshot ended before the analysis did');
+        if (snap && !(snap.open && snap.inTransaction)) throw snap.open ? new Error('the snapshot ended before the analysis did') : new WashSnapshotClosed();
         return { analysis, snapshotAt, finishedAt: Date.now(), stepMs: time.ms, wallMs: performance.now() - wallStart };
+    } catch (e) {
+        throw snap && !snap.open && !(e instanceof WashSnapshotClosed) ? new WashSnapshotClosed() : e;
     } finally {
         if (snap?.open && snap.inTransaction) snap.exec('COMMIT');
     }
@@ -513,7 +520,10 @@ function startRefresh(db: Db, s: WashState): void {
     const run = new Promise<void>((resolve) => setImmediate(resolve))
         .then(() => runWashAnalysisInSlices(db))
         .then((r) => { if (s.generation === generation) land(s, r); })
-        .catch((e) => console.warn('[Wash] A background refresh of the wash analysis failed; floors read the last one:', e))
+        .catch((e) => {
+            if (e instanceof WashSnapshotClosed) console.log('[Wash] A background refresh of the wash analysis stopped: its snapshot was closed (a checkpoint, a VACUUM, a restore or a shutdown). Floors read the last one; the next refresh opens a new snapshot.');
+            else console.warn('[Wash] A background refresh of the wash analysis failed; floors read the last one:', e);
+        })
         .finally(() => {
             s.refreshing = null;
             if (s.again) {

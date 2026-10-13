@@ -20,6 +20,14 @@ Each site works a little differently. The screen says which:
 - **A tap per post** (Instagram, TikTok, Facebook): share each post by hand. Where the screen offers **Connect**, you can link the account instead. The link is kept on this phone only. Signing out of the phone removes it, so connect again when you come back.
 - **Shows as a card** (a website).
 
+## Verified accounts
+
+- When you tap **Connect**, your community's server asks Instagram or TikTok which account you signed in to. The channel is marked verified only when that is the account on the channel.
+- Signed in to a different account? The screen says so. Sign in to the right account and tap **Connect** again.
+- Add the channel as your **@handle** so it can be checked. A short link cannot be.
+- Facebook channels are never marked verified.
+- If a channel says **Reconnect to restore your verified badge**, tap **Reconnect**.
+
 ## On each channel
 
 - **Show on the local feed:** switch it off to keep this channel's posts off the Pulse.

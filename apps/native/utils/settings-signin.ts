@@ -71,6 +71,20 @@ export function formatShortCode(code: string): string {
 
 const pairingPath = (id: string) => `/api/local/admin/auth/pairing/${id}`;
 
+/** The assistant behind a consent code: its own name (anyone can register any name) and where what it reads goes. */
+export interface AgentAsking { name: string; sendsTo: string }
+
+const HOST_SHAPE = /^[a-z0-9.\-:[\]]{1,253}$/i;
+
+/** The node's `agent`, or null: a host that isn't a host shape is not shown (nor approved: the screen would mislead). */
+export function readAgent(v: unknown): AgentAsking | null {
+    if (!v || typeof v !== 'object') return null;
+    const a = v as { name?: unknown; sendsTo?: unknown };
+    if (typeof a.sendsTo !== 'string' || !HOST_SHAPE.test(a.sendsTo)) return null;
+    const name = typeof a.name === 'string' ? a.name.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 60) : '';
+    return { name, sendsTo: a.sendsTo.toLowerCase() };
+}
+
 export type PairingLookup =
     | {
         kind: 'ok'; browser: string; expiresAt: number;
@@ -81,6 +95,11 @@ export type PairingLookup =
         fromAddress: string | null;
         /** The node saw this phone's lookup come from the computer's network. */
         sameNetwork: boolean;
+        /**
+         * An AI assistant asking to connect for you (admin MCP S2), not a computer signing in: the name it gave itself and
+         * the host its answers go to. Null for a Settings sign-in.
+         */
+        agent: AgentAsking | null;
     }
     | { kind: 'gone'; message: string }
     | { kind: 'error'; message: string };
@@ -97,7 +116,7 @@ export async function lookupPairing(qr: SettingsSigninQr, identity?: BeanPoolIde
         const res = await fetch(url, { headers: { Accept: 'application/json', ...signed } });
         const body = await res.json().catch(() => ({})) as {
             shortCode?: unknown; browser?: unknown; expiresAt?: unknown; error?: unknown;
-            expiresInSeconds?: unknown; askedSecondsAgo?: unknown; fromAddress?: unknown; sameNetwork?: unknown;
+            expiresInSeconds?: unknown; askedSecondsAgo?: unknown; fromAddress?: unknown; sameNetwork?: unknown; agent?: unknown;
         };
         if (res.ok) {
             if (body.shortCode !== qr.shortCode) {
@@ -111,6 +130,7 @@ export async function lookupPairing(qr: SettingsSigninQr, identity?: BeanPoolIde
                 askedSecondsAgo: seconds(body.askedSecondsAgo),
                 fromAddress: typeof body.fromAddress === 'string' && body.fromAddress && body.fromAddress !== 'unknown' ? body.fromAddress.slice(0, 64) : null,
                 sameNetwork: body.sameNetwork === true,
+                agent: readAgent(body.agent),
             };
         }
         const message = typeof body.error === 'string' ? body.error : `The node did not answer (${res.status}).`;
@@ -125,6 +145,18 @@ const seconds = (v: unknown): number | null => (typeof v === 'number' && Number.
 /** The approval sheet's heading: name the trick, so a story ("scan this to verify your account") gets a No. */
 export const SIGNIN_QUESTION = 'Did you just open Settings on a computer?';
 export const SIGNIN_WARNING = 'If someone sent you this code, tap No.';
+
+/** The sheet for an AI assistant's consent: the question, the warning, and what it is, the name never alone. */
+export const AGENT_QUESTION = 'Did you just add this community to an AI assistant?';
+export const AGENT_WARNING = "If someone sent you this code, or you don't know where it sends, tap No.";
+
+export function agentLines(a: AgentAsking): string[] {
+    return [
+        a.name ? `Assistant: “${a.name}” (the name it gave itself)` : 'Assistant: no name given',
+        `Sends what it reads to: ${a.sendsTo}`,
+        'It reads health, backups, totals, reports and join requests as you, and can only suggest changes for you to approve.',
+    ];
+}
 
 /** "1:35 left" */
 export function formatTimeLeft(secondsLeft: number): string {
@@ -175,7 +207,7 @@ export function signinMessage(action: 'approve' | 'decline', qr: SettingsSigninQ
  * Signed for the host it is POSTed to (`qr.nodeUrl`, which readSigninScan has checked is this app's node).
  */
 export async function buildSigninRequest(
-    action: 'approve' | 'decline', qr: SettingsSigninQr, identity: BeanPoolIdentity, totpCode?: string,
+    action: 'approve' | 'decline', qr: SettingsSigninQr, identity: BeanPoolIdentity, totpCode?: string, agentShown = false,
 ): Promise<{ url: string; init: RequestInit }> {
     const signed = await signPairing(qr.nodeUrl, action, qr.pairingId, qr.shortCode, identity.privateKey);
     return {
@@ -190,6 +222,8 @@ export async function buildSigninRequest(
                 ...(action === 'approve' && totpCode ? { totpCode: totpCode.trim() } : {}),
                 // This app shows the node's two digits, so the computer must type them (number matching).
                 ...(action === 'approve' ? { confirm: true } : {}),
+                // This screen showed an AI assistant's name and where it sends (the node refuses an assistant's approval without it).
+                ...(action === 'approve' && agentShown ? { agentShown: true } : {}),
             }),
         },
     };
@@ -212,6 +246,8 @@ export async function approveComputerSignin(opts: {
     qr: SettingsSigninQr;
     identity: BeanPoolIdentity;
     communityName: string;
+    /** The sheet showed lookupPairing's `agent`: this approval connects that assistant. */
+    agentShown?: boolean;
 }): Promise<ApproveOutcome> {
     const unlock = await requireDeviceUnlock(opts.communityName);
     if (unlock === 'no-device-lock') return { kind: 'no-device-lock' };
@@ -219,7 +255,7 @@ export async function approveComputerSignin(opts: {
 
     const attempt = async (totpCode?: string): Promise<ApproveOutcome> => {
         try {
-            const { url, init } = await buildSigninRequest('approve', opts.qr, opts.identity, totpCode);
+            const { url, init } = await buildSigninRequest('approve', opts.qr, opts.identity, totpCode, opts.agentShown === true);
             const res = await fetch(url, init);
             const body = await res.json().catch(() => ({})) as { success?: boolean; totpRequired?: boolean; error?: string; reason?: string; confirmCode?: unknown };
             if (res.ok && body.success) {
@@ -229,7 +265,7 @@ export async function approveComputerSignin(opts: {
             }
             if (body.totpRequired) return { kind: 'totp-required', wrongCode: !!totpCode, continueWith: attempt };
             if (body.reason === 'not-admin') return { kind: 'refused', message: `You are not an owner, admin or moderator of ${opts.communityName}, so you can't open its Settings.` };
-            if (res.status === 403 || res.status === 404 || res.status === 409 || res.status === 410) {
+            if (res.status === 403 || res.status === 404 || res.status === 409 || res.status === 410 || res.status === 426) {
                 return { kind: 'refused', message: body.error || 'The node refused the sign-in.' };
             }
             if (res.status === 429) return { kind: 'error', message: body.error || 'Too many attempts. Wait a minute and try again.' };

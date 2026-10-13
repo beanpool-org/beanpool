@@ -434,10 +434,10 @@ async function main(): Promise<void> {
             const r = registerClient({ client_name: `p${i}`, redirect_uris: [REDIRECT] }, `test-${i}`);
             if (r.ok) held.push(r.client.clientId);
         }
-        markRegistrationOpened(held[0]);
+        const opened = await openConsent(authorizeUrl(held[0])); // its consent page shown: no longer the first to make room
         const room = await call('POST', '/oauth/register', { body: { client_name: 'Makes Room', redirect_uris: [REDIRECT] } });
-        assert(room.status === 201 && pendingRegistrations() === OAUTH_PENDING_MAX && isPendingRegistration(held[0]) && !isPendingRegistration(held[1]),
-            `the 101st pending registration: the oldest one nobody opened a page for makes room, an opened one stays (${show(room)})`);
+        assert(opened.status === 200 && room.status === 201 && pendingRegistrations() === OAUTH_PENDING_MAX && isPendingRegistration(held[0]) && !isPendingRegistration(held[1]),
+            `the 101st pending registration: the oldest one nobody opened a page for makes room, one whose page was opened stays (${opened.status}; ${show(room)})`);
         for (const id of [...held, room.body?.client_id]) markRegistrationOpened(id);
         const over = await call('POST', '/oauth/register', { body: { client_name: 'One Too Many', redirect_uris: [REDIRECT] } });
         assert(over.status === 429 && pendingRegistrations() === OAUTH_PENDING_MAX, `100 waiting, every one opened: the next → 429 (${show(over)})`);

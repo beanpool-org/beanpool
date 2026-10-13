@@ -8,13 +8,15 @@
 // that it is exactly the next epoch, and that it covers exactly the active members (group_key_epochs, group_key_wraps).
 //
 // The roster an epoch must cover is the group's active rows whose key is a member of this node (isNodeMember): a pruned
-// account, a visitor's row or the old key of a re-key is in no epoch. A line is accepted only under the current epoch,
+// account, a visitor's row or the old key of a re-key is in no epoch. A re-keyed key's wraps stay (getFormerGroupWraps),
+// but it has no group_members row, so it is never listed, topped up or counted in a roster. A line is accepted only under the current epoch,
 // and only while that epoch is not stale: marked so when the membership changed without a new one, or found so because
 // its recipients are no longer the roster. So every line is under a key the current membership holds, and a leaver's
 // last key dies at the next line anyone writes.
 
 import { db } from '../db/db.js';
 import { isNodeMember } from '@beanpool/engine';
+import { formerKeysReader } from './key-succession.js';
 import {
     verifyGroupEpochRecord, verifyGroupTopUp, groupEpochCoversExactly, groupMembersDigest, GroupKeyNotVerifiedError,
     type GroupEpochReason, type GroupEpochRecord, type GroupKeyWrap, type GroupTopUp,
@@ -236,6 +238,10 @@ export function withMembershipEpoch<T>(
  * its recipient refused stays (rejectGroupWrap), and its wrapper may not try that slot again: one row per wrapper per
  * slot, so a slot takes at most roster-size wraps ever (DESIGN-group-chat-epochs-over-time-fable.md §1, Marty's picks 2
  * and 3). A group whose only other member was refused rotates instead.
+ *
+ * A member may wrap to themselves (DESIGN-group-history-after-rekey-fable.md §3, Marty's pick 3 of 13 Oct): a box only
+ * its maker opens, made from a key they already hold (their old key's wrap, opened by their old 12 words). It reaches
+ * nobody else and costs the node one row; the membership rule below still holds.
  */
 export function storeGroupTopUp(groupId: string, actor: string, body: any): { epoch: number; recipient: string } {
     const t: GroupTopUp = {
@@ -249,7 +255,6 @@ export function storeGroupTopUp(groupId: string, actor: string, body: any): { ep
             const msg = e instanceof Error ? e.message : 'Top-up refused.';
             throw new GroupKeyError(/not an active member/.test(msg) ? 403 : 400, 'wrap_refused', msg);
         }
-        if (t.recipient === actor) throw new GroupKeyError(400, 'wrap_refused', 'Nobody tops themselves up: another member hands you this key.');
         if (!epochRow(groupId, t.epoch)) throw new GroupKeyError(404, 'wrap_refused', 'This group has no such epoch.');
         const from = fromEpochOf(groupId, t.recipient);
         if (from === null || t.epoch < from) {
@@ -408,7 +413,33 @@ export function filterDeclaredMentions(groupId: string, author: string, declared
     return out;
 }
 
-/** A re-key (engine/key-move.ts): the old key's wraps can never open again, so they go (§6); the member shows as missing. */
-export function dropGroupWrapsOf(oldKey: string): void {
-    db.prepare('DELETE FROM group_key_wraps WHERE recipient_pubkey = ?').run(oldKey);
+/**
+ * GET …/keys/former (DESIGN-group-history-after-rekey-fable.md §3, Marty's pick 3 of 13 Oct): the live wraps of the keys
+ * this member's attested succession chain names (formerKeysReader: each statement signed by the key after it), for the
+ * epochs of this group from the member's fromEpoch on that they hold no live wrap for, with those epochs' records. Only
+ * a former key's seed opens them, so serving them to a claimant reads nothing: the member's phone opens them with their
+ * old 12 words and wraps each key to itself (POST …/keys/wrap). At most GROUP_KEYS_PAGE epochs per answer, after `after`.
+ */
+export function getFormerGroupWraps(groupId: string, viewer: string, q: { after?: number } = {}) {
+    const formerKeys = formerKeysReader()(viewer).map((k) => k.pubkey);
+    const fromEpoch = fromEpochOf(groupId, viewer);
+    if (fromEpoch === null || formerKeys.length === 0) return { formerKeys, epochs: [], wraps: [], more: false };
+    const keys = formerKeys.map(() => '?').join(',');
+    const epochList = (db.prepare(`
+        SELECT DISTINCT w.epoch FROM group_key_wraps w
+        WHERE w.group_id = ? AND w.recipient_pubkey IN (${keys}) AND w.${LIVE} AND w.epoch >= ? AND w.epoch > ?
+          AND NOT EXISTS (SELECT 1 FROM group_key_wraps m WHERE m.group_id = w.group_id AND m.epoch = w.epoch AND m.recipient_pubkey = ? AND m.${LIVE})
+        ORDER BY w.epoch LIMIT ?
+    `).all(groupId, ...formerKeys, fromEpoch, q.after ?? 0, viewer, GROUP_KEYS_PAGE) as { epoch: number }[]).map((r) => r.epoch);
+    if (epochList.length === 0) return { formerKeys, epochs: [], wraps: [], more: false };
+    const inEpochs = epochList.map(() => '?').join(',');
+    const current = currentGroupEpoch(groupId);
+    const rows = db.prepare(`SELECT * FROM group_key_epochs WHERE group_id = ? AND epoch IN (${inEpochs}) ORDER BY epoch`).all(groupId, ...epochList) as EpochRow[];
+    const wraps = (db.prepare(`
+        SELECT epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig FROM group_key_wraps
+        WHERE group_id = ? AND recipient_pubkey IN (${keys}) AND ${LIVE} AND epoch IN (${inEpochs}) ORDER BY epoch, recipient_pubkey
+    `).all(groupId, ...formerKeys, ...epochList) as any[]).map((w) => ({
+        epoch: w.epoch, recipient: w.recipient_pubkey, wrapper: w.wrapper_pubkey, ephPub: w.eph_pub, nonce: w.nonce, wrapped: w.wrapped, sig: w.sig ?? null,
+    }));
+    return { formerKeys, epochs: rows.map((r) => servedEpoch(r, current)), wraps, more: epochList.length === GROUP_KEYS_PAGE };
 }

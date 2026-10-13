@@ -451,6 +451,7 @@ export const SUITES = [
     'test-group-keys-http',
     'test-group-keys-over-time',
     'test-key-succession',
+    'test-group-history-after-rekey',
     'test-dm-line-relay',
     'test-dm-standby-order',
     'test-keeper-read-cursor',

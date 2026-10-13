@@ -57,7 +57,6 @@ import { MembersModule } from './components/modules/MembersModule';
 import { TopologyModule } from './components/modules/TopologyModule';
 import { InvitesModule } from './components/modules/InvitesModule';
 import { LogsModule, type LogEntry } from './components/modules/LogsModule';
-import { AiServicesModule } from './components/modules/AiServicesModule';
 
 import { IS_FLEET_MODE } from './lib/mode';
 import { downloadNotice, downloadedAlert } from './lib/backup-shortfall';
@@ -1220,7 +1219,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         members: { critical: activeMemberCritical, warning: activeMemberWarning },
         invites: { critical: 0, warning: 0 },
         logs: { critical: logErrorsCount, warning: logWarningsCount },
-        ai: { critical: 0, warning: 0 },
     };
 
     // Phone layout (single-node, below lg): the section menu is a sheet, and screens are history entries so Back works.
@@ -1810,15 +1808,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                             {activeTab === 'logs' && (
                                 <SectionErrorBoundary sectionName="Logs Module" resetKey={activeProfileId || activeNode?.id}>
                                     <LogsModule logs={nodeLogs} onRefresh={() => loadLogs()} />
-                                </SectionErrorBoundary>
-                            )}
-
-                            {activeTab === 'ai' && (
-                                <SectionErrorBoundary sectionName="AI Services" resetKey={activeProfileId || activeNode?.id}>
-                                    <AiServicesModule
-                                        activeNode={activeNode}
-                                        contextData={{ telemetry: diag, gateway, members: nodeData?.members, logs: nodeLogs }}
-                                    />
                                 </SectionErrorBoundary>
                             )}
                         </>

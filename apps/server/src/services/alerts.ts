@@ -70,6 +70,8 @@ import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
 import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, type SecurityNote } from './security-signal.js';
 import { registrarNames } from '../engine/registrar-names.js';
+import { listAutomationTokens } from '../automation-tokens.js';
+import { agentCallsTodayAll } from '../agent/limits.js';
 
 function dataDir(): string {
     return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -119,6 +121,7 @@ export type AlertKey =
     | 'standby.incident'
     | 'tls.fallback'
     | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
+    | 'sec.agent'
     | 'sec.log';
 
 interface Row {
@@ -155,6 +158,8 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.keys': { title: 'a sign-in key or code changed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.replaced': { title: 'replaced by another server', priority: 5, webhook: true, pushEveryMs: DAY, banner: true },
     'sec.name': { title: 'its address is not its own', priority: 4, webhook: true, pushEveryMs: DAY, banner: true },
+    /** An AI assistant connected to /mcp or disconnected (admin MCP design §8): told as a role change is. */
+    'sec.agent': { title: 'an AI assistant connected or disconnected', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.more': { title: 'more security changes', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     /** The record of an acknowledgement, kept in the history only: who saw them, as a role, and when. */
     'sec.seen': { title: 'security alerts marked as seen', priority: 2, webhook: false, pushEveryMs: 0, banner: false },
@@ -163,7 +168,7 @@ const ROWS: Record<AlertKey, Row> = {
 };
 
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
-const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.role', 'sec.claim', 'sec.keys', 'sec.more']);
+const SECURITY_ONE_SHOTS: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.role', 'sec.claim', 'sec.keys', 'sec.more', 'sec.agent']);
 /** Going on while it is seen; over after an hour without another (then the usual 15-minute hold). */
 const SECURITY_SEEN: ReadonlySet<AlertKey> = new Set<AlertKey>(['sec.password-burst', 'sec.claim-guess']);
 const SECURITY_QUIET_MS = 60 * 60_000;
@@ -827,7 +832,7 @@ function foldedConditions(s: BookState, t: number, only?: string): Condition[] {
 /** The security log's lines by category, in words: what Settings → Logs holds them under, never what a line says. */
 const LOG_KINDS: Record<LogCategory, string> = {
     AUTH: 'sign-in, keys and codes', ADMIN: 'admin actions', P2P: 'backups, the standby and other servers', SYS: 'the server itself',
-    TLS: 'certificates', LEDGER: 'the ledger', DB: 'the database',
+    TLS: 'certificates', LEDGER: 'the ledger', DB: 'the database', AGENT: 'AI assistants',
 };
 
 /**
@@ -1136,6 +1141,8 @@ export interface AlertsStatus {
     recent: Array<AlertEvent & { title: string }>;
     /** Whether an owner has something to acknowledge: those, or this server replaced. */
     acknowledge: boolean;
+    /** AI assistants today (admin MCP design §8), counts only: calls let in since midnight UTC, and how many are connected. */
+    assistants: { calls: number; connected: number };
 }
 
 export function getAlertsStatus(): AlertsStatus {
@@ -1153,5 +1160,6 @@ export function getAlertsStatus(): AlertsStatus {
         history: s.history.slice().reverse().map((e) => ({ ...e, title: ROWS[e.key].title })),
         recent: recentSecurityEvents(s, t).map((e) => ({ ...e, title: ROWS[e.key].title })),
         acknowledge: recentSecurityEvents(s, t).length > 0 || (!!s.raised['sec.replaced'] && s.raised['sec.replaced'].endedAt === undefined),
+        assistants: { calls: agentCallsTodayAll(t), connected: listAutomationTokens().filter((k) => k.scope === 'agent').length },
     };
 }

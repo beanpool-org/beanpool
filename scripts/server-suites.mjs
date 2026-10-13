@@ -172,6 +172,8 @@ export const SUITES = [
     'test-retire-admin-password',
     'test-retired-password-bundles',
     'test-automation-tokens',
+    'test-admin-mcp',
+    'test-admin-mcp-settings',
     'test-settings-qr-signin',
     'test-challenge-token-leak',
     'test-moderator-routes',

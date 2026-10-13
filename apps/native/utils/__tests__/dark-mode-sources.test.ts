@@ -148,7 +148,6 @@ describe('dark mode: themed screens draw with the theme', () => {
     // with no dark branch. Allowed only where it sits on a pale pill or box that stays pale in both schemes, by value.
     const DARK_TEXT_ON_PALE_OK: Record<string, string[]> = {
         'components/DecideSection.tsx': ['palette.red700', 'palette.red900', 'palette.amber800', 'palette.indigo700'], // debt warning on red100; status pills on 100 steps
-        'components/MyDealsSheet.tsx': ['palette.emerald800'],              // "completed" on its emerald100 pill
         'components/ProposeDecisionModal.tsx': ['palette.red700', 'palette.red900'], // removal warning on red100
         'app/(tabs)/market.tsx': ["'#1e40af'"],                            // "YOU" on its #dbeafe pill
         'app/(tabs)/settings.tsx': ["'#000000'"],                          // Confirm Sign Out on the dark scheme's bright danger button
@@ -216,7 +215,6 @@ describe('dark mode: themed screens draw with the theme', () => {
     // only for a pale pill or box that brings its own dark text, which then reads in both schemes; by value.
     const PALE_OK: Record<string, string[]> = {
         'components/DecideSection.tsx': ['palette.red100', 'palette.green100', 'palette.amber100', 'palette.indigo100'], // debt warning, status pills
-        'components/MyDealsSheet.tsx': ['palette.emerald100', 'palette.amber100'], // "completed" pill; Review button with amber800 text
         'components/ProposeDecisionModal.tsx': ['palette.red100'],          // removal warning, red700/red900 text
         'app/(tabs)/market.tsx': ["'#dbeafe'"],                             // "YOU" pill, #1e40af text
         // Base styles whose dark look is laid over at render: `theme === 'dark' && { backgroundColor: … }` (lines 237, 296, 398)
@@ -252,6 +250,30 @@ describe('dark mode: themed screens draw with the theme', () => {
         const review = 'components/ReviewModal.tsx';
         expect(contrast(value(review, 'color', /starInactive/), card)).toBeGreaterThanOrEqual(3);
         expect(contrast(value(review, 'color', /submitText/), value(review, 'backgroundColor', /submitBtn/))).toBeGreaterThanOrEqual(4.5);
+    });
+
+    // My Deals' History tab (showcase lane, 13 Oct): on main the Edit label was 2.00:1, the dates 3.60:1 (the shared
+    // dark muted), and the Completed badge and Review button kept their pale light fills. Text needs 4.5:1 on what is behind it.
+    it("My Deals' History rows read at 4.5:1 in dark and keep their light colours", () => {
+        const file = 'components/MyDealsSheet.tsx';
+        const src = ALL.find(s => s.file === file)!.src;
+        const block = (name: string) => src.slice(src.indexOf(`        ${name}: {`), src.indexOf('},', src.indexOf(`        ${name}: {`)));
+        const dark = (name: string, prop: string) => resolve(darkValues(file, block(name), prop)[0].value)!.hex;
+        const light = (name: string, prop: string) => /\?[^:]*:\s*([^,\n]+)/.exec(block(name).split(`${prop}: `)[1])?.[1].trim() ?? block(name).split(`${prop}: `)[1].split(',')[0].trim();
+        const card = darkColors.surface.card;
+        expect(contrast(dark('dateText', 'color'), card)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(dark('statusTextCompleted', 'color'), dark('statusCompleted', 'backgroundColor'))).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(dark('reviewBtnText', 'color'), dark('reviewBtn', 'backgroundColor'))).toBeGreaterThanOrEqual(4.5);
+        const edit = darkValues(file, src, 'color').find(v => />Edit<\/Text>/.test(src.split('\n')[Number(v.at.split(':').pop()) - 1]))!;
+        const editGround = darkValues(file, src, 'backgroundColor').find(v => /borderColor: colors\.border\.strong/.test(src.split('\n')[Number(v.at.split(':').pop()) - 1]))!;
+        expect(contrast(resolve(edit.value)!.hex, resolve(editGround.value)!.hex)).toBeGreaterThanOrEqual(4.5);
+        // Light keeps the colours it had.
+        expect(light('dateText', 'color')).toBe('colors.text.muted');
+        expect(light('statusCompleted', 'backgroundColor')).toBe('palette.emerald100');
+        expect(light('statusTextCompleted', 'color')).toBe('palette.emerald800');
+        expect(light('reviewBtn', 'backgroundColor')).toBe('palette.amber100');
+        expect(light('reviewBtn', 'borderColor')).toBe('palette.yellow300');
+        expect(light('reviewBtnText', 'color')).toBe('palette.amber700');
     });
 });
 

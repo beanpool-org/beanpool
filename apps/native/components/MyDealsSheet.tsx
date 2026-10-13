@@ -178,7 +178,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         dateText: {
             fontSize: 12,
             fontWeight: '600',
-            color: colors.text.muted,
+            color: theme === 'dark' ? colors.text.secondary : colors.text.muted, // dark muted is 3.60:1 on the card
         },
         creditAmount: {
             fontWeight: '900',
@@ -198,7 +198,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             borderRadius: 8,
         },
         statusCompleted: {
-            backgroundColor: palette.emerald100,
+            backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.emerald100,
         },
         statusText: {
             fontSize: 10,
@@ -207,7 +207,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             textTransform: 'uppercase',
         },
         statusTextCompleted: {
-            color: palette.emerald800,
+            color: theme === 'dark' ? colors.feedback.success.fg : palette.emerald800,
         },
         typeBadge: {
             paddingHorizontal: 6,
@@ -255,15 +255,15 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             fontWeight: '800',
         },
         reviewBtn: {
-            backgroundColor: palette.amber100,
+            backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber100,
             paddingHorizontal: 12,
             paddingVertical: 6,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: palette.yellow300,
+            borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.yellow300,
         },
         reviewBtnText: {
-            color: palette.amber700,
+            color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber700,
             fontSize: 12,
             fontWeight: '800',
         },

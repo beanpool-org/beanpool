@@ -420,20 +420,26 @@ function sameHeard(a: DmHeard | undefined, b: DmHeard | undefined): boolean {
     return (a?.rekeyedAt ?? '') === (b?.rekeyedAt ?? '') && (a?.tryKeys ?? []).join() === (b?.tryKeys ?? []).join();
 }
 
+/**
+ * A first-sight pause (history placed the pin and the listing disagreed, rules 3-4) is the member's to end (design §3.4
+ * amendment 2, option H): no listing lifts it, not one naming the pinned key, and not one offering a third key in between
+ * (`firstSight` belongs to the pause, so PUPPET → Q → PUPPET keeps it). An existing phone's offer (no `firstSight`) clears
+ * when every listing names the pin again: the pin never moved, so that is harmless.
+ */
 function applyDmListingsTo(pin: DmPeerPin, named: string[][], now: string, heard?: DmHeard): boolean {
     const without = named.find((o) => o.length > 0 && !o.includes(pin.peer));
     if (!without) {
-        if (!pin.offered || named.some((o) => !o.includes(pin.peer))) return false;
+        if (!pin.offered || pin.offered.firstSight || named.some((o) => !o.includes(pin.peer))) return false;
         delete pin.offered;
         return true;
     }
     const peer = without.length === 1 ? without[0] : null;
     const rekeyedAt = peer && named.length === 1 ? heard?.rekeyedAt : undefined;
     if (pin.offered && pin.offered.peer === peer && pin.offered.nodeSays?.rekeyedAt === rekeyedAt) return false;
-    const same = pin.offered?.peer === peer ? pin.offered : undefined;
-    pin.offered = { peer, at: same ? same.at : now };
+    const pause = pin.offered;
+    pin.offered = { peer, at: pause?.peer === peer ? pause.at : now };
     if (rekeyedAt) pin.offered.nodeSays = { rekeyedAt };
-    if (same?.firstSight) pin.offered.firstSight = true;
+    if (pause?.firstSight) pin.offered.firstSight = true;
     return true;
 }
 

@@ -1568,13 +1568,13 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         } catch { return null; }
     };
     /** A line `from` seals to `to`, written on the node with no app (a node-run account, Ben's new phone, an old build). */
-    function sealed(from: Person, to: Person, conv: Conv, text: string): Line {
+    function sealed(from: Person, to: Person, conv: Conv, text: string, extra: Partial<Line> = {}): Line {
         const messageId = randomUUID().toLowerCase();
         const p = phoneCrypto.sealDmLine(text, { myEdPrivHex: from.privateKey, peerEdPubHex: to.publicKey, conversationId: conv.id } as any,
             { senderPubHex: from.publicKey, messageId, part: 'body', after: null, replyToId: null } as any);
-        return written(conv, from, p.ciphertext, p.nonce, { id: messageId });
+        return written(conv, from, p.ciphertext, p.nonce, { id: messageId, ...extra });
     }
-    const saysTo = (who: Person, conv: Conv, text: string) => sealed(who, ana, conv, text);
+    const saysTo = (who: Person, conv: Conv, text: string, extra: Partial<Line> = {}) => sealed(who, ana, conv, text, extra);
     /** A send from Ana's phone: the error's name, the node's new lines, the rows it left, and who of `readers` opens them. */
     async function sendTo(id: string, text: string, readers: Person[] = []) {
         const before = node.lines.length;
@@ -1718,6 +1718,96 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
             expect(pinOf(ana, dm.id)?.peer).not.toBe(k2.publicKey);
         });
     }
+
+    // §3.4 amendment 2, option H: a first-sight pause ends only on the member's tap. A listing is the node's word, and the
+    // pause exists because the listing and the history disagreed; no listing settles that, not even one naming the pin.
+    const stillPaused = { err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] };
+    /** B's set-up: Ben listed with his history, and one PUPPET line the node dated an hour before it (rule 4 pins PUPPET). */
+    async function backdated() {
+        await aQuestionAndAnAnswer();
+        const first = node.lines.reduce((m, l) => (l.timestamp < m ? l.timestamp : m), node.lines[0].timestamp);
+        saysTo(puppet, dm, 'Hi Ana, it is Ben', { timestamp: new Date(Date.parse(first) - 3_600_000).toISOString() });
+        await restoredPhone();
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, checked: true, offered: { peer: ben.publicKey, firstSight: true } });
+    }
+
+    it('B: a restored phone pins PUPPET from a backdated line, Ben offered; the listing then flips to PUPPET: still paused, Ben\'s code stays on the banner, nothing goes', async () => {
+        await backdated();
+        expect(await sendTo(dm.id, 'Is that you?', [puppet, ben])).toEqual(stillPaused);
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        await syncMessages(ana.publicKey);
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id).offered).toMatchObject({ peer: ben.publicKey, firstSight: true });
+        expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual(stillPaused);
+    });
+
+    it('B-detour: B, then the listing names a third key, then PUPPET again: the pause is still first sight, nothing goes', async () => {
+        await backdated();
+        const q = person('Q');
+        dm.participants = [ana.publicKey, q.publicKey];
+        await syncMessages(ana.publicKey);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, offered: { peer: q.publicKey, firstSight: true } });
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        await syncMessages(ana.publicKey);
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, offered: { firstSight: true } });
+        expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben, q])).toEqual(stillPaused);
+    });
+
+    it('F: a rule-5 record, a prune and a relist [Ana, Ben] with only PUPPET\'s lines (a pause on PUPPET), then a flip to PUPPET: still paused, nothing goes', async () => {
+        await aQuestionAndAnAnswer();
+        for (const l of node.lines) if (l.authorPubkey === ben.publicKey) l.authorPubkey = puppet.publicKey;   // re-attributed, no formerKeys
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        saysTo(puppet, dm, 'New phone, same Ben.');
+        await restoredPhone();
+        expect(await sendTo(dm.id, 'Hello?', [puppet])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+        node.convs = [];
+        await syncMessages(ana.publicKey);
+        node.lines = [];
+        dm.participants = [ana.publicKey, ben.publicKey];
+        saysTo(puppet, dm, 'It is me.');
+        saysTo(puppet, dm, 'Text me the code.');
+        node.convs = [dm];
+        await syncMessages(ana.publicKey);
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, offered: { peer: ben.publicKey, firstSight: true } });
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        await syncMessages(ana.publicKey);
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual(stillPaused);
+    });
+
+    it('H-exit: P13, "Not now", then the node lists Ben again: still paused; a new DM with Ben pins Ben and the line goes to him', async () => {
+        await p13();
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);   // the banner; "Not now" writes nothing
+        dm.participants = [ana.publicKey, ben.publicKey];
+        await syncMessages(ana.publicKey);
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey, firstSight: true } });
+        expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual(stillPaused);
+        const fresh: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, ben.publicKey] };
+        node.convs.push(fresh);
+        await syncMessages(ana.publicKey);
+        expect(await isDmKeyChangePending(fresh.id)).toBe(false);
+        expect(await sendTo(fresh.id, 'Ben, the code is 4821', [puppet, ben])).toEqual({ err: null, posts: 1, rowsAdded: 1, readBy: ['Ben'] });
+        expect(pinOf(ana, fresh.id)).toMatchObject({ peer: ben.publicKey, by: 'first-seen', checked: true });
+    });
+
+    it('H-control: an existing phone\'s offer (pin Ben checked, the node lists PUPPET, then Ben again) clears, and the line goes to Ben', async () => {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true });
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        await syncMessages(ana.publicKey);
+        expect(pinOf(ana, dm.id).offered).toEqual({ peer: puppet.publicKey, at: expect.any(String) });
+        expect(await sendTo(dm.id, 'Hello?', [puppet, ben])).toEqual(stillPaused);
+        dm.participants = [ana.publicKey, ben.publicKey];
+        await syncMessages(ana.publicKey);
+        expect(await isDmKeyChangePending(dm.id)).toBe(false);
+        expect(pinOf(ana, dm.id).offered).toBeUndefined();
+        expect(await sendTo(dm.id, 'Hello Ben', [puppet, ben])).toEqual({ err: null, posts: 1, rowsAdded: 1, readBy: ['Ben'] });
+    });
 
     it('R5: "Not now" on a restored phone\'s pause, then a prune and a relist with the history withheld: still paused, nothing goes', async () => {
         await p13();

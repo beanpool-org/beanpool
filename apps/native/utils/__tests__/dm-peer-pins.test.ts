@@ -94,6 +94,27 @@ describe('applyDmListings: a listing offers, never moves', () => {
         expect((p[D0] as DmPeerPin).offered).toEqual({ peer: null, at: NOW });
         expect((p[D0] as DmPeerPin).peer).toBe(BEN);
     });
+
+    it('a first-sight pause ends only on the member\'s tap: no listing lifts it, and a third key in between keeps it a first-sight pause (§3.4 amendment 2, option H)', () => {
+        const LATER = '2026-10-15T00:00:00.000Z';
+        const p: DmPeerPins = { [D0]: { peer: PUPPET, since: NOW, by: 'first-seen', checked: true, offered: { peer: BEN, at: NOW, firstSight: true } } };
+        expect(applyDmListings(p, D0, [[PUPPET]], LATER)).toBe(false);   // the node names the pin: still paused
+        expect((p[D0] as DmPeerPin).offered).toEqual({ peer: BEN, at: NOW, firstSight: true });
+        expect(applyDmListings(p, D0, [[OTHER]], LATER)).toBe(true);     // a detour through a third key
+        expect((p[D0] as DmPeerPin).offered).toEqual({ peer: OTHER, at: LATER, firstSight: true });
+        expect(applyDmListings(p, D0, [[PUPPET, OTHER]], LATER)).toBe(false);
+        expect(applyDmListings(p, D0, [[OTHER, BEN]], LATER)).toBe(true);
+        expect((p[D0] as DmPeerPin).offered).toEqual({ peer: null, at: LATER, firstSight: true });
+        expect(applyDmListings(p, D0, [[PUPPET]], LATER)).toBe(false);
+        expect(dmPinFor(p, D0)).toMatchObject({ peer: PUPPET, offered: { firstSight: true } });
+        // An existing phone's offer (no firstSight) still clears when the listing names the pin again, and never becomes one.
+        const q = pinned();
+        applyDmListings(q, D0, [[PUPPET]], NOW);
+        applyDmListings(q, D0, [[OTHER]], NOW);
+        expect((q[D0] as DmPeerPin).offered).toEqual({ peer: OTHER, at: NOW });
+        expect(applyDmListings(q, D0, [[BEN]], NOW)).toBe(true);
+        expect((q[D0] as DmPeerPin).offered).toBeUndefined();
+    });
 });
 
 describe('pinAtFirstSight and dmOpenPeers', () => {

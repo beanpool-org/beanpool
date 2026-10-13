@@ -1991,7 +1991,7 @@ export default function SettingsScreen() {
                     {/* Only the sign-in part waits for its answer (the key vault's, up to 20 s, or the community's): the
                         12 words below never wait behind it (PR #1336 review finding 9). */}
                     {protectionLoading ? (
-                        <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} accessibilityLabel="Checking your sign-in accounts" />
+                        <ActivityIndicator color={colors.brand.primary} style={{ marginVertical: 20 }} accessibilityLabel="Checking your sign-in accounts" />
                     ) : (
                         <>
                             <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />

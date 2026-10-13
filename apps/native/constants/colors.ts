@@ -211,7 +211,7 @@ export const lightColors = {
     brand: {
         primary: brandLight.ink.brand,      // words and icons in the brand green
         fill: brandLight.commit.fill,       // a brand-green fill under text.onBrand
-        dark: brandLight.commit.hover,      // the deeper green: pressed fills, emphasis
+        dark: brandLight.commit.hover,      // the deeper green as a FILL or border (map.tsx: under white words); words use primary
         tint: palette.emerald50,
     },
     accent: {
@@ -341,7 +341,7 @@ export const darkColors = {
     brand: {
         primary: brandDark.ink.brand,     // emerald-500: reads on the page, never under white words
         fill: brandDark.commit.fill,      // emerald-700: the same deep fill as light
-        dark: palette.emerald400,         // the "deeper" green as words in dark is the paler one
+        dark: palette.emerald600,         // main's value: the protected map.tsx paints it as a fill under white words (3.77)
         tint: palette.emerald950,
     },
     accent: {

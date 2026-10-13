@@ -191,9 +191,9 @@ export default function ChatsScreen() {
         actionCardTitle: { fontSize: 15, fontWeight: '700', color: colors.text.body },
         actionCardPeer: { fontSize: 13, color: colors.text.secondary, marginTop: 1 },
         actionAmountBadge: { backgroundColor: theme === 'dark' ? colors.brand.tint : palette.emerald100, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-        actionAmountText: { fontSize: 14, fontWeight: '800', color: colors.brand.dark },
+        actionAmountText: { fontSize: 14, fontWeight: '800', color: colors.brand.primary },
         actionCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.surface.subtle },
-        actionLabel: { fontSize: 14, fontWeight: '700', color: colors.brand.dark },
+        actionLabel: { fontSize: 14, fontWeight: '700', color: colors.brand.primary },
     
         searchBarRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 10, gap: 10, alignItems: 'center' },
         searchContainer: { flex: 1, flexDirection: 'row', backgroundColor: colors.surface.subtle, borderRadius: 12, alignItems: 'center', paddingHorizontal: 10, height: 42 },
@@ -429,7 +429,7 @@ export default function ChatsScreen() {
             </View>
             <View style={styles.actionCardFooter}>
                 <Text style={styles.actionLabel}>{getActionLabel(item)}</Text>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.brand.dark} />
+                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.brand.primary} />
             </View>
         </Pressable>
     );
@@ -493,7 +493,7 @@ export default function ChatsScreen() {
                 ) : item.postId ? (
                     <View style={styles.avatarComposite}>
                         <View style={[styles.avatar, styles.avatarMarketplace]}>
-                            <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.dark} />
+                            <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.primary} />
                         </View>
                         <View style={styles.overlayAvatarWrap}>
                             <MemberAvatar avatarUrl={item.peerAvatar} pubkey={item.peerPubkey || ''} callsign={item.peer} size={20} />
@@ -562,7 +562,7 @@ export default function ChatsScreen() {
             {actionRequired.length > 0 && (
                 <View style={styles.actionSection}>
                     <View style={styles.actionSectionHeader}>
-                        <MaterialCommunityIcons name="lightning-bolt" size={18} color={colors.brand.dark} />
+                        <MaterialCommunityIcons name="lightning-bolt" size={18} color={colors.brand.primary} />
                         <Text style={styles.actionSectionTitle}>Action Required</Text>
                         <View style={styles.actionCountBadge}>
                             <Text style={styles.actionCountText}>{actionRequired.length}</Text>

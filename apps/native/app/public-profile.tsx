@@ -336,7 +336,7 @@ export default function PublicProfileScreen() {
         roleBadgeProvider: { backgroundColor: colors.profile.roleProviderBg },
         roleBadgeReceiver: { backgroundColor: colors.profile.roleReceiverBg },
         roleText: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.3 },
-        roleTextProvider: { color: colors.brand.dark },
+        roleTextProvider: { color: colors.brand.primary },
         roleTextReceiver: { color: theme === 'dark' ? palette.indigo300 : palette.indigo600 },
         dateText: { fontSize: 10, fontWeight: '700', color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.3, flexShrink: 0, marginLeft: 8 },
         commentText: {

@@ -122,7 +122,7 @@ export default function PeopleScreen() {
 
         pendingHeader: { fontSize: 12, fontWeight: '800', color: colors.text.muted, marginBottom: 12, letterSpacing: 1 },
         pendingCard: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
-        pendingFor: { fontSize: 12, fontWeight: '700', color: colors.brand.dark, marginBottom: 4 },
+        pendingFor: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, marginBottom: 4 },
         pendingCode: { fontSize: 13, fontFamily: 'monospace', color: colors.text.heading, fontWeight: '600' },
         btnCopySmall: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, marginLeft: 12 },
         btnCopySmallText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
@@ -130,7 +130,7 @@ export default function PeopleScreen() {
         // Friend-specific styles
         friendChip: { fontSize: 10, fontWeight: '800', color: colors.feedback.warning.fg, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', flexShrink: 0 },
         addBtnFriended: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, shadowOpacity: 0 },
-        addBtnTextFriended: { color: colors.brand.dark },
+        addBtnTextFriended: { color: colors.brand.primary },
         friendActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
         msgBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.green100 },
         msgBtnText: { fontSize: 18 },

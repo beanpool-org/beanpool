@@ -470,7 +470,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             </Text>
                             {showsBeans && (
                             <View testID={`deal-amount-${item.id}`} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
-                                <Text style={[styles.creditAmount, { color: isBuyer ? colors.feedback.danger.fg : colors.brand.dark }]} numberOfLines={1}>
+                                <Text style={[styles.creditAmount, { color: isBuyer ? colors.feedback.danger.fg : colors.brand.primary }]} numberOfLines={1}>
                                     {isBuyer ? '- ' : '+ '}{item.credits}
                                 </Text>
                                 <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />

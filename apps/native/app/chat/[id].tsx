@@ -216,7 +216,7 @@ function ChatScreen({ id }: { id: string }) {
         stickyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.emerald50, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme === 'dark' ? colors.border.default : palette.emerald100 },
         stickyHeaderLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 16 },
         stickyPostTitle: { fontSize: 15, fontWeight: '700', color: theme === 'dark' ? colors.text.body : palette.emerald800 },
-        stickyPostCredits: { fontSize: 13, color: colors.brand.dark, fontWeight: '600', marginTop: 2 },
+        stickyPostCredits: { fontSize: 13, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
         statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
         statusBadgeText: { fontSize: 11, fontWeight: '800' },
         keyboardView: { flex: 1 },
@@ -897,7 +897,7 @@ function ChatScreen({ id }: { id: string }) {
         }
         if (item.systemType === 'ESCROW_RELEASED') {
             iconName = 'check-decagram';
-            iconColor = colors.brand.dark;
+            iconColor = colors.brand.primary;
             bgColor = colors.chatSystem.releasedBg;
             borderColor = colors.brand.dark;
         }
@@ -1239,7 +1239,7 @@ function ChatScreen({ id }: { id: string }) {
             {postContext && (
                 <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${postContext.id}`)} style={styles.stickyHeader}>
                     <View style={styles.stickyHeaderLeft}>
-                        <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.dark} />
+                        <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.primary} />
                         <View style={{ marginLeft: 12 }}>
                             <Text style={styles.stickyPostTitle} numberOfLines={1}>{postContext.title}</Text>
                             {showsBeans && <Text style={styles.stickyPostCredits}>{postContext.credits} Beans{postContext.priceType === 'hourly' ? ' / hr' : ''}</Text>}

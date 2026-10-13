@@ -466,7 +466,7 @@ export function ArchetypeQuizModal({
                                                     styles.optionText,
                                                     {
                                                         color: isSelected
-                                                            ? colors.brand.dark
+                                                            ? colors.brand.primary
                                                             : colors.text.body,
                                                         fontWeight: isSelected ? '700' : '500',
                                                     },

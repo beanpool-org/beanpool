@@ -558,7 +558,7 @@ export default function LedgerScreen() {
                         onPress={openSend}
                     >
                         <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
-                        <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</Text>
+                        <Text style={[styles.perkText, { color: canSend ? colors.brand.primary : colors.text.muted }]}>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</Text>
                     </Pressable>}
                     <View style={[styles.perkPill, {
                         borderColor: theme === 'dark' ? colors.feedback.success.border : palette.green200,

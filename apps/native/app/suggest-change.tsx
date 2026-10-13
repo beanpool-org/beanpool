@@ -39,7 +39,7 @@ export default function SuggestChangeScreen() {
         chip: { minHeight: 48, paddingHorizontal: 18, justifyContent: 'center', borderRadius: 24, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card },
         chipOn: { borderColor: colors.brand.primary, backgroundColor: colors.brand.tint },
         chipText: { fontSize: 15, fontWeight: '600', color: colors.text.body },
-        chipTextOn: { color: colors.brand.dark },
+        chipTextOn: { color: colors.brand.primary },
         input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 16, fontSize: 16, color: colors.text.body },
         textarea: { minHeight: 150, paddingTop: 16, textAlignVertical: 'top' },
         counter: { fontSize: 12, color: colors.text.secondary, marginTop: 6, textAlign: 'right' },

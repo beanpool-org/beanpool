@@ -894,7 +894,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     tileActive: { borderColor: colors.brand.primary, backgroundColor: colors.brand.tint },
     tileIcon: { fontSize: 20 },
     tileLabel: { fontSize: 15, fontWeight: '600', color: colors.text.heading, marginTop: 2 },
-    tileLabelActive: { color: colors.brand.dark },
+    tileLabelActive: { color: colors.brand.primary },
     tileHint: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
 
     input: {
@@ -910,7 +910,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     },
     chipActive: { borderColor: colors.brand.primary, backgroundColor: colors.brand.tint },
     chipText: { fontSize: 14, color: colors.text.body },
-    chipTextActive: { color: colors.brand.dark, fontWeight: '600' },
+    chipTextActive: { color: colors.brand.primary, fontWeight: '600' },
 
     verifiedBadgeRow: {
         flexDirection: 'row',
@@ -921,7 +921,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
         borderRadius: 12,
     },
     verifiedText: {
-        color: colors.brand.dark,
+        color: colors.brand.primary,
         fontSize: 12,
         fontWeight: '700',
     },

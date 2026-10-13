@@ -2129,16 +2129,19 @@ router.post('/api/reports', async (ctx) => {
     }
     // Repeating a still-pending report succeeds without a new row, even at the limit: the member's
     // report is already on file.
+    // Every alert judges the 500 characters the queue keeps (submitReport), so a child-safety alert always points at a
+    // report the queue marks and lists first (the review of #1912, finding 6: words past them were told, then lost).
+    const kept = reason.slice(0, 500);
     const pending = findPendingReport(activeReporter, targetPubkey, targetPostId, targetPulseItemId || undefined);
     if (pending) {
         // Reported again with "Child safety" after another reason (the review of #1895, finding 3): the report on file
         // becomes child safety and is told as a new one would be. Once: it is child safety from then on, and a member's
         // are bounded like any (alerts.ts childAtOnce). Judged on the 500 characters the queue keeps, as the report on
         // file was: words past them would make every repeat look like a change.
-        if (reportKind(reason.slice(0, 500)) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
+        if (reportKind(kept) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
             const changed = updatePendingReportReason(pending.id, reason);
             if (changed) {
-                noteNewReport(reason, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
+                noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
                 ctx.body = { success: true, report: changed, duplicate: true };
                 return;
             }
@@ -2159,7 +2162,7 @@ router.post('/api/reports', async (ctx) => {
     }
     // The owners and admins hear of it (by kind and count, never who or what): not awaited, so a slow alert channel
     // never holds the reporter's answer.
-    noteNewReport(reason, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
+    noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
     ctx.body = { success: true, report };
 });
 

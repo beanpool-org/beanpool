@@ -43,6 +43,8 @@
  *     reason, so an app from before the choice behaves as today. Picking it bypasses nothing: a repeat of the pending
  *     report tells nothing, the member's others in their hour are one line when it ends, the 11th in their hour is
  *     refused (429) like any report, and the reports wait in the queue as pending like any other.
+ *     A new report whose words say it only past the 500 characters the queue keeps is not told as one, as the queue does
+ *     not mark it (the review of #1912, finding 6).
  * 13. Nothing in any alert line names a member or quotes what they wrote: no callsign, no key (nor its first 12
  *     characters) and no reason's words in any channel message (headers and body), any push, any push notice kept for
  *     the phone, the Alerts routes' answers or the book.
@@ -702,6 +704,26 @@ async function main(): Promise<void> {
     assert(long12.status === 200 && firstLong.length === 1 && firstLong[0].reason.length === 500 && againLong.length === 1
         && againLong[0].updated_at === firstLong[0].updated_at && ownerPushes().length === pLong && topicHits().length === hLong,
         `12. a long report sent again twice rewrites nothing and tells nothing (${firstLong[0]?.updated_at} → ${againLong[0]?.updated_at}, ${ownerPushes().length - pLong} pushes)`);
+    // Words saying it only past the 500 the queue keeps, on a new report (the review of #1912, finding 6): the alert judges
+    // the same 500 characters, so it never points the owners at a report the queue does not mark or list first.
+    const lateR = join('LateLiamR');
+    const lateT = join('LateTessR');
+    const lateReason = `Other: ${'he keeps turning up at the market stall and hanging around, '.repeat(9)}and he is grooming an underage kid`;
+    const hLate = topicHits().length;
+    const lateBody = JSON.stringify({ reporterPubkey: lateR.pk, targetPubkey: lateT.pk, reason: lateReason });
+    const late12 = await fetch(`${base}/api/reports`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', '/api/reports', lateBody, lateR) }, body: lateBody });
+    const lateJson = await late12.json().catch(() => null) as any;
+    await settle();
+    const lateLines = topicHits().slice(hLate);
+    // The owners' queue, read through the route (not adminCall: its answers are step 13's alert payloads, and a queue
+    // names members by design).
+    resetAdminAuthTarpit();
+    https.resetAdminRateLimit();
+    const queue12 = await (await fetch(`${base}/api/local/admin/reports?status=open&limit=500&offset=0`, { headers: asOwner })).json() as any;
+    const lateRow = (queue12?.reports ?? []).find((x: any) => x.id === lateJson?.report?.id);
+    assert(late12.status === 200 && lateReason.length === 581 && !!lateRow && lateRow.reason.length === 500 && lateRow.childSafety === false
+        && lateLines.every((x) => !/child-safety/i.test(`${x.headers.title} ${x.body}`) && x.headers.priority !== '5'),
+        `12. words past the 500 kept are not told as child safety, as the queue does not mark them (${late12.status}, kept ${lateRow?.reason.length}, marked ${lateRow?.childSafety}, lines ${JSON.stringify(lateLines.map((x) => [x.headers.title, x.headers.priority]))})`);
     const plain12 = await report(plain, targets[0], 'Spam or scam');
     await settle();
     const last12 = topicHits().at(-1)!;

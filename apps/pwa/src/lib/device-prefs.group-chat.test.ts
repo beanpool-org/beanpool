@@ -7,6 +7,7 @@ import { memoryIndexedDB, type MemoryIndexedDB } from './memory-indexeddb';
 import { indexedDbGroupLockStore, lockedGroupsOf, resetGroupChatLockStoreForTest } from './group-chat-lock-store';
 import { groupKeyring, groupsSeenLockedInMemory, forgetGroupKeys, memoryGroupLockStore } from './group-chat-keys';
 import { clearAccountStorage } from './device-prefs';
+import { ACCOUNT_EPOCH_KEY, resetAccountEpochForTest } from './account-epoch';
 import { fakeGroupNode, person } from './group-chat-fake-node.test-support';
 
 const G = '8b1d2c3b-4a59-4e68-9d7c-8b9a0f1e2d3c';
@@ -38,5 +39,20 @@ describe('Sign Out and the group chats', () => {
         expect(groupsSeenLockedInMemory(ana.publicKey)).toEqual([]);
         // A keyring asked for afterwards is a new one, holding nothing.
         expect(groupKeyring(node.as(ana.publicKey), ana, G, memoryGroupLockStore())).not.toBe(ring);
+    });
+
+    it("a Sign Out in another tab takes this tab's opened keys too (finding 8); a clear there keeps them", async () => {
+        resetAccountEpochForTest();
+        const ana = person(true); const ben = person();
+        const node = fakeGroupNode(G, [ana.publicKey, ben.publicKey]);
+        await groupKeyring(node.as(ana.publicKey), ana, G, memoryGroupLockStore()).prepareToSeal();
+        expect(groupsSeenLockedInMemory(ana.publicKey)).toEqual([G]);
+        // Another tab clears what was kept (same sign-out token, a new clear token): the keys stay.
+        window.dispatchEvent(new StorageEvent('storage', { key: ACCOUNT_EPOCH_KEY, newValue: '1.0.otherclear' }));
+        expect(groupsSeenLockedInMemory(ana.publicKey)).toEqual([G]);
+        // Another tab signs out (a new sign-out token): they leave this tab's memory.
+        window.dispatchEvent(new StorageEvent('storage', { key: ACCOUNT_EPOCH_KEY, newValue: '2.othersignout.otherclear2' }));
+        expect(groupsSeenLockedInMemory(ana.publicKey)).toEqual([]);
+        resetAccountEpochForTest();
     });
 });

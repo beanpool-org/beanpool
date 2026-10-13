@@ -9,6 +9,7 @@ import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { sendMessageApi } from '../lib/api';
+import { GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { lockForDm } from '../lib/dm-lock';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -32,7 +33,8 @@ const ana = person();
 const ben = person();
 const CONV = 'c0ffee00-1111-4222-8333-444455556666';
 const dmChat = { id: CONV, type: 'dm', participants: [ana.publicKey, ben.publicKey] };
-const t = vi.hoisted(() => ({ lines: [] as any[] }));
+/** `chatAtLoad`: what the group chat route answers until a test clears it (then the DM's own rows). */
+const t = vi.hoisted(() => ({ lines: [] as any[], chatAtLoad: null as any[] | null }));
 const conv = () => ({ id: CONV, type: 'group_thread', name: 'Ben', participants: [ana.publicKey, ben.publicKey], createdBy: ana.publicKey, createdAt: '2026-09-01T00:00:00Z', unreadCount: 0 });
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -40,7 +42,7 @@ vi.mock('../lib/api', () => ({
     getConversations: vi.fn(async () => ({ conversations: [conv()], totalUnread: 0 })),
     getConversationMessages: vi.fn(async () => ({ conversation: conv(), messages: t.lines })),
     // A node from before locked chats answers the group chat route: no `encryption`, the DM's own rows.
-    getGroupChat: vi.fn(async () => ({ conversation: conv(), messages: t.lines, canPost: true })),
+    getGroupChat: vi.fn(async () => ({ conversation: conv(), messages: t.chatAtLoad ?? t.lines, canPost: true })),
     getGroupMembers: vi.fn(async () => [{ groupId: CONV, memberPubkey: ana.publicKey, callsign: 'Ana', role: 'member', status: 'active' }, { groupId: CONV, memberPubkey: ben.publicKey, callsign: 'Ben', role: 'member', status: 'active' }]),
     groupKeysNet: { get: async () => json(404, { error: 'Not found' }), post: async () => json(404, { error: 'Not found' }) },
     getMembers: vi.fn(async () => [{ publicKey: ben.publicKey, callsign: 'Ben' }]),
@@ -57,6 +59,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
     vi.stubGlobal('indexedDB', memoryIndexedDB());
+    t.chatAtLoad = null;
     const id = crypto.randomUUID();
     const sealed = lockForDm('The bike is yours for 50 Beans', dmChat, ben, { messageId: id, after: null });
     t.lines = [
@@ -90,5 +93,25 @@ describe('the DM guard on the group chat route, on a browser that never saw the 
         // The DM guard's promise: the DM stays a DM, the forged row is never words, the reply is DM-sealed.
         expect(forgedShown).toBe(false);
         expect(nonce).toBe('x25519-xc20p-v2');
+    });
+
+    it("F1b: the chat answer at load holds no encrypted line, and the one at send time does: nothing leaves, readable or by the group route; it reopens as the DM", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        // At load the node serves only its forged readable row: the group route takes it, from a node before locked chats.
+        t.chatAtLoad = t.lines.filter((l) => l.nonce === 'plaintext-v1');
+        render(<MessagesPage identity={identity} openConversationId={CONV} />);
+        const composer = await screen.findByPlaceholderText('Message...', {}, { timeout: 5000 });
+        await screen.findByText('Send me your 12 words to finish the trade', {}, { timeout: 5000 });
+        await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+        // At send time it serves the DM's own rows, Ben's encrypted line among them.
+        t.chatAtLoad = null;
+        fireEvent.change(composer, { target: { value: 'Still here, my words are private' } });
+        await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); });
+        expect(await screen.findByText(GROUP_CHAT_IS_DM_TEXT, {}, { timeout: 5000 })).toBeTruthy();
+        await screen.findByText('The bike is yours for 50 Beans', {}, { timeout: 5000 });
+        warn.mockRestore();
+        const readable = vi.mocked(sendMessageApi).mock.calls.some((c) => Buffer.from(String(c[2]), 'base64').toString('utf8').includes('my words are private'));
+        expect(readable).toBe(false);
+        expect(sendMessageApi).not.toHaveBeenCalled();
     });
 });

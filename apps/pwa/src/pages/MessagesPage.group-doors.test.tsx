@@ -446,11 +446,51 @@ describe('a held group\'s id by every door (review of #1816)', () => {
         await send(composer, 'gloves from me (edited)');
         await waitFor(() => expect(node.calls.some((c) => c.path === '/api/messages/edit')).toBe(true));
         const editCall = node.calls.find((c) => c.path === '/api/messages/edit')!;
-        const everyBody = JSON.stringify(node.calls.map((c) => c.body ?? null)) + JSON.stringify((toggleMessageReactionApi as any).mock.calls);
+        const readableSends = [...vi.mocked(sendMessageApi).mock.calls, ...vi.mocked(editMessageApi).mock.calls];
+        const everyBody = JSON.stringify(node.calls.map((c) => c.body ?? null)) + JSON.stringify((toggleMessageReactionApi as any).mock.calls) + JSON.stringify(readableSends);
+        // No words in the clear anywhere the node was sent anything: as written, or in base64 as a readable send carries them.
+        const ciphertexts = [...node.calls.map((c) => c.body?.ciphertext), ...readableSends.map((c) => c[2])].filter(Boolean);
+        for (const words of ['gloves from me', 'replying sealed', '(edited)']) {
+            expect(everyBody).not.toContain(words);
+            expect(ciphertexts.some((b) => readableIn(b, words))).toBe(false);
+        }
         expect(replyCall?.body?.nonce?.startsWith('group-xc20p-v1:')).toBe(true);
         expect(editCall.body.nonce.startsWith('group-xc20p-v1:')).toBe(true);
         expect(sendMessageApi).not.toHaveBeenCalled();
         expect(editMessageApi).not.toHaveBeenCalled();
+    });
+});
+
+describe('checks no test pinned (confirmation review of #1816, finding 2)', () => {
+    it('F4c: seen locked this load, then the lock store stops reading and the node retypes the group enterprise_thread: still sealed (the keyrings\' memory)', async () => {
+        const composer = await openChat();
+        vi.stubGlobal('indexedDB', lockStoreUnreadable(mem));
+        resetGroupChatLockStoreForTest();
+        nodeType = 'enterprise_thread';
+        await act(async () => { for (const l of syncListeners) await l(); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+        await send(composer, 'F4c same load');
+        await waitFor(() => expect(node.lines).toHaveLength(2));
+        expect(node.lines[1].nonce.startsWith('group-xc20p-v1:')).toBe(true);
+        expect(sendMessageApi).not.toHaveBeenCalled();
+        expect(screen.queryByText(GROUP_HOLD_UNREAD_TEXT)).toBeNull();
+    });
+
+    it('MP3: the keys route down at the first load, so only the locked chat answer marks the group; after a reload the node says unlocked and retypes it enterprise_thread: still sealed', async () => {
+        node.lie = (_m, path) => (path.includes('/keys') ? new Response(JSON.stringify({ error: 'down' }), { status: 503 }) : undefined);
+        render(<MessagesPage identity={me} openConversationId={G} />);
+        await screen.findByTestId('group-chat-notice', {}, { timeout: 5000 });
+        await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+        expect(mem.peek(LOCK_DB, 'locks', `${ana.publicKey}/${G}`)).toMatchObject({ locked: true });
+        reload();
+        node.lie = null;
+        chatLocked = false;
+        nodeType = 'enterprise_thread';
+        const composer = await openChat();
+        await send(composer, 'MP3 after the keys came back');
+        await waitFor(() => expect(node.lines).toHaveLength(2));
+        expect(node.lines[1].nonce.startsWith('group-xc20p-v1:')).toBe(true);
+        expect(sendMessageApi).not.toHaveBeenCalled();
     });
 });
 

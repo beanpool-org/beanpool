@@ -13,11 +13,11 @@ export const HEADER_PILL_PX = 100;
  */
 export function HeaderTitle({ title, onClick, children }: { title: string; onClick?: () => void; children?: ReactNode }) {
     return (
-        <div className="relative z-10 flex-1 min-w-0 flex justify-center items-center px-2.5">
+        <div className="relative z-10 flex-1 min-w-0 flex justify-center items-center" style={{ padding: '0 6px' }}>
             <span
                 data-testid="header-title"
                 className="font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center cursor-pointer truncate"
-                style={{ margin: '-2px -10px -10px', padding: '10px' }}
+                style={{ margin: '-2px -6px -10px', padding: '10px 6px' }}
                 onClick={onClick}
             >
                 {title}

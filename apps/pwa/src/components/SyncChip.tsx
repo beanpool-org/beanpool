@@ -2,7 +2,8 @@
  * The sync chip as it is drawn: the dot, the word, and how long ago the last sync was. SyncStatus decides what it says;
  * this file has no state and no imports, so e2e/tour-check.mjs measures the mobile header against the real chip.
  * `stacked` (the mobile header) puts how long ago under the word, as the phone's chip does, so the chip is no wider than
- * its word and the tab's title keeps its room at 320 px (side by side, "Offline 59m ago" is 152 px at 130% text).
+ * its word and the tab's title keeps its room at 320 px (side by side, "Offline 59m ago" is 152 px at 130% text); its sides
+ * are the phone chip's 8.
  */
 
 export type SyncMode = 'online' | 'guest' | 'offline';
@@ -51,7 +52,7 @@ export function SyncChip({ mode, ago, pulsing, stacked = false }: { mode: SyncMo
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.4rem',
-                padding: twoLines ? '0.15rem 0.75rem' : '0.3rem 0.75rem',
+                padding: `${twoLines ? '0.15rem' : '0.3rem'} ${stacked ? '0.5rem' : '0.75rem'}`,
                 borderRadius: '9999px',
                 background: config.bg,
                 border: `1px solid ${config.borderColor}`,

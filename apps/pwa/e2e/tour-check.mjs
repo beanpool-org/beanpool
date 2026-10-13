@@ -9,7 +9,7 @@
  * covering a button above it, or the bar covering the tab's own bottom button (the Market's + ADD POST, which step 2
  * names, and the Map's +: their classes and offset are read from the pages themselves). Nothing here talks to a node; every request off this machine is aborted.
  *
- * Run from apps/pwa: node e2e/tour-check.mjs
+ * Run from apps/pwa: node e2e/tour-check.mjs   (TOUR_SHOTS=<dir>: a picture of the header rows at each width and text size)
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -86,10 +86,13 @@ const measure = () => {
         const title = t.getBoundingClientRect(), chip = h.querySelector('[data-testid="sync-chip"]').getBoundingClientRect(), pill = h.querySelector('[data-testid="header-pill"]').getBoundingClientRect();
         const help = h.querySelector('[data-testid="header-help"]').getBoundingClientRect();
         const meets = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-        const cs = getComputedStyle(t), cut = t.scrollWidth > t.clientWidth + 1;
-        // The words' own middle: the content box's (cut, the words fill it) or the laid-out text's.
+        // Cut: the laid-out words are wider than the content box (any overflow at all draws the ellipsis; fractional widths,
+        // as clientWidth rounds).
+        const cs = getComputedStyle(t), pl = parseFloat(cs.paddingLeft), content = title.width - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth) - pl - parseFloat(cs.paddingRight);
         const range = document.createRange(); range.selectNodeContents(t); const w = range.getBoundingClientRect();
-        const pl = parseFloat(cs.paddingLeft), mid = cut ? title.left + parseFloat(cs.borderLeftWidth) + pl + (t.clientWidth - pl - parseFloat(cs.paddingRight)) / 2 : (w.left + w.right) / 2;
+        const cut = w.width > content + 0.01;
+        // The words' own middle: the content box's (cut, the words fill it) or the laid-out text's.
+        const mid = cut ? title.left + parseFloat(cs.borderLeftWidth) + pl + content / 2 : (w.left + w.right) / 2;
         return { row: h.dataset.row, chip: [Math.round(chip.left), Math.round(chip.right)], title: [Math.round(title.left), Math.round(title.right)], pill: [Math.round(pill.left), Math.round(pill.right)],
             gapToChip: Math.round(title.left - chip.right), gapToPill: Math.round(pill.left - title.right), meets: meets(title, chip) || meets(title, pill),
             offCentre: Math.round((mid - (chip.right + pill.left) / 2) * 10) / 10, cut, ellipsis: cs.textOverflow === 'ellipsis',
@@ -143,6 +146,7 @@ for (const dark of [false, true]) {
             await page.waitForTimeout(60);
             const m = await page.evaluate(measure);
             const at = scheme + ' header ' + width + ' px ' + text + '%';
+            if (process.env.TOUR_SHOTS) { fs.mkdirSync(process.env.TOUR_SHOTS, { recursive: true }); await page.screenshot({ path: path.join(process.env.TOUR_SHOTS, 'header-' + scheme + '-' + width + '-' + text + '.png'), clip: { x: 0, y: 0, width, height: 1100 } }); }
             if (m.scrollW > width) problems.push(at + ': sideways ' + m.scrollW);
             for (const r of m.headers) {
                 rows.push([at, r.row, JSON.stringify({ chip: r.chip, title: r.title, pill: r.pill, gapToChip: r.gapToChip, gapToPill: r.gapToPill, offCentre: r.offCentre, cut: r.cut })]);

@@ -19,7 +19,8 @@ import { helpSheetFor, tourSteps } from '@beanpool/core';
 import { getBundledGuide } from '../src/lib/guide';
 
 const q = new URLSearchParams(location.search);
-if (q.get('dark') === '1') document.documentElement.classList.add('dark');
+// Dark as lib/useTheme.ts makes it: Tailwind's dark: classes and the theme's own colours (--bg-card and the rest).
+if (q.get('dark') === '1') document.documentElement.classList.add('dark', 'dark-theme');
 const view = q.get('view');
 const node = { global: q.get('global') === '1', beans: q.get('global') !== '1' };
 const steps = tourSteps('web', node);

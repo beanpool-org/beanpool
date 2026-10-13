@@ -194,10 +194,17 @@ export function nodeHasOwner(): boolean {
 
 const withArticle = (role: string) => `${/^[aeiou]/.test(role) ? 'an' : 'a'} ${role}`;
 
+/**
+ * The actor a community vote acts as (state-engine.ts COMMUNITY_DECISION_ACTOR, not imported: it imports this file).
+ * Exported only for test-alerts-security, which checks the two strings are the same.
+ */
+export const COMMUNITY_VOTE_ACTOR = 'system:community-decision';
+
 /** The actor's role, for the owners' alert (services/alerts.ts sec.role): never who. Read before the change. */
 function actorRoleOf(actorPubkey?: string): string {
     if (actorPubkey === 'owner:password') return 'admin password';
     if (actorPubkey === 'break-glass:enrolment') return 'break-glass code';
+    if (actorPubkey === COMMUNITY_VOTE_ACTOR) return 'community vote';
     if (!actorPubkey || actorPubkey === 'SYSTEM') return 'server';
     if (actorPubkey.startsWith('claim:')) return 'claim code';
     if (isNodeOwner(actorPubkey)) return 'owner';
@@ -207,6 +214,7 @@ function actorRoleOf(actorPubkey?: string): string {
 const HOW: Record<string, string> = {
     'admin password': 'by the admin password', 'break-glass code': 'with a break-glass code', server: 'by the server itself',
     'claim code': "with the community's claim code", owner: 'by an owner', admin: 'by an admin', 'key with no role': 'by a key with no role',
+    'community vote': 'by a community vote',
 };
 
 /**
@@ -219,6 +227,52 @@ function noteRoleAlert(detail: string, stillTrue: () => boolean, a: { actor?: st
         // An owner or admin who lost that role is pushed too: with one owner's key stolen, the other owner hears of it.
         alsoPush: a.lostBy ? [a.lostBy] : undefined,
     });
+}
+
+/**
+ * A re-key that moves an owner's or admin's role to a new key (engine/member-wizards.ts completeRekey), for the owners'
+ * alert: sec.keys, "An admin's key was replaced, by an owner", under the actor's own bound, never whose (the deciding
+ * review of #1807, finding 5). Who acted is read now, before the move (a member re-keying themselves holds no role
+ * after it); the returned call tells it, once the re-key has committed. An owner's is high, as an owner made or removed
+ * is. The owners are pushed, not the key replaced: the re-key drops its devices' push tokens (engine/key-move.ts (n)).
+ */
+export function roleKeyReplacedAlert(role: 'owner' | 'admin', oldKey: string, operator: string): () => void {
+    const actorRole = operator === oldKey ? role : actorRoleOf(operator);
+    const how = operator === oldKey ? `by that ${role} themselves` : HOW[actorRole] ?? 'by the server itself';
+    const who = withArticle(role);
+    const detail = `${who[0].toUpperCase()}${who.slice(1)}'s key was replaced by a re-key, ${how}. Open Settings to see who.`;
+    return () => noteSecurityEvent({ key: 'sec.keys', detail, actor: operator || 'SYSTEM', actorRole, high: role === 'owner' });
+}
+
+/**
+ * Who took a role away or gave it back outside grantNodeRole/revokeNodeRole, for the owners' alert. `actor` bounds the
+ * pushes as a grant's does: the person who acted (a member's key, 'owner:password'), or a stable id when nobody did:
+ * 'SYSTEM' for the server itself, 'system:community-decision' for a community vote. `how` comes before "by an owner".
+ */
+export interface RoleChangeBy { actor?: string; how: string }
+
+/**
+ * A role taken away by a suspension, a report, a removal or an account deleted (#1785): the row goes, and the owners are
+ * told as for a revoke, with the same event, bound and push to the one who lost it. Safe inside a transaction: told only
+ * once it committed. Every such delete of a node_roles row goes through here; a take-over's raw rewrite is not one.
+ */
+export function dropNodeRoleRow(pubkey: string, by: RoleChangeBy): NodeRole | null {
+    const actorRole = actorRoleOf(by.actor);
+    const row = db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pubkey) as { role: NodeRole } | undefined;
+    if (!row || db.prepare('DELETE FROM node_roles WHERE member_pubkey = ?').run(pubkey).changes === 0) return null;
+    const role = row.role;
+    // Their own act (an account deleted) names no actor role: the role they held is the one they lost.
+    const whoActed = by.actor === pubkey ? '' : ` ${HOW[actorRole]}`;
+    noteRoleAlert(`${withArticle(role).replace(/^a/, 'A')} lost that role, ${by.how}${whoActed}.`, () => heldNodeRoleOf(pubkey) !== role,
+        { actor: by.actor, actorRole, high: role === 'owner', lostBy: role === 'owner' || role === 'admin' ? pubkey : undefined });
+    return role;
+}
+
+/** A role a suspension held aside, given back (decisions-engine restoreSuspendedNodeRole): told as a grant is. */
+export function noteNodeRoleBack(pubkey: string, role: NodeRole, by: RoleChangeBy): void {
+    const actorRole = actorRoleOf(by.actor);
+    noteRoleAlert(`Someone was made ${withArticle(role)} again, ${by.how} ${HOW[actorRole]}.`, () => heldNodeRoleOf(pubkey) === role,
+        { actor: by.actor, actorRole, high: role === 'owner' });
 }
 
 /**

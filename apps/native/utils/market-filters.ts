@@ -16,7 +16,7 @@
  * screen: a filter the member cannot see never hides a post.
  */
 
-import { HOME_SEARCH_MAX_CHARS, searchTermsFor, tierIndexForCredit } from '@beanpool/core';
+import { foldApostrophes, HOME_SEARCH_MAX_CHARS, searchTermsFor, tierIndexForCredit } from '@beanpool/core';
 import { CATEGORY_META, normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, isEventInFeed, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
@@ -58,10 +58,13 @@ export function marketSearchQuery(search: string): string {
     return searchTermsFor(search).join(' ');
 }
 
-/** Whether a listing's title or description holds one of the search's terms: the Market's own filter, for a node without FTS. */
+/**
+ * Whether a listing's title or description holds one of the search's terms: the Market's own filter, for a node without FTS.
+ * The apostrophes are folded on both sides, so "don't" finds "Don’t miss", typed on iOS (#1828 check, finding 1).
+ */
 export function marketSearchMatches(p: { title?: string | null; description?: string | null }, search: string): boolean {
-    const text = `${(p.title ?? '').toLowerCase()} ${(p.description ?? '').toLowerCase()}`;
-    return searchTermsFor(search).some(term => text.includes(term));
+    const text = foldApostrophes(`${(p.title ?? '').toLowerCase()} ${(p.description ?? '').toLowerCase()}`);
+    return searchTermsFor(search).some(term => text.includes(foldApostrophes(term)));
 }
 
 export type MarketExtraFilter = 'distance' | 'trust' | 'beans';

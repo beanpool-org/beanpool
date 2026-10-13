@@ -42,6 +42,29 @@ async function open() {
     await new Promise(r => setTimeout(r, 50));
 }
 
+describe("a closed group's info (#1794 N9, MP6)", () => {
+    const me = { groupId: G, memberPubkey: ME, callsign: 'C', role: 'member', status: 'active' };
+    it('a member of an open group sees the quiet-lead panel; of a closed group, not (the node refuses its vote, #1784 N3)', async () => {
+        answers.group = { ...base, viewerStatus: 'active', viewerRole: 'member' };
+        answers.members = roster(me);
+        answers.decisions = { decisions: [], canPropose: true, rollSize: 4, onRoll: true, watching: false, nameable: [], closedAt: null };
+        vi.mocked(api.getGroupSuccession).mockClear();
+        await open();
+        await waitFor(() => expect(api.getGroupSuccession).toHaveBeenCalled());
+    });
+    it('closed: no quiet-lead panel, so no succession read', async () => {
+        const closedAt = new Date().toISOString();
+        answers.group = { ...base, closedAt, viewerStatus: 'active', viewerRole: 'member' };
+        answers.members = roster(me);
+        answers.decisions = { decisions: [], canPropose: false, rollSize: 4, onRoll: true, watching: false, nameable: [], closedAt };
+        vi.mocked(api.getGroupSuccession).mockClear();
+        render(<GroupDetailModal group={{ ...base, closedAt } as any} isOpen onClose={() => {}} myPubkey={ME} />);
+        await waitFor(() => expect(api.getGroupMembers).toHaveBeenCalled());
+        await new Promise(r => setTimeout(r, 50));
+        expect(api.getGroupSuccession).not.toHaveBeenCalled();
+    });
+});
+
 describe("the vote where Home's line lands (#1784 review B1)", () => {
     it('removed mid-vote (node: on the frozen roll, vote 200): the sheet shows the vote with Yes / No', async () => {
         answers.group = { ...base, viewerStatus: 'removed', viewerRole: null };

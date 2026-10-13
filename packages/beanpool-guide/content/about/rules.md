@@ -19,14 +19,14 @@ About a member:
 - Suspend a member, or lift a suspension.
 - Freeze a member's credit, or unfreeze it.
 - Give a member the right to vouch for newcomers, or take it away.
-- Remove a lead keeper from an enterprise.
+- Remove a lead keeper from an enterprise, or a leader from a project.
 - Remove a member from the community, or reinstate them.
 
 About the Commons:
 
-- Give beans from the Commons to an enterprise.
+- Give beans from the Commons to a project or an enterprise.
 - Give a hardship grant from the Commons to a member.
-- Pay off an enterprise's debt from the Commons.
+- Pay off a project's or an enterprise's debt from the Commons.
 
 ## Who can start a Decision
 

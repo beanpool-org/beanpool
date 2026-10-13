@@ -4,8 +4,8 @@
  *
  *   1. the canonical hash: order-free, deduped, injective where a join was not (an id holding a comma), and the pinned
  *      vector the phone's suite pins too (apps/native utils/__tests__/posts-nearby.test.ts);
- *   2. ids pack and unpack exactly: canonical UUIDs (16 bytes each) and any other id (kept as the string), so a diff
- *      against an entry names exactly the ids that changed;
+ *   2. ids pack and unpack exactly: canonical UUIDs (16 bytes each) and any other id (kept as the string, counted at its
+ *      bytes and the 32 a string costs beyond them), so a diff against an entry names exactly the ids that changed;
  *   3. equivalence over 3,000 seeded cycles: 60 readers with 1-2 phones each over 12 worlds of 20-600 ids, each cycle
  *      changing 0-40 ids of one world and flipping ties, the memory under a tiny budget (so it evicts) and replaced every
  *      ~150 cycles (a restart), reads cut short at random (not applied), some phones that never say setDiff, and the
@@ -13,9 +13,10 @@
  *      `tied`, hashed to `setHash`; a hash not on the reader's own list (none, from before a restart, another reader's)
  *      is never answered a diff; a diff is smaller than the set, and names `tied` exactly when it moved; bytes, sets and
  *      readers stay within their bounds after every step;
- *   4. the bound measured: 20,000 distinct hub-size sets (500 UUIDs + 100 tied) under the default bounds hold at most
- *      32 MB as counted, at most 20,000 sets and readers, and the heap (heapUsed + arrayBuffers) grows by at most 1.5×
- *      what is counted;
+ *   4. the bound measured: 20,000 distinct hub-size sets (500 UUIDs + 100 tied), and 20,000 sets of ids members chose
+ *      (three characters each, kept as strings, each a fresh string as SQLite hands it out), under the default bounds
+ *      hold at most 32 MB as counted, at most 20,000 sets and readers, and the heap (heapUsed + arrayBuffers) grows by at
+ *      most 1.5× what is counted (the review of #1810, finding 3: counted at their bytes alone, the second grew 10×);
  *   5. NEARBY_SET_MEMORY_MB: 0 turns the memory off (every changed set whole, `setUnchanged` still answered); a value out
  *      of range is the default.
  *
@@ -102,6 +103,10 @@ function main() {
         const packed = new NearbySetMemory({ budgetBytes: 1 << 20, maxSets: 100, maxReaders: 100 });
         packed.answer('r', { ids: uuids, tied: [] }, {});
         assert(packed.held().bytes === uuids.length * 16 + 128, `50 UUIDs count 16 bytes each plus 128 (${packed.held().bytes})`);
+        const strings = new NearbySetMemory({ budgetBytes: 1 << 20, maxSets: 100, maxReaders: 100 });
+        strings.answer('r', { ids: ['p,1', 'q\n2', 'é'], tied: [] }, {});
+        assert(strings.held().bytes === (3 + 32) + (3 + 32) + (2 + 32) + 128,
+            `ids kept as strings count their UTF-8 bytes and 32 each, plus 128 (${strings.held().bytes})`);
         const d = diffNearbySet(['a', 'b', 'c'], ['d', 'b', 'e', 'd']);
         assert(d.setAdd.join() === 'd,e' && d.setDrop.join() === 'a,c', 'setAdd in the new set\'s order, each once; setDrop what went');
     }
@@ -229,7 +234,7 @@ function main() {
     }
 
     // ── 4. the bound, measured ──
-    console.log('\n── 4. 20,000 distinct hub-size sets under the default bounds ──');
+    console.log('\n── 4. 20,000 distinct sets under the default bounds: hub-size UUIDs, and ids members chose ──');
     {
         delete process.env.NEARBY_SET_MEMORY_MB;
         const limits = nearbySetMemoryLimits();
@@ -240,23 +245,46 @@ function main() {
             gc = vm.runInNewContext('gc') as () => void;
         } catch { gc = null; }
         const heap = () => { gc?.(); gc?.(); const m = process.memoryUsage(); return m.heapUsed + m.arrayBuffers; };
-        const before = heap();
-        const memory = new NearbySetMemory(limits);
-        let maxBytes = 0, maxSets = 0;
         const hex = (n: number, w: number) => n.toString(16).padStart(w, '0');
-        for (let i = 0; i < 20_000; i++) {
-            const ids = Array.from({ length: 500 }, (_, j) => `${hex(i, 8)}-${hex(j, 4)}-4000-8000-${hex(i * 500 + j, 12)}`);
-            memory.answer(hex(i, 64), { ids, tied: ids.slice(0, 100) }, {});
-            if (i % 1000 === 999) { const h = memory.held(); maxBytes = Math.max(maxBytes, h.bytes); maxSets = Math.max(maxSets, h.sets); }
-        }
-        const held = memory.held();
-        const after = heap();
-        const grew = after - before;
-        console.log(`  held: ${held.sets} sets, ${(held.bytes / 1048576).toFixed(1)} MB counted, ${held.readers} readers, ${held.evictions} evictions; heap grew ${(grew / 1048576).toFixed(1)} MB${gc ? '' : ' (no forced GC)'}`);
-        assert(held.bytes <= 32 * 1024 * 1024 && maxBytes <= 32 * 1024 * 1024, `at most 32 MB counted, at every sample (${(maxBytes / 1048576).toFixed(1)} MB at most)`);
-        assert(held.sets <= 20_000 && maxSets <= 20_000 && held.readers <= 20_000, `at most 20,000 sets and readers (${held.sets} sets, ${held.readers} readers)`);
-        assert(held.evictions === 20_000 - held.sets, `the oldest went: ${held.evictions} evictions`);
-        assert(grew <= 1.5 * held.bytes, `the heap grew ${(grew / 1048576).toFixed(1)} MB for ${(held.bytes / 1048576).toFixed(1)} MB counted: within 1.5× (${(grew / held.bytes).toFixed(2)}×)`);
+        // An id as SQLite hands it to the route: a fresh flat string, shared with no other read's.
+        const fresh = (id: string) => Buffer.from(id, 'utf8').toString('utf8');
+        const alpha = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        const short = (n: number) => alpha[n % 36] + alpha[Math.floor(n / 36) % 36] + alpha[Math.floor(n / 1296) % 36];
+        const worlds: Array<{ name: string; setOf: (i: number) => { ids: string[]; tied: string[] } }> = [
+            {
+                name: 'hub-size sets (500 UUIDs + 100 tied, packed)',
+                setOf: (i) => {
+                    const ids = Array.from({ length: 500 }, (_, j) => `${hex(i, 8)}-${hex(j, 4)}-4000-8000-${hex(i * 500 + j, 12)}`);
+                    return { ids, tied: ids.slice(0, 100) };
+                },
+            },
+            {
+                // A member chooses their listing's id ([a-z0-9._-]{1,128}, engine/posts.ts), and one such id among a set's
+                // nearest keeps the whole set as strings. Three characters: the most a string costs beyond its bytes.
+                name: 'sets of ids members chose (501 three-character ids, kept as strings)',
+                setOf: (i) => ({ ids: [...Array.from({ length: 500 }, (_, j) => fresh(short(j))), fresh(`s${hex(i, 6)}`)], tied: [] }),
+            },
+        ];
+        // Each world in its own call: the one before is unreachable when the next one's heap is first measured.
+        const measure = (world: (typeof worlds)[number]) => {
+            const before = heap();
+            const memory = new NearbySetMemory(limits);
+            let maxBytes = 0, maxSets = 0;
+            for (let i = 0; i < 20_000; i++) {
+                memory.answer(hex(i, 64), world.setOf(i), {});
+                if (i % 1000 === 999) { const h = memory.held(); maxBytes = Math.max(maxBytes, h.bytes); maxSets = Math.max(maxSets, h.sets); }
+            }
+            const held = memory.held();
+            const after = heap();
+            const grew = after - before;
+            console.log(`  ${world.name}: ${held.sets} sets, ${(held.bytes / 1048576).toFixed(1)} MB counted, ${held.readers} readers, ${held.evictions} evictions; heap grew ${(grew / 1048576).toFixed(1)} MB${gc ? '' : ' (no forced GC)'}`);
+            assert(held.bytes <= 32 * 1024 * 1024 && maxBytes <= 32 * 1024 * 1024, `${world.name}: at most 32 MB counted, at every sample (${(maxBytes / 1048576).toFixed(1)} MB at most)`);
+            assert(held.sets <= 20_000 && maxSets <= 20_000 && held.readers <= 20_000, `${world.name}: at most 20,000 sets and readers (${held.sets} sets, ${held.readers} readers)`);
+            // Read after the heap, so the memory is still reachable when it is measured.
+            assert(held.evictions === 20_000 - memory.held().sets, `${world.name}: the oldest went (${held.evictions} evictions)`);
+            assert(grew <= 1.5 * held.bytes, `${world.name}: the heap grew ${(grew / 1048576).toFixed(1)} MB for ${(held.bytes / 1048576).toFixed(1)} MB counted, within 1.5× (${(grew / held.bytes).toFixed(2)}×)`);
+        };
+        for (const world of worlds) measure(world);
     }
 
     // ── 5. NEARBY_SET_MEMORY_MB ──

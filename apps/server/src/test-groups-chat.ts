@@ -18,7 +18,7 @@
  *  6. Pushes: every other member by default, never the author, never someone removed; a mute (8h / 1w / always)
  *     silences one chat; an @mention gets through a mute; an expired mute is no mute. No text in a push.
  *  7. Convenor removal of a message; nobody else; system lines cannot be removed.
- *  8. "Your groups": groups, kept enterprises (🥖) and events hosted or Going (📅), latest message, unread count
+ *  8. "Your groups": groups, kept enterprises (🥖), projects (🎯) and events hosted or Going (📅), latest message, unread count
  *     per member; nothing the member is not in.
  *  9. The old chat group is gone: the create route answers 410; existing ones are deleted with tombstones.
  * 10. Renaming a group renames its chat.
@@ -150,12 +150,20 @@ async function main(): Promise<void> {
 
     // ── 1. The chat is created with the group ───────────────────────────────────────────────
     console.log('\n--- 1. A group is created with its chat ---');
-    assert(GROUP_CATEGORIES.join(',') === 'social,general,working_group,project,guild',
-        'categories are ordered Social Circle, General, Working Group, Project Team, Guild');
-    assert(DEFAULT_GROUP_CATEGORY === 'social' && GROUP_CATEGORY_LABELS.project === 'Project Team' && GROUP_CATEGORY_LABELS.social === 'Social Circle',
-        'Social Circle is the default, and "project" reads as Project Team');
+    assert(GROUP_CATEGORIES.join(',') === 'social,general,working_group,guild',
+        'categories are ordered Social Circle, General, Working Group, Guild: no Project Team (pick 7)');
+    assert(DEFAULT_GROUP_CATEGORY === 'social' && GROUP_CATEGORY_LABELS.project === 'Team' && GROUP_CATEGORY_LABELS.social === 'Social Circle',
+        'Social Circle is the default, and a stored "project" row reads as Team');
     const garden = createGroup({ name: 'Garden Crew', joinPolicy: 'request_to_join', createdBy: alice });
     assert(garden.category === 'social', 'a group created without a category is a Social Circle');
+    // #1814 review N-e: "Project Team" is gone, so the node refuses it on both ways in (a project is the Beans kind now).
+    const before = (db.prepare('SELECT COUNT(*) AS c FROM groups').get() as any).c;
+    assertThrows(() => createGroup({ name: 'Old Team', joinPolicy: 'open', createdBy: alice, category: 'project' }),
+        /Invalid group category: project/, 'a new group with the dropped category "project" is refused');
+    assert((db.prepare('SELECT COUNT(*) AS c FROM groups').get() as any).c === before, 'and nothing is stored');
+    assertThrows(() => updateGroup(garden.id, alice, { category: 'project' }),
+        /Invalid group category: project/, 'an existing group cannot be changed to it either');
+    assert((db.prepare('SELECT category FROM groups WHERE id = ?').get(garden.id) as any).category === 'social', 'and keeps its own');
     const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(garden.id) as any;
     assert(conv?.type === 'group_thread', "the group's chat is one group_thread conversation");
     assert(conv?.name === 'Garden Crew', "named after the group");
@@ -422,6 +430,8 @@ async function main(): Promise<void> {
     console.log('\n--- 8. "Your groups" ---');
     const bakery = createTreasury('Village Bakery', AVATAR, 0).publicKey;
     adminAssignTreasuryOperator(bakery, bob, 'admin');
+    const roof = createTreasury('Hall roof', AVATAR, 0, { lifecycle: 'bounded', goalAmount: 500, purpose: 'A new roof' }).publicKey;
+    adminAssignTreasuryOperator(roof, bob, 'admin');
     const walk = createPost('event', 'community', 'Creek walk', '', 0, 'fixed', erin, -28.5, 153.5, [], false, undefined, false,
         { eventStartAt: inHours(30), eventPlaceName: 'The creek' })!;
     rsvpEvent(() => { }, walk.id, bob, 'going');
@@ -442,6 +452,10 @@ async function main(): Promise<void> {
     assert(g?.unreadCount === 1, `and Bob's unread count, computed for him (got ${g?.unreadCount})`);
     const e = items.find(i => i.id === bakery);
     assert(!!e && e.kind === 'enterprise' && e.badge === '🥖' && e.role === 'keeper', 'the enterprise he keeps is listed with 🥖');
+    assert(e?.lifecycle === 'ongoing', `and says it is an enterprise, so the app names it one (got ${e?.lifecycle})`);
+    const r = items.find(i => i.id === roof);
+    assert(!!r && r.kind === 'enterprise' && r.badge === '🎯' && r.lifecycle === 'bounded' && r.role === 'keeper',
+        `the project he helps opens the same chat, with 🎯 and lifecycle 'bounded', so the app names it a project (got ${r?.badge} ${r?.lifecycle})`);
     const w = items.find(i => i.id === walk.id);
     assert(!!w && w.kind === 'event' && w.badge === '📅' && w.role === 'going', 'the event he is Going to is listed with 📅');
     assert(!items.some(i => i.id === quiz.id), 'an event he is only interested in is not');

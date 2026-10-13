@@ -6,12 +6,11 @@
 import type { GroupCategory, JoinPolicy } from './db';
 import { GROUP_CATEGORY_EMOJI, GROUP_CATEGORY_WORDS } from './your-groups';
 
-/** Decision 11: Social Circle (default, pre-selected) → General → Working Group → Project Team → Guild. */
+/** Decision 11: Social Circle (default, pre-selected) → General → Working Group → Guild. No Project Team (pick 7). */
 export const GROUP_CATEGORY_OPTIONS: ReadonlyArray<{ key: GroupCategory; label: string; emoji: string; desc: string }> = [
     { key: 'social', label: GROUP_CATEGORY_WORDS.social, emoji: GROUP_CATEGORY_EMOJI.social, desc: 'Friends, neighbours, shared interests' },
     { key: 'general', label: GROUP_CATEGORY_WORDS.general, emoji: GROUP_CATEGORY_EMOJI.general, desc: 'Open discussion space' },
     { key: 'working_group', label: GROUP_CATEGORY_WORDS.working_group, emoji: GROUP_CATEGORY_EMOJI.working_group, desc: 'Getting a practical job done together' },
-    { key: 'project', label: GROUP_CATEGORY_WORDS.project, emoji: GROUP_CATEGORY_EMOJI.project, desc: 'Collaborating on an initiative' },
     { key: 'guild', label: GROUP_CATEGORY_WORDS.guild, emoji: GROUP_CATEGORY_EMOJI.guild, desc: 'People who share a skill or craft' },
 ];
 
@@ -28,7 +27,7 @@ export const CREATE_GROUP_DEFAULTS: Readonly<{ category: GroupCategory; joinPoli
 
 /** Decision 14: at the foot of the category list, the bridge for people who are really running something. */
 export const START_ENTERPRISE_BRIDGE = {
-    lead: '🥖 Running something together?',
-    link: 'Start an enterprise →',
+    lead: '🥖 With Beans involved?',
+    link: 'Start a project or an enterprise →',
     route: '/propose-project',
 } as const;

@@ -23,6 +23,16 @@
  *     admin password then making someone an owner is pushed at once, reaches the channel and stays in the card through
  *     30 more flips; the password flipping that owner is told line by line (high) but pushed 3 times at most; an hour
  *     later each actor's rest is one pushed line ("257 more changes by the same admin").
+ *  5c. A role lost or given back outside grant and revoke, through the real routes: an admin suspends an admin, an owner
+ *     lifts it, an owner removes an admin, an admin suspends a moderator on a report, an admin deletes their account, a
+ *     suspension the community does not keep ends, a suspension by a community vote, an owner halting a suspension's
+ *     vote: each told once and pushed to the owners, under the actor's own bound, in words naming who acted (a vote, an
+ *     owner); node-roles' community-vote actor is state-engine's.
+ *  5d. Every security log line is in the history (one line per kind, counted, never its words); 1000 of them write the
+ *     alert book a handful of times at most, its next write carries their count. A standby takes a role
+ *     grant and tells it on its own channel only; once it is the main server, its standby days leave the card and banner.
+ *  5e. An owner re-keys an admin through the real routes: told to the owners as a key replaced (sec.keys) and pushed to
+ *     them, naming nobody; a moderator's re-key tells nothing.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts-security.ts
@@ -114,6 +124,7 @@ async function main(): Promise<void> {
     const { generateTotpSecret, generateTotpCode } = await import('./totp.js');
     const { readNodeIdentity } = await import('./services/takeover-envelope.js');
     const { noteNameStandingForTests } = await import('./services/registrar-name-watch.js');
+    const { recordRegistrarAnswer } = await import('./engine/registrar-names.js');
     const { deliverRecoverNotices } = await import('./recover-command.js');
     const { setSimulatedDiskUsageForTesting } = await import('./engine/storage-health.js');
     const alerts = await import('./services/alerts.js');
@@ -301,18 +312,20 @@ async function main(): Promise<void> {
         `2. new 2FA backup codes through the real route (${codes.status} ${codes.json?.error ?? ''})`);
     updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
 
-    noteNameStandingForTests('lost-another-key');
+    // Two registrar names on the record, as Settings' claims write them: the alert reads which are lost from it.
+    for (const name of ['first', 'second']) recordRegistrarAnswer({ status: 'live', name, hostname: `${name}.beanpool.org` }, 'claim');
+    noteNameStandingForTests('lost-another-key', 'first.beanpool.org');
     await settle();
     const nm = alerts.getAlertsStatus().active.find((a) => a.key === 'sec.name');
     assert(!!nm && nm.priority === 4 && /names another community's key/.test(nm.detail), `2. the address names another community's key: raised, high (${nm?.priority})`);
-    noteNameStandingForTests('lost-released', 'second.example');
-    noteNameStandingForTests('held', 'second.example');
+    noteNameStandingForTests('lost-released', 'second.beanpool.org');
+    noteNameStandingForTests('held', 'second.beanpool.org');
     await settle();
     advance(16 * MIN);
     await tick();
     assert(alerts.getAlertsStatus().active.some((a) => a.key === 'sec.name') && lastHistory('sec.name')?.kind === 'raised',
         `2. a second address back while the first is still lost: not over (${lastHistory('sec.name')?.kind})`);
-    noteNameStandingForTests('held');
+    noteNameStandingForTests('held', 'first.beanpool.org');
     await settle();
     advance(16 * MIN);
     await tick();
@@ -465,6 +478,248 @@ async function main(): Promise<void> {
         fs.readFileSync(path.join(dataDir!, 'alerts-state.json'), 'utf8')];
     assert(!flood5.some((p) => [flipped, xav, admin].some((k) => p.includes(k.slice(0, 12))) || /FlipFloS|XavNewOwnerS|AdamAdminS/.test(p)),
         '5. no member or key in the flood\'s lines, the status or the alert book');
+
+    // ── 5b. Past the channel's hourly ceiling, and past the card's 50 lines (the review's d4 H3 and d4c) ──────────────
+    const book = () => JSON.parse(fs.readFileSync(path.join(dataDir!, 'alerts-state.json'), 'utf8'));
+    const filler = async (n: number, tag: string) => {
+        for (let i = 0; i < n; i++) await alerts.updateAlerts([{ key: 'boot.unclean', active: true, oneShot: true, priority: 4, detail: `${tag} ${i}` }]);
+        await settle(300);
+    };
+    const yan = pubkey();
+    const una = pubkey();
+    for (const [pk, callsign] of [[yan, 'YanNewOwnerS'], [una, 'UnaNewAdminS']]) {
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
+            .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
+        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    }
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    const hC = topicHits().length;
+    await filler(70, 'filler before');
+    grantNodeRole(yan, 'owner', 'owner:password');
+    await settle(300);
+    await filler(100, 'filler after');
+    const st5b = book();
+    assert(st5b.dropped > 0 && (st5b.waiting as any[]).some((e) => ownerLine(e.detail)),
+        `5b. the ceiling reached, then an owner made, then 100 more lines: lines were dropped (${st5b.dropped}), the owner line still waits`);
+    assert(alerts.getAlertsStatus().history.some((e) => ownerLine(e.detail)), '5b. and is still in the history');
+    assert(!topicHits().slice(hC).some((h) => ownerLine(h.body)), '5b. held past the ceiling, not sent before the hour');
+    const hD = topicHits().length;
+    advance(HOUR + MIN);
+    await tick();
+    await settle(1500);
+    assert(topicHits().slice(hD).some((h) => ownerLine(h.body)), '5b. the hour over, the owner line is delivered');
+
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    const adminLine = (d: string) => /Someone was made an admin, by the admin password\./.test(d);
+    grantNodeRole(una, 'admin', 'owner:password');
+    await settle(300);
+    await filler(60, 'filler card');
+    assert(!alerts.getAlertsStatus().history.some((e) => adminLine(e.detail)), '5b. an admin made, then 60 other lines: out of the history\'s last 50');
+    assert(alerts.getAlertsStatus().recent.some((e) => adminLine(e.detail)) && banner('owner') >= 1,
+        `5b. but still in the Alerts card and the owners' banner (${banner('owner')})`);
+    revokeNodeRole(una, 'admin', 'owner:password');
+    revokeNodeRole(yan, 'owner', 'owner:password');
+    await settle(300);
+
+    // ── 5c. A role lost or given back outside grant and revoke (the first review's N1), through the real routes ──────
+    const C5 = ['SueSuspendS', 'PruPrunedS', 'RepReportedS', 'DelDeletesS', 'MiaModS', 'MoeModS', 'DeeVotedS', 'EveHaltedS'];
+    const [sue, pru, rpt, del, mia, moe, dee, eve] = C5.map(() => pubkey());
+    for (const [i, pk] of [sue, pru, rpt, del, mia, moe, dee, eve].entries()) {
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
+            .run(pk, C5[i], new Date().toISOString(), owner, 'TEST');
+        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    }
+    for (const pk of [sue, pru, del, eve]) grantNodeRole(pk, 'admin', owner);
+    for (const pk of [rpt, mia, moe, dee]) grantNodeRole(pk, 'moderator', owner);
+    putPushTokenRow(sue, 'ExponentPushToken[sue-admin]', 'android');
+    await settle(300);
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    const hR = topicHits().length;
+    const { heldNodeRoleOf } = await import('./engine/node-roles.js');
+    const { tickDecisions, executeDecision, adminHaltDecision } = await import('./decisions-engine.js');
+    const { purgeMemberSelf } = await import('./state-engine.js');
+    const told = async (what: string, act: () => Promise<{ status: number; json?: any } | void>, words: RegExp, extraTo?: string) => {
+        const p = ownerPushes().length;
+        const n = historyOf('sec.role').length;
+        const res = await act();
+        await settle(300);
+        assert(!res || res.status === 200, `5c. ${what} (${res ? `${res.status} ${res.json?.error ?? ''}` : 'called'})`);
+        assert(historyOf('sec.role').length === n + 1 && words.test(lastHistory('sec.role')?.detail ?? ''),
+            `5c. ${what}: told once, the role and how (${lastHistory('sec.role')?.detail})`);
+        const to = ownerPushes().slice(p).flatMap((x) => x.to);
+        assert(ownerPushes().length === p + 1 && to.includes('ExponentPushToken[olive-owner]') && to.includes('ExponentPushToken[xav-new-owner]')
+            && (!extraTo || to.includes(extraTo)), `5c. ${what}: the owners pushed at once${extraTo ? ', and the one who lost it' : ''} (${JSON.stringify(to)})`);
+    };
+    await told('an admin suspends an admin', () => call('POST', `/api/local/admin/users/${sue}/suspend`, { reason: 'Owners must hear of this one.' }, asAdmin),
+        /^An admin lost that role, suspended by an admin\./, 'ExponentPushToken[sue-admin]');
+    assert(heldNodeRoleOf(sue) === null, '5c. the role is gone while suspended');
+    await told('an owner lifts it', () => call('POST', `/api/local/admin/users/${sue}/status`, { status: 'active' }, asOwner),
+        /^Someone was made an admin again, the suspension lifted by an owner\./);
+    assert(heldNodeRoleOf(sue) === 'admin', '5c. the role is back');
+    await told('an owner removes an admin from the community', () => call('POST', `/api/local/admin/users/${pru}/prune`, {}, asOwner),
+        /^An admin lost that role, removed from the community by an owner\./);
+    db.prepare("INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status) VALUES ('report-5c', ?, ?, 'spam', 'pending')").run(member, rpt);
+    await told('an admin suspends a moderator on a report', () => call('POST', '/api/local/admin/reports/report-5c/action', { suspendUser: true }, asAdmin),
+        /^A moderator lost that role, suspended on a report by an admin\./);
+    await told('an admin deletes their own account', async () => { assert(purgeMemberSelf(del).ok, '5c. the admin deletes their account'); },
+        /^An admin lost that role, by deleting their own account\./);
+    await told('an owner suspends an admin', () => call('POST', `/api/local/admin/users/${sue}/suspend`, { reason: 'A second time, for the vote.' }, asOwner),
+        /^An admin lost that role, suspended by an owner\./, 'ExponentPushToken[sue-admin]');
+    await told('the community does not keep it', async () => { tickDecisions(Date.now() + 8 * 24 * HOUR); },
+        /^Someone was made an admin again, the suspension not kept by a community vote\./);
+    assert(heldNodeRoleOf(sue) === 'admin', '5c. the role is back once more');
+    // The acting person's own bound: the admin's third change is pushed, the fourth only counted for the hour's line.
+    await told('the admin suspends a third member', () => call('POST', `/api/local/admin/users/${mia}/suspend`, { reason: 'Third one this hour, still pushed.' }, asAdmin),
+        /^A moderator lost that role, suspended by an admin\./);
+    const p4 = ownerPushes().length;
+    const s4 = await call('POST', `/api/local/admin/users/${moe}/suspend`, { reason: 'Fourth one this hour, only counted.' }, asAdmin);
+    await settle(300);
+    assert(s4.status === 200 && ownerPushes().length === p4, `5c. the admin's fourth this hour is not pushed: it is their bound, not the server's (${ownerPushes().length - p4})`);
+    advance(HOUR + MIN);
+    await tick();
+    await settle(500);
+    assert(/1 more change by the same admin in the hour/.test(topicHits().slice(hR).map((h) => h.body).join('\n')), '5c. an hour later it is the admin\'s one more change');
+    // Who acted, in the words (the deciding review of #1807, finding 4: these two were told "by the server itself" with
+    // every step still green). The owner's bound is a new hour's: the tick above closed the last one.
+    const { COMMUNITY_VOTE_ACTOR } = await import('./engine/node-roles.js');
+    const { COMMUNITY_DECISION_ACTOR } = await import('./state-engine.js');
+    assert(COMMUNITY_VOTE_ACTOR === COMMUNITY_DECISION_ACTOR, `5c. node-roles' community-vote actor is state-engine's (${COMMUNITY_VOTE_ACTOR}, ${COMMUNITY_DECISION_ACTOR})`);
+    const vote = `vote-5c-${crypto.randomBytes(4).toString('hex')}`;
+    const at = new Date().toISOString();
+    db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status, opens_at, closes_at, created_at, updated_at)
+        VALUES (?, ?, 'Suspend a moderator', 'a passed suspension vote', 'member', 'suspend_member', ?, NULL, '1m1v', 'passed', ?, ?, ?, ?)`).run(vote, owner, dee, at, at, at, at);
+    await told('a suspension by a community vote', async () => { assert(executeDecision(vote).success, '5c. the suspension vote is carried out'); },
+        /^A moderator lost that role, suspended by a community vote\./);
+    assert(heldNodeRoleOf(dee) === null, '5c. the vote took the role');
+    // Told as the earlier "an owner suspends an admin" was, so counted on that same line (×2), not a new one.
+    const sEve = await call('POST', `/api/local/admin/users/${eve}/suspend`, { reason: 'An owner will halt this vote.' }, asOwner);
+    await settle(300);
+    assert(sEve.status === 200 && heldNodeRoleOf(eve) === null && (historyOf('sec.role').find((e) => /^An admin lost that role, suspended by an owner\./.test(e.detail))?.count ?? 1) >= 2,
+        `5c. an owner suspends an admin for its vote: told (${sEve.status})`);
+    const keep = (db.prepare("SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'").get(eve) as { id: string } | undefined)?.id;
+    await told('an owner halts its keep vote', async () => { assert(!!keep && adminHaltDecision(keep, owner, 'Halted: lift it.').success, '5c. the owner halts the keep vote'); },
+        /^Someone was made an admin again, the suspension's vote halted by an owner\./);
+    assert(heldNodeRoleOf(eve) === 'admin', '5c. the halt gave the role back');
+    const c5 = [...topicHits().slice(hR).map((h) => JSON.stringify(h.headers) + h.body), JSON.stringify(alerts.getAlertsStatus()),
+        ...ownerPushes().map((p) => p.title + p.body)];
+    assert(!c5.some((p) => C5.some((c) => p.includes(c)) || [sue, pru, rpt, del, mia, moe, dee, eve].some((k) => p.includes(k.slice(0, 12)))),
+        '5c. no member or key in any of these lines, pushes or the status');
+
+    // ── 5d. The security log, and a standby's own events (the first review's N7 b–d) ─────────────────────────────────
+    const { setNodeRole } = await import('./config/node-role.js');
+    const { logger } = await import('./logger.js');
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    // (d) Every logger.security() line is in the Alerts history (design §3.2): one line per kind, counted, never its words.
+    const pL = ownerPushes().length;
+    const hL = topicHits().length;
+    logger.security('AUTH', `A test line naming @${CALLSIGNS[3]} (key ${member.slice(0, 12)}…)`);
+    logger.security('AUTH', `Another test line naming @${CALLSIGNS[4]}`);
+    logger.security('P2P', '[Backup] A test line from the standby copy');
+    await settle();
+    const logLines = historyOf('sec.log');
+    assert(logLines.length === 2 && logLines.find((e) => /sign-in/.test(e.detail))?.count === 2 && logLines.some((e) => /backups/.test(e.detail)),
+        `5d. every security log line is in the Alerts history, one line per kind, counted (${JSON.stringify(logLines.map((e) => [e.detail, e.count ?? 1]))})`);
+    const st5d = JSON.stringify(alerts.getAlertsStatus());
+    assert(!st5d.includes(CALLSIGNS[3]) && !st5d.includes(CALLSIGNS[4]) && !st5d.includes(member.slice(0, 12)), '5d. never what the line says: no member or key');
+    assert(ownerPushes().length === pL && topicHits().length === hL && banner('owner') === 0, '5d. the history only: no push, no channel line, no banner');
+    // A flood of them (a request with no credentials writes one) never rewrites the book per line: counted in memory, the
+    // book written by the next tick (the deciding review of #1807, finding 1: an fsync'd rewrite per line held the loop).
+    const bookFile = path.join(dataDir!, alerts.ALERTS_STATE_FILE);
+    const realRename = fs.renameSync;
+    let bookWrites = 0;
+    fs.renameSync = ((from: fs.PathLike, to: fs.PathLike) => {
+        if (path.basename(String(to)) === alerts.ALERTS_STATE_FILE) bookWrites++;
+        return realRename(from, to);
+    }) as typeof fs.renameSync;
+    const floodStarted = Date.now();
+    try {
+        for (let i = 0; i < 1000; i++) logger.security('AUTH', 'Unauthorized attempt to generate invite code.');
+    } finally {
+        fs.renameSync = realRename;
+    }
+    const floodMs = Date.now() - floodStarted;
+    assert(bookWrites <= 5, `5d. 1000 security log lines write the alert book a handful of times at most (${bookWrites} writes, ${floodMs} ms)`);
+    assert(historyOf('sec.log').find((e) => /sign-in/.test(e.detail))?.count === 1002, `5d. and every one is counted (${historyOf('sec.log').find((e) => /sign-in/.test(e.detail))?.count})`);
+    // The tick's write (checkServerAlerts ends in updateAlerts, which writes the book) or any event's: the same call.
+    await alerts.updateAlerts([]);
+    const onDisk = JSON.parse(fs.readFileSync(bookFile, 'utf8')).history.find((e: any) => e.key === 'sec.log' && /sign-in/.test(e.detail));
+    assert(onDisk?.count === 1002, `5d. the book's next write (the tick's, every minute) carries the count (${onDisk?.count})`);
+    // (c) A standby takes a role grant through the route (its own operators' roles; a take-over replaces them): told on its
+    // own channel and in its own card, and pushes nobody, as the first review measured it (M5-G1).
+    const stan = pubkey();
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
+        .run(stan, 'StanStandbyS', new Date().toISOString(), owner, 'TEST');
+    setNodeRole('backup');
+    try {
+        const pB = ownerPushes().length;
+        const hB = topicHits().length;
+        const onStandby = await call('POST', '/api/local/admin/node-roles', { pubkey: stan, role: 'moderator' }, asOwner);
+        await settle(300);
+        assert(onStandby.status === 200 && heldNodeRoleOf(stan) === 'moderator', `5d. a standby takes a role grant through the route (${onStandby.status})`);
+        assert(topicHits().length === hB + 1 && /Someone was made a moderator, by an owner\./.test(topicHits().at(-1)?.body ?? ''),
+            `5d. told on the standby's own channel (${topicHits().length - hB})`);
+        assert(ownerPushes().length === pB, `5d. and pushes nobody: a standby never pushes (${ownerPushes().length - pB})`);
+        assert(banner('owner') === 1 && alerts.getAlertsStatus().recent.length === 1, `5d. in the standby's own card and banner (${banner('owner')})`);
+    } finally {
+        setNodeRole('primary');
+    }
+    // (b) Once it is the main server, its standby days' events leave the card and the banner: they stay in the history.
+    assert(banner('owner') === 0 && alerts.getAlertsStatus().recent.length === 0,
+        `5d. promoted, the standby's own events leave the card and the banner (${banner('owner')}, ${alerts.getAlertsStatus().recent.length})`);
+    assert(historyOf('sec.role').some((e) => /Someone was made a moderator, by an owner\./.test(e.detail)), '5d. and stay in the history');
+    revokeNodeRole(stan, 'moderator', owner);
+    await settle(300);
+    assert(banner('owner') === 1 && alerts.getAlertsStatus().recent.length === 1, `5d. one told on the main server is in both (${banner('owner')})`);
+
+    // ── 5e. A re-key moves an owner's or admin's role to a new key (the deciding review of #1807, finding 5) ─────────
+    // Through the real routes: an owner issues the code and binds the new key. Told to the owners as sec.keys, under the
+    // owner's own bound (the re-key drops the old key's push tokens: the owners are pushed); a moderator's re-key tells
+    // nothing; nobody named.
+    alerts.resetAlertsForTests();
+    advance(2 * HOUR);
+    const C5E = ['ReyRekeyedS', 'MacModRekeyS'];
+    const [rey, mac] = C5E.map(() => pubkey());
+    for (const [i, pk] of [rey, mac].entries()) {
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
+            .run(pk, C5E[i], new Date().toISOString(), owner, 'TEST');
+        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    }
+    grantNodeRole(rey, 'admin', owner);
+    grantNodeRole(mac, 'moderator', owner);
+    putPushTokenRow(rey, 'ExponentPushToken[rey-admin]', 'android');
+    await settle(300);
+    const rekey = async (pk: string) => {
+        const issued = await call('POST', `/api/local/admin/members/${pk}/rekey/issue-code`, {}, asOwner);
+        const fresh = pubkey();
+        const done = await call('POST', `/api/local/admin/members/${pk}/rekey/complete`, { code: issued.json?.code, newPubkey: fresh }, asOwner);
+        await settle(300);
+        return { issued: issued.status, done: done.status, error: done.json?.error ?? issued.json?.error, fresh };
+    };
+    const hK = topicHits().length;
+    const pK = ownerPushes().length;
+    const keysBefore = historyOf('sec.keys').length;
+    const r1 = await rekey(rey);
+    assert(r1.issued === 200 && r1.done === 200 && heldNodeRoleOf(r1.fresh) === 'admin' && heldNodeRoleOf(rey) === null,
+        `5e. an owner re-keys an admin through the routes: the role is on the new key (${r1.issued} ${r1.done} ${r1.error ?? ''})`);
+    const keyLines = historyOf('sec.keys');
+    assert(keyLines.length === keysBefore + 1 && /^An admin's key was replaced by a re-key, by an owner\. Open Settings to see who\.$/.test(keyLines[0]?.detail ?? ''),
+        `5e. told once as a key replaced, the role and how (${keyLines[0]?.detail})`);
+    const toK = ownerPushes().slice(pK).flatMap((x) => x.to);
+    assert(ownerPushes().length === pK + 1 && toK.includes('ExponentPushToken[olive-owner]') && toK.includes('ExponentPushToken[xav-new-owner]'),
+        `5e. the owners pushed at once (${JSON.stringify(toK)})`);
+    assert(topicHits().length === hK + 1 && /An admin's key was replaced by a re-key, by an owner\./.test(topicHits().at(-1)?.body ?? ''),
+        `5e. one line on the channel (${topicHits().length - hK})`);
+    const r2 = await rekey(mac);
+    assert(r2.done === 200 && heldNodeRoleOf(r2.fresh) === 'moderator' && historyOf('sec.keys').length === keysBefore + 1,
+        `5e. a moderator's re-key tells nothing as a key replaced (${r2.done} ${r2.error ?? ''})`);
+    const c5e = [...topicHits().slice(hK).map((h) => JSON.stringify(h.headers) + h.body), JSON.stringify(alerts.getAlertsStatus()),
+        ...ownerPushes().slice(pK).map((p) => p.title + p.body)];
+    assert(!c5e.some((p) => C5E.some((c) => p.includes(c)) || [rey, mac, r1.fresh, r2.fresh].some((k) => p.includes(k.slice(0, 12)))),
+        '5e. no member or key in any of these lines, pushes or the status');
 
     // ── 6. The server's shell: beanpool recover run as a real process, its notice delivered as index.ts's watch does ──
     alerts.resetAlertsForTests();

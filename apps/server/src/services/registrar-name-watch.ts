@@ -70,7 +70,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../state-engine.js';
 import { logger } from '../logger.js';
-import { noteSecurityEvent } from './security-signal.js';
+import { noteSecurityEvent, NAME_ALERT_WORDS } from './security-signal.js';
 import { forgetOwnAddresses } from '../engine/own-addresses.js';
 import { setLostAddressRefusedHandler } from '../engine/member-signature.js';
 import {
@@ -453,32 +453,28 @@ function standingOf(lost: RegistrarNameLost | null, w: NameWatch): Standing {
 
 const key16 = (k: string | null) => (k ? `${k.slice(0, 16)}…` : 'a key it did not name');
 
-/** The watched addresses now lost: the owners' alert lasts while any is, and ends only when none is. */
-const lostHosts = new Set<string>();
-
-/** The owners' alert for a name lost or back (services/alerts.ts sec.name): never the other community's key, nor which address. */
+/**
+ * The owners' alert for a name lost or back (services/alerts.ts sec.name): never the other community's key, nor which
+ * address. It lasts while any recorded name is lost, and ends only when none is. That is read from the record's `lost`
+ * marks, never kept in memory: after a restart a name still lost is in no round's change, and a name gone from the
+ * record is lost no more. `host`'s own mark is written after this, so it is left out. This tells a change at once; the
+ * alert book's tick reads the same marks every minute and sees it through (services/alerts.ts nameConditions).
+ */
 function noteNameStanding(host: string, standing: Standing): void {
-    if (standing === 'lost-another-key' || standing === 'lost-released') lostHosts.add(host);
-    else if (standing === 'held') lostHosts.delete(host);
     if (standing === 'lost-another-key') {
-        noteSecurityEvent({
-            key: 'sec.name', state: true,
-            detail: "The address service names another community's key as the holder of this community's address, and the address "
-                + 'answers as that community: what apps sign for this community there is refused. Open Settings → Public address.',
-        });
+        noteSecurityEvent({ key: 'sec.name', state: true, detail: NAME_ALERT_WORDS['another-key'] });
     } else if (standing === 'lost-released') {
-        noteSecurityEvent({
-            key: 'sec.name', state: true,
-            detail: "This community released its address and the hold is over: what apps sign for it there is refused. Claiming it again brings it back.",
-        });
-    } else if (standing === 'held' && lostHosts.size === 0) {
-        noteSecurityEvent({ key: 'sec.name', state: false, detail: "This community's address is its own again." });
+        noteSecurityEvent({ key: 'sec.name', state: true, detail: NAME_ALERT_WORDS.released });
+    } else if (standing === 'held' && !registrarNames().some((e) => e.address !== host && e.lost)) {
+        noteSecurityEvent({ key: 'sec.name', state: false, detail: NAME_ALERT_WORDS.back });
     }
 }
 
-/** The owners' alert as a round tells it, for a suite (test-alerts-security). */
-export function noteNameStandingForTests(standing: Standing, host = 'name.example'): void {
+/** The owners' alert as a round tells it, and the mark the round writes after it, for a suite (test-alerts-security). */
+export function noteNameStandingForTests(standing: Standing, host: string): void {
     noteNameStanding(host, standing);
+    const lost = standing === 'lost-another-key' ? 'another-key' : standing === 'lost-released' ? 'released' : null;
+    if (standing === 'held' || lost) setRegistrarNameLost(host, lost ? { since: new Date().toISOString(), why: lost, holderKey: null } : null);
 }
 
 function logChange(host: string, standing: Standing, w: NameWatch, lost: RegistrarNameLost | null): void {

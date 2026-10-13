@@ -1,7 +1,7 @@
 ---
 slug: reporting
 title: Reporting a problem
-summary: Tell your community's moderators about a post, an event, a Pulse post or an enterprise.
+summary: Tell your community's moderators about a post, an event, a Pulse post, a project or an enterprise.
 related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
 ---
 
@@ -10,14 +10,14 @@ related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
 - **A post in the Market:** open it and tap **Report Post**.
 - **An event:** open it and tap **Report event**.
 - **A Pulse post:** tap the flag on it.
-- **An enterprise:** open it and tap **Report Enterprise** at the bottom.
+- **A project or an enterprise:** open it and tap **Report Project** or **Report Enterprise** at the bottom.
 
 Then:
 
 - **A Market post:** choose a reason (**Spam or scam**, **Offensive content**, **Misleading post** or **Other**), add a few words if they help, and tap **Submit Report**.
 - **A Pulse post:** choose a reason and tap **Submit report**.
 - **An event:** tap **Report** to confirm.
-- **An enterprise:** type why, and tap **Submit Report**.
+- **A project or an enterprise:** type why, and tap **Submit Report**.
 
 ## A person or a message
 
@@ -30,7 +30,7 @@ In the web app, a chat with one person has a report button at the top: a flag, w
 Your report goes to your community's moderators: the owners and admins who run its server, and any members they have made moderators. They decide what to do. A moderator can remove a post or a Pulse post. Only the owners and admins can suspend a member, while the community votes on it.
 
 - **A Market post or an event:** if they remove it, you get an alert: "The post you reported was removed". If they look at it and keep it, you are told that too. If its author took it down before they looked, you are told it is no longer up.
-- **A Pulse post, an enterprise or a person:** you are not told the outcome in the app.
+- **A Pulse post, a project, an enterprise or a person:** you are not told the outcome in the app.
 - Nobody is told who reported. Not the person you reported, and not anyone else who reported the same thing.
 
 These alerts come under **Marketplace Activity** in your notification settings. On your phone's lock screen each one says only "Your community has a notice for you."; open BeanPool to read it. See "Notifications". The web app has no notifications: it shows each alert while it is open, or the next time you open it.

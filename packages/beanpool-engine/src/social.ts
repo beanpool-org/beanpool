@@ -46,7 +46,7 @@ export function getRatings(db: Db, targetPubkey: string): any[] {
         FROM ratings r
         LEFT JOIN members m ON r.rater_pubkey = m.public_key
         WHERE r.target_pubkey=?
-        ORDER BY r.created_at DESC
+        ORDER BY r.created_at DESC, r.rowid DESC
     `).all(targetPubkey) as any[];
 
     return rows.map(r => ({

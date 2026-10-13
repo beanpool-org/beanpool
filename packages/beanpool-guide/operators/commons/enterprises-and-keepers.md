@@ -5,7 +5,7 @@ summary: Setting up a shared enterprise, choosing who runs it, and the commons p
 related: decisions-and-emergencies, disputes, members-and-invites, roles
 ---
 
-An enterprise is a shared project with its own account: a community garden, a tool library, a bakery run by several people. The people who run it are its **keepers**.
+A project or an enterprise is a group with its own account: a community garden, a tool library, a bakery run by several people. The people who run an enterprise are its **keepers**, one of them the lead keeper; on a project the app calls them its **leader** and **collaborators**.
 
 ## Setting one up
 

@@ -24,14 +24,14 @@ export type GroupCategory = 'working_group' | 'social' | 'guild' | 'project' | '
 
 /**
  * In the order every create form lists them (groups decision 11, 2026-09-19): Social Circle first and
- * pre-selected, then General, Working Group, Project Team, Guild. The stored keys stay as they are — 'project'
- * is shown as "Project Team" — so no group row has to change.
+ * pre-selected, then General, Working Group, Guild. 'project' (once "Project Team") is no longer offered or
+ * accepted (group decisions pick 7, Marty 2026-10-10): "Project" means one thing, a group with a leader and a goal
+ * in Beans. The key stays in the type and the table so a stored row still reads, as "Team"; day zero, none exist.
  */
 export const GROUP_CATEGORIES: readonly GroupCategory[] = [
     'social',
     'general',
     'working_group',
-    'project',
     'guild'
 ] as const;
 
@@ -41,7 +41,7 @@ export const GROUP_CATEGORY_LABELS: Readonly<Record<GroupCategory, string>> = {
     social: 'Social Circle',
     general: 'General',
     working_group: 'Working Group',
-    project: 'Project Team',
+    project: 'Team',
     guild: 'Guild',
 };
 

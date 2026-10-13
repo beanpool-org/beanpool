@@ -49,7 +49,7 @@ import { chatIsLocked, groupChatNotice, groupChatShownLines, openGroupThread, ty
 import { isSealedGroupLine, searchShownLines } from '../utils/group-line-display';
 import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GROUP_KEYS_UNOPENABLE_TEXT } from '../utils/group-chat-keys';
 import {
-    isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel,
+    isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel, chatLifecycleFromRows,
     ENTERPRISE_CHAT_NOTICE,
     type YourChatMute,
 } from '../utils/your-groups';
@@ -128,6 +128,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [searchQuery, setSearchQuery] = useState('');
     const [invitedCount, setInvitedCount] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    // The node refused the chat as to someone not in the group now (403 or 404), not a read that failed.
+    const [refused, setRefused] = useState(false);
     const [sending, setSending] = useState(false);
     const [pending, setPending] = useState<PendingMessage[]>([]);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -235,6 +237,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             return msgs;
         } catch (e: any) {
             setError(e?.message || 'Could not open this chat.');
+            setRefused(kind === 'group' && (e?.status === 403 || e?.status === 404));
             return null;
         } finally {
             inFlight.current = false;
@@ -290,7 +293,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/chats'); };
 
-    const name = view?.group?.name || group?.name || view?.conversation?.name || initialName || (kind === 'group' ? 'Group' : 'Enterprise');
+    // A project's chat says "project" and 🎯 (§3.1): "Your groups" carries the kind, as it carries the mute.
+    const lifecycle = kind === 'enterprise' ? chatLifecycleFromRows(yourGroupsStore.getState().items, id) : undefined;
+    const name = view?.group?.name || group?.name || view?.conversation?.name || initialName || (kind === 'group' ? 'Group' : lifecycle === 'bounded' ? 'Project' : 'Enterprise');
     const category = view?.group?.category || group?.category || null;
     const rawMessages: any[] = view?.messages || [];
     const isConvenor = !!view?.isConvenor;
@@ -527,6 +532,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             kind={kind}
             name={name}
             category={category}
+            lifecycle={lifecycle}
             detail={detail}
             onBack={goBack}
             onOpenOwner={openOwner}
@@ -547,7 +553,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     lands them here (info=1), so the votes the node answers them show below (#1784 review B1). */}
                 {kind === 'group' && openInfo && (
                     <ScrollView contentContainerStyle={{ padding: 16 }}>
-                        <GroupDecisions groupId={id} myPubkey={me ?? null} people={[]} />
+                        <GroupDecisions groupId={id} myPubkey={me ?? null} people={[]} votesOnly={refused} />
                     </ScrollView>
                 )}
             </View>

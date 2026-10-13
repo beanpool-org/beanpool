@@ -13,7 +13,7 @@
  *     links: no element the popup doesn't build itself, no event handler, no link but mailto: and tel:, and each value
  *     shows as the text it is.
  *     A node_url that isn't an https address with a real host name (javascript:, http:, an IP, localhost, a
- *     user:password@ address) is no link.
+ *     user:password@ address) is no link; the last three each have a row of their own that only that rule turns away.
  *  2. A normal row still gets its mailto: and tel: links, its member count and its radius, and a link to its address.
  *  3. A row whose place isn't a number (Leaflet throws on it) is left off the map, and the rows after it still show.
  *  4. The totals count communities and whole-number member counts only.
@@ -64,13 +64,20 @@ const HOSTILE_ROWS = [
         node_url: 'https://user:pw@10.0.0.1:8443',
     },
 ];
+// One rule each: a row with a real place and nothing else to link, whose node_url only that rule turns away, so dropping
+// the rule from nodeHref (apps/website/main.js) puts a link in that row's popup.
+const URL_RULE_ROWS = [
+    { rule: 'a user:password@ address', row: { node_id: 'userinfo', community_name: 'Userinfo Row', member_count: 2, service_radius: { lat: -33.9, lng: 151.2, radiusKm: 5 }, node_url: 'https://user:pw@good.example.org' } },
+    { rule: 'an IP address', row: { node_id: 'ip', community_name: 'IP Row', member_count: 5, service_radius: { lat: -27.5, lng: 153.0, radiusKm: 5 }, node_url: 'https://10.0.0.1' } },
+    { rule: 'localhost', row: { node_id: 'localhost', community_name: 'Localhost Row', member_count: 6, service_radius: { lat: -31.9, lng: 115.9, radiusKm: 5 }, node_url: 'https://localhost' } },
+];
 const NOT_A_PLACE = { node_id: 'nowhere', community_name: 'Nowhere', member_count: 1, service_radius: { lat: 'north', lng: 'east', radiusKm: 5 }, node_url: 'https://localhost' };
 const NORMAL = {
     node_id: 'mullum', community_name: 'Mullum Creek', contact_email: 'hello@mullum.example', contact_phone: '+61 (2) 6684-0000',
     member_count: 42, service_radius: { lat: -28.55, lng: 153.5, radiusKm: 25 }, node_url: 'mullum.example.org/',
 };
 // The place that isn't one comes before the normal row, so the normal row shows only if the map goes on past it.
-const ROWS = [...HOSTILE_ROWS, NOT_A_PLACE, NORMAL];
+const ROWS = [...HOSTILE_ROWS, ...URL_RULE_ROWS.map((r) => r.row), NOT_A_PLACE, NORMAL];
 
 /** The website's own scripts, in the order index.html loads them (the CDN ones are replaced by fakes). */
 function siteScripts(): string[] {
@@ -160,7 +167,7 @@ async function main() {
     });
 
     console.log('\n── 1. what a community published shows as text ──');
-    assert(markers.length === 4 && popups.length === 4, `four communities are on the map: three hostile rows and the normal one (${markers.length} markers, ${popups.length} popups)`);
+    assert(markers.length === 7 && popups.length === 7, `seven communities are on the map: three hostile rows, three address rows and the normal one (${markers.length} markers, ${popups.length} popups)`);
     const hostile = opened.slice(0, HOSTILE_ROWS.length);
     const allowedTags = new Set(['DIV', 'STRONG', 'BR', 'SPAN', 'A']);
     const foreignTags = hostile.flatMap((box) => [...box.querySelectorAll('*')].filter((el: any) => !allowedTags.has(el.tagName)).map((el: any) => el.tagName));
@@ -183,6 +190,13 @@ async function main() {
         `the third row's name, email and phone show as the text they are (${JSON.stringify(text(2).replace(/\s+/g, ' ').trim())})`);
     assert(!text(1).includes('onmouseover') && !text(2).includes('svg'),
         `a member count or radius that isn't a number isn't shown (${JSON.stringify([text(1), text(2)].map((t) => t.replace(/\s+/g, ' ').trim()))})`);
+    URL_RULE_ROWS.forEach(({ rule, row }, i) => {
+        const box = opened[HOSTILE_ROWS.length + i];
+        const shown = (box?.querySelector('strong')?.textContent ?? '') as string;
+        const hrefs = [...(box?.querySelectorAll('a') ?? [])].map((a: any) => a.getAttribute('href'));
+        assert(shown === row.community_name && hrefs.length === 0,
+            `a node_url at ${rule} is no link (${row.node_url}: ${shown || 'no popup'}, links ${hrefs.join(' | ') || 'none'})`);
+    });
 
     console.log('\n── 2. a normal row ──');
     const normal = opened[opened.length - 1];
@@ -207,7 +221,7 @@ async function main() {
     const statNodes = w.document.getElementById('stat-nodes').textContent;
     const statMembers = w.document.getElementById('stat-members').textContent;
     assert(statNodes === String(ROWS.length), `every community in the directory is counted (${statNodes})`);
-    assert(statMembers === String(3 + 4 + 1 + 42), `members are summed from whole-number counts only (${statMembers})`);
+    assert(statMembers === String(3 + 4 + 2 + 5 + 6 + 1 + 42),`members are summed from whole-number counts only (${statMembers})`);
 
     dom.window.close();
     console.log(`\n${passed}/${run} checks passed.`);

@@ -44,7 +44,9 @@
  * 2. Optionally, one channel the operator chooses: an ntfy topic, or any URL that takes a JSON POST. Nothing goes through
  *    BeanPool's servers: with none set, the push and the banner still work and nothing leaves the server. A channel
  *    that fails keeps what it missed (up to 50 events) and is tried again every 5 minutes, with all of it in one message
- *    of at most 4096 bytes (ntfy's limit): the high and urgent lines first, report lines last, the rest as a count.
+ *    whose text is at most 4096 bytes (ntfy's limit; a JSON channel's POST body carries that text with the subject, a
+ *    2000-character copy and each shown line's details, so it is larger): the high and urgent lines first, report lines
+ *    last, the rest as a count.
  *    At most 20 messages an hour; high and urgent ones are never held by that, only by a hard ceiling of 60. A redirect
  *    is a failed send, never followed: the address the owner gave is the only one the alerts go to.
  *
@@ -510,7 +512,11 @@ export interface AlertMessage {
     events: AlertEvent[];
 }
 
-/** ntfy's limit for one message's words (a longer one becomes an attachment, or is refused): no message is longer. */
+/**
+ * ntfy's limit for one message's words (a longer one becomes an attachment, or is refused): no message's text is longer.
+ * It bounds the text, an ntfy POST's whole body; a JSON channel's body adds the subject, a 2000-character copy for
+ * Discord-style hooks and each shown line's details (sendToChannel), so it is larger.
+ */
 export const ALERT_MESSAGE_MAX_BYTES = 4096;
 
 const shownPriority = (e: AlertEvent) => (e.kind === 'cleared' ? 2 : e.priority);

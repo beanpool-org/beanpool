@@ -40,6 +40,7 @@ import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark
 import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI } from '@beanpool/core';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../../utils/reportReasons';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
@@ -1754,7 +1755,7 @@ export default function PostDetailModal() {
                             <View style={[styles.confirmBox, { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border }]}>
                                 <Text style={styles.confirmBoxLabel}>SELECT REPORT REASON</Text>
                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                                    {['Spam or scam', 'Offensive content', 'Misleading post', 'Other'].map((r) => {
+                                    {REPORT_REASONS.map((r) => {
                                         const isSelected = reportReason === r;
                                         return (
                                             <Pressable
@@ -1781,6 +1782,9 @@ export default function PostDetailModal() {
                                         );
                                     })}
                                 </View>
+                                <Text style={{ fontSize: 13, color: colors.text.body, marginBottom: 12 }}>
+                                    <Text style={{ fontWeight: '700' }}>{CHILD_SAFETY_REASON}:</Text> {CHILD_SAFETY_HINT}
+                                </Text>
 
                                 <TextInput
                                     style={[styles.editInput, { minHeight: 48, marginBottom: 12, backgroundColor: colors.surface.card }]}

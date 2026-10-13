@@ -1,7 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { ReportModal } from './ReportModal';
+import { reportAbuse } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
     reportAbuse: vi.fn().mockResolvedValue({ success: true }),
@@ -57,5 +58,23 @@ describe('ReportModal Component', () => {
 
         expect(spamBtn).toHaveAttribute('aria-pressed', 'false');
         expect(offensiveBtn).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('offers "Child safety" with its one-line hint, and sends it as picked (the server reads it from there)', async () => {
+        vi.spyOn(window, 'alert').mockImplementation(() => {});
+        const props = { isOpen: true, onClose: () => {}, reporterPubkey: 'pubkey_123', targetPubkey: 'target_456', targetName: 'Alice', targetPostId: 'post_9' };
+        const { unmount } = render(<ReportModal {...props} />);
+        expect(screen.getByText(/A child at risk, or sexual content involving a minor\./)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^Child safety$/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        await waitFor(() => expect(reportAbuse).toHaveBeenCalledWith('pubkey_123', 'target_456', 'Child safety', 'post_9', undefined));
+        unmount();
+
+        vi.mocked(reportAbuse).mockClear();
+        render(<ReportModal {...props} />);
+        fireEvent.click(screen.getByRole('button', { name: /^Child safety$/ }));
+        fireEvent.change(screen.getByLabelText(/Additional details/i), { target: { value: 'messages to my daughter' } });
+        fireEvent.click(screen.getByRole('button', { name: /Submit Report/i }));
+        await waitFor(() => expect(reportAbuse).toHaveBeenCalledWith('pubkey_123', 'target_456', 'Child safety: messages to my daughter', 'post_9', undefined));
     });
 });

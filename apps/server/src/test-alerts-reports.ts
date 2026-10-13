@@ -38,7 +38,12 @@
  * 11. A history of 50 lines none of them a report's (a long-running node's daily reminders): a new report line makes room
  *     with the oldest reminder, never a security line, and stays in "Last 50 alerts" (the confirmation review 2's finding
  *     1: it dropped itself).
- * 12. Nothing in any alert line names a member or quotes what they wrote: no callsign, no key (nor its first 12
+ * 12. The apps' "Child safety" choice: read from where the apps put it, never from the words after it, and told at once
+ *     as a child-safety report, urgent and pushed to the owner and the admin; keyword guessing stays for every other
+ *     reason, so an app from before the choice behaves as today. Picking it bypasses nothing: a repeat of the pending
+ *     report tells nothing, the member's others in their hour are one line when it ends, the 11th in their hour is
+ *     refused (429) like any report, and the reports wait in the queue as pending like any other.
+ * 13. Nothing in any alert line names a member or quotes what they wrote: no callsign, no key (nor its first 12
  *     characters) and no reason's words in any channel message (headers and body), any push, any push notice kept for
  *     the phone, the Alerts routes' answers or the book.
  *
@@ -189,6 +194,8 @@ async function main(): Promise<void> {
     const mixReporter = join('MixReporterMaxR');
     const newOwners = Array.from({ length: 3 }, (_, i) => join(`NewOwnerNia${i}R`));
     const newAdmin = join('NewAdminAdaR');
+    const picker = join('PickerPiaR');
+    const plain = join('PlainPatR');
     for (const [id, token] of [[owner, 'ExponentPushToken[olive-owner]'], [admin, 'ExponentPushToken[adam-admin]'],
         [moderator, 'ExponentPushToken[mo-moderator]'], [reporters[0], 'ExponentPushToken[ruth-reporter]'], [targets[0], 'ExponentPushToken[tom-target]']] as const) {
         putPushTokenRow(id.pk, token, 'android');
@@ -606,13 +613,108 @@ async function main(): Promise<void> {
     assert(h11c.some(isAdmin11), '11. the security line is still there: a report line made room with a reminder');
     assert(h11c.length === 50, `11. and the history still holds 50 lines (${h11c.length})`);
 
-    // ── 12. Nothing names a member or quotes them ───────────────────────────────────────────────────────────────────
+    // ── 12. The apps' "Child safety" choice ─────────────────────────────────────────────────────────────────────────
+    advance(HOUR + MIN);
+    await tick();
+    await settle();
+    assert(alerts.CHILD_SAFETY_REASON === 'Child safety' && alerts.pickedChildSafety('Child safety')
+        && alerts.pickedChildSafety(' child safety: he keeps messaging my daughter ') && !alerts.pickedChildSafety('Other: child safety')
+        && !alerts.pickedChildSafety('Child safety gates for sale') && !alerts.pickedChildSafety('CSAM') && !alerts.pickedChildSafety(42),
+        '12. the choice is read from where the apps put it (alone, or before ": " and the member\'s words), never from words elsewhere');
+    assert(alerts.reportKind('Child safety: he keeps messaging my daughter') === 'child safety', '12. picked, a report is child safety whatever words follow');
+    assert(alerts.reportKind('Other: child sexual abuse') === 'child safety' && alerts.reportKind('Spam or scam: fake child safety gates for sale') === 'child safety'
+        && alerts.reportKind('Offensive content') === 'offensive content' && alerts.reportKind('Misleading post: wrong price') === 'misleading post'
+        && alerts.reportKind('Other') === 'other', '12. keyword guessing stays for every other reason: an app from before the choice behaves as today');
+    const p12 = ownerPushes().length;
+    const h12 = topicHits().length;
+    const childHits12 = () => topicHits().slice(h12).filter((h) => /child-safety report/.test(String(h.headers.title)));
+    const c12 = await report(picker, targets[0], alerts.CHILD_SAFETY_REASON);
+    await settle();
+    assert(c12.status === 200 && !c12.json?.duplicate && ownerPushes().length === p12 + 1 && topicHits().length === h12 + 1,
+        `12. a member picks "Child safety": pushed and told at once (${c12.status}, ${ownerPushes().length - p12} pushes, ${topicHits().length - h12} lines)`);
+    const hit12 = topicHits().at(-1)!;
+    assert(/a child-safety report waiting/.test(String(hit12.headers.title)) && hit12.headers.priority === '5' && /look at it first/.test(hit12.body),
+        `12. as a child-safety report, urgent (${hit12.headers.title}, priority ${hit12.headers.priority})`);
+    const to12 = (ownerPushes().at(-1)?.to ?? []).slice().sort();
+    assert(JSON.stringify(to12) === JSON.stringify(pushTo), `12. pushed to the owner and the admin (${JSON.stringify(to12)})`);
+    const again12 = await report(picker, targets[0], alerts.CHILD_SAFETY_REASON);
+    await settle();
+    assert(again12.json?.duplicate === true && ownerPushes().length === p12 + 1 && topicHits().length === h12 + 1, '12. a repeat of the pending report tells nothing more');
+    for (let j = 1; j < 10; j++) {
+        const r = await report(picker, targets[j], alerts.CHILD_SAFETY_REASON);
+        if (r.status !== 200 || r.json?.duplicate) throw new Error(`setup: picked child-safety report ${j} not taken (${r.status} ${JSON.stringify(r.json)})`);
+    }
+    await settle();
+    assert(ownerPushes().length === p12 + 1 && childHits12().length === 1,
+        `12. their 9 more in the hour: none told on its own (${ownerPushes().length - p12} pushes, ${childHits12().length} child-safety lines)`);
+    const over12 = await report(picker, moderator, alerts.CHILD_SAFETY_REASON);
+    await settle();
+    assert(over12.status === 429 && ownerPushes().length === p12 + 1 && childHits12().length === 1,
+        `12. the 11th in their hour is refused like any report, and nothing is told (${over12.status})`);
+    const rows12 = db.prepare(`SELECT status FROM abuse_reports WHERE reporter_pubkey = ?`).all(picker.pk) as Array<{ status: string }>;
+    assert(rows12.length === 10 && rows12.every((x) => x.status === 'pending'), `12. they wait in the queue as 10 pending reports, like any other (${rows12.length})`);
+    advance(HOUR + MIN);
+    await tick();
+    await settle();
+    const more12 = childHits12().filter((h) => /more child-safety reports waiting/.test(String(h.headers.title)));
+    assert(more12.length === 1 && /9 more child-safety reports came in from the same member in the hour after their first was told/.test(more12[0].body)
+        && more12[0].headers.priority === '5' && ownerPushes().length === p12 + 2,
+        `12. their hour over: the 9 in one urgent line, pushed (${more12.length} lines, ${ownerPushes().length - p12} pushes)`);
+    // Step 1's member reports the same member again and picks "Child safety" (the review of #1895, finding 3): their
+    // report on file, still pending, becomes child safety and is told as a new one would be, once.
+    const pUp12 = ownerPushes().length;
+    const hUp12 = topicHits().length;
+    const up12 = await report(reporters[0], targets[0], alerts.CHILD_SAFETY_REASON);
+    await settle();
+    const lastUp12 = topicHits().at(-1)!;
+    assert(up12.status === 200 && up12.json?.duplicate === true && ownerPushes().length === pUp12 + 1 && topicHits().length === hUp12 + 1
+        && /a child-safety report waiting/.test(String(lastUp12.headers.title)) && lastUp12.headers.priority === '5',
+        `12. a member changes their pending report to "Child safety": pushed and told at once, urgent (${up12.status}, ${ownerPushes().length - pUp12} pushes, ${topicHits().length - hUp12} lines)`);
+    const rowsUp12 = db.prepare(`SELECT reason, status FROM abuse_reports WHERE reporter_pubkey = ? AND target_pubkey = ?`).all(reporters[0].pk, targets[0].pk) as Array<{ reason: string; status: string | null }>;
+    assert(rowsUp12.length === 1 && rowsUp12[0].reason.startsWith(`${alerts.CHILD_SAFETY_REASON}: quoted-words-`) && (rowsUp12[0].status ?? 'pending') === 'pending',
+        `12. still one report in the queue, its reason now the one they picked (${rowsUp12.length}, ${rowsUp12[0]?.reason.split(':')[0]})`);
+    const upAgain12 = await report(reporters[0], targets[0], alerts.CHILD_SAFETY_REASON);
+    await settle();
+    assert(upAgain12.json?.duplicate === true && ownerPushes().length === pUp12 + 1 && topicHits().length === hUp12 + 1,
+        `12. "Child safety" again on it tells nothing more (${ownerPushes().length - pUp12} pushes)`);
+    const down12 = await report(reporters[0], targets[0], 'Spam or scam');
+    await settle();
+    const rowsDown12 = db.prepare(`SELECT reason FROM abuse_reports WHERE reporter_pubkey = ? AND target_pubkey = ?`).all(reporters[0].pk, targets[0].pk) as Array<{ reason: string }>;
+    assert(down12.json?.duplicate === true && ownerPushes().length === pUp12 + 1 && topicHits().length === hUp12 + 1
+        && rowsDown12.length === 1 && alerts.pickedChildSafety(rowsDown12[0].reason),
+        '12. another reason after it changes nothing: the report stays child safety, and nothing is told');
+    // Its words saying "child safety" past the 500 the queue keeps (the check of #1895's fix round, finding 1): the same
+    // request again is a plain repeat, not a change to child safety, so it rewrites nothing and adds nothing to a count.
+    const longR = join('LongLenaR');
+    const longT = join('LongTedR');
+    const longReason = `Spam or scam: ${'x'.repeat(600)} child safety`;
+    const long12 = await report(longR, longT, longReason);
+    await settle();
+    const longAt = () => (db.prepare(`SELECT reason, updated_at FROM abuse_reports WHERE reporter_pubkey = ? AND target_pubkey = ?`).all(longR.pk, longT.pk) as Array<{ reason: string; updated_at: string | null }>);
+    const firstLong = longAt();
+    const pLong = ownerPushes().length;
+    const hLong = topicHits().length;
+    for (let i = 0; i < 2; i++) {
+        await report(longR, longT, longReason);
+        await settle();
+    }
+    const againLong = longAt();
+    assert(long12.status === 200 && firstLong.length === 1 && firstLong[0].reason.length === 500 && againLong.length === 1
+        && againLong[0].updated_at === firstLong[0].updated_at && ownerPushes().length === pLong && topicHits().length === hLong,
+        `12. a long report sent again twice rewrites nothing and tells nothing (${firstLong[0]?.updated_at} → ${againLong[0]?.updated_at}, ${ownerPushes().length - pLong} pushes)`);
+    const plain12 = await report(plain, targets[0], 'Spam or scam');
+    await settle();
+    const last12 = topicHits().at(-1)!;
+    assert(plain12.status === 200 && /new reports waiting/.test(String(last12.headers.title)) && /A new report came in \(spam or scam\)/.test(last12.body),
+        `12. an ordinary report after them is still told as one (${last12.headers.title})`);
+
+    // ── 13. Nothing names a member or quotes them ───────────────────────────────────────────────────────────────────
     await settle();
     const st = await adminCall('POST', '/api/local/admin/alerts/status', {});
-    assert(st.status === 200 && st.json?.history?.some((e: any) => e.key === 'reports.new'), `12. the Alerts card lists them (${st.status})`);
+    assert(st.status === 200 && st.json?.history?.some((e: any) => e.key === 'reports.new'), `13. the Alerts card lists them (${st.status})`);
     const notices = db.prepare(`SELECT recipient, title, body, data FROM push_notices WHERE kind = 'owner.alert'`).all() as any[];
     assert(notices.some((x) => x.recipient === admin.pk) && notices.every((x) => x.recipient === owner.pk || x.recipient === admin.pk),
-        `12. ${notices.length} owner.alert notices kept, every one for the owner or the admin`);
+        `13. ${notices.length} owner.alert notices kept, every one for the owner or the admin`);
     const payloads = [
         ...ntfy.hits.map((h) => JSON.stringify(h.headers) + h.body),
         ...ownerPushes().map((p) => p.title + p.body),
@@ -624,8 +726,8 @@ async function main(): Promise<void> {
     const leaks = payloads.filter((p) => ids.some((i) => p.includes(i.callsign) || p.includes(i.pk.slice(0, 12)))
         || REASON_WORDS.some((w) => p.includes(w)) || /sexual abuse of a minor|Other:/.test(p));
     assert(n > 55 && payloads.length > 20 && leaks.length === 0,
-        `12. ${payloads.length} payloads (${topicHits().length} channel messages, ${n} reports), none names a member or quotes a reason (${leaks.length})`);
-    assert(blocked.length === 0, `12. nothing off this machine was asked (${blocked.join(', ')})`);
+        `13. ${payloads.length} payloads (${topicHits().length} channel messages, ${n} reports), none names a member or quotes a reason (${leaks.length})`);
+    assert(blocked.length === 0, `13. nothing off this machine was asked (${blocked.join(', ')})`);
 
     await ntfy.close();
     console.log(`\n${testsPassed}/${testsRun} passed`);

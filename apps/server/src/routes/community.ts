@@ -17,7 +17,7 @@ import {
     getPublicCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
-    submitReport, getReports, getReportCount, getReportablePulseItemOwner, getReportablePostAuthor, findPendingReport, isReportRateLimited,
+    submitReport, getReports, getReportCount, getReportablePulseItemOwner, getReportablePostAuthor, findPendingReport, updatePendingReportReason, isReportRateLimited,
     getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
@@ -87,7 +87,7 @@ import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type Adm
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
-import { noteNewReport } from '../services/alerts.js';
+import { noteNewReport, reportKind } from '../services/alerts.js';
 import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
@@ -2117,6 +2117,18 @@ router.post('/api/reports', async (ctx) => {
     // report is already on file.
     const pending = findPendingReport(activeReporter, targetPubkey, targetPostId, targetPulseItemId || undefined);
     if (pending) {
+        // Reported again with "Child safety" after another reason (the review of #1895, finding 3): the report on file
+        // becomes child safety and is told as a new one would be. Once: it is child safety from then on, and a member's
+        // are bounded like any (alerts.ts childAtOnce). Judged on the 500 characters the queue keeps, as the report on
+        // file was: words past them would make every repeat look like a change.
+        if (reportKind(reason.slice(0, 500)) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
+            const changed = updatePendingReportReason(pending.id, reason);
+            if (changed) {
+                noteNewReport(reason, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
+                ctx.body = { success: true, report: changed, duplicate: true };
+                return;
+            }
+        }
         ctx.body = { success: true, report: pending, duplicate: true };
         return;
     }

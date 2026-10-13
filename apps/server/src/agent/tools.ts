@@ -588,6 +588,9 @@ AGENT_TOOLS.push({
         if (!r) return { ok: false, error: 'No report has that id: list them with reports_list.' };
         const kindOf = targetKind(r);
         if (kind === 'remove_reported' && kindOf === 'member') return { ok: false, error: 'That report is about a member, not a post: there is nothing to remove.' };
+        if (kind !== 'restore_post' && (r.status === 'reviewed' || r.status === 'actioned')) {
+            return { ok: false, error: 'That report is already closed: there is nothing to suggest about it.' };
+        }
         if (kind === 'restore_post' && (kindOf !== 'post' || r.postHiddenByReports !== true)) {
             return { ok: false, error: 'That report is not about a post hidden by reports: there is nothing to restore.' };
         }

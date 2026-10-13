@@ -246,6 +246,8 @@ async function main(): Promise<void> {
         assert(logged.some(l => l.includes(`Dismissed report ${reports[0]}`) && l.includes('from a suggestion by agent "Adam\'s Claude"')),
             'the audit line says it came from a suggestion by agent "Adam\'s Claude"');
         const replay = await call('POST', evil.approve.path, { headers: asSession(adminS), body: evil.approve.body });
+        const onClosed = await suggest(olive, { kind: 'remove_reported', report_id: reports[0], reason: 'take it down after all' });
+        assert(!onClosed.ok && /already closed/.test(onClosed.text), `a closed report takes no dismiss or remove suggestion (${onClosed.text})`);
         assert(replay.status === 409, `approved once, it is gone: the same call again is 409 (${show(replay)})`);
         const ok2 = await call('POST', removeItem.approve.path, { headers: asSession(adminS), body: removeItem.approve.body });
         assert(ok2.status === 200 && reportStatus(reports[1]) === 'actioned' && postActive('post-1')?.active !== 1,

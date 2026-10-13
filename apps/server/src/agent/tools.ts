@@ -408,8 +408,8 @@ export const AGENT_TOOLS: AgentTool[] = [
     {
         name: 'knocks_list',
         title: 'Join requests',
-        reads: `the open requests to join, newest first, at most ${AGENT_LIST_MAX}: id, when, and the other community's host if it came `
-            + "from one; with include_text, the asker's name and message, fenced",
+        reads: `the open requests to join, newest first, at most ${AGENT_LIST_MAX}: id, when, and whether it says it came from another `
+            + "community; with include_text, the asker's name and message and that community's host, fenced",
         never: "the asker's photo or key, or any address",
         memberText: true,
         inputSchema: {
@@ -428,8 +428,12 @@ export const AGENT_TOOLS: AgentTool[] = [
                 open: total,
                 returned: knocks.length,
                 knocks: knocks.map((k) => {
-                    const view: Record<string, unknown> = { id: k.id, at: k.createdAt, fromOtherCommunity: hostOnly(k.fromNode) };
+                    // The host is the asker's app's word, never checked (engine/knocks.ts): words a stranger chose, so
+                    // fenced and only with include_text, like the name and message.
+                    const host = hostOnly(k.fromNode);
+                    const view: Record<string, unknown> = { id: k.id, at: k.createdAt, fromOtherCommunity: host !== null };
                     if (withText) {
+                        view.otherCommunity = fence(boundary, `join request ${k.id}, the community it says it came from`, host) as Fenced | null;
                         view.callsign = fence(boundary, `join request ${k.id}, name`, k.callsign) as Fenced | null;
                         view.message = fence(boundary, `join request ${k.id}, message`, k.message) as Fenced | null;
                     }

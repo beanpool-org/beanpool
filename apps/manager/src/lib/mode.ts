@@ -3,12 +3,12 @@
  *
  * Single-node mode (default):
  * - Target node URL is window.location.origin
- * - Fleet features (node switcher, TopologyModule, AiServicesModule, multi-node compare) are OFF
+ * - Fleet features (node switcher, TopologyModule, multi-node compare) are OFF
  * - 4 plain-English navigation sections + Home screen
  *
  * Fleet mode (opt-in via VITE_FLEET_MODE=true):
  * - Multi-node profile switcher
- * - Topology canvas, AI copilot, cross-node comparisons
+ * - Topology canvas, cross-node comparisons
  */
 
 declare const __FLEET_MODE__: boolean | undefined;

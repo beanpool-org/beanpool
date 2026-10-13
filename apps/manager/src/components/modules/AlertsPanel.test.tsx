@@ -21,6 +21,17 @@ describe('AlertsPanel', () => {
     beforeEach(() => { vi.restoreAllMocks(); });
     afterEach(() => { vi.unstubAllGlobals(); });
 
+    it("today's AI assistant calls, counts only, once one is connected; nothing when none ever was", async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => json(status({ assistants: { calls: 12, connected: 2 } }))));
+        const { unmount } = render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByTestId('alerts-assistants')).toHaveTextContent('AI assistants today: 12 calls · 2 connected.');
+        unmount();
+        vi.stubGlobal('fetch', vi.fn(async () => json(status({ assistants: { calls: 0, connected: 0 } }))));
+        render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByText('Nothing needs you.')).toBeInTheDocument();
+        expect(screen.queryByTestId('alerts-assistants')).toBeNull();
+    });
+
     it("says in one line when the node answers that it is an owner's card", async () => {
         const words = "Only an owner of this node can see or change its alerts and where they're sent";
         vi.stubGlobal('fetch', vi.fn(async () => json({ error: words }, false, 403)));

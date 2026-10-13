@@ -44,7 +44,7 @@ import {
     type NodeDataPayload,
 } from './lib/node-client';
 
-import { FleetSidebar, type TabId, type NodeHealthStatus, type AlertCounts } from './components/layout/FleetSidebar';
+import { FleetSidebar, isTabId, type TabId, type NodeHealthStatus, type AlertCounts } from './components/layout/FleetSidebar';
 import { AddNodeModal } from './components/nodes/AddNodeModal';
 import { EditNodeModal } from './components/nodes/EditNodeModal';
 import { TotpModal } from './components/nodes/TotpModal';
@@ -57,7 +57,6 @@ import { MembersModule } from './components/modules/MembersModule';
 import { TopologyModule } from './components/modules/TopologyModule';
 import { InvitesModule } from './components/modules/InvitesModule';
 import { LogsModule, type LogEntry } from './components/modules/LogsModule';
-import { AiServicesModule } from './components/modules/AiServicesModule';
 
 import { IS_FLEET_MODE } from './lib/mode';
 import { downloadNotice, downloadedAlert } from './lib/backup-shortfall';
@@ -159,11 +158,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     });
     const [activeTab, setActiveTab] = useState<TabId>(() => {
         try {
-            const saved = (localStorage.getItem(isFleetMode ? 'bp_fleet_active_tab' : 'bp_settings_active_tab') as TabId);
-            if (saved) return saved;
+            const saved = localStorage.getItem(isFleetMode ? 'bp_fleet_active_tab' : 'bp_settings_active_tab');
+            if (isTabId(saved)) return saved;
         } catch {}
         return isFleetMode ? 'overview' : 'home';
     });
+    // The fleet copilot is gone (#1865): what it kept in this browser, an OpenRouter key among it, goes with it.
+    useEffect(() => {
+        try { localStorage.removeItem('bp_fleet_ai_config'); } catch {}
+    }, []);
     const [navSubTab, setNavSubTab] = useState<string | undefined>(undefined);
 
     /**
@@ -1220,7 +1223,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         members: { critical: activeMemberCritical, warning: activeMemberWarning },
         invites: { critical: 0, warning: 0 },
         logs: { critical: logErrorsCount, warning: logWarningsCount },
-        ai: { critical: 0, warning: 0 },
     };
 
     // Phone layout (single-node, below lg): the section menu is a sheet, and screens are history entries so Back works.
@@ -1810,15 +1812,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                             {activeTab === 'logs' && (
                                 <SectionErrorBoundary sectionName="Logs Module" resetKey={activeProfileId || activeNode?.id}>
                                     <LogsModule logs={nodeLogs} onRefresh={() => loadLogs()} />
-                                </SectionErrorBoundary>
-                            )}
-
-                            {activeTab === 'ai' && (
-                                <SectionErrorBoundary sectionName="AI Services" resetKey={activeProfileId || activeNode?.id}>
-                                    <AiServicesModule
-                                        activeNode={activeNode}
-                                        contextData={{ telemetry: diag, gateway, members: nodeData?.members, logs: nodeLogs }}
-                                    />
                                 </SectionErrorBoundary>
                             )}
                         </>

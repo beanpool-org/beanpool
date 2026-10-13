@@ -2,7 +2,7 @@
 slug: what-the-admins-can-see
 title: What the admins can see
 summary: In a community whose admins keep a names list: what it holds about you, who can read it, what your community's server keeps, and what being confirmed means.
-related: privacy, joining, leaving-or-deleting
+related: privacy, joining, leaving-or-deleting, admins-ai-assistants
 ---
 
 ## The names list
@@ -76,6 +76,10 @@ The member stats the admins see show how many posts each member has up and messa
 Every member, admins included, sees each member's **trust profile**: how many of their trades were finished and how many were cancelled, and the share finished, how many Bean payments they have sent to or received from members plus the trades they have finished, with how many different members they have paid, been paid by or traded with, how many payments and trades they have done with the member looking, and their Trust Points. It isn't logged, because every member can see it.
 
 Nothing else of your trades.
+
+## An admin's AI assistant
+
+An owner (and, in a coming update, an admin) may connect their own AI assistant to the server to help them. It sees less than they do: never your messages, balance, trades, keys, photos or the names list, and never who reported anyone. See "When an admin uses an AI assistant".
 
 ## Asking about your entry
 

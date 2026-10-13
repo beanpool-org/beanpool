@@ -14,6 +14,7 @@ import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, isDmUnplaced, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
+import { dmKeyBannerMaxHeight } from '../../utils/dm-key-change';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
@@ -164,9 +165,15 @@ function ChatScreen({ id }: { id: string }) {
     // First sight found lines it couldn't place (rule 5 of the §3.4 amendment): no key is pinned and nothing is offered, so
     // the box is disabled with one line and there is no Continue. Every send refuses meanwhile (db.ts).
     const [unplaced, setUnplaced] = useState(false);
-    // The banner never takes more than about half the screen at 320 dp and 1.3× text: the thread and the paused box keep
-    // the rest (#1873 review, finding 3). It scrolls inside that.
-    const { height: windowHeight } = useWindowDimensions();
+    // The banner's height comes from the column under the header as measured (utils/dm-key-change dmKeyBannerMaxHeight):
+    // the paused box is never cut, edge-to-edge too, and the thread keeps one message at the text size on a 320 × 533
+    // phone at 1.3× (#1873 review, findings 3 and 7). It scrolls inside that.
+    const { height: windowHeight, fontScale } = useWindowDimensions();
+    const [column, setColumn] = useState({ column: 0, composer: 0, deals: 0 });
+    const measured = (part: 'column' | 'composer' | 'deals') => (e: { nativeEvent: { layout: { height: number } } }) => {
+        const h = Math.round(e.nativeEvent.layout.height);
+        setColumn((c) => (c[part] === h ? c : { ...c, [part]: h }));
+    };
     const [menuOpen, setMenuOpen] = useState(false);
     const [muteOpen, setMuteOpen] = useState(false);
     const [mute, setMute] = useState<YourChatMute | null>(() => getKnownChatMute(String(id ?? '')));
@@ -1234,8 +1241,12 @@ function ChatScreen({ id }: { id: string }) {
                 Keyed on the offered key, so a tick given for one code never carries over to another. At most 55% of the
                 window, scrolling inside, so the thread and the paused box keep the rest at 320 dp and 1.3× text. Named
                 from the key's member row, never the conversation id. */}
+            <View style={styles.keyboardView} onLayout={measured('column')}>
             {keyChange && (
-                <ScrollView style={{ flexGrow: 0, flexShrink: 1, maxHeight: Math.round(windowHeight * 0.55) }} keyboardShouldPersistTaps="handled">
+                <ScrollView
+                    style={{ flexGrow: 0, flexShrink: 1, maxHeight: dmKeyBannerMaxHeight({ ...column, deals: visibleDeals.length ? column.deals : 0, fontScale, windowHeight }) }}
+                    keyboardShouldPersistTaps="handled"
+                >
                     <DmKeyChangedBanner
                         key={keyChange.offeredPeer ?? 'none'}
                         peerName={keyChange.name}
@@ -1249,7 +1260,7 @@ function ChatScreen({ id }: { id: string }) {
             {/* Pinned active-deals strip — per-deal actions live here (one card per live deal),
                 always visible so a Release/Review is never buried in the conversation scroll. */}
             {visibleDeals.length > 0 && (
-                <View style={styles.dealStrip}>
+                <View style={styles.dealStrip} onLayout={measured('deals')}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 12, paddingVertical: 10 }}>
                         {visibleDeals.map(d => (
                             <Pressable
@@ -1412,6 +1423,7 @@ function ChatScreen({ id }: { id: string }) {
                     return <ChatReplyBanner styles={chat} author={q.author} text={q.text} note={q.note} onCancel={() => setReplyToMessage(null)} />;
                 })()}
 
+                <View onLayout={measured('composer')}>
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
                         <Text style={styles.blockedNoticeText}>
@@ -1436,7 +1448,9 @@ function ChatScreen({ id }: { id: string }) {
                         }
                     />
                 )}
+                </View>
             </KeyboardAvoidingView>
+            </View>
 
             {/* The ⋮ menu: the same sheet, the same mute wording, as every group chat (groups decision 12). */}
             <ChatMenuSheet

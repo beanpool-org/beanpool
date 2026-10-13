@@ -137,3 +137,25 @@ export function dmKeyChangeStyleSpec(colors: AppColors) {
         myCodeBody: { color: colors.text.secondary, fontSize: 14, lineHeight: 20 },
     };
 }
+
+/** The thread's floor under the banner: the list's own padding plus one short message at the member's text size. */
+export function dmThreadFloor(fontScale: number): number {
+    return Math.round(24 + 56 * Math.max(1, fontScale));
+}
+
+/** The banner always shows at least this much (its title and the start of what changed), unless the box needs it. */
+export const DM_KEY_BANNER_FLOOR = 120;
+
+/**
+ * How tall the DM screen's key-changed banner may be (#1873 review, finding 7). Worked out from the column under the
+ * header as measured (banner + deals strip + thread + the paused box, with the nav bar's inset in the box's padding when
+ * the screen is edge-to-edge), never from a share of the window: the box is never cut, the thread keeps dmThreadFloor
+ * when there is room for it and the banner's floor, and the banner never takes more than 55% of the column. The banner
+ * scrolls inside whatever it gets. Before the column is measured (the first frame), 55% of the window minus the box.
+ */
+export function dmKeyBannerMaxHeight(m: { column: number; composer: number; deals: number; fontScale: number; windowHeight: number }): number {
+    if (!(m.column > 0) || !(m.composer > 0)) return Math.max(0, Math.round(m.windowHeight * 0.55) - Math.max(0, m.composer));
+    const room = Math.max(0, m.column - m.composer - Math.max(0, m.deals));
+    const wanted = Math.min(room - dmThreadFloor(m.fontScale), Math.round(m.column * 0.55));
+    return Math.max(0, Math.min(room, Math.round(Math.max(wanted, DM_KEY_BANNER_FLOOR))));
+}

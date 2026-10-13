@@ -42,7 +42,7 @@ vi.mock('../db', () => ({}));
 import { lightColors, darkColors } from '../../constants/colors';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
-import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText, DM_FIRST_SIGHT_LEAD } from '../dm-key-change';
+import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText, DM_FIRST_SIGHT_LEAD, dmKeyBannerMaxHeight, dmThreadFloor, DM_KEY_BANNER_FLOOR } from '../dm-key-change';
 import { keyCodeOf, keyCodeSpoken } from '../key-code';
 
 const CODE = /^\d{4} \d{4} \d{4} \d{4} \d{4}$/;
@@ -221,8 +221,14 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         expect(src).toMatch(/const canSendNow = \(\) => [^;]*!unplaced/);
         // The banner is named from the key's member row (getDmKeyChange), never the screen's id-fragment fallback.
         expect(src).toMatch(/peerName=\{keyChange\.name\}/);
-        // At most 55% of the window at 320 dp and 1.3× text: the thread and the paused box keep the rest.
-        expect(src).toMatch(/maxHeight: Math\.round\(windowHeight \* 0\.55\)/);
+        // The banner's cap is worked out from the measured column, the deals strip and the box (finding 7), never a share
+        // of the window alone; the column wraps the banner, the strip and the keyboard view, and the box is measured whole.
+        expect(src).toMatch(/maxHeight: dmKeyBannerMaxHeight\(\{ \.\.\.column, deals: visibleDeals\.length \? column\.deals : 0, fontScale, windowHeight \}\)/);
+        expect(src).not.toMatch(/windowHeight \* 0\.55/);
+        expect(src).toMatch(/<View style=\{styles\.keyboardView\} onLayout=\{measured\('column'\)\}>\s*\{keyChange && \(/);
+        expect(src).toMatch(/<View style=\{styles\.dealStrip\} onLayout=\{measured\('deals'\)\}>/);
+        expect(src).toMatch(/<View onLayout=\{measured\('composer'\)\}>\s*\{isPeerBlocked \? \(/);
+        expect(src).toMatch(/<\/KeyboardAvoidingView>\s*<\/View>/);
     });
     it('Settings shows My key code above the sign-in check\'s spinner, never behind it (#1873 review, finding 9)', async () => {
         const { readFileSync } = await import('node:fs');
@@ -248,5 +254,47 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         expect(DM_OFFERED_KEY_LINE).toBe('Sent from the new key. Shown after you continue.');
         expect(dmLineSlotText({ text: 'PUPPET: what is the door code?', fromOfferedKey: true })).toBe(DM_OFFERED_KEY_LINE);
         expect(dmLineSlotText({ text: 'Shall I cancel the order?', fromOfferedKey: false })).toBe('Shall I cancel the order?');
+    });
+});
+
+// #1873 review, finding 7: the banner's cap on the smallest phones, from the review's §6 geometry. The column is what sits
+// under the header (screen − nav bar unless edge-to-edge − status bar 24 − header 64); the paused box is the composer at
+// that text size, plus the nav bar's inset in its padding when edge-to-edge (max(48, 12) instead of 12).
+describe('the banner\'s height on a 320 × 533 phone and up (finding 7)', () => {
+    const composerAt: Record<number, number> = { 1: 101, 1.2: 105, 1.3: 109 };
+    const phones = [
+        { name: '320 × 533, 48-dp nav bar', screen: 533, nav: 48, edgeToEdge: false },
+        { name: '320 × 533, edge-to-edge', screen: 533, nav: 48, edgeToEdge: true },
+        { name: '320 × 568, no nav bar', screen: 568, nav: 0, edgeToEdge: false },
+        { name: '360 × 640, 48-dp nav bar', screen: 640, nav: 48, edgeToEdge: false },
+    ];
+    for (const p of phones) for (const fontScale of [1, 1.2, 1.3]) {
+        it(`${p.name} at ${fontScale}×: the box is never cut, the thread keeps one message, the banner keeps its floor and at most 55%`, () => {
+            const windowHeight = p.edgeToEdge ? p.screen : p.screen - p.nav;
+            const column = windowHeight - 24 - 64;
+            const composer = composerAt[fontScale] + (p.edgeToEdge ? p.nav - 12 : 0);
+            for (const deals of [0, 72]) {
+                const banner = dmKeyBannerMaxHeight({ column, composer, deals, fontScale, windowHeight });
+                const thread = column - banner - deals - composer;
+                expect(banner + deals + composer).toBeLessThanOrEqual(column);
+                expect(banner).toBeLessThanOrEqual(Math.round(column * 0.55));
+                expect(banner).toBeGreaterThanOrEqual(DM_KEY_BANNER_FLOOR);
+                if (deals === 0) expect(thread).toBeGreaterThanOrEqual(dmThreadFloor(fontScale));
+                else expect(thread).toBeGreaterThanOrEqual(Math.min(dmThreadFloor(fontScale), column - composer - deals - DM_KEY_BANNER_FLOOR));
+            }
+        });
+    }
+    it('one message at the text size: 80 dp at 1.0×, 97 dp at 1.3× (the list\'s 24 dp of padding is not a usable thread)', () => {
+        expect(dmThreadFloor(1)).toBe(80);
+        expect(dmThreadFloor(1.3)).toBe(97);
+        expect(dmThreadFloor(0.85)).toBe(80);
+    });
+    it('a window too short for the banner\'s floor and the box gives the banner only what is left: the box is never cut', () => {
+        expect(dmKeyBannerMaxHeight({ column: 200, composer: 145, deals: 0, fontScale: 1.3, windowHeight: 320 })).toBe(55);
+        expect(dmKeyBannerMaxHeight({ column: 120, composer: 145, deals: 0, fontScale: 1.3, windowHeight: 320 })).toBe(0);
+    });
+    it('before the column is measured (the first frame), 55% of the window less the box, never more', () => {
+        expect(dmKeyBannerMaxHeight({ column: 0, composer: 0, deals: 0, fontScale: 1.3, windowHeight: 485 })).toBe(267);
+        expect(dmKeyBannerMaxHeight({ column: 0, composer: 109, deals: 0, fontScale: 1.3, windowHeight: 485 })).toBe(158);
     });
 });

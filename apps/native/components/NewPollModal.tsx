@@ -28,6 +28,7 @@ import {
 import * as Crypto from 'expo-crypto';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
+import { palette } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
 import { createPost } from '../utils/db';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
@@ -446,7 +447,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         addOptionText: {
             fontSize: 12,
             fontWeight: '700',
-            color: '#7c3aed',
+            color: theme === 'dark' ? palette.violet300 : '#7c3aed', // violet600 is 2.9:1 on the dark card; violet300 9.43:1
         },
         optionInputRow: {
             flexDirection: 'row',
@@ -508,7 +509,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         durationBtnTextActive: {
             fontWeight: '800',
-            color: '#7c3aed',
+            color: theme === 'dark' ? palette.violet300 : '#7c3aed', // violet600 is 2.9:1 on the dark card; violet300 9.43:1
         },
         openVoteRow: {
             flexDirection: 'row',
@@ -527,7 +528,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         openVoteBox: {
             fontSize: 20,
-            color: '#7c3aed',
+            color: theme === 'dark' ? palette.violet300 : '#7c3aed', // violet600 is 2.9:1 on the dark card; violet300 9.43:1
             lineHeight: 22,
         },
         openVoteTitle: {

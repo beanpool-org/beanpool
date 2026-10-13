@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { darkColors, palette } from '../../constants/colors';
 
 /**
  * Dark mode on the phone (Damo via Marty, 13 Oct 2026): New Event's header stayed white, so its title vanished, and
@@ -28,6 +29,69 @@ function sources(): { file: string; src: string }[] {
 
 const ALL = sources();
 const themed = (src: string) => /\buse(Theme|Styles)\(/.test(src);
+
+/**
+ * Every value given to `prop` in a source (`backgroundColor: …` in a style, `color={…}` on an icon), read up to the
+ * comma, brace or paren that closes it, across lines. A ternary on the scheme yields only the branch dark mode draws:
+ * `theme === 'dark' ? a : b` gives `a`, `theme === 'light' ? a : b` gives `b`. Any other value is drawn in dark as is,
+ * whatever else its line says.
+ */
+function darkValues(file: string, src: string, prop: string): { at: string; value: string }[] {
+    const out: { at: string; value: string }[] = [];
+    const start = new RegExp(`\\b${prop}(?::\\s*|=\\{)`, 'g');
+    for (let m = start.exec(src); m; m = start.exec(src)) {
+        let i = m.index + m[0].length, depth = 0, quote = '';
+        for (; i < src.length; i++) {
+            const c = src[i];
+            if (quote) { if (c === quote && src[i - 1] !== '\\') quote = ''; continue; }
+            if (c === "'" || c === '"' || c === '`') quote = c;
+            else if ('([{'.includes(c)) depth++;
+            else if (')]}'.includes(c)) { if (depth === 0) break; depth--; }
+            else if ((c === ',' || c === ';') && depth === 0) break;
+        }
+        out.push({ at: `${file}:${src.slice(0, m.index).split('\n').length}`, value: darkBranch(src.slice(m.index + m[0].length, i).trim()) });
+    }
+    return out;
+}
+
+function darkBranch(expr: string): string {
+    const t = /^\(?\s*(theme\s*===\s*'dark'|isDark|theme\s*!==\s*'light')\s*\)?\s*\?([^:]*):([\s\S]*)$/.exec(expr);
+    if (t) return t[2].trim();
+    const f = /^\(?\s*(theme\s*===\s*'light'|!isDark|theme\s*!==\s*'dark')\s*\)?\s*\?([^:]*):([\s\S]*)$/.exec(expr);
+    return f ? darkBranch(f[3].trim()) : expr;
+}
+
+/** A dark-mode value as `#rrggbb` plus alpha: a `palette.` step, a themed `colors.` token, or a literal. */
+function resolve(value: string): { hex: string; alpha: number } | undefined {
+    const tok = /^(palette|colors|theme\.colors)\.([\w.]+)$/.exec(value);
+    if (tok) {
+        const root: any = tok[1] === 'palette' ? palette : darkColors;
+        const v = tok[2].split('.').reduce((o, k) => (o == null ? o : o[k]), root);
+        return typeof v === 'string' ? resolve(`'${v}'`) : undefined;
+    }
+    const lit = /^['"](.*)['"]$/.exec(value)?.[1].toLowerCase();
+    if (!lit) return undefined;
+    if (lit === 'white') return { hex: '#ffffff', alpha: 1 };
+    if (lit === 'black') return { hex: '#000000', alpha: 1 };
+    const h = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/.exec(lit);
+    if (h) {
+        const six = h[1].length === 3 ? h[1].replace(/./g, c => c + c) : h[1];
+        return { hex: `#${six}`, alpha: h[2] ? parseInt(h[2], 16) / 255 : 1 };
+    }
+    const r = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/.exec(lit);
+    if (r) return { hex: '#' + [r[1], r[2], r[3]].map(n => Number(n).toString(16).padStart(2, '0')).join(''), alpha: r[4] ? Number(r[4]) : 1 };
+    return undefined;
+}
+
+function luminance(hex: string): number {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+        .map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+const contrast = (a: string, b: string) => {
+    const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+    return (x + 0.05) / (y + 0.05);
+};
 
 describe('dark mode: themed screens draw with the theme', () => {
     it('finds the sources it scans', () => {
@@ -79,22 +143,30 @@ describe('dark mode: themed screens draw with the theme', () => {
         expect(mixed).toEqual([]);
     });
 
-    // A dark palette step as text, with no dark branch on its line, is dark text on the dark card: gray600 is about
-    // 2.3:1 on neutral900, gray700 about 1.5:1 on neutral800. These files keep such text only on pale pills and boxes
-    // that stay pale in both schemes (red100, amber100, emerald100 …), where it reads.
-    const DARK_TEXT_ON_PALE_OK = new Set([
-        'components/DecideSection.tsx',        // debt warning on red100; status pills on green/red/amber/indigo 100
-        'components/MyDealsSheet.tsx',         // "completed" on its emerald100 pill
-        'components/ProposeDecisionModal.tsx', // removal warning on red100
-    ]);
-    it('no themed screen sets dark palette text without a dark branch', () => {
-        const darkStep = /\bcolor: palette\.(gray[5-9]00|slate[5-9]00|neutral[6-9]00|neutral950|red[7-9]00|orange[7-9]00|amber[8-9]00|emerald[8-9]00|green[8-9]00|indigo[7-9]00|blue[7-9]00|violet700|purple[7-8]00|black)\b/;
+    // Dark text in dark mode: a dark palette step (gray600 is about 2.3:1 on neutral900, gray700 about 1.5:1 on
+    // neutral800) or a hard-coded colour under 4.5:1 on the dark card, given to a style's `color` or an icon's `color`
+    // with no dark branch. Allowed only where it sits on a pale pill or box that stays pale in both schemes, by value.
+    const DARK_TEXT_ON_PALE_OK: Record<string, string[]> = {
+        'components/DecideSection.tsx': ['palette.red700', 'palette.red900', 'palette.amber800', 'palette.indigo700'], // debt warning on red100; status pills on 100 steps
+        'components/MyDealsSheet.tsx': ['palette.emerald800'],              // "completed" on its emerald100 pill
+        'components/ProposeDecisionModal.tsx': ['palette.red700', 'palette.red900'], // removal warning on red100
+        'app/(tabs)/market.tsx': ["'#1e40af'"],                            // "YOU" on its #dbeafe pill
+        'app/(tabs)/settings.tsx': ["'#000000'"],                          // Confirm Sign Out on the dark scheme's bright danger button
+        'components/NeedsYouIcons.tsx': ["'#1f2937'"],                     // the count on its white or accent dot
+    };
+    const PROTECTED = new Set(['app/(tabs)/map.tsx', 'components/GlobalHeader.tsx']); // off-limits; map.tsx's are the map style's
+    it('no themed screen sets dark text without a dark branch', () => {
+        const darkStep = /^palette\.(gray[5-9]00|slate[5-9]00|neutral[6-9]00|neutral950|red[7-9]00|orange[7-9]00|amber[8-9]00|emerald[8-9]00|green[8-9]00|indigo[7-9]00|blue[7-9]00|violet700|purple[7-8]00|black)$/;
         const offenders = ALL
-            .filter(s => themed(s.src) && !DARK_TEXT_ON_PALE_OK.has(s.file))
-            .flatMap(s => s.src.split('\n')
-                .map((line, i) => ({ line, at: `${s.file}:${i + 1}` }))
-                .filter(({ line }) => darkStep.test(line) && !/theme === 'dark'|isDark/.test(line))
-                .map(({ at }) => at));
+            .filter(s => themed(s.src) && !PROTECTED.has(s.file))
+            .flatMap(s => darkValues(s.file, s.src, 'color')
+                .filter(({ value }) => {
+                    if (DARK_TEXT_ON_PALE_OK[s.file]?.includes(value)) return false;
+                    if (darkStep.test(value)) return true;
+                    const c = /^['"]/.test(value) ? resolve(value) : undefined;
+                    return !!c && c.alpha >= 0.5 && contrast(c.hex, darkColors.surface.card) < 4.5;
+                })
+                .map(({ at, value }) => `${at} ${value}`));
         expect(offenders).toEqual([]);
     });
 
@@ -122,14 +194,64 @@ describe('dark mode: themed screens draw with the theme', () => {
         'app/apple-probe.tsx',         // dev-only probe screen
         'app/google-probe.tsx',        // dev-only probe screen
         'components/CreditBar.tsx',    // ticks and the thumb on the coloured bar
+        'components/PhotoCarousel.tsx', // the page dots over the photo
+        'components/RecoveryAlertBanner.tsx', // unthemed: a light card with its own red700/red800 text, reads in both
         'components/SsoButton.tsx',    // the providers' own white button
     ]);
-    it('no themed screen hard-codes a white background outside the known brand and glyph uses', () => {
+    // Hard-coded (a palette step or a literal), not a theme token: tokens follow the scheme by design.
+    const hardCoded = (value: string) => /^(palette\.|['"])/.test(value);
+    it('no screen hard-codes a white background outside the known brand and glyph uses', () => {
         const offenders = ALL
             .filter(s => !WHITE_OK.has(s.file))
-            .filter(s => s.src.split('\n').some(line =>
-                /backgroundColor:\s*['"](#fff|#ffffff|white)['"]/i.test(line) && !/theme === 'dark'|isDark/.test(line)))
-            .map(s => s.file);
+            .flatMap(s => darkValues(s.file, s.src, 'backgroundColor')
+                .filter(({ value }) => {
+                    const c = hardCoded(value) ? resolve(value) : undefined;
+                    return !!c && c.alpha >= 0.5 && c.hex === '#ffffff';
+                })
+                .map(({ at, value }) => `${at} ${value}`));
         expect(offenders).toEqual([]);
     });
+
+    // Pale grounds (slate50, gray100, red100, '#f8fafc', rgba(255,255,255,0.9) …) under the theme's light text. Allowed
+    // only for a pale pill or box that brings its own dark text, which then reads in both schemes; by value.
+    const PALE_OK: Record<string, string[]> = {
+        'components/DecideSection.tsx': ['palette.red100', 'palette.green100', 'palette.amber100', 'palette.indigo100'], // debt warning, status pills
+        'components/MyDealsSheet.tsx': ['palette.emerald100', 'palette.amber100'], // "completed" pill; Review button with amber800 text
+        'components/ProposeDecisionModal.tsx': ['palette.red100'],          // removal warning, red700/red900 text
+        'app/(tabs)/market.tsx': ["'#dbeafe'"],                             // "YOU" pill, #1e40af text
+        // Base styles whose dark look is laid over at render: `theme === 'dark' && { backgroundColor: … }` (lines 237, 296, 398)
+        'components/ArchetypeQuizModal.tsx': ['palette.green50', 'palette.grayAlt100', 'palette.gray200'],
+    };
+    it('no themed screen hard-codes a pale ground without a dark branch', () => {
+        const offenders = ALL
+            .filter(s => themed(s.src) && !WHITE_OK.has(s.file))
+            .flatMap(s => darkValues(s.file, s.src, 'backgroundColor')
+                .filter(({ value }) => {
+                    if (!hardCoded(value) || PALE_OK[s.file]?.includes(value)) return false;
+                    const c = resolve(value);
+                    return !!c && c.alpha >= 0.5 && luminance(c.hex) >= 0.6;
+                })
+                .map(({ at, value }) => `${at} ${value}`));
+        expect(offenders).toEqual([]);
+    });
+
+    // Finding 2 and the review card (Sonnet check of #1834): parts of a control need 3:1 on the ground behind them,
+    // text 4.5:1. Read from the source and computed from the dark tokens, so a later swap to a weak colour fails here.
+    it('the distance slider and the review card reach 3:1 (parts) and 4.5:1 (text) in dark', () => {
+        const value = (file: string, prop: string, near?: RegExp) => {
+            const src = ALL.find(s => s.file === file)!.src;
+            const all = darkValues(file, src, prop);
+            const hit = near ? all.find(v => near.test(src.split('\n')[Number(v.at.split(':').pop()) - 1])) : all[0];
+            return resolve(hit!.value)!.hex;
+        };
+        const card = darkColors.surface.card; // the slider's bottom panel and the review card
+        const slider = 'components/RadiusPickerModal.tsx';
+        expect(contrast(value(slider, 'thumbTintColor'), card)).toBeGreaterThanOrEqual(3);
+        expect(contrast(value(slider, 'maximumTrackTintColor'), card)).toBeGreaterThanOrEqual(3);
+        expect(contrast(value(slider, 'minimumTrackTintColor'), card)).toBeGreaterThanOrEqual(3);
+        const review = 'components/ReviewModal.tsx';
+        expect(contrast(value(review, 'color', /starInactive/), card)).toBeGreaterThanOrEqual(3);
+        expect(contrast(value(review, 'color', /submitText/), value(review, 'backgroundColor', /submitBtn/))).toBeGreaterThanOrEqual(4.5);
+    });
 });
+

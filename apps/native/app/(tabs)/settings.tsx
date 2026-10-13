@@ -2064,8 +2064,8 @@ export default function SettingsScreen() {
                             accessibilityRole="button" 
                             accessibilityHint="Choose to remove account from device or permanently delete from node"
                         >
-                            <View style={[styles.menuIconWrap, { backgroundColor: palette.red50 }]}><Text style={styles.menuIcon}>⚠️</Text></View>
-                            <Text style={[styles.menuText, { flex: 1, color: palette.red600 }]}>Account Deletion & Sign Out</Text>
+                            <View style={[styles.menuIconWrap, { backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50 }]}><Text style={styles.menuIcon}>⚠️</Text></View>
+                            <Text style={[styles.menuText, { flex: 1, color: theme === 'dark' ? colors.feedback.danger.fg : palette.red600 }]}>Account Deletion & Sign Out</Text>
                             <Text style={[styles.menuChevron, { color: palette.red300 }]}>›</Text>
                         </Pressable>
                     </View>

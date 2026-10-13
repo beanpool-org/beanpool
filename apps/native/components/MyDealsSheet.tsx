@@ -236,7 +236,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         pausedBadgeText: {
             fontSize: 10,
             fontWeight: '800',
-            color: '#b45309',
+            color: theme === 'dark' ? colors.feedback.warning.fg : '#b45309', // amber700 is 3.47:1 on the dark card
             letterSpacing: 0.3,
         },
         typeBadgeText: {
@@ -403,7 +403,10 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                 <View style={[
                     styles.dealCard,
                     !isCompleted && !isPending && { opacity: 0.5 },
-                    isPending && { backgroundColor: palette.green50, borderColor: palette.green200 },
+                    isPending && {
+                        backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.green50,
+                        borderColor: theme === 'dark' ? colors.feedback.success.border : palette.green200,
+                    },
                 ]}>
                     {item.coverImage && typeof item.coverImage === 'string' && item.coverImage.trim() !== '' && item.coverImage !== 'null' && item.coverImage !== 'undefined' ? (
                         <ExpoImage source={{ uri: listPhotoUrl(item.coverImage) }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
@@ -491,11 +494,18 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         
         if (item.status === 'pending' || relatedTx?.status === 'pending') {
             displayStatusText = '🤝 Held in Trust';
-            highlightStyle = { backgroundColor: palette.green50, borderColor: palette.green200 };
+            // Pale boxes under the theme's light text were unreadable in dark: the success and warning boxes there.
+            highlightStyle = {
+                backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.green50,
+                borderColor: theme === 'dark' ? colors.feedback.success.border : palette.green200,
+            };
         } else if (relatedTx?.status === 'requested') {
             if (item.author_pubkey === identity?.publicKey) {
                 displayStatusText = '⚠️ Action Required';
-                highlightStyle = { backgroundColor: palette.amber50, borderColor: palette.yellow300 };
+                highlightStyle = {
+                    backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50,
+                    borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.yellow300,
+                };
             } else {
                 displayStatusText = '⏳ Awaiting Approval';
                 highlightStyle = { backgroundColor: colors.surface.subtle, borderColor: colors.border.default };

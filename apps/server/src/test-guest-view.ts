@@ -1164,6 +1164,8 @@ async function main(): Promise<void> {
             // An assistant's call for the reports, which name members, and the owner switch turned off.
             'POST /mcp': { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'reports_list', arguments: {} } },
             'POST /api/local/admin/agent/switch': { allowed: false },
+            'POST /api/local/admin/agent/grants': { name: 'Sentinel assistant', days: 7 },
+            'POST /api/local/admin/agent/preview': { tool: 'reports_list', args: { include_text: true } },
             // A succession statement naming Alice's key as the caller's old one (line-display design §5).
             'POST /api/community/me/key-succession': { oldPubkey: alice.pk, at: '2026-10-03T04:00:00.000Z', sig: 'A'.repeat(86) + '==' },
             'POST /api/friends/add': { friendPubkey: alice.pk },
@@ -1435,6 +1437,9 @@ async function main(): Promise<void> {
             // The AI assistant endpoint (agent/mcp-route.ts): an agent token is the only way in (every guest refused, below),
             // and the owner switch that turns it off.
             'POST /mcp', 'GET /mcp', 'DELETE /mcp', 'GET /api/local/admin/agent/switch', 'POST /api/local/admin/agent/switch',
+            // Settings' Connected assistants (agent/grants-route.ts): a person's own session only, never a token or a guest.
+            'GET /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants/:id/revoke',
+            'POST /api/local/admin/agent/preview',
         ]);
         const ID_BY_PREFIX: Array<[RegExp, string]> = [
             [/^\/api\/groups\//, prunedClub.id], [/^\/api\/marketplace\/posts\/:id\/chat/, clubEvent.id], [/^\/api\/marketplace\/posts\//, offer.id], [/^\/api\/commons\/decisions\//, 'dec-sentinel'],

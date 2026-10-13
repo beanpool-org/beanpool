@@ -86,6 +86,16 @@ describe('the Commons screen shows the sections a node has', () => {
         }
     });
 
+    it("on the worldwide community that shows its switched-off features: the Commons heading over Example Valley, the real groups under it (review of #1852, finding 5)", () => {
+        const showcase = { ...GLOBAL, showcase: true };
+        expect(commonsSections(showcase)).toEqual(['groups']);
+        expect(commonsHeading(showcase).title).toBe('Commons');
+        expect(commonsHeading(showcase).description).toMatch(/from an example/);
+        expect(commonsHeading(showcase).description).toMatch(/groups to join here/);
+        // A node that hides them (showcase off) is the groups list it was.
+        expect(commonsHeading({ ...GLOBAL, showcase: false }).title).toBe('Groups');
+    });
+
     it('one switch at a time: no Decide where Decisions are off, no projects or enterprises where enterprises are', () => {
         expect(commonsSections({ ...LOCAL, decisions: false })).toEqual(['groups']);
         expect(commonsSectionFor('decide', { ...LOCAL, decisions: false })).toBe('groups');

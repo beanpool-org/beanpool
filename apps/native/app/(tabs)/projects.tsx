@@ -580,9 +580,6 @@ export default function ProjectsScreen() {
                         colors={[colors.brand.primary]}
                     />
                 }
-                // The preview's cards carry their own 16 dp sides; the negative margin undoes the list's, so at 320 dp they
-                // line up with the groups above rather than sitting 32 dp in.
-                ListFooterComponent={enterprisesPreview ? <View style={{ marginHorizontal: -16 }}><CommonsPreview /></View> : null}
                 ListHeaderComponent={
                     <View style={styles.headerContainer}>
                         <View style={styles.headerInfo}>
@@ -601,6 +598,12 @@ export default function ProjectsScreen() {
                             ) : undefined} />
                             <Text style={styles.headerDesc}>{heading.description}</Text>
                         </View>
+
+                        {/* In preview, Example Valley's Commons first, its strip across the top, so a newcomer meets the
+                            marker on arrival; the real groups follow (design §1 row 6, §2; review of #1852, finding 5). The
+                            preview's cards carry their own 16 dp sides; the negative margin undoes the list's, so at 320 dp
+                            they line up with the groups below rather than sitting 32 dp in. */}
+                        {enterprisesPreview && <View style={{ marginHorizontal: -16 }}><CommonsPreview /></View>}
 
                         {/* Commons Pool + My Governance Credits */}
                         {showsBeans && (

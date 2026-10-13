@@ -163,6 +163,22 @@ describe('the Commons on the worldwide community, its profile on the phone', () 
         expect(net.calls).toContain('db.fetchGroups');
         expect(net.calls.filter(c => c !== 'db.fetchGroups' && c !== 'db.fetchYourGroups')).toEqual([]);
     });
+
+    it('is headed Commons, and greets the newcomer with the strip and Example Valley before the real groups (design §1 row 6, §2)', async () => {
+        rememberProfile('global', WORLDWIDE);
+        const group = (n: number) => ({
+            id: `g${n}`, name: `Real group number ${n}`, slug: `real-${n}`, description: 'A group on this node', avatarUrl: null,
+            category: 'other', createdBy: 'someone', joinPolicy: 'open', createdAt: '2026-10-01', updatedAt: '2026-10-01', memberCount: 3,
+        });
+        net.answer = name => (name === 'fetchGroups' ? Promise.resolve(Array.from({ length: 12 }, (_, i) => group(i + 1))) : emptyAnswer(name));
+        await render(createElement(ProjectsScreen));
+        expect(host.querySelector('[data-testid="page-title-commons"]')?.textContent).toContain('Commons');
+        expect(text()).toContain('Real group number 12');
+        const strip = text().indexOf(host.querySelector('[data-testid="local-community-strip"]')!.textContent!);
+        expect(strip).toBeGreaterThan(-1);
+        expect(strip).toBeLessThan(text().indexOf('Real group number 1'));
+        expect(text().indexOf(SAMPLE_COMMUNITY.enterprises[0].name)).toBeLessThan(text().indexOf('Real group number 1'));
+    });
 });
 
 describe("a phone that has never heard the worldwide community's profile", () => {

@@ -90,7 +90,7 @@ vi.mock('../crypto', async (orig) => ({
 
 import {
     insertMessage, postGroupChatMessage, editThreadMessage, groupKeyringFor, groupScreenKeyringFor, isHeldGroupChat,
-    isKnownDmConversation, getConversationKind, joinGroupApi, approveGroupMemberApi, leaveGroupApi,
+    isKnownDmConversation, knownDmConversationId, getConversationKind, joinGroupApi, approveGroupMemberApi, leaveGroupApi,
 } from '../db';
 import { GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
 import { forgetGroupKeys } from '../group-chat-keys';
@@ -115,7 +115,7 @@ const OTHER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
 const PUPPET = mkId();
 const DM_SEEN = 'beanpool_dm_conversations_seen';
 /** ChatRoute's asks, wired to the real utils/db.ts as app/chat/[id].tsx wires them. */
-const ASKS: ChatRouteAsks = { isHeldGroupChat, isKnownDmConversation, getConversationKind };
+const ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getConversationKind };
 
 /** How the fake node answers each group (matched by id in any spelling, as a dishonest node would). */
 interface NodeView {
@@ -319,6 +319,47 @@ describe('a known DM in any spelling gets no group keys, and stays DM-sealed (#1
         const other = randomUUID();
         store.conversations.set(other, { id: other, type: 'group_thread', created_by: null });
         expect(await isKnownDmConversation(other.toUpperCase())).toBe(false);
+    });
+});
+
+describe('a known DM is one conversation whatever a link\'s case (#1841 confirmation 1, C3 and C4)', () => {
+    it('C4 a DM the node minted in capitals, opened from the Inbox: routing asks the node nothing and writes no second row under the lower-case spelling', async () => {
+        fresh();
+        const d = randomUUID();
+        const D = d.toUpperCase();
+        store.conversations.set(D, { id: D, type: 'dm', created_by: null });
+        partsOf(D).add(ME.publicKey); partsOf(D).add(OTHER);
+        store.asyncStore.set(DM_SEEN, JSON.stringify([D]));
+        // A node that would answer the lower-case spelling as a group of its own.
+        views.set(d, { keys: { current: null, roster: [ME.publicKey, PUPPET.publicKey], epochs: [], myWraps: [] } });
+        const from = received.length;
+
+        expect(await routeChat(ASKS, D, {})).toEqual({ view: 'dm', screenId: D });
+        expect(received.slice(from)).toEqual([]);
+        expect(store.conversations.has(d)).toBe(false);
+        expect(store.participants.get(d)?.size ?? 0).toBe(0);
+    });
+
+    it('C3 an honest DM (lower-case): a push for its id in capitals opens the DM screen on the conversation the phone has, with or without group=1', async () => {
+        fresh();
+        const d0 = randomUUID();
+        const D0 = d0.toUpperCase();
+        store.conversations.set(d0, { id: d0, type: 'dm', created_by: null });
+        partsOf(d0).add(ME.publicKey); partsOf(d0).add(OTHER);
+        store.asyncStore.set(DM_SEEN, JSON.stringify([d0]));
+        const from = received.length;
+
+        expect(await routeChat(ASKS, D0, {})).toEqual({ view: 'dm', screenId: d0 });
+        expect(await routeChat(ASKS, D0, { thread: 'group' })).toEqual({ view: 'dm', screenId: d0 });
+        expect(received.slice(from)).toEqual([]);
+        expect(store.conversations.has(D0)).toBe(false);
+        // Known by its dm row alone (not listed) or by an encrypted line alone: the same spelling comes back.
+        store.asyncStore.delete(DM_SEEN);
+        expect(await knownDmConversationId(D0)).toBe(d0);
+        const lineOnly = randomUUID();
+        store.messages.set(randomUUID(), { id: randomUUID(), conversation_id: lineOnly, nonce: `${V2_NONCE_PREFIX}abc`, metadata: null });
+        expect(await knownDmConversationId(lineOnly.toUpperCase())).toBe(lineOnly);
+        expect(await knownDmConversationId(randomUUID().toUpperCase())).toBe(null);
     });
 });
 

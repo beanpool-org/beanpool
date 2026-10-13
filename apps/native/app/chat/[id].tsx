@@ -11,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, isKnownDmConversation, isHeldGroupChat } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
@@ -81,7 +81,7 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
 }
 
 /** What the route asks the phone (utils/chat-route.ts tests these wirings). */
-const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, isKnownDmConversation, getConversationKind };
+const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getConversationKind };
 
 /**
  * `/chat/:id` serves several kinds of conversation, and utils/chat-route.ts decides which screen, in this order: a group
@@ -117,12 +117,13 @@ export default function ChatRoute() {
     if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     if (view === 'event') return <EventChatView eventId={screenId} />;
     if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
-    return <ChatScreen />;
+    return <ChatScreen id={screenId} />;
 }
 
-function ChatScreen() {
+/** The DM screen, on routeChat's id: a known DM's own spelling, else the link's. */
+function ChatScreen({ id }: { id: string }) {
     const { theme, colors } = useTheme();
-    const { id, triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ id?: string; triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
+    const { triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
     const { identity } = useIdentity();
     const [messages, setMessages] = useState<any[]>([]);
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);

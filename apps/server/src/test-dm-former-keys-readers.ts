@@ -15,7 +15,11 @@
  *   B.  a participant who deleted their account (#1871 review NB4): Fay₂'s former keys are served to nobody, while Dan₂'s
  *       in the same DM still are, on the list and by id; a DM in which only Fay re-keyed is served as one nobody re-keyed.
  *       Fay's replaced keys stay refused (their rows are kept).
- *   S.  a standby's copy (a signed whole export, the copied tables emptied, a real import as a backup) answers A and B
+ *   R.  her group's roster (#1898 review finding 2): an open group Ben convenes, with Fay, Dan and Cat in it. After the
+ *       deletion every signed reader (Ana₃ and Zed outside the group too) is served the roster, and on an open node a
+ *       guest as well: Fay₂'s row, kept as "Deleted Member", serves `formerKeys: []` and her former key appears nowhere in
+ *       the answer, while Dan₂'s row still serves his chain, walking to Dan₁. Read auth on: a guest 401, as before.
+ *   S.  a standby's copy (a signed whole export, the copied tables emptied, a real import as a backup) answers A, B and R
  *       the same.
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-dm-former-keys-readers node scripts/run-server-suites.mjs
@@ -27,7 +31,7 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import * as se from './state-engine.js';
-import { initStateEngine, seedGenesisMember, setNodeRole } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, setNodeRole, createGroup, joinGroup } from './state-engine.js';
 import { emptyCopiedTables } from './engine/copied-tables.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
@@ -115,6 +119,9 @@ async function main(): Promise<void> {
     const dmEve = se.createConversation('dm', [ben.pk, eve.pk], ben.pk)!.id;
     const dmDanFay = se.createConversation('dm', [dan1.pk, fay1.pk], dan1.pk)!.id;
     const dmBenFay = se.createConversation('dm', [ben.pk, fay1.pk], ben.pk)!.id;
+    // A group joined before the re-keys too: a re-key moves the member's row to the new key (key-move.ts).
+    const grp = createGroup({ name: 'Roster', joinPolicy: 'open', createdBy: ben.pk } as any).id;
+    for (const m of [dan1, fay1, cat]) joinGroup(grp, m.pk);
     const AT1 = '2026-10-03T04:00:00.000Z', AT2 = '2026-10-09T04:00:00.000Z';
     const ana2 = rekey(ana1, 'Ana₂');
     assert(await attest(ana2, ana1, AT1) === 201, 'the fixture: Ana₂ signs for Ana₁');
@@ -196,8 +203,37 @@ async function main(): Promise<void> {
         assert(kept.n === 1, `${phase}: Fay₁'s row is kept, so her replaced key stays refused`);
     };
 
+    // ── R. her group's roster ─────────────────────────────────────────────────────────────────────────
+    const rosterReaders: Reader[] = [...readers, { name: 'Dan₂', who: dan2 }];
+    const danRow = (rows: any[]) => rows.find((r) => r.memberPubkey === dan2.pk);
+    const danChainWalks = (row: any) => JSON.stringify(row?.formerKeys?.map((f: any) => [f.pubkey, f.at])) === JSON.stringify([[dan1.pk, AT1]])
+        && walkKeySuccession({ memberPubkey: dan2.pk, formerKeys: row.formerKeys }, dan1.pk);
+    const rosters = async (phase: string) => {
+        console.log(`\n── R. Fay₂'s group roster after she deleted her account (${phase}) ──`);
+        for (const { name, who } of rosterReaders) {
+            const res = await call('GET', who, `/api/groups/${grp}/members`);
+            const want = OPEN || who ? 200 : 401;
+            const label = `${phase}: ${name}, the group's roster: ${want}`;
+            if (want !== 200) {
+                assert(res.status === want && !res.text.includes(fayFormer), `${label}, and her former key nowhere in the answer (got ${res.status})`);
+                continue;
+            }
+            const rows: any[] = Array.isArray(res.body) ? res.body : [];
+            const fayRow = rows.find((r) => r.memberPubkey === fay2.pk);
+            assert(res.status === 200 && fayRow?.status === 'active' && Array.isArray(fayRow.formerKeys) && fayRow.formerKeys.length === 0
+                && !res.text.includes(fayFormer),
+                `${label}, Fay₂'s row serves formerKeys [] and her former key is nowhere in the answer (got ${res.status}, ${fayRow ? JSON.stringify(fayRow.formerKeys?.length) : 'no row'}${res.text.includes(fayFormer) ? ', her former key' : ''})`);
+            assert(danChainWalks(danRow(rows)), `${label}, Dan₂'s row still serves his former key with its date, walking to Dan₁`);
+        }
+    };
+
     {
-        // Before the deletion both are served: the fixture holds what B takes away.
+        // Before the deletion both are served: the fixture holds what B and R take away. The roster read here is held as a
+        // snapshot (roster-snapshots.ts), so R also shows the deletion moves its key.
+        const rosterBefore = await call('GET', ben, `/api/groups/${grp}/members`);
+        const fayBefore = (rosterBefore.body as any[] | undefined)?.find?.((r: any) => r.memberPubkey === fay2.pk);
+        assert(rosterBefore.status === 200 && fayBefore?.formerKeys?.[0]?.pubkey === fay1.pk && danChainWalks(danRow(rosterBefore.body)),
+            `the fixture: before Fay₂ deletes her account, the group's roster names her former key and Dan₂'s (got ${rosterBefore.status})`);
         const before = (await call('GET', dan2, `/api/messages/conversations/${dan2.pk}`)).body?.conversations?.find((c: any) => c.id === dmDanFay);
         assert(JSON.stringify(Object.keys(before?.formerKeys ?? {}).sort()) === JSON.stringify([dan2.pk, fay2.pk].sort()),
             'the fixture: before Fay₂ deletes her account, Dan₂\'s DM with her names both their former keys');
@@ -206,6 +242,7 @@ async function main(): Promise<void> {
     }
     await sweep('main');
     await deleted('main');
+    await rosters('main');
 
     // ── S. a standby's copy ───────────────────────────────────────────────────────────────────────────
     {
@@ -223,6 +260,7 @@ async function main(): Promise<void> {
         try {
             await sweep('standby');
             await deleted('standby');
+            await rosters('standby');
         } finally {
             setNodeRole('primary');
             try { await p2p.stop(); } catch { /* stopping only */ }

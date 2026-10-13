@@ -129,8 +129,9 @@ export function verifiedFormerKeysReader(): (memberPubkey: string) => FormerKey[
  * re-keyed is served exactly as before, and an app from before the field reads past it.
  *
  * Never for a participant who deleted their account (#1871 review NB4): the deletion takes these keys out of the logs and
- * push notices (state-engine.ts purgeMemberSelf), no phone can seal to that account again, and its `invalidated_keys`
- * rows stay only so the old keys are still refused.
+ * push notices (state-engine.ts purgeMemberSelf), nothing seals to a former key (sealing only ever needs the current key;
+ * the node does not refuse a line to a deleted account, as its send route checks only the sender), and its
+ * `invalidated_keys` rows stay only so the old keys are still refused. A group roster leaves them out too (groups.ts).
  */
 export function withDmFormerKeys<T extends { type?: string; participants?: readonly string[] }>(
     conversations: T[], viewer: string | undefined,

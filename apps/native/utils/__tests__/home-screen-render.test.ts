@@ -2799,3 +2799,84 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         expect(tourStore.currentTour()).toMatchObject({ publicKey: who.identity.publicKey, step: 0 });
     });
 });
+
+// Where Beans are previewed (the worldwide community with its showcase on), Home's Your Beans card (scratch/global-node/
+// DESIGN-global-showcase-fable.md §1 row 1): "hideable, default-on for new members like steps" — its own card, which only
+// its own "Hide this card" puts away. It rode inside First steps before, and went whenever First steps did.
+describe('the Your Beans card where Beans are previewed: its own card, put away only by its own Hide', () => {
+    const showcase = (): HomeAnswer => { const base = everyCard('global', 1); return { ...base, features: { ...base.features, showcase: true } }; };
+    const beansCard = () => document.querySelector('[data-testid="home-card-beans-preview"]');
+    beforeEach(() => { mem.store.set(homeHintStoreKey(who.identity.publicKey), '1'); });
+
+    it('sits right under First steps while that is up', async () => {
+        node.answer = showcase();
+        await render();
+        const ids = cards();
+        expect(ids).toContain('steps');
+        expect(ids[ids.indexOf('steps') + 1]).toBe('beans-preview');
+    });
+
+    it('stays when First steps is removed through its "…" menu', async () => {
+        node.answer = showcase();
+        await render();
+        await removeVia('steps');
+        expect(cards()).not.toContain('steps');
+        expect(beansCard()).not.toBeNull();
+    });
+
+    it('stays when the node sends no First steps (every line done, or past its days)', async () => {
+        const a = showcase();
+        node.answer = { ...a, cards: { ...a.cards, steps: undefined } };
+        await render();
+        expect(cards()).not.toContain('steps');
+        expect(beansCard()).not.toBeNull();
+    });
+
+    it('its own Hide puts it away and First steps stays; on the next visit it never shows, not for a frame', async () => {
+        node.answer = showcase();
+        await render();
+        await act(async () => { byLabel('Hide this card: Your Beans')!.click(); });
+        await settle();
+        expect(beansCard()).toBeNull();
+        expect(cards()).toContain('steps');
+        act(() => root?.unmount());
+        host?.remove();
+        let seen = false;
+        const watch = new MutationObserver(() => { if (document.querySelector('[data-testid="home-card-beans-preview"]')) seen = true; });
+        watch.observe(document.body, { childList: true, subtree: true });
+        await render();
+        watch.disconnect();
+        expect(seen).toBe(false);
+        expect(cards()).toContain('steps');
+    });
+
+    // Both designs: a newcomer's global Home is Needs you · Find your community · Getting started · Your community, and
+    // the example waits in the tour's Ledger step (DESIGN-getting-started-fable.md §0, §1; pick 10). Skip brings it.
+    it('a newcomer on the worldwide community: none while Getting started is up; Skip brings it, under First steps', async () => {
+        const a = showcase();
+        const { tour: _t, ...me } = a.me!;
+        node.answer = { ...a, me, layout: null };
+        mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        tourStore.closeTour();
+        await render();
+        expect(cards()).toEqual(['needs', 'find', 'start', 'community']);
+        expect(beansCard()).toBeNull();
+        await act(async () => { byLabel('Skip the tour')!.click(); });
+        await settle(20);
+        const ids = cards();
+        expect(ids).not.toContain('start');
+        expect(ids[ids.indexOf('steps') + 1]).toBe('beans-preview');
+    });
+
+    it('no such card on a local community, nor on the worldwide one with its showcase off', async () => {
+        node.answer = everyCard('local', 1);
+        await render();
+        expect(beansCard()).toBeNull();
+        act(() => root?.unmount());
+        host?.remove();
+        node.answer = everyCard('global', 1);
+        await render();
+        expect(cards()).toContain('steps');
+        expect(beansCard()).toBeNull();
+    });
+});

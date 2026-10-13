@@ -19,6 +19,7 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { imageFromTransfer, dragCarriesFile } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
 
 /**
@@ -134,6 +135,13 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
         setPosting(true);
         setPostError(null);
         try {
+            // This screen sends readable: never for a group held locked here, nor while the record of those can't be read
+            // (lib/group-hold.ts; review of #1816, findings 2 and 3).
+            const route = identity ? await sendRouteOf(identity.publicKey, postId) : 'refuse';
+            if (route !== 'as-typed') {
+                setPostError(route === 'group' ? GROUP_HOLD_EVENT_TEXT : GROUP_HOLD_UNREAD_TEXT);
+                return;
+            }
             await postEventChatMessage(postId, text);
             setDraft('');
             setImageNotice(null);

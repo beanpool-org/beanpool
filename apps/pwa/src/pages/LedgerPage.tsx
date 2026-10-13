@@ -445,9 +445,11 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     </div>
 
                     {/* ── Medallion shelf ── */}
+                    {/* Levels are merit badges (#1838): one not reached yet keeps its own colours and a dashed edge, something
+                        to grow into. Never a lock, never faded or greyed as if it were out of bounds. */}
                     <div>
                         <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-3">ALL LEVELS</span>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-4 gap-2" data-testid="levels-shelf">
                             {TIERS.map((t, i) => {
                                 const reached = tierIdx >= i;
                                 const isSel = selLevel === i;
@@ -462,12 +464,12 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         style={{
                                             background: isSel ? t.bg : 'var(--tier-card)',
                                             borderColor: isSel ? t.color : 'var(--tier-card-border)',
-                                            opacity: reached ? 1 : 'var(--tier-unreached-opacity)',
+                                            borderStyle: reached || isSel ? 'solid' : 'dashed',
                                             fontFamily: 'inherit',
                                         }}
                                     >
                                         <span className="text-3xl leading-none">{t.emoji}</span>
-                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: reached ? t.color : 'var(--tier-unreached)' }}>{t.name}</span>
+                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: t.color }}>{t.name}</span>
                                         <span className="text-[9px] font-semibold text-nature-400 mt-1 leading-none">
                                             {tierIdx === i ? "You're here" : reached ? 'Reached' : `${t.min} trust`}
                                         </span>
@@ -478,7 +480,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     </div>
 
                     {/* ── Selected-level detail ── */}
-                    <div className="bg-white dark:bg-nature-900 border rounded-2xl p-5 shadow-sm" style={{ borderColor: sel.border }}>
+                    <div className="bg-white dark:bg-nature-900 border rounded-2xl p-5 shadow-sm" style={{ borderColor: sel.border }} data-testid="level-detail">
                         {/* Wraps: at 320px with 1.3x text the level name and badge ran 22px past the card and
                             dragged the whole Ledger page sideways. */}
                         <div className="flex flex-wrap items-center gap-3 mb-4" data-testid="level-detail-heading">
@@ -487,8 +489,8 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                 <div className="text-xl font-black" style={{ color: sel.color }}>{sel.name}</div>
                                 <div className="text-xs text-nature-400 font-semibold">Level {selLevel + 1} of {TIERS.length}</div>
                             </div>
-                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, backgroundColor: selReached ? sel.bg : 'var(--tier-chip)', color: selReached ? sel.color : 'var(--tier-unreached)' }}>
-                                {selCurrent ? "You're here" : selReached ? 'Reached ✓' : '🔒 Locked'}
+                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, borderStyle: selReached ? 'solid' : 'dashed', backgroundColor: sel.bg, color: sel.color }}>
+                                {selCurrent ? "You're here" : selReached ? 'Reached ✓' : selLevel === tierIdx + 1 ? 'Next level' : 'Up ahead'}
                             </span>
                         </div>
 
@@ -513,7 +515,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div className="flex flex-col gap-2">
                             {sel.perks.map(p => (
                                 <div key={p} className="flex items-start gap-2 text-[13px]">
-                                    <span className="mt-0.5 shrink-0" style={{ color: selReached ? '#10b981' : '#d1d5db' }}>{selReached ? '✓' : '○'}</span>
+                                    <span className="mt-0.5 shrink-0" style={{ color: selReached ? '#10b981' : sel.color }}>{selReached ? '✓' : '○'}</span>
                                     <span className="text-nature-700 dark:text-nature-300">{p}</span>
                                 </div>
                             ))}

@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — Exchange for Communities, Not Commercial Banks</title>
-    <meta name="description" content="BeanPool is a free app a community runs for itself to trade help, goods and skills in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web.">
+    <meta name="description" content="BeanPool is a free app a community runs for itself to trade help, goods and skills in Beans instead of money. Find or start a community near you, or join with an invite; the global community opens to everyone soon. iPhone, Android and web.">
+    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -111,7 +112,11 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. Door 1 and the showcase lines go live with the global redeploy, never before. -->
+                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
+                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
+                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
+                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
+                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">Three ways in</span>
@@ -120,8 +125,9 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <a href="https://global.beanpool.org" class="btn btn-primary font-header">Try it now, worldwide</a>
-                            <p>No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you.</p>
+                            <!-- OPEN-GLOBAL: href="https://global.beanpool.org"; sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you." -->
+                            <a href="getting-started.html#global" class="btn btn-primary font-header">Try it now, worldwide</a>
+                            <p>The global community opens to everyone soon, with no invite: look around, post something free or for swap, and find a community near you. It is a private preview today, so start by getting the app.</p>
                         </div>
                         <div class="hero-door">
                             <a href="#find-or-start" class="btn btn-ghost">Find or start a community</a>
@@ -263,7 +269,8 @@
                     <div class="step-number">01</div>
                     <div>
                         <h3>1. Come in by one of three doors</h3>
-                        <p>Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by.</p>
+                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
+                        <p>Ask a community near you to let you in, or open the invite a member sent you; soon you can also try the global community with no invite. Either way you pick the name people will know you by.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -312,7 +319,8 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Map</h3>
-                    <p>See what is on offer near you. You place every pin yourself: use your location once, at the moment you post, or drop the pin by hand. BeanPool never tracks where you are. Enterprise and event pins can be set to Approximate, which rounds the spot to about 100&nbsp;m. Pins are seen by the members of your community. On the global community a visitor sees listings and roughly where they are, but no names, no faces and no exact spots.</p>
+                    <p>See what is on offer near you. You place every pin yourself: use your location once, at the moment you post, or drop the pin by hand. BeanPool never tracks where you are. Enterprise and event pins can be set to Approximate, which rounds the spot to about 100&nbsp;m. Pins are seen by the members of your community. When the global community opens to everyone, a visitor there sees listings and roughly where they are, but no names, no faces and no exact spots.</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no faces and no exact spots." -->
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -491,7 +499,8 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>Private from the first boot</h3>
-                    <p>A community's listings, map, messages and balances are for its members from the moment its node starts; there is nothing to switch on. Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join.</p>
+                    <p>A community's listings, map, messages and balances are for its members from the moment its node starts; there is nothing to switch on. Someone who opens its address without an account is pointed to the global community, which opens to everyone soon.</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -573,6 +582,23 @@ docker compose exec beanpool-node beanpool claim</code>
             </div>
         </div>
     </section>
+
+    <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
+         13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
+         first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
+         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+
+    <div class="partner-block">
+        <h3>The BeanPool Project</h3>
+        <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
+        <ul>
+            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
+            <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
+        </ul>
+        <p>Source and licence: <a href="https://github.com/beanpool-org/beanpool">github.com/beanpool-org/beanpool</a> (MIT).</p>
+    </div>
+    PARTNER-BLOCK end -->
 
     <!-- Footer Module -->
     <footer>

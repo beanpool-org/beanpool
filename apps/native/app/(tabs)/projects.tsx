@@ -5,8 +5,9 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type MyPoolVoting, type TreasurySummary, type GroupItem } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
-import { useNodeProfile } from '../../utils/use-node-profile';
-import { beansOn } from '../../utils/node-profile';
+import { useReaderFeatures } from '../../utils/use-reader-features';
+import { beansOn, showcaseMode } from '../../utils/node-profile';
+import { CommonsPreview } from '../../components/showcase/Previews';
 import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, isProject, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection } from '../../components/DecideSection';
@@ -38,15 +39,26 @@ export default function ProjectsScreen() {
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     // A community with Beans off (the worldwide one) hides this tab, but a link still opens it (Talk's "Find groups",
     // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.
-    const nodeProfile = useNodeProfile();
-    const showsBeans = beansOn(nodeProfile?.features);
+    // The reader's own features (the node's, narrowed by this account's on /api/community/me: design §4).
+    const reader = useReaderFeatures();
+    const showsBeans = beansOn(reader.effective);
+    // Enterprises and Decide previewed from Example Valley where the node shows its switched-off features (§1 row 6).
+    const enterprisesPreview = showcaseMode('enterprises', reader.node, reader.reader) === 'preview';
+    // What the screen asks the node for, per feature: nothing until the phone's copy of the node's profile is read (a
+    // moment, no network), then only what is not in preview. The pool and voice credits are Beans, the members list is
+    // the Decision form's: a preview reads Example Valley and never asks for the reader's own (as the Ledger).
+    const beansPreview = showcaseMode('beans', reader.node, reader.reader) === 'preview';
+    const decisionsPreview = showcaseMode('decisions', reader.node, reader.reader) === 'preview';
+    const modesKnown = reader.known;
+    // Each load's answers land only while it is the latest: one begun under another mode never lands over the preview.
+    const loadGen = useRef(0);
     // Decide only where formal Decisions are on; Groups is one list of projects, enterprises and chat groups, with
     // projects and enterprises only where the node has them (utils/commons-sections.ts). With Groups all that is left
     // (the worldwide community, reached from Talk's "Find groups"), this is its groups list.
-    const sections = commonsSections(nodeProfile?.features);
+    const sections = commonsSections(reader.effective);
     const showsDecide = sections.includes('decide');
-    const heading = commonsHeading(nodeProfile?.features);
-    const kindChips = groupKindChips(nodeProfile?.features);
+    const heading = commonsHeading(reader.effective);
+    const kindChips = groupKindChips(reader.effective);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [treasuries, setTreasuries] = useState<any[]>([]);
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
@@ -55,7 +67,7 @@ export default function ProjectsScreen() {
     const [groupKind, setGroupKind] = useState<GroupKind>('all');
     // The one drawn: the section picked (or linked to), where this node shows it, else its first. So a section the
     // node's profile takes away is never drawn, not even before the profile has arrived and been acted on.
-    const activeSection = commonsSectionFor(pickedSection, nodeProfile?.features);
+    const activeSection = commonsSectionFor(pickedSection, reader.effective);
     // The header's vote icon lands here with section=decide. Commons may already be open on another section,
     // so switch to Decide, on its Open list (the vote is there, not in History), and show it from the top, then
     // clear the param so a later visit keeps its place.
@@ -219,39 +231,58 @@ export default function ProjectsScreen() {
     }));
 
     const loadData = useCallback(async () => {
+        const gen = ++loadGen.current;
+        const latest = () => gen === loadGen.current;
         try {
             const id = await loadIdentity();
             setIdentity(id);
-            if (id?.publicKey) {
-                getBalance(id.publicKey).then(setBalanceState).catch(console.error);
+            if (modesKnown && !beansPreview && id?.publicKey) {
+                getBalance(id.publicKey).then(b => { if (latest()) setBalanceState(b); }).catch(console.error);
             }
         } catch (e) {
             console.error('[Commons] Failed loading identity:', e);
         }
+        if (!modesKnown || !latest()) return;
+        if (beansPreview) setBalanceState({ earnedCredit: 0, commons: 0 });
 
-        try {
-            const list = await getTreasuries();
-            setEnterprises(list);
+        if (enterprisesPreview) {
+            setEnterprises([]);
             setLoading(false);
-        } catch (err) {
-            console.error('[Commons] Failed loading enterprises:', err);
-            setLoading(false);
+        } else {
+            try {
+                const list = await getTreasuries();
+                if (!latest()) return;
+                setEnterprises(list);
+                setLoading(false);
+            } catch (err) {
+                console.error('[Commons] Failed loading enterprises:', err);
+                if (latest()) setLoading(false);
+            }
         }
 
-        try {
-            const decData = await getDecisions();
-            setDecisions(decData.decisions || []);
-            setMyPoolVoting(decData.myPoolVoting ?? null);
-            setNodeSaysCanPropose(decData.canPropose);
-        } catch (err) {
-            console.error('[Projects] Failed loading decisions:', err);
-        }
+        if (decisionsPreview) {
+            setDecisions([]);
+            setMyPoolVoting(null);
+            setNodeSaysCanPropose(null);
+            setMembersList([]);
+        } else {
+            try {
+                const decData = await getDecisions();
+                if (!latest()) return;
+                setDecisions(decData.decisions || []);
+                setMyPoolVoting(decData.myPoolVoting ?? null);
+                setNodeSaysCanPropose(decData.canPropose);
+            } catch (err) {
+                console.error('[Projects] Failed loading decisions:', err);
+            }
 
-        try {
-            const mems = await getAllCommunityMembers();
-            setMembersList(mems || []);
-        } catch (err) {
-            console.error('[Projects] Failed loading members:', err);
+            try {
+                const mems = await getAllCommunityMembers();
+                if (!latest()) return;
+                setMembersList(mems || []);
+            } catch (err) {
+                console.error('[Projects] Failed loading members:', err);
+            }
         }
 
         yourGroupsStore.refresh();
@@ -259,13 +290,14 @@ export default function ProjectsScreen() {
         try {
             setLoadingGroups(true);
             const g = await fetchGroups();
+            if (!latest()) return;
             setGroups(g || []);
             setLoadingGroups(false);
         } catch (err) {
             console.error('[Projects] Failed loading groups:', err);
-            setLoadingGroups(false);
+            if (latest()) setLoadingGroups(false);
         }
-    }, []);
+    }, [modesKnown, beansPreview, enterprisesPreview, decisionsPreview]);
 
     // The node's rule (earned standing, or a node admin); earned credit only when the node hasn't said.
     const canProposeDecision = nodeSaysCanPropose ?? (balanceState.earnedCredit || 0) > 0;
@@ -318,9 +350,9 @@ export default function ProjectsScreen() {
             if (!isProject(a) && isProject(b)) return 1;
             return (b.liveOffers || 0) - (a.liveOffers || 0);
         });
-        return commonsGroupRows(groupKind, groups, sorted, yourGroups, nodeProfile?.features);
-    }, [groups, enterprises, yourGroups, groupKind, nodeProfile?.features]);
-    const groupsEmpty = commonsGroupsEmpty(groupKind, nodeProfile?.features);
+        return commonsGroupRows(groupKind, groups, sorted, yourGroups, reader.effective);
+    }, [groups, enterprises, yourGroups, groupKind, reader.effective]);
+    const groupsEmpty = commonsGroupsEmpty(groupKind, reader.effective);
     // The + on Groups: a project or enterprise on those chips, otherwise the create form (which offers both, with Beans).
     const startsProject = activeSection === 'groups' && (groupKind === 'projects' || groupKind === 'enterprises');
     const openProposeProject = async () => {
@@ -566,6 +598,12 @@ export default function ProjectsScreen() {
                             ) : undefined} />
                             <Text style={styles.headerDesc}>{heading.description}</Text>
                         </View>
+
+                        {/* In preview, Example Valley's Commons first, its strip across the top, so a newcomer meets the
+                            marker on arrival; the real groups follow (design §1 row 6, §2; review of #1852, finding 5). The
+                            preview's cards carry their own 16 dp sides; the negative margin undoes the list's, so at 320 dp
+                            they line up with the groups below rather than sitting 32 dp in. */}
+                        {enterprisesPreview && <View style={{ marginHorizontal: -16 }}><CommonsPreview /></View>}
 
                         {/* Commons Pool + My Governance Credits */}
                         {showsBeans && (

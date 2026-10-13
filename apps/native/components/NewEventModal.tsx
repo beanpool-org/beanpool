@@ -40,6 +40,7 @@ import {
 } from '../utils/events';
 import { effectiveEventAudience } from '../utils/event-extras';
 import { EVENT_ACCENT } from './EventCard';
+import { palette } from '../constants/colors';
 import { AddressSearch } from './AddressSearch';
 import { placeNameAfterPick } from '../utils/address-search';
 import type { AddressResult } from '@beanpool/core';
@@ -565,12 +566,12 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 <Pressable
                                     onPress={makeApproximate}
                                     disabled={!pin || approximate}
-                                    style={[styles.secondaryBtn, styles.approxBtn, (!pin || approximate) && { opacity: 0.45 }]}
+                                    style={[styles.secondaryBtn, styles.approxBtn, (!pin || approximate) && styles.secondaryBtnDisabled]}
                                     accessibilityRole="button"
                                     accessibilityLabel="Approximate the pin to about 100 metres"
                                     accessibilityState={{ disabled: !pin || approximate, selected: approximate }}
                                 >
-                                    <Text style={styles.secondaryText} numberOfLines={1}>{approximate ? 'Approximate ✓' : 'Approximate (~100 m)'}</Text>
+                                    <Text style={[styles.secondaryText, (!pin || approximate) && styles.secondaryTextDisabled]} numberOfLines={1}>{approximate ? 'Approximate ✓' : 'Approximate (~100 m)'}</Text>
                                 </Pressable>
                             </View>
                         </View>
@@ -667,9 +668,13 @@ function nextWholeHour(): Date {
     return d;
 }
 
-const makeStyles = ({ colors, theme }: ThemeContextType) =>
-    StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.page },
+const makeStyles = ({ colors, theme }: ThemeContextType) => {
+    // The violet on its own is too dark to read as text on the dark card (about 2.8:1); buttons filled with it keep it.
+    const accentText = theme === 'dark' ? palette.violet300 : EVENT_ACCENT;
+    return StyleSheet.create({
+        // surface.app, not surface.page: page goes transparent when the doodle pattern is on, and nothing draws the
+        // pattern inside a Modal, so the bare white window showed through and the light header text vanished in dark.
+        container: { flex: 1, backgroundColor: colors.surface.app },
         header: {
             flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
             paddingHorizontal: 12, paddingTop: HEADER_PAD_TOP, paddingBottom: 10, borderBottomWidth: 1,
@@ -698,7 +703,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         clearBtn: { minHeight: 48, minWidth: 48, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
         clearText: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.solid },
         doneBtn: { alignSelf: 'flex-end', minHeight: 44, paddingHorizontal: 16, justifyContent: 'center' },
-        doneText: { fontSize: 15, fontWeight: '800', color: EVENT_ACCENT },
+        doneText: { fontSize: 15, fontWeight: '800', color: accentText },
         mapBox: {
             height: 180, borderRadius: 12, overflow: 'hidden', borderWidth: 1,
             borderColor: theme === 'dark' ? '#4b5563' : '#d1d5db', backgroundColor: colors.surface.subtle,
@@ -716,6 +721,12 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             justifyContent: 'center', alignItems: 'center', flexShrink: 1,
         },
         secondaryText: { fontSize: 14, fontWeight: '700', color: colors.text.body },
+        // Dark: a faded card over the warning box's brown read as dark text on brown, so the button stays solid and
+        // only its label dims. Light keeps the fade it always had.
+        secondaryBtnDisabled: theme === 'dark'
+            ? { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong }
+            : { opacity: 0.45 },
+        secondaryTextDisabled: theme === 'dark' ? { color: colors.text.secondary } : {},
         warningBox: {
             marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1,
             backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border,
@@ -733,5 +744,6 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         chipSelected: { borderColor: EVENT_ACCENT, backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.2)' : '#f5f3ff' },
         chipText: { fontSize: 14, fontWeight: '600', color: colors.text.secondary },
-        chipTextSelected: { fontWeight: '800', color: EVENT_ACCENT },
+        chipTextSelected: { fontWeight: '800', color: accentText },
     });
+};

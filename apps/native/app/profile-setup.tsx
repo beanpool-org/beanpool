@@ -390,6 +390,7 @@ export default function ProfileSetupScreen() {
 
             <AvatarPickerSheet
                 visible={showAvatarPicker}
+                colors={dark ? colors : undefined}
                 onClose={() => setShowAvatarPicker(false)}
                 onSelectImage={(uri) => setPendingAvatar(uri)}
             />

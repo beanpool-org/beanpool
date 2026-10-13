@@ -301,12 +301,16 @@ export interface CommunityInfo {
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
         /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
+        /** An off feature is previewed from the sample community rather than hidden (lib/features.ts). Absent: hidden, as before. */
+        showcase?: boolean;
         /**
          * Present, and true, only where no app reads the member directory whole (the worldwide community): people come
          * by search, by nearness and by key (lib/members-on-demand.ts).
          */
         membersOnDemand?: true;
     };
+    /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
+    startCommunityUrl?: string;
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
     addresses?: string[];
     /**
@@ -406,6 +410,8 @@ export interface CommunityStanding {
     mute: { muted: boolean; until: string | null };
     /** The member's own coarse area (0.1°), or null when they have set none. Absent on a node from before it. */
     area?: { lat: number; lng: number; updatedAt?: string | null } | null;
+    /** The reader's own effective features (lib/features.ts): today the node's. Absent on a node from before it. */
+    features?: Record<string, unknown>;
 }
 
 /** The signer's own standing: members only, and only ever their own (the node reads the signature, not a parameter). */

@@ -1150,7 +1150,8 @@ async function globalNode(browser, root) {
         check(landing.every((r) => !r.signed), 'every read unsigned: a visitor has no key');
         check(landing.filter((r) => r.path === '/api/home').length === 1, 'one GET /api/home');
         const tabs = await page.locator('[data-testid="lobby-bottom-nav"] button').allInnerTexts();
-        check(JSON.stringify(tabs.map((t) => t.replace(/\s+/g, ''))) === JSON.stringify(['🏠Home', '🤝Market', '🗺️Map']), `three lobby tabs, Home first (${tabs.join(' · ').replace(/\n/g, '')})`);
+        // And the Ledger, in preview: the global node shows visitors mutual exchange before any door (showcase W2, pick 4).
+        check(JSON.stringify(tabs.map((t) => t.replace(/\s+/g, ''))) === JSON.stringify(['🏠Home', '🤝Market', '🗺️Map', '📊Ledger']), `four lobby tabs, Home first, the Ledger last (${tabs.join(' · ').replace(/\n/g, '')})`);
         const first = await page.evaluate(() => document.querySelector('[data-testid="home-page"] section')?.getAttribute('data-testid'));
         check(first === 'lobby-join-card', 'the Join card first');
         const ids = await cardIds(page);

@@ -67,6 +67,20 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
     return { status: res.status, body: await res.json() };
 }
 
+/** A signed GET of any path, as getInfo signs one. */
+async function getSigned(path: string, id: Id): Promise<{ status: number; body: any }> {
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const headers: Record<string, string> = {
+        'X-Public-Key': id.pubKeyHex,
+        'X-Signature': crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), id.privateKey).toString('base64'),
+        'X-Timestamp': String(ts),
+        'X-Nonce': nonce,
+    };
+    const res = await fetch(`${BASE}${path}`, { headers });
+    return { status: res.status, body: await res.json().catch(() => null) };
+}
+
 // What this build does on each profile. G2 built open join: on for the global profile, off for local. G1 built Beans
 // off: on global, Beans, escrow and enterprises are off (this database's ledger has never moved; test-global-no-beans
 // covers one that has). G3 built probation, auto-hide and auto-mute: on for global only (test-global-moderation).
@@ -75,10 +89,11 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
 // (test-guest-view). Formal Decisions: on for a local community, off on the lobby (test-decisions-off). The example
 // cards on a nearly empty Market: global only (drawn by the apps, nothing stored). Invites: on for a local community,
 // off on the lobby, whose door is the only way in (test-invites-off). The 12-words door: open beside the sign-in on the
-// lobby only (test-door-work). A member's set of nearby listings: global only, 250 km and 500 (test-sync-nearby). The PR that builds one of these changes its line here, with the test that proves it.
+// lobby only (test-door-work). A member's set of nearby listings: global only, 250 km and 500 (test-sync-nearby). The
+// showcase (DESIGN-global-showcase-fable.md W1): reported on the lobby only, so a local node's features are unchanged. The PR that builds one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
     local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, door: 'members' },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, door: 'open' },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, showcase: true, door: 'open' },
 };
 
 async function main() {
@@ -133,6 +148,8 @@ async function main() {
     assert(local.exampleListings === false && global.exampleListings === true,
         'example cards on a nearly empty Market: global only (Marty, 2026-09-27)');
     assert(local.decisions && !global.decisions, 'formal Decisions: on for a local community, off on the lobby (anyone may join it)');
+    assert(local.showcase === false && global.showcase === true,
+        'showcase: the lobby previews what lives in a local community; a local node hides what its operator turned off (Marty, 2026-10-13)');
     assert(local.invites === true && global.invites === false,
         'invites: on for a local community, off on the lobby, whose open door is the only way in (Marty, 2026-10-01)');
     assert(local.announceJoins === true && global.announceJoins === false,
@@ -199,6 +216,36 @@ async function main() {
     await checkInfo('local', 'NODE_PROFILE=lobby (unrecognised)');
     delete process.env.NODE_PROFILE;
 
+    // One effective set per reader (W1, config/features-for.ts): /api/community/me and /api/home say the reader's own
+    // features, which today are the node's, exactly, on both profiles.
+    for (const want of ['local', 'global'] as const) {
+        if (want === 'global') process.env.NODE_PROFILE = 'global'; else delete process.env.NODE_PROFILE;
+        const info = (await getInfo(alice)).body.features;
+        const me = await getSigned('/api/community/me', alice);
+        const home = await getSigned('/api/home', alice);
+        assert(me.status === 200 && JSON.stringify(me.body?.features) === JSON.stringify(info),
+            `${want}: /api/community/me's features are the node's, exactly (${me.status} ${JSON.stringify(me.body?.features)})`);
+        assert(home.status === 200 && JSON.stringify(home.body?.features) === JSON.stringify(info),
+            `${want}: /api/home's features are the node's, exactly (${home.status} ${JSON.stringify(home.body?.features)})`);
+        assert(want === 'global' ? info.showcase === true : !('showcase' in info),
+            `${want}: showcase ${want === 'global' ? 'reported on' : 'absent, so a local node answers exactly as before'}`);
+    }
+    delete process.env.NODE_PROFILE;
+
+    // Where Start a community leads (config/start-community.ts): beanpool.org's page unless an owner names their own.
+    const start = await import('./config/start-community.js');
+    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'Start a community leads to beanpool.org/#run-a-node by default');
+    assert(start.setStartCommunityUrl('https://start.example.org/how').ok && (await getInfo()).body.startCommunityUrl === 'https://start.example.org/how',
+        'a self-hoster names their own page, and /api/community/info says it');
+    for (const bad of ['javascript:alert(1)', 'ftp://start.example.org', 'http://start.example.org/how', 'https://user:pw@start.example.org', 'not a url', 'https://start.example.org/a b', `https://start.example.org/${'a'.repeat(300)}`, 42, {}]) {
+        assert(!start.setStartCommunityUrl(bad).ok && (await getInfo()).body.startCommunityUrl === 'https://start.example.org/how',
+            `${JSON.stringify(bad).slice(0, 40)} is refused, and the page named stays`);
+    }
+    db.prepare("UPDATE node_config SET value = 'javascript:alert(1)' WHERE key = 'startCommunityUrl'").run();
+    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'a stored row that is not a web address is ignored for the default');
+    assert(start.setStartCommunityUrl(null).ok && !db.prepare("SELECT 1 FROM node_config WHERE key = 'startCommunityUrl'").get()
+        && (await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'null goes back to the default, and leaves no row');
+
     // A backup restored at runtime replaces state.db, mirror included, and restarts. Before that restart, or if the
     // mirror is edited by hand, nothing reads it as the profile.
     db.prepare('UPDATE node_config SET value = ? WHERE key = ?').run('global', NODE_PROFILE_KEY);
@@ -264,6 +311,19 @@ async function main() {
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.ssoRequiredForJoin`);
     assert((await getInfo()).body.features.wordsDoor === false,
         'and without the override, a local community\'s open door needs a sign-in, so it offers none');
+
+    setOverride('showcase', 'true');
+    assert(getProfileSwitches().showcase === true && (await getInfo()).body.features.showcase === true,
+        'local + nodeProfile.showcase=true: an operator may preview what they switched off, and /api/community/info says so');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.showcase`);
+    assert(!('showcase' in (await getInfo()).body.features), 'and without it, a local community reports no showcase');
+    process.env.NODE_PROFILE = 'global';
+    setOverride('showcase', 'false');
+    assert(getProfileSwitches().showcase === false && !('showcase' in (await getInfo()).body.features),
+        'global + nodeProfile.showcase=false: hidden as before, and /api/community/info reports no showcase');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.showcase`);
+    assert((await getInfo()).body.features.showcase === true, 'and without it, the lobby previews');
+    delete process.env.NODE_PROFILE;
 
     process.env.NODE_PROFILE = 'global';
     setOverride('probation', 'false');

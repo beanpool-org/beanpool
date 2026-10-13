@@ -61,6 +61,8 @@ import {
 import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { getProfileSwitches, getNodeProfile, assertFeatureOn, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
+import { featuresFor } from '../config/features-for.js';
+import { getStartCommunityUrl } from '../config/start-community.js';
 import { probationSummary } from '../engine/probation.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { muteOf } from '../engine/auto-moderation.js';
@@ -824,6 +826,9 @@ router.get('/api/community/info', async (ctx) => {
         // community has moved, with a plain link to `primaryAddress`.
         primaryAddress: primaryAddress(),
         formerAddresses: formerAddresses(),
+        // Where the 🏘️ Local community sheet's Start a community leads (config/start-community.ts): beanpool.org's page
+        // unless an owner named their own.
+        startCommunityUrl: getStartCommunityUrl(),
     };
 });
 
@@ -848,8 +853,10 @@ router.get('/api/community/me', async (ctx) => {
         return;
     }
     ctx.set('Cache-Control', 'private, no-store');
+    // `features`: the reader's own effective set (config/features-for.ts), today the node's, as /api/community/info says.
     ctx.body = {
         publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor), area: readMemberArea(actor),
+        features: featuresFor(actor),
         // The keys a re-key replaced with this one, newest first, and whether this key has confirmed each (engine/key-succession.ts):
         // the phone asks its member to confirm an unattested one (line-display design §5, §6).
         rekeyedFrom: rekeyedFromOf(actor),

@@ -2591,17 +2591,26 @@ async function rememberDmConversations(ids: string[]): Promise<void> {
     if (seen.size !== before) await AsyncStorage.setItem(DM_SEEN_KEY, JSON.stringify([...seen])).catch(() => {});
 }
 
-/** True for a conversation this phone has seen as a DM, or that holds an encrypted line. */
+/**
+ * True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. The
+ * held check, the keyring and the group screens fold an id's case (a link or a push can carry it in capitals), so this
+ * folds it too: otherwise one id in capitals reaches a group's keys on a known DM's own id, and makes it a held group
+ * whose lines go to the roster the node shows (#1841 review, finding 1). The encrypted-line lookup asks every spelling
+ * this phone holds a row under, the id as given, and lower- and upper-case, so it keeps its index.
+ */
 export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
     if (!conversationId) return false;
-    if ((await dmConversationsSeen()).has(conversationId)) return true;
+    const folded = conversationId.toLowerCase();
+    for (const seen of await dmConversationsSeen()) if (seen.toLowerCase() === folded) return true;
     try {
         const database = await getDb();
+        const conv = await database.getFirstAsync<any>("SELECT type FROM conversations WHERE id = ? COLLATE NOCASE AND type = 'dm' LIMIT 1", [conversationId]);
+        if (conv?.type === 'dm') return true;
+        const spelt = await database.getAllAsync<any>('SELECT id FROM conversations WHERE id = ? COLLATE NOCASE', [conversationId]);
+        const ids = [...new Set([conversationId, folded, conversationId.toUpperCase(), ...(spelt ?? []).map((r: any) => r?.id).filter((s: unknown): s is string => typeof s === 'string')])];
         const row = await database.getFirstAsync<any>(
-            "SELECT 1 AS y FROM messages WHERE conversation_id = ? AND nonce LIKE ? LIMIT 1", [conversationId, `${V2_NONCE_PREFIX}%`]);
-        if (row) return true;
-        const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
-        return conv?.type === 'dm';
+            `SELECT 1 AS y FROM messages WHERE conversation_id IN (${ids.map(() => '?').join(', ')}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]);
+        return !!row;
     } catch {
         return false;
     }
@@ -2610,12 +2619,13 @@ export async function isKnownDmConversation(conversationId: string): Promise<boo
 /**
  * True if this identity has held keys of a group with this id, read straight from its key memory (the rows GroupKeyring
  * keeps, without opening one), so a sync can ask it of every conversation it writes. Throws when they can't be read.
+ * Asked of the id lower-cased, as groupKeyring() keeps the rows: any spelling of a held group's id is held.
  */
 async function heldInKeyMemory(conversationId: string, myPub?: string | null): Promise<boolean> {
     const pub = myPub ?? (await loadIdentity())?.publicKey;
     if (!pub || !conversationId) return false;
     const database = await getDb();
-    const key = `${pub}/${conversationId}`;
+    const key = `${pub}/${conversationId.toLowerCase()}`;
     const st = await database.getFirstAsync<any>('SELECT highest FROM group_chat_key_state WHERE group_id = ?', [key]);
     if (Number(st?.highest ?? 0) > 0) return true;
     return !!(await database.getFirstAsync<any>('SELECT 1 AS y FROM group_chat_epochs WHERE group_id = ? AND wrap IS NOT NULL LIMIT 1', [key]));
@@ -4360,16 +4370,13 @@ async function lockForConversation(conversationId: string, text: string, line: D
  * every path that can post into it seals or refuses (director's decision b). With no node or no identity nothing can be
  * sent at all, so that answers false. When the phone can't read its key memory (a SQLite error, a community switched
  * under it) this throws GROUP_KEY_STORE_UNREAD_TEXT: every send and edit that asks refuses, never "not held" (confirmation
- * 2 of #1788, finding 1). Asked of the id as given and lower-cased: a link or a push can carry a group's id in capitals
- * (push routes match ids case-insensitively), and the group is held whichever way its id is spelled.
+ * 2 of #1788, finding 1). A link or a push can carry a group's id in capitals (push routes match ids case-insensitively):
+ * groupKeyring() lower-cases it, so every spelling asks the group's one keyring.
  */
 export async function isHeldGroupChat(conversationId: string): Promise<boolean> {
-    for (const id of new Set([conversationId, conversationId.toLowerCase()])) {
-        let ring: GroupKeyring;
-        try { ring = await groupKeyringFor(id); } catch { return false; }
-        if (await ring.seenLocked()) return true;
-    }
-    return false;
+    let ring: GroupKeyring;
+    try { ring = await groupKeyringFor(conversationId); } catch { return false; }
+    return ring.seenLocked();
 }
 
 /**
@@ -4452,7 +4459,7 @@ async function sealForGroupConversation(conversationId: string, text: string, li
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
     const sealed = sealLine(text, {
-        myEdPrivHex: identity.privateKey, groupKey: sealedUnder.key, groupId: conversationId, epoch: sealedUnder.epoch,
+        myEdPrivHex: identity.privateKey, groupKey: sealedUnder.key, groupId: ring.groupId, epoch: sealedUnder.epoch,
         messageId: line.messageId, after: line.after ?? null, replyToId: line.replyToId ?? null,
     });
     return { ...sealed, metadata: { epoch: sealedUnder.epoch } };
@@ -6534,9 +6541,11 @@ export async function voteGroupSuccessionApi(groupId: string, proposalId: string
  * the node marks the key stale and the next member to write makes a new one.
  */
 export async function leaveGroupApi(groupId: string, memberPubkey: string, onProgress?: (done: number, total: number) => void): Promise<boolean> {
-    const path = `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`;
     const { nodeUrl, identity } = await groupKeyContext();
-    if (memberPubkey !== identity.publicKey) await refuseGroupKeysForDm(groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl)));
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+    // Under the group's own id (lower-case), as its epochs are: a removal carries one (#1841 review, finding 3).
+    const path = `/api/groups/${encodeURIComponent(ring.groupId)}/members/${encodeURIComponent(memberPubkey)}`;
+    if (memberPubkey !== identity.publicKey) await refuseGroupKeysForDm(ring);
     const res = memberPubkey === identity.publicKey
         ? await signedRequestWithMethod('DELETE', path)
         : await removeWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), groupId, memberPubkey, async (body) => {
@@ -6671,6 +6680,17 @@ async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolI
 export async function groupKeyringFor(groupId: string): Promise<GroupKeyring> {
     const { nodeUrl, identity } = await groupKeyContext();
     return groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+}
+
+/**
+ * The keyring a group's screen opens, syncs and serves missing keys from (components/GroupChatView.tsx): refused with
+ * GROUP_KEYS_FOR_DM_TEXT for a conversation this phone knows as a DM and never held a group's keys for, so no key is
+ * synced onto a known DM's id whichever route drew the screen (#1815 review E3b, made structural; #1841 review, finding 1).
+ */
+export async function groupScreenKeyringFor(groupId: string): Promise<GroupKeyring> {
+    const ring = await groupKeyringFor(groupId);
+    await refuseGroupKeysForDm(ring);
+    return ring;
 }
 
 /** An enterprise's discussion thread — public to every member of the community, not only its keepers. */

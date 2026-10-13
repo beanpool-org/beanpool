@@ -75,7 +75,9 @@ vi.mock('../crypto', async (orig) => ({
 
 import { insertMessage, editMessage, sendImageMessage } from '../db';
 import { openDmLine, isEncryptedNonce } from '../e2e-crypto';
-import { DmNotLockedError, isDmNotLocked, dmNotLockedLine, restoredDraft } from '../dm-lock';
+import { DmNotLockedError, isDmNotLocked, dmNotLockedLine, restoredDraft, refusedSendNotice } from '../dm-lock';
+import { GroupChatKeyError, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
+import { GROUP_CHAT_LOCK_LOST_TEXT } from '../group-chat-lines';
 
 // A delivered send ends with require('react-native') for a DeviceEventEmitter nudge, which node cannot parse and no
 // vi.mock reaches. Answered here, at node's loader, so a send that goes through finishes as it does on a phone.
@@ -303,5 +305,14 @@ describe('what the member is told', () => {
         expect(isDmNotLocked(new DmNotLockedError())).toBe(true);
         expect(isDmNotLocked(Object.assign(new Error('x'), { name: 'DmNotLockedError' }))).toBe(true);
         expect(isDmNotLocked(new Error('Sending is taking too long'))).toBe(false);
+    });
+
+    it('a send the group key store refused keeps the words too: the DM screen puts them back with the store sentence, as for a line that couldn\'t be locked (#1815 review)', () => {
+        expect(refusedSendNotice(new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store'), 'Bob')).toBe(GROUP_KEY_STORE_UNREAD_TEXT);
+        expect(refusedSendNotice(Object.assign(new Error(GROUP_KEY_STORE_UNREAD_TEXT), { name: 'GroupChatKeyError', code: 'store' }))).toBe(GROUP_KEY_STORE_UNREAD_TEXT);
+        expect(refusedSendNotice(new DmNotLockedError(), 'Bob')).toBe(dmNotLockedLine('Bob'));
+        // Anything else is an alert, as before.
+        expect(refusedSendNotice(new GroupChatKeyError(GROUP_CHAT_LOCK_LOST_TEXT, 'refused'))).toBeNull();
+        expect(refusedSendNotice(new Error('Sending is taking too long'))).toBeNull();
     });
 });

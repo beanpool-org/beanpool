@@ -68,7 +68,9 @@ describe('the preview sources', () => {
         const deals = read('components/MyDealsSheet.tsx');
         expect(deals).not.toMatch(/DealsPreview|SAMPLE_COMMUNITY/);
         const load = deals.slice(deals.indexOf('const loadData = async () => {'));
-        expect(load).toMatch(/^const loadData = async \(\) => \{\s*if \(preview\) \{\s*const sample = sampleDeals\(\);\s*setPosts\(sample\.posts\);\s*setTransactions\(sample\.transactions\);\s*return;\s*\}/);
+        expect(load).toMatch(/^const loadData = async \(\) => \{\s*const gen = \+\+loadGen\.current;\s*if \(preview\) \{\s*const sample = sampleDeals\(\);\s*setPosts\(sample\.posts\);\s*setTransactions\(sample\.transactions\);\s*return;\s*\}/);
+        // A live load begun before a switch to preview never lands over the sample (showcase-market-render.test.ts).
+        expect(load.slice(0, load.indexOf('\n    };')).match(/if \(gen !== loadGen\.current\) return;/g)).toHaveLength(2);
         // Every press that would open the review form or a listing opens the marker's sheet in preview.
         const leads = deals.split('\n').filter(l => /setPromptReview\(\{|pathname: '\/post\/\[id\]'|router\.push\(`\/post\//.test(l) && /onPress=/.test(l));
         expect(leads.length).toBe(4);

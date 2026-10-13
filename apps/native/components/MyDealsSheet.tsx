@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
@@ -328,7 +328,11 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         if (initialTab) setDealsTab(initialTab);
     }, [initialTab]);
 
+    // Each load's answers land only while it is the latest: a load begun before a switch to preview never draws the
+    // member's own deals over Example Valley's.
+    const loadGen = useRef(0);
     const loadData = async () => {
+        const gen = ++loadGen.current;
         if (preview) {
             const sample = sampleDeals();
             setPosts(sample.posts);
@@ -345,8 +349,10 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const byId = new Map<string, any>();
             for (const p of allPosts) byId.set(p.id, p);
             for (const p of mine) byId.set(p.id, p);
+            if (gen !== loadGen.current) return;
             setPosts(Array.from(byId.values()));
             const txs = await getMarketplaceTransactions(identity.publicKey);
+            if (gen !== loadGen.current) return;
             setTransactions(txs);
         } catch (e) {
             console.error('MyDealsSheet: failed to load data', e);

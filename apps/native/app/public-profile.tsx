@@ -522,18 +522,8 @@ export default function PublicProfileScreen() {
             isSelf ? getBalance(pubKeyStr).catch(() => null) : Promise.resolve(null),
             isSelf ? getFriendsLocal(pubKeyStr).catch(() => []) : Promise.resolve([]),
         ]).then(([prof, posts, bal, friends]) => {
-            if (prof) setProfile(prof);
-            setCardUnreachable(false);
-            if (membersOnDemand && pubKeyStr && cardNeedsFetch(prof, Date.now())) {
-                fetchCardByKey(pubKeyStr).then(async got => {
-                    if (cancelled) return;
-                    if (got === 'fetched') {
-                        const fresh = await getMemberProfile(pubKeyStr).catch(() => null);
-                        if (!cancelled && fresh) setProfile(fresh);
-                    }
-                    setCardUnreachable(got === 'unreachable' && !prof);
-                });
-            }
+            // Never over a card the fetch by key (below) has already brought fresher.
+            if (prof) setProfile((cur: any) => (cur?.public_key === prof.public_key && (cur?.card_fetched_at ?? '') > (prof.card_fetched_at ?? '') ? cur : prof));
             if (posts) setActivePosts(posts);
             if (bal) setBalanceInfo(bal);
             if (Array.isArray(friends)) {
@@ -590,7 +580,28 @@ export default function PublicProfileScreen() {
             setGiven([]);
         }
         return () => { cancelled = true; };
-    }, [pubKeyStr, isSelf, identity?.publicKey, membersOnDemand]);
+    }, [pubKeyStr, isSelf, identity?.publicKey]);
+
+    // On a community that says `membersOnDemand`: the card by key when none is held or it is a day old. Its own effect:
+    // the node profile (useNodeProfile) is known a moment after the screen mounts, and as a dependency of the reads above
+    // it asked the node for the ratings and the trust profile twice on every open (review of #1859, NB5).
+    useEffect(() => {
+        setCardUnreachable(false);
+        if (!membersOnDemand || !pubKeyStr || isHiddenAuthor(pubKeyStr)) return;
+        let cancelled = false;
+        getMemberProfile(pubKeyStr).catch(() => null).then(prof => {
+            if (cancelled || !cardNeedsFetch(prof, Date.now())) return;
+            fetchCardByKey(pubKeyStr).then(async got => {
+                if (cancelled) return;
+                if (got === 'fetched') {
+                    const fresh = await getMemberProfile(pubKeyStr).catch(() => null);
+                    if (!cancelled && fresh) setProfile(fresh);
+                }
+                setCardUnreachable(got === 'unreachable' && !prof);
+            });
+        });
+        return () => { cancelled = true; };
+    }, [pubKeyStr, membersOnDemand]);
 
     const renderStars = (avg: number) => {
         const rounded = Math.round(avg || 0);

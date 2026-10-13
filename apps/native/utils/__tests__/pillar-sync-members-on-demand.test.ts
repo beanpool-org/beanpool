@@ -58,7 +58,7 @@ const realLoad = (Module as any)._load;
 };
 afterAll(() => { (Module as any)._load = realLoad; });
 
-import { applyDelta, getDb, getPosts } from '../db';
+import { applyDelta, getDb, getPosts, getMemberRatings } from '../db';
 import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 
 const DB = 'beanpool_a.beanpool.org.db';
@@ -202,7 +202,8 @@ describe('a community that says membersOnDemand', () => {
         await performSync();
         const recheck = membersRequests().filter(r => new URL(r).searchParams.get('updatedAfter') !== null);
         expect(recheck.length).toBe(1);
-        expect(new URL(recheck[0]).searchParams.get('updatedAfter')).toBe('2026-10-01T00:00:00.000Z');
+        // The oldest stamp less the 5 minutes kept for a phone clock running ahead of the node's (NB2 below).
+        expect(new URL(recheck[0]).searchParams.get('updatedAfter')).toBe('2026-09-30T23:55:00.000Z');
         expect(keysOf(recheck[0]).sort()).toEqual([OWN, hexKey(1), hexKey(2), hexKey(3)].sort());
         // Every card re-checked is stamped now.
         for (const k of [OWN, hexKey(1), hexKey(2), hexKey(3)]) expect(cardStamp(k) > '2026-10-01T00:00:00.000Z').toBe(true);
@@ -228,6 +229,114 @@ describe('a community that says membersOnDemand', () => {
         const row = posts.find((p: any) => p.id === 'L1') as any;
         expect(row.author_callsign).toBe('Carried');
         expect(row.author_avatar).toBe(FACE(AUTHOR));
+    });
+});
+
+// The deciding review of #1859 (scratch/reviews/opus-1859.md): its measurements, kept as checks.
+const cardOf = (pk: string) => sql.prepare('SELECT callsign, avatar_url, card_fetched_at FROM members WHERE public_key = ?').get(pk) as any;
+
+describe('review of #1859: what the phone holds, and what a by-key answer may write', () => {
+    it('B1: holding other members\' ratings (the market draws PostAuthorTrust on every card) references only its own', async () => {
+        onDemandProfile(true);
+        const authors = Array.from({ length: 120 }, (_, i) => hexKey(0x10000 + i));
+        for (const a of authors) node.cards.set(a, { publicKey: a, callsign: `A${a.slice(-4)}`, avatarUrl: null, profileUpdatedAt: '2026-09-01T00:00:00.000Z' });
+        (globalThis as any).fetch = vi.fn(async (url: string) => {
+            const u = new URL(url);
+            const m = u.pathname.match(/^\/api\/ratings\/([0-9a-f]{64})$/);
+            if (m) {
+                const idx = authors.indexOf(m[1]);
+                const ratings = idx < 0 ? [] : Array.from({ length: 10 }, (_, j) => ({ id: `r-${idx}-${j}`, targetPubkey: m[1], raterPubkey: hexKey(1 + ((idx * 10 + j) % 2000)), stars: 5, role: 'provider', createdAt: '2026-09-01T00:00:00.000Z' }));
+                return answer(200, JSON.stringify({ ratings }));
+            }
+            return fetchMock(url);
+        });
+        // What the market feed does for every card it draws (components/PostAuthorTrust.tsx), as a listing or profile open does.
+        for (const a of authors) await getMemberRatings(a);
+        expect((sql.prepare('SELECT COUNT(*) AS n FROM ratings').get() as any).n).toBe(1200);
+        // The member's own: one who rated them and one they rated.
+        sql.prepare('INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars) VALUES (?, ?, ?, ?, ?)').run('own-in', OWN, hexKey(7), 'provider', 5);
+        sql.prepare('INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars) VALUES (?, ?, ?, ?, ?)').run('own-out', hexKey(8), OWN, 'receiver', 4);
+        for (let c = 0; c < 3; c++) await performSync();
+        expect(held().sort()).toEqual([OWN, hexKey(7), hexKey(8)].sort());
+    });
+
+    it('B2: a partner removes their photo: the re-check clears the held card, and so does opening their profile', async () => {
+        onDemandProfile(true);
+        partners(2);
+        await performSync();
+        expect(cardOf(hexKey(1)).avatar_url).toBe(FACE(hexKey(1)));
+        node.cards.set(hexKey(1), { ...node.cards.get(hexKey(1))!, avatarUrl: null, profileUpdatedAt: new Date(Date.now() + 1000).toISOString() });
+        await performSync();
+        expect(cardOf(hexKey(1)).avatar_url).toBeNull();
+        // The profile's fetch by key too: a held face put back, then the open clears it.
+        sql.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run(FACE(hexKey(1)), hexKey(1));
+        expect(await (await import('../members-lookup')).fetchCardByKey(hexKey(1))).toBe('fetched');
+        expect(cardOf(hexKey(1)).avatar_url).toBeNull();
+        // A by-key answer that names a photo still sets it; a partial members list (no by-key) still keeps what is held.
+        await applyDelta({ members: [{ publicKey: hexKey(2), callsign: 'M2', avatarUrl: null }] }, DB);
+        expect(cardOf(hexKey(2)).avatar_url).toBe(FACE(hexKey(2)));
+    });
+
+    it('B2: a listing author removes their photo: the carried face clears; a copy without the field keeps it', async () => {
+        onDemandProfile(true);
+        await performSync();
+        const face = async () => ((await getPosts()) as any[]).find(p => p.id === 'L1').author_avatar;
+        expect(await face()).toBe(FACE(AUTHOR));
+        const serve = (row: Record<string, unknown>) => {
+            (globalThis as any).fetch = vi.fn(async (url: string) => {
+                const u = new URL(url);
+                if (u.pathname === '/api/marketplace/posts') { node.requests.push(url); return answer(200, JSON.stringify([row])); }
+                return fetchMock(url);
+            });
+        };
+        // An older node: no authorAvatarUrl on the row. Says nothing about the face, so it stays.
+        const { authorAvatarUrl: _face, ...older } = listing('L1', AUTHOR);
+        serve({ ...older, updatedAt: new Date(Date.now() + 1000).toISOString() });
+        await performSync();
+        expect(await face()).toBe(FACE(AUTHOR));
+        // The node says the author has no photo now.
+        serve({ ...listing('L1', AUTHOR), authorAvatarUrl: null, updatedAt: new Date(Date.now() + 2000).toISOString() });
+        await performSync();
+        expect(await face()).toBeNull();
+    });
+
+    it('NB2: a phone clock 2 minutes fast still sees a rename made between cycles', async () => {
+        onDemandProfile(true);
+        partners(3);
+        const real = Date.now();
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            vi.setSystemTime(real + 120_000);
+            await performSync();
+            expect(cardOf(hexKey(2)).callsign).toBe('M2');
+            // The node renames partner 2 thirty seconds later, by its own clock.
+            node.cards.set(hexKey(2), { ...node.cards.get(hexKey(2))!, callsign: 'Renamed', profileUpdatedAt: new Date(real + 30_000).toISOString() });
+            vi.setSystemTime(real + 180_000); // the next cycle, a minute on
+            await performSync();
+            expect(cardOf(hexKey(2)).callsign).toBe('Renamed');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('NB4: a keys= answer with rows nobody asked for writes only the asked ones', async () => {
+        onDemandProfile(true);
+        partners(1);
+        const STRANGER = hexKey(0x7777);
+        (globalThis as any).fetch = vi.fn(async (url: string) => {
+            const res: any = await fetchMock(url);
+            const u = new URL(url);
+            if (u.pathname === '/api/members' && u.searchParams.get('keys')) {
+                const rows = await res.json();
+                rows.push({ publicKey: STRANGER, callsign: 'Injected', avatarUrl: null, profileUpdatedAt: '2026-09-01T00:00:00.000Z' });
+                return answer(200, JSON.stringify(rows));
+            }
+            return res;
+        });
+        await performSync();
+        await performSync();
+        expect(cardOf(STRANGER)).toBeUndefined();
+        expect(held().sort()).toEqual([OWN, hexKey(1)].sort());
     });
 });
 

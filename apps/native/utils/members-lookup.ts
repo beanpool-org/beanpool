@@ -6,7 +6,7 @@
  * search they always had. An answer is shown, not kept: a card is kept when the member opens it (the profile by key,
  * §2.2.4), so the held cards stay the people this member has dealt with.
  */
-import { applyDelta, signedGet } from './db';
+import { applyDelta, copyForRead, signedGet } from './db';
 import { isMemberKey, membersKeysPath } from './members-on-demand';
 
 /** The node refuses a shorter search: nobody lists a membership by typing a letter. */
@@ -41,17 +41,23 @@ export function asHeldRow(m: any): { public_key: string; callsign: string; avata
     };
 }
 
+/** The copy each answered row was read for, so a card kept from it later lands only there (keepCards). */
+const readFor = new WeakMap<object, Awaited<ReturnType<typeof copyForRead>>>();
+
 /**
  * Ask the node one of the small reads above. The rows, or null when the node could not be asked or did not answer a list
  * (offline, busy, refused): the screen then shows the cards held.
  */
 export async function lookUpMembers(path: string, options?: { signal?: AbortSignal }): Promise<any[] | null> {
     try {
+        const copy = await copyForRead();
         const res = await signedGet(path, { signal: options?.signal });
         if (!res.ok) return null;
         const body = await res.json();
         if (!Array.isArray(body)) return null;
-        return body.map(asHeldRow).filter((r): r is NonNullable<ReturnType<typeof asHeldRow>> => r !== null);
+        const rows = body.map(asHeldRow).filter((r): r is NonNullable<ReturnType<typeof asHeldRow>> => r !== null);
+        for (const r of rows) readFor.set(r, copy);
+        return rows;
     } catch {
         return null;
     }
@@ -70,27 +76,38 @@ export function cardNeedsFetch(row: { card_fetched_at?: string | null } | null |
 /**
  * The card of one member, fetched by key and kept, stamped now (§2.2.4): 'fetched', 'none' when the node has no such
  * member, or 'unreachable' (offline, busy, refused), when the profile shows the name it was given and "Connect to see
- * more", never a spinner that never ends.
+ * more", never a spinner that never ends. Written only into the copy open when the read started (copyForRead).
  */
 export async function fetchCardByKey(key: string): Promise<'fetched' | 'none' | 'unreachable'> {
     if (!isMemberKey(key)) return 'none';
     try {
+        const copy = await copyForRead();
         const res = await signedGet(membersKeysPath([key]));
         if (!res.ok) return 'unreachable';
         const body = await res.json();
         if (!Array.isArray(body)) return 'unreachable';
         const row = body.find(m => m?.publicKey === key);
         if (!row) return 'none';
-        const wrote = await applyDelta({ members: [row], membersFetched: { keys: [key], at: new Date().toISOString() } });
+        const wrote = await applyDelta({ members: [row], membersByKey: true, membersFetched: { keys: [key], at: new Date().toISOString() } }, copy.dbName, copy.generation);
         return wrote === false ? 'unreachable' : 'fetched';
     } catch {
         return 'unreachable';
     }
 }
 
-/** Keep the cards of results the member acted on (a DM started from a search result, §2.2.4), stamped now. */
+/**
+ * Keep the cards of results the member acted on (a DM started from a search result, §2.2.4), stamped now, in the copy
+ * their search was read for (a row from elsewhere: the copy open now). Rows read for different copies are not kept.
+ */
 export async function keepCards(rows: readonly any[]): Promise<void> {
     const keys = rows.map(r => r?.public_key ?? r?.publicKey).filter(isMemberKey);
     if (keys.length === 0) return;
-    await applyDelta({ members: rows, membersFetched: { keys, at: new Date().toISOString() } }).catch(() => false);
+    try {
+        const copies = rows.map(r => (r && typeof r === 'object' ? readFor.get(r) : undefined));
+        const copy = copies[0] ?? await copyForRead();
+        if (copies.some(c => (c?.dbName ?? copy.dbName) !== copy.dbName)) return;
+        await applyDelta({ members: rows, membersFetched: { keys, at: new Date().toISOString() } }, copy.dbName, copy.generation);
+    } catch {
+        // Kept next time the member opens the card.
+    }
 }

@@ -1,9 +1,10 @@
 /**
  * The line above People → Community on a community that says `membersOnDemand` (DESIGN-global-members-by-area §2.3),
  * and what the list says when it is empty. Never "Loading" for a list that will not load: with no area there is nothing
- * near to show, and offline the cards held are what there is.
+ * near to show, and offline the cards held are what there is. One letter typed asks the node nothing (a search is 2 or
+ * more): the cards held, with the words for that ('short'), never the offline ones while the phone is online.
  */
-export type CommunityListNote = 'near' | 'search' | 'noArea' | 'held';
+export type CommunityListNote = 'near' | 'search' | 'noArea' | 'held' | 'short';
 
 export function communityListNote(note: CommunityListNote, typed: string): string {
     switch (note) {
@@ -11,6 +12,7 @@ export function communityListNote(note: CommunityListNote, typed: string): strin
         case 'search': return `Members whose name starts with “${typed.trim()}”.`;
         case 'noArea': return "Set your area to see who's near you. Search a name to find anyone.";
         case 'held': return "People you've dealt with. Connect to search everyone.";
+        case 'short': return "People you've dealt with. Type at least 2 letters to search everyone.";
     }
 }
 
@@ -37,5 +39,6 @@ export function communityListEmpty(note: CommunityListNote | null, typed: string
     if (note === 'near') return 'No one near you yet.';
     if (note === 'noArea') return 'Type at least 2 letters of a name.';
     if (note === 'held') return typed.trim() ? 'No one you have dealt with matches. Connect to search everyone.' : 'No one yet. Connect to search everyone.';
+    if (note === 'short') return 'No one you have dealt with matches. Type at least 2 letters to search everyone.';
     return typed ? 'No members match your search.' : 'Loading community...';
 }

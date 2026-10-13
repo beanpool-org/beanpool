@@ -738,6 +738,16 @@ let copyGeneration = 0;
 export function copyGenerationNow(): number {
     return copyGeneration;
 }
+/**
+ * The copy a read outside the sync is made for, taken when the read starts: the anchor's file and the copy generation.
+ * Handed back to applyDelta (`expectedDbName`, `generation`), the answer lands only in that copy: a community switch, or
+ * a copy cleared, while the read was out writes nothing (review of #1859, NB3: a card fetched on global landed in mullum's).
+ */
+export async function copyForRead(): Promise<{ dbName: string | undefined; generation: number }> {
+    const generation = copyGeneration;
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    return { dbName: anchorUrl ? getDatabaseFilenameForNode(anchorUrl) : undefined, generation };
+}
 /** A new copy generation: every sync cycle in flight writes and stores nothing more (copyGeneration). */
 export function newCopyGeneration(): void {
     copyGeneration++;
@@ -3071,7 +3081,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), COALESCE(?, (SELECT carried_avatar FROM posts WHERE id = ?)))',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -3114,7 +3124,9 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             // A copy without the name (an older node) keeps the one the row has.
             syncedAuthorCallsign(p),
             p.id ?? null,
-            // Its face likewise: a copy without one keeps the one the row has.
+            // Its face: a copy that names it (a node that has members on demand) is the node's word, and its null says the
+            // author has no photo now, so it clears; a copy without the field (an older node) keeps the one the row has.
+            carriesAuthorAvatar(p) ? 1 : 0,
             syncedAuthorAvatar(p),
             p.id ?? null,
         ]
@@ -3125,6 +3137,11 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
 function syncedAuthorAvatar(p: any): string | null {
     const url = p.authorAvatarUrl ?? p.author_avatar_url;
     return typeof url === 'string' && url.trim() !== '' ? url : null;
+}
+
+/** Whether a listing names its author's face at all (`authorAvatarUrl`, null included), as a by-area read does. */
+function carriesAuthorAvatar(p: any): boolean {
+    return p != null && (Object.prototype.hasOwnProperty.call(p, 'authorAvatarUrl') || Object.prototype.hasOwnProperty.call(p, 'author_avatar_url'));
 }
 
 /** The author's name a listing carries (the node's `authorCallsign`), or null for a copy without one. */
@@ -3283,11 +3300,11 @@ export async function readMembersOnDemandWorld(ownKey: string): Promise<{ refere
             `SELECT public_key AS k FROM conversation_participants
              UNION SELECT buyer_pubkey FROM marketplace_transactions
              UNION SELECT seller_pubkey FROM marketplace_transactions
-             UNION SELECT rater_pubkey FROM ratings
-             UNION SELECT target_pubkey FROM ratings
+             UNION SELECT rater_pubkey FROM ratings WHERE target_pubkey = ?
+             UNION SELECT target_pubkey FROM ratings WHERE rater_pubkey = ?
              UNION SELECT friend_pubkey FROM friends WHERE owner_pubkey = ?
              UNION SELECT elder_vouched_by FROM members WHERE public_key = ? AND elder_vouched_by IS NOT NULL`,
-            [ownKey, ownKey]
+            [ownKey, ownKey, ownKey, ownKey]
         );
         const held = await database.getAllAsync<{ key: string; fetchedAt: string | null }>(
             'SELECT public_key AS key, card_fetched_at AS fetchedAt FROM members'
@@ -3407,7 +3424,12 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         // A PARTIAL list (the incremental `?updatedAfter=` delta) is not evidence of absence —
         // it only carries members who changed — so it keeps COALESCE, exactly as the GC below
         // only runs for a complete list.
-        const avatarNullClears = delta.membersComplete === true;
+        //
+        // A `keys=` answer (`membersByKey`, members on demand) is complete for every key it names:
+        // its null is the node saying that member has no photo now, so it clears too. On a
+        // community that says `membersOnDemand` no complete list ever comes, so without this a
+        // removed photo stayed on every phone that had shown it (review of #1859, B2).
+        const avatarNullClears = delta.membersComplete === true || delta.membersByKey === true;
         const serverMemberSet = new Set();
         for (const m of delta.members) {
             const pk = m.publicKey || m.public_key || '';

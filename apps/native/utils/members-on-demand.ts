@@ -92,6 +92,18 @@ export function cardsToDrop(own: string | null, referenced: Iterable<string>, he
         .map(c => c.key);
 }
 
+/**
+ * The re-check cursor sent for a batch whose oldest stamp is `since`: that stamp less RECHECK_MARGIN_MS. The stamp is the
+ * phone's clock and the node compares its own; the posts delta keeps the same 5 minutes (services/pillar-sync.ts). Without
+ * it, a phone whose clock runs ahead by more than the time between cycles never saw a rename (review of #1859, NB2). A
+ * stamp that can't be read sends no cursor: every card in the batch comes back whole.
+ */
+export const RECHECK_MARGIN_MS = 5 * 60 * 1000;
+export function recheckCursor(since: string | null): string | null {
+    const at = since === null ? NaN : Date.parse(since);
+    return Number.isFinite(at) ? new Date(Math.max(0, at - RECHECK_MARGIN_MS)).toISOString() : null;
+}
+
 /** The `keys=` read for one batch, with the cursor the node compares each card's change against when re-checking. */
 export function membersKeysPath(keys: readonly string[], since?: string | null): string {
     if (keys.length === 0 || keys.length > KEYS_BATCH) throw new Error(`a keys read is 1 to ${KEYS_BATCH} keys`);

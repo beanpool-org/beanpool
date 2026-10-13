@@ -15,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanpool/core';
 import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
-import { absentAfter, cardsToDrop, membersKeysPath, planMembersCycle, readAbsent } from '../utils/members-on-demand';
+import { absentAfter, cardsToDrop, membersKeysPath, planMembersCycle, readAbsent, recheckCursor } from '../utils/members-on-demand';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
@@ -1487,18 +1487,24 @@ async function syncMembersOnDemand(anchorUrl: string, ownKey: string, expectedDb
                 return null;
             }
         };
+        // Only the rows for keys this read named: a row nobody asked for is not a card this phone has a reason to hold
+        // (review of #1859, NB4), and could carry it past the bound.
+        const named = (got: any[], keys: readonly string[]) => {
+            const want = new Set(keys);
+            return got.filter(r => want.has(r?.publicKey ?? r?.public_key));
+        };
         let refused = false;
         for (const batch of plan.missing) {
             const got = await read(membersKeysPath(batch));
             if (!got) { refused = true; break; }
-            rows.push(...got);
+            rows.push(...named(got, batch));
             asked.push(...batch);
         }
         const rechecked: string[] = [];
         if (!refused && plan.revalidate) {
-            const got = await read(membersKeysPath(plan.revalidate.keys, plan.revalidate.since));
+            const got = await read(membersKeysPath(plan.revalidate.keys, recheckCursor(plan.revalidate.since)));
             if (got) {
-                rows.push(...got);
+                rows.push(...named(got, plan.revalidate.keys));
                 rechecked.push(...plan.revalidate.keys);
             }
         }
@@ -1514,7 +1520,7 @@ async function syncMembersOnDemand(anchorUrl: string, ownKey: string, expectedDb
         const drop = cardsToDrop(ownKey, world.referenced, heldAfter);
         if (copyGenerationNow() !== copyGen) return;
         if (rows.length > 0 || fetched.length > 0 || drop.length > 0) {
-            const wrote = await applyDelta({ members: rows, membersFetched: { keys: fetched, at: fetchedAt }, membersDrop: drop }, expectedDbName, copyGen);
+            const wrote = await applyDelta({ members: rows, membersByKey: true, membersFetched: { keys: fetched, at: fetchedAt }, membersDrop: drop }, expectedDbName, copyGen);
             if (wrote === false) return;
         }
         if (asked.length > 0 || absent.size > 0 || absentRaw) {

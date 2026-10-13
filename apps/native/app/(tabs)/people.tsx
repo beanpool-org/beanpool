@@ -92,6 +92,8 @@ export default function PeopleScreen() {
         textStack: { justifyContent: 'center', flex: 1, minWidth: 0 },
         callsign: { fontSize: 16, fontWeight: '700', color: colors.text.heading, flexShrink: 1 },
         dateText: { fontSize: 12, color: colors.text.muted, marginTop: 2, fontWeight: '500' },
+        // The distance a member on demand reads (the near list): 4.5:1 on a card, light and dark.
+        distanceText: { color: colors.text.secondary },
         addBtn: { backgroundColor: colors.brand.dark, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 0, marginLeft: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
         addBtnText: { color: colors.text.inverse, fontWeight: 'bold', fontSize: 12 },
 
@@ -713,7 +715,8 @@ export default function PeopleScreen() {
         try {
             if (membersOnDemand) {
                 if (await loadMembersOnDemand(query)) return;
-                setListNote('held');
+                // One letter asked the node nothing: the cards held, but not "Connect" to a phone that is online.
+                setListNote(query.trim() !== '' && searchPath(query) === null ? 'short' : 'held');
             } else {
                 setListNote(null);
             }
@@ -940,7 +943,7 @@ export default function PeopleScreen() {
                         }
                         ListEmptyComponent={
                             <View style={{ padding: 40, alignItems: 'center' }}>
-                                <Text style={{ color: colors.text.muted, fontSize: 15, fontWeight: '500' }}>
+                                <Text style={{ color: colors.text.secondary, fontSize: 15, fontWeight: '500', textAlign: 'center' }}>
                                     {communityListEmpty(listNote, searchQuery)}
                                 </Text>
                             </View>
@@ -977,7 +980,7 @@ export default function PeopleScreen() {
                                         {isFriend && <Text style={styles.friendChip}>Friend</Text>}
                                     </View>
                                     <Text style={styles.dateText} numberOfLines={1}>
-                                        {joinDateText}{typeof item.distance_km === 'number' ? ` · about ${item.distance_km} km` : ''}
+                                        {joinDateText}{typeof item.distance_km === 'number' ? <Text style={styles.distanceText}>{` · about ${item.distance_km} km`}</Text> : null}
                                     </Text>
                                 </View>
                             </Pressable>

@@ -76,7 +76,7 @@ describe('which lines collapse into the row', () => {
 });
 
 describe('the row, its sheet and the menu label at 320dp with 1.3× text', () => {
-    const src = fs.readFileSync(path.join(__dirname, '../../components/GroupChatView.tsx'), 'utf8');
+    const src = fs.readFileSync(path.join(__dirname, '../../components/LockedHistory.tsx'), 'utf8');
     const chatStyles = fs.readFileSync(path.join(__dirname, '../../components/chat/styles.ts'), 'utf8');
     const num = (from: string, re: RegExp) => Number(re.exec(from)?.[1]);
     const SCALE = 1.3;
@@ -87,9 +87,9 @@ describe('the row, its sheet and the menu label at 320dp with 1.3× text', () =>
         const comp = /function LockedHistoryRow[\s\S]*?\n}\n/.exec(src)?.[0] ?? '';
         expect(comp).not.toBe('');
         expect(comp).not.toMatch(/numberOfLines/);
-        const style = /lockedHistoryRow: \{([\s\S]*?)\},/.exec(src)?.[1] ?? '';
+        const style = /row: \{([\s\S]*?)\},/.exec(src)?.[1] ?? '';
         expect(num(style, /minHeight: (\d+)/)).toBeGreaterThanOrEqual(48);
-        const font = num(/lockedHistoryText: \{([\s\S]*?)\}/.exec(src)?.[1] ?? '', /fontSize: (\d+)/);
+        const font = num(/rowText: \{([\s\S]*?)\}/.exec(src)?.[1] ?? '', /fontSize: (\d+)/);
         const wrapPad = num(/systemWrap: \{([\s\S]*?)\}/.exec(src)?.[1] ?? '', /paddingHorizontal: (\d+)/);
         const rowPad = num(style, /paddingHorizontal: (\d+)/);
         const width = 320 - 2 * wrapPad - 2 * rowPad;

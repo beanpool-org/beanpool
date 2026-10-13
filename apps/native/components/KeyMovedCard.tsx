@@ -6,13 +6,16 @@
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import type { AppColors } from '../constants/colors';
+import { palette, type AppColors } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
 import { anchorUrl } from '../utils/node-post';
 import { getMnemonic } from '../utils/identity';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
 import { KEY_MOVED_BODY, KEY_MOVED_REASON, KEY_MOVED_SHOW, KEY_MOVED_TITLE, keyReplacedHere, onKeyReplaced } from '../utils/key-replaced';
 import { NoScreenCapture } from './WordsOnScreen';
+
+/** The primary button's green: white on it is 5.5:1, where on brand.primary (emerald-500) it is 2.5:1 (e2e/locked-history-320.mjs). */
+const BUTTON_GREEN = palette.emerald700;
 
 export function KeyMovedCard({ colors }: { colors: AppColors }) {
     const { identity } = useIdentity();
@@ -55,7 +58,7 @@ export function KeyMovedCard({ colors }: { colors: AppColors }) {
             ) : hasWords ? (
                 <Pressable
                     onPress={async () => { const w = await readWordsBehindLock(identity, KEY_MOVED_REASON).catch(() => null); if (w) setWords(w); }}
-                    style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]}
+                    style={[styles.primaryBtn, { backgroundColor: BUTTON_GREEN }]}
                     accessibilityRole="button"
                 >
                     <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{KEY_MOVED_SHOW}</Text>

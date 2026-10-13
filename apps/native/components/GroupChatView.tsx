@@ -29,11 +29,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { markKeyChanged, rememberRosterNames } from '../utils/name-key-memory';
 import { verifiedFormerKeys } from '../utils/group-chat-crypto';
 import {
-    collapseLockedHistory, lockedHistoryRowText, LOCKED_HISTORY_ROW_ID, LOCKED_HISTORY_SHEET_TITLE, LOCKED_HISTORY_SHEET_BODY, LOCKED_HISTORY_WORDS,
-    LOCKED_HISTORY_ASK, LOCKED_HISTORY_KEEP, LOCKED_OWN_LINE_TEXT, NEW_PHONE_CONFIRM_MENU, servedAuthorKeys,
+    collapseLockedHistory, lockedHistoryRowText, LOCKED_HISTORY_ROW_ID, LOCKED_OWN_LINE_TEXT, NEW_PHONE_CONFIRM_MENU, servedAuthorKeys,
 } from '../utils/group-history-unlock';
+import { LockedHistoryRow, LockedHistorySheet, SealedNoticeLine } from './LockedHistory';
 import { anchorUrl } from '../utils/node-post';
-import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -638,10 +638,10 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     ];
 
     const renderMessage = (item: ChatMessage) => {
-        if (item.id === LOCKED_HISTORY_ROW_ID) return <LockedHistoryRow text={item.text} onPress={() => setHistoryOpen(true)} styles={styles} />;
+        if (item.id === LOCKED_HISTORY_ROW_ID) return <LockedHistoryRow text={item.text} onPress={() => setHistoryOpen(true)} />;
         if (item.type === 'system' || item.senderId === 'SYSTEM') return <SystemLine text={item.text} styles={styles} />;
         // A sealed line that names nobody: one that couldn't be verified ("Unverified"), or one whose key isn't here yet.
-        if (item.unattributed) return <SealedNoticeLine name={item.authorName ?? null} text={item.text} details={item.integrityNote ?? null} styles={styles} />;
+        if (item.unattributed) return <SealedNoticeLine name={item.authorName ?? null} text={item.text} details={item.integrityNote ?? null} />;
 
         const isMe = !!me && item.senderId === me;
         const actions = messageActions(item, viewer);
@@ -846,7 +846,6 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             />
             <LockedHistorySheet
                 open={historyOpen}
-                styles={chat}
                 bottomInset={insets.bottom}
                 onClose={() => setHistoryOpen(false)}
                 onWords={() => { setHistoryOpen(false); router.push('/old-words-unlock'); }}
@@ -875,58 +874,6 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 />
             )}
         </KeyboardAvoidingView>
-    );
-}
-
-/** A sealed line drawn as nobody's: "Unverified" (it opened under neither key the node names) or still waiting for its key. */
-function SealedNoticeLine({ name, text, details, styles }: { name: string | null; text: string; details: string | null; styles: ReturnType<typeof makeStyles> }) {
-    return (
-        <View style={styles.systemWrap} accessibilityRole="text">
-            <Text style={styles.sealedText}>{name ? `${name}: ${text}` : text}</Text>
-            {!!details && <Text style={styles.sealedDetails}>{details}</Text>}
-        </View>
-    );
-}
-
-/**
- * The sheet behind the row (§7): the two ways back and "Keep them locked". Its own rows, not ChatMenuSheet's: these
- * labels wrap at 320dp with 1.3× text, where a one-line menu label would be cut.
- */
-function LockedHistorySheet({ open, styles, bottomInset, onClose, onWords, onAsk }: {
-    open: boolean; styles: ReturnType<typeof makeChatStyles>; bottomInset: number; onClose: () => void; onWords: () => void; onAsk: () => void;
-}) {
-    const { colors } = useTheme();
-    const rows: [string, string, () => void][] = [
-        ['form-textbox-password', LOCKED_HISTORY_WORDS, onWords],
-        ['account-check-outline', LOCKED_HISTORY_ASK, onAsk],
-        ['lock-outline', LOCKED_HISTORY_KEEP, onClose],
-    ];
-    return (
-        <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
-            <Pressable style={styles.menuBackdrop} onPress={onClose} accessibilityLabel="Close">
-                <View style={[styles.menuSheet, { paddingBottom: Math.max(bottomInset, 12) }]}>
-                    <Text style={[styles.menuTitle, { textTransform: 'none' }]}>{LOCKED_HISTORY_SHEET_TITLE}</Text>
-                    <Text style={styles.menuHint}>{LOCKED_HISTORY_SHEET_BODY}</Text>
-                    {rows.map(([icon, label, onPress]) => (
-                        <Pressable key={label} style={styles.menuRow} onPress={onPress} accessibilityRole="button">
-                            <MaterialCommunityIcons name={icon as any} size={22} color={colors.text.body} />
-                            <Text style={[styles.menuLabel, { paddingVertical: 8 }]}>{label}</Text>
-                        </Pressable>
-                    ))}
-                </View>
-            </Pressable>
-        </Modal>
-    );
-}
-
-/** §7: the one row the lines from before a phone change collapse into; quiet until tapped. */
-function LockedHistoryRow({ text, onPress, styles }: { text: string; onPress: () => void; styles: ReturnType<typeof makeStyles> }) {
-    return (
-        <View style={styles.systemWrap}>
-            <Pressable onPress={onPress} accessibilityRole="button" style={styles.lockedHistoryRow}>
-                <Text style={styles.lockedHistoryText}>{text}</Text>
-            </Pressable>
-        </View>
     );
 }
 
@@ -961,16 +908,7 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         skipText: { fontSize: 15, fontWeight: '700', color: colors.text.secondary },
         inviteHint: { fontSize: 12, color: colors.text.muted, textAlign: 'center' },
         systemWrap: { alignItems: 'center', marginVertical: 6, paddingHorizontal: 16 },
-        sealedText: {
-            fontSize: 13, color: colors.text.secondary, textAlign: 'center', fontStyle: 'italic', overflow: 'hidden',
-            backgroundColor: colors.surface.subtle, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
-        },
         sealedDetails: { fontSize: 12, color: colors.text.muted, textAlign: 'center', marginTop: 2 },
-        lockedHistoryRow: {
-            minHeight: 48, justifyContent: 'center', alignSelf: 'stretch', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
-            backgroundColor: colors.surface.subtle,
-        },
-        lockedHistoryText: { fontSize: 14, lineHeight: 20, color: colors.text.secondary, textAlign: 'center' },
         securing: { marginHorizontal: 12, marginBottom: 6, fontSize: 13, color: colors.text.secondary, textAlign: 'center' },
         keyNotice: {
             marginHorizontal: 12, marginBottom: 6, padding: 8, borderRadius: 10, fontSize: 13, textAlign: 'center',

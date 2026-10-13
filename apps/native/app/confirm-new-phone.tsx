@@ -10,6 +10,7 @@ import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'ex
 import { router, ErrorBoundary } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
+import { palette } from '../constants/colors';
 import { checkScannedNewPhone, confirmScannedNewPhone } from '../utils/db';
 import { yourGroupsStore } from '../components/useYourGroups';
 import { NEW_PHONE_CONFIRM_ACTION, newPhoneConfirmText, newPhoneDoneText, newPhoneProgressText, type NewPhoneCheck } from '../utils/group-history-unlock';
@@ -18,6 +19,9 @@ export { ErrorBoundary };
 
 type Step = { kind: 'scan' } | { kind: 'checking' } | { kind: 'refused'; text: string } | { kind: 'confirm'; check: Extract<NewPhoneCheck, { ok: true }> }
     | { kind: 'handing'; check: Extract<NewPhoneCheck, { ok: true }>; handed: number; planned: number | null } | { kind: 'done'; text: string };
+
+/** The primary button's green: white on it is 5.5:1, where on brand.primary (emerald-500) it is 2.5:1 (e2e/locked-history-320.mjs). */
+const BUTTON_GREEN = palette.emerald700;
 
 export default function ConfirmNewPhoneScreen() {
     const { colors } = useTheme();
@@ -54,7 +58,7 @@ export default function ConfirmNewPhoneScreen() {
                 <View style={[styles.center, { backgroundColor: colors.surface.app, paddingTop: insets.top + 16 }]}>
                     <Text style={[styles.title, { color: colors.text.heading }]}>{NEW_PHONE_CONFIRM_ACTION}</Text>
                     <Text style={[styles.body, { color: colors.text.secondary }]}>BeanPool scans the code on the member's new phone.</Text>
-                    <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]} accessibilityRole="button"
+                    <Pressable style={[styles.primaryBtn, { backgroundColor: BUTTON_GREEN }]} accessibilityRole="button"
                         onPress={permission.canAskAgain ? requestPermission : () => Linking.openSettings()}>
                         <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{permission.canAskAgain ? 'Allow the camera' : 'Open phone settings'}</Text>
                     </Pressable>
@@ -81,8 +85,8 @@ export default function ConfirmNewPhoneScreen() {
             <Text style={[styles.title, { color: colors.text.heading }]}>{NEW_PHONE_CONFIRM_ACTION}</Text>
             {step.kind === 'refused' && (
                 <>
-                    <Text style={[styles.body, { color: colors.feedback.danger.solid }]} accessibilityRole="alert">{step.text}</Text>
-                    <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]} onPress={() => setStep({ kind: 'scan' })} accessibilityRole="button">
+                    <Text style={[styles.body, { color: colors.feedback.danger.fg }]} accessibilityRole="alert">{step.text}</Text>
+                    <Pressable style={[styles.primaryBtn, { backgroundColor: BUTTON_GREEN }]} onPress={() => setStep({ kind: 'scan' })} accessibilityRole="button">
                         <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Scan again</Text>
                     </Pressable>
                 </>
@@ -90,7 +94,7 @@ export default function ConfirmNewPhoneScreen() {
             {step.kind === 'confirm' && (
                 <>
                     <Text style={[styles.body, { color: colors.text.body }]}>{newPhoneConfirmText(step.check.name, step.check.groups.map((g) => g.name))}</Text>
-                    <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]} onPress={() => confirm(step.check)} accessibilityRole="button">
+                    <Pressable style={[styles.primaryBtn, { backgroundColor: BUTTON_GREEN }]} onPress={() => confirm(step.check)} accessibilityRole="button">
                         <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Confirm</Text>
                     </Pressable>
                 </>

@@ -58,7 +58,7 @@ export default function NewPhoneCodeScreen() {
                     <QRCode value={code} size={240} backgroundColor="#ffffff" color="#000000" />
                 </View>
             ) : (
-                <Text style={[styles.body, { color: colors.feedback.danger.solid }]}>
+                <Text style={[styles.body, { color: colors.feedback.danger.fg }]}>
                     This phone doesn't know which key it replaced yet. Confirm your re-key when the app asks, then come back.
                 </Text>
             )}

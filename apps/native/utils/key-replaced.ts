@@ -6,14 +6,14 @@
  * messages from before the change). The words are shown here only behind the phone's lock, and never sent.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DeviceEventEmitter } from 'react-native';
 
 export const KEY_MOVED_TITLE = 'This account moved to a new phone';
 export const KEY_MOVED_BODY = "This phone's key was replaced by a new one. If the new phone can't read earlier group messages, type these 12 words there: they unlock them.";
 export const KEY_MOVED_SHOW = 'Show my old 12 words, so the new phone can unlock earlier messages';
 export const KEY_MOVED_REASON = 'Show your old 12 words';
 
-const EVENT = 'beanpool:key-replaced';
+/** The screens showing the offer (a plain set, not DeviceEventEmitter: db.ts imports this, and runs outside React Native in tests). */
+const listeners = new Set<() => void>();
 const storageKey = (nodeUrl: string, pubkey: string) => `beanpool_key_replaced:${nodeUrl.replace(/\/+$/, '')}:${pubkey}`;
 
 /** True for the node's answer that the signing key was replaced (403 with code `key_invalidated`). */
@@ -27,7 +27,7 @@ export async function noteKeyReplaced(nodeUrl: string, pubkey: string): Promise<
         if (await AsyncStorage.getItem(storageKey(nodeUrl, pubkey))) return;
         await AsyncStorage.setItem(storageKey(nodeUrl, pubkey), String(Date.now()));
     } catch { /* the next refusal notes it again */ }
-    DeviceEventEmitter?.emit?.(EVENT);
+    for (const l of [...listeners]) l();
 }
 
 /** For a signed request's answer: a 403 is read (from a copy, so the caller's body is untouched) for the replaced-key code. */
@@ -47,6 +47,6 @@ export async function keyReplacedHere(nodeUrl: string, pubkey: string): Promise<
 
 /** Called when a refusal is noted; returns the unsubscribe. */
 export function onKeyReplaced(cb: () => void): () => void {
-    const sub = DeviceEventEmitter.addListener(EVENT, cb);
-    return () => sub.remove();
+    listeners.add(cb);
+    return () => { listeners.delete(cb); };
 }

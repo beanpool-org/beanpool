@@ -9,6 +9,7 @@ import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from
 import { router, ErrorBoundary } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
+import { palette } from '../constants/colors';
 import { unlockGroupHistoryWithWords } from '../utils/db';
 import { yourGroupsStore } from '../components/useYourGroups';
 import { RecoveryWordsEntry } from '../components/RecoveryWordsEntry';
@@ -17,6 +18,9 @@ import {
 } from '../utils/group-history-unlock';
 
 export { ErrorBoundary };
+
+/** The primary button's green: white on it is 5.5:1, where on brand.primary (emerald-500) it is 2.5:1 (e2e/locked-history-320.mjs). */
+const BUTTON_GREEN = palette.emerald700;
 
 export default function OldWordsUnlockScreen() {
     const { colors } = useTheme();
@@ -57,14 +61,14 @@ export default function OldWordsUnlockScreen() {
             <View>
                 <RecoveryWordsEntry words={words} onChange={setWords} editable={!busy} label="Your old 12 words." colors={colors} />
             </View>
-            <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary, opacity: busy || !typedAny ? 0.6 : 1 }]}
+            <Pressable style={[styles.primaryBtn, { backgroundColor: BUTTON_GREEN, opacity: busy || !typedAny ? 0.6 : 1 }]}
                 onPress={run} disabled={busy || !typedAny} accessibilityRole="button">
                 {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Unlock earlier messages</Text>}
             </Pressable>
             {!!progress && <Text style={[styles.body, { color: colors.text.secondary }]} accessibilityLiveRegion="polite">{progress}</Text>}
             {!!outcome && (
                 <View style={[styles.box, { borderColor: outcome.ok ? colors.border.default : colors.feedback.danger.solid }]} accessibilityLiveRegion="polite">
-                    <Text style={[styles.boxText, { color: outcome.ok ? colors.text.body : colors.feedback.danger.solid }]}>{outcome.text}</Text>
+                    <Text style={[styles.boxText, { color: outcome.ok ? colors.text.body : colors.feedback.danger.fg }]}>{outcome.text}</Text>
                     {outcome.lines.map((l) => <Text key={l} style={[styles.boxText, { color: colors.text.secondary }]}>{l}</Text>)}
                 </View>
             )}

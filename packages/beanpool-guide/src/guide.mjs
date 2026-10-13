@@ -252,9 +252,7 @@ function page({ title, description, body, root = '../', nav = `<a href="index.ht
     <title>${esc(title)}</title>
     <meta name="description" content="${esc(description)}">
     <link rel="icon" type="image/png" href="${root}favicon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="${root}fonts/fonts.css">
     <link rel="stylesheet" href="${root}style.css?v=2.5">
     <style>
         /* Width only: .legal-content's top margin is what clears the fixed navbar. */

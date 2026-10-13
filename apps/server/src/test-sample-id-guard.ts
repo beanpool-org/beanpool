@@ -257,6 +257,8 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const https = await import('./https-server.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
+    // The walk in step 5 holds this process's loop for seconds on CI; localFetch lets the server close the stale socket first.
+    const { localFetch } = await import('./keepalive-test-fetch.js');
     initStateEngine();
     await initTls();
     const port = await https.startHttpsServer(0);
@@ -276,7 +278,7 @@ async function main() {
         // The limiters in front of the parser count every call from this one address; reset, each call meets the guard.
         resetGatewayRateLimit();
         https.resetAdminRateLimit();
-        const res = await fetch(`${BASE}${url}`, {
+        const res = await localFetch(`${BASE}${url}`, {
             method, headers: body === undefined ? {} : { 'content-type': contentType }, body, signal: AbortSignal.timeout(5000),
         });
         const text = await res.text();

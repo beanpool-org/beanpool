@@ -2201,13 +2201,6 @@ export interface ViewerTrustProfile {
 }
 
 /**
- * Assembles the viewer-aware Trust Profile for `targetPubkey` as seen by
- * `viewerPubkey`. Aggregate signals are public; identities are graduated —
- * only connections in common are named: members who are friends both ways with
- * the viewer AND friends both ways with the target (all four friend rows).
- * See docs/trust-profile-and-trade-safety.md §2.
- */
-/**
  * "Vouched in by" — who brought this member in.
  *
  * A peer inviter is returned by name, so invitations carry accountability: bringing someone in
@@ -2242,6 +2235,13 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
     };
 }
 
+/**
+ * Assembles the viewer-aware Trust Profile for `targetPubkey` as seen by
+ * `viewerPubkey`. Aggregate signals are public; identities are graduated —
+ * only connections in common are named: members who are friends both ways with
+ * the viewer AND friends both ways with the target (all four friend rows).
+ * See docs/trust-profile-and-trade-safety.md §2.
+ */
 export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: string): ViewerTrustProfile | null {
     const member = getMember(targetPubkey);
     if (!member) return null;

@@ -25,7 +25,7 @@ Friends are a shortcut for you. If you choose **Friends** for your contact detai
 
 ## Connections in common
 
-A member's profile can show **connections in common**: people you can ask about them. Someone is shown there only when you are friends both ways with someone who is friends both ways with them. That means you and that person have added each other, and that person and the member have added each other too. Adding someone on your own never puts anyone there, and nor does someone adding you. Up to 12 are shown. Tap a name to ask them.
+A member's profile can show **connections in common**: people you can ask about them. Someone is shown there only when you are friends both ways with someone who is friends both ways with them. That means you and that person have added each other, and that person and the member have added each other too. Adding someone on your own never puts anyone there, and nor does someone adding you. Up to 12 are shown. Tap a name to see their profile.
 
 ## Vouching for someone
 

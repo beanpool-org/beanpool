@@ -407,6 +407,42 @@ async function main(): Promise<void> {
         assert(batch.status === 400 && /one MCP message per request/.test(batch.body?.error?.message ?? ''),
             `a JSON-RPC batch (50 calls in one request, past the limits) is refused (${show(batch)})`);
 
+        // A body the gateway's parser did not read (its Content-Type test is case-sensitive) would be read by the SDK
+        // itself: up to 4 MiB and batches of 100. Every other spelling is refused before the SDK sees the stream.
+        resetAgentLimits();
+        const snapsBeforeSpellings = listSnapshots().length;
+        const agentRowsBefore = (db.prepare("SELECT COUNT(*) AS n FROM system_logs WHERE category = 'AGENT' AND message LIKE 'Assistant read%'").get() as { n: number }).n;
+        const reads100 = Array.from({ length: 100 }, (_, i) => rpc('tools/call', i + 1, { name: 'connection_info', arguments: {} }));
+        const oversize = rpc('tools/list', 1, { pad: 'x'.repeat(1_500_000) });
+        for (const ct of ['APPLICATION/JSON', 'application/JSON', 'Application/Json; charset=utf-8', 'text/plain']) {
+            const b = await call('POST', '/mcp', { body: reads100, headers: { ...MCP_HEADERS, ...bearer(AGENT), 'Content-Type': ct } });
+            assert((b.status === 400 || b.status === 415) && b.body?.error && !Array.isArray(b.body),
+                `a batch of 100 sent as "${ct}" is refused, not answered (${show(b)})`);
+            const big = await call('POST', '/mcp', { body: oversize, headers: { ...MCP_HEADERS, ...bearer(AGENT), 'Content-Type': ct } });
+            assert(big.status === 413 || big.status === 415, `a 1.5 MB body sent as "${ct}" is refused (${show(big)})`);
+        }
+        const agentRowsAfter = (db.prepare("SELECT COUNT(*) AS n FROM system_logs WHERE category = 'AGENT' AND message LIKE 'Assistant read%'").get() as { n: number }).n;
+        assert(agentRowsAfter === agentRowsBefore && listSnapshots().length === snapsBeforeSpellings,
+            `none of those ran a tool (AGENT reads ${agentRowsBefore} → ${agentRowsAfter})`);
+        const bigPlain = await call('POST', '/mcp', { body: oversize, headers: { ...MCP_HEADERS, ...bearer(AGENT) } });
+        assert(bigPlain.status === 413, `a 1.5 MB body sent as application/json is 413 (${show(bigPlain)})`);
+        const over64k = rpc('tools/list', 1, { pad: 'x'.repeat(200_000) });
+        for (const p of ['/mcp', '/mcp/']) {
+            const r = await call('POST', p, { body: over64k, headers: { ...MCP_HEADERS, ...bearer(AGENT) } });
+            assert(r.status === 413, `a 200 KB body to ${p} is 413: the 64 KiB cap holds with a trailing slash too (${show(r)})`);
+        }
+
+        // The admin IP allowlist covers /mcp (isAdminSurfacePath), with or without the trailing slash.
+        const gwBefore = getLocalConfig().gateway ?? {};
+        updateLocalConfig({ gateway: { ...gwBefore, adminIpAllowlist: ['203.0.113.9'] } as any });
+        for (const p of ['/mcp', '/mcp/']) {
+            const r = await call('POST', p, { body: init, headers: { ...MCP_HEADERS, ...bearer(AGENT) } });
+            assert(r.status === 403, `with an admin IP allowlist this address is not on, ${p} is 403 (${show(r)})`);
+        }
+        updateLocalConfig({ gateway: { ...gwBefore, adminIpAllowlist: [] } as any });
+        const allowAgain = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(AGENT) } });
+        assert(allowAgain.status === 200, `with the allowlist cleared, /mcp answers again (${show(allowAgain)})`);
+
         resetAgentLimits();
         const statuses: number[] = [];
         let last: Reply | null = null;

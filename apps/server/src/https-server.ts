@@ -2006,7 +2006,7 @@ const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
  *  a byte is buffered. Pulse OAuth ingest is at most 50 items of link metadata. */
 const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     // An AI assistant's MCP request (agent/mcp-route.ts): a method, an id and a few arguments.
-    [/^\/mcp$/, 64 * 1024],
+    [/^\/mcp\/?$/, 64 * 1024],
     [/^\/api\/member\/pulse\/oauth-ingest$/, 512 * 1024],
     // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
     [/^\/api\/join\/knock$/, 192 * 1024],

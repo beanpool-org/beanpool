@@ -210,14 +210,19 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         }
         noteAutomationTokenUse(grant.id, `POST ${MCP_PATH}`);
 
-        // The body: parsed already for a JSON request (https-server.ts); a body that does not parse is a parse error.
-        let parsed: unknown;
+        // The body: read, capped and parsed already for a JSON request (https-server.ts); one that does not parse is a
+        // parse error. Only a body that parser read goes on: one it did not take as JSON (a Content-Type spelled in
+        // capitals, or none) would be read by the SDK itself, past the 64 KiB cap and the one-message rule below.
         const rawBody: unknown = (ctx as any).rawBody;
-        if (typeof rawBody === 'string') {
-            try { parsed = JSON.parse(rawBody); } catch {
-                jsonRpcError(ctx, 400, 'Parse error: the body is not JSON', -32700);
-                return;
-            }
+        if (typeof rawBody !== 'string') {
+            logger.warn('AGENT', 'Assistant sent a body the server did not read: refused', { grant: grant.id });
+            jsonRpcError(ctx, 415, 'Send the MCP message with Content-Type: application/json', -32600);
+            return;
+        }
+        let parsed: unknown;
+        try { parsed = JSON.parse(rawBody); } catch {
+            jsonRpcError(ctx, 400, 'Parse error: the body is not JSON', -32700);
+            return;
         }
         // One message per request: a JSON-RPC batch would carry hundreds of calls past the per-call limits (MCP dropped
         // batching in 2025-06-18; the SDK's client never sends one).
